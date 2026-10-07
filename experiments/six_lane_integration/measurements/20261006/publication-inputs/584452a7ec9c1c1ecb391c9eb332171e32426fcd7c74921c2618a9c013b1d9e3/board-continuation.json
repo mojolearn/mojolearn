@@ -1,0 +1,26 @@
+{
+  "schema": "mojolearn.campaign-continuation/1",
+  "id": "targeted-ab-20261007",
+  "matrix": "planning/current/unified-matrix.json",
+  "sources": [
+    {
+      "vendor": "nvidia",
+      "path": "nvidia/measurements",
+      "route": "native-sm90"
+    },
+    {
+      "vendor": "amd",
+      "path": "amd/measurements",
+      "route": "amd-native-gfx942"
+    }
+  ],
+  "quality_reviews": [
+    "quality-review/targeted-quality.json"
+  ],
+  "notes": [
+    "Owner scope is exhaustive valid combinations of reachable A/B experiment controls per algorithm, including fresh historical/incumbent configurations. Unrelated shared-binding/global flags do not inflate local counts.",
+    "Current admitted recipe plan: eight priority profiles plus64 CV-local profiles;584 logical paired vendor/workload cells,560 distinct fresh executions if24 exact same-freeze aliases qualify. Other algorithm reach audits remain pending; this is not an all-algorithm completion claim.",
+    "Initial106-profile broad plan is superseded for exhaustive local scope; its immutable planning snapshots are retained. Current coverage and superseded controls are recorded in planning/current/catalog-scope.json.",
+    "Workers retain60-minute idle after all assigned queued work finishes and verified off-machine local/R2 preservation. Frozen numerical source remains6fe3cfce38fdb3fd25c493071745d0e2dbb402f5; no default promotion from planning or compile success."
+  ]
+}

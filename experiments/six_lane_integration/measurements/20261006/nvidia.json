@@ -81479,8 +81479,680 @@
         "amd",
         "nvidia"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "T.C13.only",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2a098babe6bda25adfe4/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/2a098babe6bda25adfe4/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "ae687f34dde3a386c6a8863dd1cae8d5a949083f8b1fce02cf51cd792a0d6842",
+          "source_coverage_pending": [],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.32928042638183586,
+                  "rmse": 0.6833854259336551
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.31456879028296647,
+                  "rmse": 0.6908394981786193
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "BETTER",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "BETTER",
+                  0.32928042638183586,
+                  0.31456879028296647,
+                  0.04467813729629246
+                ],
+                "rmse": [
+                  "BETTER",
+                  0.6833854259336551,
+                  0.6908394981786193,
+                  0.010789875600073048
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 5529.921775683761,
+            "candidate_ms": 6149.545788764954,
+            "observed_candidate_over_baseline": 1.1120493269553668,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.C13.only",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "QUALITY_FAILED",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "FAIL",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/9239319b1567d2138ec7/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "ca6f9f798983ebe34517ba655108526dfdaef29e06bc60d352757f5d989a0299",
+          "source_coverage_pending": [],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9088028117512673,
+                  "rmse": 4.697345852642057
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9091215889136197,
+                  "rmse": 4.689128946848568
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "QUALITY_FAILED",
+          "quality_reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "WORSE",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9088028117512673,
+                  0.9091215889136197,
+                  -0.0003506430451545357
+                ],
+                "rmse": [
+                  "WORSE",
+                  4.697345852642057,
+                  4.689128946848568,
+                  -0.0017492656600678967
+                ]
+              },
+              "unknown": [],
+              "worst": -0.0017492656600678967
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 2057.0573210716248,
+            "candidate_ms": 8255.340568721294,
+            "observed_candidate_over_baseline": 4.013179644610327,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.C13.only",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "QUALITY_FAILED",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "FAIL",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/99604a295758e4930607/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6",
+          "source_coverage_pending": [],
+          "prior_receipt_snapshots": [
+            "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.json"
+          ],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9087603210162847,
+                  "rmse": 4.698440022529554
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9090718560676742,
+                  "rmse": 4.690411824863933
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "QUALITY_FAILED",
+          "quality_reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "WORSE",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9087603210162847,
+                  0.9090718560676742,
+                  -0.0003426957388572879
+                ],
+                "rmse": [
+                  "WORSE",
+                  4.698440022529554,
+                  4.690411824863933,
+                  -0.0017086942957928607
+                ]
+              },
+              "unknown": [],
+              "worst": -0.0017086942957928607
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 5576.460275799036,
+            "candidate_ms": 4412.843635305762,
+            "observed_candidate_over_baseline": 0.7913341828071138,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.C13.only",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fef343a1a02430ef8632/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/fef343a1a02430ef8632/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "e0b7993e5c2337f9a9db22d630a9ce1ffd4fb01742812a8ee478180416acbc18",
+          "source_coverage_pending": [],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.33058307378651086,
+                  "rmse": 0.6827214801205793
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.3216136885206221,
+                  "rmse": 0.6872800861438083
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "BETTER",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "BETTER",
+                  0.33058307378651086,
+                  0.3216136885206221,
+                  0.0271320160562157
+                ],
+                "rmse": [
+                  "BETTER",
+                  0.6827214801205793,
+                  0.6872800861438083,
+                  0.006632821341887593
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 5583.485981449485,
+            "candidate_ms": 6222.399715334177,
+            "observed_candidate_over_baseline": 1.1144291820571257,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        }
+      ],
+      "status": "PENDING_ADMISSION, QUALITY_FAILED"
     },
     {
       "id": "T.C55.only",
@@ -81490,8 +82162,647 @@
         "amd",
         "nvidia"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "T.C55.only",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "QUALITY_FAILED",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "FAIL",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/57442d9d2689ba284f4b/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "86611db12092ab82d2139e9c7a5eaefc2175e7b31d11f2fdf5e2de1eedbdee21",
+          "source_coverage_pending": [],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C55"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours": {
+                  "accuracy": 0.71871,
+                  "logloss": 1.176889445295522
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours": {
+                  "accuracy": 0.720538,
+                  "logloss": 1.1408800529981222
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "QUALITY_FAILED",
+          "quality_reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "WORSE",
+              "metrics": {
+                "accuracy": [
+                  "WORSE",
+                  0.71871,
+                  0.720538,
+                  -0.0025369931911988705
+                ],
+                "logloss": [
+                  "WORSE",
+                  1.176889445295522,
+                  1.1408800529981222,
+                  -0.030597090016690344
+                ]
+              },
+              "unknown": [],
+              "worst": -0.030597090016690344
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "accuracy": "higher",
+              "logloss": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 1414.3643341958523,
+            "candidate_ms": 5315.56991301477,
+            "observed_candidate_over_baseline": 3.7582748549983607,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.C55.only",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6a1927d993c3730a4ca2/attempt-0001/receipt.d12e8f1e18983624b53e5a7021478cce3ded2907a6bcd9e2b0b5faba38763869.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/6a1927d993c3730a4ca2/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "d12e8f1e18983624b53e5a7021478cce3ded2907a6bcd9e2b0b5faba38763869",
+          "source_coverage_pending": [],
+          "prior_receipt_snapshots": [
+            "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6a1927d993c3730a4ca2/attempt-0001/receipt.json"
+          ],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C55"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours": {
+                  "accuracy": 0.763616,
+                  "logloss": 0.5382462555073213
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours": {
+                  "accuracy": 0.763624,
+                  "logloss": 0.5382462695354288
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "accuracy": [
+                  "SAME",
+                  0.763616,
+                  0.763624,
+                  -1.047636009345961e-05
+                ],
+                "logloss": [
+                  "SAME",
+                  0.5382462555073213,
+                  0.5382462695354288,
+                  2.6062619004386682e-08
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "accuracy": "higher",
+              "logloss": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 1372.085526585579,
+            "candidate_ms": 3283.4807373583317,
+            "observed_candidate_over_baseline": 2.393058358052388,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.C55.only",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "QUALITY_FAILED",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "FAIL",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/927ae028a0e623bcc0d4/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "495480a5eaa09b8a907376e41e4bd271fbe7dec58c7e54623458deced0c682f9",
+          "source_coverage_pending": [],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C55"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours": {
+                  "accuracy": 0.912628,
+                  "logloss": 0.23408621803587862
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours": {
+                  "accuracy": 0.913584,
+                  "logloss": 0.23366145305870906
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "QUALITY_FAILED",
+          "quality_reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "WORSE",
+              "metrics": {
+                "accuracy": [
+                  "WORSE",
+                  0.912628,
+                  0.913584,
+                  -0.0010464281335924852
+                ],
+                "logloss": [
+                  "WORSE",
+                  0.23408621803587862,
+                  0.23366145305870906,
+                  -0.0018145663624863958
+                ]
+              },
+              "unknown": [],
+              "worst": -0.0018145663624863958
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "accuracy": "higher",
+              "logloss": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 3758.4602534770966,
+            "candidate_ms": 4797.153417021036,
+            "observed_candidate_over_baseline": 1.2763613537173912,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.C55.only",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d75d76539c8a32df81e8/attempt-0001/receipt.4197e246bcaaf01c5c89125b016de4a01417e819738cdb2ed53e0407cf0be3c6.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/d75d76539c8a32df81e8/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "4197e246bcaaf01c5c89125b016de4a01417e819738cdb2ed53e0407cf0be3c6",
+          "source_coverage_pending": [],
+          "prior_receipt_snapshots": [
+            "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d75d76539c8a32df81e8/attempt-0001/receipt.json"
+          ],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C55"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours": {
+                  "accuracy": 0.86872,
+                  "logloss": 3.7337998882694503
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours": {
+                  "accuracy": 0.868346,
+                  "logloss": 3.743026222088278
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "BETTER",
+              "metrics": {
+                "accuracy": [
+                  "SAME",
+                  0.86872,
+                  0.868346,
+                  0.00043051846394706746
+                ],
+                "logloss": [
+                  "BETTER",
+                  3.7337998882694503,
+                  3.743026222088278,
+                  0.0024649396695062874
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "accuracy": "higher",
+              "logloss": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 3472.144525498152,
+            "candidate_ms": 5822.394425049424,
+            "observed_candidate_over_baseline": 1.6768871175413067,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        }
+      ],
+      "status": "PENDING_ADMISSION, QUALITY_FAILED"
     },
     {
       "id": "T.C13.C18",
@@ -81501,8 +82812,692 @@
         "amd",
         "nvidia"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "T.C13.C18",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "QUALITY_FAILED",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "FAIL",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/7541c12687ecdc63a7a7/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "1f34ef1342beb0e86dbae9a9b293e8c6d268681863cb123151cf7dd501902061",
+          "source_coverage_pending": [],
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13",
+            "I.C.C18"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9088028117512673,
+                  "rmse": 4.697345852642057
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9091215889136197,
+                  "rmse": 4.689128946848568
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "quality_assessment": "QUALITY_FAILED",
+          "quality_reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "WORSE",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9088028117512673,
+                  0.9091215889136197,
+                  -0.0003506430451545357
+                ],
+                "rmse": [
+                  "WORSE",
+                  4.697345852642057,
+                  4.689128946848568,
+                  -0.0017492656600678967
+                ]
+              },
+              "unknown": [],
+              "worst": -0.0017492656600678967
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 2101.310098543763,
+            "candidate_ms": 4431.438382714987,
+            "observed_candidate_over_baseline": 2.1088931071078156,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.C13.C18",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b1c11584d78ed1948ad/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/9b1c11584d78ed1948ad/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "cc3ab5b3abcd0d56e123a196f93ae23b9fcd49639a6e7193e11a9fd65fb58b20",
+          "source_coverage_pending": [],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13",
+            "I.C.C18"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.33058307378651086,
+                  "rmse": 0.6827214801205793
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.3216136885206221,
+                  "rmse": 0.6872800861438083
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "BETTER",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "BETTER",
+                  0.33058307378651086,
+                  0.3216136885206221,
+                  0.0271320160562157
+                ],
+                "rmse": [
+                  "BETTER",
+                  0.6827214801205793,
+                  0.6872800861438083,
+                  0.006632821341887593
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 5537.733756005764,
+            "candidate_ms": 6202.290967106819,
+            "observed_candidate_over_baseline": 1.120005265760625,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.C13.C18",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ebc643bc218228636fa5/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/ebc643bc218228636fa5/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "a965cc14f06230f719be1e4597640c7e763416f7010d3c360eb232fabafa5b7a",
+          "source_coverage_pending": [],
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13",
+            "I.C.C18"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.32928042638183586,
+                  "rmse": 0.6833854259336551
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.31456879028296647,
+                  "rmse": 0.6908394981786193
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "BETTER",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "BETTER",
+                  0.32928042638183586,
+                  0.31456879028296647,
+                  0.04467813729629246
+                ],
+                "rmse": [
+                  "BETTER",
+                  0.6833854259336551,
+                  0.6908394981786193,
+                  0.010789875600073048
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 6031.563246622682,
+            "candidate_ms": 6250.58176368475,
+            "observed_candidate_over_baseline": 1.0363120650661677,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.C13.C18",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "QUALITY_FAILED",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "FAIL",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/f3f35ea8353c16762e68/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0",
+          "source_coverage_pending": [],
+          "prior_receipt_snapshots": [
+            "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.json"
+          ],
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13",
+            "I.C.C18"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9087603210162847,
+                  "rmse": 4.698440022529554
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9090718560676742,
+                  "rmse": 4.690411824863933
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "quality_assessment": "QUALITY_FAILED",
+          "quality_reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "WORSE",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9087603210162847,
+                  0.9090718560676742,
+                  -0.0003426957388572879
+                ],
+                "rmse": [
+                  "WORSE",
+                  4.698440022529554,
+                  4.690411824863933,
+                  -0.0017086942957928607
+                ]
+              },
+              "unknown": [],
+              "worst": -0.0017086942957928607
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 2063.9792904257774,
+            "candidate_ms": 4439.687913283706,
+            "observed_candidate_over_baseline": 2.1510331687329307,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        }
+      ],
+      "status": "PENDING_ADMISSION, QUALITY_FAILED"
     },
     {
       "id": "T.C18.residual-only",
@@ -81512,8 +83507,93 @@
         "amd",
         "nvidia"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "T.C18.residual-only",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "IN_PROGRESS",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "IN_PROGRESS",
+          "worker_returncodes": [
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 0
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 0,
+          "quality": "NOT_ASSESSED",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/d3fbad05c2611ab543a7/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "1049147658d99e875cc076eefa4265d00cebdc05b0ac4d13e6e2a00821f99f33",
+          "source_coverage_pending": [],
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [
+                "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+              ],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C18"
+          ]
+        }
+      ],
+      "status": "IN_PROGRESS"
     },
     {
       "id": "T.combined.minus-C13",
@@ -82636,6 +84716,1366 @@
       ],
       "cells": [],
       "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.de099bccad76",
+      "title": "T.CV.local.de099bccad76",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [
+        {
+          "id": "T.CV.local.de099bccad76",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/047dc5950c1d73fd8b3c/attempt-0001/receipt.e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63",
+          "source_coverage_pending": [],
+          "prior_receipt_snapshots": [
+            "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/047dc5950c1d73fd8b3c/attempt-0001/receipt.json"
+          ],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.3216136885206221,
+                  "rmse": 0.6872800861438083
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.3216136885206221,
+                  "rmse": 0.6872800861438083
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.3216136885206221,
+                  0.3216136885206221,
+                  0.0
+                ],
+                "rmse": [
+                  "SAME",
+                  0.6872800861438083,
+                  0.6872800861438083,
+                  0.0
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 7304.326960816979,
+            "candidate_ms": 5536.9399432092905,
+            "observed_candidate_over_baseline": 0.7580356099763079,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.CV.local.de099bccad76",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/060dd5184930208ceb52/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/060dd5184930208ceb52/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "a301dfdcac13595e99ec84e66b814a8fe992b2a273d8d1ea39a460ad44135a35",
+          "source_coverage_pending": [],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.31456879028296647,
+                  "rmse": 0.6908394981786193
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.31456879028296647,
+                  "rmse": 0.6908394981786193
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.31456879028296647,
+                  0.31456879028296647,
+                  0.0
+                ],
+                "rmse": [
+                  "SAME",
+                  0.6908394981786193,
+                  0.6908394981786193,
+                  0.0
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 5565.585307776928,
+            "candidate_ms": 5552.143728360534,
+            "observed_candidate_over_baseline": 0.997584875862452,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.CV.local.de099bccad76",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf523bdc7b56fd295b5c/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/bf523bdc7b56fd295b5c/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "092e57cf584d517bd8fd2be3f8336a9e956c733430decbee47679b5088582da8",
+          "source_coverage_pending": [],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9091215889136197,
+                  "rmse": 4.689128946848568
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9091215889136197,
+                  "rmse": 4.689128946848568
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9091215889136197,
+                  0.9091215889136197,
+                  0.0
+                ],
+                "rmse": [
+                  "SAME",
+                  4.689128946848568,
+                  4.689128946848568,
+                  0.0
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 8524.058865383267,
+            "candidate_ms": 2048.577858135104,
+            "observed_candidate_over_baseline": 0.24032891964818617,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "T.CV.local.de099bccad76",
+          "vendor": "nvidia",
+          "mode": "identical",
+          "case": "expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ce3fe6a01c8948daa84e/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/ce3fe6a01c8948daa84e/attempts/attempt-0001/receipt.json",
+          "receipt_sha256": "3f6446867e68755c10ab78bbeb15ef8390c24917c933aff67945564edd698310",
+          "source_coverage_pending": [],
+          "quality_review_source": {
+            "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+            "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+            "kind": "quality_review",
+            "status": "RETAINED"
+          },
+          "continuation": "targeted-ab-20261007",
+          "controls": {
+            "A": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "requested_controls": {
+            "A": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            },
+            "B": {
+              "defines": [],
+              "environment": {},
+              "runtime": {}
+            }
+          },
+          "implementation_ids": [
+            "I.C.C13"
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9090718560676742,
+                  "rmse": 4.690411824863933
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9090718560676742,
+                  "rmse": 4.690411824863933
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+          "quality_comparisons": {
+            "candidate_vs_baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9090718560676742,
+                  0.9090718560676742,
+                  0.0
+                ],
+                "rmse": [
+                  "SAME",
+                  4.690411824863933,
+                  4.690411824863933,
+                  0.0
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "candidate_vs_opponents": {},
+            "baseline_vs_opponents": {},
+            "metric_directions": {
+              "finite": "higher",
+              "r2": "higher",
+              "rmse": "lower"
+            },
+            "new_full_opponent_review": {
+              "qualified": [],
+              "unqualified": [],
+              "expected_arms": [],
+              "matched_arms": [],
+              "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+            }
+          },
+          "unqualified_timing": {
+            "baseline_ms": 2097.3420571535826,
+            "candidate_ms": 2119.566760957241,
+            "observed_candidate_over_baseline": 1.010596604272467,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        }
+      ],
+      "status": "PENDING_ADMISSION"
+    },
+    {
+      "id": "T.CV.local.bb9ba62bd9a3",
+      "title": "T.CV.local.bb9ba62bd9a3",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.bb286656b51d",
+      "title": "T.CV.local.bb286656b51d",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.4c17c43f1dcf",
+      "title": "T.CV.local.4c17c43f1dcf",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.ca4bcc07ecfe",
+      "title": "T.CV.local.ca4bcc07ecfe",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.25fdcd3067b2",
+      "title": "T.CV.local.25fdcd3067b2",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.710590f636c2",
+      "title": "T.CV.local.710590f636c2",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.e5174d506044",
+      "title": "T.CV.local.e5174d506044",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.a8952d6bcb79",
+      "title": "T.CV.local.a8952d6bcb79",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.e6430f146f9a",
+      "title": "T.CV.local.e6430f146f9a",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.4210e28ea16c",
+      "title": "T.CV.local.4210e28ea16c",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.f364954c07b8",
+      "title": "T.CV.local.f364954c07b8",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.874a0fa1a14e",
+      "title": "T.CV.local.874a0fa1a14e",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.47b36b46b020",
+      "title": "T.CV.local.47b36b46b020",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.1d489e1a5ca4",
+      "title": "T.CV.local.1d489e1a5ca4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.d9f7769600f0",
+      "title": "T.CV.local.d9f7769600f0",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.5b95f394132e",
+      "title": "T.CV.local.5b95f394132e",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.cae449b50635",
+      "title": "T.CV.local.cae449b50635",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.56910b67cfd3",
+      "title": "T.CV.local.56910b67cfd3",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.5addd299d853",
+      "title": "T.CV.local.5addd299d853",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.939213337b9a",
+      "title": "T.CV.local.939213337b9a",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.426d5c94ba58",
+      "title": "T.CV.local.426d5c94ba58",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.de502ee70e76",
+      "title": "T.CV.local.de502ee70e76",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.9c0718c0659d",
+      "title": "T.CV.local.9c0718c0659d",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.e321b03d7ce2",
+      "title": "T.CV.local.e321b03d7ce2",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.8ed86cebb151",
+      "title": "T.CV.local.8ed86cebb151",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.e3f175a8315e",
+      "title": "T.CV.local.e3f175a8315e",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.66545710f91e",
+      "title": "T.CV.local.66545710f91e",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.f243c596bff6",
+      "title": "T.CV.local.f243c596bff6",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.f88ceebbf031",
+      "title": "T.CV.local.f88ceebbf031",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.8573a66827df",
+      "title": "T.CV.local.8573a66827df",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.df5213a577d0",
+      "title": "T.CV.local.df5213a577d0",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.7f14710a8274",
+      "title": "T.CV.local.7f14710a8274",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.60f09333701d",
+      "title": "T.CV.local.60f09333701d",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.304ae54fb44a",
+      "title": "T.CV.local.304ae54fb44a",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.90a8532756c9",
+      "title": "T.CV.local.90a8532756c9",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.af2c963cb0ce",
+      "title": "T.CV.local.af2c963cb0ce",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.8f821152df6f",
+      "title": "T.CV.local.8f821152df6f",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.6f5ca4f9a269",
+      "title": "T.CV.local.6f5ca4f9a269",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.4de1ac4c8112",
+      "title": "T.CV.local.4de1ac4c8112",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.26c607b84d31",
+      "title": "T.CV.local.26c607b84d31",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.d9b04dd8d9f0",
+      "title": "T.CV.local.d9b04dd8d9f0",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.2acfd53c71b9",
+      "title": "T.CV.local.2acfd53c71b9",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.c0e1783a3789",
+      "title": "T.CV.local.c0e1783a3789",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.b07b813f4f51",
+      "title": "T.CV.local.b07b813f4f51",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.681a57357367",
+      "title": "T.CV.local.681a57357367",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.34642e8073d6",
+      "title": "T.CV.local.34642e8073d6",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.b04e8eaf2e85",
+      "title": "T.CV.local.b04e8eaf2e85",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.a0c414d22b4f",
+      "title": "T.CV.local.a0c414d22b4f",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.13e507e4ed3d",
+      "title": "T.CV.local.13e507e4ed3d",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.9f92a6dff156",
+      "title": "T.CV.local.9f92a6dff156",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.0576c9d788a6",
+      "title": "T.CV.local.0576c9d788a6",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.329261fcc0f8",
+      "title": "T.CV.local.329261fcc0f8",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.6ab7896abd23",
+      "title": "T.CV.local.6ab7896abd23",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.85b7b57ddf4e",
+      "title": "T.CV.local.85b7b57ddf4e",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.beb1b9335c3b",
+      "title": "T.CV.local.beb1b9335c3b",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.db2eef76b5fa",
+      "title": "T.CV.local.db2eef76b5fa",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.b0084d073050",
+      "title": "T.CV.local.b0084d073050",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.44749883df90",
+      "title": "T.CV.local.44749883df90",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.ba688fcc26f8",
+      "title": "T.CV.local.ba688fcc26f8",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.83c01a764439",
+      "title": "T.CV.local.83c01a764439",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.6ab5df2181ab",
+      "title": "T.CV.local.6ab5df2181ab",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.c112c5de8b9a",
+      "title": "T.CV.local.c112c5de8b9a",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.CV.local.3ba57d8b8260",
+      "title": "T.CV.local.3ba57d8b8260",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
     }
   ],
   "notes": [
@@ -82657,9 +86097,14 @@
     "Full Taxi GMM refused both candidate and incumbent before scoring. Source-only review found no established implementation or harness defect; retain the incomplete pair and original failures, with zero scored samples and no candidate win/loss decision. See nvidia-gmm-taxi-source-diagnosis.json.",
     "LassoCV and ElasticNetCV Taxi retain combined-configuration quality failures on NVIDIA and AMD. Source-only review does not establish an implementation defect or isolate a control; saved quality failures cannot promote these defaults. See cv-taxi-source-diagnosis.json.",
     "Saved same-arm AMD/NVIDIA output comparison: 84 matched workloads; primary counts {\"AGREE\": 168}, repeated counts {\"AGREE\": 168}. Full identity counts {\"INCOMPLETE\": 84, \"MATCH\": 0, \"MISMATCH\": 0, \"NOT_REQUIRED\": 0}. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot.",
-    "Targeted queue uses one immutable source freeze with deduplicated builds; 106 profiles and 1540 planned paired vendor/workload cells, all pending execution. Missing recipes and control blockers remain explicit; no claim of all-algorithm coverage.",
-    "CPU/GPU workers use sixty-minute idle retention after all assigned queued work finishes and verified off-machine preservation. No numerical default was changed by this planning publication.",
-    "Targeted continuations: 106 additional exact profiles; 0 have receipts. See continuation-coverage.json for members and pending scope, and publication-continuations.json for exact plan/review snapshots and missing inputs. The catalog coverage ledger counts authored catalog IDs only; it does not relabel targeted profile IDs as catalog receipts."
+    "Owner scope is exhaustive valid combinations of reachable A/B experiment controls per algorithm, including fresh historical/incumbent configurations. Unrelated shared-binding/global flags do not inflate local counts.",
+    "Current admitted recipe plan: eight priority profiles plus64 CV-local profiles;584 logical paired vendor/workload cells,560 distinct fresh executions if24 exact same-freeze aliases qualify. Other algorithm reach audits remain pending; this is not an all-algorithm completion claim.",
+    "Initial106-profile broad plan is superseded for exhaustive local scope; its immutable planning snapshots are retained. Current coverage and superseded controls are recorded in planning/current/catalog-scope.json.",
+    "Workers retain60-minute idle after all assigned queued work finishes and verified off-machine local/R2 preservation. Frozen numerical source remains6fe3cfce38fdb3fd25c493071745d0e2dbb402f5; no default promotion from planning or compile success.",
+    "Per-algorithm scope snapshot is retained inside this continuation manifest under algorithm_scope: 55 audited family entries, 72 current profiles, all_algorithms_exhaustively_queued=false. Missing recipes, unsupported or unqueued controls remain explicit in its rows. Classifier source enumeration counts (480 GaussianNB and 21312 LDA) are audit-only; 384 GaussianNB profiles still await proof review, not completed or admitted measurements.",
+    "Initial C13/C55 retained-byte audit is retained inside this continuation manifest under retained_scored_byte_audit: all 32 scored vendor/arm executions and their repeated outputs/model states reconstruct to the captured typed hashes; 448 NPY leaves checked, zero issues. This audits saved bytes only and does not rerun models. Complete declared fitted-state and output identity matches for all 16 initial same-arm NVIDIA-native/AMD comparisons; Apple, host and PTX remain absent, so full identity remains incomplete.",
+    "Initial task-quality failures remain visible on both vendors: C13 LassoCV taxi, C13 ElasticNetCV taxi, C55 GaussianNB taxi, and C55 LDA Istella. Execution completion and matching bits do not override quality failures or authorize default promotion.",
+    "Targeted continuations: 170 additional exact profiles; 5 have receipts. See continuation-coverage.json for members and pending scope, and publication-continuations.json for exact plan/review snapshots and missing inputs. The catalog coverage ledger counts authored catalog IDs only; it does not relabel targeted profile IDs as catalog receipts."
   ],
   "decisions": [
     {
@@ -82797,6 +86242,102 @@
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classification-full-v1/896a91284fe76be2f130/attempt-0001/receipt.json",
       "default_changed": false,
       "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C55.only/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C13.C18/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C13.only/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C55.only/expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C13.only/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C13.C18/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C13.only/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/3d0daa186ea154a23d5e/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C13.C18/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/4873658ed79bcdc696a3/attempt-0001/receipt.ccc9ddfa99b4858dd380bd3f4c1d1513eb4bf01f69bf8d61189c083d03fbd1be.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C55.only/expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/81aff7ce155ba663b7c0/attempt-0001/receipt.231c36bc8bd7fced2d418dfe9dc2df49d72422e4719bc42f3883410b6ba7f9a2.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C55.only/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/94344cac43938a205dcd/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C13.C18/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/dfc8d7a22b610e371fd6/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
+    },
+    {
+      "candidate": "T.C13.only/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "commit": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/fe404b0a79ed4d09df0a/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     }
   ],
   "coverage": [
@@ -82806,9 +86347,9 @@
       "routes": [
         "native-sm90"
       ],
-      "complete_pairs": 99,
+      "complete_pairs": 115,
       "failed_attempts": 2,
-      "quality_failed": 4,
+      "quality_failed": 10,
       "remaining_scope": "See exact selection and route receipts. PTX and unrecorded individual/full-workload scopes remain pending."
     },
     {
@@ -82817,9 +86358,9 @@
       "routes": [
         "amd-native-gfx942"
       ],
-      "complete_pairs": 84,
+      "complete_pairs": 102,
       "failed_attempts": 1,
-      "quality_failed": 4,
+      "quality_failed": 10,
       "remaining_scope": "Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending."
     },
     {
@@ -82864,12 +86405,6 @@
       "scope": "Apple FAST MLP classifier/regressor \u00d7 Taxi/Istella",
       "reason": "4 additional pending pairs; No retained accepted Apple FAST x_sequence pair; IDENTICAL cannot substitute",
       "evidence": "campaign-coverage.json: apple_readiness"
-    },
-    {
-      "vendor": "all",
-      "scope": "Continuation targeted-ab-20261007",
-      "reason": "Pending sources/inputs: /Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
-      "evidence": "publication-continuations.json"
     }
   ],
   "remaining_catalog": {
@@ -131887,26 +135422,81 @@
           "I.C.C13",
           "I.C.C18"
         ],
-        "attempts": 0,
-        "complete_pairs": 0,
-        "quality_failed": 0,
-        "status": "PENDING_MEASUREMENT",
-        "receipts": []
+        "attempts": 8,
+        "complete_pairs": 8,
+        "quality_failed": 4,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b1c11584d78ed1948ad/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ebc643bc218228636fa5/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/4873658ed79bcdc696a3/attempt-0001/receipt.ccc9ddfa99b4858dd380bd3f4c1d1513eb4bf01f69bf8d61189c083d03fbd1be.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/af5ee517738947cd42ec/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/dfc8d7a22b610e371fd6/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e53fca1a998380458fdf/attempt-0001/receipt.35258611dae4666b3a33b4848adfd23ee8b38269443ea8fd7d5b055e39ce3951.json"
+        ]
       },
       {
         "id": "T.C13.only",
         "members": [
           "I.C.C13"
         ],
-        "attempts": 0,
-        "complete_pairs": 0,
-        "quality_failed": 0,
-        "status": "PENDING_MEASUREMENT",
-        "receipts": []
+        "attempts": 8,
+        "complete_pairs": 8,
+        "quality_failed": 4,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2a098babe6bda25adfe4/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fef343a1a02430ef8632/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/3d0daa186ea154a23d5e/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/5c24a6b46732ada9b809/attempt-0001/receipt.ac4a45d5fda6e64e3802f9981b1e660cf86c0b61206d7289d657f87f5cac21e8.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/d843ad424711b6ad4e77/attempt-0001/receipt.58a8082cd6906774b4a769e21903f088ac82a3d09a3ae9afe16aba7c0dbf7d42.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/fe404b0a79ed4d09df0a/attempt-0001/receipt.json"
+        ]
       },
       {
         "id": "T.C18.residual-only",
         "members": [
+          "I.C.C18"
+        ],
+        "attempts": 4,
+        "complete_pairs": 2,
+        "quality_failed": 0,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/24e8e0542e4f54ab5ad8/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/55f5904de0bbd6d47f43/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e6b98819c437ea37d9ee/attempt-0001/receipt.304bb8832cf9a90081f13f44cce223cb6554dcbc3d126d9727f09fd28531e665.json"
+        ]
+      },
+      {
+        "id": "T.C55.only",
+        "members": [
+          "I.C.C55"
+        ],
+        "attempts": 8,
+        "complete_pairs": 8,
+        "quality_failed": 4,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6a1927d993c3730a4ca2/attempt-0001/receipt.d12e8f1e18983624b53e5a7021478cce3ded2907a6bcd9e2b0b5faba38763869.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d75d76539c8a32df81e8/attempt-0001/receipt.4197e246bcaaf01c5c89125b016de4a01417e819738cdb2ed53e0407cf0be3c6.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/363f093609c46a864ee6/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/81aff7ce155ba663b7c0/attempt-0001/receipt.231c36bc8bd7fced2d418dfe9dc2df49d72422e4719bc42f3883410b6ba7f9a2.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/94344cac43938a205dcd/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/ad744036652095482a82/attempt-0001/receipt.json"
+        ]
+      },
+      {
+        "id": "T.CV.local.0576c9d788a6",
+        "members": [
+          "I.C.C13",
           "I.C.C18"
         ],
         "attempts": 0,
@@ -131916,9 +135506,763 @@
         "receipts": []
       },
       {
-        "id": "T.C55.only",
+        "id": "T.CV.local.13e507e4ed3d",
         "members": [
-          "I.C.C55"
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.1d489e1a5ca4",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.25fdcd3067b2",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.26c607b84d31",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.2acfd53c71b9",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.304ae54fb44a",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.329261fcc0f8",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.34642e8073d6",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.3ba57d8b8260",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.4210e28ea16c",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.426d5c94ba58",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.44749883df90",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.47b36b46b020",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.4c17c43f1dcf",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.4de1ac4c8112",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.56910b67cfd3",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.5addd299d853",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.5b95f394132e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.60f09333701d",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.66545710f91e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.681a57357367",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.6ab5df2181ab",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.6ab7896abd23",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.6f5ca4f9a269",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.710590f636c2",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.7f14710a8274",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.83c01a764439",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.8573a66827df",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.85b7b57ddf4e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.874a0fa1a14e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.8ed86cebb151",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.8f821152df6f",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.90a8532756c9",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.939213337b9a",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.9c0718c0659d",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.9f92a6dff156",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.a0c414d22b4f",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.a8952d6bcb79",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.af2c963cb0ce",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.b0084d073050",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.b04e8eaf2e85",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.b07b813f4f51",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.ba688fcc26f8",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.bb286656b51d",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.bb9ba62bd9a3",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.beb1b9335c3b",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.c0e1783a3789",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.c112c5de8b9a",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.ca4bcc07ecfe",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.cae449b50635",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.d9b04dd8d9f0",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.d9f7769600f0",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.db2eef76b5fa",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.de099bccad76",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 8,
+        "complete_pairs": 8,
+        "quality_failed": 0,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/047dc5950c1d73fd8b3c/attempt-0001/receipt.e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/060dd5184930208ceb52/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf523bdc7b56fd295b5c/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ce3fe6a01c8948daa84e/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/24511b905f5dbe54fe19/attempt-0001/receipt.23a77a0baf7b12a6a2fb2793f1f01433f042f82a992a8ac1ad287412026f3f36.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/2c32b4b985196c4c08b8/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/df274c96625c58fe8875/attempt-0001/receipt.e0c2132bb9900902e0d0e4341235dbd04984f46286e6bafda2ab923b3e79f1e5.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/ff79717343a3e4c04eed/attempt-0001/receipt.json"
+        ]
+      },
+      {
+        "id": "T.CV.local.de502ee70e76",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.df5213a577d0",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.e321b03d7ce2",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.e3f175a8315e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.e5174d506044",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.e6430f146f9a",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.f243c596bff6",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.f364954c07b8",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.f88ceebbf031",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
         ],
         "attempts": 0,
         "complete_pairs": 0,

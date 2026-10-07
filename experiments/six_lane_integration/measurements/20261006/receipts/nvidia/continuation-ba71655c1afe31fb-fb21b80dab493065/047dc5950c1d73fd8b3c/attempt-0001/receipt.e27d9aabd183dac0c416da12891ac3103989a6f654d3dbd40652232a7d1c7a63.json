@@ -1,0 +1,5050 @@
+{
+  "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+  "key": "047dc5950c1d73fd8b3c",
+  "mode": "identical",
+  "workload": {
+    "arms": {
+      "A": {
+        "argv": [
+          "/root/targeted-ab-20261007/runtime/.pixi/envs/default/bin/python",
+          "/root/targeted-ab-20261007/source-provenance/repo/tools/six_lane_ab_worker.py",
+          "--recipe",
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/cells/047dc5950c1d73fd8b3c/queue-workers/047dc5950c1d73fd8b3c.json",
+          "--arm",
+          "A",
+          "--phase",
+          "{phase}",
+          "--output",
+          "{output}"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "environment": {}
+      },
+      "B": {
+        "argv": [
+          "/root/targeted-ab-20261007/runtime/.pixi/envs/default/bin/python",
+          "/root/targeted-ab-20261007/source-provenance/repo/tools/six_lane_ab_worker.py",
+          "--recipe",
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/cells/047dc5950c1d73fd8b3c/queue-workers/047dc5950c1d73fd8b3c.json",
+          "--arm",
+          "B",
+          "--phase",
+          "{phase}",
+          "--output",
+          "{output}"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "environment": {}
+      }
+    },
+    "artifact_provenance": {
+      "A": [
+        {
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+          "defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+          "path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/identical/_mojolearn.so",
+          "receipt": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/attributed/edb58a11758774dc9693/receipt.json",
+          "sha256": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
+          "source_closure_sha256": "ea44e4afd8783f0058c7492ba7632a16435344aadcd03f6fccfda56b23e7daff",
+          "target": "nvidia-native"
+        },
+        {
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+          "defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+          "path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/identical/_mojolearn_x_linear.so",
+          "receipt": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/attributed/ca4918077f351c8926e8/receipt.json",
+          "sha256": "814408be3f9c27edab432706aad75041ee04a61eeedc6ad6d2a4fab2545f57f8",
+          "source_closure_sha256": "986b1afcc35ea767b096ca2afd5656abc36bff941305dfda805ba1e06722b4ef",
+          "target": "nvidia-native"
+        }
+      ],
+      "B": [
+        {
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+          "defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+          "path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/identical/_mojolearn.so",
+          "receipt": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/attributed/edb58a11758774dc9693/receipt.json",
+          "sha256": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
+          "source_closure_sha256": "ea44e4afd8783f0058c7492ba7632a16435344aadcd03f6fccfda56b23e7daff",
+          "target": "nvidia-native"
+        },
+        {
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+          "defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+          "path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/identical/_mojolearn_x_linear.so",
+          "receipt": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/attributed/ca4918077f351c8926e8/receipt.json",
+          "sha256": "814408be3f9c27edab432706aad75041ee04a61eeedc6ad6d2a4fab2545f57f8",
+          "source_closure_sha256": "986b1afcc35ea767b096ca2afd5656abc36bff941305dfda805ba1e06722b4ef",
+          "target": "nvidia-native"
+        }
+      ]
+    },
+    "blocked": [],
+    "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+    "dimensions": {
+      "X": [
+        2043304,
+        220
+      ],
+      "Xq": [
+        500000,
+        220
+      ],
+      "y": [
+        2043304
+      ],
+      "yq": [
+        500000
+      ]
+    },
+    "estimator_settings": {
+      "__record__": true,
+      "library": "mojolearn",
+      "params": {
+        "alphas": [
+          0.001,
+          0.01,
+          0.1,
+          1.0
+        ],
+        "cv": 5,
+        "eps": 0.001,
+        "fit_intercept": true,
+        "l1_ratio": 0.5,
+        "max_iter": 1000,
+        "n_alphas": "deprecated",
+        "positive": false,
+        "precompute": "auto",
+        "random_state": 7,
+        "selection": "cyclic",
+        "tol": 0.0001
+      },
+      "source": "get_params"
+    },
+    "full_dataset_coverage": true,
+    "implementation_ids": [
+      "I.C.C13"
+    ],
+    "intrinsic_caps": [],
+    "key": "047dc5950c1d73fd8b3c",
+    "master_selection": {
+      "A": {
+        "defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "B": {
+        "defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "campaign_role": "new_candidate",
+      "experiment_kind": "exhaustive_per_algorithm_authored_controls",
+      "id": "T.CV.local.de099bccad76",
+      "kind": "candidate",
+      "logical_choices": {
+        "device_cast": true,
+        "device_finite": true,
+        "device_folds": true,
+        "fold_stats": false,
+        "residual_next": false,
+        "vendor_ftz": true
+      },
+      "logical_control_evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/planning/per-algorithm-audit/per-algorithm-controls.json",
+      "members": [
+        "I.C.C13",
+        "I.C.C18"
+      ],
+      "mode": "identical",
+      "name": "T.CV.local.de099bccad76",
+      "parameters": {},
+      "priority": 1,
+      "problems": [],
+      "rationale": "Every legal local combination of six authored CV controls. Both full datasets per estimator, frozen incumbent B; historic verdict never automatically promotes.",
+      "shared_algorithms": [
+        "LassoCV",
+        "ElasticNetCV"
+      ],
+      "source_gaps": [],
+      "source_selectable": true,
+      "vendors": [
+        "nvidia",
+        "amd"
+      ],
+      "workloads": [
+        "expanded:lasso-cv@dataset=taxi",
+        "expanded:lasso-cv@dataset=istella",
+        "expanded:enet-cv@dataset=taxi",
+        "expanded:enet-cv@dataset=istella"
+      ]
+    },
+    "matrix_status": "PENDING_COVERAGE",
+    "mode": "identical",
+    "source_coverage_pending": [],
+    "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
+    "timeout_seconds": 3600,
+    "workload_id": "expanded:enet-cv@dataset=istella"
+  },
+  "started": 1791349690.0693727,
+  "runs": [
+    {
+      "phase": "warmup",
+      "arm": "A",
+      "excluded": true,
+      "returncode": 0,
+      "process_wall_seconds": 12.08077096939087,
+      "log": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-A.log",
+      "output": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-A.json",
+      "result_sha256": "b8cbf1bb95e8b5f45e509a4a34e79fcc7e360e3f747129fe677f10d6713894ac",
+      "result": {
+        "arm": "A",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "Full actual cgroup allocation, serial arms under one GPU lock; worker captures effective thread/resource metadata; no laptop diagnostic caps"
+        },
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            85,
+            86,
+            87,
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135,
+            136,
+            137,
+            138,
+            139,
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155,
+            156,
+            157,
+            158,
+            159,
+            160,
+            161,
+            162,
+            163,
+            164,
+            165,
+            166,
+            167,
+            168,
+            169,
+            170,
+            171,
+            172,
+            173,
+            174,
+            175,
+            176,
+            177,
+            178,
+            179,
+            180,
+            181,
+            182,
+            183,
+            184,
+            185,
+            186,
+            187,
+            188,
+            189,
+            190,
+            191,
+            192,
+            193,
+            194,
+            195,
+            196,
+            197,
+            198,
+            199,
+            200,
+            201,
+            202,
+            203,
+            204,
+            205,
+            206,
+            207,
+            208,
+            209,
+            210,
+            211,
+            212,
+            213,
+            214,
+            215,
+            216,
+            217,
+            218,
+            219,
+            220,
+            221,
+            222,
+            223
+          ],
+          "cgroup": {
+            "/sys/fs/cgroup/cpu.max": "2380000 100000",
+            "/sys/fs/cgroup/cpuset.cpus.effective": "0-223"
+          },
+          "cpu_count": 224,
+          "machine": "x86_64",
+          "native_readback": {
+            "config": "mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/__init__.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.37"
+          },
+          "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+          "system": "Linux"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "I.C.C13"
+        ],
+        "loaded_artifacts": {
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/identical/_mojolearn.so": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/identical/_mojolearn_x_linear.so": "814408be3f9c27edab432706aad75041ee04a61eeedc6ad6d2a4fab2545f57f8"
+        },
+        "missing_timing_scopes": [],
+        "mode": "identical",
+        "model_state": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[0]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[1]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[2]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[3]",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.copy_X",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.cv",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.eps",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.fit_intercept",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.l1_ratio",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.max_iter",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.n_alphas",
+              "shape": []
+            },
+            {
+              "dtype": "NoneType",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.n_jobs",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.positive",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.precompute",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.random_state",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.selection",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.tol",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.verbose",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.estimator",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.alpha_",
+              "shape": []
+            },
+            {
+              "bytes": 16,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.alphas_",
+              "shape": [
+                4
+              ]
+            },
+            {
+              "bytes": 880,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.coef_",
+              "shape": [
+                220
+              ]
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.intercept_",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.l1_ratio_",
+              "shape": []
+            },
+            {
+              "bytes": 80,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.mse_path_",
+              "shape": [
+                4,
+                5
+              ]
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_features_in_",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_iter_",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.format",
+              "shape": []
+            }
+          ],
+          "missing_state": [],
+          "provenance": {
+            "capture_source": "reviewed public and private fitted native-result storage",
+            "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+            "contract_paths": [
+              "$.constructor.alphas[0]",
+              "$.constructor.alphas[1]",
+              "$.constructor.alphas[2]",
+              "$.constructor.alphas[3]",
+              "$.constructor.copy_X",
+              "$.constructor.cv",
+              "$.constructor.eps",
+              "$.constructor.fit_intercept",
+              "$.constructor.l1_ratio",
+              "$.constructor.max_iter",
+              "$.constructor.n_alphas",
+              "$.constructor.n_jobs",
+              "$.constructor.positive",
+              "$.constructor.precompute",
+              "$.constructor.random_state",
+              "$.constructor.selection",
+              "$.constructor.tol",
+              "$.constructor.verbose",
+              "$.estimator",
+              "$.fitted.alpha_",
+              "$.fitted.alphas_",
+              "$.fitted.coef_",
+              "$.fitted.intercept_",
+              "$.fitted.l1_ratio_",
+              "$.fitted.mse_path_",
+              "$.fitted.n_features_in_",
+              "$.fitted.n_iter_",
+              "$.format"
+            ],
+            "contract_source": "python/mojolearn/_expansion_linear.py",
+            "excluded_non_fitted_state": {
+              "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+              "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+            },
+            "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+            "numerical_verification": false,
+            "optional_fields": [],
+            "product_python_compliance": "not assessed; existing timed product work unchanged",
+            "required_fields": [
+              "coef_",
+              "intercept_",
+              "alpha_",
+              "l1_ratio_",
+              "n_iter_",
+              "alphas_",
+              "mse_path_",
+              "n_features_in_"
+            ],
+            "reviewed_api_source": {
+              "path": "python/mojolearn/_expansion_linear.py",
+              "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+            }
+          },
+          "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-A.model-state.json",
+          "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+          "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+          "status": "CAPTURED"
+        },
+        "output_sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.pred",
+              "shape": [
+                500000
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+          "status": "CAPTURED"
+        },
+        "phase": "warmup",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[0]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[1]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[2]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[3]",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.copy_X",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.cv",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.eps",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.fit_intercept",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.l1_ratio",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.max_iter",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.n_alphas",
+                  "shape": []
+                },
+                {
+                  "dtype": "NoneType",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.n_jobs",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.positive",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.precompute",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.random_state",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.selection",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.tol",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.verbose",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.estimator",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.alpha_",
+                  "shape": []
+                },
+                {
+                  "bytes": 16,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.alphas_",
+                  "shape": [
+                    4
+                  ]
+                },
+                {
+                  "bytes": 880,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.coef_",
+                  "shape": [
+                    220
+                  ]
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.intercept_",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.l1_ratio_",
+                  "shape": []
+                },
+                {
+                  "bytes": 80,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.mse_path_",
+                  "shape": [
+                    4,
+                    5
+                  ]
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_features_in_",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_iter_",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.format",
+                  "shape": []
+                }
+              ],
+              "missing_state": [],
+              "provenance": {
+                "capture_source": "reviewed public and private fitted native-result storage",
+                "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+                "contract_paths": [
+                  "$.constructor.alphas[0]",
+                  "$.constructor.alphas[1]",
+                  "$.constructor.alphas[2]",
+                  "$.constructor.alphas[3]",
+                  "$.constructor.copy_X",
+                  "$.constructor.cv",
+                  "$.constructor.eps",
+                  "$.constructor.fit_intercept",
+                  "$.constructor.l1_ratio",
+                  "$.constructor.max_iter",
+                  "$.constructor.n_alphas",
+                  "$.constructor.n_jobs",
+                  "$.constructor.positive",
+                  "$.constructor.precompute",
+                  "$.constructor.random_state",
+                  "$.constructor.selection",
+                  "$.constructor.tol",
+                  "$.constructor.verbose",
+                  "$.estimator",
+                  "$.fitted.alpha_",
+                  "$.fitted.alphas_",
+                  "$.fitted.coef_",
+                  "$.fitted.intercept_",
+                  "$.fitted.l1_ratio_",
+                  "$.fitted.mse_path_",
+                  "$.fitted.n_features_in_",
+                  "$.fitted.n_iter_",
+                  "$.format"
+                ],
+                "contract_source": "python/mojolearn/_expansion_linear.py",
+                "excluded_non_fitted_state": {
+                  "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+                  "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+                },
+                "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+                "numerical_verification": false,
+                "optional_fields": [],
+                "product_python_compliance": "not assessed; existing timed product work unchanged",
+                "required_fields": [
+                  "coef_",
+                  "intercept_",
+                  "alpha_",
+                  "l1_ratio_",
+                  "n_iter_",
+                  "alphas_",
+                  "mse_path_",
+                  "n_features_in_"
+                ],
+                "reviewed_api_source": {
+                  "path": "python/mojolearn/_expansion_linear.py",
+                  "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+                }
+              },
+              "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-A.repeated-0.model-state.json",
+              "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+              "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+              "status": "CAPTURED"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.pred",
+                  "shape": [
+                    500000
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+              "status": "CAPTURED"
+            },
+            "retained_output_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-A.repeated-0.values.json",
+            "timings": {
+              "consumed_output_seconds": 0.0008271932601928711,
+              "fit_or_training_seconds": 2.4310996308922768,
+              "inference_seconds": 0.051689643412828445,
+              "repeated_seconds": 2.4836178179830313
+            }
+          }
+        ],
+        "resource_policy": {
+          "affinity_cpus": 224,
+          "cgroup_quota_cpus": 23.8,
+          "configured_library_threads": 23,
+          "policy": "whole worker allocation; estimator semantics and nested pools preserved",
+          "quota_source": "/sys/fs/cgroup/cpu.max",
+          "utilization": "not inferred"
+        },
+        "retained_output_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-A.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "cuda",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 1,
+          "scored": 0
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.3216136885206221,
+              "rmse": 0.6872800861438083
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": "23",
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": "23",
+          "OMP_NUM_THREADS": "23",
+          "OPENBLAS_NUM_THREADS": "23",
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
+        "timings": {
+          "cold_seconds": 6.087870208546519,
+          "consumed_output_seconds": 0.0023142360150814056,
+          "fit_or_training_seconds": 3.3534794244915247,
+          "full_operation_seconds": 6.087870208546519,
+          "inference_seconds": 0.046751877292990685,
+          "preparation_seconds": 2.6853238064795732
+        },
+        "vendor": "nvidia",
+        "workload_id": "expanded:enet-cv@dataset=istella",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": true
+        }
+      },
+      "output_sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+      "model_state": {
+        "completeness": "complete_declared_scope",
+        "encoding": "mojolearn-benchmark-state-v1",
+        "manifest": [
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[0]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[1]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[2]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[3]",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.copy_X",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.cv",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.eps",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.fit_intercept",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.l1_ratio",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.max_iter",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.n_alphas",
+            "shape": []
+          },
+          {
+            "dtype": "NoneType",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.n_jobs",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.positive",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.precompute",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.random_state",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.selection",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.tol",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.verbose",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.estimator",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.alpha_",
+            "shape": []
+          },
+          {
+            "bytes": 16,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.alphas_",
+            "shape": [
+              4
+            ]
+          },
+          {
+            "bytes": 880,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.coef_",
+            "shape": [
+              220
+            ]
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.intercept_",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.l1_ratio_",
+            "shape": []
+          },
+          {
+            "bytes": 80,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.mse_path_",
+            "shape": [
+              4,
+              5
+            ]
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_features_in_",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_iter_",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.format",
+            "shape": []
+          }
+        ],
+        "missing_state": [],
+        "provenance": {
+          "capture_source": "reviewed public and private fitted native-result storage",
+          "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+          "contract_paths": [
+            "$.constructor.alphas[0]",
+            "$.constructor.alphas[1]",
+            "$.constructor.alphas[2]",
+            "$.constructor.alphas[3]",
+            "$.constructor.copy_X",
+            "$.constructor.cv",
+            "$.constructor.eps",
+            "$.constructor.fit_intercept",
+            "$.constructor.l1_ratio",
+            "$.constructor.max_iter",
+            "$.constructor.n_alphas",
+            "$.constructor.n_jobs",
+            "$.constructor.positive",
+            "$.constructor.precompute",
+            "$.constructor.random_state",
+            "$.constructor.selection",
+            "$.constructor.tol",
+            "$.constructor.verbose",
+            "$.estimator",
+            "$.fitted.alpha_",
+            "$.fitted.alphas_",
+            "$.fitted.coef_",
+            "$.fitted.intercept_",
+            "$.fitted.l1_ratio_",
+            "$.fitted.mse_path_",
+            "$.fitted.n_features_in_",
+            "$.fitted.n_iter_",
+            "$.format"
+          ],
+          "contract_source": "python/mojolearn/_expansion_linear.py",
+          "excluded_non_fitted_state": {
+            "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+            "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+          },
+          "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+          "numerical_verification": false,
+          "optional_fields": [],
+          "product_python_compliance": "not assessed; existing timed product work unchanged",
+          "required_fields": [
+            "coef_",
+            "intercept_",
+            "alpha_",
+            "l1_ratio_",
+            "n_iter_",
+            "alphas_",
+            "mse_path_",
+            "n_features_in_"
+          ],
+          "reviewed_api_source": {
+            "path": "python/mojolearn/_expansion_linear.py",
+            "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+          }
+        },
+        "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-A.model-state.json",
+        "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+        "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+        "status": "CAPTURED"
+      },
+      "timings": {
+        "cold_seconds": 6.087870208546519,
+        "consumed_output_seconds": 0.0023142360150814056,
+        "fit_or_training_seconds": 3.3534794244915247,
+        "full_operation_seconds": 6.087870208546519,
+        "inference_seconds": 0.046751877292990685,
+        "preparation_seconds": 2.6853238064795732
+      },
+      "model_identity_available": true
+    },
+    {
+      "phase": "warmup",
+      "arm": "B",
+      "excluded": true,
+      "returncode": 0,
+      "process_wall_seconds": 12.131352424621582,
+      "log": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-B.log",
+      "output": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-B.json",
+      "result_sha256": "97c05c01624811bb8928b241337e5117d388f60deb5f93734c7406e2034339cd",
+      "result": {
+        "arm": "B",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "Full actual cgroup allocation, serial arms under one GPU lock; worker captures effective thread/resource metadata; no laptop diagnostic caps"
+        },
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            85,
+            86,
+            87,
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135,
+            136,
+            137,
+            138,
+            139,
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155,
+            156,
+            157,
+            158,
+            159,
+            160,
+            161,
+            162,
+            163,
+            164,
+            165,
+            166,
+            167,
+            168,
+            169,
+            170,
+            171,
+            172,
+            173,
+            174,
+            175,
+            176,
+            177,
+            178,
+            179,
+            180,
+            181,
+            182,
+            183,
+            184,
+            185,
+            186,
+            187,
+            188,
+            189,
+            190,
+            191,
+            192,
+            193,
+            194,
+            195,
+            196,
+            197,
+            198,
+            199,
+            200,
+            201,
+            202,
+            203,
+            204,
+            205,
+            206,
+            207,
+            208,
+            209,
+            210,
+            211,
+            212,
+            213,
+            214,
+            215,
+            216,
+            217,
+            218,
+            219,
+            220,
+            221,
+            222,
+            223
+          ],
+          "cgroup": {
+            "/sys/fs/cgroup/cpu.max": "2380000 100000",
+            "/sys/fs/cgroup/cpuset.cpus.effective": "0-223"
+          },
+          "cpu_count": 224,
+          "machine": "x86_64",
+          "native_readback": {
+            "config": "mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/__init__.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.37"
+          },
+          "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+          "system": "Linux"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "I.C.C13"
+        ],
+        "loaded_artifacts": {
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/identical/_mojolearn.so": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/identical/_mojolearn_x_linear.so": "814408be3f9c27edab432706aad75041ee04a61eeedc6ad6d2a4fab2545f57f8"
+        },
+        "missing_timing_scopes": [],
+        "mode": "identical",
+        "model_state": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[0]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[1]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[2]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[3]",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.copy_X",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.cv",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.eps",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.fit_intercept",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.l1_ratio",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.max_iter",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.n_alphas",
+              "shape": []
+            },
+            {
+              "dtype": "NoneType",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.n_jobs",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.positive",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.precompute",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.random_state",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.selection",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.tol",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.verbose",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.estimator",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.alpha_",
+              "shape": []
+            },
+            {
+              "bytes": 16,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.alphas_",
+              "shape": [
+                4
+              ]
+            },
+            {
+              "bytes": 880,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.coef_",
+              "shape": [
+                220
+              ]
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.intercept_",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.l1_ratio_",
+              "shape": []
+            },
+            {
+              "bytes": 80,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.mse_path_",
+              "shape": [
+                4,
+                5
+              ]
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_features_in_",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_iter_",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.format",
+              "shape": []
+            }
+          ],
+          "missing_state": [],
+          "provenance": {
+            "capture_source": "reviewed public and private fitted native-result storage",
+            "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+            "contract_paths": [
+              "$.constructor.alphas[0]",
+              "$.constructor.alphas[1]",
+              "$.constructor.alphas[2]",
+              "$.constructor.alphas[3]",
+              "$.constructor.copy_X",
+              "$.constructor.cv",
+              "$.constructor.eps",
+              "$.constructor.fit_intercept",
+              "$.constructor.l1_ratio",
+              "$.constructor.max_iter",
+              "$.constructor.n_alphas",
+              "$.constructor.n_jobs",
+              "$.constructor.positive",
+              "$.constructor.precompute",
+              "$.constructor.random_state",
+              "$.constructor.selection",
+              "$.constructor.tol",
+              "$.constructor.verbose",
+              "$.estimator",
+              "$.fitted.alpha_",
+              "$.fitted.alphas_",
+              "$.fitted.coef_",
+              "$.fitted.intercept_",
+              "$.fitted.l1_ratio_",
+              "$.fitted.mse_path_",
+              "$.fitted.n_features_in_",
+              "$.fitted.n_iter_",
+              "$.format"
+            ],
+            "contract_source": "python/mojolearn/_expansion_linear.py",
+            "excluded_non_fitted_state": {
+              "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+              "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+            },
+            "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+            "numerical_verification": false,
+            "optional_fields": [],
+            "product_python_compliance": "not assessed; existing timed product work unchanged",
+            "required_fields": [
+              "coef_",
+              "intercept_",
+              "alpha_",
+              "l1_ratio_",
+              "n_iter_",
+              "alphas_",
+              "mse_path_",
+              "n_features_in_"
+            ],
+            "reviewed_api_source": {
+              "path": "python/mojolearn/_expansion_linear.py",
+              "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+            }
+          },
+          "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-B.model-state.json",
+          "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+          "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+          "status": "CAPTURED"
+        },
+        "output_sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.pred",
+              "shape": [
+                500000
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+          "status": "CAPTURED"
+        },
+        "phase": "warmup",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[0]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[1]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[2]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[3]",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.copy_X",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.cv",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.eps",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.fit_intercept",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.l1_ratio",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.max_iter",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.n_alphas",
+                  "shape": []
+                },
+                {
+                  "dtype": "NoneType",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.n_jobs",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.positive",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.precompute",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.random_state",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.selection",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.tol",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.verbose",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.estimator",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.alpha_",
+                  "shape": []
+                },
+                {
+                  "bytes": 16,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.alphas_",
+                  "shape": [
+                    4
+                  ]
+                },
+                {
+                  "bytes": 880,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.coef_",
+                  "shape": [
+                    220
+                  ]
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.intercept_",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.l1_ratio_",
+                  "shape": []
+                },
+                {
+                  "bytes": 80,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.mse_path_",
+                  "shape": [
+                    4,
+                    5
+                  ]
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_features_in_",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_iter_",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.format",
+                  "shape": []
+                }
+              ],
+              "missing_state": [],
+              "provenance": {
+                "capture_source": "reviewed public and private fitted native-result storage",
+                "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+                "contract_paths": [
+                  "$.constructor.alphas[0]",
+                  "$.constructor.alphas[1]",
+                  "$.constructor.alphas[2]",
+                  "$.constructor.alphas[3]",
+                  "$.constructor.copy_X",
+                  "$.constructor.cv",
+                  "$.constructor.eps",
+                  "$.constructor.fit_intercept",
+                  "$.constructor.l1_ratio",
+                  "$.constructor.max_iter",
+                  "$.constructor.n_alphas",
+                  "$.constructor.n_jobs",
+                  "$.constructor.positive",
+                  "$.constructor.precompute",
+                  "$.constructor.random_state",
+                  "$.constructor.selection",
+                  "$.constructor.tol",
+                  "$.constructor.verbose",
+                  "$.estimator",
+                  "$.fitted.alpha_",
+                  "$.fitted.alphas_",
+                  "$.fitted.coef_",
+                  "$.fitted.intercept_",
+                  "$.fitted.l1_ratio_",
+                  "$.fitted.mse_path_",
+                  "$.fitted.n_features_in_",
+                  "$.fitted.n_iter_",
+                  "$.format"
+                ],
+                "contract_source": "python/mojolearn/_expansion_linear.py",
+                "excluded_non_fitted_state": {
+                  "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+                  "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+                },
+                "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+                "numerical_verification": false,
+                "optional_fields": [],
+                "product_python_compliance": "not assessed; existing timed product work unchanged",
+                "required_fields": [
+                  "coef_",
+                  "intercept_",
+                  "alpha_",
+                  "l1_ratio_",
+                  "n_iter_",
+                  "alphas_",
+                  "mse_path_",
+                  "n_features_in_"
+                ],
+                "reviewed_api_source": {
+                  "path": "python/mojolearn/_expansion_linear.py",
+                  "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+                }
+              },
+              "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-B.repeated-0.model-state.json",
+              "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+              "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+              "status": "CAPTURED"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.pred",
+                  "shape": [
+                    500000
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+              "status": "CAPTURED"
+            },
+            "retained_output_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-B.repeated-0.values.json",
+            "timings": {
+              "consumed_output_seconds": 0.0020583942532539368,
+              "fit_or_training_seconds": 2.4465114027261734,
+              "inference_seconds": 0.049426011741161346,
+              "repeated_seconds": 2.4979974944144487
+            }
+          }
+        ],
+        "resource_policy": {
+          "affinity_cpus": 224,
+          "cgroup_quota_cpus": 23.8,
+          "configured_library_threads": 23,
+          "policy": "whole worker allocation; estimator semantics and nested pools preserved",
+          "quota_source": "/sys/fs/cgroup/cpu.max",
+          "utilization": "not inferred"
+        },
+        "retained_output_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-B.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "cuda",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 1,
+          "scored": 0
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.3216136885206221,
+              "rmse": 0.6872800861438083
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": "23",
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": "23",
+          "OMP_NUM_THREADS": "23",
+          "OPENBLAS_NUM_THREADS": "23",
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
+        "timings": {
+          "cold_seconds": 6.147126344963908,
+          "consumed_output_seconds": 0.0032537374645471573,
+          "fit_or_training_seconds": 3.376424739137292,
+          "full_operation_seconds": 6.147126344963908,
+          "inference_seconds": 0.05029304325580597,
+          "preparation_seconds": 2.7171538956463337
+        },
+        "vendor": "nvidia",
+        "workload_id": "expanded:enet-cv@dataset=istella",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": true
+        }
+      },
+      "output_sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+      "model_state": {
+        "completeness": "complete_declared_scope",
+        "encoding": "mojolearn-benchmark-state-v1",
+        "manifest": [
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[0]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[1]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[2]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[3]",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.copy_X",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.cv",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.eps",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.fit_intercept",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.l1_ratio",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.max_iter",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.n_alphas",
+            "shape": []
+          },
+          {
+            "dtype": "NoneType",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.n_jobs",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.positive",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.precompute",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.random_state",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.selection",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.tol",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.verbose",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.estimator",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.alpha_",
+            "shape": []
+          },
+          {
+            "bytes": 16,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.alphas_",
+            "shape": [
+              4
+            ]
+          },
+          {
+            "bytes": 880,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.coef_",
+            "shape": [
+              220
+            ]
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.intercept_",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.l1_ratio_",
+            "shape": []
+          },
+          {
+            "bytes": 80,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.mse_path_",
+            "shape": [
+              4,
+              5
+            ]
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_features_in_",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_iter_",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.format",
+            "shape": []
+          }
+        ],
+        "missing_state": [],
+        "provenance": {
+          "capture_source": "reviewed public and private fitted native-result storage",
+          "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+          "contract_paths": [
+            "$.constructor.alphas[0]",
+            "$.constructor.alphas[1]",
+            "$.constructor.alphas[2]",
+            "$.constructor.alphas[3]",
+            "$.constructor.copy_X",
+            "$.constructor.cv",
+            "$.constructor.eps",
+            "$.constructor.fit_intercept",
+            "$.constructor.l1_ratio",
+            "$.constructor.max_iter",
+            "$.constructor.n_alphas",
+            "$.constructor.n_jobs",
+            "$.constructor.positive",
+            "$.constructor.precompute",
+            "$.constructor.random_state",
+            "$.constructor.selection",
+            "$.constructor.tol",
+            "$.constructor.verbose",
+            "$.estimator",
+            "$.fitted.alpha_",
+            "$.fitted.alphas_",
+            "$.fitted.coef_",
+            "$.fitted.intercept_",
+            "$.fitted.l1_ratio_",
+            "$.fitted.mse_path_",
+            "$.fitted.n_features_in_",
+            "$.fitted.n_iter_",
+            "$.format"
+          ],
+          "contract_source": "python/mojolearn/_expansion_linear.py",
+          "excluded_non_fitted_state": {
+            "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+            "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+          },
+          "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+          "numerical_verification": false,
+          "optional_fields": [],
+          "product_python_compliance": "not assessed; existing timed product work unchanged",
+          "required_fields": [
+            "coef_",
+            "intercept_",
+            "alpha_",
+            "l1_ratio_",
+            "n_iter_",
+            "alphas_",
+            "mse_path_",
+            "n_features_in_"
+          ],
+          "reviewed_api_source": {
+            "path": "python/mojolearn/_expansion_linear.py",
+            "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+          }
+        },
+        "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/warmup-B.model-state.json",
+        "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+        "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+        "status": "CAPTURED"
+      },
+      "timings": {
+        "cold_seconds": 6.147126344963908,
+        "consumed_output_seconds": 0.0032537374645471573,
+        "fit_or_training_seconds": 3.376424739137292,
+        "full_operation_seconds": 6.147126344963908,
+        "inference_seconds": 0.05029304325580597,
+        "preparation_seconds": 2.7171538956463337
+      },
+      "model_identity_available": true
+    },
+    {
+      "phase": "scored",
+      "arm": "A",
+      "excluded": false,
+      "returncode": 0,
+      "process_wall_seconds": 11.480066776275635,
+      "log": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-A.log",
+      "output": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-A.json",
+      "result_sha256": "73479c5d7a1b4b074a3b2df274e10aaaa47606c2a8fc39baaf8a0e96110c8f31",
+      "result": {
+        "arm": "A",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "Full actual cgroup allocation, serial arms under one GPU lock; worker captures effective thread/resource metadata; no laptop diagnostic caps"
+        },
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            85,
+            86,
+            87,
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135,
+            136,
+            137,
+            138,
+            139,
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155,
+            156,
+            157,
+            158,
+            159,
+            160,
+            161,
+            162,
+            163,
+            164,
+            165,
+            166,
+            167,
+            168,
+            169,
+            170,
+            171,
+            172,
+            173,
+            174,
+            175,
+            176,
+            177,
+            178,
+            179,
+            180,
+            181,
+            182,
+            183,
+            184,
+            185,
+            186,
+            187,
+            188,
+            189,
+            190,
+            191,
+            192,
+            193,
+            194,
+            195,
+            196,
+            197,
+            198,
+            199,
+            200,
+            201,
+            202,
+            203,
+            204,
+            205,
+            206,
+            207,
+            208,
+            209,
+            210,
+            211,
+            212,
+            213,
+            214,
+            215,
+            216,
+            217,
+            218,
+            219,
+            220,
+            221,
+            222,
+            223
+          ],
+          "cgroup": {
+            "/sys/fs/cgroup/cpu.max": "2380000 100000",
+            "/sys/fs/cgroup/cpuset.cpus.effective": "0-223"
+          },
+          "cpu_count": 224,
+          "machine": "x86_64",
+          "native_readback": {
+            "config": "mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/__init__.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.37"
+          },
+          "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+          "system": "Linux"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "I.C.C13"
+        ],
+        "loaded_artifacts": {
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/identical/_mojolearn.so": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/identical/_mojolearn_x_linear.so": "814408be3f9c27edab432706aad75041ee04a61eeedc6ad6d2a4fab2545f57f8"
+        },
+        "missing_timing_scopes": [],
+        "mode": "identical",
+        "model_state": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[0]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[1]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[2]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[3]",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.copy_X",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.cv",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.eps",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.fit_intercept",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.l1_ratio",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.max_iter",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.n_alphas",
+              "shape": []
+            },
+            {
+              "dtype": "NoneType",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.n_jobs",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.positive",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.precompute",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.random_state",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.selection",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.tol",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.verbose",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.estimator",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.alpha_",
+              "shape": []
+            },
+            {
+              "bytes": 16,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.alphas_",
+              "shape": [
+                4
+              ]
+            },
+            {
+              "bytes": 880,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.coef_",
+              "shape": [
+                220
+              ]
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.intercept_",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.l1_ratio_",
+              "shape": []
+            },
+            {
+              "bytes": 80,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.mse_path_",
+              "shape": [
+                4,
+                5
+              ]
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_features_in_",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_iter_",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.format",
+              "shape": []
+            }
+          ],
+          "missing_state": [],
+          "provenance": {
+            "capture_source": "reviewed public and private fitted native-result storage",
+            "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+            "contract_paths": [
+              "$.constructor.alphas[0]",
+              "$.constructor.alphas[1]",
+              "$.constructor.alphas[2]",
+              "$.constructor.alphas[3]",
+              "$.constructor.copy_X",
+              "$.constructor.cv",
+              "$.constructor.eps",
+              "$.constructor.fit_intercept",
+              "$.constructor.l1_ratio",
+              "$.constructor.max_iter",
+              "$.constructor.n_alphas",
+              "$.constructor.n_jobs",
+              "$.constructor.positive",
+              "$.constructor.precompute",
+              "$.constructor.random_state",
+              "$.constructor.selection",
+              "$.constructor.tol",
+              "$.constructor.verbose",
+              "$.estimator",
+              "$.fitted.alpha_",
+              "$.fitted.alphas_",
+              "$.fitted.coef_",
+              "$.fitted.intercept_",
+              "$.fitted.l1_ratio_",
+              "$.fitted.mse_path_",
+              "$.fitted.n_features_in_",
+              "$.fitted.n_iter_",
+              "$.format"
+            ],
+            "contract_source": "python/mojolearn/_expansion_linear.py",
+            "excluded_non_fitted_state": {
+              "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+              "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+            },
+            "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+            "numerical_verification": false,
+            "optional_fields": [],
+            "product_python_compliance": "not assessed; existing timed product work unchanged",
+            "required_fields": [
+              "coef_",
+              "intercept_",
+              "alpha_",
+              "l1_ratio_",
+              "n_iter_",
+              "alphas_",
+              "mse_path_",
+              "n_features_in_"
+            ],
+            "reviewed_api_source": {
+              "path": "python/mojolearn/_expansion_linear.py",
+              "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+            }
+          },
+          "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-A.model-state.json",
+          "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+          "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+          "status": "CAPTURED"
+        },
+        "output_sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.pred",
+              "shape": [
+                500000
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+          "status": "CAPTURED"
+        },
+        "phase": "scored",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[0]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[1]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[2]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[3]",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.copy_X",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.cv",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.eps",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.fit_intercept",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.l1_ratio",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.max_iter",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.n_alphas",
+                  "shape": []
+                },
+                {
+                  "dtype": "NoneType",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.n_jobs",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.positive",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.precompute",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.random_state",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.selection",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.tol",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.verbose",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.estimator",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.alpha_",
+                  "shape": []
+                },
+                {
+                  "bytes": 16,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.alphas_",
+                  "shape": [
+                    4
+                  ]
+                },
+                {
+                  "bytes": 880,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.coef_",
+                  "shape": [
+                    220
+                  ]
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.intercept_",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.l1_ratio_",
+                  "shape": []
+                },
+                {
+                  "bytes": 80,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.mse_path_",
+                  "shape": [
+                    4,
+                    5
+                  ]
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_features_in_",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_iter_",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.format",
+                  "shape": []
+                }
+              ],
+              "missing_state": [],
+              "provenance": {
+                "capture_source": "reviewed public and private fitted native-result storage",
+                "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+                "contract_paths": [
+                  "$.constructor.alphas[0]",
+                  "$.constructor.alphas[1]",
+                  "$.constructor.alphas[2]",
+                  "$.constructor.alphas[3]",
+                  "$.constructor.copy_X",
+                  "$.constructor.cv",
+                  "$.constructor.eps",
+                  "$.constructor.fit_intercept",
+                  "$.constructor.l1_ratio",
+                  "$.constructor.max_iter",
+                  "$.constructor.n_alphas",
+                  "$.constructor.n_jobs",
+                  "$.constructor.positive",
+                  "$.constructor.precompute",
+                  "$.constructor.random_state",
+                  "$.constructor.selection",
+                  "$.constructor.tol",
+                  "$.constructor.verbose",
+                  "$.estimator",
+                  "$.fitted.alpha_",
+                  "$.fitted.alphas_",
+                  "$.fitted.coef_",
+                  "$.fitted.intercept_",
+                  "$.fitted.l1_ratio_",
+                  "$.fitted.mse_path_",
+                  "$.fitted.n_features_in_",
+                  "$.fitted.n_iter_",
+                  "$.format"
+                ],
+                "contract_source": "python/mojolearn/_expansion_linear.py",
+                "excluded_non_fitted_state": {
+                  "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+                  "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+                },
+                "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+                "numerical_verification": false,
+                "optional_fields": [],
+                "product_python_compliance": "not assessed; existing timed product work unchanged",
+                "required_fields": [
+                  "coef_",
+                  "intercept_",
+                  "alpha_",
+                  "l1_ratio_",
+                  "n_iter_",
+                  "alphas_",
+                  "mse_path_",
+                  "n_features_in_"
+                ],
+                "reviewed_api_source": {
+                  "path": "python/mojolearn/_expansion_linear.py",
+                  "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+                }
+              },
+              "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-A.repeated-0.model-state.json",
+              "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+              "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+              "status": "CAPTURED"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.pred",
+                  "shape": [
+                    500000
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+              "status": "CAPTURED"
+            },
+            "retained_output_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-A.repeated-0.values.json",
+            "timings": {
+              "consumed_output_seconds": 0.0008458215743303299,
+              "fit_or_training_seconds": 2.4413285925984383,
+              "inference_seconds": 0.046516211703419685,
+              "repeated_seconds": 2.4886923748999834
+            }
+          }
+        ],
+        "resource_policy": {
+          "affinity_cpus": 224,
+          "cgroup_quota_cpus": 23.8,
+          "configured_library_threads": 23,
+          "policy": "whole worker allocation; estimator semantics and nested pools preserved",
+          "quota_source": "/sys/fs/cgroup/cpu.max",
+          "utilization": "not inferred"
+        },
+        "retained_output_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-A.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/A/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "cuda",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.3216136885206221,
+              "rmse": 0.6872800861438083
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": "23",
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": "23",
+          "OMP_NUM_THREADS": "23",
+          "OPENBLAS_NUM_THREADS": "23",
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
+        "timings": {
+          "cold_seconds": 5.5369399432092905,
+          "consumed_output_seconds": 0.002412332221865654,
+          "fit_or_training_seconds": 3.3818848002701998,
+          "full_operation_seconds": 5.5369399432092905,
+          "inference_seconds": 0.0467503871768713,
+          "preparation_seconds": 2.105891177430749
+        },
+        "vendor": "nvidia",
+        "workload_id": "expanded:enet-cv@dataset=istella",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": true
+        }
+      },
+      "output_sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+      "model_state": {
+        "completeness": "complete_declared_scope",
+        "encoding": "mojolearn-benchmark-state-v1",
+        "manifest": [
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[0]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[1]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[2]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[3]",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.copy_X",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.cv",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.eps",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.fit_intercept",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.l1_ratio",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.max_iter",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.n_alphas",
+            "shape": []
+          },
+          {
+            "dtype": "NoneType",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.n_jobs",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.positive",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.precompute",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.random_state",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.selection",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.tol",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.verbose",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.estimator",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.alpha_",
+            "shape": []
+          },
+          {
+            "bytes": 16,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.alphas_",
+            "shape": [
+              4
+            ]
+          },
+          {
+            "bytes": 880,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.coef_",
+            "shape": [
+              220
+            ]
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.intercept_",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.l1_ratio_",
+            "shape": []
+          },
+          {
+            "bytes": 80,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.mse_path_",
+            "shape": [
+              4,
+              5
+            ]
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_features_in_",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_iter_",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.format",
+            "shape": []
+          }
+        ],
+        "missing_state": [],
+        "provenance": {
+          "capture_source": "reviewed public and private fitted native-result storage",
+          "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+          "contract_paths": [
+            "$.constructor.alphas[0]",
+            "$.constructor.alphas[1]",
+            "$.constructor.alphas[2]",
+            "$.constructor.alphas[3]",
+            "$.constructor.copy_X",
+            "$.constructor.cv",
+            "$.constructor.eps",
+            "$.constructor.fit_intercept",
+            "$.constructor.l1_ratio",
+            "$.constructor.max_iter",
+            "$.constructor.n_alphas",
+            "$.constructor.n_jobs",
+            "$.constructor.positive",
+            "$.constructor.precompute",
+            "$.constructor.random_state",
+            "$.constructor.selection",
+            "$.constructor.tol",
+            "$.constructor.verbose",
+            "$.estimator",
+            "$.fitted.alpha_",
+            "$.fitted.alphas_",
+            "$.fitted.coef_",
+            "$.fitted.intercept_",
+            "$.fitted.l1_ratio_",
+            "$.fitted.mse_path_",
+            "$.fitted.n_features_in_",
+            "$.fitted.n_iter_",
+            "$.format"
+          ],
+          "contract_source": "python/mojolearn/_expansion_linear.py",
+          "excluded_non_fitted_state": {
+            "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+            "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+          },
+          "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+          "numerical_verification": false,
+          "optional_fields": [],
+          "product_python_compliance": "not assessed; existing timed product work unchanged",
+          "required_fields": [
+            "coef_",
+            "intercept_",
+            "alpha_",
+            "l1_ratio_",
+            "n_iter_",
+            "alphas_",
+            "mse_path_",
+            "n_features_in_"
+          ],
+          "reviewed_api_source": {
+            "path": "python/mojolearn/_expansion_linear.py",
+            "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+          }
+        },
+        "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-A.model-state.json",
+        "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+        "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+        "status": "CAPTURED"
+      },
+      "timings": {
+        "cold_seconds": 5.5369399432092905,
+        "consumed_output_seconds": 0.002412332221865654,
+        "fit_or_training_seconds": 3.3818848002701998,
+        "full_operation_seconds": 5.5369399432092905,
+        "inference_seconds": 0.0467503871768713,
+        "preparation_seconds": 2.105891177430749
+      },
+      "model_identity_available": true
+    },
+    {
+      "phase": "scored",
+      "arm": "B",
+      "excluded": false,
+      "returncode": 0,
+      "process_wall_seconds": 13.083134412765503,
+      "log": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-B.log",
+      "output": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-B.json",
+      "result_sha256": "15c63a1132689fa169dc7afba77a47a0296044e516078a7af5aca9d378e3703e",
+      "result": {
+        "arm": "B",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "Full actual cgroup allocation, serial arms under one GPU lock; worker captures effective thread/resource metadata; no laptop diagnostic caps"
+        },
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            85,
+            86,
+            87,
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135,
+            136,
+            137,
+            138,
+            139,
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155,
+            156,
+            157,
+            158,
+            159,
+            160,
+            161,
+            162,
+            163,
+            164,
+            165,
+            166,
+            167,
+            168,
+            169,
+            170,
+            171,
+            172,
+            173,
+            174,
+            175,
+            176,
+            177,
+            178,
+            179,
+            180,
+            181,
+            182,
+            183,
+            184,
+            185,
+            186,
+            187,
+            188,
+            189,
+            190,
+            191,
+            192,
+            193,
+            194,
+            195,
+            196,
+            197,
+            198,
+            199,
+            200,
+            201,
+            202,
+            203,
+            204,
+            205,
+            206,
+            207,
+            208,
+            209,
+            210,
+            211,
+            212,
+            213,
+            214,
+            215,
+            216,
+            217,
+            218,
+            219,
+            220,
+            221,
+            222,
+            223
+          ],
+          "cgroup": {
+            "/sys/fs/cgroup/cpu.max": "2380000 100000",
+            "/sys/fs/cgroup/cpuset.cpus.effective": "0-223"
+          },
+          "cpu_count": 224,
+          "machine": "x86_64",
+          "native_readback": {
+            "config": "mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/__init__.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.37"
+          },
+          "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+          "system": "Linux"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "I.C.C13"
+        ],
+        "loaded_artifacts": {
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/identical/_mojolearn.so": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
+          "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/identical/_mojolearn_x_linear.so": "814408be3f9c27edab432706aad75041ee04a61eeedc6ad6d2a4fab2545f57f8"
+        },
+        "missing_timing_scopes": [],
+        "mode": "identical",
+        "model_state": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[0]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[1]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[2]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.alphas[3]",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.copy_X",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.cv",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.eps",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.fit_intercept",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.l1_ratio",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.max_iter",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.n_alphas",
+              "shape": []
+            },
+            {
+              "dtype": "NoneType",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.n_jobs",
+              "shape": []
+            },
+            {
+              "dtype": "bool",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.positive",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.precompute",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.random_state",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.selection",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.tol",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.verbose",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.estimator",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.alpha_",
+              "shape": []
+            },
+            {
+              "bytes": 16,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.alphas_",
+              "shape": [
+                4
+              ]
+            },
+            {
+              "bytes": 880,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.coef_",
+              "shape": [
+                220
+              ]
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.intercept_",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.l1_ratio_",
+              "shape": []
+            },
+            {
+              "bytes": 80,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.mse_path_",
+              "shape": [
+                4,
+                5
+              ]
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_features_in_",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_iter_",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.format",
+              "shape": []
+            }
+          ],
+          "missing_state": [],
+          "provenance": {
+            "capture_source": "reviewed public and private fitted native-result storage",
+            "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+            "contract_paths": [
+              "$.constructor.alphas[0]",
+              "$.constructor.alphas[1]",
+              "$.constructor.alphas[2]",
+              "$.constructor.alphas[3]",
+              "$.constructor.copy_X",
+              "$.constructor.cv",
+              "$.constructor.eps",
+              "$.constructor.fit_intercept",
+              "$.constructor.l1_ratio",
+              "$.constructor.max_iter",
+              "$.constructor.n_alphas",
+              "$.constructor.n_jobs",
+              "$.constructor.positive",
+              "$.constructor.precompute",
+              "$.constructor.random_state",
+              "$.constructor.selection",
+              "$.constructor.tol",
+              "$.constructor.verbose",
+              "$.estimator",
+              "$.fitted.alpha_",
+              "$.fitted.alphas_",
+              "$.fitted.coef_",
+              "$.fitted.intercept_",
+              "$.fitted.l1_ratio_",
+              "$.fitted.mse_path_",
+              "$.fitted.n_features_in_",
+              "$.fitted.n_iter_",
+              "$.format"
+            ],
+            "contract_source": "python/mojolearn/_expansion_linear.py",
+            "excluded_non_fitted_state": {
+              "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+              "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+            },
+            "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+            "numerical_verification": false,
+            "optional_fields": [],
+            "product_python_compliance": "not assessed; existing timed product work unchanged",
+            "required_fields": [
+              "coef_",
+              "intercept_",
+              "alpha_",
+              "l1_ratio_",
+              "n_iter_",
+              "alphas_",
+              "mse_path_",
+              "n_features_in_"
+            ],
+            "reviewed_api_source": {
+              "path": "python/mojolearn/_expansion_linear.py",
+              "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+            }
+          },
+          "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-B.model-state.json",
+          "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+          "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+          "status": "CAPTURED"
+        },
+        "output_sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.pred",
+              "shape": [
+                500000
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+          "status": "CAPTURED"
+        },
+        "phase": "scored",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[0]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[1]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[2]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.alphas[3]",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.copy_X",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.cv",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.eps",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.fit_intercept",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.l1_ratio",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.max_iter",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.n_alphas",
+                  "shape": []
+                },
+                {
+                  "dtype": "NoneType",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.n_jobs",
+                  "shape": []
+                },
+                {
+                  "dtype": "bool",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.positive",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.precompute",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.random_state",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.selection",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.tol",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.verbose",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.estimator",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.alpha_",
+                  "shape": []
+                },
+                {
+                  "bytes": 16,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.alphas_",
+                  "shape": [
+                    4
+                  ]
+                },
+                {
+                  "bytes": 880,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.coef_",
+                  "shape": [
+                    220
+                  ]
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.intercept_",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.l1_ratio_",
+                  "shape": []
+                },
+                {
+                  "bytes": 80,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.mse_path_",
+                  "shape": [
+                    4,
+                    5
+                  ]
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_features_in_",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_iter_",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.format",
+                  "shape": []
+                }
+              ],
+              "missing_state": [],
+              "provenance": {
+                "capture_source": "reviewed public and private fitted native-result storage",
+                "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+                "contract_paths": [
+                  "$.constructor.alphas[0]",
+                  "$.constructor.alphas[1]",
+                  "$.constructor.alphas[2]",
+                  "$.constructor.alphas[3]",
+                  "$.constructor.copy_X",
+                  "$.constructor.cv",
+                  "$.constructor.eps",
+                  "$.constructor.fit_intercept",
+                  "$.constructor.l1_ratio",
+                  "$.constructor.max_iter",
+                  "$.constructor.n_alphas",
+                  "$.constructor.n_jobs",
+                  "$.constructor.positive",
+                  "$.constructor.precompute",
+                  "$.constructor.random_state",
+                  "$.constructor.selection",
+                  "$.constructor.tol",
+                  "$.constructor.verbose",
+                  "$.estimator",
+                  "$.fitted.alpha_",
+                  "$.fitted.alphas_",
+                  "$.fitted.coef_",
+                  "$.fitted.intercept_",
+                  "$.fitted.l1_ratio_",
+                  "$.fitted.mse_path_",
+                  "$.fitted.n_features_in_",
+                  "$.fitted.n_iter_",
+                  "$.format"
+                ],
+                "contract_source": "python/mojolearn/_expansion_linear.py",
+                "excluded_non_fitted_state": {
+                  "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+                  "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+                },
+                "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+                "numerical_verification": false,
+                "optional_fields": [],
+                "product_python_compliance": "not assessed; existing timed product work unchanged",
+                "required_fields": [
+                  "coef_",
+                  "intercept_",
+                  "alpha_",
+                  "l1_ratio_",
+                  "n_iter_",
+                  "alphas_",
+                  "mse_path_",
+                  "n_features_in_"
+                ],
+                "reviewed_api_source": {
+                  "path": "python/mojolearn/_expansion_linear.py",
+                  "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+                }
+              },
+              "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-B.repeated-0.model-state.json",
+              "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+              "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+              "status": "CAPTURED"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.pred",
+                  "shape": [
+                    500000
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+              "status": "CAPTURED"
+            },
+            "retained_output_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-B.repeated-0.values.json",
+            "timings": {
+              "consumed_output_seconds": 0.0008183494210243225,
+              "fit_or_training_seconds": 2.4336352441459894,
+              "inference_seconds": 0.047288497909903526,
+              "repeated_seconds": 2.4817441068589687
+            }
+          }
+        ],
+        "resource_policy": {
+          "affinity_cpus": 224,
+          "cgroup_quota_cpus": 23.8,
+          "configured_library_threads": 23,
+          "policy": "whole worker allocation; estimator semantics and nested pools preserved",
+          "quota_source": "/sys/fs/cgroup/cpu.max",
+          "utilization": "not inferred"
+        },
+        "retained_output_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-B.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/targeted-ab-20261007/continuations/20261007T050433Z-226000/staged/packages/T.CV.local.de099bccad76/B/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "cuda",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.3216136885206221,
+              "rmse": 0.6872800861438083
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": "23",
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": "23",
+          "OMP_NUM_THREADS": "23",
+          "OPENBLAS_NUM_THREADS": "23",
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
+        "timings": {
+          "cold_seconds": 7.304326960816979,
+          "consumed_output_seconds": 0.002814013510942459,
+          "fit_or_training_seconds": 3.3901561554521322,
+          "full_operation_seconds": 7.304326960816979,
+          "inference_seconds": 0.04728504456579685,
+          "preparation_seconds": 3.864070560783148
+        },
+        "vendor": "nvidia",
+        "workload_id": "expanded:enet-cv@dataset=istella",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": true
+        }
+      },
+      "output_sha256": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+      "model_state": {
+        "completeness": "complete_declared_scope",
+        "encoding": "mojolearn-benchmark-state-v1",
+        "manifest": [
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[0]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[1]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[2]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.alphas[3]",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.copy_X",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.cv",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.eps",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.fit_intercept",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.l1_ratio",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.max_iter",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.n_alphas",
+            "shape": []
+          },
+          {
+            "dtype": "NoneType",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.n_jobs",
+            "shape": []
+          },
+          {
+            "dtype": "bool",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.positive",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.precompute",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.random_state",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.selection",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.tol",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.verbose",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.estimator",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.alpha_",
+            "shape": []
+          },
+          {
+            "bytes": 16,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.alphas_",
+            "shape": [
+              4
+            ]
+          },
+          {
+            "bytes": 880,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.coef_",
+            "shape": [
+              220
+            ]
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.intercept_",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.l1_ratio_",
+            "shape": []
+          },
+          {
+            "bytes": 80,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.mse_path_",
+            "shape": [
+              4,
+              5
+            ]
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_features_in_",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_iter_",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.format",
+            "shape": []
+          }
+        ],
+        "missing_state": [],
+        "provenance": {
+          "capture_source": "reviewed public and private fitted native-result storage",
+          "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+          "contract_paths": [
+            "$.constructor.alphas[0]",
+            "$.constructor.alphas[1]",
+            "$.constructor.alphas[2]",
+            "$.constructor.alphas[3]",
+            "$.constructor.copy_X",
+            "$.constructor.cv",
+            "$.constructor.eps",
+            "$.constructor.fit_intercept",
+            "$.constructor.l1_ratio",
+            "$.constructor.max_iter",
+            "$.constructor.n_alphas",
+            "$.constructor.n_jobs",
+            "$.constructor.positive",
+            "$.constructor.precompute",
+            "$.constructor.random_state",
+            "$.constructor.selection",
+            "$.constructor.tol",
+            "$.constructor.verbose",
+            "$.estimator",
+            "$.fitted.alpha_",
+            "$.fitted.alphas_",
+            "$.fitted.coef_",
+            "$.fitted.intercept_",
+            "$.fitted.l1_ratio_",
+            "$.fitted.mse_path_",
+            "$.fitted.n_features_in_",
+            "$.fitted.n_iter_",
+            "$.format"
+          ],
+          "contract_source": "python/mojolearn/_expansion_linear.py",
+          "excluded_non_fitted_state": {
+            "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+            "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+          },
+          "model_class": "mojolearn._expansion_linear.ElasticNetCV",
+          "numerical_verification": false,
+          "optional_fields": [],
+          "product_python_compliance": "not assessed; existing timed product work unchanged",
+          "required_fields": [
+            "coef_",
+            "intercept_",
+            "alpha_",
+            "l1_ratio_",
+            "n_iter_",
+            "alphas_",
+            "mse_path_",
+            "n_features_in_"
+          ],
+          "reviewed_api_source": {
+            "path": "python/mojolearn/_expansion_linear.py",
+            "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+          }
+        },
+        "retained_values": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/scored-B.model-state.json",
+        "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+        "sha256": "2bc868fd6ab1b18dfc83f6195664013d0f6ef1cb49df744ff1df3a79ba052ee0",
+        "status": "CAPTURED"
+      },
+      "timings": {
+        "cold_seconds": 7.304326960816979,
+        "consumed_output_seconds": 0.002814013510942459,
+        "fit_or_training_seconds": 3.3901561554521322,
+        "full_operation_seconds": 7.304326960816979,
+        "inference_seconds": 0.04728504456579685,
+        "preparation_seconds": 3.864070560783148
+      },
+      "model_identity_available": true
+    }
+  ],
+  "receipt": "/root/targeted-ab-20261007/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/receipt.json",
+  "previous_receipt": null,
+  "warmup_scope": "separate_process",
+  "steady_state_claim": false,
+  "finished": 1791349740.314585,
+  "status": "MEASURED_FULL",
+  "model_identity_available": true
+}

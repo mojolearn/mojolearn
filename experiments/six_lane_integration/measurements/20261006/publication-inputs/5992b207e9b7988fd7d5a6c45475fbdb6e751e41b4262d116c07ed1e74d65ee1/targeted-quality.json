@@ -1,0 +1,31 @@
+{
+  "schema": "mojolearn.saved-quality-review/1",
+  "observed_at": 1791348523.0456169,
+  "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+  "input_fingerprint": "e2688792e2315da566d02db8462e0dbea2df889d6041695c4915e26d93031964",
+  "scope": "Arbitrary exact targeted profiles; saved scored metadata only",
+  "gate_sources": {
+    "quality": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/build/payload-6fe3cfce38fd/source/tools/af_quality.py",
+      "sha256": "49337226a14ebdbad9451617404a74b5a378c8c38e181fc6a24da3552e3f25f7"
+    },
+    "comparison": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/build/payload-6fe3cfce38fd/source/tools/six_lane_compare_results.py",
+      "sha256": "6766da83eec6678ededbfc07a810ee9910813150980c099ea687d746b7c94586"
+    }
+  },
+  "sample_policy": "One excluded warmup and one scored sample per arm; no reruns requested",
+  "no_fits_builds_or_verification_reruns": true,
+  "default_promotion": false,
+  "counts": {},
+  "completed_pairs_reviewed": 0,
+  "rows": [],
+  "unfinished_or_failed_receipts": [],
+  "read_errors": [],
+  "limitations": [
+    "Task-quality pass is separate from scope/identity/timing admission.",
+    "Only existing qualified independent references with exact task/input/settings/metric-method scope are reused; unknown metrics/rosters remain pending.",
+    "Raw arrays/model bytes are not opened or checked by this watcher. Hash metadata does not prove durable retained bytes.",
+    "No default changes, commits, publisher execution, remote/cloud calls, compilation or model execution."
+  ]
+}

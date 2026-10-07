@@ -6,9 +6,9 @@
       "routes": [
         "native-sm90"
       ],
-      "complete_pairs": 99,
+      "complete_pairs": 115,
       "failed_attempts": 2,
-      "quality_failed": 4,
+      "quality_failed": 10,
       "remaining_scope": "See exact selection and route receipts. PTX and unrecorded individual/full-workload scopes remain pending."
     },
     {
@@ -17,9 +17,9 @@
       "routes": [
         "amd-native-gfx942"
       ],
-      "complete_pairs": 84,
+      "complete_pairs": 102,
       "failed_attempts": 1,
-      "quality_failed": 4,
+      "quality_failed": 10,
       "remaining_scope": "Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending."
     },
     {
@@ -64,12 +64,6 @@
       "scope": "Apple FAST MLP classifier/regressor \u00d7 Taxi/Istella",
       "reason": "4 additional pending pairs; No retained accepted Apple FAST x_sequence pair; IDENTICAL cannot substitute",
       "evidence": "campaign-coverage.json: apple_readiness"
-    },
-    {
-      "vendor": "all",
-      "scope": "Continuation targeted-ab-20261007",
-      "reason": "Pending sources/inputs: /Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
-      "evidence": "publication-continuations.json"
     }
   ],
   "evidence_inputs": {
@@ -1559,26 +1553,81 @@
           "I.C.C13",
           "I.C.C18"
         ],
-        "attempts": 0,
-        "complete_pairs": 0,
-        "quality_failed": 0,
-        "status": "PENDING_MEASUREMENT",
-        "receipts": []
+        "attempts": 8,
+        "complete_pairs": 8,
+        "quality_failed": 4,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b1c11584d78ed1948ad/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ebc643bc218228636fa5/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/4873658ed79bcdc696a3/attempt-0001/receipt.ccc9ddfa99b4858dd380bd3f4c1d1513eb4bf01f69bf8d61189c083d03fbd1be.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/af5ee517738947cd42ec/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/dfc8d7a22b610e371fd6/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e53fca1a998380458fdf/attempt-0001/receipt.35258611dae4666b3a33b4848adfd23ee8b38269443ea8fd7d5b055e39ce3951.json"
+        ]
       },
       {
         "id": "T.C13.only",
         "members": [
           "I.C.C13"
         ],
-        "attempts": 0,
-        "complete_pairs": 0,
-        "quality_failed": 0,
-        "status": "PENDING_MEASUREMENT",
-        "receipts": []
+        "attempts": 8,
+        "complete_pairs": 8,
+        "quality_failed": 4,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2a098babe6bda25adfe4/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fef343a1a02430ef8632/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/3d0daa186ea154a23d5e/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/5c24a6b46732ada9b809/attempt-0001/receipt.ac4a45d5fda6e64e3802f9981b1e660cf86c0b61206d7289d657f87f5cac21e8.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/d843ad424711b6ad4e77/attempt-0001/receipt.58a8082cd6906774b4a769e21903f088ac82a3d09a3ae9afe16aba7c0dbf7d42.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/fe404b0a79ed4d09df0a/attempt-0001/receipt.json"
+        ]
       },
       {
         "id": "T.C18.residual-only",
         "members": [
+          "I.C.C18"
+        ],
+        "attempts": 4,
+        "complete_pairs": 2,
+        "quality_failed": 0,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/24e8e0542e4f54ab5ad8/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/55f5904de0bbd6d47f43/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e6b98819c437ea37d9ee/attempt-0001/receipt.304bb8832cf9a90081f13f44cce223cb6554dcbc3d126d9727f09fd28531e665.json"
+        ]
+      },
+      {
+        "id": "T.C55.only",
+        "members": [
+          "I.C.C55"
+        ],
+        "attempts": 8,
+        "complete_pairs": 8,
+        "quality_failed": 4,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6a1927d993c3730a4ca2/attempt-0001/receipt.d12e8f1e18983624b53e5a7021478cce3ded2907a6bcd9e2b0b5faba38763869.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d75d76539c8a32df81e8/attempt-0001/receipt.4197e246bcaaf01c5c89125b016de4a01417e819738cdb2ed53e0407cf0be3c6.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/363f093609c46a864ee6/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/81aff7ce155ba663b7c0/attempt-0001/receipt.231c36bc8bd7fced2d418dfe9dc2df49d72422e4719bc42f3883410b6ba7f9a2.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/94344cac43938a205dcd/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/ad744036652095482a82/attempt-0001/receipt.json"
+        ]
+      },
+      {
+        "id": "T.CV.local.0576c9d788a6",
+        "members": [
+          "I.C.C13",
           "I.C.C18"
         ],
         "attempts": 0,
@@ -1588,9 +1637,763 @@
         "receipts": []
       },
       {
-        "id": "T.C55.only",
+        "id": "T.CV.local.13e507e4ed3d",
         "members": [
-          "I.C.C55"
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.1d489e1a5ca4",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.25fdcd3067b2",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.26c607b84d31",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.2acfd53c71b9",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.304ae54fb44a",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.329261fcc0f8",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.34642e8073d6",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.3ba57d8b8260",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.4210e28ea16c",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.426d5c94ba58",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.44749883df90",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.47b36b46b020",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.4c17c43f1dcf",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.4de1ac4c8112",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.56910b67cfd3",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.5addd299d853",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.5b95f394132e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.60f09333701d",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.66545710f91e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.681a57357367",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.6ab5df2181ab",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.6ab7896abd23",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.6f5ca4f9a269",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.710590f636c2",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.7f14710a8274",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.83c01a764439",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.8573a66827df",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.85b7b57ddf4e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.874a0fa1a14e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.8ed86cebb151",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.8f821152df6f",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.90a8532756c9",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.939213337b9a",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.9c0718c0659d",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.9f92a6dff156",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.a0c414d22b4f",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.a8952d6bcb79",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.af2c963cb0ce",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.b0084d073050",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.b04e8eaf2e85",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.b07b813f4f51",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.ba688fcc26f8",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.bb286656b51d",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.bb9ba62bd9a3",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.beb1b9335c3b",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.c0e1783a3789",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.c112c5de8b9a",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.ca4bcc07ecfe",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.cae449b50635",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.d9b04dd8d9f0",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.d9f7769600f0",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.db2eef76b5fa",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.de099bccad76",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 8,
+        "complete_pairs": 8,
+        "quality_failed": 0,
+        "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+        "receipts": [
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/047dc5950c1d73fd8b3c/attempt-0001/receipt.e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/060dd5184930208ceb52/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf523bdc7b56fd295b5c/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ce3fe6a01c8948daa84e/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/24511b905f5dbe54fe19/attempt-0001/receipt.23a77a0baf7b12a6a2fb2793f1f01433f042f82a992a8ac1ad287412026f3f36.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/2c32b4b985196c4c08b8/attempt-0001/receipt.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/df274c96625c58fe8875/attempt-0001/receipt.e0c2132bb9900902e0d0e4341235dbd04984f46286e6bafda2ab923b3e79f1e5.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/ff79717343a3e4c04eed/attempt-0001/receipt.json"
+        ]
+      },
+      {
+        "id": "T.CV.local.de502ee70e76",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.df5213a577d0",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.e321b03d7ce2",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.e3f175a8315e",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.e5174d506044",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.e6430f146f9a",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.f243c596bff6",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.f364954c07b8",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.CV.local.f88ceebbf031",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
         ],
         "attempts": 0,
         "complete_pairs": 0,

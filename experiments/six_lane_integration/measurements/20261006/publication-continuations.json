@@ -3,22 +3,24 @@
   "manifests": [
     {
       "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/board-continuation.json",
-      "sha256": "f715d183509a40a3a59198bf9d5ba33ea5f862f64f2ae40a2c5c91a588a759e8",
-      "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/f715d183509a40a3a59198bf9d5ba33ea5f862f64f2ae40a2c5c91a588a759e8/board-continuation.json",
+      "sha256": "e54e2b50ae16392945c127220521801b64d3a0a35e583b26ad1337ead57c0d8f",
+      "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/e54e2b50ae16392945c127220521801b64d3a0a35e583b26ad1337ead57c0d8f/board-continuation.json",
       "id": "targeted-ab-20261007",
       "source_available": true,
       "inputs": [
         {
-          "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/planning/unified-matrix.json",
-          "sha256": "41bc2c508f3616c843908ae31827b4e707089418b39662b1920bb6e44e9de8d5",
-          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/41bc2c508f3616c843908ae31827b4e707089418b39662b1920bb6e44e9de8d5/unified-matrix.json",
+          "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/planning/current/unified-matrix.json",
+          "sha256": "15a248e4c64c8b6820251a67efcc7c3dc6981427a449138e556f6eb10451c0e4",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/15a248e4c64c8b6820251a67efcc7c3dc6981427a449138e556f6eb10451c0e4/unified-matrix.json",
           "kind": "matrix",
           "status": "RETAINED"
         },
         {
           "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+          "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
           "kind": "quality_review",
-          "status": "PENDING_INPUT"
+          "status": "RETAINED"
         }
       ],
       "sources": [
@@ -27,14 +29,14 @@
           "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements",
           "route": "native-sm90",
           "status": "AVAILABLE",
-          "receipt_files": 0
+          "receipt_files": 17
         },
         {
           "vendor": "amd",
           "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements",
           "route": "amd-native-gfx942",
           "status": "AVAILABLE",
-          "receipt_files": 0
+          "receipt_files": 19
         }
       ]
     }

@@ -1,0 +1,4090 @@
+{
+  "schema": "mojolearn.saved-quality-review/1",
+  "observed_at": 1791349875.031281,
+  "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+  "input_fingerprint": "f05b9de89ea414bd1327e225207e561d2d18dcb6a845b7a8717327515ef9b31c",
+  "scope": "Arbitrary exact targeted profiles; saved scored metadata only",
+  "gate_sources": {
+    "quality": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/build/payload-6fe3cfce38fd/source/tools/af_quality.py",
+      "sha256": "49337226a14ebdbad9451617404a74b5a378c8c38e181fc6a24da3552e3f25f7"
+    },
+    "comparison": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/build/payload-6fe3cfce38fd/source/tools/six_lane_compare_results.py",
+      "sha256": "6766da83eec6678ededbfc07a810ee9910813150980c099ea687d746b7c94586"
+    }
+  },
+  "sample_policy": "One excluded warmup and one scored sample per arm; no reruns requested",
+  "no_fits_builds_or_verification_reruns": true,
+  "default_promotion": false,
+  "counts": {
+    "PENDING": 16,
+    "QUALITY_FAILED": 9
+  },
+  "completed_pairs_reviewed": 25,
+  "rows": [
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/23a77a0baf7b12a6a2fb2793f1f01433f042f82a992a8ac1ad287412026f3f36/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/24511b905f5dbe54fe19/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "23a77a0baf7b12a6a2fb2793f1f01433f042f82a992a8ac1ad287412026f3f36",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:lasso-cv@dataset=istella",
+      "configuration": "T.CV.local.de099bccad76",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.31456879028296647,
+          "rmse": 0.6908394981786193
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.31456879028296647,
+          "rmse": 0.6908394981786193
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "8545ae72dd826fc60485bf962599bc95fc741c9b59005cbde00d683147852912",
+        "B": "8545ae72dd826fc60485bf962599bc95fc741c9b59005cbde00d683147852912"
+      },
+      "scope": {
+        "workload_id": "expanded:lasso-cv@dataset=istella",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.31456879028296647,
+            0.31456879028296647,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.6908394981786193,
+            0.6908394981786193,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/4dd082d5ffedfad1420dd3d0c9acc47223e1831ad88e2f8bfd043c63e802b7b3/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/2c32b4b985196c4c08b8/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "4dd082d5ffedfad1420dd3d0c9acc47223e1831ad88e2f8bfd043c63e802b7b3",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:enet-cv@dataset=taxi",
+      "configuration": "T.CV.local.de099bccad76",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9090718560676742,
+          "rmse": 4.690411824863933
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9090718560676742,
+          "rmse": 4.690411824863933
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9",
+        "B": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=taxi",
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9090718560676742,
+            0.9090718560676742,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.690411824863933,
+            4.690411824863933,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/9e9a0c1caf87cd682972bffb02603c6e703d3ce34cdb82e1af89e62c1e5c6a1a/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/363f093609c46a864ee6/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "9e9a0c1caf87cd682972bffb02603c6e703d3ce34cdb82e1af89e62c1e5c6a1a",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+      "configuration": "T.C55.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "accuracy": 0.763616,
+          "logloss": 0.5382462555073213
+        },
+        "B": {
+          "accuracy": 0.763624,
+          "logloss": 0.5382462695354288
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C55"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "4aafe9cf3bb85219c002704e19102e02f1715ec630ae2fb1c3d56d93d4415fb9",
+        "B": "28ee66132ac6c5da08b207ff76160ceb1f750570d69a2e33cecc107724681419"
+      },
+      "scope": {
+        "workload_id": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+        "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+        "dataset_version": "classification-full-v1; original loader archive 10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "covariance_estimator": null,
+            "n_components": null,
+            "priors": null,
+            "shrinkage": null,
+            "solver": "svd",
+            "store_covariance": false,
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.763616,
+            0.763624,
+            -1.047636009345961e-05
+          ],
+          "logloss": [
+            "SAME",
+            0.5382462555073213,
+            0.5382462695354288,
+            2.6062619004386682e-08
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/2571df437042cb91f84e969b0005d5c941af7205011c19f587d15061c6509c60/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/3d0daa186ea154a23d5e/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "2571df437042cb91f84e969b0005d5c941af7205011c19f587d15061c6509c60",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:lasso-cv@dataset=taxi",
+      "configuration": "T.C13.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9088028117512673,
+          "rmse": 4.697345852642057
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9091215889136197,
+          "rmse": 4.689128946848568
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "6fd654bf51028df8ee08cd7213039af50bca7e6718582417c535cc82f6ddea97",
+        "B": "8dc2e83675dfccd5b5670e67320efd2e8f5f8fe3cbaf7165a2292186eb4f8fec"
+      },
+      "scope": {
+        "workload_id": "expanded:lasso-cv@dataset=taxi",
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9088028117512673,
+            0.9091215889136197,
+            -0.0003506430451545357
+          ],
+          "rmse": [
+            "WORSE",
+            4.697345852642057,
+            4.689128946848568,
+            -0.0017492656600678967
+          ]
+        },
+        "unknown": [],
+        "worst": -0.0017492656600678967
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/ac4a45d5fda6e64e3802f9981b1e660cf86c0b61206d7289d657f87f5cac21e8/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/5c24a6b46732ada9b809/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "ac4a45d5fda6e64e3802f9981b1e660cf86c0b61206d7289d657f87f5cac21e8",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:enet-cv@dataset=istella",
+      "configuration": "T.C13.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.33058307378651086,
+          "rmse": 0.6827214801205793
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.3216136885206221,
+          "rmse": 0.6872800861438083
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "6c8958bdb3ffa97f9d759f8e9e04b18e0da3eafdb2d3116ae7035232c4315fb6",
+        "B": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=istella",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "BETTER",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "BETTER",
+            0.33058307378651086,
+            0.3216136885206221,
+            0.0271320160562157
+          ],
+          "rmse": [
+            "BETTER",
+            0.6827214801205793,
+            0.6872800861438083,
+            0.006632821341887593
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/231c36bc8bd7fced2d418dfe9dc2df49d72422e4719bc42f3883410b6ba7f9a2/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/81aff7ce155ba663b7c0/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "231c36bc8bd7fced2d418dfe9dc2df49d72422e4719bc42f3883410b6ba7f9a2",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+      "configuration": "T.C55.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "accuracy": 0.912628,
+          "logloss": 0.23408621803587862
+        },
+        "B": {
+          "accuracy": 0.913584,
+          "logloss": 0.23366145305870906
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C55"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "912e64be7735c13bf011ec218269ba074c0df675c551f0f7d83df50938e51b21",
+        "B": "814362ea3d0d63dda2b74211d4031a49931caa478f2e14f16a55f71bfa70e7f0"
+      },
+      "scope": {
+        "workload_id": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+        "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+        "dataset_version": "classification-full-v1; original loader archive 31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "covariance_estimator": null,
+            "n_components": null,
+            "priors": null,
+            "shrinkage": null,
+            "solver": "svd",
+            "store_covariance": false,
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "accuracy": [
+            "WORSE",
+            0.912628,
+            0.913584,
+            -0.0010464281335924852
+          ],
+          "logloss": [
+            "WORSE",
+            0.23408621803587862,
+            0.23366145305870906,
+            -0.0018145663624863958
+          ]
+        },
+        "unknown": [],
+        "worst": -0.0018145663624863958
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/bf2c53ad8e61231afaaad1b7c15a4749e525b4f0900ce5844cb4bc299af6d8da/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/94344cac43938a205dcd/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "bf2c53ad8e61231afaaad1b7c15a4749e525b4f0900ce5844cb4bc299af6d8da",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "configuration": "T.C55.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "accuracy": 0.71871,
+          "logloss": 1.176889445295522
+        },
+        "B": {
+          "accuracy": 0.720538,
+          "logloss": 1.1408800529981222
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C55"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+        "B": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f"
+      },
+      "scope": {
+        "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+        "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+        "dataset_version": "classification-full-v1; original loader archive 10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "priors": null,
+            "var_smoothing": 1e-09
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "accuracy": [
+            "WORSE",
+            0.71871,
+            0.720538,
+            -0.0025369931911988705
+          ],
+          "logloss": [
+            "WORSE",
+            1.176889445295522,
+            1.1408800529981222,
+            -0.030597090016690344
+          ]
+        },
+        "unknown": [],
+        "worst": -0.030597090016690344
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/daf8b1e15bb7ed65e108d35fe636bcf51d808e2fee528909779e2dbe73841ea4/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/ad744036652095482a82/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "daf8b1e15bb7ed65e108d35fe636bcf51d808e2fee528909779e2dbe73841ea4",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+      "configuration": "T.C55.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "accuracy": 0.86872,
+          "logloss": 3.7337998882694503
+        },
+        "B": {
+          "accuracy": 0.868346,
+          "logloss": 3.743026222088278
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C55"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "8c4b421fe036978ba5fd4f8180639e777d29988ad08d231eae44585f82daad3d",
+        "B": "b8273c26957428d7f589c1f1b51b9797b6c0f15963ceac64b8badf02de94f6af"
+      },
+      "scope": {
+        "workload_id": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+        "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+        "dataset_version": "classification-full-v1; original loader archive 31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "priors": null,
+            "var_smoothing": 1e-09
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "BETTER",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.86872,
+            0.868346,
+            0.00043051846394706746
+          ],
+          "logloss": [
+            "BETTER",
+            3.7337998882694503,
+            3.743026222088278,
+            0.0024649396695062874
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/92891b782380be7c56b74fa80a6d93c7f142f446d5f6f14b3ac945ca9547ad27/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/af5ee517738947cd42ec/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "92891b782380be7c56b74fa80a6d93c7f142f446d5f6f14b3ac945ca9547ad27",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:enet-cv@dataset=istella",
+      "configuration": "T.C13.C18",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.33058307378651086,
+          "rmse": 0.6827214801205793
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.3216136885206221,
+          "rmse": 0.6872800861438083
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+            "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13",
+        "I.C.C18"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "6c8958bdb3ffa97f9d759f8e9e04b18e0da3eafdb2d3116ae7035232c4315fb6",
+        "B": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=istella",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "BETTER",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "BETTER",
+            0.33058307378651086,
+            0.3216136885206221,
+            0.0271320160562157
+          ],
+          "rmse": [
+            "BETTER",
+            0.6827214801205793,
+            0.6872800861438083,
+            0.006632821341887593
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/58a8082cd6906774b4a769e21903f088ac82a3d09a3ae9afe16aba7c0dbf7d42/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/d843ad424711b6ad4e77/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "58a8082cd6906774b4a769e21903f088ac82a3d09a3ae9afe16aba7c0dbf7d42",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:lasso-cv@dataset=istella",
+      "configuration": "T.C13.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.32928042638183586,
+          "rmse": 0.6833854259336551
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.31456879028296647,
+          "rmse": 0.6908394981786193
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "e66b0d8cbedfd1dc5a4ada42a77ffb459efc72d797cba180dc550abab377a8f5",
+        "B": "8545ae72dd826fc60485bf962599bc95fc741c9b59005cbde00d683147852912"
+      },
+      "scope": {
+        "workload_id": "expanded:lasso-cv@dataset=istella",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "BETTER",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "BETTER",
+            0.32928042638183586,
+            0.31456879028296647,
+            0.04467813729629246
+          ],
+          "rmse": [
+            "BETTER",
+            0.6833854259336551,
+            0.6908394981786193,
+            0.010789875600073048
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/e0c2132bb9900902e0d0e4341235dbd04984f46286e6bafda2ab923b3e79f1e5/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/df274c96625c58fe8875/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "e0c2132bb9900902e0d0e4341235dbd04984f46286e6bafda2ab923b3e79f1e5",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:enet-cv@dataset=istella",
+      "configuration": "T.CV.local.de099bccad76",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.3216136885206221,
+          "rmse": 0.6872800861438083
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.3216136885206221,
+          "rmse": 0.6872800861438083
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+        "B": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=istella",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.3216136885206221,
+            0.3216136885206221,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.6872800861438083,
+            0.6872800861438083,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/7ada46f378f03c8f363de17361433eaed3827ec61e2d3df6f821ba0e62015267/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/dfc8d7a22b610e371fd6/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "7ada46f378f03c8f363de17361433eaed3827ec61e2d3df6f821ba0e62015267",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:enet-cv@dataset=taxi",
+      "configuration": "T.C13.C18",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9087603210162847,
+          "rmse": 4.698440022529554
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9090718560676742,
+          "rmse": 4.690411824863933
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+            "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13",
+        "I.C.C18"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "46a7555765fda05ee0080b7cf0b902088bf15e53a3e8872b76c44f947b94d810",
+        "B": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=taxi",
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9087603210162847,
+            0.9090718560676742,
+            -0.0003426957388572879
+          ],
+          "rmse": [
+            "WORSE",
+            4.698440022529554,
+            4.690411824863933,
+            -0.0017086942957928607
+          ]
+        },
+        "unknown": [],
+        "worst": -0.0017086942957928607
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/b3d938fa2f8ec6d97ecbc02de4ac451cc3867bf744938fc4b5574f7ea85a30e9/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/fe404b0a79ed4d09df0a/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "b3d938fa2f8ec6d97ecbc02de4ac451cc3867bf744938fc4b5574f7ea85a30e9",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:enet-cv@dataset=taxi",
+      "configuration": "T.C13.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9087603210162847,
+          "rmse": 4.698440022529554
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9090718560676742,
+          "rmse": 4.690411824863933
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "46a7555765fda05ee0080b7cf0b902088bf15e53a3e8872b76c44f947b94d810",
+        "B": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=taxi",
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9087603210162847,
+            0.9090718560676742,
+            -0.0003426957388572879
+          ],
+          "rmse": [
+            "WORSE",
+            4.698440022529554,
+            4.690411824863933,
+            -0.0017086942957928607
+          ]
+        },
+        "unknown": [],
+        "worst": -0.0017086942957928607
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/48a2b4aa789baa83c7db819d50954c683fde8477f7aa9b29ec277058320415a9/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/ff79717343a3e4c04eed/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "48a2b4aa789baa83c7db819d50954c683fde8477f7aa9b29ec277058320415a9",
+      "vendor": "amd",
+      "column": "amd",
+      "route": "amd-native-gfx942",
+      "workload": "expanded:lasso-cv@dataset=taxi",
+      "configuration": "T.CV.local.de099bccad76",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9091215889136197,
+          "rmse": 4.689128946848568
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9091215889136197,
+          "rmse": 4.689128946848568
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "8dc2e83675dfccd5b5670e67320efd2e8f5f8fe3cbaf7165a2292186eb4f8fec",
+        "B": "8dc2e83675dfccd5b5670e67320efd2e8f5f8fe3cbaf7165a2292186eb4f8fec"
+      },
+      "scope": {
+        "workload_id": "expanded:lasso-cv@dataset=taxi",
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9091215889136197,
+            0.9091215889136197,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.689128946848568,
+            4.689128946848568,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/047dc5950c1d73fd8b3c/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:enet-cv@dataset=istella",
+      "configuration": "T.CV.local.de099bccad76",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.3216136885206221,
+          "rmse": 0.6872800861438083
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.3216136885206221,
+          "rmse": 0.6872800861438083
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+        "B": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=istella",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.3216136885206221,
+            0.3216136885206221,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.6872800861438083,
+            0.6872800861438083,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/a301dfdcac13595e99ec84e66b814a8fe992b2a273d8d1ea39a460ad44135a35/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/060dd5184930208ceb52/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "a301dfdcac13595e99ec84e66b814a8fe992b2a273d8d1ea39a460ad44135a35",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:lasso-cv@dataset=istella",
+      "configuration": "T.CV.local.de099bccad76",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.31456879028296647,
+          "rmse": 0.6908394981786193
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.31456879028296647,
+          "rmse": 0.6908394981786193
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "8545ae72dd826fc60485bf962599bc95fc741c9b59005cbde00d683147852912",
+        "B": "8545ae72dd826fc60485bf962599bc95fc741c9b59005cbde00d683147852912"
+      },
+      "scope": {
+        "workload_id": "expanded:lasso-cv@dataset=istella",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.31456879028296647,
+            0.31456879028296647,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.6908394981786193,
+            0.6908394981786193,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/ae687f34dde3a386c6a8863dd1cae8d5a949083f8b1fce02cf51cd792a0d6842/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/2a098babe6bda25adfe4/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "ae687f34dde3a386c6a8863dd1cae8d5a949083f8b1fce02cf51cd792a0d6842",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:lasso-cv@dataset=istella",
+      "configuration": "T.C13.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.32928042638183586,
+          "rmse": 0.6833854259336551
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.31456879028296647,
+          "rmse": 0.6908394981786193
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "e66b0d8cbedfd1dc5a4ada42a77ffb459efc72d797cba180dc550abab377a8f5",
+        "B": "8545ae72dd826fc60485bf962599bc95fc741c9b59005cbde00d683147852912"
+      },
+      "scope": {
+        "workload_id": "expanded:lasso-cv@dataset=istella",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "BETTER",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "BETTER",
+            0.32928042638183586,
+            0.31456879028296647,
+            0.04467813729629246
+          ],
+          "rmse": [
+            "BETTER",
+            0.6833854259336551,
+            0.6908394981786193,
+            0.010789875600073048
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/86611db12092ab82d2139e9c7a5eaefc2175e7b31d11f2fdf5e2de1eedbdee21/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/57442d9d2689ba284f4b/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "86611db12092ab82d2139e9c7a5eaefc2175e7b31d11f2fdf5e2de1eedbdee21",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "configuration": "T.C55.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "accuracy": 0.71871,
+          "logloss": 1.176889445295522
+        },
+        "B": {
+          "accuracy": 0.720538,
+          "logloss": 1.1408800529981222
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C55"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+        "B": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f"
+      },
+      "scope": {
+        "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+        "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+        "dataset_version": "classification-full-v1; original loader archive 10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "priors": null,
+            "var_smoothing": 1e-09
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "accuracy": [
+            "WORSE",
+            0.71871,
+            0.720538,
+            -0.0025369931911988705
+          ],
+          "logloss": [
+            "WORSE",
+            1.176889445295522,
+            1.1408800529981222,
+            -0.030597090016690344
+          ]
+        },
+        "unknown": [],
+        "worst": -0.030597090016690344
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/d12e8f1e18983624b53e5a7021478cce3ded2907a6bcd9e2b0b5faba38763869/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/6a1927d993c3730a4ca2/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "d12e8f1e18983624b53e5a7021478cce3ded2907a6bcd9e2b0b5faba38763869",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+      "configuration": "T.C55.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "accuracy": 0.763616,
+          "logloss": 0.5382462555073213
+        },
+        "B": {
+          "accuracy": 0.763624,
+          "logloss": 0.5382462695354288
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C55"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "4aafe9cf3bb85219c002704e19102e02f1715ec630ae2fb1c3d56d93d4415fb9",
+        "B": "28ee66132ac6c5da08b207ff76160ceb1f750570d69a2e33cecc107724681419"
+      },
+      "scope": {
+        "workload_id": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+        "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+        "dataset_version": "classification-full-v1; original loader archive 10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "covariance_estimator": null,
+            "n_components": null,
+            "priors": null,
+            "shrinkage": null,
+            "solver": "svd",
+            "store_covariance": false,
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.763616,
+            0.763624,
+            -1.047636009345961e-05
+          ],
+          "logloss": [
+            "SAME",
+            0.5382462555073213,
+            0.5382462695354288,
+            2.6062619004386682e-08
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/ca6f9f798983ebe34517ba655108526dfdaef29e06bc60d352757f5d989a0299/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/9239319b1567d2138ec7/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "ca6f9f798983ebe34517ba655108526dfdaef29e06bc60d352757f5d989a0299",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:lasso-cv@dataset=taxi",
+      "configuration": "T.C13.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9088028117512673,
+          "rmse": 4.697345852642057
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9091215889136197,
+          "rmse": 4.689128946848568
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "6fd654bf51028df8ee08cd7213039af50bca7e6718582417c535cc82f6ddea97",
+        "B": "8dc2e83675dfccd5b5670e67320efd2e8f5f8fe3cbaf7165a2292186eb4f8fec"
+      },
+      "scope": {
+        "workload_id": "expanded:lasso-cv@dataset=taxi",
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9088028117512673,
+            0.9091215889136197,
+            -0.0003506430451545357
+          ],
+          "rmse": [
+            "WORSE",
+            4.697345852642057,
+            4.689128946848568,
+            -0.0017492656600678967
+          ]
+        },
+        "unknown": [],
+        "worst": -0.0017492656600678967
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/495480a5eaa09b8a907376e41e4bd271fbe7dec58c7e54623458deced0c682f9/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/927ae028a0e623bcc0d4/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "495480a5eaa09b8a907376e41e4bd271fbe7dec58c7e54623458deced0c682f9",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+      "configuration": "T.C55.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "accuracy": 0.912628,
+          "logloss": 0.23408621803587862
+        },
+        "B": {
+          "accuracy": 0.913584,
+          "logloss": 0.23366145305870906
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C55"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "912e64be7735c13bf011ec218269ba074c0df675c551f0f7d83df50938e51b21",
+        "B": "814362ea3d0d63dda2b74211d4031a49931caa478f2e14f16a55f71bfa70e7f0"
+      },
+      "scope": {
+        "workload_id": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+        "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+        "dataset_version": "classification-full-v1; original loader archive 31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "covariance_estimator": null,
+            "n_components": null,
+            "priors": null,
+            "shrinkage": null,
+            "solver": "svd",
+            "store_covariance": false,
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "accuracy": [
+            "WORSE",
+            0.912628,
+            0.913584,
+            -0.0010464281335924852
+          ],
+          "logloss": [
+            "WORSE",
+            0.23408621803587862,
+            0.23366145305870906,
+            -0.0018145663624863958
+          ]
+        },
+        "unknown": [],
+        "worst": -0.0018145663624863958
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/99604a295758e4930607/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:enet-cv@dataset=taxi",
+      "configuration": "T.C13.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9087603210162847,
+          "rmse": 4.698440022529554
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9090718560676742,
+          "rmse": 4.690411824863933
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "46a7555765fda05ee0080b7cf0b902088bf15e53a3e8872b76c44f947b94d810",
+        "B": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=taxi",
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9087603210162847,
+            0.9090718560676742,
+            -0.0003426957388572879
+          ],
+          "rmse": [
+            "WORSE",
+            4.698440022529554,
+            4.690411824863933,
+            -0.0017086942957928607
+          ]
+        },
+        "unknown": [],
+        "worst": -0.0017086942957928607
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/3f6446867e68755c10ab78bbeb15ef8390c24917c933aff67945564edd698310/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/ce3fe6a01c8948daa84e/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "3f6446867e68755c10ab78bbeb15ef8390c24917c933aff67945564edd698310",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:enet-cv@dataset=taxi",
+      "configuration": "T.CV.local.de099bccad76",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9090718560676742,
+          "rmse": 4.690411824863933
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9090718560676742,
+          "rmse": 4.690411824863933
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9",
+        "B": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=taxi",
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9090718560676742,
+            0.9090718560676742,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.690411824863933,
+            4.690411824863933,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/4197e246bcaaf01c5c89125b016de4a01417e819738cdb2ed53e0407cf0be3c6/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/d75d76539c8a32df81e8/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "4197e246bcaaf01c5c89125b016de4a01417e819738cdb2ed53e0407cf0be3c6",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+      "configuration": "T.C55.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "accuracy": 0.86872,
+          "logloss": 3.7337998882694503
+        },
+        "B": {
+          "accuracy": 0.868346,
+          "logloss": 3.743026222088278
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C55"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "8c4b421fe036978ba5fd4f8180639e777d29988ad08d231eae44585f82daad3d",
+        "B": "b8273c26957428d7f589c1f1b51b9797b6c0f15963ceac64b8badf02de94f6af"
+      },
+      "scope": {
+        "workload_id": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+        "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+        "dataset_version": "classification-full-v1; original loader archive 31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "priors": null,
+            "var_smoothing": 1e-09
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "BETTER",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.86872,
+            0.868346,
+            0.00043051846394706746
+          ],
+          "logloss": [
+            "BETTER",
+            3.7337998882694503,
+            3.743026222088278,
+            0.0024649396695062874
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/e0b7993e5c2337f9a9db22d630a9ce1ffd4fb01742812a8ee478180416acbc18/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements/fef343a1a02430ef8632/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "e0b7993e5c2337f9a9db22d630a9ce1ffd4fb01742812a8ee478180416acbc18",
+      "vendor": "nvidia",
+      "column": "nvidia-native",
+      "route": "native-sm90",
+      "workload": "expanded:enet-cv@dataset=istella",
+      "configuration": "T.C13.only",
+      "mode": "identical",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "execution_status": "MEASURED_FULL",
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.33058307378651086,
+          "rmse": 0.6827214801205793
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.3216136885206221,
+          "rmse": 0.6872800861438083
+        }
+      },
+      "sample_counts": {
+        "A": {
+          "warmup": 1,
+          "scored": 1
+        },
+        "B": {
+          "warmup": 1,
+          "scored": 1
+        }
+      },
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "controls": {
+        "A": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "B": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        }
+      },
+      "implementation_ids": [
+        "I.C.C13"
+      ],
+      "source_coverage_pending": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending",
+      "issues": [],
+      "promotion_authorized": false,
+      "output_sha256": {
+        "A": "6c8958bdb3ffa97f9d759f8e9e04b18e0da3eafdb2d3116ae7035232c4315fb6",
+        "B": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287"
+      },
+      "scope": {
+        "workload_id": "expanded:enet-cv@dataset=istella",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "seed": 7,
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer"
+      },
+      "candidate_vs_baseline": {
+        "verdict": "BETTER",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "BETTER",
+            0.33058307378651086,
+            0.3216136885206221,
+            0.0271320160562157
+          ],
+          "rmse": [
+            "BETTER",
+            0.6827214801205793,
+            0.6872800861438083,
+            0.006632821341887593
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [],
+        "expected_arms": [],
+        "matched_arms": [],
+        "scope": "Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported"
+      },
+      "candidate_vs_opponents": {},
+      "baseline_vs_opponents": {},
+      "remaining_requirements": [
+        "Complete affected workload/variant coverage",
+        "NVIDIA and AMD timing decision together",
+        "Required same-arm output and complete model-state identity including Apple/host and applicable NVIDIA routes",
+        "Durable artifact retention; no automatic source/default changes"
+      ]
+    }
+  ],
+  "unfinished_or_failed_receipts": [
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/retained/receipts/d8612d2d1eebed064f9a017db3941afd2ee4708ab32601dfadd6cb900b291024/receipt.json",
+      "original_receipt_path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements/e53fca1a998380458fdf/attempts/attempt-0001/receipt.json",
+      "receipt_sha256": "d8612d2d1eebed064f9a017db3941afd2ee4708ab32601dfadd6cb900b291024",
+      "column": "amd",
+      "configuration": "T.C13.C18",
+      "workload": "expanded:lasso-cv@dataset=istella",
+      "status": null,
+      "runs": [
+        {
+          "arm": "A",
+          "phase": "warmup",
+          "returncode": 0,
+          "excluded": true,
+          "error": null,
+          "log": "/root/targeted-ab-20261007/measurements/e53fca1a998380458fdf/attempts/attempt-0001/warmup-A.log",
+          "output": "/root/targeted-ab-20261007/measurements/e53fca1a998380458fdf/attempts/attempt-0001/warmup-A.json"
+        }
+      ]
+    }
+  ],
+  "read_errors": [],
+  "limitations": [
+    "Task-quality pass is separate from scope/identity/timing admission.",
+    "Only existing qualified independent references with exact task/input/settings/metric-method scope are reused; unknown metrics/rosters remain pending.",
+    "Raw arrays/model bytes are not opened or checked by this watcher. Hash metadata does not prove durable retained bytes.",
+    "No default changes, commits, publisher execution, remote/cloud calls, compilation or model execution."
+  ]
+}

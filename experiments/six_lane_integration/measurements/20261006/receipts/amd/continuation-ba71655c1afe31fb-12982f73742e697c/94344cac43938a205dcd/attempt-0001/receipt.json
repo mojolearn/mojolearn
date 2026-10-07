@@ -1,0 +1,3325 @@
+{
+  "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+  "key": "94344cac43938a205dcd",
+  "mode": "identical",
+  "workload": {
+    "arms": {
+      "A": {
+        "argv": [
+          "/root/targeted-ab-20261007/runtime/.pixi/envs/default/bin/python",
+          "/root/targeted-ab-20261007/source-provenance/repo/tools/six_lane_ab_worker.py",
+          "--recipe",
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/cells/94344cac43938a205dcd/queue-workers/94344cac43938a205dcd.json",
+          "--arm",
+          "A",
+          "--phase",
+          "{phase}",
+          "--output",
+          "{output}"
+        ],
+        "configuration": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "environment": {}
+      },
+      "B": {
+        "argv": [
+          "/root/targeted-ab-20261007/runtime/.pixi/envs/default/bin/python",
+          "/root/targeted-ab-20261007/source-provenance/repo/tools/six_lane_ab_worker.py",
+          "--recipe",
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/cells/94344cac43938a205dcd/queue-workers/94344cac43938a205dcd.json",
+          "--arm",
+          "B",
+          "--phase",
+          "{phase}",
+          "--output",
+          "{output}"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "environment": {}
+      }
+    },
+    "artifact_provenance": {
+      "A": [
+        {
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+          "defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "numerical_source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/identical/_mojolearn.so",
+          "receipt": "/root/targeted-ab-20261007/accepted-artifacts/attributed-first-eight/05938485f5afe4381b0a/receipt.json",
+          "sha256": "29b7af646d9af36374eacf87203e90930729eb085f3ea2d21fae10e5f4f6701c",
+          "source_closure_sha256": "ea44e4afd8783f0058c7492ba7632a16435344aadcd03f6fccfda56b23e7daff",
+          "target": "amd-gfx942"
+        },
+        {
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1",
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "numerical_source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+          "path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/identical/_mojolearn_x_prep.so",
+          "receipt": "/root/targeted-ab-20261007/accepted-artifacts/attributed-first-eight/2ec6ad6e5cc32cf80b29/receipt.json",
+          "sha256": "7ac4edd39d6a67be14984aac45e499d059f488fed51027c7bef5a87d51696cca",
+          "source_closure_sha256": "0c88bb962ffb90847703b6e95fc725c88f4a3e6fca581b4d03ed11e4fe23d008",
+          "target": "amd-gfx942"
+        }
+      ],
+      "B": [
+        {
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+          "defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "numerical_source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/identical/_mojolearn.so",
+          "receipt": "/root/targeted-ab-20261007/accepted-artifacts/attributed-first-eight/05938485f5afe4381b0a/receipt.json",
+          "sha256": "29b7af646d9af36374eacf87203e90930729eb085f3ea2d21fae10e5f4f6701c",
+          "source_closure_sha256": "ea44e4afd8783f0058c7492ba7632a16435344aadcd03f6fccfda56b23e7daff",
+          "target": "amd-gfx942"
+        },
+        {
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+          "defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "numerical_source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/identical/_mojolearn_x_prep.so",
+          "receipt": "/root/targeted-ab-20261007/accepted-artifacts/attributed-first-eight/936ac09fa904698d5d73/receipt.json",
+          "sha256": "c81bc4885b5bda3eb02ed868a76b78bca3aafb5ec1793f5a60b68a8ce972ed11",
+          "source_closure_sha256": "0c88bb962ffb90847703b6e95fc725c88f4a3e6fca581b4d03ed11e4fe23d008",
+          "target": "amd-gfx942"
+        }
+      ]
+    },
+    "blocked": [],
+    "changes_frozen_race": true,
+    "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+    "dimensions": {
+      "X": [
+        4110786,
+        11
+      ],
+      "Xq": [
+        500000,
+        11
+      ],
+      "y": [
+        4110786
+      ],
+      "yq": [
+        500000
+      ]
+    },
+    "estimator_settings": {
+      "__record__": true,
+      "library": "mojolearn",
+      "params": {
+        "priors": null,
+        "var_smoothing": 1e-09
+      },
+      "source": "get_params"
+    },
+    "full_dataset_coverage": true,
+    "implementation_ids": [
+      "I.C.C55"
+    ],
+    "intrinsic_caps": [],
+    "key": "94344cac43938a205dcd",
+    "master_selection": {
+      "A": {
+        "defines": [
+          "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "B": {
+        "defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "campaign_role": "new_candidate",
+      "experiment_kind": "isolated",
+      "id": "T.C55.only",
+      "kind": "candidate",
+      "members": [
+        "I.C.C55"
+      ],
+      "mode": "identical",
+      "name": "T.C55.only",
+      "parameters": {},
+      "priority": 1,
+      "problems": [],
+      "rationale": "Isolate suspected class-stat arithmetic from historical combined failures. Include LDA shared caller even though original C55 catalog omits it.",
+      "source_gaps": [],
+      "source_selectable": true,
+      "vendors": [
+        "nvidia",
+        "amd"
+      ],
+      "workloads": [
+        "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+        "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+        "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+        "expanded:lda-clf@dataset=istella@input=classification-full-v1"
+      ]
+    },
+    "matrix_status": "PENDING_COVERAGE",
+    "mode": "identical",
+    "registered_input_variant": {
+      "contract_sha256": "41d33a776cfaa3e7819ac9a11300ba2f4c14c7383e94aab32e00d2881c3df186",
+      "measurement_source_sha": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+      "original_cell_key": "44581f746afc72bc3eec",
+      "original_workload_id": "expanded:gaussian-nb@dataset=taxi",
+      "preparation_plan": {
+        "path": "/root/targeted-ab-20261007/inputs/f966651e21d1274b51264a42936a9a3e0c7f11b4f5ea31d20084b4d9be9fd4ad.json",
+        "sha256": "f966651e21d1274b51264a42936a9a3e0c7f11b4f5ea31d20084b4d9be9fd4ad"
+      },
+      "preparation_receipt": {
+        "path": "/root/targeted-ab-20261007/inputs/f335a123cd53f403345120d86345c91f51bd6e110055beb514188053d32331f9.json",
+        "sha256": "f335a123cd53f403345120d86345c91f51bd6e110055beb514188053d32331f9"
+      },
+      "preparation_source_sha": "1bda35ed707d76ea9d6452fb1c98f39165fca3d6",
+      "variant": "classification-full-v1",
+      "variant_cell_key": "659b9236920edb90c199",
+      "variant_workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1"
+    },
+    "source_coverage_pending": [],
+    "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+    "timeout_seconds": 3600,
+    "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1"
+  },
+  "started": 1791349246.389264,
+  "runs": [
+    {
+      "phase": "warmup",
+      "arm": "A",
+      "excluded": true,
+      "returncode": 0,
+      "process_wall_seconds": 9.883436679840088,
+      "log": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-A.log",
+      "output": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-A.json",
+      "result_sha256": "39a14261f990e2650b446c2ca563570ba74b03cbf30063df47f32fd1f8a6b315",
+      "result": {
+        "arm": "A",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "dataset_version": "classification-full-v1; original loader archive 10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "Full actual cgroup allocation, serial arms under one GPU lock; worker captures effective thread/resource metadata; no laptop diagnostic caps"
+        },
+        "dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "priors": null,
+            "var_smoothing": 1e-09
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ],
+          "cgroup": {
+            "/sys/fs/cgroup/cpuset.cpus.effective": "0-19"
+          },
+          "cpu_count": 20,
+          "machine": "x86_64",
+          "native_readback": {
+            "config": "mojolearn.GaussianNB(var_smoothing=1e-09)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/__init__.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_how": "_mojolearn_x_prep numeric_mode constant",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "hip",
+            "version": "0.8.37"
+          },
+          "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+          "system": "Linux"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "I.C.C55"
+        ],
+        "loaded_artifacts": {
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/identical/_mojolearn.so": "29b7af646d9af36374eacf87203e90930729eb085f3ea2d21fae10e5f4f6701c",
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/identical/_mojolearn_x_prep.so": "7ac4edd39d6a67be14984aac45e499d059f488fed51027c7bef5a87d51696cca"
+        },
+        "missing_timing_scopes": [],
+        "mode": "identical",
+        "model_state": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "dtype": "NoneType",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.priors",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.var_smoothing",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.estimator",
+              "shape": []
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted._const",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted._raw_var",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.class_count_",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.class_prior_",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.classes_[0]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.classes_[1]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.epsilon_",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_features_in_",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.numeric_mode_",
+              "shape": []
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.theta_",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.var_",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.format",
+              "shape": []
+            }
+          ],
+          "missing_state": [],
+          "provenance": {
+            "capture_source": "reviewed public and private fitted native-result storage",
+            "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+            "contract_paths": [
+              "$.constructor.priors",
+              "$.constructor.var_smoothing",
+              "$.estimator",
+              "$.fitted._const",
+              "$.fitted._raw_var",
+              "$.fitted.class_count_",
+              "$.fitted.class_prior_",
+              "$.fitted.classes_[0]",
+              "$.fitted.classes_[1]",
+              "$.fitted.epsilon_",
+              "$.fitted.n_features_in_",
+              "$.fitted.numeric_mode_",
+              "$.fitted.theta_",
+              "$.fitted.var_",
+              "$.format"
+            ],
+            "contract_source": "python/mojolearn/_expansion_prep.py",
+            "excluded_non_fitted_state": {
+              "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+              "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+            },
+            "model_class": "mojolearn._expansion_prep.GaussianNB",
+            "numerical_verification": false,
+            "optional_fields": [],
+            "product_python_compliance": "not assessed; existing timed product work unchanged",
+            "required_fields": [
+              "classes_",
+              "theta_",
+              "var_",
+              "class_count_",
+              "class_prior_",
+              "epsilon_",
+              "_const",
+              "_raw_var",
+              "numeric_mode_",
+              "n_features_in_"
+            ],
+            "reviewed_api_source": {
+              "path": "python/mojolearn/_expansion_prep.py",
+              "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+            }
+          },
+          "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-A.model-state.json",
+          "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+          "sha256": "aea88ff11740001f6a5f0833194bdda3a7427d4b4a1bd971a33db0c21e6c107a",
+          "status": "CAPTURED"
+        },
+        "output_sha256": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.pred",
+              "shape": [
+                500000
+              ]
+            },
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.proba1",
+              "shape": [
+                500000
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+          "status": "CAPTURED"
+        },
+        "phase": "warmup",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "dtype": "NoneType",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.priors",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.var_smoothing",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.estimator",
+                  "shape": []
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted._const",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted._raw_var",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.class_count_",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.class_prior_",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.classes_[0]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.classes_[1]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.epsilon_",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_features_in_",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.numeric_mode_",
+                  "shape": []
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.theta_",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.var_",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.format",
+                  "shape": []
+                }
+              ],
+              "missing_state": [],
+              "provenance": {
+                "capture_source": "reviewed public and private fitted native-result storage",
+                "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+                "contract_paths": [
+                  "$.constructor.priors",
+                  "$.constructor.var_smoothing",
+                  "$.estimator",
+                  "$.fitted._const",
+                  "$.fitted._raw_var",
+                  "$.fitted.class_count_",
+                  "$.fitted.class_prior_",
+                  "$.fitted.classes_[0]",
+                  "$.fitted.classes_[1]",
+                  "$.fitted.epsilon_",
+                  "$.fitted.n_features_in_",
+                  "$.fitted.numeric_mode_",
+                  "$.fitted.theta_",
+                  "$.fitted.var_",
+                  "$.format"
+                ],
+                "contract_source": "python/mojolearn/_expansion_prep.py",
+                "excluded_non_fitted_state": {
+                  "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+                  "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+                },
+                "model_class": "mojolearn._expansion_prep.GaussianNB",
+                "numerical_verification": false,
+                "optional_fields": [],
+                "product_python_compliance": "not assessed; existing timed product work unchanged",
+                "required_fields": [
+                  "classes_",
+                  "theta_",
+                  "var_",
+                  "class_count_",
+                  "class_prior_",
+                  "epsilon_",
+                  "_const",
+                  "_raw_var",
+                  "numeric_mode_",
+                  "n_features_in_"
+                ],
+                "reviewed_api_source": {
+                  "path": "python/mojolearn/_expansion_prep.py",
+                  "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+                }
+              },
+              "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-A.repeated-0.model-state.json",
+              "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+              "sha256": "aea88ff11740001f6a5f0833194bdda3a7427d4b4a1bd971a33db0c21e6c107a",
+              "status": "CAPTURED"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.pred",
+                  "shape": [
+                    500000
+                  ]
+                },
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.proba1",
+                  "shape": [
+                    500000
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+              "status": "CAPTURED"
+            },
+            "retained_output_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-A.repeated-0.values.json",
+            "timings": {
+              "consumed_output_seconds": 0.0006032820000427819,
+              "fit_or_training_seconds": 3.6667408959999648,
+              "inference_seconds": 0.006372047000013481,
+              "repeated_seconds": 3.6737181749999763
+            }
+          }
+        ],
+        "resource_policy": {
+          "affinity_cpus": 20,
+          "cgroup_quota_cpus": null,
+          "configured_library_threads": 20,
+          "policy": "whole worker allocation; estimator semantics and nested pools preserved",
+          "quota_source": null,
+          "utilization": "not inferred"
+        },
+        "retained_output_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-A.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.GaussianNB(var_smoothing=1e-09)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_prep numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "hip",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 1,
+          "scored": 0
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours": {
+              "accuracy": 0.71871,
+              "logloss": 1.176889445295522
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": "20",
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": "20",
+          "OMP_NUM_THREADS": "20",
+          "OPENBLAS_NUM_THREADS": "20",
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+        "timings": {
+          "cold_seconds": 4.2476639399999385,
+          "consumed_output_seconds": 0.002024230999950305,
+          "fit_or_training_seconds": 4.007084695000003,
+          "full_operation_seconds": 4.2476639399999385,
+          "inference_seconds": 0.008390164000047662,
+          "preparation_seconds": 0.23016397000003508
+        },
+        "vendor": "amd",
+        "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": true
+        }
+      },
+      "output_sha256": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+      "model_state": {
+        "completeness": "complete_declared_scope",
+        "encoding": "mojolearn-benchmark-state-v1",
+        "manifest": [
+          {
+            "dtype": "NoneType",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.priors",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.var_smoothing",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.estimator",
+            "shape": []
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted._const",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted._raw_var",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.class_count_",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.class_prior_",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.classes_[0]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.classes_[1]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.epsilon_",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_features_in_",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.numeric_mode_",
+            "shape": []
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.theta_",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.var_",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.format",
+            "shape": []
+          }
+        ],
+        "missing_state": [],
+        "provenance": {
+          "capture_source": "reviewed public and private fitted native-result storage",
+          "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+          "contract_paths": [
+            "$.constructor.priors",
+            "$.constructor.var_smoothing",
+            "$.estimator",
+            "$.fitted._const",
+            "$.fitted._raw_var",
+            "$.fitted.class_count_",
+            "$.fitted.class_prior_",
+            "$.fitted.classes_[0]",
+            "$.fitted.classes_[1]",
+            "$.fitted.epsilon_",
+            "$.fitted.n_features_in_",
+            "$.fitted.numeric_mode_",
+            "$.fitted.theta_",
+            "$.fitted.var_",
+            "$.format"
+          ],
+          "contract_source": "python/mojolearn/_expansion_prep.py",
+          "excluded_non_fitted_state": {
+            "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+            "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+          },
+          "model_class": "mojolearn._expansion_prep.GaussianNB",
+          "numerical_verification": false,
+          "optional_fields": [],
+          "product_python_compliance": "not assessed; existing timed product work unchanged",
+          "required_fields": [
+            "classes_",
+            "theta_",
+            "var_",
+            "class_count_",
+            "class_prior_",
+            "epsilon_",
+            "_const",
+            "_raw_var",
+            "numeric_mode_",
+            "n_features_in_"
+          ],
+          "reviewed_api_source": {
+            "path": "python/mojolearn/_expansion_prep.py",
+            "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+          }
+        },
+        "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-A.model-state.json",
+        "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+        "sha256": "aea88ff11740001f6a5f0833194bdda3a7427d4b4a1bd971a33db0c21e6c107a",
+        "status": "CAPTURED"
+      },
+      "timings": {
+        "cold_seconds": 4.2476639399999385,
+        "consumed_output_seconds": 0.002024230999950305,
+        "fit_or_training_seconds": 4.007084695000003,
+        "full_operation_seconds": 4.2476639399999385,
+        "inference_seconds": 0.008390164000047662,
+        "preparation_seconds": 0.23016397000003508
+      },
+      "model_identity_available": true
+    },
+    {
+      "phase": "warmup",
+      "arm": "B",
+      "excluded": true,
+      "returncode": 0,
+      "process_wall_seconds": 2.621422052383423,
+      "log": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-B.log",
+      "output": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-B.json",
+      "result_sha256": "2d03b0dc2b1401f5220afbca07271075e6ab44fa412be87f22ff6cbc7ad51dd5",
+      "result": {
+        "arm": "B",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "dataset_version": "classification-full-v1; original loader archive 10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "Full actual cgroup allocation, serial arms under one GPU lock; worker captures effective thread/resource metadata; no laptop diagnostic caps"
+        },
+        "dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "priors": null,
+            "var_smoothing": 1e-09
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ],
+          "cgroup": {
+            "/sys/fs/cgroup/cpuset.cpus.effective": "0-19"
+          },
+          "cpu_count": 20,
+          "machine": "x86_64",
+          "native_readback": {
+            "config": "mojolearn.GaussianNB(var_smoothing=1e-09)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/__init__.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_how": "_mojolearn_x_prep numeric_mode constant",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "hip",
+            "version": "0.8.37"
+          },
+          "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+          "system": "Linux"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "I.C.C55"
+        ],
+        "loaded_artifacts": {
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/identical/_mojolearn.so": "29b7af646d9af36374eacf87203e90930729eb085f3ea2d21fae10e5f4f6701c",
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/identical/_mojolearn_x_prep.so": "c81bc4885b5bda3eb02ed868a76b78bca3aafb5ec1793f5a60b68a8ce972ed11"
+        },
+        "missing_timing_scopes": [],
+        "mode": "identical",
+        "model_state": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "dtype": "NoneType",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.priors",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.var_smoothing",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.estimator",
+              "shape": []
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted._const",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted._raw_var",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.class_count_",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.class_prior_",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.classes_[0]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.classes_[1]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.epsilon_",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_features_in_",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.numeric_mode_",
+              "shape": []
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.theta_",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.var_",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.format",
+              "shape": []
+            }
+          ],
+          "missing_state": [],
+          "provenance": {
+            "capture_source": "reviewed public and private fitted native-result storage",
+            "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+            "contract_paths": [
+              "$.constructor.priors",
+              "$.constructor.var_smoothing",
+              "$.estimator",
+              "$.fitted._const",
+              "$.fitted._raw_var",
+              "$.fitted.class_count_",
+              "$.fitted.class_prior_",
+              "$.fitted.classes_[0]",
+              "$.fitted.classes_[1]",
+              "$.fitted.epsilon_",
+              "$.fitted.n_features_in_",
+              "$.fitted.numeric_mode_",
+              "$.fitted.theta_",
+              "$.fitted.var_",
+              "$.format"
+            ],
+            "contract_source": "python/mojolearn/_expansion_prep.py",
+            "excluded_non_fitted_state": {
+              "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+              "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+            },
+            "model_class": "mojolearn._expansion_prep.GaussianNB",
+            "numerical_verification": false,
+            "optional_fields": [],
+            "product_python_compliance": "not assessed; existing timed product work unchanged",
+            "required_fields": [
+              "classes_",
+              "theta_",
+              "var_",
+              "class_count_",
+              "class_prior_",
+              "epsilon_",
+              "_const",
+              "_raw_var",
+              "numeric_mode_",
+              "n_features_in_"
+            ],
+            "reviewed_api_source": {
+              "path": "python/mojolearn/_expansion_prep.py",
+              "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+            }
+          },
+          "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-B.model-state.json",
+          "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+          "sha256": "424d99efd4f12f1373aa60634f68f85a6024846a8462f2fc9dd0e47c3b2fa5b5",
+          "status": "CAPTURED"
+        },
+        "output_sha256": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.pred",
+              "shape": [
+                500000
+              ]
+            },
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.proba1",
+              "shape": [
+                500000
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f",
+          "status": "CAPTURED"
+        },
+        "phase": "warmup",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "dtype": "NoneType",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.priors",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.var_smoothing",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.estimator",
+                  "shape": []
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted._const",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted._raw_var",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.class_count_",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.class_prior_",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.classes_[0]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.classes_[1]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.epsilon_",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_features_in_",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.numeric_mode_",
+                  "shape": []
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.theta_",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.var_",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.format",
+                  "shape": []
+                }
+              ],
+              "missing_state": [],
+              "provenance": {
+                "capture_source": "reviewed public and private fitted native-result storage",
+                "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+                "contract_paths": [
+                  "$.constructor.priors",
+                  "$.constructor.var_smoothing",
+                  "$.estimator",
+                  "$.fitted._const",
+                  "$.fitted._raw_var",
+                  "$.fitted.class_count_",
+                  "$.fitted.class_prior_",
+                  "$.fitted.classes_[0]",
+                  "$.fitted.classes_[1]",
+                  "$.fitted.epsilon_",
+                  "$.fitted.n_features_in_",
+                  "$.fitted.numeric_mode_",
+                  "$.fitted.theta_",
+                  "$.fitted.var_",
+                  "$.format"
+                ],
+                "contract_source": "python/mojolearn/_expansion_prep.py",
+                "excluded_non_fitted_state": {
+                  "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+                  "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+                },
+                "model_class": "mojolearn._expansion_prep.GaussianNB",
+                "numerical_verification": false,
+                "optional_fields": [],
+                "product_python_compliance": "not assessed; existing timed product work unchanged",
+                "required_fields": [
+                  "classes_",
+                  "theta_",
+                  "var_",
+                  "class_count_",
+                  "class_prior_",
+                  "epsilon_",
+                  "_const",
+                  "_raw_var",
+                  "numeric_mode_",
+                  "n_features_in_"
+                ],
+                "reviewed_api_source": {
+                  "path": "python/mojolearn/_expansion_prep.py",
+                  "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+                }
+              },
+              "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-B.repeated-0.model-state.json",
+              "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+              "sha256": "424d99efd4f12f1373aa60634f68f85a6024846a8462f2fc9dd0e47c3b2fa5b5",
+              "status": "CAPTURED"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.pred",
+                  "shape": [
+                    500000
+                  ]
+                },
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.proba1",
+                  "shape": [
+                    500000
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f",
+              "status": "CAPTURED"
+            },
+            "retained_output_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-B.repeated-0.values.json",
+            "timings": {
+              "consumed_output_seconds": 0.000645341999984339,
+              "fit_or_training_seconds": 0.02236184299999877,
+              "inference_seconds": 0.006123382000055244,
+              "repeated_seconds": 0.029132677999996304
+            }
+          }
+        ],
+        "resource_policy": {
+          "affinity_cpus": 20,
+          "cgroup_quota_cpus": null,
+          "configured_library_threads": 20,
+          "policy": "whole worker allocation; estimator semantics and nested pools preserved",
+          "quota_source": null,
+          "utilization": "not inferred"
+        },
+        "retained_output_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-B.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.GaussianNB(var_smoothing=1e-09)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_prep numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "hip",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 1,
+          "scored": 0
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours": {
+              "accuracy": 0.720538,
+              "logloss": 1.1408800529981222
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": "20",
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": "20",
+          "OMP_NUM_THREADS": "20",
+          "OPENBLAS_NUM_THREADS": "20",
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+        "timings": {
+          "cold_seconds": 0.5946598709999762,
+          "consumed_output_seconds": 0.0021235629999409866,
+          "fit_or_training_seconds": 0.3535493489999908,
+          "full_operation_seconds": 0.5946598709999762,
+          "inference_seconds": 0.007961716000068009,
+          "preparation_seconds": 0.23102392299995245
+        },
+        "vendor": "amd",
+        "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": true
+        }
+      },
+      "output_sha256": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f",
+      "model_state": {
+        "completeness": "complete_declared_scope",
+        "encoding": "mojolearn-benchmark-state-v1",
+        "manifest": [
+          {
+            "dtype": "NoneType",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.priors",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.var_smoothing",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.estimator",
+            "shape": []
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted._const",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted._raw_var",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.class_count_",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.class_prior_",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.classes_[0]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.classes_[1]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.epsilon_",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_features_in_",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.numeric_mode_",
+            "shape": []
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.theta_",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.var_",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.format",
+            "shape": []
+          }
+        ],
+        "missing_state": [],
+        "provenance": {
+          "capture_source": "reviewed public and private fitted native-result storage",
+          "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+          "contract_paths": [
+            "$.constructor.priors",
+            "$.constructor.var_smoothing",
+            "$.estimator",
+            "$.fitted._const",
+            "$.fitted._raw_var",
+            "$.fitted.class_count_",
+            "$.fitted.class_prior_",
+            "$.fitted.classes_[0]",
+            "$.fitted.classes_[1]",
+            "$.fitted.epsilon_",
+            "$.fitted.n_features_in_",
+            "$.fitted.numeric_mode_",
+            "$.fitted.theta_",
+            "$.fitted.var_",
+            "$.format"
+          ],
+          "contract_source": "python/mojolearn/_expansion_prep.py",
+          "excluded_non_fitted_state": {
+            "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+            "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+          },
+          "model_class": "mojolearn._expansion_prep.GaussianNB",
+          "numerical_verification": false,
+          "optional_fields": [],
+          "product_python_compliance": "not assessed; existing timed product work unchanged",
+          "required_fields": [
+            "classes_",
+            "theta_",
+            "var_",
+            "class_count_",
+            "class_prior_",
+            "epsilon_",
+            "_const",
+            "_raw_var",
+            "numeric_mode_",
+            "n_features_in_"
+          ],
+          "reviewed_api_source": {
+            "path": "python/mojolearn/_expansion_prep.py",
+            "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+          }
+        },
+        "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/warmup-B.model-state.json",
+        "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+        "sha256": "424d99efd4f12f1373aa60634f68f85a6024846a8462f2fc9dd0e47c3b2fa5b5",
+        "status": "CAPTURED"
+      },
+      "timings": {
+        "cold_seconds": 0.5946598709999762,
+        "consumed_output_seconds": 0.0021235629999409866,
+        "fit_or_training_seconds": 0.3535493489999908,
+        "full_operation_seconds": 0.5946598709999762,
+        "inference_seconds": 0.007961716000068009,
+        "preparation_seconds": 0.23102392299995245
+      },
+      "model_identity_available": true
+    },
+    {
+      "phase": "scored",
+      "arm": "A",
+      "excluded": false,
+      "returncode": 0,
+      "process_wall_seconds": 9.783218383789062,
+      "log": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-A.log",
+      "output": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-A.json",
+      "result_sha256": "6654535fae9990567c9881ed0363fa45c6b48bea79510bb074808daf138f3cb8",
+      "result": {
+        "arm": "A",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1"
+          ],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "dataset_version": "classification-full-v1; original loader archive 10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "Full actual cgroup allocation, serial arms under one GPU lock; worker captures effective thread/resource metadata; no laptop diagnostic caps"
+        },
+        "dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "priors": null,
+            "var_smoothing": 1e-09
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ],
+          "cgroup": {
+            "/sys/fs/cgroup/cpuset.cpus.effective": "0-19"
+          },
+          "cpu_count": 20,
+          "machine": "x86_64",
+          "native_readback": {
+            "config": "mojolearn.GaussianNB(var_smoothing=1e-09)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/__init__.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_how": "_mojolearn_x_prep numeric_mode constant",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "hip",
+            "version": "0.8.37"
+          },
+          "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+          "system": "Linux"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "I.C.C55"
+        ],
+        "loaded_artifacts": {
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/identical/_mojolearn.so": "29b7af646d9af36374eacf87203e90930729eb085f3ea2d21fae10e5f4f6701c",
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/identical/_mojolearn_x_prep.so": "7ac4edd39d6a67be14984aac45e499d059f488fed51027c7bef5a87d51696cca"
+        },
+        "missing_timing_scopes": [],
+        "mode": "identical",
+        "model_state": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "dtype": "NoneType",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.priors",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.var_smoothing",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.estimator",
+              "shape": []
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted._const",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted._raw_var",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.class_count_",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.class_prior_",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.classes_[0]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.classes_[1]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.epsilon_",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_features_in_",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.numeric_mode_",
+              "shape": []
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.theta_",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.var_",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.format",
+              "shape": []
+            }
+          ],
+          "missing_state": [],
+          "provenance": {
+            "capture_source": "reviewed public and private fitted native-result storage",
+            "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+            "contract_paths": [
+              "$.constructor.priors",
+              "$.constructor.var_smoothing",
+              "$.estimator",
+              "$.fitted._const",
+              "$.fitted._raw_var",
+              "$.fitted.class_count_",
+              "$.fitted.class_prior_",
+              "$.fitted.classes_[0]",
+              "$.fitted.classes_[1]",
+              "$.fitted.epsilon_",
+              "$.fitted.n_features_in_",
+              "$.fitted.numeric_mode_",
+              "$.fitted.theta_",
+              "$.fitted.var_",
+              "$.format"
+            ],
+            "contract_source": "python/mojolearn/_expansion_prep.py",
+            "excluded_non_fitted_state": {
+              "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+              "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+            },
+            "model_class": "mojolearn._expansion_prep.GaussianNB",
+            "numerical_verification": false,
+            "optional_fields": [],
+            "product_python_compliance": "not assessed; existing timed product work unchanged",
+            "required_fields": [
+              "classes_",
+              "theta_",
+              "var_",
+              "class_count_",
+              "class_prior_",
+              "epsilon_",
+              "_const",
+              "_raw_var",
+              "numeric_mode_",
+              "n_features_in_"
+            ],
+            "reviewed_api_source": {
+              "path": "python/mojolearn/_expansion_prep.py",
+              "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+            }
+          },
+          "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-A.model-state.json",
+          "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+          "sha256": "aea88ff11740001f6a5f0833194bdda3a7427d4b4a1bd971a33db0c21e6c107a",
+          "status": "CAPTURED"
+        },
+        "output_sha256": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.pred",
+              "shape": [
+                500000
+              ]
+            },
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.proba1",
+              "shape": [
+                500000
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+          "status": "CAPTURED"
+        },
+        "phase": "scored",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "dtype": "NoneType",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.priors",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.var_smoothing",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.estimator",
+                  "shape": []
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted._const",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted._raw_var",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.class_count_",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.class_prior_",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.classes_[0]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.classes_[1]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.epsilon_",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_features_in_",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.numeric_mode_",
+                  "shape": []
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.theta_",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.var_",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.format",
+                  "shape": []
+                }
+              ],
+              "missing_state": [],
+              "provenance": {
+                "capture_source": "reviewed public and private fitted native-result storage",
+                "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+                "contract_paths": [
+                  "$.constructor.priors",
+                  "$.constructor.var_smoothing",
+                  "$.estimator",
+                  "$.fitted._const",
+                  "$.fitted._raw_var",
+                  "$.fitted.class_count_",
+                  "$.fitted.class_prior_",
+                  "$.fitted.classes_[0]",
+                  "$.fitted.classes_[1]",
+                  "$.fitted.epsilon_",
+                  "$.fitted.n_features_in_",
+                  "$.fitted.numeric_mode_",
+                  "$.fitted.theta_",
+                  "$.fitted.var_",
+                  "$.format"
+                ],
+                "contract_source": "python/mojolearn/_expansion_prep.py",
+                "excluded_non_fitted_state": {
+                  "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+                  "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+                },
+                "model_class": "mojolearn._expansion_prep.GaussianNB",
+                "numerical_verification": false,
+                "optional_fields": [],
+                "product_python_compliance": "not assessed; existing timed product work unchanged",
+                "required_fields": [
+                  "classes_",
+                  "theta_",
+                  "var_",
+                  "class_count_",
+                  "class_prior_",
+                  "epsilon_",
+                  "_const",
+                  "_raw_var",
+                  "numeric_mode_",
+                  "n_features_in_"
+                ],
+                "reviewed_api_source": {
+                  "path": "python/mojolearn/_expansion_prep.py",
+                  "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+                }
+              },
+              "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-A.repeated-0.model-state.json",
+              "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+              "sha256": "aea88ff11740001f6a5f0833194bdda3a7427d4b4a1bd971a33db0c21e6c107a",
+              "status": "CAPTURED"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.pred",
+                  "shape": [
+                    500000
+                  ]
+                },
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.proba1",
+                  "shape": [
+                    500000
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+              "status": "CAPTURED"
+            },
+            "retained_output_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-A.repeated-0.values.json",
+            "timings": {
+              "consumed_output_seconds": 0.0006067229999189294,
+              "fit_or_training_seconds": 3.688339573999997,
+              "inference_seconds": 0.0059364950000144745,
+              "repeated_seconds": 3.69488413199997
+            }
+          }
+        ],
+        "resource_policy": {
+          "affinity_cpus": 20,
+          "cgroup_quota_cpus": null,
+          "configured_library_threads": 20,
+          "policy": "whole worker allocation; estimator semantics and nested pools preserved",
+          "quota_source": null,
+          "utilization": "not inferred"
+        },
+        "retained_output_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-A.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.GaussianNB(var_smoothing=1e-09)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/A/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_prep numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "hip",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours": {
+              "accuracy": 0.71871,
+              "logloss": 1.176889445295522
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": "20",
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": "20",
+          "OMP_NUM_THREADS": "20",
+          "OPENBLAS_NUM_THREADS": "20",
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+        "timings": {
+          "cold_seconds": 4.2534338570000045,
+          "consumed_output_seconds": 0.0022309270000278048,
+          "fit_or_training_seconds": 4.02349691500001,
+          "full_operation_seconds": 4.2534338570000045,
+          "inference_seconds": 0.008206827999970301,
+          "preparation_seconds": 0.21949812700006532
+        },
+        "vendor": "amd",
+        "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": true
+        }
+      },
+      "output_sha256": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+      "model_state": {
+        "completeness": "complete_declared_scope",
+        "encoding": "mojolearn-benchmark-state-v1",
+        "manifest": [
+          {
+            "dtype": "NoneType",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.priors",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.var_smoothing",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.estimator",
+            "shape": []
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted._const",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted._raw_var",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.class_count_",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.class_prior_",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.classes_[0]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.classes_[1]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.epsilon_",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_features_in_",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.numeric_mode_",
+            "shape": []
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.theta_",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.var_",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.format",
+            "shape": []
+          }
+        ],
+        "missing_state": [],
+        "provenance": {
+          "capture_source": "reviewed public and private fitted native-result storage",
+          "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+          "contract_paths": [
+            "$.constructor.priors",
+            "$.constructor.var_smoothing",
+            "$.estimator",
+            "$.fitted._const",
+            "$.fitted._raw_var",
+            "$.fitted.class_count_",
+            "$.fitted.class_prior_",
+            "$.fitted.classes_[0]",
+            "$.fitted.classes_[1]",
+            "$.fitted.epsilon_",
+            "$.fitted.n_features_in_",
+            "$.fitted.numeric_mode_",
+            "$.fitted.theta_",
+            "$.fitted.var_",
+            "$.format"
+          ],
+          "contract_source": "python/mojolearn/_expansion_prep.py",
+          "excluded_non_fitted_state": {
+            "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+            "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+          },
+          "model_class": "mojolearn._expansion_prep.GaussianNB",
+          "numerical_verification": false,
+          "optional_fields": [],
+          "product_python_compliance": "not assessed; existing timed product work unchanged",
+          "required_fields": [
+            "classes_",
+            "theta_",
+            "var_",
+            "class_count_",
+            "class_prior_",
+            "epsilon_",
+            "_const",
+            "_raw_var",
+            "numeric_mode_",
+            "n_features_in_"
+          ],
+          "reviewed_api_source": {
+            "path": "python/mojolearn/_expansion_prep.py",
+            "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+          }
+        },
+        "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-A.model-state.json",
+        "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+        "sha256": "aea88ff11740001f6a5f0833194bdda3a7427d4b4a1bd971a33db0c21e6c107a",
+        "status": "CAPTURED"
+      },
+      "timings": {
+        "cold_seconds": 4.2534338570000045,
+        "consumed_output_seconds": 0.0022309270000278048,
+        "fit_or_training_seconds": 4.02349691500001,
+        "full_operation_seconds": 4.2534338570000045,
+        "inference_seconds": 0.008206827999970301,
+        "preparation_seconds": 0.21949812700006532
+      },
+      "model_identity_available": true
+    },
+    {
+      "phase": "scored",
+      "arm": "B",
+      "excluded": false,
+      "returncode": 0,
+      "process_wall_seconds": 2.469315528869629,
+      "log": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-B.log",
+      "output": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-B.json",
+      "result_sha256": "0fcf15ba1ab632622b3098d1772c87f2554214e2e95b35751992c5e6751e7fac",
+      "result": {
+        "arm": "B",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "dataset_version": "classification-full-v1; original loader archive 10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "Full actual cgroup allocation, serial arms under one GPU lock; worker captures effective thread/resource metadata; no laptop diagnostic caps"
+        },
+        "dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "priors": null,
+            "var_smoothing": 1e-09
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ],
+          "cgroup": {
+            "/sys/fs/cgroup/cpuset.cpus.effective": "0-19"
+          },
+          "cpu_count": 20,
+          "machine": "x86_64",
+          "native_readback": {
+            "config": "mojolearn.GaussianNB(var_smoothing=1e-09)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/__init__.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_how": "_mojolearn_x_prep numeric_mode constant",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "hip",
+            "version": "0.8.37"
+          },
+          "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+          "system": "Linux"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "I.C.C55"
+        ],
+        "loaded_artifacts": {
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/identical/_mojolearn.so": "29b7af646d9af36374eacf87203e90930729eb085f3ea2d21fae10e5f4f6701c",
+          "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/identical/_mojolearn_x_prep.so": "c81bc4885b5bda3eb02ed868a76b78bca3aafb5ec1793f5a60b68a8ce972ed11"
+        },
+        "missing_timing_scopes": [],
+        "mode": "identical",
+        "model_state": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "dtype": "NoneType",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.priors",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.constructor.var_smoothing",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.estimator",
+              "shape": []
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted._const",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted._raw_var",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.class_count_",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "bytes": 8,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.class_prior_",
+              "shape": [
+                2
+              ]
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.classes_[0]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.classes_[1]",
+              "shape": []
+            },
+            {
+              "dtype": "float",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.epsilon_",
+              "shape": []
+            },
+            {
+              "dtype": "int",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.n_features_in_",
+              "shape": []
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.fitted.numeric_mode_",
+              "shape": []
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.theta_",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "bytes": 88,
+              "dtype": "<f4",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.fitted.var_",
+              "shape": [
+                2,
+                11
+              ]
+            },
+            {
+              "dtype": "str",
+              "encoding": "canonical JSON scalar",
+              "path": "$.format",
+              "shape": []
+            }
+          ],
+          "missing_state": [],
+          "provenance": {
+            "capture_source": "reviewed public and private fitted native-result storage",
+            "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+            "contract_paths": [
+              "$.constructor.priors",
+              "$.constructor.var_smoothing",
+              "$.estimator",
+              "$.fitted._const",
+              "$.fitted._raw_var",
+              "$.fitted.class_count_",
+              "$.fitted.class_prior_",
+              "$.fitted.classes_[0]",
+              "$.fitted.classes_[1]",
+              "$.fitted.epsilon_",
+              "$.fitted.n_features_in_",
+              "$.fitted.numeric_mode_",
+              "$.fitted.theta_",
+              "$.fitted.var_",
+              "$.format"
+            ],
+            "contract_source": "python/mojolearn/_expansion_prep.py",
+            "excluded_non_fitted_state": {
+              "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+              "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+            },
+            "model_class": "mojolearn._expansion_prep.GaussianNB",
+            "numerical_verification": false,
+            "optional_fields": [],
+            "product_python_compliance": "not assessed; existing timed product work unchanged",
+            "required_fields": [
+              "classes_",
+              "theta_",
+              "var_",
+              "class_count_",
+              "class_prior_",
+              "epsilon_",
+              "_const",
+              "_raw_var",
+              "numeric_mode_",
+              "n_features_in_"
+            ],
+            "reviewed_api_source": {
+              "path": "python/mojolearn/_expansion_prep.py",
+              "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+            }
+          },
+          "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-B.model-state.json",
+          "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+          "sha256": "424d99efd4f12f1373aa60634f68f85a6024846a8462f2fc9dd0e47c3b2fa5b5",
+          "status": "CAPTURED"
+        },
+        "output_sha256": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.pred",
+              "shape": [
+                500000
+              ]
+            },
+            {
+              "bytes": 4000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.proba1",
+              "shape": [
+                500000
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f",
+          "status": "CAPTURED"
+        },
+        "phase": "scored",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "dtype": "NoneType",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.priors",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.constructor.var_smoothing",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.estimator",
+                  "shape": []
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted._const",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted._raw_var",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.class_count_",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "bytes": 8,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.class_prior_",
+                  "shape": [
+                    2
+                  ]
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.classes_[0]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.classes_[1]",
+                  "shape": []
+                },
+                {
+                  "dtype": "float",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.epsilon_",
+                  "shape": []
+                },
+                {
+                  "dtype": "int",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.n_features_in_",
+                  "shape": []
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.fitted.numeric_mode_",
+                  "shape": []
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.theta_",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "bytes": 88,
+                  "dtype": "<f4",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.fitted.var_",
+                  "shape": [
+                    2,
+                    11
+                  ]
+                },
+                {
+                  "dtype": "str",
+                  "encoding": "canonical JSON scalar",
+                  "path": "$.format",
+                  "shape": []
+                }
+              ],
+              "missing_state": [],
+              "provenance": {
+                "capture_source": "reviewed public and private fitted native-result storage",
+                "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+                "contract_paths": [
+                  "$.constructor.priors",
+                  "$.constructor.var_smoothing",
+                  "$.estimator",
+                  "$.fitted._const",
+                  "$.fitted._raw_var",
+                  "$.fitted.class_count_",
+                  "$.fitted.class_prior_",
+                  "$.fitted.classes_[0]",
+                  "$.fitted.classes_[1]",
+                  "$.fitted.epsilon_",
+                  "$.fitted.n_features_in_",
+                  "$.fitted.numeric_mode_",
+                  "$.fitted.theta_",
+                  "$.fitted.var_",
+                  "$.format"
+                ],
+                "contract_source": "python/mojolearn/_expansion_prep.py",
+                "excluded_non_fitted_state": {
+                  "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+                  "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+                },
+                "model_class": "mojolearn._expansion_prep.GaussianNB",
+                "numerical_verification": false,
+                "optional_fields": [],
+                "product_python_compliance": "not assessed; existing timed product work unchanged",
+                "required_fields": [
+                  "classes_",
+                  "theta_",
+                  "var_",
+                  "class_count_",
+                  "class_prior_",
+                  "epsilon_",
+                  "_const",
+                  "_raw_var",
+                  "numeric_mode_",
+                  "n_features_in_"
+                ],
+                "reviewed_api_source": {
+                  "path": "python/mojolearn/_expansion_prep.py",
+                  "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+                }
+              },
+              "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-B.repeated-0.model-state.json",
+              "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+              "sha256": "424d99efd4f12f1373aa60634f68f85a6024846a8462f2fc9dd0e47c3b2fa5b5",
+              "status": "CAPTURED"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.pred",
+                  "shape": [
+                    500000
+                  ]
+                },
+                {
+                  "bytes": 4000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.proba1",
+                  "shape": [
+                    500000
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f",
+              "status": "CAPTURED"
+            },
+            "retained_output_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-B.repeated-0.values.json",
+            "timings": {
+              "consumed_output_seconds": 0.0006587239998907535,
+              "fit_or_training_seconds": 0.02169493900009911,
+              "inference_seconds": 0.005894979000004241,
+              "repeated_seconds": 0.02825002199995197
+            }
+          }
+        ],
+        "resource_policy": {
+          "affinity_cpus": 20,
+          "cgroup_quota_cpus": null,
+          "configured_library_threads": 20,
+          "policy": "whole worker allocation; estimator semantics and nested pools preserved",
+          "quota_source": null,
+          "utilization": "not inferred"
+        },
+        "retained_output_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-B.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.GaussianNB(var_smoothing=1e-09)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/targeted-ab-20261007/staging-first-eight-repair-01/packages/T.C55.only/B/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_prep numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "hip",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours": {
+              "accuracy": 0.720538,
+              "logloss": 1.1408800529981222
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": "20",
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": "20",
+          "OMP_NUM_THREADS": "20",
+          "OPENBLAS_NUM_THREADS": "20",
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+        "timings": {
+          "cold_seconds": 0.5828515580000158,
+          "consumed_output_seconds": 0.0021440609999672233,
+          "fit_or_training_seconds": 0.3491443809999737,
+          "full_operation_seconds": 0.5828515580000158,
+          "inference_seconds": 0.008040980000032505,
+          "preparation_seconds": 0.22352136500001052
+        },
+        "vendor": "amd",
+        "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": true
+        }
+      },
+      "output_sha256": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f",
+      "model_state": {
+        "completeness": "complete_declared_scope",
+        "encoding": "mojolearn-benchmark-state-v1",
+        "manifest": [
+          {
+            "dtype": "NoneType",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.priors",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.constructor.var_smoothing",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.estimator",
+            "shape": []
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted._const",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted._raw_var",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.class_count_",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "bytes": 8,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.class_prior_",
+            "shape": [
+              2
+            ]
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.classes_[0]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.classes_[1]",
+            "shape": []
+          },
+          {
+            "dtype": "float",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.epsilon_",
+            "shape": []
+          },
+          {
+            "dtype": "int",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.n_features_in_",
+            "shape": []
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.fitted.numeric_mode_",
+            "shape": []
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.theta_",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "bytes": 88,
+            "dtype": "<f4",
+            "encoding": "C-order raw bytes; dtype endian preserved",
+            "path": "$.fitted.var_",
+            "shape": [
+              2,
+              11
+            ]
+          },
+          {
+            "dtype": "str",
+            "encoding": "canonical JSON scalar",
+            "path": "$.format",
+            "shape": []
+          }
+        ],
+        "missing_state": [],
+        "provenance": {
+          "capture_source": "reviewed public and private fitted native-result storage",
+          "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+          "contract_paths": [
+            "$.constructor.priors",
+            "$.constructor.var_smoothing",
+            "$.estimator",
+            "$.fitted._const",
+            "$.fitted._raw_var",
+            "$.fitted.class_count_",
+            "$.fitted.class_prior_",
+            "$.fitted.classes_[0]",
+            "$.fitted.classes_[1]",
+            "$.fitted.epsilon_",
+            "$.fitted.n_features_in_",
+            "$.fitted.numeric_mode_",
+            "$.fitted.theta_",
+            "$.fitted.var_",
+            "$.format"
+          ],
+          "contract_source": "python/mojolearn/_expansion_prep.py",
+          "excluded_non_fitted_state": {
+            "temporary_program_and_solver_workspaces": "Released before fit returns; no persistent device handle or resumption API in reviewed classes",
+            "vendor_and_binding_diagnostics": "Captured separately by worker artifact/runtime provenance"
+          },
+          "model_class": "mojolearn._expansion_prep.GaussianNB",
+          "numerical_verification": false,
+          "optional_fields": [],
+          "product_python_compliance": "not assessed; existing timed product work unchanged",
+          "required_fields": [
+            "classes_",
+            "theta_",
+            "var_",
+            "class_count_",
+            "class_prior_",
+            "epsilon_",
+            "_const",
+            "_raw_var",
+            "numeric_mode_",
+            "n_features_in_"
+          ],
+          "reviewed_api_source": {
+            "path": "python/mojolearn/_expansion_prep.py",
+            "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+          }
+        },
+        "retained_values": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/scored-B.model-state.json",
+        "scope": "complete reviewed fitted storage: mojolearn.reviewed-fitted-storage/GaussianNB-1",
+        "sha256": "424d99efd4f12f1373aa60634f68f85a6024846a8462f2fc9dd0e47c3b2fa5b5",
+        "status": "CAPTURED"
+      },
+      "timings": {
+        "cold_seconds": 0.5828515580000158,
+        "consumed_output_seconds": 0.0021440609999672233,
+        "fit_or_training_seconds": 0.3491443809999737,
+        "full_operation_seconds": 0.5828515580000158,
+        "inference_seconds": 0.008040980000032505,
+        "preparation_seconds": 0.22352136500001052
+      },
+      "model_identity_available": true
+    }
+  ],
+  "receipt": "/root/targeted-ab-20261007/measurements/94344cac43938a205dcd/attempts/attempt-0001/receipt.json",
+  "previous_receipt": null,
+  "warmup_scope": "separate_process",
+  "steady_state_claim": false,
+  "finished": 1791349271.6069434,
+  "status": "MEASURED_FULL",
+  "model_identity_available": true
+}
