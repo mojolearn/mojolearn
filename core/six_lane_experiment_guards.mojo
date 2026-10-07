@@ -67,6 +67,10 @@ def _check_configuration() -> Bool:
     comptime assert HS == 1 or HS == 4, "MOJOLEARN_IDN_ATTN_HEAD_SHARE legal set {4} (two-head I06/NI19 deleted as a loser)"
     comptime SM = get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX",0]()
     comptime assert SM >= 0 and SM <= 2, "MOJOLEARN_IDN_ATTN_SOFTMAX arms: 1 summary_tree, 2 online_tile32"
+    # lane/attention-tiled-v2 (2026-10-07): the online_tile32 forward's query rows per block.
+    comptime TQ2 = get_defined_int["MOJOLEARN_IDN_ATTN_V2_TQ",32]()
+    comptime assert TQ2 == 32 or TQ2 == 64, "MOJOLEARN_IDN_ATTN_V2_TQ legal set 32|64 (256 threads, 8 or 4 lanes per query row)"
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_V2_TQ"]() or SM == 2, "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)"
     comptime ST = get_defined_int["MOJOLEARN_IDN_ATTN_STASH",0]()
     comptime assert ST >= 0 and ST <= 3, "MOJOLEARN_IDN_ATTN_STASH arms: 1 recompute, 2 packed, 3 alias_y"
     comptime NO = get_defined_int["MOJOLEARN_IDN_NORM",0]()

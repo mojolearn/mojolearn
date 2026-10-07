@@ -337,9 +337,11 @@
    "default": "off",
    "source": [
     "transformer/experiments/attention_summary_contract.mojo:14",
-    "training/neural_identical_experiments.mojo:53",
-    "transformer/impl/llama/modeling_llama.mojo:4177",
-    "transformer/impl/llama/modeling_llama.mojo:4203"
+    "training/neural_identical_experiments.mojo:80",
+    "transformer/impl/llama/modeling_llama.mojo:4203",
+    "transformer/impl/llama/attention_v2_model_device.mojo:331",
+    "transformer/impl/llama/attention_v2_model_device.mojo:795",
+    "transformer/checks/transformer_backward.mojo:3628"
    ],
    "binding": [
     "_mojolearn_transformer",
@@ -351,7 +353,8 @@
    "merged_from": [
     "I.N.NN20",
     "I.N.NI20"
-   ]
+   ],
+   "note": "online_tile32 (MOJOLEARN_IDN_ATTN_SOFTMAX=2) is the attention-online-tile32.fp32.v2 profile; since lane/attention-tiled-v2 (2026-10-07) its device kernels are the tiled ones in attention_v2_model_device.mojo (forward _forward_tiled: one QK^T and one PV sweep per query tile, 32-key device tiles in a 64-key shared ring, two running words per row; backward _prepare_tiled/_dq_tiled/_dkdv_tiled, all in the contract's fold order), not the one-thread-per-row reference, which remains for the Apple column, the trace-only diagnostic cells and head dims outside {16,32,64}. Host column: attention_v2_model_host.mojo (byte_lm_host_kernels.mojo:931, transformer_oracle.mojo:2057). Bits change vs off/summary_tree (profile), equal on NVIDIA and AMD. Its forward rows-per-block sweep is attn_v2_tq (grid_controls/attention-tiled-v2.json)."
   },
   "attn_stash": {
    "define": "MOJOLEARN_IDN_ATTN_STASH",
