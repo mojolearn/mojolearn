@@ -1448,3 +1448,19 @@ both NVIDIA and AMD results, no material vendor regression, same-version
 identity on Apple and the host column, and end-to-end quality/performance
 on taxi + Istella or enwik8 + Pile GitHub as appropriate. No default flips
 are authorized by the synthetic screen alone.
+
+## IDENTICAL tree switch cleanup (lane/trees-cleanup, 2026-10-07)
+
+Source review: `~/mojolearn-evidence/board-review-20261007/review_trees.md`. Base 8be4d20d4 (the deleted code is recoverable there).
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_TREES_T01` (+ `_REPLICAS`, `_ROWS`) = `MOJOLEARN_IDN_RF_STREAM_REPLICAS` (N07) | rf fit, generated 100000x32 and 131071x17 | main @ cbcc8dcd3303 (source of the measurement) | N07 2026-10-06 (measurements/20261006/index.json) | AMD 335.85 -> 347.28 (1.034); NVIDIA L40S 124.76 -> 161.31 (1.293); NVIDIA 131071x17 107.52 -> 131.88 (1.227) | DROP, code deleted | slower on both vendors; T01_ROWS (task rows) is covered by T02's cost rule |
+| `MOJOLEARN_TREES_T16` = `MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT` (I17) | gbdt-lossguide, 10000x17, 10001x18, 32769x9, 10 trees | main @ 5b467815b | I17 overnight-ab-20261006 | AMD candidate/base 1.041, 1.292, 1.083; NVIDIA 1.114, 1.111, 1.116 | DROP, code deleted | slower on both vendors |
+| `MOJOLEARN_TREES_T20` | gbdt depthwise / lossguide | lane/trees-cleanup | none | n/a | DROP, define deleted | set the same `DEFER_HIST_COPY_1903` constant as `T19_DEFER` |
+| `MOJOLEARN_TREES_T19_DEFER` (`MOJOLEARN_GBDT_ID_DEFER_COPY`) | gbdt depthwise / lossguide, NVIDIA + AMD | lane/trees-cleanup | none | n/a | KEPT as switch | no loss on record: "LOST" in candidate-audit-2026-10-04 means missing from the inventory, not slower; Apple IDENTICAL already ships the schedule |
+| `MOJOLEARN_TREES_T31_PACKED_A` / `_B` | forest predict | lane/trees-cleanup | none | n/a | DROP, defines deleted | A was a no-op (packed nodes are the default); B duplicated `MOJOLEARN_FOREST_SEPARATE_NODES` |
+| `MOJOLEARN_TREES_T09` (RF part) + `MOJOLEARN_TREES_T10` | rf bootstrap | lane/trees-cleanup | none | n/a | REWRITTEN as `MOJOLEARN_TREES_RF_SAMPLE=0\|1\|2` | T09 turned T10's fused gather off; one arms switch, per-vendor default explicit (NVIDIA 2, AMD 0); T09 now names the ET sort only |
+| `MOJOLEARN_TREES_T35_LEAF_REUSE` / `T36_FINITE_STAGE` | forest predict | lane/trees-cleanup | none | n/a | REWRITTEN as `MOJOLEARN_TREES_FOREST_ROUTE=0\|1\|2` | silent precedence over T34/grove hid T33; one route switch, T33/T34 orthogonal |
+| `MOJOLEARN_TREES_T05` | rf fit | lane/trees-cleanup | none | n/a | REWRITTEN per node (`T05_ROW_VISITS` sweep 8/16/32/64) | forced the one-block fused path on every node incl. million-row roots; now a device per-node choice, fused kernel uses the pinned IDENTICAL reduce |
+| `T11`, `T17`, `T21_STREAM/4` | rf/et frontier, gbdt lossguide, gbdt histogram | lane/trees-cleanup | none | n/a | REWRITTEN as int sweeps `T11_LEVELS`, `T17_BATCH`, `T21_STREAMS` | knobs, not switches. RF K1/K2/K8 already showed no combined gain (forest-final-decisions 2026-10-05) |
