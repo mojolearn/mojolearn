@@ -43,17 +43,12 @@
     "5": [
      "MOJOLEARN_IDN_GEMM_OZAKI_LINALG=1",
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
-    ],
-    "6": [
-     "MOJOLEARN_IDN_GEMM_OZAKI_LINALG=1",
-     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=6"
     ]
    },
    "default": "off",
    "legal_set": [
     4,
-    5,
-    6
+    5
    ],
    "source": [
     "gemm/host_entry.mojo:74",
@@ -73,20 +68,8 @@
    "define": "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",
    "kind": "int_sweep",
    "arms": {
-    "0": [
-     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=0"
-    ],
-    "128": [
-     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=128"
-    ],
     "192": [
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"
-    ],
-    "256": [
-     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=256"
-    ],
-    "384": [
-     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=384"
     ],
     "512": [
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=512"
@@ -98,11 +81,7 @@
    },
    "default": "off",
    "legal_set": [
-    0,
-    128,
     192,
-    256,
-    384,
     512,
     1024
    ],
@@ -157,7 +136,9 @@
    ],
    "bits_change": false,
    "status": "new",
-   "note": "Define-ized MOJOLEARN_GEMM_TILE_SHORT_K; define wins over the env var. off = column default (NVIDIA 512, else 0). Inert on AMD (min_k default 0 already steps down at every k) and wherever the block floor is 0. Execution plan only."
+   "note": "Define-ized MOJOLEARN_GEMM_TILE_SHORT_K; define wins over the env var. off = column default (NVIDIA 512, else 0). Inert on AMD (min_k default 0 already steps down at every k) and wherever the block floor is 0. Execution plan only.",
+   "grid": "exclude",
+   "prune_note": "ALWAYS_OFF_DELETE"
   },
   "gemm_split_min_leaves": {
    "define": "MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES",
@@ -359,7 +340,9 @@
    "note": "NVIDIA only: fold-split 2 for TUNED_128 calls whose fold bound is <= 2 leaves; does nothing under LEGACY_SHAPE_NV_FS4 or GEMM_NV_FS4_OFF. Never run before (EXPERIMENTS.md). Schedule only, same bits. Reaches classical callers.",
    "exclusive_with": [
     "MOJOLEARN_LEGACY_SHAPE_NV_FS4"
-   ]
+   ],
+   "grid": "exclude",
+   "prune_note": "ALWAYS_OFF_DELETE (N02 noise)"
   }
  },
  "algorithms": {
@@ -513,7 +496,8 @@
      "gemm_kpack_rpt4",
      "gemm_fs2"
     ]
-   ]
+   ],
+   "notes": "Only attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
   },
   "neural:samba-train-step": {
    "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
@@ -583,6 +567,11 @@
      "neural_gemm_schedule",
      "neural_gemm_epilogue"
     ]
+   ],
+   "not_reached": [
+    "gemm_tile_min_blocks",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4"
    ]
   },
   "neural:mamba1-forward": {
@@ -611,7 +600,11 @@
      "gemm_fs2"
     ]
    ],
-   "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist)."
+   "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist).",
+   "not_reached": [
+    "gemm_split_min_leaves"
+   ],
+   "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap reach this lane."
   },
   "neural:mamba2-forward": {
    "binding": "_mojolearn_mamba",
@@ -639,7 +632,11 @@
      "gemm_fs2"
     ]
    ],
-   "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist)."
+   "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist).",
+   "not_reached": [
+    "gemm_split_min_leaves"
+   ],
+   "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap reach this lane."
   },
   "neural:mamba3-forward": {
    "binding": "_mojolearn_mamba",
@@ -673,7 +670,11 @@
      "m3_angle_block"
     ]
    ],
-   "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist)."
+   "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist).",
+   "not_reached": [
+    "gemm_split_min_leaves"
+   ],
+   "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap reach this lane."
   },
   "neural:cnn-clf": {
    "binding": "_mojolearn_x_cnn",
@@ -720,7 +721,8 @@
    "not_reached": [
     "ni10_cnn_tape",
     "ni11_direct_taps64",
-    "cnn_conv_relu"
+    "cnn_conv_relu",
+    "gemm_split_min_leaves"
    ],
    "note": "Board config (tools/bench_board_algos.py:1068): 1x28x28, Conv-ReLU-MaxPool x2 (8,16), k3, batch 128. Not reached: ni10 (tape ~11 MB, under the 64 MiB budget), ni11 (block 1 ckk 9 already direct, block 2 ckk 72 > 64), cnn_conv_relu (both arms live in the no-pool branch; both board blocks pool)."
   },
@@ -749,6 +751,10 @@
      "gemm_compact_live_tile",
      "gemm_global_workspace"
     ]
+   ],
+   "not_reached": [
+    "gemm_tile_min_blocks",
+    "gemm_split_min_leaves"
    ]
   }
  },

@@ -14,16 +14,12 @@
     ],
     "5": [
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
-    ],
-    "6": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=6"
     ]
    },
    "default": "off",
    "legal_set": [
     4,
-    5,
-    6
+    5
    ],
    "source": [
     "gemm/experiments/neural_ozaki.mojo:89",

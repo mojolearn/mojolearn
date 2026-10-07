@@ -22,7 +22,10 @@
    "binding": "_mojolearn_mamba",
    "bits_change": false,
    "status": "new",
-   "notes": "one launch; block = CH channels x 16 states of one batch row for the whole sequence; chains serial per thread, y/out fold from shared memory; same S5-S11 graph as selective_scan_fwd_kernel. Refused (comptime assert) together with MOJOLEARN_IDN_M1_STATE_WINDOW; unused when MOJOLEARN_NN34_AFFINE_PREFIX is on (that profile replaces the scan)."
+   "notes": "one launch; block = CH channels x 16 states of one batch row for the whole sequence; chains serial per thread, y/out fold from shared memory; same S5-S11 graph as selective_scan_fwd_kernel. Refused (comptime assert) together with MOJOLEARN_IDN_M1_STATE_WINDOW; unused when MOJOLEARN_NN34_AFFINE_PREFIX is on (that profile replaces the scan).",
+   "exclusive_with": [
+    "MOJOLEARN_NN34_AFFINE_PREFIX"
+   ]
   },
   "m1_persistent_scan_ch": {
    "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH",
@@ -105,9 +108,6 @@
     ],
     "8": [
      "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8"
-    ],
-    "16": [
-     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=16"
     ]
    },
    "default": "4",

@@ -53,7 +53,7 @@
     "NN36",
     "NI39"
    ],
-   "board": "mamba2-forward, samba-*",
+   "board": "mamba2-forward",
    "tags": [],
    "arm_names": {
     "0": "recompute",
@@ -80,7 +80,7 @@
    "entries": [
     "NN33"
    ],
-   "board": "mamba2-forward, samba-*",
+   "board": "mamba2-forward",
    "tags": [
     "tile_param",
     "tune_per_vendor"
@@ -106,7 +106,7 @@
    "entries": [
     "NN33"
    ],
-   "board": "mamba2-forward, samba-*",
+   "board": "mamba2-forward",
    "tags": [
     "tile_param",
     "tune_per_vendor"
@@ -132,7 +132,7 @@
    "entries": [
     "NI40"
    ],
-   "board": "mamba2-forward, samba-*",
+   "board": "mamba2-forward",
    "tags": [],
    "note": "Not merged with NN33: retaining G*L composes with any tile geometry (independent ideas in the same kernels); crossed in an interaction group instead."
   },
@@ -1139,7 +1139,9 @@
    ],
    "board": "mlp-train-step only with dropout",
    "tags": [],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "grid": "exclude",
+   "prune_note": "DEFER: UNREACHED: board MLP has no dropout (bench_board_neural.py:351 MLP_DIMS)"
   },
   "nn63_shard_merge": {
    "define": "MOJOLEARN_NN63_CANONICAL_SHARD_MERGE",
@@ -1283,7 +1285,10 @@
    ],
    "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
    "note": "bits_change not re-assessed by L11 (unchanged switch)",
-   "reach": "neural:cnn-clf: x_cnn/device.mojo:290 via _col2im :3022, block 2 backward; NI14_TILED wins when both are set"
+   "reach": "neural:cnn-clf: x_cnn/device.mojo:290 via _col2im :3022, block 2 backward; NI14_TILED wins when both are set",
+   "exclusive_with": [
+    "MOJOLEARN_NI14_TILED_COL2IM"
+   ]
   },
   "ni14_tiled_col2im": {
    "define": "MOJOLEARN_NI14_TILED_COL2IM",
@@ -1329,7 +1334,10 @@
    ],
    "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
    "note": "bits_change not re-assessed by L11 (unchanged switch)",
-   "reach": "neural:cnn-clf: x_cnn/device.mojo:808/814 bias_grad_gemm (:3014, head :1492); bypassed when a neural GEMM experiment is on"
+   "reach": "neural:cnn-clf: x_cnn/device.mojo:808/814 bias_grad_gemm (:3014, head :1492); bypassed when a neural GEMM experiment is on",
+   "exclusive_with": [
+    "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES"
+   ]
   },
   "ni17_balanced_norm": {
    "define": "MOJOLEARN_NI17_BALANCED_NORM",
@@ -1636,6 +1644,12 @@
      "act_retain",
      "train_scratch"
     ]
+   ],
+   "not_reached": [
+    "m2_yoff_exp",
+    "m2_yd_rows",
+    "m2_cs_pt",
+    "m2_retain_gl"
    ]
   },
   "neural:mlp-train-step": {
