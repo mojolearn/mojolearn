@@ -7,9 +7,9 @@ outside the GPU runtime and any scored interval. No timing is emitted.
 
 Per case it prints
   OZAKI_ACC fixture op m n k S=<s> nerr=<x> rerr=<x> inc_nerr=<x> inc_rerr=<x> digest=<h>
-where nerr is max |C - ref| / sum_p |a||b| over the cells (normwise, the
-fp32 GEMM error bound's own scale) and rerr is max |C - ref| / |ref| over
-cells with |ref| >= 2^-10 * sum|a||b|. The digest is FNV-1a over the Ozaki
+where nerr is max |C - expect| / sum_p |a||b| over the cells (normwise, the
+fp32 GEMM error bound's own scale) and rerr is max |C - expect| / |expect| over
+cells with |expect| >= 2^-10 * sum|a||b|. The digest is FNV-1a over the Ozaki
 output bits: NVIDIA, AMD and the host column must print the same digest for
 the same line (the IDENTICAL claim). The last line,
   OZAKI_CHECK S4=<worst nerr ratio vs incumbent> S5=.. S6=.. exact_ints=PASS|FAIL
@@ -52,18 +52,18 @@ def _b_at(bl: List[Float32], op: Int, n: Int, k: Int, j: Int, p: Int) -> Float64
     return Float64(bl[j * k + p]) if op == OP_NT else Float64(bl[p * n + j])
 
 
-def _errors(ch: HostBuffer[DType.float32], ref: List[Float64], sab: List[Float64], count: Int) -> Tuple[Float64, Float64]:
+def _errors(ch: HostBuffer[DType.float32], expect: List[Float64], sab: List[Float64], count: Int) -> Tuple[Float64, Float64]:
     var nerr = Float64(0)
     var rerr = Float64(0)
     for c in range(count):
         var got = Float64(ch[c])
-        var d = abs(got - ref[c])
+        var d = abs(got - expect[c])
         if got != got:
             d = Float64(1e300)
         if sab[c] > 0:
             nerr = max(nerr, d / sab[c])
-            if abs(ref[c]) >= sab[c] * 0.0009765625:
-                rerr = max(rerr, d / abs(ref[c]))
+            if abs(expect[c]) >= sab[c] * 0.0009765625:
+                rerr = max(rerr, d / abs(expect[c]))
         elif d != 0:
             nerr = Float64(1e300)
     return (nerr, rerr)
@@ -111,7 +111,7 @@ def main() raises:
             ctx.enqueue_copy(dst_buf=b, src_buf=bh)
             ctx.synchronize()
             # cpu-route: qualification-only float64 reference and |a||b| scale.
-            var ref = List[Float64]()
+            var expect = List[Float64]()
             var sab = List[Float64]()
             for i in range(m):
                 for j in range(n):
@@ -122,12 +122,12 @@ def main() raises:
                         var y = _b_at(bl, op, n, k, j, p)
                         s += x * y
                         t += abs(x * y)
-                    ref.append(s)
+                    expect.append(s)
                     sab.append(t)
             identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
             ctx.enqueue_copy(dst_ptr=ch.unsafe_ptr(), src_buf=c)
             ctx.synchronize()
-            var inc = _errors(ch, ref, sab, m * n)
+            var inc = _errors(ch, expect, sab, m * n)
             comptime for S in range(3, 7):
                 var line = ("OZAKI_ACC fixture=" + String(fixture) + " op=" + String(op) + " m=" + String(m)
                     + " n=" + String(n) + " k=" + String(k) + " S=" + String(S))
@@ -137,11 +137,11 @@ def main() raises:
                     _ = neural_ozaki_into[S](ctx, c, a, b, ws, m, n, k, op)
                     ctx.enqueue_copy(dst_ptr=ch.unsafe_ptr(), src_buf=c)
                     ctx.synchronize()
-                    var oz = _errors(ch, ref, sab, m * n)
+                    var oz = _errors(ch, expect, sab, m * n)
                     if fixture == 3:
                         # Small integers: the exact sum, rounded once, is the answer.
                         for x in range(m * n):
-                            if bitcast[DType.uint32](ch[x]) != bitcast[DType.uint32](Float32(ref[x])):
+                            if bitcast[DType.uint32](ch[x]) != bitcast[DType.uint32](Float32(expect[x])):
                                 exact_ok = False
                     if fixture != 3:
                         worst[S] = max(worst[S], oz[0] / max(inc[0], Float64(5.9604644775390625e-08)))
