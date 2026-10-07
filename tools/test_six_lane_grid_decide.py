@@ -160,5 +160,44 @@ class FastDecideTests(unittest.TestCase):
         self.assertIn('| x | PROMOTE |', md)
 
 
+class Phase2MergeTests(unittest.TestCase):
+    def test_phase2_crosses_judged_against_phase1_singles(self):
+        A = 'classical:a1'
+        p1 = dict(schema='m', base_main='abc', configurations=[cfg(A, {'x': 'on'}, 'single'), cfg(A, {'y': 'on'}, 'single')])
+        p2 = dict(schema='m', configurations=[cfg(A, {'x': 'on', 'y': 'on'}, 'cross'), cfg(A, {'x': 'on'}, 'single')])
+        m = D.merge_matrices(p1, p2)
+        self.assertEqual(len(m['configurations']), 3)  # the phase-1 single is not duplicated
+        self.assertEqual(m['merged_phase2']['configurations'], 1)
+        t = [tcase(c['id'], w, v, r, r) for c, v, r in ((p1['configurations'][0], 'FASTER', 0.8), (p1['configurations'][1], 'FASTER', 0.9),
+                                                         (p2['configurations'][0], 'SLOWER', 1.2)) for w in c['workloads']]
+        ident = [icase(x['configuration'], x['workload_id'], 'MATCH') for x in t]
+        dec = D.decide(m, D.timing_index([dict(cases=t)]), D.identity_index([dict(cases=ident)]), {})
+        inter = dec['algorithms'][A]['interactions']
+        self.assertEqual([i['assignment'] for i in inter], [{'x': 'on', 'y': 'on'}])
+        self.assertEqual(inter[0]['predicted'], 'NOT_SLOWER')
+        self.assertIn('merged_phase2', dec)
+        self.assertNotIn('merged_phase2', D.decide(p1, {}, {}, {}))  # unchanged schema without phase 2
+
+    def test_id_collision_with_other_assignment_refused(self):
+        A = 'classical:a1'
+        c = cfg(A, {'x': 'on'}, 'single')
+        bad = dict(c, grid=dict(c['grid'], assignment={'x': 'off'}))
+        with self.assertRaises(ValueError):
+            D.merge_matrices(dict(configurations=[c]), dict(configurations=[bad]))
+
+    def test_new_tiers_are_interactions(self):
+        A = 'classical:a1'
+        cs = [cfg(A, {'x': 'on'}, 'single'), cfg(A, {'y': 'on'}, 'single')]
+        for tier in ('factorial', 'triple', 'cross_across', 'all_survivors'):
+            c = cfg(A, {'x': 'on', 'y': 'on'}, 'cross')
+            c['id'] += '.' + tier
+            c['grid']['tier'] = tier
+            m = dict(configurations=cs + [c])
+            t = [tcase(x['id'], w, 'FASTER' if x is not c else 'SLOWER', 1, 1) for x in m['configurations'] for w in x['workloads']]
+            ident = [icase(x['configuration'], x['workload_id'], 'MATCH') for x in t]
+            dec = D.decide(m, D.timing_index([dict(cases=t)]), D.identity_index([dict(cases=ident)]), {})
+            self.assertEqual(len(dec['algorithms'][A]['interactions']), 1, tier)
+
+
 if __name__ == '__main__':
     unittest.main()
