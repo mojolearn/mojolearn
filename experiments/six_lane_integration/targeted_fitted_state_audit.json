@@ -1,0 +1,321 @@
+{
+  "schema": "mojolearn.targeted-fitted-storage-review/1",
+  "reviewed_base": "38904e0d8",
+  "contracts": [
+    {
+      "estimator": "RidgeCV",
+      "contract": "mojolearn.reviewed-fitted-storage/RidgeCV-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_linear.py",
+        "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+      },
+      "class_line": 1069,
+      "required_fields": [
+        "coef_",
+        "intercept_",
+        "alpha_",
+        "best_score_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [
+        "cv_results_"
+      ],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "LassoCV",
+      "contract": "mojolearn.reviewed-fitted-storage/LassoCV-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_linear.py",
+        "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+      },
+      "class_line": 1203,
+      "required_fields": [
+        "coef_",
+        "intercept_",
+        "alpha_",
+        "n_iter_",
+        "alphas_",
+        "mse_path_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "ElasticNetCV",
+      "contract": "mojolearn.reviewed-fitted-storage/ElasticNetCV-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_linear.py",
+        "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+      },
+      "class_line": 1222,
+      "required_fields": [
+        "coef_",
+        "intercept_",
+        "alpha_",
+        "l1_ratio_",
+        "n_iter_",
+        "alphas_",
+        "mse_path_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "GaussianNB",
+      "contract": "mojolearn.reviewed-fitted-storage/GaussianNB-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_prep.py",
+        "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+      },
+      "class_line": 2759,
+      "required_fields": [
+        "classes_",
+        "theta_",
+        "var_",
+        "class_count_",
+        "class_prior_",
+        "epsilon_",
+        "_const",
+        "_raw_var",
+        "numeric_mode_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "LinearDiscriminantAnalysis",
+      "contract": "mojolearn.reviewed-fitted-storage/LinearDiscriminantAnalysis-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_prep.py",
+        "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+      },
+      "class_line": 3303,
+      "required_fields": [
+        "classes_",
+        "means_",
+        "priors_",
+        "xbar_",
+        "coef_",
+        "intercept_",
+        "_coef",
+        "_inter",
+        "_max_components",
+        "numeric_mode_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [
+        "covariance_",
+        "scalings_",
+        "_scal_full",
+        "_rank",
+        "explained_variance_ratio_"
+      ],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "QuadraticDiscriminantAnalysis",
+      "contract": "mojolearn.reviewed-fitted-storage/QuadraticDiscriminantAnalysis-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_prep.py",
+        "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+      },
+      "class_line": 3538,
+      "required_fields": [
+        "classes_",
+        "means_",
+        "priors_",
+        "rotations_",
+        "scalings_",
+        "_rot",
+        "_logc",
+        "numeric_mode_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [
+        "covariance_"
+      ],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "MultinomialNB",
+      "contract": "mojolearn.reviewed-fitted-storage/MultinomialNB-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_prep.py",
+        "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+      },
+      "class_line": 3126,
+      "required_fields": [
+        "classes_",
+        "class_count_",
+        "feature_count_",
+        "class_log_prior_",
+        "feature_log_prob_",
+        "numeric_mode_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "ComplementNB",
+      "contract": "mojolearn.reviewed-fitted-storage/ComplementNB-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_prep.py",
+        "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+      },
+      "class_line": 5959,
+      "required_fields": [
+        "classes_",
+        "class_count_",
+        "feature_count_",
+        "class_log_prior_",
+        "feature_log_prob_",
+        "numeric_mode_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "BernoulliNB",
+      "contract": "mojolearn.reviewed-fitted-storage/BernoulliNB-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_prep.py",
+        "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+      },
+      "class_line": 3156,
+      "required_fields": [
+        "classes_",
+        "class_count_",
+        "feature_count_",
+        "class_log_prior_",
+        "feature_log_prob_",
+        "_w",
+        "_bias",
+        "numeric_mode_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "CategoricalNB",
+      "contract": "mojolearn.reviewed-fitted-storage/CategoricalNB-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_prep.py",
+        "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+      },
+      "class_line": 5996,
+      "required_fields": [
+        "classes_",
+        "class_count_",
+        "class_log_prior_",
+        "category_count_",
+        "n_categories_",
+        "feature_log_prob_",
+        "_cc",
+        "_flp",
+        "_cmax",
+        "numeric_mode_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "VarianceThreshold",
+      "contract": "mojolearn.reviewed-fitted-storage/VarianceThreshold-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_prep.py",
+        "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+      },
+      "class_line": 5530,
+      "required_fields": [
+        "variances_",
+        "_mask",
+        "numeric_mode_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    },
+    {
+      "estimator": "SelectKBest",
+      "contract": "mojolearn.reviewed-fitted-storage/SelectKBest-1",
+      "source": {
+        "path": "python/mojolearn/_expansion_prep.py",
+        "sha256": "57e0e4ee3fd025ece2366d33d8faf70ecbbd996a2da771d1e8e7fba749259c6e"
+      },
+      "class_line": 5651,
+      "required_fields": [
+        "scores_",
+        "pvalues_",
+        "_mask",
+        "numeric_mode_",
+        "n_features_in_"
+      ],
+      "conditional_fields": [],
+      "constructor": "Every exact constructor argument retained; unsupported objects/callbacks fail closed",
+      "opaque_persistent_native_handles": false,
+      "scope": "All retained learned storage in reviewed class, including prediction/transform/partial_fit state; temporary solver workspace is excluded",
+      "new_numerical_source": false
+    }
+  ],
+  "private_field_reasons": {
+    "GaussianNB._const": "Joint log-likelihood constant used by prediction",
+    "GaussianNB._raw_var": "Unsmoothed variance used by partial_fit merge",
+    "LinearDiscriminantAnalysis._coef/_inter": "Full multiclass score coefficients, distinct from binary public difference",
+    "LinearDiscriminantAnalysis._scal_full/_rank/_max_components": "Complete retained transform basis and rank/component limits",
+    "QuadraticDiscriminantAnalysis._rot/_logc": "Actual prediction factors and constants",
+    "BernoulliNB._w/_bias": "Actual prediction weights/bias",
+    "CategoricalNB._cc/_flp/_cmax": "Padded counts/probabilities and layout width, needed by partial_fit/predict",
+    "Selectors._mask": "Retained selected support, required for transform"
+  },
+  "timing": "Unchanged preparation/fit/inference/consumed-output timing; copy/hash/file capture occurs afterward and never computes missing model state",
+  "runtime_policy": "Existing Python product data/control work remains debt; no compliance claim or hidden timing exclusion",
+  "durability": "Per-execution local typed trees and raw numpy leaves retained with hashes; provider teardown still requires independent off-machine byte preservation proof",
+  "qualification": "Capture establishes exact reviewed scope only; cross-vendor same-arm equality and quality remain separately evaluated",
+  "limitations": [
+    "Source hashes pin API storage layout; changing those files requires renewed source review",
+    "Custom covariance estimators/callbacks/opaque RNG objects cannot be qualified by this contract",
+    "No training-resumption claim beyond supported fitted partial_fit state",
+    "Historical receipts are untouched and not retroactively upgraded"
+  ]
+}

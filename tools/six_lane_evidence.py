@@ -55,6 +55,26 @@ def capture_model(runner, expected_paths=None, *, retain_path=None):
     from bench_board_state import runner_model
     model=runner_model(runner)
     if model is None:return dict(status='UNAVAILABLE',reason='Runner exposes no public model owner',missing_state=['model owner'])
+    from six_lane_targeted_state import targeted_fitted_state
+    targeted,contract=targeted_fitted_state(model)
+    if contract is not None:
+        if targeted is None:return contract
+        try:
+            result=capture(targeted,'complete reviewed fitted storage: '+contract['contract'],expected_paths=contract['contract_paths'])
+            result['provenance']=contract
+            if expected_paths is not None and set(expected_paths)!=set(contract['contract_paths']):
+                result.update(completeness='incomplete',reason='Recipe fitted-state paths differ from reviewed full storage contract',
+                              missing_state=sorted(set(contract['contract_paths'])-set(expected_paths)),
+                              unexpected_declared_paths=sorted(set(expected_paths)-set(contract['contract_paths'])))
+            if retain_path is None:
+                result.update(completeness='incomplete',reason='Complete fitted-state bytes were not retained')
+            else:
+                retain_values(targeted,retain_path)
+                result['retained_values']=str(retain_path)
+            return result
+        except Exception as exc:
+            return dict(status='UNAVAILABLE',completeness='incomplete',provenance=contract,
+                        missing_state=['durably retained complete fitted state'],reason=type(exc).__name__+': '+str(exc))
     if callable(getattr(model,'state_dict',None)):
         state=model.state_dict()
         result=capture(state,'public state_dict',expected_paths=expected_paths)

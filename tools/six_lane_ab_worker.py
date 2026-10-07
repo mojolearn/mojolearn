@@ -172,7 +172,16 @@ def run(args):
     from six_lane_mlp_variants import validate_output_scope as validate_mlp_output
     validate_mlp_output(work,output)
     if output['missing_state']:raise ValueError('Incomplete consumed output scope')
+    # Persist this execution before repeated use can mutate returned storage.
+    # Typed serialization is testing evidence after the unchanged scored clock.
+    from six_lane_evidence import retain_values
+    values_path=args.output.with_suffix('.values.json');retain_values(outputs,values_path)
     state=capture_model(runner,work.get('model_state_paths'),retain_path=args.output.with_suffix('.model-state.json'))
+    required_state=work.get('required_model_state_contract')
+    if required_state and (state.get('completeness')!='complete_declared_scope'
+            or state.get('provenance',{}).get('contract')!=required_state or not state.get('retained_values')):
+        write(args.output.with_suffix('.model-state-failure.json'),state)
+        raise ValueError('Required complete learned-state capture failed; retained original output evidence')
     # The unchanged quality functions own metric definitions. Gate outcomes are
     # separate, retained evidence; a self-relative metric is never acceptance.
     if family=='forest':metrics=runner.quality()
@@ -202,9 +211,14 @@ def run(args):
         repeated_output=capture(values,'repeated consumed outputs',expected_paths=work['output_paths'])
         validate_output_scope(work,repeated_output)
         validate_mlp_output(work,repeated_output)
-        repeated.append(dict(index=index,timings=parts,outputs=repeated_output,model_state=capture_model(runner,work.get('model_state_paths'),retain_path=args.output.with_suffix('.repeated-'+str(index)+'.model-state.json'))))
-    from six_lane_evidence import retain_values
-    values_path=args.output.with_suffix('.values.json');retain_values(outputs,values_path)
+        repeated_values_path=args.output.with_suffix('.repeated-'+str(index)+'.values.json')
+        retain_values(values,repeated_values_path)
+        repeated_state=capture_model(runner,work.get('model_state_paths'),retain_path=args.output.with_suffix('.repeated-'+str(index)+'.model-state.json'))
+        if required_state and (repeated_state.get('completeness')!='complete_declared_scope'
+                or repeated_state.get('provenance',{}).get('contract')!=required_state or not repeated_state.get('retained_values')):
+            write(args.output.with_suffix('.repeated-'+str(index)+'.model-state-failure.json'),repeated_state)
+            raise ValueError('Required repeated learned-state capture failed; retained original output evidence')
+        repeated.append(dict(index=index,timings=parts,outputs=repeated_output,retained_output_values=str(repeated_values_path),model_state=repeated_state))
     counts=dict(excluded_warmups=int(args.phase=='warmup'),scored=int(args.phase=='scored'))
     result=dict(schema='mojolearn.full-ab-result/1',status='PASS',source_sha=recipe['source_sha'],dataset_sha256=job['dataset_sha256'],dataset_version=work['dataset_version'],dataset_split=work['split'],seed=work['seed'],mode=job['mode'],vendor=recipe['vendor'],arm=args.arm,phase=args.phase,dimensions=actual_shapes,estimator_settings=actual_settings,full_dataset_coverage=True,timed_boundary=job['timed_boundary'],
         timings=timings,repeated_use=repeated,missing_timing_scopes=[] if repeated else ['repeated use'],outputs=output,retained_output_values=str(values_path),output_sha256=output['sha256'],model_state=state,loaded_artifacts=loaded,configuration=cfg,implementation_ids=job['implementation_ids'],workload_id=job['workload_id'],hashing_outside_timing=True,source_coverage_pending=job.get('source_coverage_pending',[]),
