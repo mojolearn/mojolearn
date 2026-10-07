@@ -1120,7 +1120,7 @@ Status: NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VE
 | `hw_scale_once` | `MOJOLEARN_C58_SHARED_PREP` | Incumbent; no new C defines |
 | `hw_series4` | `MOJOLEARN_C58_SERIES4` | Incumbent; no new C defines |
 | `forecast_series4` | `MOJOLEARN_C58_FORECAST4` | Incumbent; no new C defines |
-| `team64` | `MOJOLEARN_C58_TEAM64` | Incumbent; no new C defines |
+| `team64` | `MOJOLEARN_C58_TEAM_MIB=64` | Incumbent; no new C defines |
 
 Production source: [holtwinters/impl/internal/hw_estimate.mojo](../../holtwinters/impl/internal/hw_estimate.mojo), [holtwinters/impl/internal/hw_estimate_launch.mojo](../../holtwinters/impl/internal/hw_estimate_launch.mojo), [sequence/exec_device.mojo](../../sequence/exec_device.mojo), [sequence/fit_team_py.mojo](../../sequence/fit_team_py.mojo), [sequence/ets_team_py.mojo](../../sequence/ets_team_py.mojo).
 

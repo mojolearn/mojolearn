@@ -11097,7 +11097,7 @@
         {
           "A": {
             "defines": [
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11116,7 +11116,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11363,7 +11363,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11385,7 +11385,7 @@
             "MOJOLEARN_C58_SHARED_PREP": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11416,7 +11416,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11438,7 +11438,7 @@
             "MOJOLEARN_C58_SERIES4": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11470,7 +11470,7 @@
             "defines": [
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11495,7 +11495,7 @@
             "MOJOLEARN_C58_SHARED_PREP": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11526,7 +11526,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11548,7 +11548,7 @@
             "MOJOLEARN_C58_FORECAST4": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11580,7 +11580,7 @@
             "defines": [
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11605,7 +11605,7 @@
             "MOJOLEARN_C58_SHARED_PREP": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11637,7 +11637,7 @@
             "defines": [
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11662,7 +11662,7 @@
             "MOJOLEARN_C58_SERIES4": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11695,7 +11695,7 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11723,7 +11723,7 @@
             "MOJOLEARN_C58_SHARED_PREP": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11756,7 +11756,7 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11784,7 +11784,7 @@
             "MOJOLEARN_C58_SHARED_PREP": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -94164,7 +94164,7 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1",
+              "MOJOLEARN_C58_TEAM_MIB=64",
               "MOJOLEARN_C59_TRIAL_STATE=1",
               "MOJOLEARN_C60_LAG4=1",
               "MOJOLEARN_C60_DIFF_REUSE=1"
@@ -94490,7 +94490,7 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1",
+              "MOJOLEARN_C58_TEAM_MIB=64",
               "MOJOLEARN_C59_TRIAL_STATE=1",
               "MOJOLEARN_C60_LAG4=1",
               "MOJOLEARN_C60_DIFF_REUSE=1"

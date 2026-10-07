@@ -845,10 +845,9 @@
             "MOJOLEARN_C58_SHARED_PREP",
             "MOJOLEARN_C58_SERIES4",
             "MOJOLEARN_C58_FORECAST4",
-            "MOJOLEARN_C58_TEAM64",
+            "MOJOLEARN_C58_TEAM_MIB=64",
             "MOJOLEARN_C59_TRIAL_STATE",
-            "MOJOLEARN_C60_LAG4",
-            "MOJOLEARN_C60_DIFF_REUSE"
+            "MOJOLEARN_C60_LAG4"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -9726,7 +9725,7 @@
         {
           "name": "team64",
           "candidate_defines": [
-            "MOJOLEARN_C58_TEAM64"
+            "MOJOLEARN_C58_TEAM_MIB=64"
           ],
           "baseline_defines": [],
           "candidate_ids": [
@@ -9933,7 +9932,7 @@
           ],
           "candidate_defines": [
             "MOJOLEARN_C58_SHARED_PREP",
-            "MOJOLEARN_C58_TEAM64"
+            "MOJOLEARN_C58_TEAM_MIB=64"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -9974,7 +9973,7 @@
           ],
           "candidate_defines": [
             "MOJOLEARN_C58_SERIES4",
-            "MOJOLEARN_C58_TEAM64"
+            "MOJOLEARN_C58_TEAM_MIB=64"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -10016,7 +10015,7 @@
           "candidate_defines": [
             "MOJOLEARN_C58_SHARED_PREP",
             "MOJOLEARN_C58_SERIES4",
-            "MOJOLEARN_C58_TEAM64"
+            "MOJOLEARN_C58_TEAM_MIB=64"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -10061,7 +10060,7 @@
           ],
           "candidate_defines": [
             "MOJOLEARN_C58_FORECAST4",
-            "MOJOLEARN_C58_TEAM64"
+            "MOJOLEARN_C58_TEAM_MIB=64"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -10103,7 +10102,7 @@
           "candidate_defines": [
             "MOJOLEARN_C58_SHARED_PREP",
             "MOJOLEARN_C58_FORECAST4",
-            "MOJOLEARN_C58_TEAM64"
+            "MOJOLEARN_C58_TEAM_MIB=64"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -10149,7 +10148,7 @@
           "candidate_defines": [
             "MOJOLEARN_C58_SERIES4",
             "MOJOLEARN_C58_FORECAST4",
-            "MOJOLEARN_C58_TEAM64"
+            "MOJOLEARN_C58_TEAM_MIB=64"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -10196,7 +10195,7 @@
             "MOJOLEARN_C58_SHARED_PREP",
             "MOJOLEARN_C58_SERIES4",
             "MOJOLEARN_C58_FORECAST4",
-            "MOJOLEARN_C58_TEAM64"
+            "MOJOLEARN_C58_TEAM_MIB=64"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -10247,7 +10246,7 @@
             "MOJOLEARN_C58_SHARED_PREP",
             "MOJOLEARN_C58_SERIES4",
             "MOJOLEARN_C58_FORECAST4",
-            "MOJOLEARN_C58_TEAM64"
+            "MOJOLEARN_C58_TEAM_MIB=64"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -10300,10 +10299,9 @@
             "MOJOLEARN_C58_SHARED_PREP",
             "MOJOLEARN_C58_SERIES4",
             "MOJOLEARN_C58_FORECAST4",
-            "MOJOLEARN_C58_TEAM64",
+            "MOJOLEARN_C58_TEAM_MIB=64",
             "MOJOLEARN_C59_TRIAL_STATE",
-            "MOJOLEARN_C60_LAG4",
-            "MOJOLEARN_C60_DIFF_REUSE"
+            "MOJOLEARN_C60_LAG4"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -10570,9 +10568,7 @@
         },
         {
           "name": "diff_reuse",
-          "candidate_defines": [
-            "MOJOLEARN_C60_DIFF_REUSE"
-          ],
+          "candidate_defines": [],
           "baseline_defines": [],
           "candidate_ids": [
             "C60"
@@ -10601,8 +10597,7 @@
             "C60"
           ],
           "candidate_defines": [
-            "MOJOLEARN_C60_LAG4",
-            "MOJOLEARN_C60_DIFF_REUSE"
+            "MOJOLEARN_C60_LAG4"
           ],
           "baseline_defines": [],
           "source_gaps": [
@@ -10635,8 +10630,7 @@
             "C60"
           ],
           "candidate_defines": [
-            "MOJOLEARN_C60_LAG4",
-            "MOJOLEARN_C60_DIFF_REUSE"
+            "MOJOLEARN_C60_LAG4"
           ],
           "baseline_defines": [],
           "source_gaps": [

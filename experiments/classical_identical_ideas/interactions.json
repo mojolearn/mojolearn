@@ -824,10 +824,9 @@
         "MOJOLEARN_C58_SHARED_PREP",
         "MOJOLEARN_C58_SERIES4",
         "MOJOLEARN_C58_FORECAST4",
-        "MOJOLEARN_C58_TEAM64",
+        "MOJOLEARN_C58_TEAM_MIB=64",
         "MOJOLEARN_C59_TRIAL_STATE",
-        "MOJOLEARN_C60_LAG4",
-        "MOJOLEARN_C60_DIFF_REUSE"
+        "MOJOLEARN_C60_LAG4"
       ],
       "baseline_defines": [],
       "source_gaps": [

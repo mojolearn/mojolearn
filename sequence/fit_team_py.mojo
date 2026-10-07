@@ -17,7 +17,7 @@ then the fit raises. NVIDIA and AMD run the fit in one launch with no check
 `-D MOJOLEARN_WITNESS_SABOTAGE=1` makes every Apple GARCH / Prophet fit
 raise (the test that the check is wired)."""
 from std.python import PythonObject
-from experiments.classical_identical_ideas.stats_controls import C58_TEAM64
+from experiments.classical_identical_ideas.stats_controls import C58_TEAM_MIB
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -47,11 +47,11 @@ from sequence.pyapi import (
 #: device words a group of series may hold in shared and private rows; a
 #: larger batch runs as several groups over the same buffers
 # C58 independent classical-series grouping: cap live optimizer/rollback state
-# at 64 MiB versus incumbent 256 MiB. Grouping follows actual state bytes,
+# at C58_TEAM_MIB (int sweep 64|256, absent = incumbent 256 MiB). Grouping follows actual state bytes,
 # including Apple rollback copies, rather than series count or dataset shape.
 # Same kernels, same series-local trial order; all groups complete before return.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime SEQ_TEAM_BYTES = (1 << 26) if C58_TEAM64 else (1 << 28)
+comptime SEQ_TEAM_BYTES = C58_TEAM_MIB << 20
 #: Apple: the lead-thread steps one launch may take over all of its series
 #: (a bound on the command buffer's length, not on any value)
 comptime SEQ_TEAM_APPLE_STEPS = 1 << 27

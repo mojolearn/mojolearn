@@ -28,8 +28,12 @@ comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57
 comptime C58_SHARED_PREP = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SHARED_PREP"]()
 comptime C58_SERIES4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SERIES4"]()
 comptime C58_FORECAST4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_FORECAST4"]()
-comptime C58_TEAM64 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_TEAM64"]()
+# C58 team state budget in MiB: integer sweep -D MOJOLEARN_C58_TEAM_MIB=64|256
+# (was the boolean MOJOLEARN_C58_TEAM64); absent = 256 = incumbent. A memory
+# budget only: it sets series per launch slice, never per-series arithmetic.
+comptime C58_TEAM_MIB = get_defined_int["MOJOLEARN_C58_TEAM_MIB", 256]() if CLASSICAL_IDENTICAL else 256
 comptime C59_TRIAL_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C59_TRIAL_STATE"]()
 # C60: shared detrended observations across independent lag tasks.
 comptime C60_LAG4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C60_LAG4"]()
-comptime C60_DIFF_REUSE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C60_DIFF_REUSE"]()
+# C60_DIFF_REUSE removed 2026-10-07 (lane classical-misc): dead code. It fired only
+# for d_ == 2, but select_d loops d_ in range(d_max) with d_max <= 2 - D, so d_ <= 1.

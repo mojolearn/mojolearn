@@ -139,105 +139,14 @@
       "required_workload_keys": [
         "expanded:autoarima"
       ]
-    },
-    "diff_reuse": {
-      "name": "diff_reuse",
-      "candidate_defines": [
-        "MOJOLEARN_C60_DIFF_REUSE"
-      ],
-      "baseline_defines": [],
-      "candidate_ids": [
-        "C60"
-      ],
-      "source_gaps": [
-        "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
-        "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
-        "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
-        "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
-      ],
-      "scope": [],
-      "adapter": null,
-      "selectable": true,
-      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
-      "default_enabled": false,
-      "required_workload_keys": [
-        "expanded:autoarima"
-      ]
-    },
-    "combo_lag4_diff_reuse": {
-      "name": "combo_lag4_diff_reuse",
-      "selectable": true,
-      "candidate_ids": [
-        "C60"
-      ],
-      "candidate_defines": [
-        "MOJOLEARN_C60_LAG4",
-        "MOJOLEARN_C60_DIFF_REUSE"
-      ],
-      "baseline_defines": [],
-      "source_gaps": [
-        "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
-        "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
-        "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
-        "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
-      ],
-      "required_workload_keys": [
-        "expanded:autoarima"
-      ],
-      "component_arms": [
-        {
-          "id": "C60",
-          "configuration": "lag4"
-        },
-        {
-          "id": "C60",
-          "configuration": "diff_reuse"
-        }
-      ],
-      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
-      "default_enabled": false,
-      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
-    },
-    "combined": {
-      "name": "combined",
-      "selectable": true,
-      "candidate_ids": [
-        "C60"
-      ],
-      "candidate_defines": [
-        "MOJOLEARN_C60_LAG4",
-        "MOJOLEARN_C60_DIFF_REUSE"
-      ],
-      "baseline_defines": [],
-      "source_gaps": [
-        "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
-        "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
-        "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
-        "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
-      ],
-      "required_workload_keys": [
-        "expanded:autoarima"
-      ],
-      "component_arms": [
-        {
-          "id": "C60",
-          "configuration": "lag4"
-        },
-        {
-          "id": "C60",
-          "configuration": "diff_reuse"
-        }
-      ],
-      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
-      "default_enabled": false,
-      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
     }
   },
   "source_gaps": [
     "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
     "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
     "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
-    "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+    "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test.",
+    "2026-10-07 lane classical-misc: C60_DIFF_REUSE deleted as dead code (select_d loops d_ < d_max <= 2 - D, so its d_ == 2 branch never ran); C60 is LAG4 only."
   ],
   "catalog_estimators": [
     "ADF",

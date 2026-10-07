@@ -34,3 +34,10 @@ comptime C41_FUSED_MINIMA = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C41_FUSED_
 comptime C42_ACTIVE_TRIANGLE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C42_ACTIVE_TRIANGLE"]()
 comptime C43_RESIDENT_NORMALIZATION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C43_RESIDENT_NORMALIZATION"]()
 comptime C44_SAMPLING_DESCRIPTORS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C44_SAMPLING_DESCRIPTORS"]()
+# C61 (lane classical-misc, 2026-10-07): HDBSCAN sparse mutual-reachability
+# Boruvka search, tiled kernel (NVIDIA/AMD default): skip a j tile whose points
+# all lie in the block's single component. Those cells are excluded anyway, so
+# outputs are bit-identical; only the d-long chains of dead cells are saved.
+# Fixed order unchanged (per-point min over the total (key, j) order).
+# NOT TESTED — NOT MEASURED. Default OFF.
+comptime C61_SAME_COMPONENT_SKIP = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C61_SAME_COMPONENT_SKIP"]()
