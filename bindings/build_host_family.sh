@@ -1,5 +1,5 @@
 #!/bin/sh
-. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
 # THE ONE CPU-ONLY BUILDER for every host binding (the CPU training lane,
 # 2026-09-13; folded 2026-09-14 when the seventh family, trees, would have
 # been the seventh copy of one script; the byte LM, forest and estimators

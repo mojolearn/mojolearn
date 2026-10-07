@@ -1,5 +1,5 @@
 #!/bin/sh
-. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
 # The metrics expansion lane's GPU binding: evaluation metrics and
 # model_selection helpers (x_metrics/).
 set -eu

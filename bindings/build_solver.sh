@@ -1,5 +1,5 @@
 #!/bin/sh
-. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
 # Build the coordinate-descent / single-linkage CPython extension into
 # python/mojolearn/_mojolearn_solver.so. Run from anywhere; requires pixi.
 #
