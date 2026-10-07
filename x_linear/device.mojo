@@ -37,7 +37,12 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C17_OVR, C19_SGD_CHUNK, C16_GLM_FUSED
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C17_OVR, C19_SGD_CHUNK, C16_GLM_FUSED, RIDGECV_FF_BLOCKED
+from x_linear.ridge_ff_blocks import (
+    RFF_TPB, rff_blocks, rff_stats, rff_mcols, rff_part_words, rff_mean_part_kernel, rff_mean_fold_kernel,
+    rff_cell_part_kernel, rff_cell_fold_kernel, rff_kf_solve_kernel, rff_solve_kernel,
+)
+from x_linear.team import TEAM_SLOTS
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
@@ -3592,11 +3597,19 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var ff_units = ridge_ff_units(n, d, 1)
     var dsh = ctx.enqueue_create_buffer[DType.float32](ffw)
     var dsl = ctx.enqueue_create_buffer[DType.float32](ffw)
-    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
-    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
-    var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
-    var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
-    var dtmp = ctx.enqueue_create_buffer[DType.float32](d + 1)
+    # RIDGECV_FF_BLOCKED (x_linear/ridge_ff_blocks.mojo): the float-float
+    # solve scratch per alpha (one block team per alpha in one launch) and
+    # the block partial table; one alpha's words otherwise
+    var ffa = na if RIDGECV_FF_BLOCKED else 1
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(ffa * d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(ffa * d, 1))
+    var dfh = ctx.enqueue_create_buffer[DType.float32](max(ffa * d * d, 1))
+    var dfl = ctx.enqueue_create_buffer[DType.float32](max(ffa * d * d, 1))
+    var dtmp = ctx.enqueue_create_buffer[DType.float32](ffa * (d + 1))
+    var rff_pw = rff_part_words(n, d, 1) if RIDGECV_FF_BLOCKED else 1
+    var dph = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
+    var dpl = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
+    var dtw = ctx.enqueue_create_buffer[DType.float32](max(ffa * TEAM_SLOTS, 1))
     var hfp = fp.copy()
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
@@ -3617,6 +3630,13 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
                    + _xg_blocks(kbm) + _xg_blocks(na * kbm))
     comptime if C13_FOLD_STATS:
         wcap = max(wcap, _xg_blocks(d + 1 + d * d + d) + _xg_blocks(na))
+    comptime if RIDGECV_FF_BLOCKED:
+        # unit B with the blocked float-float statistics: two partial passes,
+        # two folds, one solve block per alpha, then the predictions and scores
+        var nbf = fold_blocks(n)
+        wcap = max(wcap, rff_blocks(rff_mcols(d, 1) * nbf) + rff_blocks(d + 1) + rff_blocks(rff_stats(d, 1) * nbf)
+                   + rff_blocks(rff_stats(d, 1)) + na + _xg_blocks(nt_max * na) + _xg_blocks(kbm) + _xg_blocks(na * kbm)
+                   + _xg_blocks(na))
         var prep_wit = Witness(ctx, _xg_blocks(k * (d + 1)) + _xg_blocks(k * (d + 1) * (d + 1)))
         var attempt = 0
         while True:
@@ -3692,26 +3712,63 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
             var nonce = wit.begin()
             var wo = 0
             var have_ff = False
-            for a in range(na):
-                if htr[a] == Float32(1):
-                    continue
-                if not have_ff:
-                    ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
-                                                            Int32(0), Int32(d + 1), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                            wit.p(), Int32(wo), nonce,
-                                                            grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
-                    wo += _xg_blocks(d + 1)
-                    ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
-                                                            Int32(d + 1), Int32(ff_units - (d + 1)), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                            wit.p(), Int32(wo), nonce,
-                                                            grid_dim=_xg_blocks(ff_units - (d + 1)), block_dim=XG_TPB)
-                    wo += _xg_blocks(ff_units - (d + 1))
-                    have_ff = True
-                ctx.enqueue_function[kf_ff_solve_kernel](Int32(d), Int32(fi), hfp[a], dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                         dbh.unsafe_ptr(), dbl.unsafe_ptr(), dfh.unsafe_ptr(), dfl.unsafe_ptr(),
-                                                         dtmp.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(a),
-                                                         wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
-                wo += 1
+            comptime if RIDGECV_FF_BLOCKED:
+                # lane/classical-cv-folds: the fold's float-float statistics as
+                # FOLD_BLOCK-row block partials folded blocks ascending, then one
+                # solve block team per alpha (trusted alphas' blocks idle)
+                for a in range(na):
+                    if htr[a] != Float32(1):
+                        have_ff = True
+                if have_ff:
+                    var nbf = fold_blocks(n)
+                    var mc = rff_mcols(d, 1)
+                    var stats = rff_stats(d, 1)
+                    ctx.enqueue_function[rff_mean_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
+                                                               Int32(0), Int32(n), s, e, dph.unsafe_ptr(), dpl.unsafe_ptr(),
+                                                               wit.p(), Int32(wo), nonce,
+                                                               grid_dim=rff_blocks(mc * nbf), block_dim=RFF_TPB)
+                    wo += rff_blocks(mc * nbf)
+                    ctx.enqueue_function[rff_mean_fold_kernel](Int32(n), Int32(d), Int32(1), Int32(fi), dph.unsafe_ptr(),
+                                                               dpl.unsafe_ptr(), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                               wit.p(), Int32(wo), nonce,
+                                                               grid_dim=rff_blocks(d + 1), block_dim=RFF_TPB)
+                    wo += rff_blocks(d + 1)
+                    ctx.enqueue_function[rff_cell_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
+                                                               Int32(0), Int32(n), s, e, dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                               dph.unsafe_ptr(), dpl.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                               grid_dim=rff_blocks(stats * nbf), block_dim=RFF_TPB)
+                    wo += rff_blocks(stats * nbf)
+                    ctx.enqueue_function[rff_cell_fold_kernel](Int32(n), Int32(d), Int32(1), dph.unsafe_ptr(), dpl.unsafe_ptr(),
+                                                               dsh.unsafe_ptr(), dsl.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                               grid_dim=rff_blocks(stats), block_dim=RFF_TPB)
+                    wo += rff_blocks(stats)
+                    ctx.enqueue_function[rff_kf_solve_kernel](Int32(d), Int32(fi), dal.unsafe_ptr(), Int32(na), dtr.unsafe_ptr(),
+                                                              dsh.unsafe_ptr(), dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(),
+                                                              dfh.unsafe_ptr(), dfl.unsafe_ptr(), dtmp.unsafe_ptr(), dtw.unsafe_ptr(),
+                                                              dw.unsafe_ptr(), db.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                              grid_dim=na, block_dim=RFF_TPB)
+                    wo += na
+            else:
+                for a in range(na):
+                    if htr[a] == Float32(1):
+                        continue
+                    if not have_ff:
+                        ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                                Int32(0), Int32(d + 1), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                                wit.p(), Int32(wo), nonce,
+                                                                grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+                        wo += _xg_blocks(d + 1)
+                        ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                                Int32(d + 1), Int32(ff_units - (d + 1)), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                                wit.p(), Int32(wo), nonce,
+                                                                grid_dim=_xg_blocks(ff_units - (d + 1)), block_dim=XG_TPB)
+                        wo += _xg_blocks(ff_units - (d + 1))
+                        have_ff = True
+                    ctx.enqueue_function[kf_ff_solve_kernel](Int32(d), Int32(fi), hfp[a], dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                             dbh.unsafe_ptr(), dbl.unsafe_ptr(), dfh.unsafe_ptr(), dfl.unsafe_ptr(),
+                                                             dtmp.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(a),
+                                                             wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+                    wo += 1
             var nt = Int(e) - Int(s)
             ctx.enqueue_function[kf_pred_kernel](dx.unsafe_ptr(), Int32(d), s, e, Int32(na), dw.unsafe_ptr(), db.unsafe_ptr(),
                                                  dp.unsafe_ptr(), Int32(stride), wit.p(), Int32(wo), nonce,
@@ -3766,6 +3823,9 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     _ = dfh^
     _ = dfl^
     _ = dtmp^
+    _ = dph^
+    _ = dpl^
+    _ = dtw^
 
 
 
@@ -3793,8 +3853,15 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     var words = d + t_n + d * d + d * t_n
     var dsh = ctx.enqueue_create_buffer[DType.float32](words)
     var dsl = ctx.enqueue_create_buffer[DType.float32](words)
-    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
-    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    # RIDGECV_FF_BLOCKED (x_linear/ridge_ff_blocks.mojo): one target a thread
+    # in the solve team needs T*d words of b; the block partial table and the
+    # team's slots beside them (one word each otherwise)
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(t_n * d if RIDGECV_FF_BLOCKED else d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(t_n * d if RIDGECV_FF_BLOCKED else d, 1))
+    var rff_pw = rff_part_words(n, d, t_n) if RIDGECV_FF_BLOCKED else 1
+    var dph = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
+    var dpl = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
+    var dtw = ctx.enqueue_create_buffer[DType.float32](TEAM_SLOTS if RIDGECV_FF_BLOCKED else 1)
     var dout = ctx.enqueue_create_buffer[DType.float32](t_n * d + t_n + 1)
     var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
     var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
@@ -3803,26 +3870,60 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     var h = List[Float32](length=t_n * d + t_n + 1, fill=Float32(0))
     var b1 = _xg_blocks(nm)
     var b2 = _xg_blocks(units - nm)
-    var wit = Witness(ctx, b1 + b2 + 1)
+    var cap = b1 + b2 + 1
+    var nbf = fold_blocks(n)
+    var mc = rff_mcols(d, t_n)
+    var stats = rff_stats(d, t_n)
+    comptime if RIDGECV_FF_BLOCKED:
+        cap = rff_blocks(mc * nbf) + rff_blocks(nm) + rff_blocks(stats * nbf) + rff_blocks(stats) + 1
+    var wit = Witness(ctx, cap)
     var tries = 0
     while True:
         var nonce = wit.begin()
         dsh.enqueue_fill(Float32(0))
         dsl.enqueue_fill(Float32(0))
-        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
-                                                   Int32(1 if sw else 0), Int32(0), Int32(nm), dsh.unsafe_ptr(),
-                                                   dsl.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                                                   grid_dim=b1, block_dim=XG_TPB)
-        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
-                                                   Int32(1 if sw else 0), Int32(nm), Int32(units - nm), dsh.unsafe_ptr(),
-                                                   dsl.unsafe_ptr(), wit.p(), Int32(b1), nonce,
-                                                   grid_dim=b2, block_dim=XG_TPB)
-        ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
-                                                    dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
-                                                    dfh.unsafe_ptr(), dfl.unsafe_ptr(), wit.p(), Int32(b1 + b2), nonce,
-                                                    grid_dim=1, block_dim=1)
+        comptime if RIDGECV_FF_BLOCKED:
+            # lane/classical-cv-folds: the statistics as block partials folded
+            # blocks ascending; the solve on one block team
+            var wo = 0
+            ctx.enqueue_function[rff_mean_part_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if sw else 0),
+                                                       Int32(n * t_n), Int32(0), Int32(0), dph.unsafe_ptr(), dpl.unsafe_ptr(),
+                                                       wit.p(), Int32(wo), nonce,
+                                                       grid_dim=rff_blocks(mc * nbf), block_dim=RFF_TPB)
+            wo += rff_blocks(mc * nbf)
+            ctx.enqueue_function[rff_mean_fold_kernel](Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0), dph.unsafe_ptr(),
+                                                       dpl.unsafe_ptr(), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                       wit.p(), Int32(wo), nonce,
+                                                       grid_dim=rff_blocks(nm), block_dim=RFF_TPB)
+            wo += rff_blocks(nm)
+            ctx.enqueue_function[rff_cell_part_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if sw else 0),
+                                                       Int32(n * t_n), Int32(0), Int32(0), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                       dph.unsafe_ptr(), dpl.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                       grid_dim=rff_blocks(stats * nbf), block_dim=RFF_TPB)
+            wo += rff_blocks(stats * nbf)
+            ctx.enqueue_function[rff_cell_fold_kernel](Int32(n), Int32(d), Int32(t_n), dph.unsafe_ptr(), dpl.unsafe_ptr(),
+                                                       dsh.unsafe_ptr(), dsl.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                       grid_dim=rff_blocks(stats), block_dim=RFF_TPB)
+            wo += rff_blocks(stats)
+            ctx.enqueue_function[rff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
+                                                   dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
+                                                   dfh.unsafe_ptr(), dfl.unsafe_ptr(), dtw.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                   grid_dim=1, block_dim=RFF_TPB)
+        else:
+            ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                       Int32(1 if sw else 0), Int32(0), Int32(nm), dsh.unsafe_ptr(),
+                                                       dsl.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                       grid_dim=b1, block_dim=XG_TPB)
+            ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                       Int32(1 if sw else 0), Int32(nm), Int32(units - nm), dsh.unsafe_ptr(),
+                                                       dsl.unsafe_ptr(), wit.p(), Int32(b1), nonce,
+                                                       grid_dim=b2, block_dim=XG_TPB)
+            ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
+                                                        dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
+                                                        dfh.unsafe_ptr(), dfl.unsafe_ptr(), wit.p(), Int32(b1 + b2), nonce,
+                                                        grid_dim=1, block_dim=1)
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
-        if wit.ok(ctx, b1 + b2 + 1, "Ridge float-float refit"):
+        if wit.ok(ctx, cap, "Ridge float-float refit"):
             break
         tries += 1
         if tries >= WITNESS_TRIES:
@@ -3839,6 +3940,9 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     _ = dsl^
     _ = dbh^
     _ = dbl^
+    _ = dph^
+    _ = dpl^
+    _ = dtw^
     _ = dout^
     _ = dfh^
     _ = dfl^
