@@ -45,9 +45,11 @@ from std.gpu import block_idx, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
+from cluster.checks.reduce_by_key import BLOCK_ACC_TPB, fold_block_table_kernel
 from cluster.impl.distance.fused_distance_nn.simt_kernel import (
     FUSED_CLAMP_PRECISION,
     FUSED_MAX,
@@ -206,3 +208,78 @@ def kmeans_assign_accumulate_kernel[
     while i < k:
         table_w.unsafe_store(b * k + i, s_t[kd + i])
         i += KF_TPB
+
+
+def kmeans_fused_table_cells(n_samples: Int, n_features: Int, n_clusters: Int) -> Int:
+    """Int32 cells of the sums table (`n_features = 1`: the weights table)."""
+    return kmeans_fused_blocks(n_samples) * n_clusters * n_features
+
+
+def launch_kmeans_fused_accumulate[
+    gated: Bool, store: Bool
+](
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut min_dist: DeviceBuffer[DType.float32],
+    mut sums_i32: DeviceBuffer[DType.int32],
+    mut weight_i32: DeviceBuffer[DType.int32],
+    mut table: DeviceBuffer[DType.int32],
+    mut table_w: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut centroid_norm: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    is_sqrt: Bool,
+    sum_scale: Float32,
+    weight_scale: Float32,
+) raises:
+    """The fused pass, then the incumbent's two folds (ungated, as the
+    incumbent's are: past convergence they refold the untouched tables).
+    `store`: the folds store the totals (`IDN_KMEANS_FOLD_STORE`), else add
+    into buffers the caller zeroed. The caller checked `kmeans_fused_fits`
+    and sized the tables with `kmeans_fused_table_cells`."""
+    var n_blocks = kmeans_fused_blocks(n_samples)
+    comptime kern = kmeans_assign_accumulate_kernel[gated]
+    ctx.enqueue_function[kern](
+        gate.unsafe_ptr(),
+        labels.unsafe_ptr(),
+        min_dist.unsafe_ptr(),
+        table.unsafe_ptr(),
+        table_w.unsafe_ptr(),
+        x.unsafe_ptr(),
+        centroids.unsafe_ptr(),
+        x_norm.unsafe_ptr(),
+        centroid_norm.unsafe_ptr(),
+        weights.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_clusters),
+        Int32(n_features),
+        Int32(1 if is_sqrt else 0),
+        sum_scale,
+        weight_scale,
+        grid_dim=(n_blocks, 1, 1),
+        block_dim=(KF_TPB, 1, 1),
+    )
+    var cells = n_clusters * n_features
+    comptime fold = fold_block_table_kernel[store]
+    ctx.enqueue_function[fold](
+        sums_i32.unsafe_ptr(),
+        table.unsafe_ptr(),
+        Int32(n_blocks),
+        Int32(cells),
+        grid_dim=((cells + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )
+    ctx.enqueue_function[fold](
+        weight_i32.unsafe_ptr(),
+        table_w.unsafe_ptr(),
+        Int32(n_blocks),
+        Int32(n_clusters),
+        grid_dim=((n_clusters + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )
