@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / 'tools'))
 CONTROLS_DIR = ROOT / 'experiments/six_lane_integration/grid_controls'
 GUARDS = ROOT / 'core/six_lane_experiment_guards.mojo'
 OUT_DIR = ROOT / 'experiments/six_lane_integration/grid'
+PHASE2_DIR = ROOT / 'experiments/six_lane_integration/grid-phase2'
 CAP = 16
 FULL_BUDGET = 128  # --crosses auto: full factorial when its raw size is at most this
 # Median scored-pair seconds per box from the Oct 6 receipts (projection only; override with --pair-seconds).
@@ -935,7 +936,30 @@ def build_key(path, vendor, defines):
 
 
 # ------------------------------------------------------------------- generate
-def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP):
+def load_phase1(path):
+    """grid-decisions.json (tools/six_lane_grid_decide.py) -> {algorithm: {frozenset(assignment items): row}}."""
+    doc = json.loads(Path(path).read_text())
+    if doc.get('schema') != 'mojolearn.six-lane-grid-decisions/1':
+        raise ValueError(str(path) + ': unexpected schema ' + str(doc.get('schema')))
+    out = {}
+    for row in (doc.get('configurations') or {}).values():
+        out.setdefault(row['algorithm'], {})[frozenset((row.get('assignment') or {}).items())] = dict(
+            configuration=row['configuration'], verdict=row.get('verdict') or 'UNMEASURED', tier=row.get('tier'),
+            combined_ratio=row.get('combined_ratio'))
+    return out, doc
+
+
+def hours(cells, seconds):
+    return round(cells * seconds / 3600.0, 2)
+
+
+def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP, crosses='full', full_budget=FULL_BUDGET,
+             survivors=None, pair_seconds=None):
+    # Default arguments reproduce the committed grid byte for byte; anything else is an extended plan
+    # (regimes, deferred total and projected box-hours in the summary and GRID.md).
+    extended = crosses != 'full' or survivors is not None or pair_seconds is not None or cap == 0
+    pair_seconds = dict(pair_seconds or PAIR_SECONDS)
+    phase1_all, phase1_doc = (load_phase1(survivors) if survivors is not None else ({}, None))
     guards = Guards(Path(guards_path).read_text())
     controls, algorithms, removed, owed_misc, files = load_controls(controls_dir)
     for a, b, why in source_exclusions(controls):
@@ -948,7 +972,8 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP):
         if algo['workloads'] is None:
             unmapped.append(dict(algorithm=algo_id, files=algo['files'], reason=algo['mapping'],
                                  controls=algo['controls']))
-        plan = plan_algorithm(algo, controls, reach, guards, cap)
+        plan = plan_algorithm(algo, controls, reach, guards, cap, crosses=crosses, full_budget=full_budget,
+                              phase1=None if survivors is None else phase1_all.get(algo_id, {}))
         plans[algo_id] = plan
         for e in plan['excluded']:
             excluded_all.setdefault(e['control'], dict(control=e['control'], define=e['define'],
@@ -1050,6 +1075,34 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP):
         a_builds_before_packing=len(before) * len(VENDORS), a_builds_after_packing=len(after) * len(VENDORS),
         b_builds=len(b_builds), packs=len(packs), packed_multi_member=sum(1 for p in packs if len(p['members']) > 1),
         bindings=binding_set, guard_asserts=guards.assert_count, cap=cap)
+    if extended:
+        tiers, per_regime = {}, {}
+        for c in all_configs:
+            tiers[c['tier']] = tiers.get(c['tier'], 0) + 1
+        for aid, pl in plans.items():
+            r = per_regime.setdefault(pl.get('regime', crosses), dict(algorithms=0, configs=0, cells_per_vendor=0, deferred=0))
+            r['algorithms'] += 1
+            r['configs'] += len(pl['configs']) if model[aid]['workloads'] is not None else 0
+            r['cells_per_vendor'] += len(pl['configs']) * len(model[aid]['workloads'] or [])
+            r['deferred'] += len(pl['deferred']) + sum(g['configs'] for g in pl['deferred_groups'])
+        for r in per_regime.values():
+            r['projected_hours'] = {v: hours(r['cells_per_vendor'], pair_seconds[v]) for v in VENDORS}
+        cells_v = len(cells) // len(VENDORS)
+        summary.update(
+            crosses=crosses, full_budget=full_budget, configs_by_tier=dict(sorted(tiers.items())),
+            cells_per_vendor=cells_v, deferred_total=summary['deferred_configs'] + summary['deferred_cross_configs'],
+            pair_seconds=pair_seconds,
+            projected_hours=dict(ab={v: hours(cells_v, pair_seconds[v]) for v in VENDORS},
+                                 aa={v: hours(len(aa) // len(VENDORS), pair_seconds[v]) for v in VENDORS}),
+            regimes=dict(sorted(per_regime.items())))
+        if survivors is not None:
+            states = {}
+            for pl in plans.values():
+                for k, v in pl['survivors']['counts'].items():
+                    states[k] = states.get(k, 0) + v
+            summary.update(phase='phase2', survivors_file=str(survivors), survivor_arms=dict(sorted(states.items())),
+                           reused_configs=sum(len(pl['reused']) for pl in plans.values()),
+                           phase1_verdicts=dict(sorted(_count(r['verdict'] for a in phase1_all.values() for r in a.values()).items())))
     if summary['builds_after_packing'] != len(jobs):
         raise ValueError('Build accounting mismatch: %d jobs vs %d planned' % (len(jobs), summary['builds_after_packing']))
     plan = dict(
@@ -1096,7 +1149,8 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP):
                           global_reach=c['global_reach'], vendor_default_equivalent=c['vendor_default_equivalent'],
                           queued=not c.get('unmapped')) for c in p['configs']],
             deferred=p['deferred'], deferred_groups=p['deferred_groups'], invalid=summarize_invalid(p['invalid']),
-            notes=model[aid]['notes'])
+            notes=model[aid]['notes'],
+            **({k: p[k] for k in ('regime', 'factorial_product', 'survivors', 'reused') if k in p}))
             for aid, p in plans.items()},
         unmapped=unmapped, excluded=sorted(excluded_all.values(), key=lambda e: (e['file'], e['control'])),
         removed_per_file=removed,
@@ -1105,7 +1159,27 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP):
                     packs=[dict(id=p['id'], bindings=p['bindings'], defines=p['defines'], members=[m['id'] for m in p['members']],
                                 algorithms=sorted(p['algorithms']), global_reach=p['is_global']) for p in packs]),
         owed_special_ab=owed)
+    if extended:
+        plan['generation_rules']['crosses'] = dict(
+            mode=crosses, full_budget=full_budget, cap='0 = no cap' if cap == 0 else cap,
+            full='within-group products admitted group-atomically (the committed grid)',
+            pairwise='every pair of interaction-group members x every non-default arm combination; admitted one config at a time, so the cap cuts configs, not whole groups',
+            triples='pairwise+triples: all pairs first, then every triple of group members',
+            auto='per algorithm: the whole factorial over its eligible controls (tier factorial; singles/all-on emitted once with their own tier) when product(arms + 1) - 1 <= full_budget, no cap; otherwise singles + all-on + pairwise crosses (higher orders come from --survivors phase 2)',
+            projection='projected box-hours = cells per vendor x median scored-pair seconds (--pair-seconds)')
+        if survivors is not None:
+            plan['status'] = 'PHASE2_PLANNED_NOT_RUN'
+            plan['inputs']['survivors'] = dict(path=str(survivors), sha256=file_sha(survivors),
+                                               schema=phase1_doc.get('schema'), mode=phase1_doc.get('mode'))
+            plan['generation_rules']['phase2'] = plan_phase2.__doc__.strip()
     return plan, matrix, build_plan
+
+
+def _count(items):
+    out = {}
+    for x in items:
+        out[x] = out.get(x, 0) + 1
+    return out
 
 
 def summarize_invalid(invalid, examples=3):
@@ -1152,7 +1226,9 @@ def family_of(algo_id, files):
 
 def render_md(plan):
     s = plan['summary']
-    L = ['# IDENTICAL switch grid (planned, not run)', '',
+    ext = 'crosses' in s
+    gdir = plan.get('outputs_dir', 'experiments/six_lane_integration/grid')
+    L = ['# IDENTICAL switch grid' + (', phase 2 from phase-1 survivors' if s.get('phase') == 'phase2' else '') + ' (planned, not run)', '',
          'Generated by `tools/six_lane_grid.py` from `experiments/six_lane_integration/grid_controls/*.json` and',
          '`core/six_lane_experiment_guards.mojo`. The stale `catalog.json`/`matrix.json.gz` define lists are not used.',
          '**Every switch is NOT MEASURED** until it has an A/A floor, a scored A/B on NVIDIA and AMD, identity and quality evidence.', '',
@@ -1170,6 +1246,7 @@ def render_md(plan):
          '| excluded controls | %d of %d |' % (s['excluded_controls'], s['controls']),
          '| builds before packing (A + B) | %d |' % s['builds_before_packing'],
          '| builds after packing (A + B) | %d (%d A packs, %d with >1 member; %d B) |' % (s['builds_after_packing'], s['packs'], s['packed_multi_member'], s['b_builds']),
+         ] + (extended_totals(s) if ext else []) + [
          '', 'Cap: %d configs per algorithm per vendor. One excluded warmup + one scored sample per arm. Vendors: NVIDIA (native sm_89, nv box) and AMD (gfx942, amd box); Apple does not vote on IDENTICAL.' % s['cap'], '',
          '## Verdict rule', '']
     for k in ('timing', 'identity', 'quality', 'promotion', 'default_state'):
@@ -1184,13 +1261,18 @@ def render_md(plan):
             continue
         L += ['### ' + fam, '', '| algorithm | #configs | configs | deferred | builds |', '|---|---|---|---|---|']
         for aid, a in sorted(fams[fam]):
-            short = {'single': 's', 'all_on': 'all', 'cross': 'x'}
-            cfgs = '<br>'.join(short[c['tier']] + ' ' + (('all-on: ' + ', '.join(k + '=' + v for k, v in c['assignment'].items())) if c['tier'] == 'all_on' else ', '.join(k + '=' + v for k, v in c['assignment'].items())) for c in a['configs']) or '-'
+            short = {'single': 's', 'all_on': 'all', 'cross': 'x', 'triple': 'x3', 'factorial': 'f', 'all_survivors': 'all*', 'cross_across': 'xa'}
+            shown = a['configs'] if not ext or len(a['configs']) <= MD_CONFIG_LIMIT else a['configs'][:MD_CONFIG_LIMIT]
+            cfgs = '<br>'.join(short[c['tier']] + ' ' + (('all-on: ' + ', '.join(k + '=' + v for k, v in c['assignment'].items())) if c['tier'] == 'all_on' else ', '.join(k + '=' + v for k, v in c['assignment'].items())) for c in shown) or '-'
+            if len(shown) < len(a['configs']):
+                cfgs += '<br>... +%d more (grid-plan.json)' % (len(a['configs']) - len(shown))
             dparts = []
             if a['deferred']:
                 dparts.append('+%d: ' % len(a['deferred']) + ', '.join(d['id'].split('.', 2)[-1] for d in a['deferred'][:12]) + (' ...' if len(a['deferred']) > 12 else ''))
-            for g in a['deferred_groups']:
-                dparts.append('cross ' + '/'.join(g['members']) + ': %d' % g['configs'])
+            for g in a['deferred_groups'][:12] if ext else a['deferred_groups']:
+                dparts.append(g.get('kind', 'cross') + ' ' + '/'.join(g['members']) + ': %d' % g['configs'])
+            if ext and len(a['deferred_groups']) > 12:
+                dparts.append('... +%d groups' % (len(a['deferred_groups']) - 12))
             if a['unmapped_reason']:
                 status = 'UNMAPPED: ' + a['unmapped_reason']
                 builds = '-'
@@ -1202,6 +1284,8 @@ def render_md(plan):
             L.append('| %s | %d | %s | %s | %s |' % (aid + (' (' + status + ')' if status else ''), n, cfgs,
                                                     '<br>'.join(dparts) or '-', builds))
         L.append('')
+    if ext:
+        L += regime_section(plan)
     L += ['## Unmapped workloads', '', '| algorithm | reason | controls |', '|---|---|---|']
     for u in plan['unmapped']:
         L.append('| %s | %s | %s |' % (u['algorithm'], u['reason'], ', '.join(u['controls']) or '-'))
@@ -1221,16 +1305,16 @@ def render_md(plan):
           '(`mojolearn.six-lane-build-plan/1`), `grid-plan.json` (everything above, machine-readable).', '',
           '1. Freeze one commit; compile once per vendor on cheap build boxes (orchestrator only):', '', '```bash']
     for v, info in VENDORS.items():
-        L.append('python3 tools/six_lane_ab.py compile --plan experiments/six_lane_integration/grid/grid-build-plan.json \\')
+        L.append('python3 tools/six_lane_ab.py compile --plan ' + gdir + '/grid-build-plan.json \\')
         L.append('  %s --compiler <mojo> --output <evidence>/grid-build-%s --keep-going' % (info['compile_flags'], v))
     L += ['```', '', '2. Materialize recipes from the saved full-workload facts and deployed receipts (per vendor):', '', '```bash']
     for v, info in VENDORS.items():
-        L.append('python3 tools/six_lane_materialize.py --matrix experiments/six_lane_integration/grid/grid-matrix.json.gz \\')
+        L.append('python3 tools/six_lane_materialize.py --matrix ' + gdir + '/grid-matrix.json.gz \\')
         L.append('  --workloads <saved-workload-facts.json> --deployments <deployments-%s.json> --vendor %s --target-track %s --output <evidence>/grid-recipes-%s' % (v, v, info['target_track'], v))
     L += ['```', '', '   `@input=` variant cells go through the existing full-input transfer (`tools/six_lane_targeted_variants.py`).', '',
           '3. Write the A/B queue and its A/A queue (one pair per workload per box; both arms the B build):', '', '```bash']
     for v in VENDORS:
-        L.append('python3 tools/six_lane_ab.py queue --vendor %s --matrix experiments/six_lane_integration/grid/grid-matrix.json.gz \\' % v)
+        L.append(('python3 tools/six_lane_ab.py queue --vendor %s --matrix ' + gdir + '/grid-matrix.json.gz \\') % v)
         L.append('  --recipes <evidence>/grid-recipes-%s/recipes.json --output <evidence>/grid-queue-%s.json' % (v, v))
         L.append('python3 tools/six_lane_ab.py aa-queue --queue <evidence>/grid-queue-%s.json --output <evidence>/grid-aa-%s.json' % (v, v))
     L += ['```', '', '4. Run A/A first, then A/B, serially per box, NVIDIA and AMD in parallel (orchestrator, after recorded authorization):', '', '```bash']
@@ -1249,6 +1333,64 @@ def render_md(plan):
           '```', '',
           'Regenerate: `python3 tools/six_lane_grid.py` (deterministic; `--check` fails if the committed outputs are stale).', '']
     return '\n'.join(L)
+
+
+MD_CONFIG_LIMIT = 24  # extended plans only: configs listed per algorithm row (the full list is in grid-plan.json)
+
+
+def extended_totals(s):
+    hv = lambda d: ', '.join('%s %.1f h' % (v, d[v]) for v in VENDORS)
+    L = ['| crosses mode | %s%s |' % (s['crosses'], (' (full budget %d)' % s['full_budget']) if s['crosses'] == 'auto' else ''),
+         '| configs by tier | %s |' % ', '.join('%s %d' % kv for kv in s['configs_by_tier'].items()),
+         '| A/B cells per vendor | %d |' % s['cells_per_vendor'],
+         '| deferred by the cap (all kinds, configs) | %d |' % s['deferred_total'],
+         '| median scored-pair seconds | %s |' % ', '.join('%s %g s' % (v, s['pair_seconds'][v]) for v in VENDORS),
+         '| projected A/B box-hours | %s |' % hv(s['projected_hours']['ab']),
+         '| projected A/A box-hours | %s |' % hv(s['projected_hours']['aa'])]
+    for name, r in s['regimes'].items():
+        L.append('| regime %s | %d algorithms, %d configs, %d cells per vendor, %d deferred; %s |' % (
+            name, r['algorithms'], r['configs'], r['cells_per_vendor'], r['deferred'], hv(r['projected_hours'])))
+    if s.get('phase') == 'phase2':
+        L += ['| phase-1 decisions | `%s` |' % s['survivors_file'],
+              '| phase-1 verdicts (configs) | %s |' % (', '.join('%s %d' % kv for kv in s['phase1_verdicts'].items()) or 'none'),
+              '| phase-1 single arms | %s |' % (', '.join('%s %d' % kv for kv in s['survivor_arms'].items()) or 'none'),
+              '| reused phase-1 configs (not re-emitted) | %d |' % s['reused_configs']]
+    return L
+
+
+def regime_section(plan):
+    s = plan['summary']
+    ps = s['pair_seconds']
+    L = ['## Regimes per algorithm', '',
+         'factorial = every combination of the eligible controls (no cap); pairwise = singles + all-on + pairs inside each group '
+         '(higher orders from `--survivors`); phase2 = crosses among phase-1 survivors. Hours = cells per vendor x median pair seconds.', '',
+         '| algorithm | regime | eligible controls | full factorial | configs | deferred | cells per vendor | ' + ' | '.join(v + ' h' for v in VENDORS) + ' |',
+         '|---|---|---|---|---|---|---|' + '---|' * len(VENDORS)]
+    for aid, a in sorted(plan['algorithms'].items()):
+        n = len(a['configs'])
+        cells = n * len(a['workloads'] or [])
+        deferred = len(a['deferred']) + sum(g['configs'] for g in a['deferred_groups'])
+        L.append('| %s | %s | %d | %s | %d | %d | %d | %s |' % (
+            aid + (' (unmapped)' if a['unmapped_reason'] else ''), a.get('regime', s['crosses']), len(a['eligible_controls']),
+            a.get('factorial_product', '-'), n, deferred, cells, ' | '.join('%.2f' % hours(cells, ps[v]) for v in VENDORS)))
+    L.append('')
+    if s.get('phase') == 'phase2':
+        L += ['## Phase-1 survivors', '',
+              'A (control, arm) survives when its phase-1 single is FASTER or NEUTRAL; SLOWER and HOLD_* are dropped; '
+              'UNMEASURED / IDENTITY_INCOMPLETE / absent from the decision file are not measured and do not survive.', '',
+              '| algorithm | survived | FASTER (cross-group eligible) | dropped | not measured | reused |', '|---|---|---|---|---|---|']
+        for aid, a in sorted(plan['algorithms'].items()):
+            sv = a.get('survivors') or {}
+            arms = sv.get('arms', [])
+            fmt = lambda st: ', '.join('%s=%s (%s)' % (e['control'], e['arm'], e['verdict']) for e in arms if e['state'] == st) or '-'
+            nm = [e for e in arms if e['state'] == 'not_measured']
+            nm_s = ('%d: ' % len(nm) + ', '.join(sorted({e['verdict'] for e in nm}))) if nm else '-'
+            L.append('| %s | %s | %s | %s | %s | %d |' % (
+                aid, ', '.join('%s=%s' % (k, '|'.join(v)) for k, v in (sv.get('surviving') or {}).items()) or 'none',
+                ', '.join('%s=%s' % (k, '|'.join(v)) for k, v in (sv.get('faster') or {}).items()) or '-',
+                fmt('dropped'), nm_s, len(a.get('reused') or [])))
+        L.append('')
+    return L
 
 
 def write_outputs(plan, matrix, build_plan, out_dir=OUT_DIR):
@@ -1270,8 +1412,18 @@ def main(argv=None):
                    help='identical (default): NVIDIA + AMD IDENTICAL grid; fast: Apple FAST trees + classical grid (tools/six_lane_grid_fast.py)')
     p.add_argument('--vendor', choices=('apple',), help='FAST vendor (fast mode only; apple = M3 Ultra, Metal)')
     p.add_argument('--queue-branch', help='fast mode: the lane/apple-fast* branch the M3 queue lines name')
+    p.add_argument('--crosses', choices=('full', 'pairwise', 'pairwise+triples', 'auto'),
+                   help='full (default; the committed grid): group products admitted group-atomically; pairwise: every pair of '
+                        'group members x arm combinations, admitted per config; pairwise+triples: pairs then triples; auto: the '
+                        'whole factorial when product(arms + 1) - 1 <= --full-budget, else pairwise (default with --survivors: pairwise)')
+    p.add_argument('--full-budget', type=int, default=FULL_BUDGET, help='--crosses auto: largest full factorial emitted whole (default %d)' % FULL_BUDGET)
+    p.add_argument('--survivors', type=Path, help='phase 2: grid-decisions.json from tools/six_lane_grid_decide.py; crosses among '
+                                                   'the FASTER/NEUTRAL phase-1 singles (default --out ' + str(PHASE2_DIR.relative_to(ROOT)) + ')')
+    p.add_argument('--pair-seconds', help='median scored-pair seconds per vendor for the projected box-hours, e.g. nvidia=38,amd=24')
     args = p.parse_args(argv)
     if args.mode == 'fast':
+        if args.crosses or args.survivors or args.pair_seconds or args.full_budget != FULL_BUDGET:
+            p.error('--crosses / --survivors / --pair-seconds / --full-budget apply to the IDENTICAL grid only')
         import six_lane_grid_fast as F
         if args.vendor not in (None, 'apple'):
             p.error('--mode fast supports --vendor apple only')
@@ -1281,7 +1433,26 @@ def main(argv=None):
         return F.main_fast(out=args.out if args.out != OUT_DIR else F.OUT_DIR, cap=args.cap, check=args.check, branch=branch)
     if args.vendor or args.queue_branch:
         p.error('--vendor / --queue-branch apply to --mode fast only')
-    plan, matrix, build_plan = generate(cap=args.cap)
+    if args.cap < 0:
+        p.error('--cap must be >= 0 (0 = no cap)')
+    crosses = args.crosses or ('pairwise' if args.survivors else 'full')
+    if args.survivors and crosses == 'full':
+        p.error('--survivors plans pairwise crosses (optionally pairwise+triples); --crosses full does not apply')
+    pair_seconds = None
+    if args.pair_seconds:
+        pair_seconds = dict(PAIR_SECONDS)
+        for part in args.pair_seconds.split(','):
+            v, _, sec = part.partition('=')
+            if v not in VENDORS:
+                p.error('--pair-seconds: unknown vendor ' + v)
+            pair_seconds[v] = float(sec)
+    if args.survivors and args.out == OUT_DIR:
+        args.out = PHASE2_DIR
+    plan, matrix, build_plan = generate(cap=args.cap, crosses=crosses, full_budget=args.full_budget,
+                                        survivors=args.survivors, pair_seconds=pair_seconds)
+    if 'crosses' in plan['summary']:
+        out = Path(args.out).resolve()
+        plan['outputs_dir'] = str(out.relative_to(ROOT)) if out.is_relative_to(ROOT) else str(args.out)
     if args.check:
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
