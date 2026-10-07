@@ -1448,3 +1448,14 @@ both NVIDIA and AMD results, no material vendor regression, same-version
 identity on Apple and the host column, and end-to-end quality/performance
 on taxi + Istella or enwik8 + Pile GitHub as appropriate. No default flips
 are authorized by the synthetic screen alone.
+
+## IDENTICAL neural GEMM/attention switch dedupe (lane/neural-gemm-attn-dedupe, 2026-10-07)
+
+Losers and dead switches deleted from the code. Each stays recoverable at main 8be4d20d4 (the lane's base). The merged switches are listed in `experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json`.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_IDN_GEMM_FOLD_LEAF_64` (I04, also the leaf-64 arm of NN03's `IDN_NEURAL_LEAF`) | IDENTICAL GEMM leaf 64 vs 128 / m1024 n1024 k2048 and neighbor m1023 n1025 k2049 | measured @ cbcc8dcd3303; deleted from lane/neural-gemm-attn-dedupe (base 8be4d20d4) | overnight-ab-20261006 I04 (amd/normalized-measurements.json, nvidia/default-repair-normalized-measurements.json) | MI325X 0.182 -> 0.231 (1.268x; neighbor 1.157x); L40S 0.280/0.255 -> 0.304/0.281 | DROP | slower on both voting vendors; leaf is a bit version, so no FAST-style keep. `MOJOLEARN_IDN_GEMM_LEAF` keeps arms neural128/neural256/all256 |
+| `MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE` (I06 / NI19, two query heads per K/V page) | attention forward GQA ratio 2 / length 1024/1536, B1, heads8, kv4, hd64 | measured @ e80a1d0 (fixed kvgrid schedule); deleted from lane/neural-gemm-attn-dedupe | overnight-ab-20261006 I06 | MI325X 2.434/3.581 -> 2.947/4.342 (1.211/1.212x); L40S 1.143/2.262 -> 1.311/2.506 (1.147/1.108x) | DROP | slower on both vendors. The four-head NN17 arm survives as `MOJOLEARN_IDN_ATTN_HEAD_SHARE=4` |
+| `MOJOLEARN_NN22_EAGER_DKDV_PAIR` | transformer eager attention backward dK/dV pairing | source @ 8be4d20d4; deleted | - | - | DROP (unmeasured) | only the eager fallback backward (`transformer/checks/transformer_backward.mojo`) read it, never the fused backward the board trains through; deleted by the lane brief instead of wiring into `fused_bwd_*` |
+| `MOJOLEARN_NN23_ROWDOT_DS` | transformer eager softmax backward row-dot + dS in one serial-per-row kernel | source @ 8be4d20d4; deleted | - | - | DROP (unmeasured) | same reach as NN22; one thread walks every key of its row twice, which the split flat-grid incumbent already parallelizes |
