@@ -1,4 +1,5 @@
 #!/bin/sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
 # Root-only guarded build. No smoke/model/test launch.
 # Invoke through the corresponding NVIDIA/AMD/macOS serial guard.
 # MOJOLEARN_NUMERIC_MODE=identical (default) or fast; Linux needs one GPU target.
@@ -86,7 +87,7 @@ esac
 # Compiler concurrency: two workers by default, as before; a shared box
 # sets MOJOLEARN_COMPILE_JOBS=1. `mojo build` refuses a repeated -j, so
 # the value has to be substituted here rather than appended.
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $byte_lm_mode_define -I . -I bindings \
     bindings/_mojolearn_byte_lm.mojo -o "$byte_lm_tmpdir/_mojolearn_byte_lm.so"
 ln "$byte_lm_tmpdir/_mojolearn_byte_lm.so" "$byte_lm_destination"

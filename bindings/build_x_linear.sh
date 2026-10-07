@@ -1,4 +1,5 @@
 #!/bin/sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
 # The linear expansion lane's GPU binding (lane/algos-linear).
 set -eu
 MACOS_FLOOR="11.0"
@@ -48,7 +49,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-x-linear.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out=$tmpdir/_mojolearn_x_linear.so
 # Intentionally split compiler option lists, consistent with existing builders.
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
     bindings/_mojolearn_x_linear.mojo -o "$out"
 # The gate below needs NumPy in the gating interpreter, which a fresh Linux

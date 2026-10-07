@@ -1,4 +1,5 @@
 #!/bin/sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
 # The prep expansion lane's GPU binding: preprocessing additions, naive Bayes,
 # discriminant analysis (x_prep/, naive_bayes/; algorithm expansion lane 5).
 set -eu
@@ -49,7 +50,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-preprocessing.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out=$tmpdir/_mojolearn_x_prep.so
 # Intentionally split compiler option lists, consistent with existing builders.
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
     bindings/_mojolearn_x_prep.mojo -o "$out"
 # The gate below needs NumPy in the gating interpreter, which a fresh Linux
