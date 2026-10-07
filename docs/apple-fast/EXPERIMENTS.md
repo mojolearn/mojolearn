@@ -1454,3 +1454,4 @@ are authorized by the synthetic screen alone.
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
 | `IDN_SEQ_ROW_SERIAL_SCAN` (NI49 row-serial arm) | lstm-clf, lstm-reg (x_sequence) | lane/neural-seq-train-dedupe @ 83b9bf20a (deleted; last present at 8be4d20d4) | none | - | DROPPED-rule | one GPU thread per batch row, serial over units and timesteps: breaks the IDENTICAL parallel-GPU rule; never measured, not a board lane. Recoverable at 8be4d20d4 sequence/recurrent_scan.mojo:71-83 |
+| `NI13_CNN_WEIGHT_GENERATION_CACHE` | x_cnn (CNN forward) | lane/neural-seq-train-dedupe (deleted; last present at 8be4d20d4) | none | - | DROPPED-rejected | rejected by source review (the shipped route performs no repack for a cache to remove); x_cnn/neural_weight_cache.mojo had no importer. Recoverable at 8be4d20d4 |
