@@ -17,32 +17,6 @@ def fold_value(x: FP, y: FP, row: Int, col: Int, d: Int) -> Float32:
     return ld(y, row) if col == d else ld(x, row * d + col)
 
 
-def fold_mean_cell(x: FP, y: FP, n: Int, d: Int, f: Int, col: Int, fi: Bool, cache: FP):
-    var base = f * fold_stat_words(d)
-    var count = 0
-    var acc = Float32(0)
-    for row in range(n):
-        if Int(ld(y, n + row)) == f:
-            count += 1
-            if fi:
-                acc = fa(acc, fold_value(x, y, row, col, d))
-    st(cache, base + 1 + col, fd(acc, i2f(count)) if count > 0 and fi else Float32(0))
-    if col == 0:
-        st(cache, base, i2f(count))
-
-
-def fold_gram_cell(x: FP, y: FP, n: Int, d: Int, f: Int, i: Int, j: Int, cache: FP):
-    var base = f * fold_stat_words(d)
-    var mi = ld(cache, base + 1 + i)
-    var mj = ld(cache, base + 1 + j)
-    var acc = Float32(0)
-    for row in range(n):
-        if Int(ld(y, n + row)) == f:
-            acc = fmad(fs(fold_value(x, y, row, i, d), mi), fs(fold_value(x, y, row, j, d), mj), acc)
-    st(cache, base + d + 2 + i * (d + 1) + j, acc)
-    st(cache, base + d + 2 + j * (d + 1) + i, acc)
-
-
 def retained_count(cache: FP, d: Int, folds: Int, held: Int) -> Float32:
     var count = Float32(0)
     for f in range(folds):
@@ -72,19 +46,6 @@ def retained_cross(cache: FP, d: Int, folds: Int, held: Int, i: Int, j: Int) -> 
             var value = fmad(shift, fs(ld(cache, base + 1 + j), mj), ld(cache, base + d + 2 + i * (d + 1) + j))
             acc = fa(acc, value)
     return acc
-
-
-def fold_prep_from_cache(cache: FP, d: Int, folds: Int, held: Int, fw: FP, xm: Int, gg: Int, q: Int, sc: Int):
-    for i in range(d):
-        st(fw, xm + i, retained_mean(cache, d, folds, held, i))
-        st(fw, q + i, retained_cross(cache, d, folds, held, i, d))
-        for j in range(i, d):
-            var v = retained_cross(cache, d, folds, held, i, j)
-            st(fw, gg + i * d + j, v)
-            st(fw, gg + j * d + i, v)
-    st(fw, sc, retained_mean(cache, d, folds, held, d))
-    st(fw, sc + 1, retained_cross(cache, d, folds, held, d, d))
-    st(fw, sc + 2, retained_count(cache, d, folds, held))
 
 
 @always_inline

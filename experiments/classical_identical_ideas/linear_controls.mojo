@@ -31,11 +31,9 @@ comptime CLASSICAL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # `-D MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF` restores the per-fold passes (arm B
 # of the isolated confirmation A/B owed on nv and amd).
 comptime C13_FOLD_STATS = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF"]()
-# The LassoCV/ElasticNetCV fold cache (x_linear/cd.mojo, cd_grid.mojo) is the
-# measured loser above (T.C13.only: Taxi 4.0x/1.4x slower, Taxi quality worse on
-# both vendors; Istella 1.1x slower). It stays opt-in under its own name so the
-# RidgeCV default cannot drag it in; delete it unless a later A/B clears it.
-comptime C13_CD_FOLD_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS"]()
+# The LassoCV/ElasticNetCV fold cache (C13_CD_FOLD_STATS) was deleted on
+# lane/classical-cv (2026-10-07): T.C13.only measured it 4.0x/1.4x slower on
+# Taxi and quality-failing on both vendors (row in docs/apple-fast/EXPERIMENTS.md).
 comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"]()
 comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
 comptime C16_GLM_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C16_GLM_FUSED"]()
@@ -69,8 +67,6 @@ comptime C27_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_
 comptime C28_BUCKET_SOLVES = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES"]()
 
 # Additional independent component/residual sub-arms; the header status applies.
-comptime C18_TILE64 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C18_TILE64"]()
-comptime C18_GRAM_PREFETCH = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH"]()
 comptime C27_FA_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS"]()
 comptime C27_NORM_VECTOR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_NORM_VECTOR"]()
 comptime C13_LOGCV_WEIGHTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"]()

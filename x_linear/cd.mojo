@@ -27,8 +27,7 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
     add_acc, axpy_centered,
 )
-from experiments.classical_identical_ideas.linear_controls import C18_RESIDUAL_NEXT, C13_CD_FOLD_STATS
-from x_linear.classical_fold_stats import fold_stat_words, fold_mean_cell, fold_gram_cell, fold_prep_from_cache
+from experiments.classical_identical_ideas.linear_controls import C18_RESIDUAL_NEXT
 from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.tops import upper_cell, fold_fa_ix, fold_sq_ix, chain_cfmad_ix
@@ -266,28 +265,14 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     var alphas = d + 4
     var mse = alphas + l_n * a_n
     var rr = t.row(0)
-    var cache = fw + d * d + 4 * d + 3 + a_n * (d + 2)
-    comptime if C13_CD_FOLD_STATS and not is_gpu():
-        for f in range(f_n):
-            for col in range(d + 1):
-                fold_mean_cell(x, y, n, d, f, col, fi, cache)
-            for i in range(d + 1):
-                for j in range(i, d + 1):
-                    fold_gram_cell(x, y, n, d, f, i, j, cache)
     # the grids, on all rows
-    comptime if C13_CD_FOLD_STATS and not is_gpu():
-        fold_prep_from_cache(cache, d, f_n, -1, fw, xm, gg, q, sc)
-    else:
-        _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+    _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
     if t.lead():
         ecv_alphas(res, alphas, fp, l_n, a_n, explicit, eps, fw, q, d, n)
     t.sync()
     # the path on each fold
     for f in range(f_n):
-        comptime if C13_CD_FOLD_STATS and not is_gpu():
-            fold_prep_from_cache(cache, d, f_n, f, fw, xm, gg, q, sc)
-        else:
-            _prep(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
+        _prep(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
         var ym = ld(fw, sc)
         var yn = ld(fw, sc + 1)
         var rows = Int(ld(fw, sc + 2))
@@ -350,10 +335,7 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
         ecv_choose(res, fp, d, l_n, a_n, f_n)
     t.sync()
     # the refit on all rows, from zero
-    comptime if C13_CD_FOLD_STATS and not is_gpu():
-        fold_prep_from_cache(cache, d, f_n, -1, fw, xm, gg, q, sc)
-    else:
-        _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+    _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
     if not t.lead():
         return
     var l1r = ld(res, d + 2)

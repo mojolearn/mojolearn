@@ -1448,3 +1448,13 @@ both NVIDIA and AMD results, no material vendor regression, same-version
 identity on Apple and the host column, and end-to-end quality/performance
 on taxi + Istella or enwik8 + Pile GitHub as appropriate. No default flips
 are authorized by the synthetic screen alone.
+
+## IDENTICAL CV coordinate descent (lane/classical-cv, 2026-10-07)
+
+Code recoverable at `lane/ridgecv-c13@c59be1781` (and main@8be4d20d4 under the old name `MOJOLEARN_CLASSICAL_C13_FOLD_STATS`).
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS` (was the CD half of `C13_FOLD_STATS`) | lasso-cv, enet-cv / taxi, istella (IDENTICAL, NV sm90 + AMD gfx942) | lane/ridgecv-c13@c59be1781, measured source 6fe3cfce38fd | T.C13.only (targeted-ab-20261007) | candidate/baseline NV 4.01/1.11 (lasso taxi/istella), 0.79/1.11 (enet); AMD 1.40/1.13, 1.35/1.10 | DROPPED, code deleted | each fold cell rescans all n rows filtered by fold id (F-fold redundant reads) with a plain f32 serial sum; Taxi quality gate FAIL on both vendors (picked alpha moves). Replaced by `MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS`. RidgeCV half kept as `C13_FOLD_STATS` (default on). |
+| `MOJOLEARN_CLASSICAL_C18_TILE64` | plain Lasso/ElasticNet solver CD (`solver/impl/cd.mojo` `CD_FUSED_STEPS` 64 vs 128) | lane/ridgecv-c13@c59be1781 | none | unmeasured | DROPPED (orchestrator brief L5), code deleted | never measured; not on any CV route. A tile size belongs in an int sweep if revived. |
+| `MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH` | plain Lasso/ElasticNet solver CD (`solver/impl/cd.mojo` Gram word prefetch) | lane/ridgecv-c13@c59be1781 | none | unmeasured | DROPPED (orchestrator brief L5), code deleted | never measured; not on any CV route. |
