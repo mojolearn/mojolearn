@@ -35,6 +35,9 @@ CONTROLS_DIR = ROOT / 'experiments/six_lane_integration/grid_controls'
 GUARDS = ROOT / 'core/six_lane_experiment_guards.mojo'
 OUT_DIR = ROOT / 'experiments/six_lane_integration/grid'
 CAP = 16
+FULL_BUDGET = 128  # --crosses auto: full factorial when its raw size is at most this
+# Median scored-pair seconds per box from the Oct 6 receipts (projection only; override with --pair-seconds).
+PAIR_SECONDS = {'nvidia': 38.0, 'amd': 24.0}
 MODE = 'identical'
 IDENTICAL_DEFINE = 'MOJOLEARN_NUMERIC_IDENTICAL=1'
 # Owner 2026-10-07: IDENTICAL is decided by NVIDIA and AMD; Apple does not vote.
@@ -500,7 +503,17 @@ def label(assign):
     return '+'.join(k + '=' + a for k, a in assign)
 
 
-def plan_algorithm(algo, controls, reach, guards, cap=CAP):
+def plan_algorithm(algo, controls, reach, guards, cap=CAP, crosses='full', phase1=None, full_budget=FULL_BUDGET):
+    """Per-algorithm configurations in priority order under the cap (cap 0 = no cap).
+
+    crosses: 'full' (default, the committed grids) = within-group products admitted group-atomically;
+    'pairwise' = every pair of group members x every non-default arm combination, admitted one config at a
+    time (the cap cuts configs, not whole groups); 'pairwise+triples' = pairs, then triples; 'auto' = the
+    whole factorial over the eligible controls when its raw size (product of (arms + 1) - 1) is at most
+    full_budget (regime 'factorial', no cap), else singles + all-on + pairwise crosses (regime 'pairwise').
+    phase1: {frozenset(assignment items): phase-1 decision row} for this algorithm (--survivors); the plan
+    is then the phase-2 grid (see plan_phase2).
+    """
     excluded, eligible, arm_info, invalid = [], [], {}, []
     for key in algo['controls']:
         c = controls[key]
@@ -557,7 +570,7 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP):
             ordered = unique(extra + ordered)
         return tuple(sorted(ordered, key=lambda ka: eligible.index(ka[0])))
 
-    candidates, seen = [], {(): 'B'}
+    candidates, seen, reused = [], {(): 'B'}, []
 
     def add(tier, assign, origin):
         assign = with_parent(assign)
@@ -567,11 +580,18 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP):
             return None
         if key in seen:
             return dict(tier=tier, assignment=label(assign), duplicate_of=seen[key])
+        if phase1 is not None:
+            prev = phase1.get(frozenset(assign))
+            if prev is not None:  # measured in phase 1 with the same assignment: reused, never re-emitted
+                seen[key] = prev['configuration']
+                reused.append(dict(tier=tier, assignment={k: a for k, a in assign}, phase1_configuration=prev['configuration'],
+                                   phase1_verdict=prev['verdict']))
+                return dict(tier=tier, assignment=label(assign), reused=prev['configuration'])
         problems = check(defines, guards)
         if problems:
             invalid.append(dict(tier=tier, assignment=label(assign), problems=problems))
             return None
-        cid = 'G.' + algo['id'] + '.' + (tier if tier == 'all_on' else label(assign))
+        cid = 'G.' + algo['id'] + '.' + (tier if tier in ('all_on', 'all_survivors') else label(assign))
         seen[key] = cid
         cfg = dict(id=cid, algorithm=algo['id'], tier=tier, origin=origin, assignment={k: a for k, a in assign},
                    defines=defines, controls=[k for k, _ in assign],
@@ -581,6 +601,18 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP):
         candidates.append(cfg)
         return cfg
 
+    unlimited = cap == 0
+    factorial_product = 1
+    for key in eligible:
+        factorial_product *= len(arm_info[key]['arms']) + 1
+    factorial_product -= 1
+    regime = crosses
+    if crosses == 'auto':
+        regime = 'factorial' if factorial_product <= full_budget else 'pairwise'
+        crosses = 'full' if regime == 'factorial' else 'pairwise'
+    if phase1 is not None:
+        return plan_phase2(algo, controls, guards, cap, crosses, phase1, eligible, excluded, arm_info, parents, rep,
+                           with_parent, add, candidates, reused, invalid)
     for key in eligible:
         for arm in arm_info[key]['arms']:
             add('single', ((key, arm),), 'one control alone')
@@ -599,8 +631,25 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP):
             before = len(candidates)
             res = add('all_on', tuple(assign), 'one representative arm per control, guard-compatible')
             all_on = candidates[-1] if len(candidates) > before else res
+    if regime == 'factorial':
+        # Every combination of the eligible controls (singles and all-on above are part of it, emitted once).
+        combos = [[(k, a) for k, a in zip(eligible, combo) if a is not None]
+                  for combo in itertools.product(*[[None] + arm_info[k]['arms'] for k in eligible])]
+        for assign in sorted(combos, key=len):  # stable: lower orders first
+            keys = {k for k, _ in assign}
+            if len(assign) < 2 or any(k in parents and parents[k][0] not in keys for k in keys):
+                continue  # singles are above; a child without its parent set is inert (with_parent adds it)
+            add('factorial', tuple(assign), 'full factorial over ' + str(len(eligible)) + ' eligible controls (' +
+                str(factorial_product) + ' <= budget ' + str(full_budget) + ')')
+        for i, c in enumerate(candidates):
+            c['priority'] = i + 1
+        return dict(eligible=eligible, excluded=excluded, arm_info=arm_info, parents={k: v[0] for k, v in parents.items()},
+                    representative_arms=rep, dropped_from_all_on=dropped_from_all_on,
+                    all_on=None if not all_on else (all_on.get('id') or 'duplicate of ' + all_on['duplicate_of']),
+                    configs=list(candidates), deferred=[], deferred_groups=[], invalid=invalid, cross_groups=[],
+                    regime='factorial', factorial_product=factorial_product)
     cross_groups = []
-    for g in algo['groups']:
+    for g in (algo['groups'] if crosses == 'full' else []):
         members = [k for k in g if k in eligible]
         if len(members) < 2:
             cross_groups.append(dict(group=g, members=members, configs=[], note='fewer than two eligible members'))
@@ -628,14 +677,26 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP):
         del candidates[mark:]  # crosses are admitted below, group-atomically
         cross_groups.append(dict(group=g, members=members, product=product, configs=configs, duplicates=dup))
     ordered = singles + ([all_on] if all_on and 'duplicate_of' not in all_on else [])
-    chosen = ordered[:cap]
-    deferred = [dict(id=c['id'], tier=c['tier'], assignment=c['assignment'], reason='cap ' + str(cap) + ' reached in priority order') for c in ordered[cap:]]
+    chosen = list(ordered) if unlimited else ordered[:cap]
+    deferred = [] if unlimited else [dict(id=c['id'], tier=c['tier'], assignment=c['assignment'], reason='cap ' + str(cap) + ' reached in priority order') for c in ordered[cap:]]
     deferred_groups = []
-    for cg in cross_groups:
+    if crosses != 'full':
+        units = []
+        for size, tier in ((2, 'cross'), (3, 'triple')):
+            if size == 3 and crosses != 'pairwise+triples':
+                continue
+            for g in algo['groups']:
+                members = [k for k in g if k in eligible]
+                cg = subset_crosses(members, {k: arm_info[k]['arms'] for k in members}, size, tier,
+                                    'interaction group ' + '/'.join(members) + (' (pair)' if size == 2 else ' (triple)'), add, candidates)
+                cross_groups.append(dict(group=g, **cg))
+                units.append(cg)
+        deferred_groups = admit(units, chosen, cap)
+    for cg in (cross_groups if crosses == 'full' else []):
         new = [c for c in cg['configs'] if c['id'] not in {x['id'] for x in chosen}]
         if not new:
             continue
-        if len(chosen) + len(new) <= cap:
+        if unlimited or len(chosen) + len(new) <= cap:
             chosen.extend(new)
         else:
             deferred_groups.append(dict(members=cg['members'], configs=len(new), product=cg['product'],
@@ -650,7 +711,168 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP):
                 all_on=None if not all_on else (all_on.get('id') or 'duplicate of ' + all_on['duplicate_of']),
                 configs=chosen, deferred=deferred, deferred_groups=deferred_groups, invalid=invalid,
                 cross_groups=[dict(members=cg['members'], product=cg.get('product'), new_configs=len(cg['configs']),
-                                   duplicates=cg.get('duplicates', 0), note=cg.get('note')) for cg in cross_groups])
+                                   duplicates=cg.get('duplicates', 0), note=cg.get('note'),
+                                   **({'kind': cg['kind']} if 'kind' in cg else {})) for cg in cross_groups],
+                **({} if regime == 'full' else dict(regime=regime, factorial_product=factorial_product)))
+
+
+def subset_crosses(members, arms_of, size, tier, origin, add, candidates):
+    """Every `size`-subset of members x every non-default arm combination (guards applied by add()).
+
+    A child control carries its parent's representative arm (as its single does). Returns the admission unit."""
+    configs, dup, reused, product = [], 0, [], 0
+    mark = len(candidates)
+    for subset in itertools.combinations(members, size):
+        combos = list(itertools.product(*[arms_of[k] for k in subset]))
+        product += len(combos)
+        for combo in combos:
+            res = add(tier, tuple(zip(subset, combo)), origin)
+            if res is None:
+                continue
+            if 'reused' in res:
+                reused.append(res['reused'])
+            elif 'duplicate_of' in res:
+                dup += 1
+            else:
+                configs.append(res)
+    del candidates[mark:]  # admitted by admit(), one config at a time
+    return dict(members=list(members), kind=tier, product=product, configs=configs, duplicates=dup, reused=reused,
+                note=None if len(members) >= size else 'fewer than %d eligible members' % size)
+
+
+def admit(units, chosen, cap):
+    """Per-config admission in unit order (cap 0 = no cap); returns the deferred remainder per unit."""
+    deferred = []
+    for u in units:
+        ids = {x['id'] for x in chosen}
+        new = [c for c in u['configs'] if c['id'] not in ids]
+        room = len(new) if cap == 0 else max(0, cap - len(chosen))
+        chosen.extend(new[:room])
+        left = new[room:]
+        if left:
+            deferred.append(dict(members=u['members'], kind=u['kind'], configs=len(left), product=u['product'],
+                                 reason='%s configs cut by the cap %d (admitted one config at a time in priority order)' % (u['kind'], cap),
+                                 listed=[dict(id=c['id'], assignment=c['assignment']) for c in left[:DEFER_LIST_LIMIT]],
+                                 listed_truncated=len(left) > DEFER_LIST_LIMIT))
+    return deferred
+
+
+SURVIVING = ('FASTER', 'NEUTRAL')
+
+
+def plan_phase2(algo, controls, guards, cap, crosses, phase1, eligible, excluded, arm_info, parents, rep,
+                with_parent, add, candidates, reused, invalid):
+    """Phase 2 from phase-1 decisions: crosses among the (control, arm) singles that survived.
+
+    A (control, arm) survives for this algorithm when its phase-1 single (the same assignment, parents carried)
+    has verdict FASTER or NEUTRAL. SLOWER and HOLD_* are dropped; UNMEASURED, IDENTITY_INCOMPLETE and a single
+    absent from the decision file are not measured and do not survive. Priority: (a) pairwise crosses among
+    survivors inside each interaction group, (b) one all-survivors-on, (c) triples inside groups when
+    crosses == 'pairwise+triples', (d) pairwise crosses across groups among FASTER survivors only. A config whose
+    assignment phase 1 already measured is listed as reused, never re-emitted."""
+    survivors, faster, status = {}, {}, []
+    for key in eligible:
+        for arm in arm_info[key]['arms']:
+            prev = phase1.get(frozenset(with_parent(((key, arm),))))
+            verdict = prev['verdict'] if prev else 'NOT_IN_DECISIONS'
+            if verdict in SURVIVING:
+                state = 'survived'
+            elif verdict in ('UNMEASURED', 'NOT_MEASURED', 'IDENTITY_INCOMPLETE', 'NOT_IN_DECISIONS'):
+                state = 'not_measured'
+            else:
+                state = 'dropped'
+            entry = dict(control=key, arm=arm, verdict=verdict, state=state,
+                         phase1_configuration=prev['configuration'] if prev else None,
+                         combined_ratio=prev.get('combined_ratio') if prev else None)
+            status.append(entry)
+            if state == 'survived':
+                survivors.setdefault(key, []).append(arm)
+                if verdict == 'FASTER':
+                    faster.setdefault(key, []).append(arm)
+    for key in list(survivors):
+        anc, k = [], key
+        while k in parents:
+            k = parents[k][0]
+            anc.append(k)
+        lost = [a for a in anc if rep[a] not in survivors.get(a, [])]
+        if lost:
+            for e in status:
+                if e['control'] == key and e['state'] == 'survived':
+                    e['state'] = 'dropped'
+                    e['verdict'] += ' (parent ' + lost[0] + '=' + rep[lost[0]] + ' did not survive)'
+            survivors.pop(key)
+            faster.pop(key, None)
+    order = [k for k in eligible if k in survivors]
+    units = []
+    for g in algo['groups']:
+        members = [k for k in g if k in survivors]
+        units.append(subset_crosses(members, survivors, 2, 'cross', 'phase 2: survivor pair in group ' + '/'.join(g), add, candidates))
+    all_surv, dropped_from_all = None, []
+    if len(order) >= 2:
+        def best_arm(k):
+            rows = {e['arm']: e for e in status if e['control'] == k and e['state'] == 'survived'}
+            return min(survivors[k], key=lambda a: (rows[a]['verdict'] != 'FASTER',
+                                                    rows[a]['combined_ratio'] if rows[a]['combined_ratio'] else float('inf'),
+                                                    survivors[k].index(a)))
+        assign = []
+        for key in order:
+            trial = with_parent(tuple(assign + [(key, best_arm(key))]))
+            problems = check(assignment_defines(trial, controls), guards)
+            if problems:
+                dropped_from_all.append(dict(control=key, arm=best_arm(key), problems=problems))
+            else:
+                assign = list(trial)
+        if len({k for k, _ in assign}) >= 2:
+            mark = len(candidates)
+            res = add('all_survivors', tuple(assign), 'phase 2: best surviving arm per control (FASTER first, then smallest phase-1 ratio), guard-compatible')
+            del candidates[mark:]
+            all_surv = res
+            units.append(dict(members=order, kind='all_survivors', product=1,
+                              configs=[res] if res and 'id' in res else [], duplicates=0, reused=[]))
+    if crosses == 'pairwise+triples':
+        for g in algo['groups']:
+            members = [k for k in g if k in survivors]
+            units.append(subset_crosses(members, survivors, 3, 'triple', 'phase 2: survivor triple in group ' + '/'.join(g), add, candidates))
+    grouped = {frozenset(p) for g in algo['groups'] for p in itertools.combinations(g, 2)}
+    fast_keys = [k for k in eligible if k in faster]
+    pairs = [(a, b) for a, b in itertools.combinations(fast_keys, 2) if frozenset((a, b)) not in grouped]
+    mark = len(candidates)
+    across = dict(members=fast_keys, kind='cross_across', product=0, configs=[], duplicates=0, reused=[])
+    for a, b in pairs:
+        for arm_a in faster[a]:
+            for arm_b in faster[b]:
+                across['product'] += 1
+                res = add('cross_across', ((a, arm_a), (b, arm_b)), 'phase 2: FASTER survivors across groups')
+                if res is None:
+                    continue
+                if 'reused' in res:
+                    across['reused'].append(res['reused'])
+                elif 'duplicate_of' in res:
+                    across['duplicates'] += 1
+                else:
+                    across['configs'].append(res)
+    del candidates[mark:]
+    units.append(across)
+    chosen = []
+    deferred_groups = admit(units, chosen, cap)
+    deferred = []
+    for d in [d for d in deferred_groups if d['kind'] == 'all_survivors']:
+        deferred.append(dict(id=d['listed'][0]['id'], tier='all_survivors', assignment=d['listed'][0]['assignment'],
+                             reason='cap ' + str(cap) + ' reached in priority order'))
+        deferred_groups.remove(d)
+    for i, c in enumerate(chosen):
+        c['priority'] = i + 1
+    counts = {}
+    for e in status:
+        counts[e['state']] = counts.get(e['state'], 0) + 1
+    return dict(eligible=eligible, excluded=excluded, arm_info=arm_info, parents={k: v[0] for k, v in parents.items()},
+                representative_arms=rep, dropped_from_all_on=dropped_from_all,
+                all_on=None if not all_surv else (all_surv.get('id') or ('reused ' + all_surv['reused'] if 'reused' in all_surv else 'duplicate of ' + all_surv['duplicate_of'])),
+                configs=chosen, deferred=deferred, deferred_groups=deferred_groups, invalid=invalid,
+                cross_groups=[dict(members=u['members'], kind=u['kind'], product=u['product'], new_configs=len(u['configs']),
+                                   duplicates=u['duplicates'], reused=len(u['reused']), note=u.get('note')) for u in units],
+                regime='phase2', survivors=dict(counts=counts, arms=status, surviving={k: survivors[k] for k in order},
+                                                faster={k: faster[k] for k in fast_keys}), reused=reused)
 
 
 def config_bindings(algo, cfg, controls):
