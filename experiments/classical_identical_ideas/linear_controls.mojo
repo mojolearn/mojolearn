@@ -1,20 +1,39 @@
 # SPDX-License-Identifier: Apache-2.0
 """C13-C28 classical IDENTICAL opt-in controls.
 
-Every switch below is NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED —
-QUALITY NOT VERIFIED — NOT MEASURED. Absence preserves the incumbent.
+Unless scoped evidence below says otherwise, switches remain NOT COMPILED —
+NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+Absence preserves the incumbent; measurements do not imply default promotion.
 Numerical profiles are shared by the host and all three device columns.
 """
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime CLASSICAL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# T.C13.only, measured source 6fe3cfce38fd (2026-10-07): remain opt-in/off.
+# Full LassoCV Taxi/Istella, ElasticNetCV Taxi/Istella; candidate/baseline time
+# ratios NVIDIA sm90: 4.0132/1.1120/0.7913/1.1144; AMD gfx942:
+# 1.3997/1.1302/1.3511/1.0997. Both Taxi CV quality gates fail on both vendors.
+# One excluded warmup + one scored sample per arm; same-arm NV/AMD outputs and
+# complete declared model state match. Apple/host/PTX identity remains pending.
+# Evidence: experiments/six_lane_integration/measurements/20261006/retained-pairs.json
+# and BOARD.md. C13+C18 reproduces the saved C13 quality loss; no promotion.
 comptime C13_FOLD_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C13_FOLD_STATS"]()
 comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"]()
 comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
 comptime C16_GLM_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C16_GLM_FUSED"]()
 comptime C17_OVR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C17_OVR"]()
 comptime C17_LS_TRIALS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C17_LS_TRIALS"]()
+# T.C18.residual-only, measured source 6fe3cfce38fd: remain opt-in/off, pending
+# qualification. Full LassoCV Taxi/Istella, ElasticNetCV Taxi/Istella ratios
+# (candidate/baseline): NVIDIA sm90 1.0088/1.0061/0.9697/1.0067;
+# AMD gfx942 1.0039/1.0336/0.9464/0.9740. Mixed timing; no blanket win claimed.
+# Saved quality metrics match the incumbent in all eight vendor/workload cells;
+# independent quality admission and required Apple/host/PTX identity are pending.
+# NV/AMD same-arm outputs and complete declared model state match. One excluded
+# warmup + one scored sample per arm; combination/scope qualification incomplete.
+# Evidence: experiments/six_lane_integration/measurements/20261006/retained-pairs.json
+# and BOARD.md; C13+C18 quality failures do not establish C18 as their cause.
 comptime C18_RESIDUAL_NEXT = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT"]()
 comptime C19_ORDERED_128 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C19_ORDERED_128"]()
 comptime C19_ORDERED_32 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C19_ORDERED_32"]()

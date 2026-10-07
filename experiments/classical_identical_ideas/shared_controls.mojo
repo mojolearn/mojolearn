@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Classical IDENTICAL shared candidates. Every switch defaults OFF.
-NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+Unless scoped evidence below says otherwise: NOT COMPILED — NOT TESTED —
+IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 A enables only its named define; B omits it and retains all incumbent controls.
 """
 from std.sys.compile import is_defined
@@ -24,6 +25,15 @@ comptime C09_REG_BUNDLE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICA
 comptime C10_RANK_REUSE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C10_RANK_REUSE"]()
 comptime C11_DRAW_GATHER = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C11_DRAW_GATHER"]()
 comptime C12_SPARSE_COUNTS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS"]()
+# T.C55.only, measured source 6fe3cfce38fd (2026-10-07): remain opt-in/off.
+# Full GaussianNB Taxi/Istella, LDA Taxi/Istella; candidate/baseline time ratios
+# NVIDIA sm90: 3.7583/1.6769/2.3931/1.2764; AMD gfx942:
+# 7.2976/3.2273/3.4697/1.6871. GaussianNB Taxi and LDA Istella fail quality
+# on both vendors; matching cross-vendor bits do not excuse those failures.
+# One excluded warmup + one scored sample per arm. NV/AMD same-arm outputs and
+# complete declared model state match; Apple/host/PTX identity remains pending.
+# Evidence: experiments/six_lane_integration/measurements/20261006/retained-pairs.json
+# and BOARD.md. Other affected estimators/combinations remain unqualified.
 comptime C55_CLASS_GROUP = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C55_CLASS_GROUP"]()
 # C08 independent grouped one-hot emission; immutable dictionary is unchanged.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
