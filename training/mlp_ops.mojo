@@ -29,6 +29,7 @@ from gemm.neural_dispatch import (
 )
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.experiments.neural_epilogue import NN06
+from gemm.experiments.neural_switches import ROLE_PROJECTION, ROLE_WGRAD
 from gemm.experiments.neural_profile import NEURAL_LEAF,NEURAL_CHAINS,neural_partition,neural_cell
 from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN
 from core.device_scan import device_first_nonfinite
@@ -253,7 +254,7 @@ def _launch_mlp[
     )
 
 
-def _gemm(
+def _gemm[ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
@@ -270,7 +271,7 @@ def _gemm(
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
-    identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
+    identical_gemm_into[ROLE=ROLE](ctx, c, a, b, ws, m, n, k, op)
 
 
 def _max_ws(mut ws_n: Int, m: Int, n: Int, k: Int):
@@ -503,7 +504,7 @@ def mlp_train_step_host(
     var db2_v = g_d.create_sub_buffer[DType.float32](MLP_OFF_B2, MLP_B2)
     var incoming = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
     var dhidden = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
-    _gemm(ctx, dw2_v, dlogits, act, ws, MLP_OUT, MLP_HID, rows, OP_TN)
+    _gemm[ROLE_WGRAD](ctx, dw2_v, dlogits, act, ws, MLP_OUT, MLP_HID, rows, OP_TN)
     _launch_mlp(
         # operation 3 never reads `other`; `incoming` is a distinct placeholder
         ctx, dlogits.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B2,
@@ -514,7 +515,7 @@ def mlp_train_step_host(
         ctx, act.unsafe_ptr(), incoming.unsafe_ptr(), dhidden.unsafe_ptr(),
         rows, MLP_HID, 2,
     )
-    _gemm(ctx, dw1_v, dhidden, x_d, ws, MLP_HID, MLP_IN, rows, OP_TN)
+    _gemm[ROLE_WGRAD](ctx, dw1_v, dhidden, x_d, ws, MLP_HID, MLP_IN, rows, OP_TN)
     _launch_mlp(
         # operation 3 never reads `other`; `incoming` is a distinct placeholder
         ctx, dhidden.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B1,

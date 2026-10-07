@@ -25,6 +25,7 @@ from embedding.checks.embedding_oracle import EmbConfig
 from embedding.checks.embedding_identical import identical_embedding_forward_into, identical_embedding_backward_into
 from gemm.contract import OP_NT
 from gemm.neural_dispatch import identical_gemm_into
+from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.neural_backward import identical_gemm_backward_a_into, identical_gemm_backward_b_into
 from training.checks.loss import identical_ce_forward_into, identical_ce_backward_into
 from training.checks.loss_contract import CeConfig
@@ -267,7 +268,7 @@ struct ByteOffloadedReplay(Movable, Writable):
             inputs.append(hidden.copy())
             hidden = _replay_layer(ctx,self.p,config,i,inputs[i],self.rope.value(),self.cache.value())
         _load_range(ctx,h.final_hidden,hidden,0)
-        identical_gemm_into(ctx,h.logits,h.final_hidden,h.lm_w,h.head_ws,M,config.vocab_size,config.d_model,OP_NT)
+        identical_gemm_into[ROLE=ROLE_HEAD](ctx,h.logits,h.final_hidden,h.lm_w,h.head_ws,M,config.vocab_size,config.d_model,OP_NT)
         ctx.synchronize()
         identical_ce_forward_into(ctx,h.ce_max,h.ce_shift,h.ce_expo,h.ce_denom,h.ce_logdenom,
             h.ce_logp_target,h.ce_nll,h.ce_logp,h.ce_logp_sum,h.ce_smooth,h.ce_row,
@@ -277,7 +278,7 @@ struct ByteOffloadedReplay(Movable, Writable):
         _require_finite(loss,"loss")
         identical_ce_backward_into(ctx,h.ce_weights,h.ce_dlogits,h.ce_expo,h.ce_denom,h.ce_logp,h.targets,M,M,ce)
         ctx.synchronize()
-        identical_gemm_backward_a_into(ctx,h.d_h,h.ce_dlogits,h.lm_w,h.head_bwd_ws,M,config.vocab_size,config.d_model,OP_NT)
+        identical_gemm_backward_a_into[ROLE_HEAD](ctx,h.d_h,h.ce_dlogits,h.lm_w,h.head_bwd_ws,M,config.vocab_size,config.d_model,OP_NT)
         identical_gemm_backward_b_into(ctx,h.dw_lm,h.ce_dlogits,h.final_hidden,h.head_bwd_ws,M,config.vocab_size,config.d_model,OP_NT)
         ctx.synchronize()
         # x is no longer needed: the layer owner saved its input activation.

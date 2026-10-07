@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Actual production fused attention forward/backward timing, no identity replay."""
 from std.time import perf_counter_ns
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from max.gpu.host import DeviceContext
 from gemm.checks.gemm_step_arms import gemm_step_env_int
 from transformer.impl.llama.fused_attention import FUSED_RAN,fused_attention_arm_parse,fused_forward_launch_estash_ran,fused_backward_launch_estash_ran
@@ -18,7 +18,7 @@ def main() raises:
     var kept=ctx.enqueue_create_buffer[DType.float32](1);var kept_cells=0;var ran=-1
     ctx.enqueue_memset(q,Float32(.03125));ctx.enqueue_memset(k,Float32(-.0625));ctx.enqueue_memset(v,Float32(.125));ctx.enqueue_memset(dy,Float32(.015625));ctx.synchronize()
     var arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf"))
-    comptime if is_defined["MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"]():
+    comptime if is_defined["MOJOLEARN_IDN_ATTN_HEAD_SHARE"]():
         arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"))
     # Isolate I06's forward GQA reuse: both variants must keep the same
     # existing backward kvgrid schedule. The original driver changed both.
@@ -39,7 +39,7 @@ def main() raises:
         # Execution admission only: refuse a timing whose intended lifetime
         # did not run. No numerical comparison or identity check is performed.
         comptime if is_defined["MOJOLEARN_MEASURE_I07_LIFETIME"]():
-            comptime if is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]():
+            comptime if get_defined_int["MOJOLEARN_IDN_ATTN_STASH", 0]() == 1:
                 if kept_cells!=0:raise Error("I07 recompute timing retained unexpected exp storage")
             else:
                 if kept_cells!=h*l*l:raise Error("I07 retained timing did not retain its declared exp storage")

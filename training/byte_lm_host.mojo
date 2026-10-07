@@ -41,7 +41,7 @@ fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
 
 from std.math import max, min
 from std.os import getenv
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from std.sys.info import num_physical_cores, simd_width_of
 
 from std.memory import bitcast, unsafe_memcpy
@@ -841,8 +841,8 @@ def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch:
     `threads` threads (0: one per physical core); same arguments, same bits."""
     comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        and (is_defined["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"]()
-             or is_defined["MOJOLEARN_NN24_NORM_LANES8"]())):
+        and (get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 1
+             or (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4))):
         # The legacy packed host block materializes the v1 attention/norm
         # graph. A v2 build uses the shared host block contract, including
         # its profile-specific tapes, rather than reusing that v1 graph.
@@ -864,8 +864,8 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
     """
     comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        and (is_defined["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"]()
-             or is_defined["MOJOLEARN_NN24_NORM_LANES8"]())):
+        and (get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 1
+             or (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4))):
         var logits = byte_host_logits(params, inputs, batch, length, config)
         var chosen = List[Int32](length=batch, fill=Int32(0))
         for row in range(batch):

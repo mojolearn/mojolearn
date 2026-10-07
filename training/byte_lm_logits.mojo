@@ -52,6 +52,7 @@ from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, 
 from core.device_arena import arena_begin, arena_end, arena_release
 from core.device_scan import device_first_nonfinite, device_first_token_oob
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.experiments.neural_streaming import NN16
 from gemm.contract import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
@@ -264,7 +265,7 @@ def _logits_enqueue(
                     batch, length, 0, trace, prefix, norm1_ready=norm1_ready, forward_only=True)
         sc.stages.insert(layer, st^)
     timing_tick(ctx, ton, tk, "logits.layers")
-    identical_gemm_into(ctx, sc.logits, sc.stages[config.n_layers - 1].residual2, lm_w, sc.head_ws,
+    identical_gemm_into[ROLE=ROLE_HEAD](ctx, sc.logits, sc.stages[config.n_layers - 1].residual2, lm_w, sc.head_ws,
         m, vocab, dm, OP_NT)
     timing_tick(ctx, ton, tk, "logits.head_gemm")
     _ = trace

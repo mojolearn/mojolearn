@@ -60,6 +60,7 @@ from gemm.neural_dispatch import (
     ANY_SABOTAGE as GEMM_SABOTAGE, identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
+from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.neural_backward import (
     ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE, identical_gemm_backward_a_into,
     identical_gemm_backward_b_into, identical_gemm_backward_workspace_max_floats,
@@ -810,11 +811,6 @@ comptime NN51_RESIDENT_TOKEN_VALIDATION = (
     and is_defined["MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime NN28_DEAD_TRAINING_CACHE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN28_DEAD_TRAINING_CACHE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
 comptime NN60_BLOCK_VIEWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_NN60_BLOCK_VIEWS"]()
@@ -1425,11 +1421,11 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
+                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
+                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
         else:
             if fuse_next:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
@@ -1439,11 +1435,11 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
+                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
+                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
         if _byte_layer_sync():
             step_count_sync()
             ctx.synchronize()
@@ -1466,7 +1462,7 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
             config.d_model,
         )
     else:
-        identical_gemm_into(ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
+        identical_gemm_into[ROLE=ROLE_HEAD](ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
             tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
     # No wait: the cross entropy forward below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
@@ -1715,7 +1711,7 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     # waits only there, like the `step.head_backward_da` tick below.
     var pg = StepPhaseClock(ctx)
     if not config.chunked_lm_head_v2:
-        identical_gemm_backward_a_into(ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
+        identical_gemm_backward_a_into[ROLE_HEAD](ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
             tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
     pg.tick(ctx, "gemm.head_dA")
     # dA and dB share one wait below; the tick between them waits ONLY

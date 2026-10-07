@@ -38,6 +38,7 @@ from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
+from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.contract import OP_NT
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.checks.loss_contract import CeConfig, ce_count, ce_refuse_inputs
@@ -463,7 +464,7 @@ def samba_head_loss_host(
     var ws = ctx.enqueue_create_buffer[DType.float32](
         identical_gemm_workspace_max_floats(m, n, k)
     )
-    identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
+    identical_gemm_into[ROLE=ROLE_HEAD](ctx, c, a, w, ws, m, n, k, OP_NT)
     var h_c = ctx.enqueue_create_host_buffer[DType.float32](cells)
     ctx.enqueue_copy(dst_ptr=h_c.unsafe_ptr(), src_buf=c)
     ctx.synchronize()
@@ -499,7 +500,7 @@ def samba_head_loss_host(
     var ws_b = ctx.enqueue_create_buffer[DType.float32](
         identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
     )
-    identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
+    identical_gemm_backward_a_into[ROLE_HEAD](ctx, da, dc, w, ws_a, m, n, k, OP_NT)
     identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
     ctx.enqueue_copy(dst_ptr=da_ptr, src_buf=da)
     ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)

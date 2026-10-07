@@ -143,9 +143,9 @@ if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
 fi
 case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
     estash) MEMORY_DEFINE= ;;
-    recompute) MEMORY_DEFINE="-D MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1" ;;
-    packed) MEMORY_DEFINE="-D MOJOLEARN_ATTN_V1_PACKED_ESTASH=1" ;;
-    alias-y) MEMORY_DEFINE="-D MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH=1" ;;
+    recompute) MEMORY_DEFINE="-D MOJOLEARN_IDN_ATTN_STASH=1" ;;
+    packed) MEMORY_DEFINE="-D MOJOLEARN_IDN_ATTN_STASH=2" ;;
+    alias-y) MEMORY_DEFINE="-D MOJOLEARN_IDN_ATTN_STASH=3" ;;
     *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash, packed, alias-y, or recompute' >&2; exit 2 ;;
 esac
 

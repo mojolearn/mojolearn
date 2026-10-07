@@ -15,6 +15,10 @@ from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz
 from gemm.contract import CONTRACT_K_LEAF_MIN
+from gemm.experiments.neural_switches import (
+    NEURAL_GEMM_SCHEDULE,SCHED_GEOMETRY,SCHED_STREAM,SCHED_STREAM_EXACT,SCHED_ASYNC,
+    SCHED_PAGES,SCHED_COST,SCHED_FOLD_EXACT,SCHED_THREADMAP,SCHED_PAGES_THREADMAP,
+)
 from gemm.experiments.neural_profile import (
     NEURAL_EXPERIMENTS_ALLOWED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_strides, neural_validate,
     neural_leaf, neural_fold_push, neural_fold_drain, 
@@ -22,8 +26,10 @@ from gemm.experiments.neural_profile import (
 
 # No measured winners: all switches OFF. A full-workload A/B on NVIDIA and
 # AMD plus same-version host/Apple identity and neural quality remains pending.
-comptime NN02 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN02"]()
-comptime NN11 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN11"]()
+# Arms of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE (gemm/experiments/neural_switches.mojo):
+# 2 stream, 4 stream + exact slots, 11 exact slots alone.
+comptime NN02 = NEURAL_EXPERIMENTS_ALLOWED and (NEURAL_GEMM_SCHEDULE == SCHED_STREAM or NEURAL_GEMM_SCHEDULE == SCHED_STREAM_EXACT)
+comptime NN11 = NEURAL_EXPERIMENTS_ALLOWED and (NEURAL_GEMM_SCHEDULE == SCHED_STREAM_EXACT or NEURAL_GEMM_SCHEDULE == SCHED_FOLD_EXACT)
 comptime NN16 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN16"]()
 
 

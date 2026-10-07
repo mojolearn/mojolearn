@@ -15,13 +15,18 @@ from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
 from gemm.contract import CONTRACT_K_LEAF_MIN
+from gemm.experiments.neural_switches import (
+    NEURAL_GEMM_SCHEDULE,SCHED_GEOMETRY,SCHED_STREAM,SCHED_STREAM_EXACT,SCHED_ASYNC,
+    SCHED_PAGES,SCHED_COST,SCHED_FOLD_EXACT,SCHED_THREADMAP,SCHED_PAGES_THREADMAP,
+)
 from gemm.experiments.neural_profile import (
     NEURAL_EXPERIMENTS_ALLOWED, NEURAL_LEAF, NEURAL_CHAINS,neural_partition,neural_strides,neural_validate,
     neural_fold_push,neural_fold_drain,neural_merge_chains,
 )
 
-comptime NN09 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN09"]()
-comptime NN15 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN15"]()
+# Arms of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE: 9 pages, 15 thread map, 24 both.
+comptime NN09 = NEURAL_EXPERIMENTS_ALLOWED and (NEURAL_GEMM_SCHEDULE == SCHED_PAGES or NEURAL_GEMM_SCHEDULE == SCHED_PAGES_THREADMAP)
+comptime NN15 = NEURAL_EXPERIMENTS_ALLOWED and (NEURAL_GEMM_SCHEDULE == SCHED_THREADMAP or NEURAL_GEMM_SCHEDULE == SCHED_PAGES_THREADMAP)
 
 
 @always_inline

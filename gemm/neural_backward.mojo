@@ -13,6 +13,7 @@ from gemm.checks.gemm_backward import (
     gemm_backward_sabotage_name,identical_gemm_backward_bias_ones_floats,
 )
 from gemm.neural_dispatch import identical_gemm_into,identical_gemm_workspace_max_floats
+from gemm.experiments.neural_switches import ROLE_PROJECTION,ROLE_WGRAD
 
 
 def identical_gemm_backward_a_workspace_max_floats(op: Int,m: Int,n: Int,k: Int) -> Int:
@@ -37,30 +38,32 @@ def identical_gemm_backward_workspace_max_floats(op: Int,m: Int,n: Int,k: Int,wi
     return max(1,count)
 
 
-def identical_gemm_backward_a_into(ctx: DeviceContext,mut da: DeviceBuffer[DType.float32],
+def identical_gemm_backward_a_into[ROLE: Int = ROLE_PROJECTION](ctx: DeviceContext,mut da: DeviceBuffer[DType.float32],
     mut dc: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
+    # dInput keeps the caller's role: an LM head passes ROLE_HEAD.
     var call = gemm_backward_a_call(op,m,n,k)
     if call[4]==BWD_DC_LEFT:
-        identical_gemm_into(ctx,da,dc,b,ws,call[1],call[2],call[3],call[0])
+        identical_gemm_into[ROLE=ROLE](ctx,da,dc,b,ws,call[1],call[2],call[3],call[0])
     else:
-        identical_gemm_into(ctx,da,b,dc,ws,call[1],call[2],call[3],call[0])
+        identical_gemm_into[ROLE=ROLE](ctx,da,b,dc,ws,call[1],call[2],call[3],call[0])
 
 
 def identical_gemm_backward_b_into(ctx: DeviceContext,mut db: DeviceBuffer[DType.float32],
     mut dc: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
+    # Every parameter gradient (dWeight, including the LM head's) is ROLE_WGRAD.
     var call = gemm_backward_b_call(op,m,n,k)
     if call[4]==BWD_DC_LEFT:
-        identical_gemm_into(ctx,db,dc,a,ws,call[1],call[2],call[3],call[0])
+        identical_gemm_into[ROLE=ROLE_WGRAD](ctx,db,dc,a,ws,call[1],call[2],call[3],call[0])
     else:
-        identical_gemm_into(ctx,db,a,dc,ws,call[1],call[2],call[3],call[0])
+        identical_gemm_into[ROLE=ROLE_WGRAD](ctx,db,a,dc,ws,call[1],call[2],call[3],call[0])
 
 
 def identical_gemm_backward_bias_into(ctx: DeviceContext,mut dbias: DeviceBuffer[DType.float32],
     mut dc: DeviceBuffer[DType.float32],mut ones: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],m: Int,n: Int) raises:
     comptime if SAB_BWD_BIAS_AXIS:
-        identical_gemm_into(ctx,dbias,dc,ones,ws,m,1,n,OP_NT)
+        identical_gemm_into[ROLE=ROLE_WGRAD](ctx,dbias,dc,ones,ws,m,1,n,OP_NT)
     else:
-        identical_gemm_into(ctx,dbias,ones,dc,ws,1,n,m,OP_NN)
+        identical_gemm_into[ROLE=ROLE_WGRAD](ctx,dbias,ones,dc,ws,1,n,m,OP_NN)

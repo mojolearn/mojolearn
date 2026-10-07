@@ -9,25 +9,38 @@ No compilation, identity, quality or timing has been run for this source.
 from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from checks.rtf_seam import rtf_mul_add
-from gemm.contract import CONTRACT_K_LEAF_MIN, CONTRACT_MAX_LEAVES, OP_NN, OP_NT, OP_TN
+from gemm.contract import (
+    CONTRACT_K_LEAF_MIN, CONTRACT_MAX_LEAVES, OP_NN, OP_NT, OP_TN,
+    GEMM_LEAF_ARM, GEMM_LEAF_ARM_NEURAL128, GEMM_LEAF_ARM_NEURAL256,
+)
 
 comptime NEURAL_EXPERIMENTS_ALLOWED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-# Separate defines isolate leaf length from accumulator-chain experiments.
+# Leaf length and accumulator chains stay separate controls.
+# NN03 = the neural arms (1 neural128, 2 neural256) of the ONE leaf switch
+# MOJOLEARN_IDN_GEMM_LEAF (gemm/contract.mojo); arm 3 (all256) changes the
+# contract for every caller instead and leaves this profile unchanged.
+# NN04 = MOJOLEARN_IDN_NEURAL_CHAINS=2|4 (absent: one chain). The former enable
+# defines IDN_NEURAL_NN03/IDN_NEURAL_NN04/IDN_NEURAL_LEAF are gone.
 # All OFF pending four-column identity, neural quality and BOTH voting vendors'
 # full-workload A/Bs. No inherited I04 component result admits these profiles.
-comptime NN03 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN03"]()
-comptime NN04 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN04"]()
+comptime NN03 = NEURAL_EXPERIMENTS_ALLOWED and (
+    GEMM_LEAF_ARM == GEMM_LEAF_ARM_NEURAL128 or GEMM_LEAF_ARM == GEMM_LEAF_ARM_NEURAL256
+)
+comptime NN04 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_CHAINS"]()
 comptime NEURAL_PROFILE_CHANGED = NN03 or NN04
-comptime NEURAL_LEAF = get_defined_int["MOJOLEARN_IDN_NEURAL_LEAF",128]() if NN03 else CONTRACT_K_LEAF_MIN
-comptime NEURAL_CHAINS = get_defined_int["MOJOLEARN_IDN_NEURAL_CHAINS",2]() if NN04 else 1
+comptime NEURAL_LEAF = (
+    256 if NN03 and GEMM_LEAF_ARM == GEMM_LEAF_ARM_NEURAL256
+    else (128 if NN03 else CONTRACT_K_LEAF_MIN)
+)
+comptime NEURAL_CHAINS = get_defined_int["MOJOLEARN_IDN_NEURAL_CHAINS",1]() if NN04 else 1
 
 
 def neural_partition[MIN_LEAF: Int](k: Int) -> Tuple[Int, Int]:
     """The cap is numerical profile data; it never reads m/n or hardware."""
-    comptime assert MIN_LEAF == 64 or MIN_LEAF == 128 or MIN_LEAF == 256, "profile leaf"
+    comptime assert MIN_LEAF == 128 or MIN_LEAF == 256, "profile leaf (leaf 64 deleted: I04 loser)"
     if k <= 0:
         return (1, 0)
     var leaf = min(k, MIN_LEAF)

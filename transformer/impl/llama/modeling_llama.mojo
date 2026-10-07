@@ -273,10 +273,10 @@ from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
 from transformer.experiments.attention_schedules import (
-    NN25_RMS_SPLIT_SCALE, NN26_TRAIN_SWIGLU, NN29_RING_PAIR,
+    NN25_RMS_SPLIT_SCALE, NN29_RING_PAIR,
     rms_sumsq_kernel, rms_parallel_scale_kernel, training_swiglu_kernel,
     kv_ring_pair_kernel, NN27_QK_ROPE_PAIR, qk_rope_pair_kernel,
-    NN28_DEAD_TRAINING_CACHE, NN21_SCALE_MASK, score_scale_mask_kernel,
+    NN21_SCALE_MASK, score_scale_mask_kernel,
 )
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, memcpy, stack_allocation
@@ -4797,12 +4797,12 @@ def llama_attention_forward(
     taking a tensor argument.
     """
     var commit_cache = True
-    comptime if NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE:
+    comptime if IDN_TRAIN_NO_DECODE_CACHE:
         if not retain_kv_cache:
             # Explicit training-only capability, never inferred from size.
             # Stages retain the exact packed K/V consumed by backward.
             if pos0 != 0 or kv.s != 0:
-                raise Error("NN28: dead training cache requires an empty prefill")
+                raise Error("no-decode-cache: training prefill requires an empty cache")
             commit_cache = False
     var dims = stages.dims.copy()
     var dm = dims.d_model
@@ -4814,7 +4814,7 @@ def llama_attention_forward(
     var s_old = kv.s
     var window = kv.window
     if not retain_kv_cache:
-        if not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE) or s_old != 0 or pos0 != 0 or window != 0:
+        if not (IDN_TRAIN_NO_DECODE_CACHE) or s_old != 0 or pos0 != 0 or window != 0:
             raise Error("llama: no-decode-cache requires the NI24 IDENTICAL arm and an empty full-prefill cache")
     var key_lo = llama_key_lo(s_old, window)
     var s = llama_key_span(s_old, l, window)
@@ -5308,16 +5308,12 @@ def llama_mlp_forward(
     # follows, the trace is off, the record is the default SiLU gated MLP
     # and the build is not the S20 sabotage spelling (`swiglu_fused_kernel`).
     var swiglu_fused = False
-    var swiglu_training_fused = False
-    comptime if IDN_TRAIN_SWIGLU and not BLOCK_ANY_SABOTAGE:
-        swiglu_training_fused = (gated and opts.act_is_silu()
-            and not bias_silu_fused and not bias_gelu_fused)
     comptime if not SAB_S20_SILU_MUL_SIGMOID:
         swiglu_fused = (forward_only and gated and opts.act_is_silu()
                         and not bias_silu_fused and not bias_gelu_fused
                         and not trace.enabled and swiglu_fused_enabled())
     var training_swiglu = False
-    comptime if (NN26_TRAIN_SWIGLU or IDN_TRAIN_SWIGLU) and not BLOCK_ANY_SABOTAGE:
+    comptime if IDN_TRAIN_SWIGLU and not BLOCK_ANY_SABOTAGE:
         training_swiglu = (not forward_only and gated and opts.act_is_silu()
                            and not bias_silu_fused and not bias_gelu_fused)
     if training_swiglu:

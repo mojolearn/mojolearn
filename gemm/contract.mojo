@@ -17,7 +17,7 @@ cannot drift (cpu-gpu-cleanup lane n-gemm, 2026-10-02: moved out of
 """
 
 from std.memory import bitcast
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 
 
 #: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
@@ -103,41 +103,43 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
 #: real k-parallelism and large enough that the fold stays short. It is a
 #: PROFILE constant, so changing it changes the answer's bits and is a
 #: contract revision, not a tuning knob.
-# I04 supported research version: every device and host oracle imports
-# this constant. The profile cap/fold remain unchanged; partitions still
-# depend only on k. Requires an explicit IDENTICAL build and is default off.
-# I04 AMD MI325X component LOSER (2026-10-06, source cbcc8dcd3303):
-# leaf64 / leaf128 1.268 (0.231 / 0.182 ms), retained GEMM m1024/n1024/k2048;
-# neighboring m1023/n1025/k2049 also loses at 1.157.
-# One same-process warmup and score; existing identity evidence reused, not rerun.
-# Component scope and pending full-caller qualification: retain leaf128 default.
-# Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I04.
-# Leaf64 requires IDENTICAL + MOJOLEARN_IDN_GEMM_FOLD_LEAF_64; otherwise leaf128.
-# I04 NVIDIA L40S 2026-10-06 component LOSS: leaf64 0.304/0.281 ms
-# versus leaf128 0.280/0.255 ms, M,N,K=1024,1024,2048 and1023,1025,2049.
-# One warmup/score; no full-workload promotion.
-# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-# NI08 source-only profile arms (2026-10-06), NOT COMPILED OR QUALIFIED.
+# ONE leaf switch, `-D MOJOLEARN_IDN_GEMM_LEAF=<arm>` (lane
+# neural-gemm-attn-dedupe, 2026-10-07; formerly NN03's IDN_NEURAL_NN03 +
+# IDN_NEURAL_LEAF and NI08's NI08_GEMM_LEAF_256). Absent: leaf128 contract,
+# incumbent GEMM bodies everywhere. Arms:
+#   1  neural128  neural callers take the NN03 neural profile body at leaf 128;
+#                 every other GEMM keeps the contract below
+#   2  neural256  the same at leaf 256
+#   3  all256     the GEMM contract itself (every caller, every column) at 256
+# A leaf is a numerical profile: an arm changes bits on every column together.
 # The larger leaf trades twice the serial FMA dependency for approximately
-# half as many partials/fold nodes. These are logical numerical profiles,
-# shared by the host and every GPU, never hardware-specific tile choices.
-# Both defines together are refused rather than silently picking a version.
+# half as many partials/fold nodes; never a hardware tile choice.
+# Leaf 64 (I04, MOJOLEARN_IDN_GEMM_FOLD_LEAF_64) was DELETED as a measured
+# loser on both voting vendors (docs/apple-fast/EXPERIMENTS.md):
+#   MI325X leaf64/leaf128 1.268 (0.231/0.182 ms) at m1024/n1024/k2048, and
+#   1.157 at the neighboring m1023/n1025/k2049, source cbcc8dcd3303
+#   (overnight-ab-20261006/amd/normalized-measurements.json, I04);
+#   L40S leaf64 0.304/0.281 ms vs leaf128 0.280/0.255 ms at the same shapes
+#   (overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json).
 comptime _NEURAL_GEMM_PROFILE_ARM = (
     is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime _NEURAL_GEMM_LEAF64 = _NEURAL_GEMM_PROFILE_ARM and is_defined["MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"]()
-comptime _NEURAL_GEMM_LEAF256 = _NEURAL_GEMM_PROFILE_ARM and is_defined["MOJOLEARN_NI08_GEMM_LEAF_256"]()
-comptime CONTRACT_K_LEAF_MIN = 64 if _NEURAL_GEMM_LEAF64 else (256 if _NEURAL_GEMM_LEAF256 else 128)
+comptime GEMM_LEAF_ARM_NEURAL128 = 1
+comptime GEMM_LEAF_ARM_NEURAL256 = 2
+comptime GEMM_LEAF_ARM_ALL256 = 3
+comptime GEMM_LEAF_ARM = get_defined_int["MOJOLEARN_IDN_GEMM_LEAF", 0]() if _NEURAL_GEMM_PROFILE_ARM else 0
+comptime _NEURAL_GEMM_LEAF256 = GEMM_LEAF_ARM == GEMM_LEAF_ARM_ALL256
+comptime CONTRACT_K_LEAF_MIN = 256 if _NEURAL_GEMM_LEAF256 else 128
 comptime GEMM_NUMERICAL_PROFILE = (
     "mojolearn.identical.gemm.fp32.ni08-leaf256" if _NEURAL_GEMM_LEAF256
-    else ("mojolearn.identical.gemm.fp32.i04-leaf64" if _NEURAL_GEMM_LEAF64
-          else "mojolearn.identical.gemm.fp32.v1")
+    else "mojolearn.identical.gemm.fp32.v1"
 )
 # Numerical-version metadata follows this shared host/device contract. These
 # experiment versions are not qualification claims and cannot borrow v1's
 # historical certification. Exact names distinguish the independent profiles.
-comptime GEMM_NUMERICAL_PROFILE_VERSION = 3 if _NEURAL_GEMM_LEAF256 else (2 if _NEURAL_GEMM_LEAF64 else 1)
+# Version 2 was the deleted leaf64 profile; it is not reused.
+comptime GEMM_NUMERICAL_PROFILE_VERSION = 3 if _NEURAL_GEMM_LEAF256 else 1
 
 #: The cap on the number of leaves.
 #:

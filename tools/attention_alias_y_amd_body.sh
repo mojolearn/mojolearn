@@ -8,7 +8,7 @@ mkdir -p "$out"
 estash_arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
 common='-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1'
 pixi run mojo build -j 2 $common -I . bench/attention_step_price_main.mojo -o "$out/price"
-pixi run mojo build -j 2 $common -D MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH=1 -I . bench/attention_step_price_main.mojo -o "$out/alias"
+pixi run mojo build -j 2 $common -D MOJOLEARN_IDN_ATTN_STASH=3 -I . bench/attention_step_price_main.mojo -o "$out/alias"
 pixi run mojo build -j 2 $common -D MOJOLEARN_ATTN_PHASE_TIMERS=1 -I . bench/attention_step_price_main.mojo -o "$out/phases"
 
 export MOJOLEARN_ATTN_KINDS=hashed MOJOLEARN_ATTN_ORACLE=1 MOJOLEARN_ATTN_REACH=0

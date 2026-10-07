@@ -212,6 +212,7 @@ from transformer.impl.llama.modeling_llama import _zeros as _llama_zeros
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.contract import OP_NT
 from transformer.impl.llama.modeling_llama import llama_rms_norm
 from std.math import isfinite
@@ -2892,9 +2893,9 @@ def _lm_run(
         if s.head15:
             llama_int15_proj(ctx, s.st15.value(), logits, hn, s.head15.value(), m, v, d)
         elif s.tied:
-            identical_gemm_into(ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
+            identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
         else:
-            identical_gemm_into(ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
+            identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
         # lane cgr4-download-loop: the two refusals scan on the device (the
         # first index by an integer minimum), not two m x d downloads walked
         # on the host
