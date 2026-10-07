@@ -1448,3 +1448,14 @@ both NVIDIA and AMD results, no material vendor regression, same-version
 identity on Apple and the host column, and end-to-end quality/performance
 on taxi + Istella or enwik8 + Pile GitHub as appropriate. No default flips
 are authorized by the synthetic screen alone.
+
+## Classical IDENTICAL KMeans and distance switches (lane/classical-kmeans, 2026-10-07)
+
+Evidence: `~/mojolearn-evidence/board-review-20261007/review_classical.md` (C06, C29-C39) and `ix_table.txt` (all-on IDENTICAL board vs off). The deleted code is recoverable at main 8be4d20d4.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `C37_ROW_PANELS` + `C37_PANEL_128` (IDENTICAL) | kmeans, minibatch-kmeans, gmm init / taxi, istella | main @ 8be4d20d4 | board-review-20261007 all-on | all-on ratio kmeans taxi 25x NV / 43x AMD, istella 5.3x NV; minibatch taxi 1.24 / 1.84; gmm istella 1.7 NV | DROPPED (deleted) | one thread per (cluster, feature) summed all n rows serially every Lloyd iteration (88 threads at taxi = 1 block), float panel sums (new bit contract); in MiniBatch it disabled the block-per-center kernel. Replaced by `C37_FUSED_ACCUMULATE` (fused assignment + Int32 row-block accumulation, incumbent bits), A/B owed |
+| `C38_REUSE_NEAREST` / `C38_DEVICE_POTENTIAL` KMeans half (IDENTICAL) | kmeans / all | main @ 8be4d20d4 | none (no-op) | - | DROPPED (deleted) | OR-ed into `IDN_KMEANS_INCR_INIT`, `KMEANS_FAST_PP_NOSYNC`, `IDN_KMEANS_INIT_PSI_DEVICE`, which NVIDIA/AMD IDENTICAL already set: no-op there. Its x_cluster half (k-means++ distances once per distinct candidate) is real and kept as `XCLUSTER_KPP_DISTINCT` |
+| `C30_DIRECT_DISTANCE` + `C30_ROWS_4`, `C36_CENTROID_TILES` + `C36_ROWS_4` (IDENTICAL) | kmeans istella (5.3x NV), ~12 algorithms | main @ 8be4d20d4 | board-review-20261007 all-on | see review | RESTRUCTURED | too broad and redundant (C30_ROWS_4 and C36_ROWS_4 set the same value). Now one KMeans control `KMEANS_ROW_ASSIGN=2|4` (+ `KMEANS_DIRECT_DISTANCE` arm) with a k*d <= 512 cost rule for the expanded arms, `XCLUSTER_ROW_ASSIGN=2|4`, and per-family direct-distance defines KNN / KDE / DBSCAN / GRAPH / IVF with the old behavior. A/B owed per family |
+| `CLASSICAL_C06_ROWS2` / `C06_ROWS4` (IDENTICAL) | row norms | main @ 8be4d20d4 | none | - | RESTRUCTURED | two defines where ROWS4 silently won: now `CLASSICAL_C06_NORM_ROWS=2|4`; new `CLASSICAL_C06_SMALL_D_THREAD` (thread per row at d <= 32, incumbent bits); KMeans direct arms no longer compute norms they never read. A/B owed |
