@@ -2,7 +2,7 @@
  "schema": "mojolearn.grid-controls/1",
  "lane": "classical-structural",
  "branch": "lane/classical-structural",
- "head": "867669d56",
+ "head": "2cde5e0e7",
  "head_note": "lane S4 (2026-10-07): four new IDENTICAL structural switches, all default off, plus the board harness's separate upload clock (tools/classical_two_datasets.py, not a control). Nothing compiled, run or queued by the lane.",
  "controls": {
   "sgd_epoch_contiguous": {

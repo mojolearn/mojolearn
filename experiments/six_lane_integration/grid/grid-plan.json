@@ -46559,10 +46559,10 @@
    },
    "classical-structural": {
     "branch": "lane/classical-structural",
-    "head": "867669d56",
+    "head": "2cde5e0e7",
     "lane": "classical-structural",
     "path": "experiments/six_lane_integration/grid_controls/classical-structural.json",
-    "sha256": "2ead01da74ea47b09fd2296215c554ea8ccbf2e144e4f5fd76a49f48229247e7"
+    "sha256": "ecaf7c34d774363729c9b158d64b32096ace13c267e400239634a0cf66b5ed67"
    },
    "classical-te-gmm": {
     "branch": "lane/classical-te-gmm",
