@@ -56,7 +56,7 @@ row-major only (cuML hands KDE C-contiguous arrays, `kernel_density.py:
 norm workspace is allocated here.
 """
 
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
 from core.classical_distance import direct_squared_distance
 from checks.numerics import ftz, identical_sqrt
 from std.gpu import block_idx, block_dim, thread_idx
@@ -79,6 +79,7 @@ from kde.impl.distance.distance_ops import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.checks.pinned_distance_tile import (
     pinned_distance_tile_kernel,
+    pinned_distance_tile_direct_kernel,
 )
 from neighbors.impl.distance.detail.distance_ops import (
     COSINE_NORM_TPB,
@@ -142,7 +143,7 @@ def pairwise_distance(
     var cells = m * n
     var grid = (cells + elem_tpb - 1) // elem_tpb
 
-    comptime if C30_DIRECT_DISTANCE:
+    comptime if KDE_DIRECT_DISTANCE:
         if metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_UNEXPANDED:
             ctx.enqueue_function[kde_direct_distance_kernel](dist.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
                 Int32(m), Int32(n), Int32(k), Int32(1 if metric == DIST_L2_SQRT_UNEXPANDED else 0),
@@ -268,7 +269,7 @@ def pairwise_distance(
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         # IDENTITY_PATHS row 24: the product and the epilogue as ONE kernel
         # with the feature axis in one thread; the k-NN lane's tile, called.
-        ctx.enqueue_function[pinned_distance_tile_kernel](
+        ctx.enqueue_function[pinned_distance_tile_direct_kernel[KDE_DIRECT_DISTANCE]](
             dist.unsafe_ptr(),
             x.unsafe_ptr(),
             y.unsafe_ptr(),

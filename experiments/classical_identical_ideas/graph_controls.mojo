@@ -19,7 +19,14 @@ comptime C29_REFERENCE_TILE = 128 if is_defined["MOJOLEARN_C29_TILE_128"]() else
 comptime KNN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KNN_DIRECT_DISTANCE"]()
 comptime KDE_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KDE_DIRECT_DISTANCE"]()
 comptime DBSCAN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_DBSCAN_DIRECT_DISTANCE"]()
-comptime HDBSCAN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_HDBSCAN_DIRECT_DISTANCE"]()
+# GRAPH: HDBSCAN and single-linkage Agglomerative share the linkage host oracle
+# (hierarchy/checks/linkage_oracle.mojo) and the connectivities distance tile,
+# so they share one define. KNN covers the brute-force/RBC kNN primitive and its
+# host twin wherever it is called (KNN, the kNN graphs of HDBSCAN/UMAP/Spectral,
+# DBSCAN's RBC eps route through rbc_cmp_dist). KDE covers kde/impl/distance,
+# which the kernel-matrix route also calls. Each primitive keeps one define on
+# both its device kernel and its host twin.
+comptime GRAPH_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_GRAPH_DIRECT_DISTANCE"]()
 comptime IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE"]()
 # KMEANS_ASSIGN: ONE control, five arms, replacing C30 (kmeans part) and C36
 # (whose ROWS_4 knob set the same value as C30_ROWS_4):

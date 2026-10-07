@@ -146,7 +146,7 @@ The restatement is a prediction until measured. tools/classical_host_gate.py
 what it has shown.
 """
 from core.classical_distance import direct_squared_distance, direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -433,7 +433,7 @@ def host_l2_expanded_cell_ptr(
         if dist <= 0.0: dist = 0.0
         if is_sqrt: dist = ftz(identical_sqrt(dist))
     """
-    comptime if C30_DIRECT_DISTANCE:
+    comptime if KNN_DIRECT_DISTANCE:
         var direct = direct_squared_distance((q+row*d).unsafe_origin_cast[MutAnyOrigin](),(y+col*d).unsafe_origin_cast[MutAnyOrigin](),d)
         return ftz(identical_sqrt(direct)) if is_sqrt else direct
     var acc = Float32(0.0)
@@ -598,7 +598,7 @@ def _host_block_step[K: Int](acc: KnnVF, qv: Float32, y: KnnVF, metric_arg: Floa
         var diff = abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y))
         return diff.gt(acc).select(diff, acc)
     elif K == KNN_STEP_DIFF2:
-        comptime if C30_DIRECT_DISTANCE:
+        comptime if KNN_DIRECT_DISTANCE:
             return direct_distance_step[KNN_HOST_W](acc,KnnVF(qv),y)
         var diff = ftz_v[KNN_HOST_W](KnnVF(qv) - y)
         return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](diff, diff, acc))
@@ -841,7 +841,7 @@ def _host_knn_block_rows(
                         _host_block_select(dist, b0, wv, bp + (r0 + r) * k, k)
                     r0 += KNN_HOST_QB
                     continue
-                if C30_DIRECT_DISTANCE and l2_pair:
+                if KNN_DIRECT_DISTANCE and l2_pair:
                     for r in range(nq):
                         var dist = KnnVF(0)
                         for l in range(wv):
@@ -1226,7 +1226,7 @@ def host_rbc_cmp_dist(
             i = n_dims - 1 - g
         if metric == KNN_HOST_DIST_L2_SQRT_UNEXPANDED:
             var diff = ftz(ftz(a[a_off + i]) - ftz(b[b_off + i]))
-            acc = direct_distance_step[1](acc,diff,Float32(0)) if C30_DIRECT_DISTANCE else ftz(identical_mul_add(diff,diff,acc))
+            acc = direct_distance_step[1](acc,diff,Float32(0)) if KNN_DIRECT_DISTANCE else ftz(identical_mul_add(diff,diff,acc))
         elif metric == DIST_L1:
             acc = l1_core(acc, ftz(a[a_off + i]), ftz(b[b_off + i]))
         else:

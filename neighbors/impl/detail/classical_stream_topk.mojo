@@ -8,7 +8,7 @@ No exclusion/pruning or approximate candidates. Output doubles as merge state.
 from std.gpu import block_idx, block_dim, thread_idx
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C29_REFERENCE_TILE, C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import C29_REFERENCE_TILE, KNN_DIRECT_DISTANCE
 
 def classical_stream_topk_kernel(
     q: MutPointer[Float32,MutAnyOrigin], y: MutPointer[Float32,MutAnyOrigin],
@@ -28,7 +28,7 @@ def classical_stream_topk_kernel(
     for tile in range(0, Int(ny), C29_REFERENCE_TILE):
         for col in range(tile, min(tile + C29_REFERENCE_TILE, Int(ny))):
             var dist = Float32(0)
-            comptime if C30_DIRECT_DISTANCE:
+            comptime if KNN_DIRECT_DISTANCE:
                 dist = direct_squared_distance(q + row*d, y + col*d, d)
             else:
                 var dot = Float32(0)

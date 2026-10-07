@@ -48,6 +48,7 @@ residue to `+0.0` on every vendor (an IEEE compare, not a hardware
 therefore plants at `build_sorted_mst` (`linkage_check.mojo`).
 """
 
+from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -67,6 +68,7 @@ from hierarchy.impl.cluster.detail.multi_gpu import hierarchy_device_count, pair
 from neighbors.checks.pinned_distance_tile import (
     PINNED_TILE_TPB,
     pinned_distance_tile_kernel,
+    pinned_distance_tile_direct_kernel,
 )
 
 
@@ -232,7 +234,7 @@ def pairwise_distances(
             if devices > 1:
                 pairwise_rows(ctx, x, norms, data, m, n, is_sqrt, tile_tpb, devices)
             else:
-                ctx.enqueue_function[pinned_distance_tile_kernel](
+                ctx.enqueue_function[pinned_distance_tile_direct_kernel[GRAPH_DIRECT_DISTANCE]](
                     data.unsafe_ptr(),
                     x.unsafe_ptr(),
                     x_view.unsafe_ptr(),

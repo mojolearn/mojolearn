@@ -74,7 +74,7 @@ from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.os import getenv
 
-from experiments.classical_identical_ideas.graph_controls import C29_STREAM_TOPK, C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import C29_STREAM_TOPK, KNN_DIRECT_DISTANCE
 from neighbors.impl.detail.classical_stream_topk import classical_stream_topk_kernel
 from core.expand_distances import expand_distances_kernel
 from core.device_fold import device_compact_equal_i32
@@ -111,6 +111,7 @@ from neighbors.checks.pinned_distance_tile import (
     vector_exponent_admission_kernel,
     vector_exponent_minimum_kernel,
     pinned_distance_tile_kernel,
+    pinned_distance_tile_direct_kernel,
 )
 from checks.kernel_matrix import knn_distance_exact_chain_for, knn_fused_distance_select_for, knn_radix_scratch_shrink_for
 from checks.kernel_matrix import knn_smem_distance_tile_for, knn_smem_min_features_for, knn_block_topk_select_for, KNN_BLOCK_TOPK_MAX_K
@@ -1443,7 +1444,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                                 )
                             layout_distance_launched = True
                     if not layout_distance_launched:
-                        ctx.enqueue_function[pinned_distance_tile_kernel](
+                        ctx.enqueue_function[pinned_distance_tile_direct_kernel[KNN_DIRECT_DISTANCE]](
                             dist_tile.unsafe_ptr(),
                             queries.unsafe_ptr().unsafe_offset(q * n_features),
                             index.unsafe_ptr().unsafe_offset(c * n_features),
@@ -1935,7 +1936,7 @@ def brute_force_knn_impl(
     # C29/C30 default OFF, source integration only. All Euclidean callers,
     # including large k, share this exact list merge; other metrics retain
     # their configured arithmetic and production route.
-    comptime if C29_STREAM_TOPK or C30_DIRECT_DISTANCE:
+    comptime if C29_STREAM_TOPK or KNN_DIRECT_DISTANCE:
         if row_major_query and row_major_index and (mtr == DIST_L2_EXPANDED or mtr == DIST_L2_SQRT_EXPANDED):
             ctx.enqueue_function[classical_stream_topk_kernel](
                 queries.unsafe_ptr(), index.unsafe_ptr(), query_norm.unsafe_ptr(), index_norm.unsafe_ptr(),

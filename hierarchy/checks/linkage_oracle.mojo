@@ -46,7 +46,7 @@ exists to separate one thing:
     FIX_BLOBS_DUPS the blobs with a few exact duplicates: the card's
                    fixture, one input that exercises both regimes
 """
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
 from core.classical_distance import direct_distance_step
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -260,7 +260,7 @@ def host_pinned_distance(
     for f in range(d):
         var qv = ftz(x[i * d + f])
         var yv = ftz(x[j * d + f])
-        comptime if C30_DIRECT_DISTANCE:
+        comptime if GRAPH_DIRECT_DISTANCE:
             acc = direct_distance_step[1](acc,qv,yv)
         else:
             acc = ftz(identical_mul_add(qv, yv, acc))
@@ -269,7 +269,7 @@ def host_pinned_distance(
             Float32(-2.0), acc, ftz(ftz(norms[i]) + ftz(norms[j]))
         )
     )
-    comptime if C30_DIRECT_DISTANCE:
+    comptime if GRAPH_DIRECT_DISTANCE:
         dist = acc
     if dist <= Float32(0.0):
         dist = Float32(0.0)

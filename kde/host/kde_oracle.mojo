@@ -42,7 +42,7 @@ comparison is a REPORT.
 """
 
 from experiments.classical_identical_ideas.stats_controls import C52_PAIR
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
 from core.classical_distance import direct_squared_distance, direct_distance_step
 from kde.pair_lse import pair_row
 from std.math import cos, exp, lgamma, log, pi, sqrt
@@ -204,7 +204,7 @@ def oracle_distance_ptr(
     That is this file's whole contract (see its header): if the device
     kernel and this function ever disagree, one of them is wrong and the
     gate says which cell."""
-    comptime if C30_DIRECT_DISTANCE:
+    comptime if KDE_DIRECT_DISTANCE:
         if metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_UNEXPANDED:
             var direct = direct_squared_distance(query+q*d, train+j*d, d)
             return ftz(identical_sqrt(direct)) if metric == DIST_L2_SQRT_UNEXPANDED else direct
@@ -432,7 +432,7 @@ comptime KdeV = SIMD[DType.float32, KDE_W]
 def _kde_step[M: Int](acc: KdeV, qv: Float32, t: KdeV, metric_arg: Float32) -> KdeV:
     """One feature step of W cells of `oracle_distance_ptr`, the metric
     fixed at compile time (see `_kde_tile`)."""
-    comptime if C30_DIRECT_DISTANCE and (M == DIST_L2_EXPANDED or M == DIST_L2_SQRT_UNEXPANDED):
+    comptime if KDE_DIRECT_DISTANCE and (M == DIST_L2_EXPANDED or M == DIST_L2_SQRT_UNEXPANDED):
         return direct_distance_step[KDE_W](acc, KdeV(qv), t)
     comptime if M == DIST_COSINE_EXPANDED or M == DIST_L2_EXPANDED:
         return ftz_v[KDE_W](identical_mul_add_simd[KDE_W](KdeV(qv), t, acc))
@@ -489,7 +489,7 @@ def _kde_tile(
 @always_inline
 def _kde_epilogue(acc: KdeV, qn: Float32, tn: KdeV, metric: Int, metric_arg: Float32) -> KdeV:
     """The epilogues of `oracle_distance_ptr`, W cells of one query row."""
-    comptime if C30_DIRECT_DISTANCE:
+    comptime if KDE_DIRECT_DISTANCE:
         if metric == DIST_L2_EXPANDED:
             return acc
     if metric == DIST_COSINE_EXPANDED:

@@ -8,7 +8,7 @@ query merge compare the same total (distance,index) keys. Partial lists are
 exact: any globally selected point must occur in its task's KM best.
 One integer task-total readback sizes scratch; no input arithmetic on host."""
 from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
 from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS, C35_TASK_ROWS
 # SPDX-License-Identifier: Apache-2.0
 
@@ -95,7 +95,7 @@ def _scan_task[KM:Int](queries: MutPointer[Float32,MutAnyOrigin],qn: MutPointer[
                 d=ftz(identical_mul_add(Float32(-2),acc,ftz(ftz(qn[q])+ftz(norm[address]))))
                 if d<=Float32(0):
                     d=Float32(0)
-            comptime if C30_DIRECT_DISTANCE:
+            comptime if IVF_DIRECT_DISTANCE:
                 d=direct_squared_distance(queries+q*dim,data+address*dim,dim)
             var key=_key(d)
             var ck=key
