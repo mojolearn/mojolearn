@@ -2,7 +2,7 @@
 """Split-KV forward for the NN20 stable-summary attention profile (lane/neural-fusions, L13).
 
 `-D MOJOLEARN_IDN_NN20_SPLIT_KV` (IDENTICAL only, default OFF, requires
-`MOJOLEARN_NN20_BALANCED_SUMMARY_TREE`). Integer parameter
+`MOJOLEARN_IDN_ATTN_SOFTMAX=1`, the summary-tree arm). Integer parameter
 `MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES`, legal 2|4|8|16 (default 4): the number of
 32-key NN20 leaves one split owns (a power of two).
 

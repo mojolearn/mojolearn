@@ -95,4 +95,4 @@ comptime C44_SAMPLING_DESCRIPTORS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C4
 # outputs are bit-identical; only the d-long chains of dead cells are saved.
 # Fixed order unchanged (per-point min over the total (key, j) order).
 # NOT TESTED — NOT MEASURED. Default OFF.
-comptime C61_SAME_COMPONENT_SKIP = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C61_SAME_COMPONENT_SKIP"]()
+comptime C62_SAME_COMPONENT_SKIP = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C62_SAME_COMPONENT_SKIP"]()

@@ -457,12 +457,12 @@
       "note": "4 adjacent cells per thread, ascending per-cell sums; autoarima d=0 round only (max_d=1)."
     },
     "c61_same_component_skip": {
-      "define": "MOJOLEARN_C61_SAME_COMPONENT_SKIP",
+      "define": "MOJOLEARN_C62_SAME_COMPONENT_SKIP",
       "kind": "switch",
       "arms": {
         "off": [],
         "on": [
-          "MOJOLEARN_C61_SAME_COMPONENT_SKIP"
+          "MOJOLEARN_C62_SAME_COMPONENT_SKIP"
         ]
       },
       "default": "off",

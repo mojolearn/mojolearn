@@ -40,12 +40,12 @@
     "nn20_split_kv": {
       "define": "MOJOLEARN_IDN_NN20_SPLIT_KV",
       "kind": "switch",
-      "arms": {"off": ["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE=1"], "on": ["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE=1", "MOJOLEARN_IDN_NN20_SPLIT_KV=1"]},
+      "arms": {"off": ["MOJOLEARN_IDN_ATTN_SOFTMAX=1"], "on": ["MOJOLEARN_IDN_ATTN_SOFTMAX=1", "MOJOLEARN_IDN_NN20_SPLIT_KV=1"]},
       "default": "off",
       "source": ["transformer/experiments/attention_summary_split.mojo:50", "transformer/experiments/attention_summary_split.mojo:216", "transformer/experiments/summary_model.mojo:155"],
       "binding": "_mojolearn_transformer",
       "bits_change": false,
-      "requires": ["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"],
+      "requires": ["MOJOLEARN_IDN_ATTN_SOFTMAX=1"],
       "status": "new",
       "notes": "bits equal to NN20 (NN20 itself is a profile change vs attention v1). Both arms carry the NN20 define; the A/B is NN20 one-thread-per-row vs NN20 split. Inert without NN20. ON arm adds two scratch allocations and one counted completion wait."
     },
