@@ -12,7 +12,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 from sequence.moe_group import (
     MOE_GROUP_TPB, moe_group_count_all_kernel, moe_group_offsets_all_kernel, moe_group_scatter_all_kernel,
-    moe_group_zero_all_kernel, NN44_STABLE_GROUP, MOE_STABLE_PACK, moe_group_stable_all_kernel,
+    moe_group_zero_all_kernel, MOE_STABLE_PACK, moe_group_stable_all_kernel,
 )
 from sequence.moe_reg import (
     MOE_DEVGROUP,
@@ -696,7 +696,7 @@ struct DeviceExec(Exec):
                     a.p7, a.p5, a.p6, a.p8, Int32(a.i3), Int32(a.i5), Int32(a.i7),
                     grid_dim=((a.i3 + gt) // gt, 1, 1), block_dim=(gt, 1, 1),
                 )
-                comptime if NN44_STABLE_GROUP or MOE_STABLE_PACK:
+                comptime if MOE_STABLE_PACK:
                     self.ctx.enqueue_function[moe_group_stable_all_kernel](
                         a.p2, a.p5, a.p4, Int32(gp), Int32(a.i3),
                         grid_dim=((a.i3 + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),

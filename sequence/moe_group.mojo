@@ -27,7 +27,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # L11 (2026-10-07): NN44's grouping and NI53 launched the same stable kernel;
 # one switch, MOJOLEARN_IDN_MOE_STABLE_PACK (the NN44_STABLE_GROUP define is
 # retired). NN44_EXPERT_BISECT (sequence/moe_tiled.mojo) stays independent.
-comptime NN44_STABLE_GROUP = False
 
 from sequence.ops import FP
 from sequence.moe_tiled import TILE_P
