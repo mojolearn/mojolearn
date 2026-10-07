@@ -36,7 +36,7 @@ from core.apple_fast_tree_experiments import (
     AFT_P02, AFT_P03, AFT_GROVE_BLOCK, AFT_GROVES_PER_BLOCK,
     AFT_ROW_STAGE_BYTES, AFT_ORDERED_ITEMS, AFT_ARGMAX_ROWS,
 )
-from core.forest_experiments import (T31_PACKED_A, T31_PACKED_B, T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
+from core.forest_experiments import (T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
 
 # AFCL-T08: two Apple SIMD groups per RF traversal workgroup instead of
 # four. Logical 32-tree groves, tree order and all outputs stay unchanged.
@@ -121,7 +121,7 @@ comptime FOREST_ROW_THREADS_SABOTAGE = is_defined["MOJOLEARN_FOREST_ROW_THREADS_
 # 1.2171/1.1355/1.2153, repeat0.9942/0.9843/0.9526, refit1.0205/1.0163/1.0359.
 # Quality/output survival equal; one warmup+score. Mixed/cold regression:
 # no new promotion; existing cross-mode layout default retained, OFF escape above.
-comptime FOREST_PACKED_NODES = T31_PACKED_A or (not T31_PACKED_B and not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]())
+comptime FOREST_PACKED_NODES = not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]()
 
 
 @always_inline

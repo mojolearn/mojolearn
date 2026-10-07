@@ -7,8 +7,9 @@ VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED. No device-specific arithmeti
 from std.sys.compile import is_defined
 from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
-comptime T31_PACKED_A = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T31_PACKED_A"]()
-comptime T31_PACKED_B = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T31_PACKED_B"]()
+# T31_PACKED_A/B removed (trees-cleanup 2026-10-07): packed nodes are already
+# the default layout (core/forest_inference.mojo FOREST_PACKED_NODES), so A was
+# a no-op and B duplicated MOJOLEARN_FOREST_SEPARATE_NODES.
 comptime T32_SHARED_ROWS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T32_SHARED_ROWS"]()
 comptime T33_COST_SCHEDULE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T33_COST_SCHEDULE"]()
 comptime T34_CHUNK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T34_CHUNK_FOLD"]()
