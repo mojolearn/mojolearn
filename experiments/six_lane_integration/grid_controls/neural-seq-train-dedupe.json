@@ -646,54 +646,6 @@
    ],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
-  "nn34_affine_prefix": {
-   "define": "MOJOLEARN_NN34_AFFINE_PREFIX",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NN34_AFFINE_PREFIX=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "mamba/impl/ops/neural_scan_profile.mojo:54"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": true,
-   "status": "kept",
-   "entries": [
-    "NN34"
-   ],
-   "board": "mamba1-forward, samba-*",
-   "tags": [
-    "bit_version"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
-  },
-  "m1_state_window": {
-   "define": "MOJOLEARN_IDN_M1_STATE_WINDOW",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_M1_STATE_WINDOW=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "mamba/impl/ops/selective_scan_interface.mojo:256"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NI38"
-   ],
-   "board": "mamba1-forward",
-   "tags": [],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
-  },
   "nn35_conv_pair": {
    "define": "MOJOLEARN_NN35_CONV_PAIR",
    "kind": "switch",
@@ -1264,55 +1216,6 @@
    "note": "bits_change not re-assessed by L11 (unchanged switch)",
    "reach": "neural:cnn-clf: x_cnn/device.mojo:2817 _conv_relu_on_device, both blocks, fit and predict"
   },
-  "ni14_bounded_col2im": {
-   "define": "MOJOLEARN_NI14_BOUNDED_COL2IM",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NI14_BOUNDED_COL2IM=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_cnn/device.mojo:84"
-   ],
-   "binding": "_mojolearn_x_cnn",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NI14"
-   ],
-   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
-   "note": "bits_change not re-assessed by L11 (unchanged switch)",
-   "reach": "neural:cnn-clf: x_cnn/device.mojo:290 via _col2im :3022, block 2 backward; NI14_TILED wins when both are set",
-   "exclusive_with": [
-    "MOJOLEARN_NI14_TILED_COL2IM"
-   ]
-  },
-  "ni14_tiled_col2im": {
-   "define": "MOJOLEARN_NI14_TILED_COL2IM",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NI14_TILED_COL2IM=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_cnn/neural_col2im.mojo:24"
-   ],
-   "binding": "_mojolearn_x_cnn",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NI14"
-   ],
-   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
-   "note": "bits_change not re-assessed by L11 (unchanged switch)",
-   "reach": "neural:cnn-clf: x_cnn/device.mojo:287 via _col2im :3022, block 2 backward"
-  },
   "ni15_bias_no_ones": {
    "define": "MOJOLEARN_NI15_BIAS_NO_ONES",
    "kind": "switch",
@@ -1536,6 +1439,80 @@
     "off_board"
    ],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "m1_scan": {
+   "define": "MOJOLEARN_IDN_M1_SCAN",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "persistent": [
+     "MOJOLEARN_IDN_M1_SCAN=3"
+    ],
+    "state_window": [
+     "MOJOLEARN_IDN_M1_SCAN=2"
+    ],
+    "affine_prefix": [
+     "MOJOLEARN_IDN_M1_SCAN=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/ops/neural_scan_profile.mojo:52",
+    "mamba/impl/ops/selective_scan_interface.mojo:252",
+    "mamba/impl/ops/m1_persistent_scan.mojo:58"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": true,
+   "status": "merged",
+   "merged_from": [
+    "m1_persistent_scan",
+    "nn34_affine_prefix",
+    "m1_state_window",
+    "MOJOLEARN_NN34_AFFINE_PREFIX",
+    "MOJOLEARN_IDN_M1_STATE_WINDOW",
+    "MOJOLEARN_IDN_M1_PERSISTENT_SCAN",
+    "NN34",
+    "NI38"
+   ],
+   "board": "mamba1-forward",
+   "tags": [
+    "bit_version"
+   ],
+   "note": "Alternative Mamba-1 scans, one arm per build (lane/grid-prune 2026-10-07 merge): affine_prefix is the NN34 bit-version scan profile (bits change, host column with it); state_window (NI38) and persistent (L13) keep the shipped bits. Every cross of the three old defines was refused (comptime assert) or inert. Arm order puts persistent first: it is the representative arm the planner pairs with the m1_persistent_scan_ch/_tokens children."
+  },
+  "ni14_col2im": {
+   "define": "MOJOLEARN_NI14_COL2IM",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "bounded": [
+     "MOJOLEARN_NI14_COL2IM=1"
+    ],
+    "tiled": [
+     "MOJOLEARN_NI14_COL2IM=2"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/neural_col2im.mojo:29",
+    "x_cnn/device.mojo:84",
+    "x_cnn/device.mojo:287"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "merged",
+   "merged_from": [
+    "ni14_bounded_col2im",
+    "ni14_tiled_col2im",
+    "MOJOLEARN_NI14_BOUNDED_COL2IM",
+    "MOJOLEARN_NI14_TILED_COL2IM",
+    "NI14"
+   ],
+   "entries": [
+    "NI14"
+   ],
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
+   "reach": "neural:cnn-clf: x_cnn/device.mojo _col2im (block 2 backward); one col2im seam, two alternative kernels (lane/grid-prune 2026-10-07 merge: tiled won when both old defines were set)"
   }
  },
  "algorithms": {
@@ -1589,12 +1566,6 @@
      "m2_yd_rows",
      "m2_retain_gl",
      "nn37_triangle_tasks"
-    ],
-    [
-     "m2_cs_pt"
-    ],
-    [
-     "m2_yoff_exp"
     ]
    ]
   },
@@ -1602,19 +1573,13 @@
    "binding": "_mojolearn_mamba",
    "route": "forward: modeling_mamba -> selective_scan_interface (neural_scan_profile)",
    "controls": [
-    "nn34_affine_prefix",
-    "m1_state_window",
     "m1_elementwise_fused",
     "nn35_conv_pair",
     "nn40_owned_weights",
-    "nn40_ws_headroom"
+    "nn40_ws_headroom",
+    "m1_scan"
    ],
-   "interaction_groups": [
-    [
-     "nn34_affine_prefix",
-     "m1_state_window"
-    ]
-   ]
+   "interaction_groups": []
   },
   "neural:mamba3-forward": {
    "binding": "_mojolearn_mamba",
@@ -1782,6 +1747,26 @@
   {
    "define": "MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE",
    "reason": "DELETED: rejected at source review, x_cnn/neural_weight_cache.mojo had no importer (EXPERIMENTS row)"
+  },
+  {
+   "define": "MOJOLEARN_NN34_AFFINE_PREFIX",
+   "control": "nn34_affine_prefix",
+   "reason": "MERGED into m1_scan (-D MOJOLEARN_IDN_M1_SCAN=1|2|3) by lane/grid-prune 2026-10-07; old define refused in core/six_lane_experiment_guards.mojo"
+  },
+  {
+   "define": "MOJOLEARN_IDN_M1_STATE_WINDOW",
+   "control": "m1_state_window",
+   "reason": "MERGED into m1_scan (-D MOJOLEARN_IDN_M1_SCAN=1|2|3) by lane/grid-prune 2026-10-07; old define refused in core/six_lane_experiment_guards.mojo"
+  },
+  {
+   "define": "MOJOLEARN_NI14_BOUNDED_COL2IM",
+   "control": "ni14_bounded_col2im",
+   "reason": "MERGED into ni14_col2im (-D MOJOLEARN_NI14_COL2IM=1|2) by lane/grid-prune 2026-10-07; old define refused in core/six_lane_experiment_guards.mojo"
+  },
+  {
+   "define": "MOJOLEARN_NI14_TILED_COL2IM",
+   "control": "ni14_tiled_col2im",
+   "reason": "MERGED into ni14_col2im (-D MOJOLEARN_NI14_COL2IM=1|2) by lane/grid-prune 2026-10-07; old define refused in core/six_lane_experiment_guards.mojo"
   }
  ],
  "notes": {

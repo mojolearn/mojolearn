@@ -4,29 +4,6 @@
  "branch": "lane/neural-fusions",
  "head": "743c2859e",
  "controls": {
-  "m1_persistent_scan": {
-   "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "mamba/impl/ops/m1_persistent_scan.mojo:58",
-    "mamba/impl/ops/selective_scan_interface.mojo:265",
-    "mamba/impl/ops/selective_scan_interface.mojo:588"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "new",
-   "notes": "one launch; block = CH channels x 16 states of one batch row for the whole sequence; chains serial per thread, y/out fold from shared memory; same S5-S11 graph as selective_scan_fwd_kernel. Refused (comptime assert) together with MOJOLEARN_IDN_M1_STATE_WINDOW; unused when MOJOLEARN_NN34_AFFINE_PREFIX is on (that profile replaces the scan).",
-   "exclusive_with": [
-    "MOJOLEARN_NN34_AFFINE_PREFIX"
-   ]
-  },
   "m1_persistent_scan_ch": {
    "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH",
    "kind": "int_sweep",
@@ -48,7 +25,7 @@
    "binding": "_mojolearn_mamba",
    "bits_change": false,
    "status": "new",
-   "notes": "channels per block; only read with m1_persistent_scan on; sweep per vendor before the grid"
+   "notes": "channels per block; only read with m1_scan on (persistent arm; the guards refuse it with any other arm); sweep per vendor before the grid"
   },
   "m1_persistent_scan_tokens": {
    "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS",
@@ -71,7 +48,7 @@
    "binding": "_mojolearn_mamba",
    "bits_change": false,
    "status": "new",
-   "notes": "tokens staged per chunk (shared memory TOK*CH*16*4 bytes); only read with m1_persistent_scan on"
+   "notes": "tokens staged per chunk (shared memory TOK*CH*16*4 bytes); only read with m1_scan on (persistent arm; the guards refuse it with any other arm)"
   },
   "nn20_split_kv": {
    "define": "MOJOLEARN_IDN_NN20_SPLIT_KV",
@@ -125,18 +102,18 @@
    "binding": "_mojolearn_mamba",
    "route": "Mamba1Block.forward -> modeling_mamba.mamba_selective_scan -> selective_scan_fn -> m1_persistent_scan (on) | selective_scan_fwd_kernel (off)",
    "controls": [
-    "m1_persistent_scan",
     "m1_persistent_scan_ch",
-    "m1_persistent_scan_tokens"
+    "m1_persistent_scan_tokens",
+    "m1_scan"
    ],
    "interaction_groups": [
     [
-     "m1_persistent_scan",
+     "m1_scan",
      "m1_persistent_scan_ch",
      "m1_persistent_scan_tokens"
     ],
     [
-     "m1_persistent_scan",
+     "m1_scan",
      "NI38:MOJOLEARN_IDN_M1_STATE_WINDOW (exclusive)",
      "NN34:MOJOLEARN_NN34_AFFINE_PREFIX (supersedes)",
      "NI46:MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"
@@ -176,7 +153,13 @@
    ]
   }
  },
- "removed": [],
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN",
+   "control": "m1_persistent_scan",
+   "reason": "MERGED into m1_scan (-D MOJOLEARN_IDN_M1_SCAN=1|2|3) by lane/grid-prune 2026-10-07; old define refused in core/six_lane_experiment_guards.mojo"
+  }
+ ],
  "ideas": [
   {
    "idea": "RMSNorm fused into the next GEMM's A-load (+ bias/residual epilogue)",

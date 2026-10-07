@@ -2,8 +2,9 @@
 # Copyright 2026 Andrew Hendel.
 """Mamba-1 persistent chunked selective scan (lane/neural-fusions, L13).
 
-`-D MOJOLEARN_IDN_M1_PERSISTENT_SCAN` (IDENTICAL only, default OFF; the switch
-is read in `selective_scan_interface.mojo`, which calls `m1_persistent_scan`).
+`-D MOJOLEARN_IDN_M1_SCAN=3` (persistent arm; IDENTICAL only, default OFF; the
+switch is read in `selective_scan_interface.mojo`, which calls
+`m1_persistent_scan`; it replaced MOJOLEARN_IDN_M1_PERSISTENT_SCAN, lane/grid-prune).
 
 WHY. The shipped `selective_scan_fwd_kernel` runs one thread per `(batch,
 channel)` pair and walks all `DSTATE` chains and the `y` fold inside it. At

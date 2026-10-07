@@ -799,9 +799,6 @@
      "attn_stash"
     ],
     [
-     "norm"
-    ],
-    [
      "rope",
      "train_no_decode_cache"
     ]
@@ -833,12 +830,6 @@
     [
      "attn_softmax",
      "attn_scale_mask"
-    ],
-    [
-     "norm"
-    ],
-    [
-     "rope"
     ]
    ],
    "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
@@ -866,12 +857,6 @@
     [
      "attn_softmax",
      "attn_scale_mask"
-    ],
-    [
-     "norm"
-    ],
-    [
-     "rope"
     ]
    ],
    "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
@@ -900,12 +885,6 @@
     [
      "attn_softmax",
      "attn_stash"
-    ],
-    [
-     "norm"
-    ],
-    [
-     "rope"
     ]
    ],
    "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=1 gemm_split_min_leaves=3 gemm_split_min_leaves=2 reach this lane."

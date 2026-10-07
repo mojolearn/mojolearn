@@ -41,7 +41,7 @@ identical per-cell functions. The explicit component APIs also remain available 
 """
 from mamba.host.device_shim import host_launch, launch_count
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from mamba.host.device_shim import DeviceContext
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_mul_add,
@@ -51,9 +51,19 @@ comptime NN34FP = MutPointer[Float32, MutAnyOrigin]
 comptime NN34_CHUNK = 32
 comptime NN34_LEVELS = 6
 comptime NN34_TPB = 128
+# `-D MOJOLEARN_IDN_M1_SCAN=<arm>` (lane/grid-prune 2026-10-07) is ONE switch
+# for the three alternative Mamba-1 scans, formerly three defines whose every
+# cross was refused or inert: 1 affine_prefix (NN34, this profile), 2
+# state_window (NI38) and 3 persistent (selective_scan_interface.mojo). The
+# old define MOJOLEARN_NN34_AFFINE_PREFIX is refused in
+# core/six_lane_experiment_guards.mojo.
+comptime M1_SCAN_AFFINE_PREFIX = 1
+comptime M1_SCAN_STATE_WINDOW = 2
+comptime M1_SCAN_PERSISTENT = 3
+comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 0]()
 comptime NN34_AFFINE_PREFIX = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]()
+    and M1_SCAN == M1_SCAN_AFFINE_PREFIX
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime NN34_COMPONENT_PROFILE = 2 if NN34_AFFINE_PREFIX else 1

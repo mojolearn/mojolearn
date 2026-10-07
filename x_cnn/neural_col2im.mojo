@@ -8,7 +8,7 @@ from shared memory. It trades halo traffic/barriers for coalesced reads.
 """
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -19,9 +19,17 @@ from x_cnn.ops import (
     col2im_bounded_at,
 )
 
+# `-D MOJOLEARN_NI14_COL2IM=<arm>` (lane/grid-prune 2026-10-07): ONE switch for
+# the col2im seam, 1 bounded (x_cnn/ops.mojo col2im_bounded_at), 2 tiled (this
+# kernel). It replaced MOJOLEARN_NI14_BOUNDED_COL2IM and
+# MOJOLEARN_NI14_TILED_COL2IM (tiled won when both were set, so their cross was
+# inert); both old defines are refused in core/six_lane_experiment_guards.mojo.
+comptime NI14_COL2IM = get_defined_int["MOJOLEARN_NI14_COL2IM", 0]()
+comptime NI14_COL2IM_BOUNDED = 1
+comptime NI14_COL2IM_TILED = 2
 comptime NI14_TILED_COL2IM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NI14_TILED_COL2IM"]()
+    and NI14_COL2IM == NI14_COL2IM_TILED
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 # 32 output pixels per block; 8 contiguous tap words per staged source

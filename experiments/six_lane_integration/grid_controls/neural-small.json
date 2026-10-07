@@ -576,20 +576,18 @@
     "ni10_cnn_tape",
     "ni11_direct_taps64",
     "ni12_implicit_conv",
-    "ni14_bounded_col2im",
-    "ni14_tiled_col2im",
     "ni15_bias_no_ones",
     "ni18_epoch_gather",
     "nn46_gather_bounds",
     "cnn_conv_relu",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4"
+    "gemm_kpack_rpt4",
+    "ni14_col2im"
    ],
    "interaction_groups": [
     [
-     "ni14_bounded_col2im",
-     "ni14_tiled_col2im",
+     "ni14_col2im",
      "nn46_gather_bounds"
     ],
     [

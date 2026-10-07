@@ -19,7 +19,7 @@ def neural_arithmetic_suffix() -> String:
         # version, even when a particular model does not consume that graph.
         # Keep this module CPU-safe: mirror the pure compile-time guards,
         # without importing a device scan implementation into host bindings.
-        comptime if is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]():
+        comptime if get_defined_int["MOJOLEARN_IDN_M1_SCAN", 0]() == 1:  # affine_prefix (NN34)
             result += ".nn-mamba1-v2-affine32"
         comptime if get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD", 0]() == 1:
             result += ".nn-mamba2-grad-v2-tree"

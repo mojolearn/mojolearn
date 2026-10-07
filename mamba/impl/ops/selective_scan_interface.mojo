@@ -139,7 +139,7 @@ the caller keeps it alive past `ctx.synchronize()`.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import exp2
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -249,12 +249,21 @@ comptime ANY_SABOTAGE = (
 )
 
 
+# `-D MOJOLEARN_IDN_M1_SCAN=<arm>` (lane/grid-prune 2026-10-07): ONE switch
+# for the alternative Mamba-1 scans: 1 affine_prefix (NN34,
+# neural_scan_profile.mojo), 2 state_window (NI38), 3 persistent. Replaces
+# MOJOLEARN_NN34_AFFINE_PREFIX, MOJOLEARN_IDN_M1_STATE_WINDOW and
+# MOJOLEARN_IDN_M1_PERSISTENT_SCAN (refused in
+# core/six_lane_experiment_guards.mojo), whose crosses were refused or inert.
+comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 0]()
+comptime M1_SCAN_STATE_WINDOW = 2
+comptime M1_SCAN_PERSISTENT = 3
 # NI38 S subarm, independent of the unfinished V affine composition. Native
 # host keeps the original serial graph, as do checkpoint/backward consumers.
 # Off unless explicitly selected; no current default or sabotage path changes.
 comptime IDN_M1_STATE_WINDOW = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]()
+    and M1_SCAN == M1_SCAN_STATE_WINDOW
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and not ANY_SABOTAGE
@@ -264,7 +273,7 @@ comptime IDN_M1_STATE_WINDOW = (
 # The native host keeps the shipped serial kernel (the same graph).
 comptime IDN_M1_PERSISTENT_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()
+    and M1_SCAN == M1_SCAN_PERSISTENT
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and not ANY_SABOTAGE
@@ -587,7 +596,7 @@ def selective_scan_fn(
     if total > 0:
         comptime if IDN_M1_PERSISTENT_SCAN:
             comptime assert not IDN_M1_STATE_WINDOW, (
-                "MOJOLEARN_IDN_M1_PERSISTENT_SCAN and MOJOLEARN_IDN_M1_STATE_WINDOW are two"
+                "MOJOLEARN_IDN_M1_SCAN persistent and state_window are two"
                 " plans for one scan; choose one"
             )
             m1_persistent_scan[MAX_DSTATE](
