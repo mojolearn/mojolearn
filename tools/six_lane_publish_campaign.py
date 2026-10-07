@@ -17,6 +17,7 @@ import time
 
 from six_lane_review_history import publish_review_history
 from six_lane_qualification import summarize as qualification_summary
+from six_lane_timing import scored
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--campaign-root',type=Path,required=True)
@@ -288,8 +289,18 @@ def main():
                         evidence=row['evidence'],returncodes=[r.get('returncode') for r in receipt['runs']])
             if complete:
                 a,b=(selected[k]['result'] for k in ('A','B'))
-                row.update(candidate_ms=a['timings']['full_operation_seconds']*1000,
-                           baseline_ms=b['timings']['full_operation_seconds']*1000,
+                # Verdict clock: fit + transform/predict only (six_lane_timing.scored);
+                # load, preparation and output capture stay outside. The old
+                # whole-operation total is kept beside it (owner, 2026-10-07).
+                sa,sb=scored(a['timings']),scored(b['timings'])
+                if sa is None or sb is None:
+                    sa=dict(scored=a['timings']['full_operation_seconds'],source='full_operation_seconds (no fit/inference split recorded)')
+                    sb=dict(scored=b['timings']['full_operation_seconds'])
+                row.update(candidate_ms=sa['scored']*1000,
+                           baseline_ms=sb['scored']*1000,
+                           full_operation_ms={'A':a['timings']['full_operation_seconds']*1000,
+                                              'B':b['timings']['full_operation_seconds']*1000},
+                           timing_source=sa['source'],
                            quality_metrics={k:selected[k]['result']['task_quality'] for k in ('A','B')})
                 detail.update(candidate_seconds=row['candidate_ms']/1000,baseline_seconds=row['baseline_ms']/1000,
                               observed_candidate_over_baseline=row['candidate_ms']/row['baseline_ms'],
