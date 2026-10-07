@@ -1,0 +1,224 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "classical-fixes",
+ "branch": "lane/classical-fixes",
+ "head": "1ea312322",
+ "controls": {
+  "kmeans_conv_chunk": {
+   "define": "MOJOLEARN_IDN_KMEANS_CONV_CHUNK",
+   "kind": "int_sweep",
+   "arms": {
+    "8": [],
+    "1": [
+     "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=2"
+    ],
+    "4": [
+     "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=4"
+    ],
+    "16": [
+     "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=16"
+    ],
+    "32": [
+     "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=32"
+    ]
+   },
+   "default": "8",
+   "source": [
+    "cluster/impl/detail/kmeans.mojo:228",
+    "cluster/impl/detail/kmeans.mojo:1692",
+    "core/six_lane_experiment_guards.mojo:31"
+   ],
+   "binding": "_mojolearn,_mojolearn_mixture,_mojolearn_ivf",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "Lloyd iterations enqueued per device-convergence flag read (IDN_KMEANS_DEVICE_CONV loop). ONE int sweep define replacing the five mutually overriding MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1|_2|_4|_16|_32 (now refused by the guard); each value keeps that old arm's loop. Legal set 1|2|4|8|16|32, default 8. Cost: one host sync per chunk vs up to chunk-1 near-empty launches past convergence; no shape rule. No bit moves (labels, centroids, inertia, n_iter are the per-iteration loop's); the host column has no chunked loop, so it is unaffected. Reached by every kmeans_fit caller: classical:kmeans (_mojolearn), more:gmm kmeans init (_mojolearn_mixture), more:ivf coarse kmeans (_mojolearn_ivf). Prior evidence (source comment): A08 chunk 1 partial AMD win 0.83-0.99x, NVIDIA mixed."
+  },
+  "ols_one_entry": {
+   "define": "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "x_decomp/api.mojo:585",
+    "x_decomp/device.mojo:4133",
+    "python/mojolearn/linear_model.py:694"
+   ],
+   "binding": "_mojolearn_x_decomp",
+   "bits_change": false,
+   "status": "kept",
+   "note": "This is the brief's MOJOLEARN_CLASSICAL_OLS_CENTER_RESIDENT idea, which is ALREADY the IDENTICAL default: idn_flags bit 0 (IDN_OLS_ONE_ENTRY, on in every IDENTICAL build) routes LinearRegression.fit (fit_intercept=True, no weights, tall design: the board's call) through _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> DevExec.ols_tsqr_factor, which uploads X and y once and does column sums, means, centering and the blocked TSQR on resident buffers. The host round trip the report read at linear_model.py:715-726 is the fallback taken only when the flag is clear. No new define was added (it would duplicate this one). The grid control is the existing _OFF arm, so the A/B measures the resident route against the old four-crossing route. Same words both arms (docstring); host column (_mojolearn_x_decomp_host) follows the same flag."
+  },
+  "qn_idn_dconv": {
+   "define": "MOJOLEARN_QN_IDN_DCONV",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_QN_IDN_DCONV"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "glm/impl/qn/glm_base.mojo:1219",
+    "glm/impl/qn/qn_solvers.mojo:281",
+    "glm/impl/qn/qn_dconv.mojo:577"
+   ],
+   "binding": "_mojolearn_estimators",
+   "bits_change": false,
+   "status": "kept",
+   "note": "Existing candidate, now registered. Device step-1 Armijo + convergence test for IDENTICAL L-BFGS (min_lbfgs, qn_solvers.mojo:281), host reads one state block per QN_IDN_DCONV_POLL iterations; non-clean iterations are handed back to the host line search, so the iterates are the host loop's (no bit moves). Engages when dconv_idn_applies: tiled C == 1 objective (binary logreg, linearsvc, linearsvr), Armijo line search (the cuML default, qn_util.mojo:112), no trace. Requires the on-by-default QN_IDN_FUSED and QN_IDN_SLIM. Crossed with c17_ls_trials (same line-search handover)."
+  },
+  "ridge_ff_always": {
+   "define": "MOJOLEARN_RIDGE_FF_ALWAYS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_RIDGE_FF_ALWAYS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_linear/ridge.mojo:77",
+    "x_linear/ridge.mojo:83",
+    "x_linear/ridgecv.mojo:89",
+    "x_linear/ridge_grid.mojo:159"
+   ],
+   "binding": "_mojolearn_x_linear",
+   "bits_change": true,
+   "status": "kept",
+   "note": "Existing A/B arm, now registered: chol_trusted returns False, so every Ridge solve takes the float-float route (x_linear/ff.mojo) instead of the float32 Cholesky with the 2^-12 pivot gate. Reached by expanded:ridge-clf (ridge_fit_grid ra_factor_kernel / t_ridge_solve_best) and expanded:ridge-cv (kf_solve_kernel via kf_solve, and the refit). Where the float32 factor is already untrusted (istella) it is the incumbent route; where it is trusted (taxi) it moves bits to the float-float answer on device and host column together (_ridge_fit_host and the host kf_solve read the same define), so NVIDIA and AMD still agree. Its purpose is the cost B arm for float-float work (e.g. a blocked RidgeCV float-float fallback); expected slower, quality equal or better."
+  }
+ },
+ "algorithms": {
+  "classical:kmeans": {
+   "binding": "_mojolearn (host twin _mojolearn_core_host)",
+   "route": "fit: cluster.estimator kmeans_fit -> Lloyd loop (kmeans.mojo:1692 chunked device convergence)",
+   "controls": [
+    "kmeans_conv_chunk"
+   ],
+   "interaction_groups": [
+    [
+     "kmeans_conv_chunk",
+     "c37_fused_accumulate"
+    ]
+   ]
+  },
+  "more:gmm": {
+   "binding": "_mojolearn_mixture",
+   "route": "fit: mixture/estimator.mojo:80 kmeans init -> cluster.estimator.kmeans_fit -> Lloyd loop (kmeans.mojo:1692)",
+   "controls": [
+    "kmeans_conv_chunk"
+   ],
+   "interaction_groups": [
+    [
+     "kmeans_conv_chunk",
+     "c37_fused_accumulate"
+    ]
+   ]
+  },
+  "more:ivf": {
+   "binding": "_mojolearn_ivf",
+   "route": "build: coarse kmeans (cluster kmeans_fit) -> Lloyd loop (kmeans.mojo:1692)",
+   "controls": [
+    "kmeans_conv_chunk"
+   ],
+   "interaction_groups": [
+    [
+     "kmeans_conv_chunk",
+     "c37_fused_accumulate"
+    ]
+   ]
+  },
+  "classical:ols": {
+   "binding": "_mojolearn_x_decomp (host twin _mojolearn_x_decomp_host)",
+   "route": "fit: LinearRegression.fit (linear_model.py:694) -> _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> ols_tsqr_factor (x_decomp/device.mojo:4133)",
+   "controls": [
+    "ols_one_entry"
+   ],
+   "interaction_groups": []
+  },
+  "more:logreg": {
+   "binding": "_mojolearn_estimators",
+   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (qn_solvers.mojo:281 dconv_idn_run, else ls_backtrack)",
+   "controls": [
+    "qn_idn_dconv"
+   ],
+   "interaction_groups": [
+    [
+     "qn_idn_dconv",
+     "c17_ls_trials"
+    ]
+   ]
+  },
+  "more:linearsvc": {
+   "binding": "_mojolearn_estimators",
+   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (qn_solvers.mojo:281 dconv_idn_run, else ls_backtrack)",
+   "controls": [
+    "qn_idn_dconv"
+   ],
+   "interaction_groups": [
+    [
+     "qn_idn_dconv",
+     "c17_ls_trials"
+    ]
+   ]
+  },
+  "more:linearsvr": {
+   "binding": "_mojolearn_estimators",
+   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (qn_solvers.mojo:281 dconv_idn_run, else ls_backtrack)",
+   "controls": [
+    "qn_idn_dconv"
+   ],
+   "interaction_groups": [
+    [
+     "qn_idn_dconv",
+     "c17_ls_trials"
+    ]
+   ]
+  },
+  "expanded:ridge-clf": {
+   "binding": "_mojolearn_x_linear",
+   "route": "fit: _ridge_run -> x_linear_fit(ALGO_RIDGE) -> ridge_fit_grid -> ra_factor_kernel (ridge_grid.mojo:159 chol_trusted) -> t_ridge_solve_best",
+   "controls": [
+    "ridge_ff_always"
+   ],
+   "interaction_groups": []
+  },
+  "expanded:ridge-cv": {
+   "binding": "_mojolearn_x_linear",
+   "route": "fit: _ridge_kfold_grid -> kf_solve_kernel -> kf_solve (ridgecv.mojo:89 chol_trusted, float-float fallback); refit -> t_ridge_solve_best",
+   "controls": [
+    "ridge_ff_always"
+   ],
+   "interaction_groups": [
+    [
+     "ridge_ff_always",
+     "c13_fold_stats_ridgecv"
+    ]
+   ]
+  }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1|_2|_4|_16|_32",
+   "reason": "five mutually overriding defines merged into the int sweep MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1|2|4|8|16|32 (control kmeans_conv_chunk); the guard refuses the old names (core/six_lane_experiment_guards.mojo:31). Same loop per value."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_OLS_CENTER_RESIDENT",
+   "reason": "not added: the resident centered TSQR is already the IDENTICAL default (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY); measured instead through its existing _OFF arm (control ols_one_entry)."
+  },
+  {
+   "define": "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS",
+   "reason": "not registered: no board effect. The board HDBSCAN input is 100,000 rows (tools/classical_two_datasets.py:211 HDBSCAN_ROWS), above PAIRWISE_MAX_ROWS = 46340, so graph=auto already takes the sparse arm (single_linkage.mojo:201-205), and the define's legal range is 2..46340 (single_linkage.mojo:197-200): every value gives the same route on the board. It only moves designs with fewer than 46,341 rows."
+  }
+ ]
+}

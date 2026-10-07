@@ -168,10 +168,10 @@
    "source": [
     "experiments/classical_identical_ideas/graph_controls.mojo:20"
    ],
-   "binding": "_mojolearn",
+   "binding": "_mojolearn_estimators",
    "bits_change": true,
    "status": "split_from:C30_DIRECT_DISTANCE",
-   "note": "kde/impl/neighbors/kernel_density.mojo, kde/impl/distance/distance.mojo, kde/host/kde_oracle.mojo; distance.mojo is also called by kernel_methods kernel_matrix"
+   "note": "kde/impl/neighbors/kernel_density.mojo, kde/impl/distance/distance.mojo, kde/host/kde_oracle.mojo; distance.mojo is also called by kernel_methods kernel_matrix | binding fixed (lane classical-fixes 2026-10-07): the public route is density.py:844 -> bindings/_mojolearn_estimators.mojo:1261 kde_score_samples_binding / :1372 kde_score_samples_resident_binding -> kde/estimator.mojo, kde/resident_fit.mojo -> kde/impl/neighbors/kernel_density.mojo:1839,3645 + kde/impl/distance/distance.mojo:146; host twin kde/host/kde_oracle.mojo:207 via _mojolearn_estimators_host; bindings/_mojolearn.mojo exports no KDE or DBSCAN entry."
   },
   "dbscan_direct": {
    "define": "MOJOLEARN_DBSCAN_DIRECT_DISTANCE",
@@ -186,10 +186,10 @@
    "source": [
     "experiments/classical_identical_ideas/graph_controls.mojo:21"
    ],
-   "binding": "_mojolearn",
+   "binding": "_mojolearn_estimators",
    "bits_change": true,
    "status": "split_from:C30_DIRECT_DISTANCE",
-   "note": "dbscan/impl/neighbors/epsilon_neighborhood.mojo, dbscan/host/dbscan_oracle.mojo"
+   "note": "dbscan/impl/neighbors/epsilon_neighborhood.mojo, dbscan/host/dbscan_oracle.mojo | binding fixed (lane classical-fixes 2026-10-07): the public route is density.py:357/371 -> bindings/_mojolearn_estimators.mojo:139/176 dbscan_fit(_core)_binding -> dbscan/impl/runner.mojo -> epsilon_neighborhood.mojo:306; host twin dbscan/host/dbscan_oracle.mojo via _mojolearn_estimators_host; bindings/_mojolearn.mojo exports no KDE or DBSCAN entry."
   },
   "graph_direct": {
    "define": "MOJOLEARN_GRAPH_DIRECT_DISTANCE",
@@ -353,8 +353,8 @@
    "interaction_groups": []
   },
   "classical:kde": {
-   "binding": "_mojolearn",
-   "route": "kernel_density + kde/impl/distance",
+   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
+   "route": "density.py:844 -> _mojolearn_estimators kde_score_samples(_resident) -> kernel_density + kde/impl/distance",
    "controls": [
     "kde_direct",
     "c06_norm_rows"
@@ -362,8 +362,8 @@
    "interaction_groups": []
   },
   "classical:dbscan": {
-   "binding": "_mojolearn",
-   "route": "epsilon_neighborhood (brute) or RBC eps (knn primitive)",
+   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
+   "route": "density.py:371 -> _mojolearn_estimators dbscan_fit_core -> dbscan/impl/runner.mojo -> epsilon_neighborhood (brute) or RBC eps (knn primitive)",
    "controls": [
     "dbscan_direct",
     "knn_direct"

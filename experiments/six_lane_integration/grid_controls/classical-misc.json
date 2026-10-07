@@ -100,7 +100,7 @@
       "binding": "_mojolearn_x_decomp,_mojolearn_x_linear",
       "bits_change": true,
       "status": "kept",
-      "note": "Reach fixed (catalog narrowed): grouping only acts on lu-solve (64 RHS; trs_group_kernel, 16 active threads replacing cell-parallel trs_diag_kernel: expected loser). ridge-clf (binary, T=1) and the ridge-cv REFIT reach t_ridge_solve_best with count=1 (no grouping). The RidgeCV fold solve kf_solve_kernel (x_linear/device.mojo:3444) has one RHS per (fold, alpha) factor, so RHS grouping cannot apply there; the ridge-cv speedup is C13 (review section 3). ridge.mojo:195 and cells.mojo:1534 are host-only."
+      "note": "Reach fixed (catalog narrowed): grouping only acts on lu-solve (64 RHS; trs_group_kernel, 16 active threads replacing cell-parallel trs_diag_kernel: expected loser). ridge-clf (binary, T=1) and the ridge-cv REFIT reach t_ridge_solve_best with count=1 (no grouping). The RidgeCV fold solve kf_solve_kernel (x_linear/device.mojo:3444) has one RHS per (fold, alpha) factor, so RHS grouping cannot apply there; the ridge-cv speedup is C13 (review section 3). ridge.mojo:195 and cells.mojo:1534 are host-only. | lane classical-fixes 2026-10-07: the expanded:ridge-clf and expanded:ridge-cv algorithm entries were removed from this file (they measured a no-op: T=1 / count=1, no grouping); lu-solve is the only declared algorithm."
     },
     "c15_factor_solve": {
       "define": "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE",
@@ -157,7 +157,7 @@
       "binding": "_mojolearn_estimators",
       "bits_change": false,
       "status": "kept",
-      "note": "switches qn line search to 2 speculative trials accepted in original order; logreg-cv NOT reached (own L-BFGS)."
+      "note": "switches qn line search to 2 speculative trials accepted in original order; logreg-cv NOT reached (own L-BFGS). | COST NOTE (lane classical-fixes 2026-10-07): glm/impl/qn/qn_linesearch.mojo:241-251 allocates two n-float device buffers (trial_x, trial_g) per speculative trial plus a results device buffer and a host buffer per line search, and synchronizes twice per search (:260, :306); both arms pay this (on: 2 trials, off: 4), so the A/B mixes allocation cost with trial count. Preallocating once per fit is not done here (not self-contained: the buffers live across min_lbfgs state)."
     },
     "c17_ovr": {
       "define": "MOJOLEARN_CLASSICAL_C17_OVR",
@@ -448,7 +448,7 @@
     },
     "classical:ols": {
       "binding": "_mojolearn_x_decomp",
-      "route": "fit: LinearRegression.fit -> x_decomp_ols_tsqr_r -> ols_tsqr_factor -> col_sums_pair_buf (x_decomp/device.mojo:4145)",
+      "route": "fit: LinearRegression.fit (linear_model.py:694) -> _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> ols_tsqr_factor (x_decomp/device.mojo:4133: X and y up once, col_sums_pair_buf, col_means_buf, ts_pack_center_device, ts_factor_device) -> _tsqr_lstsq_core(Ra=...) small-R SVD",
       "controls": [
         "c02_linear_pair"
       ],
@@ -465,22 +465,6 @@
     "expanded:lu-solve": {
       "binding": "_mojolearn_x_decomp",
       "route": "solve -> x_decomp_lu_gesv -> launch_lu_solve -> launch_trisolve -> launch_trs_tri (x_decomp/device.mojo:2143)",
-      "controls": [
-        "c14_group_rhs"
-      ],
-      "interaction_groups": []
-    },
-    "expanded:ridge-clf": {
-      "binding": "_mojolearn_x_linear",
-      "route": "fit: _ridge_run -> x_linear_fit(ALGO_RIDGE) -> ridge_fit_grid -> ra_best_kernel -> t_ridge_solve_best (x_linear/ridge.mojo:294), T=1",
-      "controls": [
-        "c14_group_rhs"
-      ],
-      "interaction_groups": []
-    },
-    "expanded:ridge-cv": {
-      "binding": "_mojolearn_x_linear",
-      "route": "fit: _ridge_kfold_grid -> kf_solve_kernel (no C14) ; refit -> t_ridge_solve_best (C14, T=1)",
       "controls": [
         "c14_group_rhs"
       ],
