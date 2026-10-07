@@ -7,7 +7,7 @@ No build, identity, quality or performance evidence has been collected for
 this revision. Full-workload NVIDIA/AMD A/B and host/Apple identity remain
 required before any promotion. MOJOLEARN_IDN_ALL_OFF suppresses every arm.
 """
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime _ENABLED = (
@@ -42,5 +42,7 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED
 # NI36/NI48: immutable native forward tapes, consumed exactly once.
 comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and is_defined["MOJOLEARN_IDN_SAMBA_FORWARD_TAPE"]()
 
-# NI20: fixed tile32 online attention numerical graph on every column.
-comptime IDN_ATTENTION_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_ATTENTION_V2"]()
+# NI20: fixed tile32 online attention numerical graph on every column. Arm 2
+# of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1 is NN20,
+# transformer/experiments/attention_summary_contract.mojo).
+comptime IDN_ATTENTION_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 2

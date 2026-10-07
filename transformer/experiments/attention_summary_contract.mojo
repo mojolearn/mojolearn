@@ -1,12 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pure host/device NN20 summary graph; numerical profile constants shared by all columns."""
 from std.memory import bitcast
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import (GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_fmax, identical_mul, identical_mul_add)
 
+# ONE attention-softmax version switch (NN20 + NI20 merged, 2026-10-07):
+# -D MOJOLEARN_IDN_ATTN_SOFTMAX=<arm>, absent = attention-eager v1.
+#   1  summary_tree   NN20: balanced 32-key summary tree (this file)
+#   2  online_tile32  NI20: fixed tile32 online softmax
+#                     (training/neural_identical_experiments.mojo)
+# Both are numerical versions in the same eager_attention_forward: an arm
+# changes bits on every column together.
+comptime ATTN_SOFTMAX_ARM = get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]()
 comptime NN20_BALANCED_SUMMARY_TREE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"]()
+    and ATTN_SOFTMAX_ARM == 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 # Fixed numerical profile constant, never a dimension-targeting route.
