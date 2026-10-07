@@ -16,7 +16,7 @@ from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
 from gemm.contract import CONTRACT_K_LEAF_MIN
 from gemm.experiments.neural_switches import (
-    NEURAL_GEMM_SCHEDULE,SCHED_GEOMETRY,SCHED_STREAM,SCHED_STREAM_EXACT,SCHED_ASYNC,
+    NEURAL_GEMM_SCHEDULE,SCHED_GEOMETRY,SCHED_STREAM,SCHED_STREAM_EXACT,
     SCHED_PAGES,SCHED_COST,SCHED_FOLD_EXACT,SCHED_THREADMAP,SCHED_PAGES_THREADMAP,
 )
 from gemm.experiments.neural_profile import (

@@ -1089,6 +1089,12 @@
    "define": "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE",
    "control": "gemm_compact_live_tile",
    "reason": "DELETED by lane/grid-prune 2026-10-07: OVN A05 slower on NVIDIA and AMD. Recoverable at main ab554bb4a."
+  },
+  {
+   "define": "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8",
+   "control": "neural_gemm_schedule",
+   "arm": "async",
+   "reason": "DELETED by lane/grid-prune 2026-10-07: OVN N03 NVIDIA async pipeline 2.2x/4.2x slower than its sync control; guards refuse arm 8. Recoverable at main ab554bb4a."
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."

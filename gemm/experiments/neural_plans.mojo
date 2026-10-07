@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""NN01/NN08/NN10/NN12: explicit schedules and bounded model-owned plans.
+"""NN01/NN10/NN12: explicit schedules and bounded model-owned plans.
 
 Neural model dispatch reaches these adapters; standalone plan classes also
-remain available as components.
-NN01 and NN08 deliberately reuse existing implementations; no old component
+remain available as components. NN08 (async) was deleted by lane/grid-prune
+(2026-10-07; OVN N03 2.2x / 4.2x slower on NVIDIA).
+NN01 deliberately reuses existing implementations; no old component
 win is relabelled as a new full-model result. This source is uncompiled and
 unverified by request. Model ownership is in gemm.neural_dispatch; future
 full-workload recipes and execution evidence remain pending.
@@ -20,15 +21,13 @@ from gemm.checks.gemm_identical import (
     PLAN_FLAT,PLAN_TUNED_32_2X2,PLAN_TUNED_64_4X4,PLAN_TUNED_128_8X8,
 )
 from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate
-from gemm.experiments.async_operand_pipeline import pipeline_gemm
 from gemm.experiments.neural_switches import (
-    NEURAL_GEMM_SCHEDULE,SCHED_GEOMETRY,SCHED_STREAM,SCHED_STREAM_EXACT,SCHED_ASYNC,
+    NEURAL_GEMM_SCHEDULE,SCHED_GEOMETRY,SCHED_STREAM,SCHED_STREAM_EXACT,
     SCHED_PAGES,SCHED_COST,SCHED_FOLD_EXACT,SCHED_THREADMAP,SCHED_PAGES_THREADMAP,
 )
 
-# Arms of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE: 1 geometry, 8 async, 10 cost.
+# Arms of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE: 1 geometry, 10 cost (8 async deleted, lane/grid-prune).
 comptime NN01 = NEURAL_EXPERIMENTS_ALLOWED and NEURAL_GEMM_SCHEDULE == SCHED_GEOMETRY
-comptime NN08 = NEURAL_EXPERIMENTS_ALLOWED and NEURAL_GEMM_SCHEDULE == SCHED_ASYNC
 comptime NN10 = NEURAL_EXPERIMENTS_ALLOWED and NEURAL_GEMM_SCHEDULE == SCHED_COST
 comptime NN12 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN12"]()
 
@@ -57,25 +56,6 @@ def neural_schedule_ab[CANDIDATE: Bool = False](
     else:
         identical_gemm_shipped_into(ctx,c,a,b,workspace,m,n,k,op)
         return gemm_shipped_dispatch_name(m,n,k)
-
-
-def neural_async_ab[CANDIDATE: Bool = False](
-    ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
-    mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
-) raises:
-    """NN08: supported NVIDIA copy pipeline versus its synchronous control.
-
-    Existing N03 mechanism only. No AMD asynchronous primitive is invented.
-    The native AMD/Apple schedule can retain the same profile; a candidate
-    request for this particular unsupported scheduling arm fails explicitly.
-    """
-    neural_validate(m,n,k,op)
-    comptime if CANDIDATE and NN08:
-        comptime if TARGET_COLUMN != COLUMN_NVIDIA:
-            raise Error("NN08 async candidate available only on supported NVIDIA path; Modular support pending elsewhere")
-        pipeline_gemm[True,NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
-    else:
-        pipeline_gemm[False,NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
 
 
 def _neural_tile_cost(m: Int,n: Int,k: Int,tile: Int,target_blocks: Int) -> Float64:
