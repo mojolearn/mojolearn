@@ -1009,6 +1009,11 @@ def render_md(plan):
           'python3 tools/six_lane_timing.py verdicts <evidence>/grid-ab-nvidia-results <evidence>/grid-ab-amd-results --floors <evidence>/grid-floors.json --out <evidence>/grid-verdicts.json',
           'python3 tools/six_lane_compare_results.py --manifest <results-manifest.json> --aa-floors <evidence>/grid-floors.json --out <evidence>/grid-compare',
           '```', '',
+          '6. One decision per switch arm (PROMOTE / SPLIT per algorithm / DELETE / HOLD / NOT_MEASURED), interactions and the',
+          '   recommended configuration per algorithm: `GRID_DECISIONS.md` + `grid-decisions.json` beside this file.', '', '```bash',
+          'python3 tools/six_lane_grid_decide.py --verdicts <evidence>/grid-verdicts.json --identity <evidence>/grid-compare/summary.json \\',
+          '  --quality <evidence>/grid-quality-review.json',
+          '```', '',
           'Regenerate: `python3 tools/six_lane_grid.py` (deterministic; `--check` fails if the committed outputs are stale).', '']
     return '\n'.join(L)
 
