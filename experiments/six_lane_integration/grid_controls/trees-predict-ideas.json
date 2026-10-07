@@ -1,0 +1,51 @@
+{
+  "schema": "mojolearn.grid-controls/1",
+  "lane": "trees-predict-ideas",
+  "branch": "lane/trees-predict-ideas",
+  "head": "HEAD_PLACEHOLDER",
+  "controls": {
+    "gbdt_ns_predict_bitvec": {
+      "define": "MOJOLEARN_GBDT_NS_PREDICT_BITVEC",
+      "kind": "switch",
+      "arms": {"off": [], "on": ["MOJOLEARN_GBDT_NS_PREDICT_BITVEC"]},
+      "default": "off",
+      "source": [
+        "gbdt/models/ns_bitvector_predict.mojo:52",
+        "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo:420",
+        "gbdt/methods/doc_parallel_boosting.mojo:4606"
+      ],
+      "binding": "_mojolearn_gbdt",
+      "bits_change": false,
+      "status": "new",
+      "exclusive_with": ["MOJOLEARN_TREES_C50_GB_PACKED"],
+      "note": "QuickScorer bitvector apply for Depthwise/Lossguide predict: one kernel per bounded tree chunk over rows, nodes in cindex-word order, masks built on device; same per-row float32 tree-order adds as the incumbent. Trees past 512 leaves (8 mask words) or mixed approx dims take the incumbent packed apply. Compile-time refusal when both it and C50_GB_PACKED are defined: grid them as one 3-way choice {none, C50_GB, BITVEC} on the non-symmetric predict path."
+    }
+  },
+  "algorithms": {
+    "trees/gbdt-depthwise": {
+      "binding": "_mojolearn_gbdt",
+      "route": "fit: unchanged; predict/predict_proba: GradientBoosting.predict -> gbdt_resident_predict -> resident_model._apply (not oblivious) -> doc_parallel_boosting.predict -> add_non_symmetric_trees_packed -> bv_apply (switch on) | per-tree bins+add kernels (off)",
+      "controls": ["gbdt_ns_predict_bitvec"],
+      "interaction_groups": [["gbdt_ns_predict_bitvec", "MOJOLEARN_TREES_C50_GB_PACKED"]]
+    },
+    "trees/gbdt-lossguide": {
+      "binding": "_mojolearn_gbdt",
+      "route": "same as trees/gbdt-depthwise (non-symmetric model)",
+      "controls": ["gbdt_ns_predict_bitvec"],
+      "interaction_groups": [["gbdt_ns_predict_bitvec", "MOJOLEARN_TREES_C50_GB_PACKED"]]
+    },
+    "trees/rf": {
+      "binding": "_mojolearn_rf",
+      "route": "reviewed, no switch: core/forest_inference.mojo launch_forest_inference is already ONE fused rows x trees traversal kernel (no per-tree launches or bins round trip to remove), its input is row-major float X (per-thread gathers, no coalescing gain from evaluating every node), and a depth-8 tree would evaluate up to 255 nodes against 8 walked",
+      "controls": [],
+      "interaction_groups": []
+    },
+    "trees/et": {
+      "binding": "_mojolearn_rf",
+      "route": "reviewed, no switch: depth-16 trees exceed the 8-word (512-leaf) mask cap; same fused traversal as rf",
+      "controls": [],
+      "interaction_groups": []
+    }
+  },
+  "removed": []
+}
