@@ -641,6 +641,45 @@ class StandardScaler(_ScalerProtocol):
         self._keep(mean, var, scale, _seen(seen, weight is not None), d, mode)
         return self
 
+    def fit_transform(self, X, y=None, **fit_params):
+        """fit(X).transform(X). MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (a
+        FAST + Apple build's experiment, default off; lane apple-fast-round2):
+        the binding's `standard_fit_transform_direct` uploads X ONCE and runs
+        the transform on the resident copy (preprocessing/estimator.mojo has
+        the cost reasoning). Routing only: the same kernels on the same
+        words. NaN input, sample weights, other tiers and builds without the
+        export take the two steps."""
+        if not fit_params:
+            fused = self._fit_transform_fused(X)
+            if fused is not None:
+                return fused
+        return self.fit(X, y, **fit_params).transform(X)
+
+    def _fit_transform_fused(self, X):
+        _require_training(self)
+        self._configuration()
+        mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
+        if mode != 'fast':
+            return None
+        entry = _direct_entry(self._binding(mode), "standard_fit_transform_direct")
+        if entry is None:
+            return None
+        values, _, copied = self._input(X, allow_nan=True, with_copied=True, scan=False)
+        n, d = values.shape
+        for name in list(self.__dict__):  # glue: drops stale fitted attributes
+            if name.endswith('_'):
+                del self.__dict__[name]
+        stats = empty((3, d), '<f4')
+        output = empty(values.shape, '<f4')
+        got = int(entry(_addr_ro(values), _addr(stats), _addr(output),
+                        [n, d, int(self.with_mean), int(self.with_std)]))
+        if got == 0:
+            return None   # X holds NaN or an infinity: fit's NaN route, then transform
+        self._keep(stats[0].copy(), stats[1].copy(), stats[2].copy(), n, d, mode)
+        if got < 0:
+            raise ValueError('StandardScaler transform overflowed in Float32')
+        return _write_back(self.copy, copied, values, X, output)
+
     def partial_fit(self, X, y=None, sample_weight=None):
         """The reference's partial_fit: the batch's count, mean and variance
         (fit's own path for that batch) merged into the running ones, per
