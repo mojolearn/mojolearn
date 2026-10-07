@@ -122,6 +122,57 @@ def floors(paths):
                 policy='One A/A pair (byte-identical builds) per workload per box; floor = |log(A/B)| of the scored clock, per phase.')
 
 
+def _spread(values):
+    """log(high/low) of a sample of the same build: p90/p10 with 4+ samples, max/min below that."""
+    vals = sorted(v for v in values if _finite(v) and v > 0)
+    if len(vals) < 2:
+        return None
+    if len(vals) >= 4:
+        lo, hi = vals[int(0.1 * (len(vals) - 1))], vals[int(round(0.9 * (len(vals) - 1)))]
+    else:
+        lo, hi = vals[0], vals[-1]
+    return math.log(hi / lo) if lo > 0 else None
+
+
+def floors_from_pairs(paths, min_samples=2):
+    """Noise floors from the incumbent arm (B) of ordinary A/B receipts: B is the same build in every
+    cell of a workload, so the grid repeats it for free (Andrew, 2026-10-07: no separate A/A pass).
+    Samples are grouped per workload, vendor and incumbent source sha; floor = log spread of the scored
+    clock per phase. Fewer than `min_samples` repeats leaves the key without a floor (listed)."""
+    samples, meta = {}, {}
+    for path, receipt in receipts(paths):
+        runs = pair(receipt)
+        job = receipt.get('workload', {})
+        if runs is None or job.get('aa_noise_floor'):
+            continue
+        b = runs['B']
+        sb = scored(b.get('timings'))
+        if not sb:
+            continue
+        key = job['workload_id'] + '|' + vendor_of(receipt, runs)
+        # B is main at the receipt's source sha; its .so may come from a different pack per cell, so group by sha.
+        digest = receipt.get('source_sha') or json.dumps(b.get('loaded_artifacts'), sort_keys=True)
+        bucket = samples.setdefault(key, {}).setdefault(digest, {p: [] for p in PHASES})
+        for p in PHASES:
+            if _finite(sb.get(p)):
+                bucket[p].append(sb[p])
+        meta.setdefault(key, dict(workload_id=job['workload_id'], vendor=vendor_of(receipt, runs), evidence=[],
+                                  timing_source=sb['source'], source_sha=receipt.get('source_sha')))['evidence'].append(path)
+    out, thin = {}, []
+    for key, by_digest in samples.items():
+        digest, bucket = max(by_digest.items(), key=lambda kv: len(kv[1]['scored']))  # the build with the most repeats
+        n = len(bucket['scored'])
+        if n < min_samples:
+            thin.append(dict(key=key, samples=n, reason='fewer than %d incumbent repeats' % min_samples))
+            continue
+        out[key] = dict(meta[key], samples=n, builds_seen=len(by_digest), b_artifacts=digest,
+                        floor={p: _spread(bucket[p]) for p in PHASES})
+    return dict(schema='mojolearn.six-lane-aa-floors/1', floors=out, rejected=thin,
+                policy='Floor from the incumbent arm B repeated across the A/B cells of one workload on one box '
+                       '(same build): log(p90/p10) of the scored clock with 4+ samples, log(max/min) below that. '
+                       'No separate A/A pass is needed; A/A receipts, if present, are ignored here.')
+
+
 def judge(per_vendor, voters, phase):
     """per_vendor: {vendor: {'log_ratio': {...}, 'floor': {...} | None}}."""
     reasons, signs = [], []
@@ -240,9 +291,12 @@ def main(argv=None):
     q.add_argument('--queue', type=Path, required=True)
     q.add_argument('--workers', type=Path, help='worker recipe directory (default: <queue stem>-workers)')
     q.add_argument('--output', type=Path, required=True)
-    f = s.add_parser('floors', help='A/A receipts -> noise floors')
+    f = s.add_parser('floors', help='A/A receipts -> noise floors (or, with --from-pairs, A/B receipts: incumbent-arm repeats)')
     f.add_argument('receipts', nargs='+')
     f.add_argument('--out', type=Path, required=True)
+    f.add_argument('--from-pairs', action='store_true',
+                   help='derive the floor from arm B repeated across the A/B cells of each workload; no A/A pass needed')
+    f.add_argument('--min-samples', type=int, default=2, help='--from-pairs: fewest incumbent repeats that give a floor')
     v = s.add_parser('verdicts', help='A/B receipts + floors -> timing verdicts')
     v.add_argument('receipts', nargs='+')
     v.add_argument('--floors', type=Path, required=True)
@@ -255,7 +309,7 @@ def main(argv=None):
                               execution='NOT RUN; later authorization must be recorded in queue and workers')))
         return 0
     if args.command == 'floors':
-        doc = floors(args.receipts)
+        doc = floors_from_pairs(args.receipts, args.min_samples) if args.from_pairs else floors(args.receipts)
         print(json.dumps(dict(floors=len(doc['floors']), rejected=len(doc['rejected']), output=str(args.out))))
     else:
         doc = verdicts(args.receipts, json.loads(args.floors.read_text()))
