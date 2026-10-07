@@ -186,8 +186,11 @@ def dict_inverse_scratch_words(n: Int, cols: Int, chunk_rows: Int) -> Int:
             + unique_runs_scratch_words(n, cols))
 
 
-def _runs_device[FROM_KEYS: Bool](ctx: DeviceContext, f: FP, w: RUP, cols: Int, src: Int, isrc: Int, n: Int, d: Int,
+def _runs_device[FROM_KEYS: Bool](ctx: DeviceContext, mut df: DeviceBuffer[DType.float32],
+                                  mut dw: DeviceBuffer[DType.uint32], cols: Int, src: Int, isrc: Int, n: Int, d: Int,
                                   U: Int, CNT: Int, CODES: Int, rc_at: Int) raises:
+    var f = df.unsafe_ptr()
+    var w = dw.unsafe_ptr()
     var chn = radix_chunks(n, RUN_ROWS)
     var units = cols * chn
     var ro_at = rc_at + units
@@ -211,7 +214,7 @@ def unique_runs_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], 
         return
     if unique_runs_scratch_words(n, cols) > 2 ** 31 - 1 or cols * n > 2 ** 31 - 1:
         raise Error("x_prep: unique_cols too large for the device run scan")
-    _runs_device[False](ctx, df.unsafe_ptr(), dw.unsafe_ptr(), cols, S, -1, n, 0, U, CNT, -1, 0)
+    _runs_device[False](ctx, df, dw, cols, S, -1, n, 0, U, CNT, -1, 0)
 
 
 def dict_inverse_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.uint32],
@@ -267,4 +270,4 @@ def dict_inverse_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32],
         isrc = idst
         idst = itmp
     # RPASSES is even: the sorted keys and their rows are back in the first blocks
-    _runs_device[True](ctx, f, w, cols, src, isrc, n, d, U, CNT, CODES, rc_at)
+    _runs_device[True](ctx, df, dw, cols, src, isrc, n, d, U, CNT, CODES, rc_at)
