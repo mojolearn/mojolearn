@@ -294,9 +294,9 @@ def link_or_copy(src, dst):
     return dst
 
 
-def package_template(repo, out):
-    """The Python package shell of the frozen checkout: mojolearn/ without binding .so files (portable
-    math .libs kept), no bytecode. Built once per run directory."""
+def package_template(repo, out, math_lib=None):
+    """The Python package shell of the frozen checkout: mojolearn/ without binding .so files, no bytecode,
+    plus the portable math library (built outside the checkout, which must stay clean). Built once per run."""
     dest = Path(out) / 'template'
     if (dest / '.complete').exists():
         return dest
@@ -310,6 +310,9 @@ def package_template(repo, out):
             skip |= {n for n in names if n.endswith(('.so', '.dylib'))}
         return skip
     shutil.copytree(src, dest / 'mojolearn', ignore=ignore)
+    if math_lib:
+        (dest / 'mojolearn' / '.libs').mkdir(exist_ok=True)
+        shutil.copy2(math_lib, dest / 'mojolearn' / '.libs' / 'libMojolearnMath.so')
     (dest / '.complete').write_text('ok\n')
     return dest
 
@@ -495,7 +498,7 @@ def stage(args):
                     results.append(entry)
                     continue
                 fact = cell_facts(facts[wid], cell, source, kit_files, args.data_dir or [], cdir / 'audits')
-                template = template or package_template(ROOT, run)
+                template = template or package_template(ROOT, run, args.math_lib)
                 dep = dict(configuration=cid, vendor=vendor, target_track=TRACK[vendor], workload_id=wid,
                            packages={}, artifacts={})
                 every_b = {s: index[k] for s, k in b_keys.items() if index.get(k, {}).get('status') == 'COMPILED'}
@@ -776,6 +779,7 @@ def main(argv=None):
         sub.add_argument('--data-dir', action='append', help='where full inputs live when not at their original paths')
         sub.add_argument('--authorize', default='', help='authorization text recorded in every queue and worker')
         sub.add_argument('--cell-timeout', type=int, default=3600)
+        sub.add_argument('--math-lib', help='libMojolearnMath.so built outside the checkout (packaging/portable_math)')
         sub.add_argument('--limit', type=int, help='stage only the first N configurations')
         sub.add_argument('--dry-run', action='store_true', help='check admissibility only; write nothing')
     r = s.add_parser('run', help='(box) run staged cells one pair at a time')

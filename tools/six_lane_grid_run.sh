@@ -171,6 +171,15 @@ else
   fi
 fi
 
+# ---------------------------------------------------------------- 2b portable math library (outside the checkout)
+MATH=$RUN/math/libMojolearnMath.so
+say "2b math: packaging/portable_math -> $MATH (python/mojolearn/.libs would dirty the freeze)"
+if [ -f "$MATH" ]; then say "  present"; else
+  cmd "$LOGS/math.log" env PYTHONPATH="$REPO/packaging/portable_math" "$REPO/.pixi/envs/default/bin/python" -c \
+    "import pathlib, stage; pathlib.Path('$RUN/math').mkdir(parents=True, exist_ok=True); stage.build(pathlib.Path('$MATH'))" \
+    || { problem "portable math build failed; see $LOGS/math.log"; exit 1; }
+fi
+
 # ---------------------------------------------------------------- 3 kit
 say "3 kit: place retained variant evidence at its original paths; check full inputs"
 if done_mark kit; then say "  kit done"; else
@@ -186,7 +195,7 @@ fi
 # ---------------------------------------------------------------- 4 stage
 say "4 stage: one authorized A/B queue per admissible cell ($PHASE)"
 STAGE_ARGS=(stage --vendor $VENDOR --grid "$GRID" --kit "$KIT" --builds "$BUILDS" --run "$RUN" --phase $PHASE "${DATA_ARGS[@]}"
-            --cell-timeout "${GRID_CELL_TIMEOUT:-3600}")
+            --cell-timeout "${GRID_CELL_TIMEOUT:-3600}" --math-lib "$MATH")
 if done_mark stage-$PHASE; then say "  stage-$PHASE done"; else
   if [ $DRY = 1 ]; then
     printf '  $ %q %q' "$BENCH_PY" "$TOOL"; printf ' %q' "${STAGE_ARGS[@]}" --authorize "$AUTH"; printf '\n'
