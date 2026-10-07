@@ -81,3 +81,24 @@ comptime T30_ADABOOST = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime C45_GBDT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C45_GBDT"]()
+
+# ---- Lane S3 trees-structural (2026-10-07), all default OFF ----
+
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+# ORD_STD_GRIDFOLD (gbdt-ordered): the score-noise / scale-magnitude sums over
+# the full grid (ORD_STD_GRID_BLOCKS x ORD_STD_GRID_TPB lanes, a fixed lane
+# count independent of device and shape) instead of 256 serial lane chains.
+# BITS CHANGE (new fold order, same on every vendor); the host column
+# (`gbdt_oracle_ordered`) follows the same order under the same define.
+comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_ORD_STD_GRIDFOLD"]()
+
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+# LG_LEVEL_ROUNDS (gbdt-lossguide): when the leaf budget cannot bind
+# (max_leaves >= 2^max_depth, a parameter test), one exact search round per
+# depth level with an uncapped frontier. Bit-neutral (see the call sites).
+comptime LG_LEVEL_ROUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_LG_LEVEL_ROUNDS"]()
+
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+# CTR_SORTFREE_SUMS (gbdt-categorical, gbdt-ordered non-symmetric leaves):
+# per-(permutation, leaf) sums without the per-permutation radix sort.
+comptime CTR_SORTFREE_SUMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_CTR_SORTFREE_SUMS"]()

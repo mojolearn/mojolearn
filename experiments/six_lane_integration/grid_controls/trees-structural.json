@@ -1,0 +1,141 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "trees-structural",
+ "branch": "lane/trees-structural",
+ "head": "75dd2db9a",
+ "mode": "identical",
+ "controls": {
+  "ORD_STD_GRIDFOLD": {
+   "define": "MOJOLEARN_TREES_ORD_STD_GRIDFOLD",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:95",
+    "gbdt/methods/ordered_boosting.mojo:675",
+    "gbdt/methods/ordered_boosting.mojo:2756",
+    "gbdt/host/gbdt_oracle_ordered.mojo:1471",
+    "gbdt/host/gbdt_oracle_ordered.mojo:1848",
+    "gbdt/host/gbdt_oracle_ordered.mojo:1878"
+   ],
+   "binding": "_mojolearn_gbdt,_mojolearn_gbdt_host",
+   "bits_change": true,
+   "status": "new",
+   "note": "Ordered score-noise and scale-magnitude sums over a fixed 16,384-lane grid (256 blocks x 64, halving tree per block, then the unchanged 256-wide combine) instead of 256 serial lane chains (8x32). Reached on the fused arm only (random_strength != 0 and no bootstrap: the board's ordered config). New fold order on every vendor; the host column gbdt_oracle_ordered follows it under the same define. Ignores MOJOLEARN_ORD_STD_SPLIT when on. Feeds T24's combine+scale kernel unchanged (crossed)."
+  },
+  "LG_LEVEL_ROUNDS": {
+   "define": "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_LG_LEVEL_ROUNDS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:101",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:1890",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:3364"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "new",
+   "exclusive_with": [
+    "MOJOLEARN_TREES_T17_BATCH"
+   ],
+   "note": "IDENTICAL Lossguide exact batch: when max_leaves >= 2^max_depth (parameter test) the round width is the free slots, so one round splits a full depth level (about max_depth+1 rounds a tree instead of log2(max_leaves)+max_leaves/32). Bit-neutral: the best-first replay (_lg_exact_plan) still fixes leaf choice and numbering; same argument as LG_EXACT_ID at any width. Overrides T17_BATCH's width whenever its condition holds (always on board shapes), so the two are declared exclusive; C47_GBDT's memory cap still applies after it (crossed)."
+  },
+  "CTR_SORTFREE_SUMS": {
+   "define": "MOJOLEARN_TREES_CTR_SORTFREE_SUMS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_CTR_SORTFREE_SUMS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:106",
+    "gbdt/methods/leaves_estimation/bin_keyed_stats.mojo:172",
+    "gbdt/methods/doc_parallel_boosting.mojo:3676",
+    "gbdt/methods/doc_parallel_boosting.mojo:2124",
+    "gbdt/methods/doc_parallel_boosting.mojo:2242",
+    "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:754",
+    "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:2360"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": true,
+   "status": "new",
+   "exclusive_with": [
+    "MOJOLEARN_TREES_T18"
+   ],
+   "note": "Non-symmetric multi-permutation (CTR) leaf estimation without the per-permutation radix sort, gathers and partition scatter: rows stay in original order, per-row leaf ids from the model walk, exact Int32-atomic leaf counts, per-leaf der/der2/weight sums by a FIXED-ORDER FLOAT fold (2048-row chunks ascending, then a 256-lane halving tree; not integer atomics, the walker needs float sums). Reached only on the IDN_CTR_PERM_BATCH batched walk (default on; MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF disables it). Bits change NVIDIA = AMD; no host column (the CPU binding refuses CTR columns outside SymmetricTree). T18's inherited learn partition is unused under it (all 4 permutations sort-free): exclusive. NOT reached by gbdt-ordered: ordered_boosting's per-task partitions are a device counting sort (_PermPartition.enqueue_sort) on a separate route with its own host column; not converted in this lane."
+  }
+ },
+ "algorithms": {
+  "trees:gbdt-ordered": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: fit_ordered tree loop -> score noise + scale sums (ORD_STD_GRIDFOLD: _ord_std_gridfold_kernel -> _ord_std_combine[_scale] (T24)); host column gbdt_oracle_ordered follows",
+   "controls": [
+    "ORD_STD_GRIDFOLD",
+    "T24"
+   ],
+   "interaction_groups": [
+    [
+     "ORD_STD_GRIDFOLD",
+     "T24"
+    ]
+   ],
+   "not_reached": [
+    "CTR_SORTFREE_SUMS",
+    "LG_LEVEL_ROUNDS"
+   ]
+  },
+  "trees:gbdt-lossguide": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: fit_non_symmetric_tree lossguide exact batch round width (LG_LEVEL_ROUNDS over T17_BATCH, then C47_GBDT memory cap)",
+   "controls": [
+    "LG_LEVEL_ROUNDS",
+    "C47_GBDT"
+   ],
+   "interaction_groups": [
+    [
+     "LG_LEVEL_ROUNDS",
+     "C47_GBDT"
+    ]
+   ]
+  },
+  "trees:gbdt-categorical": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: Lossguide search (LG_LEVEL_ROUNDS round width) -> per-tree CTR permutation leaf estimation, batched walk (CTR_SORTFREE_SUMS: bins -> counts -> bin-keyed oracle sums -> per-row apply)",
+   "controls": [
+    "LG_LEVEL_ROUNDS",
+    "CTR_SORTFREE_SUMS",
+    "T18"
+   ],
+   "interaction_groups": [],
+   "note": "gbdt-categorical is grow_policy Lossguide with Logloss (tools/speed_gbdt_arm.py TASK_LANES), so LG_LEVEL_ROUNDS reaches it; the search rounds and the leaf estimation are separate stages (independent)."
+  }
+ },
+ "removed": [],
+ "stage0_build": {
+  "note": "lanes do not compile (rule change 2026-10-07); the orchestrator builds each binding with IDENTICAL + column define, once all-off and once all-on",
+  "bindings": [
+   "_mojolearn_gbdt",
+   "_mojolearn_gbdt_host"
+  ],
+  "all_off": [],
+  "all_on": [
+   "MOJOLEARN_TREES_ORD_STD_GRIDFOLD",
+   "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
+   "MOJOLEARN_TREES_CTR_SORTFREE_SUMS"
+  ]
+ }
+}

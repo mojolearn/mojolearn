@@ -68,6 +68,11 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 from gbdt.gpu_util.arena import BufferArena
+from gbdt.trees_identical_switches import CTR_SORTFREE_SUMS
+from gbdt.methods.leaves_estimation.bin_keyed_stats import (
+    enqueue_bin_keyed_stats,
+    enqueue_bk_copy_u32,
+)
 
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -404,6 +409,13 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: on every oracle built the ordinary way, whose constructor drains and
     #: fills `weights_cpu` itself.
     var h_weight_stats: Optional[HostBuffer[DType.float32]]
+    #: Lane S3 `CTR_SORTFREE_SUMS`: the rows are in ORIGINAL order, `d_bins`
+    #: is each row's leaf id, and the single-dim per-leaf sums come from
+    #: `enqueue_bin_keyed_stats` into `bk_partials` instead of
+    #: `compute_partition_stats` over partition ranges. False (and None) on
+    #: every oracle built the ordinary way.
+    var bin_keyed: Bool
+    var bk_partials: Optional[DeviceBuffer[DType.float32]]
 
     def settle_weights(mut self) raises:
         """Retired with the host walk (lane cpu4-gbdt): a deferred-weights
@@ -738,15 +750,27 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     )
             self.times.end(self.ctx, "est.approx")
             self.times.begin(self.ctx)
-            # the widest leaf bounds every partition exactly
-            # (`compute_partition_stats`' `row_bound`)
-            compute_partition_stats(
-                self.ctx, self.bin_count, 0, 2, self.n_rows,
-                self.d_leaves, self.d_p_off, self.d_p_sz,
-                self.d_eval_stats, self.d_partials, self.d_part_stats,
-                sm_count=self.sm_count,
-                row_bound=self.max_leaf_size,
-            )
+            var bk_done = False
+            comptime if CTR_SORTFREE_SUMS:
+                if self.bin_keyed:
+                    # Lane S3: original-order rows, per-row leaf ids
+                    var bk_part = self.bk_partials.value().copy()
+                    enqueue_bin_keyed_stats(
+                        self.ctx, self.bin_count, 2, self.n_rows, self.n_rows,
+                        self.d_bins, self.d_eval_stats, bk_part,
+                        self.d_part_stats,
+                    )
+                    bk_done = True
+            if not bk_done:
+                # the widest leaf bounds every partition exactly
+                # (`compute_partition_stats`' `row_bound`)
+                compute_partition_stats(
+                    self.ctx, self.bin_count, 0, 2, self.n_rows,
+                    self.d_leaves, self.d_p_off, self.d_p_sz,
+                    self.d_eval_stats, self.d_partials, self.d_part_stats,
+                    sm_count=self.sm_count,
+                    row_bound=self.max_leaf_size,
+                )
             self.times.end(self.ctx, "est.pstats")
             if not readback:
                 return
@@ -2185,6 +2209,13 @@ def make_bin_optimized_oracle(
     # and copy nothing home: `weights_cpu` stays empty and `settle_weights`
     # is a no-op
     weights_on_device: Bool = False,
+    # Lane S3 `CTR_SORTFREE_SUMS`: per-row leaf ids in ORIGINAL row order
+    # (the model walk's bins) and the bin-keyed fold's scratch
+    # (`bk_partials_len(bin_count, 2, n_rows)` floats). Given, the rows of
+    # `d_target` / `d_weights` / `d_cursor` are in original order too, and
+    # `d_p_sz` holds the exact per-leaf row counts.
+    var natural_bins: Optional[DeviceBuffer[DType.uint32]] = None,
+    var bk_partials: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -2325,11 +2356,23 @@ def make_bin_optimized_oracle(
     var bins_gx = 2 * sm
     if bins_gx < 1:
         bins_gx = 1
-    ctx.enqueue_function[fill_bins_from_partition_kernel](
-        d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
-        grid_dim=(bins_gx, bin_count, 1),
-        block_dim=(256, 1, 1),
-    )
+    var bin_keyed = False
+    comptime if CTR_SORTFREE_SUMS:
+        if natural_bins.__bool__():
+            if not bk_partials.__bool__():
+                raise Error("bin-keyed oracle needs its bk_partials scratch")
+            bin_keyed = True
+    if bin_keyed:
+        # Lane S3: the rows stay in original order; their leaf ids are the
+        # model walk's, copied into the oracle's (pooled) `d_bins`
+        var nb = natural_bins.value().copy()
+        enqueue_bk_copy_u32(ctx, d_bins, nb, n_rows)
+    else:
+        ctx.enqueue_function[fill_bins_from_partition_kernel](
+            d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
+            grid_dim=(bins_gx, bin_count, 1),
+            block_dim=(256, 1, 1),
+        )
     comptime if ORACLE_POOL_SABOTAGE:
         # the negative control: a reusing task's row 0 moves to the next
         # leaf, in range (see the comptime above)
@@ -2376,7 +2419,17 @@ def make_bin_optimized_oracle(
     # here (the evaluation's readback reuses `h_part_stats`, so the two
     # copies may not share it while both are in flight)
     var h_weight_stats = Optional[HostBuffer[DType.float32]]()
-    if has_weights and defer_weights:
+    if has_weights and bin_keyed:
+        # Lane S3: the weight fold over original-order rows (the deferred
+        # arm's device-only result; `_estimate_prepare` defers it)
+        if not defer_weights:
+            raise Error("bin-keyed oracle: weights are folded deferred only")
+        var bkw = bk_partials.value().copy()
+        enqueue_bin_keyed_stats(
+            ctx, bin_count, 1, n_rows, n_rows, d_bins, d_weights, bkw,
+            d_part_stats,
+        )
+    elif has_weights and defer_weights:
         # lane cpu4-gbdt: the deferred fold stays on the device for the
         # device walk (`device_walker.mojo` stashes it before the first
         # evaluation); nothing is copied home (`weights_on_device` is kept
@@ -2506,4 +2559,6 @@ def make_bin_optimized_oracle(
         TRandom(yeti_seed),
         True,  # yeti_at_search_point: no move, no evaluation yet
         h_weight_stats^,
+        bin_keyed,
+        bk_partials^,
     )

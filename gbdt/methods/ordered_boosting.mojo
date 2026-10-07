@@ -128,6 +128,7 @@ from std.sys.info import has_apple_gpu_accelerator
 
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
+from core.pinned_reduce import halving_block_sum
 from checks.fixed_point import choose_scale
 from checks.soft_f64 import (
     sf64_add,
@@ -201,7 +202,7 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
 )
 from gbdt.methods.kernel.pointwise_split_resolve import PW_FUSED_LEVEL
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ord_all_on
-from gbdt.trees_identical_switches import T24, T25
+from gbdt.trees_identical_switches import T24, T25, ORD_STD_GRIDFOLD
 from gbdt.methods.oblivious_tree_fold_tasks import (
     fold_tasks_from_folds,
     plan_fold_layout,
@@ -657,6 +658,105 @@ def _ord_std_lanes_kernel(
     dst.unsafe_store(tid, a0)
     dst.unsafe_store(REDUCE_LANES_BLOCK + tid, a1)
     dst.unsafe_store(2 * REDUCE_LANES_BLOCK + tid, a2)
+
+
+#: Lane S3 `ORD_STD_GRIDFOLD`: threads per block of `_ord_std_gridfold_kernel`
+#: (a power of two, at least AMD's 64-wide wavefront so no block is a
+#: partial wave on any vendor). Fixed, never read from the device.
+comptime ORD_STD_GRID_TPB = 64
+#: Blocks of `_ord_std_gridfold_kernel`: one per partial that
+#: `_ord_std_combine_kernel` already folds, so the combine is unchanged.
+comptime ORD_STD_GRID_BLOCKS = REDUCE_LANES_BLOCK
+#: Lanes of the grid fold (16,384): a constant, so the fold order is a pure
+#: function of `total` on every vendor and in the host column.
+comptime ORD_STD_GRID_LANES = ORD_STD_GRID_BLOCKS * ORD_STD_GRID_TPB
+
+
+def _ord_std_gridfold_kernel(
+    sw: MutPointer[Float32, MutAnyOrigin],
+    sg: MutPointer[Float32, MutAnyOrigin],
+    quality: MutPointer[UInt32, MutAnyOrigin],
+    total_in: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """Lane S3 `MOJOLEARN_TREES_ORD_STD_GRIDFOLD` (IDENTICAL, default off).
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+
+    COST REASONING. `_ord_std_lanes_kernel` runs 256 lane chains (8 blocks
+    of one warp) over ~3 planes x total positions: 256 threads cannot keep
+    enough loads in flight to reach DRAM bandwidth on any GPU with more than
+    a handful of SMs, so the pass is latency-bound (about 13 ms a tree at
+    4.1M rows on an L40S against about 0.15 ms of DRAM time). This kernel
+    spreads the same statements over ORD_STD_GRID_LANES = 16,384 lanes (256
+    blocks x 64 threads): 64x the loads in flight, each lane's chain 64x
+    shorter (which also shortens each f32 running sum, so accuracy does not
+    go down). The lane count is a constant, not a function of the device or
+    of the data shape.
+
+    THE FOLD ORDER (bits change; the same on NVIDIA, AMD and Apple, and in
+    `gbdt_oracle_ordered`'s `_ord_gridfold_sum_lanes` under the same define):
+      1. lane l = b * 64 + t adds, from 0.0 and in ascending order, the
+         per-position values at l, l + 16384, l + 2 * 16384, ...
+         (the lanes kernel's statements: the noise term, |sw|, |sg|);
+      2. block b folds its 64 lanes with the halving tree
+         `red[t] += red[t + s]`, s = 32 .. 1 (`halving_block_sum`, the
+         repo's vendor-independent fixed tree, core/pinned_reduce.mojo);
+         thread 0 stores the three partials at dst[b], dst[256 + b],
+         dst[512 + b], the layout `_ord_std_lanes_kernel` writes;
+      3. `_ord_std_combine_kernel` (or T24's combine+scale) folds the 256
+         partials with its unchanged 256-wide halving tree.
+    No atomics, no warp-width-dependent primitive, no multiply in the folds."""
+    var b = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var total = Int(total_in)
+    comptime L = ORD_STD_GRID_LANES
+    comptime SU = ORD_STD_LANE_STRIDES
+    comptime STEP = SU * L
+    var a0 = Float32(0.0)
+    var a1 = Float32(0.0)
+    var a2 = Float32(0.0)
+    var i = b * ORD_STD_GRID_TPB + t
+    # SU strides' loads in flight before they are added, in ascending
+    # order: the same chain as the one-stride loop below
+    while i + (SU - 1) * L < total:
+        var w = SIMD[DType.float32, SU]()
+        var g = SIMD[DType.float32, SU]()
+        var qm = SIMD[DType.uint32, SU]()
+        comptime for k in range(SU):
+            w[k] = sw.unsafe_load(i + k * L)
+            g[k] = sg.unsafe_load(i + k * L)
+            qm[k] = quality.unsafe_load(i + k * L)
+        comptime for k in range(SU):
+            var term = Float32(0.0)
+            if qm[k] != UInt32(0):
+                if w[k] > Float32(0.0):
+                    var q = ftz(g[k] / w[k])
+                    term = ftz(ftz(q * q) * w[k])
+            a0 += term
+            a1 += abs(w[k])
+            a2 += abs(g[k])
+        i += STEP
+    while i < total:
+        var w = sw.unsafe_load(i)
+        var g = sg.unsafe_load(i)
+        var term = Float32(0.0)
+        if quality.unsafe_load(i) != UInt32(0):
+            if w > Float32(0.0):
+                var q = ftz(g / w)
+                term = ftz(ftz(q * q) * w)
+        a0 += term
+        a1 += abs(w)
+        a2 += abs(g)
+        i += L
+    # every thread calls the fold (its contract); only thread 0's is used
+    var s0 = halving_block_sum[ORD_STD_GRID_TPB](a0)
+    var s1 = halving_block_sum[ORD_STD_GRID_TPB](a1)
+    var s2 = halving_block_sum[ORD_STD_GRID_TPB](a2)
+    if t == 0:
+        dst.unsafe_store(b, s0)
+        dst.unsafe_store(REDUCE_LANES_BLOCK + b, s1)
+        dst.unsafe_store(2 * REDUCE_LANES_BLOCK + b, s2)
 
 
 def _ord_std_combine_kernel(
@@ -2650,13 +2750,24 @@ def fit_ordered(
                     std_done = True
             var combined_scale = False
             if not std_done:
-                var std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
+                # Lane S3 ORD_STD_GRIDFOLD: the grid fold always (no env
+                # read, so the host column knows the order from the define)
+                var std_split = True
+                comptime if not ORD_STD_GRIDFOLD:
+                    std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
                 if std_split:
-                    ctx.enqueue_function[_ord_std_lanes_kernel](
-                        sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
-                        Int32(total), part.unsafe_ptr(),
-                        grid_dim=REDUCE_LANES_BLOCK // ORD_STD_LANES, block_dim=ORD_STD_LANES,
-                    )
+                    comptime if ORD_STD_GRIDFOLD:
+                        ctx.enqueue_function[_ord_std_gridfold_kernel](
+                            sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
+                            Int32(total), part.unsafe_ptr(),
+                            grid_dim=ORD_STD_GRID_BLOCKS, block_dim=ORD_STD_GRID_TPB,
+                        )
+                    else:
+                        ctx.enqueue_function[_ord_std_lanes_kernel](
+                            sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
+                            Int32(total), part.unsafe_ptr(),
+                            grid_dim=REDUCE_LANES_BLOCK // ORD_STD_LANES, block_dim=ORD_STD_LANES,
+                        )
                     comptime if T24:
                         ctx.enqueue_function[_ord_std_combine_scale_kernel](
                             part.unsafe_ptr(), d_sums.unsafe_ptr(), Int32(ord_count),

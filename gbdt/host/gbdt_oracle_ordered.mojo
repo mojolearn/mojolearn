@@ -1456,6 +1456,48 @@ from gbdt.overfitting_detector.overfitting_detector import (
 )
 
 comptime GBDT_ORDERED_SABOTAGE = is_defined["MOJOLEARN_ORDERED_SABOTAGE"]()
+
+#: Lane S3 `MOJOLEARN_TREES_ORD_STD_GRIDFOLD`: the device's
+#: `_ord_std_gridfold_kernel` fold order (ordered_boosting.mojo), taken
+#: on the device's fused arm only (noise on, no bootstrap).
+from gbdt.trees_identical_switches import ORD_STD_GRIDFOLD
+from gbdt.host.gbdt_oracle import _halving_fold
+
+#: `ORD_STD_GRID_TPB` / `ORD_STD_GRID_BLOCKS` (ordered_boosting.mojo).
+comptime GBDT_ORD_STD_GRID_TPB = 64
+comptime GBDT_ORD_STD_GRID_BLOCKS = 256
+
+
+def _ord_gridfold_sum_lanes(
+    partials: List[Float32], lanes: Int, count: Int
+) -> List[Float32]:
+    """`_ord_std_gridfold_kernel` then `_ord_std_combine_kernel`, per lane
+    (NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED): grid lane
+    `l = b * 64 + t` folds slots `l, l + 16384, ...` ascending from 0.0;
+    block `b` folds its 64 lanes with the halving tree; the 256 block
+    partials meet in the 256-wide halving tree. Host CPU-only column; the
+    work is the device's statements, in the device's order."""
+    comptime L = GBDT_ORD_STD_GRID_BLOCKS * GBDT_ORD_STD_GRID_TPB
+    var out = List[Float32](length=lanes, fill=Float32(0.0))
+    for lane in range(lanes):
+        var top = List[Float32](
+            length=GBDT_ORD_STD_GRID_BLOCKS, fill=Float32(0.0)
+        )
+        for b in range(GBDT_ORD_STD_GRID_BLOCKS):
+            var slab = List[Float32](
+                length=GBDT_ORD_STD_GRID_TPB, fill=Float32(0.0)
+            )
+            for t in range(GBDT_ORD_STD_GRID_TPB):
+                var acc = Float32(0.0)
+                var i = b * GBDT_ORD_STD_GRID_TPB + t
+                while i < count:
+                    acc += partials[i * lanes + lane]
+                    i += L
+                slab[t] = acc
+            top[b] = _halving_fold(slab)
+        out[lane] = _halving_fold(top)
+    return out^
+
 comptime GBDT_ORD_BOOT_BLOCK = 256
 comptime GBDT_ORD_BOOT_SEEDS = 65536
 #: `BOOTSTRAP_KERNEL_*` (`bootstrap.mojo`)
@@ -1802,7 +1844,14 @@ def gbdt_ordered_host_fit(
                     if w > Float32(0.0):
                         var q = ftz(sg[i] / w)
                         terms[i] = ftz(ftz(q * q) * w)
-            var s2 = _deterministic_sum_lanes(terms, 1, total)[0]
+            var s2: Float32
+            comptime if ORD_STD_GRIDFOLD:
+                if not bootstrap_on:
+                    s2 = _ord_gridfold_sum_lanes(terms, 1, total)[0]
+                else:
+                    s2 = _deterministic_sum_lanes(terms, 1, total)[0]
+            else:
+                s2 = _deterministic_sum_lanes(terms, 1, total)[0]
             # the product pinned, as the device binding spells it (lane/pinned-mul-contract-free)
             var mult = ordered_model_length_mult(
                 n, identical_mul64(Float64(iteration), Float64(lr))
@@ -1825,7 +1874,16 @@ def gbdt_ordered_host_fit(
         for i in range(total):
             absv[2 * i] = abs(sw[i])
             absv[2 * i + 1] = abs(sg[i])
-        var mags = _deterministic_sum_lanes(absv, 2, total)
+        var mags: List[Float32]
+        comptime if ORD_STD_GRIDFOLD:
+            # the device's fused arm (noise on, no bootstrap) takes the
+            # magnitudes from the same grid fold
+            if opts.random_strength != Float32(0.0) and not bootstrap_on:
+                mags = _ord_gridfold_sum_lanes(absv, 2, total)
+            else:
+                mags = _deterministic_sum_lanes(absv, 2, total)
+        else:
+            mags = _deterministic_sum_lanes(absv, 2, total)
         var m0 = Float64(mags[0])
         var m1 = Float64(mags[1])
         var scale = Float32(choose_scale(m1 if m1 > m0 else m0, total))
