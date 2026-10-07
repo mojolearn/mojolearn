@@ -36,6 +36,14 @@ on:
         description: "an id the dispatcher finds this run by (tools/release.py sets it)"
         required: false
         default: ""
+      tiers:
+        description: "comma list of tiers (default: every shipped tier)"
+        required: false
+        default: ""
+      defines:
+        description: "integration only: space separated NAME[=V] switch defines added to the identical tier"
+        required: false
+        default: ""
 
 run-name: "cross-compile-check ${{ inputs.commit || github.ref_name }} vs ${{ inputs.ref }} ${{ inputs.token }}"
 
@@ -76,10 +84,11 @@ jobs:
         id: plan
         env:
           IN_ARCHS: ${{ inputs.archs }}
+          IN_TIERS: ${{ inputs.tiers }}
           REF_SHA: ${{ steps.refsha.outputs.sha }}
         run: |
           set -eu
-          python3 tools/cross_compile_check.py --ref "$REF_SHA" --archs "$IN_ARCHS" --list-json plan.json
+          python3 tools/cross_compile_check.py --ref "$REF_SHA" --archs "$IN_ARCHS" ${IN_TIERS:+--tiers "$IN_TIERS"} --list-json plan.json
           echo "count=$(python3 -c 'import json; print(json.load(open("plan.json"))["count"])')" >> "$GITHUB_OUTPUT"
           echo "matrix=$(python3 -c 'import json; d=json.load(open("plan.json")); print(json.dumps(dict(include=d["include"])))')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -136,6 +145,7 @@ jobs:
           TIER: ${{ matrix.tier }}
           ARCH: ${{ matrix.arch }}
           IN_TIMEOUT: ${{ inputs.timeout }}
+          MOJOLEARN_XCC_EXTRA_DEFINES: ${{ inputs.defines }}
         run: |
           set -u
           mkdir -p out

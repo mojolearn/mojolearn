@@ -133,6 +133,11 @@ def plan_jobs(scripts, rows, archs, tiers=None, only=None, limit=0):
 def compile_cmd(mojo, root_file, incs, tier, arch, out):
     cmd = list(mojo) + ["build", "-j", "1", "--emit", "shared-lib", "--target-accelerator", arch]
     cmd += TIER_DEFINES[tier] + ["-D", "MOJOLEARN_COLUMN_" + column_of(arch)]
+    if tier == "identical":
+        # experiment switch sets for an integration compile (2026-10-07): space
+        # separated NAME[=V] list; empty for a release
+        for d in os.environ.get("MOJOLEARN_XCC_EXTRA_DEFINES", "").split():
+            cmd += ["-D", d]
     for inc in incs:
         cmd += ["-I", str(inc)]
     return cmd + [str(root_file), "-o", str(out)]
