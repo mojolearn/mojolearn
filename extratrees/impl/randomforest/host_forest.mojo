@@ -18,13 +18,7 @@ from extratrees.impl.decisiontree.decisiontree import (
 from extratrees.impl.decisiontree.flatnode import TreeMetaDataNode
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     DEVICE_MAX_ACC,
-    et_identical_bins_wanted,
-    n_sampled_cols_for,
     train_tree_exact,
-)
-from extratrees.impl.decisiontree.batched_levelalgo.host_binned import (
-    HostBinTables,
-    host_bin_tables,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
     train_classification,
@@ -208,17 +202,6 @@ def fit_forest_exact(
     var forest = Forest(num_outputs)
     var labels_q_p = labels_q.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
     var x_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_col_major.unsafe_ptr())
-    # `IDN_ET_BINNED` (fam2-forests, a candidate arm, default OFF): the
-    # device's regression forest loop bins X when
-    # `et_identical_bins_wanted(n_cols, k)`; the same gate builds the same
-    # borders and codes here and the exact search reads them. Off (always,
-    # without the define) the tables are one element and unread.
-    var bin_tables = HostBinTables()
-    if not is_classification and et_identical_bins_wanted(
-        Int(n_cols), Int(n_sampled_cols_for(params, n_cols))
-    ):
-        bin_tables = host_bin_tables(x_col_major, Int(n_rows), Int(n_cols))
-    var bins = bin_tables.view()
     var labels_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](labels.unsafe_ptr())
     # THE TREES, ONE TASK PER CONTIGUOUS TREE RANGE (lane/trees-cpu,
     # 2026-09-28). A tree reads X, the label planes and its own seed and
@@ -237,7 +220,7 @@ def fit_forest_exact(
     var failed = List[Bool](length=tasks, fill=False)
     var messages = List[String](length=tasks, fill=String(""))
 
-    def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks, imm bins}:
+    def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks}:
         var lo = task * chunk
         var hi = min(lo + chunk, n)
         try:
@@ -259,7 +242,7 @@ def fit_forest_exact(
                 )
                 slots[tree_id] = train_tree_exact(
                     dataset, labels_q_p, params, Int32(tree_start + tree_id), seed,
-                    is_classification, Int(num_outputs), inv_scale, bins,
+                    is_classification, Int(num_outputs), inv_scale,
                 )
                 _ = row_ids.unsafe_ptr()
         except e:
@@ -273,9 +256,6 @@ def fit_forest_exact(
     _ = x_col_major.unsafe_ptr()
     _ = labels.unsafe_ptr()
     _ = labels_q.unsafe_ptr()
-    _ = bin_tables.codes.unsafe_ptr()
-    _ = bin_tables.q.unsafe_ptr()
-    _ = bin_tables.nb.unsafe_ptr()
     # the serial walk raised its first failing tree's error; the lowest
     # failing task holds the lowest trees and stopped at its first
     for k in range(tasks):

@@ -223,21 +223,13 @@ comptime ALIGN_VALUE = 512
 # bench/results/trees_identical/h100_2026-09-10/).
 # `-D MOJOLEARN_2011_HIST_ITEMS1=1` restores the one-item mapping; the old
 # opt-in `MOJOLEARN_2011_HIST_ITEMS4` is accepted and is now the default.
-# A07 AMD measurement 2026-10-06: NEUTRAL (candidate/baseline 0.993, 0.995,
-# 0.998 for generated full fits 100000x32,100001x33,65537x17). One in-process
-# warmup + one score; frozen timing caller 4252d8155 on MI325X, quality retained.
-# NVIDIA and broader named-dataset work remain pending, so task256 stays OFF.
-# Evidence: mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json.
-# Explicit IDENTICAL opt-in only; promoted four-item/512-row default retained.
-# More descriptors trade launch/scan overhead for a shorter heavy-node tail.
-# Partition uses its unchanged TPB128 table; phase reuse remains disabled.
-# A07 measured partial: independent real-node tasks bounded by256 rows.
-# A07 NVIDIA L40S 2026-10-06 representative RF caller NEUTRAL:
-# tasks256 candidate123.567/125.678/92.118 ms versus512 baseline
-# 124.910/126.939/92.868 ms at100000x32,100001x33,65537x17.
-# One warmup/score, <1.1% difference; default512 retained.
-# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-comptime IDN_RF_TASK_ROWS256 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_TASK_ROWS256"]()
+# A07 `MOJOLEARN_IDN_RF_TASK_ROWS256` (two items/lane, 256-row histogram
+# tasks) DELETED by lane trees-small (2026-10-07): measured NEUTRAL on both
+# vendors (MI325X candidate/baseline 0.993/0.995/0.998; L40S <1.1%; generated
+# 100000x32, 100001x33, 65537x17; overnight-ab-20261006 amd/live/
+# repair-summary.json and nvidia/default-repair-normalized-measurements.json),
+# and a second define on the histogram task-row knob `MOJOLEARN_TREES_T02`
+# sweeps by cost (`histogram_task_rows`). docs/apple-fast/EXPERIMENTS.md row.
 # AFT F02: eight rows/lane amortizes each histogram work descriptor over
 # 1024 rows at the fixed 128-lane block, without changing bins or samples.
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
@@ -246,7 +238,7 @@ comptime AFT_F02 = (
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_AFT_F02"]()
 )
-comptime HIST_ITEMS_PER_THREAD = 8 if AFT_F02 else (2 if IDN_RF_TASK_ROWS256 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4))
+comptime HIST_ITEMS_PER_THREAD = 8 if AFT_F02 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4)
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
 
 
@@ -1009,8 +1001,10 @@ comptime IDN_RF_FUSED_PARTITION = (
 # check sabotage instantiations (`sabotage != 0`, ensemble/checks) and an
 # identity trace (which records per-round host split summaries); a fit
 # never builds it.
-# `-D MOJOLEARN_IDN_RF_DEVICE_LOOP_K1` / `_K2` / `_K8` pick the batches per
-# drain (default 4).
+# Batches per drain: default 4; `-D MOJOLEARN_TREES_T11_LEVELS=1|2|4|8|16` is
+# the one sweep. The older `MOJOLEARN_IDN_RF_DEVICE_LOOP_K1/_K2/_K8` defines
+# (same knob, measured below) were DELETED by lane trees-small 2026-10-07
+# (docs/apple-fast/EXPERIMENTS.md row).
 # 2026-10-05 real full-harness IDENTICAL A/B: keep K4; K1/K2/K8 not promoted.
 # Numerical source a006da73d, harness e5f3b578b; full Taxi and Istella.
 # One excluded warmup / one scored fit per arm and GPU. Candidate/base time
@@ -1026,11 +1020,7 @@ comptime IDN_RF_FUSED_PARTITION = (
 # Differences are small, single-sample observations: no variance/significance claim.
 # Original AMD Taxi evidence failures retained; four scoped receipt repairs used.
 # Evidence: experiments/identical_speed/results/20261005/forest-final-decisions/board.json.
-comptime LOOP_K = max(1, T11_LEVELS) if T11 else (1 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K1"]() else (
-    2 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K2"]() else (
-        8 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K8"]() else 4
-    )
-))
+comptime LOOP_K = max(1, T11_LEVELS) if T11 else 4
 
 
 @fieldwise_init

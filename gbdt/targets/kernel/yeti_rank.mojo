@@ -117,7 +117,6 @@ from checks.numerics import (
     identical_mul,
     identical_pow,
 )
-from gbdt.trees_identical_switches import T29_YETI
 from gbdt.data.yeti_rank_tasks import (
     YETI_TASK_POSITIONS,
     yeti_rank_cuda_seed,
@@ -192,7 +191,7 @@ def yeti_block_parallel_for[column: Int]() -> Bool:
     return column == COLUMN_NVIDIA
 
 
-comptime YETI_BLOCK_PARALLEL = T29_YETI or yeti_block_parallel_for[TARGET_COLUMN]()
+comptime YETI_BLOCK_PARALLEL = yeti_block_parallel_for[TARGET_COLUMN]()
 #: negative control for DEVIATION 3040: phase 2 before phase 1 (default off)
 comptime YETI_SABOTAGE = is_defined["MOJOLEARN_GBDT_YETI_SABOTAGE"]()
 

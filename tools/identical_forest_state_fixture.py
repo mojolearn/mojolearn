@@ -15,10 +15,13 @@ from pathlib import Path
 import sys
 import numpy as np
 
-PROFILES = {'rf-k4': [], 'rf-k1': ['MOJOLEARN_IDN_RF_DEVICE_LOOP_K1=1'],
-            'rf-k2': ['MOJOLEARN_IDN_RF_DEVICE_LOOP_K2=1'],
-            'rf-k8': ['MOJOLEARN_IDN_RF_DEVICE_LOOP_K8=1'],
-            'et-float': [], 'et-u16': ['MOJOLEARN_IDN_ET_BINNED_U16=1']}
+# lane trees-small 2026-10-07: the RF drain sweep is MOJOLEARN_TREES_T11_LEVELS
+# (the IDN_RF_DEVICE_LOOP_K* defines are deleted); the ET u16 arm
+# (MOJOLEARN_IDN_ET_BINNED_U16) was a measured loser and is deleted.
+PROFILES = {'rf-k4': [], 'rf-k1': ['MOJOLEARN_TREES_T11_LEVELS=1'],
+            'rf-k2': ['MOJOLEARN_TREES_T11_LEVELS=2'],
+            'rf-k8': ['MOJOLEARN_TREES_T11_LEVELS=8'],
+            'et-float': []}
 SOURCE = 'a006da73d78634683cfc77a12dcb99666c55748c'
 
 
