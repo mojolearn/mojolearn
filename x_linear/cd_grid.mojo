@@ -22,7 +22,7 @@ below) when the page fits; the per-value kernels otherwise. (The
 `MOJOLEARN_X_LINEAR_ENETCV_GRID` / `_STAGED` A/B switches were deleted,
 cpu-gpu-cleanup c-linear.)
 """
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS
+from experiments.classical_identical_ideas.linear_controls import C13_CD_FOLD_STATS
 from x_linear.classical_fold_stats import fold_stat_words, fold_mean_cell, fold_gram_cell, fold_prep_from_cache
 from std.gpu import block_idx, block_dim, thread_idx
 from std.atomic import Atomic
@@ -683,7 +683,7 @@ def enetcv_fit_grid(
     var l_n = Int(ip[4])
     var lay = _EcvLayout(d, a_n, f_n, l_n)
     var paths = f_n * l_n
-    var dcache = ctx.enqueue_create_buffer[DType.float32](max(f_n * fold_stat_words(d), 1) if C13_FOLD_STATS else 1)
+    var dcache = ctx.enqueue_create_buffer[DType.float32](max(f_n * fold_stat_words(d), 1) if C13_CD_FOLD_STATS else 1)
     var nt = min(LINEAR_TPB, max(32, (d + 31) // 32 * 32))
     var hip = ip.copy()
     var hfp = fp.copy()
@@ -736,7 +736,7 @@ def enetcv_fit_grid(
         dout.enqueue_fill(Float32(0))
         dew.enqueue_fill(Float32(0))
         dtw.enqueue_fill(Float32(0))
-        comptime if C13_FOLD_STATS:
+        comptime if C13_CD_FOLD_STATS:
             ctx.enqueue_function[classical_fold_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(f_n), ip[1], dcache.unsafe_ptr(), wit.p(), Int32(wo), nonce,
                                                              grid_dim=_blocks(f_n * (d + 1)), block_dim=ECV_TPB)
             wo += _blocks(f_n * (d + 1))
