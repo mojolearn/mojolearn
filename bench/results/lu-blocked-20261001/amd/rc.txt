@@ -1,9 +1,0 @@
-05:06:03 build-x_decomp rc=0
-05:06:26 build-linalg rc=0
-05:06:57 prep rc=0
-05:07:41 race-lu-factor-synthetic-before rc=0
-05:08:24 race-lu-factor-synthetic-after rc=0
-05:09:09 race-lu-factor-synthetic-restore rc=0
-05:09:53 race-lu-solve-synthetic-before rc=0
-05:10:35 race-lu-solve-synthetic-after rc=0
-05:11:20 race-lu-solve-synthetic-restore rc=0

@@ -1,7 +1,0 @@
-{
-  "state": "failed",
-  "phase": "build-mamba",
-  "vendor": "nvidia",
-  "utc": "2026-09-30T18:33:29.045772+00:00",
-  "error": "Command '['bash', 'bindings/build_mamba.sh']' returned non-zero exit status 1."
-}
