@@ -1,0 +1,101 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "samba-resident",
+ "branch": "lane/samba-resident",
+ "head": "3ccf36dd8",
+ "controls": {
+  "samba_resident_step": {
+   "define": "MOJOLEARN_IDN_SAMBA_RESIDENT_STEP",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_SAMBA_RESIDENT_STEP=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/neural_identical_experiments.mojo:88",
+    "training/samba_resident.mojo:1",
+    "bindings/_mojolearn_training.mojo:1533",
+    "python/mojolearn/_samba_impl.py:395",
+    "core/six_lane_experiment_guards.mojo:25"
+   ],
+   "binding": "_mojolearn_training",
+   "bits_change": false,
+   "status": "new",
+   "exclusive_with": [
+    "MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"
+   ],
+   "board": "samba-forward, samba-train-step",
+   "tags": [],
+   "note": "Lane S1 (toggle idea opponent_neural #2). The Samba stack's forward and train step as ONE device-resident binding call each (training/samba_resident.mojo, entries samba_resident_open/forward/step in _mojolearn_training): the flat registry goes up once per call, the ids and targets once, the loss word and the registry come down once; the per-layer weight set is a set of VIEWS into the resident registry, the block activations, the recorded forward stages, the backward stages and the gradient stay on the device, and the optimizer runs identical_optimizer_step over the resident registry and gradient with the Python optimizer's resident moments (optimizer_resident_open handle). Arm B is the incumbent per-op route: python/mojolearn/_samba_impl.py driving training/samba_ops.mojo and the mamba3 / transformer block sessions layer by layer, each op uploading, computing, downloading and waiting. Same kernels on the same operands in the same order (identical_embedding_forward_into, mamba3_block_forward / mamba3_prefill_backward_on, llama_decoder_layer_forward / llama_decoder_layer_backward_device, llama_rms_norm / bwd_rms_norm, the OP_NT head GEMM at ROLE_HEAD and its two backward GEMMs, identical_ce_loss_resident, identical_embedding_backward_into, the clause 9.2 pair add, identical_optimizer_step): execution and transport only, no bit change on any column (host column untouched). Python keeps no per-layer loop and no NumPy pass over the ids on this route (the id range refusal is the embedding entry's device scan). Taken only at accumulation_steps 1 and dropout 0 (otherwise the per-op route runs); refused with MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 (NI34 spells a different head). Interacts with every control that changes a kernel the step calls: the neural GEMM schedule (projections, head, weight grads), the attention controls (the attention layers' forward/backward), the CE denominator fold and the Mamba-3 controls; it changes none of their arithmetic, only removes the host boundaries between them. Syncs that remain inside the one call are refusal readbacks (registry scan, embedding id scan, logits scan, the mamba3 x/state scans) and the block/optimizer entries' own waits; no activation or gradient crosses the bus."
+  }
+ },
+ "algorithms": {
+  "neural:samba-forward": {
+   "binding": "_mojolearn_training (the mamba3 and llama device functions of _mojolearn_mamba and _mojolearn_transformer linked into it under the define)",
+   "route": "forward: SambaStack.forward -> _forward_resident -> _mojolearn_training samba_resident_forward (training/samba_resident.mojo samba_resident_forward: identical_embedding_forward_into -> mamba3_block_forward | llama_decoder_layer_forward per layer -> llama_rms_norm -> identical_gemm_into OP_NT -> one logits download); arm B: _forward per-layer binding calls",
+   "controls": [
+    "samba_resident_step"
+   ],
+   "interaction_groups": [
+    [
+     "samba_resident_step",
+     "attn_tile_order",
+     "nn20_split_kv",
+     "attn_softmax"
+    ],
+    [
+     "samba_resident_step",
+     "m3_angle_parallel",
+     "m3_angle_block"
+    ],
+    [
+     "samba_resident_step",
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves"
+    ]
+   ]
+  },
+  "neural:samba-train-step": {
+   "binding": "_mojolearn_training (the mamba3 and llama device functions of _mojolearn_mamba and _mojolearn_transformer linked into it under the define)",
+   "route": "training step: SambaStack.train_step -> _train_step_resident -> _mojolearn_training samba_resident_step (training/samba_resident.mojo samba_resident_train_step: embedding -> blocks -> llama_rms_norm -> identical_gemm_into[ROLE_HEAD] -> identical_ce_loss_resident -> identical_gemm_backward_a_into[ROLE_HEAD] / identical_gemm_backward_b_into -> bwd_rms_norm -> mamba3_prefill_backward_on | llama_decoder_layer_backward_device per layer -> identical_embedding_backward_into -> pair add -> identical_optimizer_step_resident_io); arm B: loss_and_grads per-layer calls + samba_head_loss_host + optimizer_resident_step",
+   "controls": [
+    "samba_resident_step"
+   ],
+   "interaction_groups": [
+    [
+     "samba_resident_step",
+     "neural_gemm_schedule",
+     "neural_gemm_schedule_roles",
+     "gemm_leaf"
+    ],
+    [
+     "samba_resident_step",
+     "ce_denom_rowfold",
+     "ce_grad_fused"
+    ],
+    [
+     "samba_resident_step",
+     "attn_tile_order",
+     "attn_softmax",
+     "attn_stash"
+    ],
+    [
+     "samba_resident_step",
+     "m3_angle_parallel",
+     "m3_s17_tail",
+     "m3_angle_carry_cache"
+    ],
+    [
+     "samba_resident_step",
+     "act_retain",
+     "nn58_accumulate_status"
+    ]
+   ]
+  }
+ },
+ "removed": []
+}

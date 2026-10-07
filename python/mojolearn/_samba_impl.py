@@ -402,6 +402,98 @@ class SambaStack(object):
             [int(n), int(c.vocab), int(d)])
         return dw
 
+    # -- the device-resident forward and step (lane S1 samba-resident, 2026-10-07)
+    _RESIDENT_ENTRIES = ("samba_resident_open", "samba_resident_forward",
+                         "samba_resident_step")
+
+    def _resident(self):
+        """The training binding when it carries the IDENTICAL resident Samba
+        entries (-D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP; training/samba_resident.mojo)
+        and this stack can take them: no dropout (the dropout mask is the
+        generator's, drawn per microbatch on the per-op route). None
+        otherwise, and the per-op route below runs as before (arm B). The
+        chunked-head profile (NI34) spells a different head and is refused
+        together with the define (core/six_lane_experiment_guards.mojo);
+        it is re-checked here so a mixed build still takes one route."""
+        cached = getattr(self, "_resident_cache", None)
+        if cached is not None:
+            return cached or None
+        binding = None
+        if self.config.dropout == 0.0:
+            try:
+                b = T._load(self.numeric_mode)
+                enabled = getattr(b, "samba_resident_enabled", None)
+                ok = callable(enabled) and bool(enabled())
+                if ok:
+                    chunked = getattr(b, "training_chunked_lm_head_enabled", None)
+                    ok = not (callable(chunked) and bool(chunked()))
+                if ok and all(callable(getattr(b, n, None)) for n in self._RESIDENT_ENTRIES):  # glue: checks binding entry names
+                    binding = b
+            except (AttributeError, ImportError):
+                binding = None
+        self._resident_cache = binding if binding is not None else False
+        return binding
+
+    def _resident_session(self, binding):
+        """The stack's `_SambaResidentSession` (opened once: the registry
+        and its gradient on the device, the per-layer weight views). The
+        host registry `self.flat` stays authoritative: every call uploads it
+        and the step writes it back, so checkpoints, `parameters()` and
+        `load_state_dict` are unchanged."""
+        session = getattr(self, "_resident_handle", None)
+        if session is None:
+            c = self.config
+            kinds = [0 if k == "mamba3" else 1 for k in c.layers]  # glue: layer kind codes for the binding
+            session = binding.samba_resident_open(
+                kinds,
+                [int(c.vocab), int(c.d_model), int(c.n_heads or 0), int(c.n_kv_heads or 0),
+                 int(c.head_dim or 0), int(c.intermediate or 0),
+                 1 if c.tie_embeddings else 0, float(c.norm_eps), int(self.n_total)],
+                T._addr_ro(self.flat))
+            self._resident_handle = session
+        return session
+
+    def _forward_resident(self, binding, ids):
+        """`(B, L)` ids -> `(B, L, vocab)` logits in one binding call. The
+        id range check is the embedding entry's own device refusal, so no
+        NumPy pass over the ids runs here."""
+        c = self.config
+        session = self._resident_session(binding)
+        b, l = ids.shape
+        logits = _buffers.empty((b * l, c.vocab), '<f4')
+        binding.samba_resident_forward(
+            session, [T._addr_ro(self.flat), T._addr_ro(ids), T._addr(logits)],
+            [int(b), int(l)])
+        return logits.reshape((b, l, c.vocab))
+
+    def _train_step_resident(self, binding, ids, y):
+        """One optimizer step in one binding call (accumulation_steps 1):
+        the forward, the sum-reduced loss over the step's own target count,
+        the backward and `identical_optimizer_step` with the optimizer's
+        resident moments. The optimizer's scalar bookkeeping is its own
+        (`_step_begin` / `_step_finish`). None when the optimizer has no
+        resident moments in this build (the per-op route then runs)."""
+        o = self.optimizer
+        o._open_resident(binding)
+        if o._res is None:
+            return None
+        session = self._resident_session(binding)
+        b, l = ids.shape
+        cfg, plist = o._step_begin(self.max_norm)
+        info = _buffers.zeros((3,), '<f4')
+        loss_out = _buffers.zeros((1,), '<f4')
+        binding.samba_resident_step(
+            session,
+            [T._addr(self.flat), T._addr_ro(ids), T._addr_ro(y), T._addr_ro(o.offsets),
+             T._addr(o.buf_initialized), T._addr(info), T._addr(loss_out)],
+            [int(b), int(l)] + plist, int(o._res))
+        # the moments moved on the device; the host copies are stale until read
+        o._host_fresh = False
+        total = o._step_finish(info, cfg)
+        self.last_ = {"loss": float(loss_out[0]), "lr": o.lr_,
+                      "step": o.t, "total_norm": total}
+        return dict(self.last_)
+
     # -- forward ------------------------------------------------------------
     @staticmethod
     def _ids(x, what):
@@ -482,6 +574,9 @@ class SambaStack(object):
                                           "SambaStack.forward")[0]
         if state is not None:
             return self._forward_state(inputs, state, step=False)
+        resident = self._resident()
+        if resident is not None:
+            return self._forward_resident(resident, self._ids(inputs, "inputs"))
         acts = self._forward(inputs)
         b, l = acts["ids"].shape
         return acts["logits"].reshape((b, l, self.config.vocab))
@@ -692,6 +787,12 @@ class SambaStack(object):
                 "clause 9.2 (leaf size, T mod L, A divides P, A a power of "
                 "two); refused before any gradient is computed "
                 "(python/mojolearn/_samba_impl.py)" % (tokens, a))
+        if a == 1:
+            resident = self._resident()
+            if resident is not None:
+                out = self._train_step_resident(resident, ids, y)
+                if out is not None:
+                    return out
         count = _count_targets(y)
         stream = (self.generator.next_stream()
                   if self.config.dropout > 0.0 else None)
