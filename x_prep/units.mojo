@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The op table: op id -> unit. python/mojolearn/_expansion_prep.py `_OPS` carries
 the same ids; the binding refuses an id outside the table."""
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_GROUPED_OUTPUT, C04_LOAD_CENTER
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_GROUPED_OUTPUT, C04_LDA
 from x_prep.common import FP, IP, p
 from x_prep.prims import (
     sort_cols_unit, col_stats_unit, quantile_unit, affine_unit, scale_params_unit,
@@ -76,7 +76,7 @@ comptime IDN_INT_OPS = IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR_DENSE
 #: 166-171 (IDN_SELECT_BLOCKED, x_prep/select_blocked.mojo), IDENTICAL only, every vendor and the
 #: host column; ops 172-176 (IDN_PT_BLOCKED, x_prep/pt_blocked.mojo) likewise.
 comptime IDN_FAM_OPS = IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED
-comptime N_OPS = 179 if C04_LOAD_CENTER else 178 if C08_DICTIONARY else (177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))))
+comptime N_OPS = 179 if C04_LDA else 178 if C08_DICTIONARY else (177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))))
 #: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
 #: CAT_CLS2_PACK (FAST + Apple default, -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF off)
 

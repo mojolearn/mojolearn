@@ -3519,7 +3519,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         xb, sc = pr.put(self.xbar_), pr.put(self._scal_full)
         out = pr.alloc(n * max(mc, 1))
         if self.solver != "eigen" and (_classical_shared(self.numeric_mode_) & 4):
-            # C04: the same center_rows -> matmul arithmetic in the consumer.
+            # C04_LDA (-D MOJOLEARN_CLASSICAL_C04_LDA): the same center_rows -> matmul arithmetic in the consumer.
             # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
             pr.stage("centered_matmul", n * mc, xo, n, d, xb, _NONE, _NONE,
                      sc, d, 1, out, mc, _NONE, _NONE)

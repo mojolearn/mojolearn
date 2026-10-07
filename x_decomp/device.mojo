@@ -29,7 +29,9 @@ from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
 from decomposition.linalg_public_device import device_qr_r
 from decomposition.linalg_types import _validate_shape
 from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS, C28_BUCKET_SOLVES
-from x_decomp.classical_device import contrast_kernel, centered_gram_kernel
+from x_decomp.classical_device import contrast_kernel
+from core.blocked_moments import bm_centered_gram_panels
+from core.blocked_moments_ops import C23_MCD_LEAF_ROWS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from std.sys.info import has_apple_gpu_accelerator
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
@@ -2625,8 +2627,9 @@ struct DevExec(Exec):
         var dm = _up(ctx, means, d)
         var dg = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
         if d > 0:
-            ctx.enqueue_function[centered_gram_kernel](_p(dx), _p(dm), _p(dg), Int32(n), Int32(d),
-                                                      grid_dim=_blocks(d * d), block_dim=TPB)
+            # C23_MCD (lane classical-decomp): the panel-256 reference cell's
+            # value, row-parallel (core/blocked_moments.mojo)
+            bm_centered_gram_panels(ctx, _p(dg), _p(dx), _p(dm), n, d, C23_MCD_LEAF_ROWS)
         _down(ctx, dg, output, d * d)
         ctx.synchronize()
         _ = dx^

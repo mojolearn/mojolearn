@@ -38,6 +38,9 @@ comptime BM_LEAF_ROWS = 1024
 #: not a shape rule: at P leaves of `cells` partials the leaf doubles until
 #: P * cells fits, so every (n, d) gets the same rule.
 comptime BM_PART_WORDS = 1 << 24
+#: C23_MCD leaf length: the panels of the C23 reference cell
+#: (x_decomp/classical_cells.mojo `centered_gram_cell`, panels256).
+comptime C23_MCD_LEAF_ROWS = 256
 #: Fold levels a mask can hold (leaf counts below 2^31).
 comptime BM_MAX_LEVELS = 31
 

@@ -29,7 +29,7 @@ x_decomp/kit_device.mojo's `fast_mcd_dev`, the same search with every
 matrix resident on the device.
 """
 from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_STATE
-from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS
+from experiments.classical_identical_ideas.linear_controls import C23_MCD
 from std.memory import bitcast
 from std.builtin.sort import sort
 
@@ -193,7 +193,7 @@ struct Mcd[E: Exec]:
         # C57 retains this candidate's just-computed immutable subset mean.
         # No reuse across support changes; the centered products are unchanged.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        comptime if C23_CENTERED_PANELS:
+        comptime if C23_MCD:
             return self.k.ew1(OP_SCALE, self.k.classical_centered_gram(Xs, loc), 1.0 / Float64(Xs.r))
         comptime if C57_CANDIDATE_STATE:
             var Xc = self.k.ew2(OP_SUB, Xs, loc)
