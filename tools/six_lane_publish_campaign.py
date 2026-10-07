@@ -178,6 +178,12 @@ def main():
            'Apple teardown preservation failed: the workspace was on the internal SSD, not retained EBS. Logs, timings, metrics and hash receipts survive; some raw array bytes remain unrecovered. See artifact-retention.json for exact recovery coverage and provenance. Original receipts are unchanged.',
            'Races reuse accepted binaries without separate numerical verification reruns. Earlier separately authorized AMD builds are historical artifact evidence, not measurements. Full provider and worker logs remain under '+str(ROOT)]
     retention={}
+    storage=ROOT/'quality-review/r2-reconciliation/reconciliation.json'
+    if storage.exists():
+        shutil.copyfile(storage,OUT/'storage-reconciliation.json')
+        storage_report=json.loads(storage.read_text())
+        notes.append('R2 storage reconciliation: '+str(storage_report.get('new_current_campaign_measurements_found','unknown'))+
+            ' new current-campaign measurements found in the recorded search. Storage locations, fetched archive hashes, historical comparisons and search limitations are retained in storage-reconciliation.json. Older medium/component results do not fill full-workload candidate gaps.')
     for label,relative in [('apple_incident','apple/emergency-preservation-correction.json'),
                            ('apple_recovery','apple/incident-offbox-audit/recovery-summary.json')]:
         source=ROOT/relative

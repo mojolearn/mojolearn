@@ -1,0 +1,306 @@
+{
+  "schema": "mojolearn.measurement-storage-reconciliation/1",
+  "checked_at": 1791340157.566703,
+  "bucket": "mojolearn-data",
+  "status": "RECONCILED_NO_NEW_CURRENT_MEASUREMENTS",
+  "prefixes": [
+    {
+      "prefix": "amd-identity/",
+      "objects": 4,
+      "latest": "2026-09-22T23:42:37.415Z",
+      "listing_sha256": "1a0fceb2490d440c42dfac51a58c6c1963f03e6fbf46f45c9641ee9289df0eb0",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/amd-identity-objects.json"
+    },
+    {
+      "prefix": "boards/",
+      "objects": 8,
+      "latest": "2026-10-01T12:10:29.190Z",
+      "listing_sha256": "727c99277f8fb58b24af52e5acf0f3c7633c019d7cb6d3d7fd2670fcdf139e1b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/boards-objects.json"
+    },
+    {
+      "prefix": "campaigns/",
+      "objects": 1,
+      "latest": "2026-10-06T02:38:57.541Z",
+      "listing_sha256": "42e9763cfff7dee9e2267a33f450c5f873f3d8ddd520db7e129e52ffbabc78ca",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/campaigns-objects.json"
+    },
+    {
+      "prefix": "evidence/",
+      "objects": 69,
+      "latest": "2026-09-20T14:59:21.361Z",
+      "listing_sha256": "37bb6d05b5bf6d3217001967a6e18883c56a8b4c1031a5f69a97f8bab0600413",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/evidence-objects.json"
+    },
+    {
+      "prefix": "legs/",
+      "objects": 20,
+      "latest": "2026-09-16T20:10:25.913Z",
+      "listing_sha256": "0ad3ef84030c2223f50b7d8c8f3ed8eef36333c2db068ecea3fbd9b80feb2b07",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/legs-objects.json"
+    },
+    {
+      "prefix": "measurements/",
+      "objects": 290,
+      "latest": "2026-10-05T08:08:09.239Z",
+      "listing_sha256": "d9755d2ccda3544aa04e4ea09d44311cdabc0a73c8750eb862cdb5e44a3e0d83",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/measurements-objects.json"
+    },
+    {
+      "prefix": "models/",
+      "objects": 6,
+      "latest": "2026-09-17T17:43:14.198Z",
+      "listing_sha256": "bec1bd69c438d24decdb414200a46fb4da3ea70836c69c067e82198b8942e5da",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/models-objects.json"
+    },
+    {
+      "prefix": "opponents/",
+      "objects": 71,
+      "latest": "2026-09-17T20:03:55.259Z",
+      "listing_sha256": "7d19be8e334c42608579f7c7319fbf1a516c72887cf422598ce201c63585352f",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/opponents-objects.json"
+    },
+    {
+      "prefix": "release-evidence/",
+      "objects": 24,
+      "latest": "2026-09-18T13:13:07.519Z",
+      "listing_sha256": "d281e459574bfc49c52d339d0c4d087dd374a9c27991a94e3238ad37b39218c3",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/release-evidence-objects.json"
+    },
+    {
+      "prefix": "runs/",
+      "objects": 210,
+      "latest": "2026-09-28T20:27:14.542Z",
+      "listing_sha256": "186c44a303f948c82c410126bdc43a9f33bfe8b749bbcf89341725c1fa90bdc6",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/runs-objects.json"
+    }
+  ],
+  "objects_listed": 703,
+  "fetched_archives": [
+    {
+      "key": "boards/amd-mi325x/board-resume.tar.gz",
+      "http_status": 200,
+      "bytes": 1401523,
+      "sha256": "bcde1f8f3e0a982fc6aa7df491f832ebf9f12be5db9c4c3eba63fa28a097c198",
+      "size_matches_listing": true,
+      "indexed_sha256": "bcde1f8f3e0a982fc6aa7df491f832ebf9f12be5db9c4c3eba63fa28a097c198",
+      "indexed_sha_matches": true,
+      "archive": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/downloads/boards/amd-mi325x/board-resume.tar.gz",
+      "last_modified": "2026-10-01T12:10:12.011Z",
+      "status": "FETCHED_HISTORICAL",
+      "members": 1222,
+      "metadata": [
+        "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/historical-board-metadata/boards/amd-mi325x/board-resume/board/board.json",
+        "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/historical-board-metadata/boards/amd-mi325x/board-resume/board/BOARD.md"
+      ]
+    },
+    {
+      "key": "boards/nvidia-l40s/board-resume-0832.tar.gz",
+      "http_status": 200,
+      "bytes": 857354,
+      "sha256": "ee555df2df2eb42cd6f150f0d5f8c3a2fb4190642c71e04df2808ba5a9d5778a",
+      "size_matches_listing": true,
+      "indexed_sha256": "ee555df2df2eb42cd6f150f0d5f8c3a2fb4190642c71e04df2808ba5a9d5778a",
+      "indexed_sha_matches": true,
+      "archive": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/downloads/boards/nvidia-l40s/board-resume-0832.tar.gz",
+      "last_modified": "2026-10-01T12:10:18.330Z",
+      "status": "FETCHED_HISTORICAL",
+      "members": 96,
+      "metadata": [
+        "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/historical-board-metadata/boards/nvidia-l40s/board-resume-0832/board/board.json",
+        "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/historical-board-metadata/boards/nvidia-l40s/board-resume-0832/board/BOARD.md"
+      ]
+    },
+    {
+      "key": "boards/nvidia-l40s/board-resume.tar.gz",
+      "http_status": 200,
+      "bytes": 10331766,
+      "sha256": "f984e67bdc75ac97a0fb1f0acd8e7526d9b88383743502a53eb6ef433f0c90a3",
+      "size_matches_listing": true,
+      "indexed_sha256": "f984e67bdc75ac97a0fb1f0acd8e7526d9b88383743502a53eb6ef433f0c90a3",
+      "indexed_sha_matches": true,
+      "archive": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/downloads/boards/nvidia-l40s/board-resume.tar.gz",
+      "last_modified": "2026-10-01T12:10:15.551Z",
+      "status": "FETCHED_HISTORICAL",
+      "members": 3225,
+      "metadata": [
+        "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/historical-board-metadata/boards/nvidia-l40s/board-resume/board/board.json",
+        "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/historical-board-metadata/boards/nvidia-l40s/board-resume/board/BOARD.md"
+      ]
+    }
+  ],
+  "historical_board_comparison": [
+    {
+      "r2_key": "boards/amd-mi325x/board-resume.tar.gz",
+      "archive_sha256": "bcde1f8f3e0a982fc6aa7df491f832ebf9f12be5db9c4c3eba63fa28a097c198",
+      "r2_board": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/historical-board-metadata/boards/amd-mi325x/board-resume/board/board.json",
+      "local_board": "bench/results/board-archive/amd-mi325x/board-resume/board/board.json.gz",
+      "identical_to_local_archive": true,
+      "races": 463,
+      "statuses": {
+        "done": 452,
+        "failed": 11
+      },
+      "created": "2026-09-29T14:45:07Z",
+      "updated": "2026-09-30T22:43:12Z",
+      "config_rows": null,
+      "board_sha256": "fab47f9e4e95f6f043eaa552156b0aadae12b53290f03da8dd9afe1db5ad5a2b"
+    },
+    {
+      "r2_key": "boards/nvidia-l40s/board-resume-0832.tar.gz",
+      "archive_sha256": "ee555df2df2eb42cd6f150f0d5f8c3a2fb4190642c71e04df2808ba5a9d5778a",
+      "r2_board": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/historical-board-metadata/boards/nvidia-l40s/board-resume-0832/board/board.json",
+      "local_board": "bench/results/board-archive/nvidia-l40s/board-resume-0832/board/board.json.gz",
+      "identical_to_local_archive": true,
+      "races": 17,
+      "statuses": {
+        "done": 15,
+        "failed": 2
+      },
+      "created": "2026-10-01T03:27:38Z",
+      "updated": "2026-10-01T03:35:01Z",
+      "config_rows": null,
+      "board_sha256": "8b60efb39b20eabb98c6a0197f96f58b4a44d95c533474f8cb61b732141f070b"
+    },
+    {
+      "r2_key": "boards/nvidia-l40s/board-resume.tar.gz",
+      "archive_sha256": "f984e67bdc75ac97a0fb1f0acd8e7526d9b88383743502a53eb6ef433f0c90a3",
+      "r2_board": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/historical-board-metadata/boards/nvidia-l40s/board-resume/board/board.json",
+      "local_board": "bench/results/board-archive/nvidia-l40s/board-resume/board/board.json.gz",
+      "identical_to_local_archive": true,
+      "races": 445,
+      "statuses": {
+        "failed": 12,
+        "done": 433
+      },
+      "created": "2026-09-29T15:36:49Z",
+      "updated": "2026-10-01T02:21:24Z",
+      "config_rows": null,
+      "board_sha256": "168ad80785ab87597870f7f19ca23aef9b82be1463229dd19c87fe9b213ee3cc"
+    }
+  ],
+  "new_current_campaign_measurements_found": 0,
+  "current_campaign_measured_pairs": {
+    "nvidia_native": 99,
+    "amd": 84,
+    "apple_fast": 86
+  },
+  "current_campaign_storage": "Latest NVIDIA/AMD terminal preservation receipts prove local captures. No matching Oct6 measurement object or upload proof found in searched measurement prefixes. This is not a claim of absence across all opaque keys or other buckets.",
+  "local_storage_audit": {
+    "schema": 1,
+    "at": "2026-10-07T02:23:12.444143+00:00",
+    "scope": "Read-only local receipt, repo ledger/index, and root-provided R2 prefix listing inspection. No cloud operations by this audit.",
+    "latest_campaign": {
+      "nvidia": {
+        "retained_files": 2534,
+        "retained_bytes": 17033065920,
+        "capture_receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/capture-receipt.json",
+        "proof": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/owner-attempt-02/preservation-before-release.json",
+        "r2_key_or_upload_proof_found_in_release_receipt": false
+      },
+      "amd": {
+        "retained_files": 2163,
+        "retained_bytes": 16850225355,
+        "inventory": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/terminal-preservation-audit/local-byte-inventory.json",
+        "proof": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/release/preservation-before-delete.json",
+        "r2_key_or_upload_proof_found_in_release_receipt": false
+      },
+      "apple": {
+        "proof": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/incident-offbox-audit/recovery-summary.json",
+        "recovered_references": 154,
+        "remaining_without_recovery": 398,
+        "unique_recovered_files": 46,
+        "unique_recovered_file_bytes": 1631951536,
+        "unrecovered_reference_payload_bytes": 18318083728,
+        "r2_upload_proof_found": false,
+        "original_inaccurate_ebs_preservation_claim_superseded_by": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/emergency-preservation-correction.json"
+      }
+    },
+    "r2_prefix_listing_observations": [
+      {
+        "prefix": "measurements/",
+        "listing": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/measurements-objects.json",
+        "objects": 290,
+        "latest": "2026-10-05T08:08:09.239Z",
+        "oct6_or_six_lane_named_objects": 0
+      },
+      {
+        "prefix": "boards/",
+        "listing": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/boards-objects.json",
+        "objects": 8,
+        "latest": "2026-10-01T12:10:29.190Z",
+        "oct6_or_six_lane_named_objects": 0
+      },
+      {
+        "prefix": "evidence/",
+        "listing": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/r2-reconciliation/evidence-objects.json",
+        "objects": 69,
+        "latest": "2026-09-20T14:59:21.361Z",
+        "oct6_or_six_lane_named_objects": 0
+      }
+    ],
+    "historical_final_archives": {
+      "objects": [
+        {
+          "at": "2026-10-05T08:04:21Z",
+          "key": "measurements/2026-10-05/box-run-2/nv/final-20261005T080131Z.tar.gz",
+          "sha256": "8de6b4904802249cec66d2c13c8f58bd593e9704565a3f69ced1f0877017efe6",
+          "bytes": "881814130",
+          "box": "aa9c56353c2f",
+          "source_dir": "/root/lq"
+        },
+        {
+          "at": "2026-10-05T08:08:29Z",
+          "key": "measurements/2026-10-05/box-run-2/amd/final-20261005T080421Z.tar.gz",
+          "sha256": "5906e1d7540f9123e495baea82c055da68bc3591639af768c2fbcdab5c52dedd",
+          "bytes": "1728169179",
+          "box": "mojolearn-br2-amd",
+          "source_dir": "/root/lq"
+        }
+      ],
+      "already_recorded_in_repo": true,
+      "ledger": "docs/identical/optimization-ledger.json:83",
+      "identity_source_sha": "af93ebe0ab05676c550f02f68741261018c0751b",
+      "scope": "medium-wave all-switch ON vs OFF; includes synthetic/canonical-small cases; not Oct6 six-lane full-dataset qualification",
+      "verdict_counts": {
+        "KEEP": 22,
+        "DROP": 14
+      },
+      "identity_status": "PARTIAL",
+      "deletion_and_R2_verification_proof": "bench/results/box-run-2-20261005/deletion-proof.txt"
+    },
+    "documentation_gap": "docs/MEASUREMENT_STORAGE.md promises git claims plus R2 bulk. Oct6 release receipts establish local persisted bytes but inspected records have no R2 publication proof.",
+    "limitations": [
+      "Prefix listings and selected local manifests do not prove no compatible object exists elsewhere, under opaque keys or other buckets.",
+      "Historical archive content not downloaded or independently revalidated in this audit; exact keys and SHA256 recorded by prior read-back verification and current object listing.",
+      "No numerical verification, model execution, compile, board edits or default changes."
+    ],
+    "validation": {
+      "exit_status": 0,
+      "failures": [],
+      "repo_changes": false
+    }
+  },
+  "historical_oct5": "Final box-run-2 archives are already indexed and represented in docs/identical/optimization-ledger.json; older medium/synthetic/canonical-small evidence cannot fill current full-dataset candidate gaps.",
+  "binary_cache_audit": {
+    "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-r2-receipt-lookup/bincache-manifest-summary.json",
+    "sha256": "a3a4a062d07735ae36ba7f2e8a288ac5cfce3524286824a8cbc10724a4a1ae9a",
+    "status": "COMPLETE",
+    "expected_objects": 3056,
+    "inspected_objects": 3056,
+    "status_counts": {
+      "MANIFEST_READ": 3056
+    },
+    "exact_source_matches": [],
+    "failed_objects": [],
+    "limitation": "No exact 4fc63c9d or c5e3a037 source match found. Some manifests lack source_commit. Older binaries might be equivalent, but no new equivalence attestation or accepted current-freeze missing artifact was established."
+  },
+  "models_run": 0,
+  "builds": 0,
+  "defaults_changed": false,
+  "limitations": [
+    "No new timing or quality claim is inferred from object existence.",
+    "Fetched historical board artifacts are already identical to local archived boards.",
+    "Array/model retention limitations in original campaign remain unchanged."
+  ]
+}
