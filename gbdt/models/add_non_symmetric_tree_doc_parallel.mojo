@@ -57,6 +57,11 @@ from gbdt.models.non_symmetric_tree import (
     TNonSymmetricTreeStructure,
 )
 from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN
+from gbdt.models.ns_bitvector_predict import (
+    GBDT_NS_BITVEC,
+    bv_apply,
+    bv_words_for,
+)
 
 #: their `ComputeNonSymmetricDecisionTreeBins` launch shape
 #: (`add_model_value.cu:399-412`): 256 threads, `CeilDivide(size, 256)`
@@ -296,6 +301,10 @@ def add_non_symmetric_trees_packed(
     var total_vals = 0
     var node_at = List[Int](capacity=n_trees)
     var val_at = List[Int](capacity=n_trees)
+    var nodes_of = List[Int](capacity=n_trees)
+    var max_leaves = 1
+    var first_dim = trees[0].dim
+    var uniform_dim = True
     for t in range(n_trees):  # small-loop(n_trees: trees): sizes each tree's node and leaf slabs, model parameters
         ref tree = trees[t]
         var dim = tree.dim
@@ -319,6 +328,10 @@ def add_non_symmetric_trees_packed(
             )
         node_at.append(total_slots)
         val_at.append(total_vals)
+        nodes_of.append(n_nodes)
+        max_leaves = max(max_leaves, n_nodes + 1)
+        if dim != first_dim:
+            uniform_dim = False
         total_slots += n_nodes if n_nodes > 0 else 1
         total_vals += n_bins * dim
     var val_cap = total_vals if total_vals > 0 else 1
@@ -399,6 +412,39 @@ def add_non_symmetric_trees_packed(
     ctx.enqueue_copy(dst_buf=d_ls, src_ptr=h_ls.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_rs, src_ptr=h_rs.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
+
+    comptime assert not (C50_GB_PACKED and GBDT_NS_BITVEC), (
+        "MOJOLEARN_GBDT_NS_PREDICT_BITVEC and MOJOLEARN_TREES_C50_GB_PACKED"
+        " replace the same non-symmetric apply; define at most one"
+    )
+    comptime if GBDT_NS_BITVEC:
+        # lane/trees-predict-ideas: bitvector apply, same per-row tree-order
+        # float32 adds (gbdt/models/ns_bitvector_predict.mojo). An ensemble
+        # past the mask-word cap or with mixed dims falls through below.
+        var words = bv_words_for(max_leaves)
+        if words > 0 and uniform_dim:
+            bv_apply(
+                ctx, words, d_off, d_mask, d_shift, d_oh, d_bin, d_ls,
+                d_vals, node_at, val_at, nodes_of, first_dim, cindex,
+                n_rows, cursor,
+            )
+            _ = d_vals^
+            _ = d_rs^
+            _ = d_ls^
+            _ = d_bin^
+            _ = d_oh^
+            _ = d_shift^
+            _ = d_mask^
+            _ = d_off^
+            _ = h_vals^
+            _ = h_rs^
+            _ = h_ls^
+            _ = h_bin^
+            _ = h_oh^
+            _ = h_shift^
+            _ = h_mask^
+            _ = h_off^
+            return
 
     comptime if C50_GB_PACKED:
         if total_slots > 2147483647//8 or total_vals > 2147483647 or n_trees > 2147483647//4:
