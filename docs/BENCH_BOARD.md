@@ -562,10 +562,22 @@ compile and bf16 work for every lane.
 | `samba-infer` | `SambaInference(config, weights).forward(inputs)` | CPU | the same stack on the CPU |
 | `mlp-train-step` | `SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y)` | GPU | `F.linear`, ReLU, `F.linear`; mean CE, `torch.optim.AdamW` |
 | `mlp-infer` | `MLPInference(w1, b1, w2, b2).predict_logits(X)` | CPU | the same MLP on the CPU |
+| `transformer-decode` | `TransformerBlock(...).decode_session(state)`: `load_state()`, then `step(x[:, t:t+1])` for every t | GPU | `LlamaEager` pieces as a per-token KV-cache decode (eager arms only) |
+| `mamba1-decode` | `Mamba1Block(weights).decode_session(state)`: `load_state()`, then `step(x[:, t:t+1])` | GPU | none (ours alone) |
+| `mamba2-decode` / `mamba3-decode` | `Mamba{2,3}Block(weights).step(x[:, t:t+1], state)`, fresh `allocate_state(B)` per round | GPU | none (ours alone) |
+| `samba-decode` | `SambaStack(config, weights).step(ids[:, t], state)`, fresh `allocate_state(B, L)` per round | GPU | none (ours alone) |
+| `mlp-predict` | `SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X)` | GPU | `F.linear`, ReLU, `F.linear` |
 
 The `*-infer` lanes are the public CPU inference classes, which run on the
-host binding. They race `torch-cpu-<setting>` arms (eager and compile, fp32
-and bf16). Every twin already existed in the repo, and none was written for
+host binding. Our CPU is never raced, so the board plans none of them; their
+GPU inference rows are the `*-forward` rows (zero-state prefill), the
+`*-decode` rows (zero-state decode, one public step call per token over the
+whole sequence, weights resident before the clock; the block decode rows carry
+the untimed host-reference check against the fresh forward) and `mlp-predict`
+(added 2026-10-07, lane/neural-gpu-infer-rows). The torch Mamba references
+are full-sequence scans with no carried-state step, so the Mamba and Samba
+decode rows race ours alone. The byte LM has no incremental decode on any
+route, so there is no `lm-decode` row. Every twin already existed in the repo, and none was written for
 the board. In the Apple smoke, each fp32 torch twin matched our output to
 about 1e-7 relative (Samba about 7e-7), and each train step's losses matched
 to about 1e-6. The Mamba opponents are pure-PyTorch reference

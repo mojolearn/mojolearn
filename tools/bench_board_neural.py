@@ -33,6 +33,19 @@ GPU lanes (the class runs on the box's GPU):
   samba-forward        SambaStack(config, weights).forward(inputs): logits.
   mlp-train-step       SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y):
                        8-16-3 ReLU, mean CE, AdamW.
+GPU inference lanes (2026-10-07, lane/neural-gpu-infer-rows: the GPU
+inference/decode rows; the *-infer rows below are the CPU host binding and
+are never raced, so GPU decode work had no row before these):
+  transformer-decode   TransformerBlock(...).decode_session(state).step(x_t),
+                       one token per call over the whole sequence, zero
+                       state (load_state) per round.
+  mamba1-decode        Mamba1Block(weights).decode_session(state).step(x_t).
+  mamba2-decode / mamba3-decode
+                       Mamba{2,3}Block(weights).step(x_t, state) (their
+                       resident sessions are private, so the public
+                       per-call step), fresh allocate_state per round.
+  samba-decode         SambaStack(config, weights).step(ids_t, state).
+  mlp-predict          SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X).
 CPU lanes (the *Inference classes run on the host binding, on the CPU):
   transformer-infer    TransformerBlockInference(...).forward(x).
   mamba1-infer / mamba2-infer / mamba3-infer
@@ -180,6 +193,10 @@ LANES = ("lm-train-step", "lm-forward", "gemm",
          "mamba3-forward", "mamba3-infer",
          "samba-train-step", "samba-forward", "samba-infer",
          "mlp-train-step", "mlp-infer",
+         # 2026-10-07: GPU inference rows (the *-infer rows are the CPU
+         # binding and never race; these are the GPU decode/predict routes)
+         "transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-decode",
+         "samba-decode", "mlp-predict",
          # 2026-09-29: the byte LM's CPU inference and CPU training step, and the
          # bf16 and int8 GEMM profiles (SmallByteLanguageModelTrainer IS
          # LanguageModelTrainer, raced by lm-train-step and lm-forward)
@@ -192,7 +209,18 @@ MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "mamba3-forward": "mamba3", "mamba3-infer": "mamba3",
             "samba-train-step": "samba", "samba-forward": "samba", "samba-infer": "samba",
             "mlp-train-step": "mlp", "mlp-infer": "mlp",
-            "lm-infer": "lm", "lm-host-train-step": "lm", "gemm-bf16": "gemm", "gemm-int8": "gemm"}
+            "lm-infer": "lm", "lm-host-train-step": "lm", "gemm-bf16": "gemm", "gemm-int8": "gemm",
+            "transformer-decode": "transformer", "mamba1-decode": "mamba1",
+            "mamba2-decode": "mamba2", "mamba3-decode": "mamba3", "samba-decode": "samba",
+            "mlp-predict": "mlp"}
+#: GPU incremental-decode lanes: one public step call per token over the
+#: lane's whole sequence, from a zero state each round.
+DECODE_LANES = ("transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-decode",
+                "samba-decode")
+#: Decode lanes with a torch decode twin in this harness. The Mamba
+#: references (mamba/corpus/gen_corpus.py) are full-sequence scans with no
+#: carried-state step, and Samba stacks Mamba-3, so those lanes race ours alone.
+DECODE_TORCH_TWIN = ("transformer-decode",)
 TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-train-step")
 #: Where OUR class runs: the *Inference classes are the host binding.
 DEVICE_OF = {lane: ("cpu" if lane.endswith("-infer") or lane == "lm-host-train-step" else "gpu")
@@ -213,7 +241,10 @@ GPU_SETTINGS = {
 }
 CPU_SETTINGS = ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16")
 #: Lanes whose torch twin is not a compile target (a per-token Python loop).
-NO_COMPILE = ("mamba1-forward", "mamba1-infer")
+NO_COMPILE = ("mamba1-forward", "mamba1-infer",
+              # a per-token Python decode loop whose cache length grows every
+              # step: torch.compile would recompile per length
+              "transformer-decode")
 VENDORS = ("apple", "nvidia", "amd")
 
 #: Our arms: `ours` IDENTICAL, `ours-fast` the Apple FAST neural tier.
@@ -233,7 +264,12 @@ NOT_PLANNED = {
     + ["torch-compile-* on mamba1-forward and mamba1-infer: the only torch Mamba-1 twin is "
        "the pure-PyTorch reference scan, a per-token Python loop that torch.compile would "
        "unroll L times; mamba1 races the eager arms only",
-       "gemm-bf16 races torch's bf16 settings only (bf16 operands, fp32 accumulate)"]
+       "gemm-bf16 races torch's bf16 settings only (bf16 operands, fp32 accumulate)",
+       "mamba1-decode, mamba2-decode, mamba3-decode and samba-decode race ours alone: the "
+       "repo's torch Mamba references are full-sequence scans with no carried-state decode "
+       "step (a torch decode twin is not written yet)",
+       "torch-compile-* on transformer-decode: the twin is a per-token loop over a growing "
+       "KV cache; transformer-decode races the eager arms only"]
     + (["gemm-int8: torch._int_mm is a CUDA kernel; torch on %s has no int8 matmul, so ours "
         "races alone" % {"apple": "MPS", "amd": "ROCm"}[v]] if v != "nvidia" else [])
     for v in VENDORS}
@@ -245,11 +281,14 @@ NOT_COVERED = [
     "SISO reference for Mamba-3), not mamba-ssm's fused CUDA/Triton kernels, which the board "
     "does not install; a Mamba ratio here is against a reference implementation, not a "
     "deployment kernel.",
-    "The blocks' backward (the Mamba and TransformerBlock VJPs), their decode `step`, ragged "
-    "`lengths` and the carried-state forward are public and not raced; only a zero-state "
-    "forward is.",
-    "SmallMLPTrainer.predict_logits (the GPU forward of the 8-16-3 MLP) is not raced; "
-    "MLPInference (its CPU forward) and the training step are.",
+    "The blocks' backward (the Mamba and TransformerBlock VJPs), ragged `lengths` and a "
+    "prefill followed by decode are public and not raced; the zero-state forward (*-forward) "
+    "and the zero-state token-by-token decode (*-decode) are.",
+    "The byte LM has no incremental decode on any route: LanguageModelTrainer (GPU) and "
+    "LanguageModelInference (CPU) expose full-sequence logits only (lm-forward on the GPU), "
+    "no KV-cache state or step, so there is no lm-decode row.",
+    "The *-infer and lm-host-train-step rows are the CPU host binding and are never raced; "
+    "their GPU twins are the *-forward, *-decode and mlp-predict rows.",
     "The GPT-3-small target shape is not on the board (the LM lanes use the smaller control "
     "shape so one shape runs on every box, a 16 GB Mac included).",
 ]
@@ -318,6 +357,8 @@ def opponents(vendor, lane):
         return ("torch-eager-int8", "torch-compile-int8") if vendor == "nvidia" else ()
     if lane == "gemm-bf16":
         return tuple("torch-" + s for s in GPU_SETTINGS[vendor] if s.endswith("bf16"))
+    if lane in DECODE_LANES and lane not in DECODE_TORCH_TWIN:
+        return ()
     if DEVICE_OF[lane] == "cpu":
         arms = ["torch-cpu-" + s for s in CPU_SETTINGS]
     else:
@@ -444,6 +485,22 @@ LANE_TEXT = {
                        "F.linear, ReLU, F.linear; mean CE; backward; torch.optim.AdamW step"),
     "mlp-infer": ("mojolearn.MLPInference(w1, b1, w2, b2).predict_logits(X) (CPU host binding)",
                   "F.linear, ReLU, F.linear on the CPU"),
+    "transformer-decode": ("mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim)"
+                           ".decode_session(state): state.cached_tokens = 0; load_state(); "
+                           "step(x[:, t:t+1]) for t < L (resident GPU decode, one token per call)",
+                           "LlamaEager pieces (tools/speed_torch_seq.py) as a KV-cache decode: per "
+                           "token RMSNorm, project + RoPE at position t, cache append, sdpa over "
+                           "the cache, o_proj, MLP; x uploaded once, outputs .cpu() once"),
+    "mamba1-decode": ("mojolearn.Mamba1Block(weights).decode_session(state): load_state(); "
+                      "step(x[:, t:t+1]) for t < L (resident GPU decode)", "none (ours alone)"),
+    "mamba2-decode": ("mojolearn.Mamba2Block(weights): state = allocate_state(B); "
+                      "step(x[:, t:t+1], state) for t < L", "none (ours alone)"),
+    "mamba3-decode": ("mojolearn.Mamba3Block(weights): state = allocate_state(B); "
+                      "step(x[:, t:t+1], state) for t < L", "none (ours alone)"),
+    "samba-decode": ("mojolearn.SambaStack(config, weights): state = allocate_state(B, L); "
+                     "step(ids[:, t], state) for t < L -> logits (B, L, vocab)", "none (ours alone)"),
+    "mlp-predict": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X) (GPU)",
+                    "F.linear, ReLU, F.linear on the GPU; .cpu()"),
 }
 
 
@@ -453,7 +510,10 @@ def lane_settings(lane):
     s = {"ours_call": ours, "torch_call": theirs, "ours_device": DEVICE_OF[lane],
          "clock": "host inputs to the device, the call, the result back on the host, "
                   "synchronized" + ("; training state device-resident on both sides; round r "
-                                    "is step r+1" if lane in TRAIN_LANES else "")}
+                                    "is step r+1" if lane in TRAIN_LANES else "")
+                  + ("; one round = a zero-state reset and L single-token decode calls, every "
+                     "token's output back on the host (ours per call); weights resident "
+                     "before the clock on both sides" if lane in DECODE_LANES else "")}
     s["seed_rule"] = ("seed %d: every parameter and input of every arm comes from the conductor's "
                  "default_rng(%d) file; torch arms also call torch.manual_seed(%d); ours' neural "
                  "classes take no seed argument (nothing in them draws)" % (SEED, SEED, SEED))
@@ -466,7 +526,8 @@ def lane_settings(lane):
                         "loss_first_abs_diff_vs_ours, loss_last_abs_diff_vs_ours")
     else:
         s["quality"] = "max_abs_diff_vs_ours, max_rel_diff_vs_ours" + (
-            ", mean_nll" if lane in ("lm-forward", "samba-forward", "samba-infer") else "") + (
+            ", mean_nll" if lane in ("lm-forward", "samba-forward", "samba-infer",
+                                     "samba-decode") else "") + (
             ", max_rel_err_vs_fp64" if MODEL_OF[lane] == "gemm" else "")
         if lane in FORWARD_REFERENCE_LANES:
             s["quality"] += ", untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)"
@@ -1027,6 +1088,26 @@ class OursBlock(Ours):
                                _mode_of(self.block, ml), "cpu" if cpu else "gpu")
         self.info.update(call=LANE_TEXT[lane][0], cls=cls.__name__)
         self.record = _ours_record(lane)
+        self.decode_tokens = self.decode_session = self.decode_state = None
+        if lane in DECODE_LANES:
+            if self.operation != "model_default":
+                raise RuntimeError("REFUSED: decode lanes run the model_default operation only")
+            batch, length = int(self.x.shape[0]), int(self.x.shape[1])
+            # Before the clock: the per-token host inputs (the caller's decode
+            # loop feeds one (B, 1, d_model) token per call).
+            self.decode_tokens = [np.ascontiguousarray(self.x[:, t:t + 1, :]) for t in range(length)]
+            if model == "transformer":
+                self.decode_state = self.block.allocate_state(batch, length)
+            elif model == "mamba1":
+                self.decode_state = self.block.allocate_state(batch)
+            if self.decode_state is not None:
+                # The public resident session: weights uploaded once, here,
+                # like the torch twin's device weights. The state's host
+                # buffers stay zero (never synced), so load_state() is the
+                # per-round zero reset.
+                self.decode_session = self.block.decode_session(self.decode_state)
+            self.info["operation_scope"] = ("zero-state token-by-token decode of the whole input, "
+                                            "one public step call per token")
         if self.operation == "transformer_forward_vjp_tape":
             if lane != "transformer-forward":
                 raise RuntimeError("REFUSED: transformer tape operation requires transformer-forward")
@@ -1080,12 +1161,32 @@ class OursBlock(Ours):
             self.window_state.cached_tokens = 0
             self.out = self.block.forward(self.x, state=self.window_state)
             self.neural_ab_runtime["cached_tokens"] = int(self.window_state.cached_tokens)
+        elif self.decode_session is not None:
+            if hasattr(self.decode_state, "cached_tokens"):
+                self.decode_state.cached_tokens = 0      # position is API metadata
+            self.decode_session.load_state()
+            step = self.decode_session.step
+            self.out = [step(xt) for xt in self.decode_tokens]
+        elif self.decode_tokens is not None:
+            state = self.block.allocate_state(int(self.x.shape[0]))
+            step = self.block.step
+            self.out = [step(xt, state) for xt in self.decode_tokens]
         else:
             self.out = self.block.forward(self.x)
         self.neural_ab_runtime["public_calls_completed"] += 1
 
+    def _y(self):
+        np = self.np
+        if self.decode_tokens is not None:     # after the clock: (B, 1, D) per token -> (B, L, D)
+            return np.concatenate([np.asarray(y).reshape(self.x.shape[0], 1, -1) for y in self.out],
+                                  axis=1)
+        return np.asarray(self.out)
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self._y()).data)[:16]
+
     def outputs(self):
-        out = {"y": self.np.asarray(self.out)}
+        out = {"y": self._y()}
         if self.window_state is not None:
             out.update(k_cache=self.np.asarray(self.window_state.k_cache),
                        v_cache=self.np.asarray(self.window_state.v_cache))
@@ -1135,6 +1236,9 @@ class OursSamba(Ours):
         self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
         self.k = 0
         self.losses = []
+        # samba-decode: the per-token ids, made before the clock
+        self.decode_ids = ([np.ascontiguousarray(self.ids[:, t]) for t in range(self.ids.shape[1])]
+                           if lane == "samba-decode" else None)
 
     def call(self):
         np = self.np
@@ -1143,17 +1247,27 @@ class OursSamba(Ours):
             res = self.model.train_step(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:]))
             self.losses.append(float(res["loss"]))
             self.k += 1
+        elif self.decode_ids is not None:
+            state = self.model.allocate_state(int(self.ids.shape[0]), int(self.ids.shape[1]))
+            step = self.model.step
+            self.out = [step(t, state) for t in self.decode_ids]
         else:
             self.out = self.model.forward(self.ids)
         self.neural_ab_runtime["public_calls_completed"] += 1
 
+    def _y(self):
+        if self.decode_ids is not None:        # after the clock: (B, V) per token -> (B, L, V)
+            return self.np.stack([self.np.asarray(y) for y in self.out], axis=1)
+        return self.np.asarray(self.out)
+
     def outputs(self):
         if self.lane == "samba-train-step":
             return {"losses": self.np.array(self.losses, dtype=self.np.float64)}
-        return {"y": self.np.asarray(self.out)}
+        return {"y": self._y()}
 
     def digest(self):
-        return None if self.lane == "samba-train-step" else Ours.digest(self)
+        return None if self.lane == "samba-train-step" else \
+            _sha(self.np.ascontiguousarray(self._y()).data)[:16]
 
 
 def mlp_state_evidence(state):
@@ -1532,6 +1646,37 @@ class TorchArm:
             blk.W = {LLAMA_NAME.get(k, k): v for k, v in p.items()}
             return blk.block(x.reshape(B * L, dm), None, B, L, sdpa=True)[0].reshape(B, L, dm)
 
+        if self.lane == "transformer-decode":
+            torch = self.torch
+            F = torch.nn.functional
+            hkv, hd = d["n_kv"], d["head_dim"]
+
+            def forward(p, x):            # noqa: F811  (the decode twin replaces the prefill one)
+                # LlamaEager's own pieces at L = 1, the position cfg["ctx"] = t
+                # (its RoPE row and its causal mask), K/V appended to a cache
+                # allocated once per call: the textbook KV-cache decode.
+                blk.W = {LLAMA_NAME.get(k, k): v for k, v in p.items()}
+                kc = torch.empty((B, hkv, L, hd), dtype=x.dtype, device=x.device)
+                vc = torch.empty_like(kc)
+                outs = []
+                for t in range(L):
+                    blk.cfg["ctx"] = t
+                    xt = x[:, t, :]
+                    h = blk._rms(xt, blk.W["norm1.weight"])
+                    q, k, v = blk.project(h, B, 1)
+                    kc[:, :, t:t + 1] = k
+                    vc[:, :, t:t + 1] = v
+                    ctxv = blk.attention_sdpa(q, kc[:, :, :t + 1], vc[:, :, :t + 1], B, 1)
+                    r1 = xt + F.linear(ctxv, blk.W["o_proj.weight"])
+                    outs.append(r1 + blk.mlp(blk._rms(r1, blk.W["norm2.weight"])))
+                blk.cfg["ctx"] = 0
+                return torch.stack(outs, dim=1)
+
+            self.module = self._module(params, forward)
+            self.host = [self._t(self.data["x"])]
+            self.info["twin"] = ("tools/speed_torch_seq.py LlamaEager pieces (_rms, project, "
+                                 "attention_sdpa, mlp) as a per-token KV-cache decode")
+            return
         self.module = self._module(params, forward)
         self.host = [self._t(self.data["x"])]
         self.info["twin"] = "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)"
@@ -1832,7 +1977,12 @@ def _mean_nll(np, logits, targets):
 
 # Same fp32 forward tolerance used by the Mamba and transformer surface gates.
 # This checks saved benchmark output, never a timed opponent or a GPU rerun.
-FORWARD_REFERENCE_LANES = ("transformer-forward", "mamba1-forward", "mamba2-forward", "mamba3-forward")
+FORWARD_REFERENCE_LANES = ("transformer-forward", "mamba1-forward", "mamba2-forward", "mamba3-forward",
+                           # zero-state decode token by token is the same sequence as one
+                           # fresh forward (tools/step_vs_full_check.py), so the decode rows
+                           # carry the same untimed host-reference check
+                           "transformer-decode", "mamba1-decode", "mamba2-decode",
+                           "mamba3-decode")
 FORWARD_REFERENCE_ATOL = 1e-6
 FORWARD_REFERENCE_RTOL = 1e-5
 
@@ -1907,7 +2057,7 @@ def quality(lane, data, outs, *, shape="full"):
         q[arm] = {}
     if lane in FORWARD_REFERENCE_LANES:
         q.update(forward_host_quality(lane, shape, data, outs))
-    if lane in ("lm-forward", "lm-infer", "samba-forward", "samba-infer"):
+    if lane in ("lm-forward", "lm-infer", "samba-forward", "samba-infer", "samba-decode"):
         targets = data["batches"][0][:, 1:].astype(np.int64)
         for arm, o in outs.items():
             q[arm]["mean_nll"] = _mean_nll(np, o["y"], targets)
