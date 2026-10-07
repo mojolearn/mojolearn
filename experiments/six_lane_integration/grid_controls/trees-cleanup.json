@@ -92,10 +92,6 @@
      "MOJOLEARN_TREES_T05",
      "MOJOLEARN_TREES_T05_ROW_VISITS=8"
     ],
-    "16": [
-     "MOJOLEARN_TREES_T05",
-     "MOJOLEARN_TREES_T05_ROW_VISITS=16"
-    ],
     "32": [
      "MOJOLEARN_TREES_T05",
      "MOJOLEARN_TREES_T05_ROW_VISITS=32"
@@ -148,7 +144,7 @@
    "source": [
     "ensemble/tree_identical_ideas.mojo:22",
     "ensemble/decisiontree/batched_levelalgo/builder.mojo:2352",
-    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3625"
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3466"
    ],
    "binding": "_mojolearn_rf,_mojolearn_trees",
    "bits_change": false,
@@ -164,29 +160,9 @@
      "MOJOLEARN_TREES_T08_BITS=8",
      "MOJOLEARN_TREES_T08_LAYOUT=1"
     ],
-    "bits8_layout2": [
-     "MOJOLEARN_TREES_T08",
-     "MOJOLEARN_TREES_T08_BITS=8",
-     "MOJOLEARN_TREES_T08_LAYOUT=2"
-    ],
     "bits8_layout3": [
      "MOJOLEARN_TREES_T08",
      "MOJOLEARN_TREES_T08_BITS=8",
-     "MOJOLEARN_TREES_T08_LAYOUT=3"
-    ],
-    "bits16_layout1": [
-     "MOJOLEARN_TREES_T08",
-     "MOJOLEARN_TREES_T08_BITS=16",
-     "MOJOLEARN_TREES_T08_LAYOUT=1"
-    ],
-    "bits16_layout2": [
-     "MOJOLEARN_TREES_T08",
-     "MOJOLEARN_TREES_T08_BITS=16",
-     "MOJOLEARN_TREES_T08_LAYOUT=2"
-    ],
-    "bits16_layout3": [
-     "MOJOLEARN_TREES_T08",
-     "MOJOLEARN_TREES_T08_BITS=16",
      "MOJOLEARN_TREES_T08_LAYOUT=3"
     ]
    },
@@ -199,7 +175,8 @@
    "binding": "_mojolearn_rf",
    "bits_change": false,
    "status": "rewritten",
-   "note": "LAYOUT 1 row-major, 2 column-major, 3 tile32; BITS 16 only pays above 256 bins (doubles bin bytes otherwise)"
+   "note": "LAYOUT 1 row-major, 2 column-major, 3 tile32; BITS 16 only pays above 256 bins (doubles bin bytes otherwise)",
+   "prune_note": "bits8_layout2 equals the incumbent on NV/AMD (column-major uint8); BITS=16 only doubles bin bytes at 128 bins (defer to a >256-bin lane)"
   },
   "T09_ET": {
    "define": "MOJOLEARN_TREES_T09",
@@ -219,7 +196,9 @@
    "binding": "_mojolearn_trees",
    "bits_change": false,
    "status": "split_from:T09",
-   "note": "ET bootstrap locality sort only"
+   "note": "ET bootstrap locality sort only",
+   "grid": "exclude",
+   "prune_note": "et board bootstrap=False; host sync in fit"
   },
   "RF_SAMPLE": {
    "define": "MOJOLEARN_TREES_RF_SAMPLE",
@@ -270,7 +249,7 @@
    "source": [
     "ensemble/tree_identical_ideas.mojo:47",
     "ensemble/decisiontree/batched_levelalgo/builder.mojo:1018",
-    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:5005"
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:4849"
    ],
    "binding": "_mojolearn_rf,_mojolearn_trees",
    "bits_change": false,
@@ -299,7 +278,8 @@
    "source": [
     "ensemble/tree_identical_ideas.mojo:49",
     "ensemble/randomforest.mojo:3017",
-    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:6548"
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:6392",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:7370"
    ],
    "binding": "_mojolearn_rf,_mojolearn_trees",
    "bits_change": false,
@@ -328,7 +308,7 @@
    "source": [
     "ensemble/tree_identical_ideas.mojo:51",
     "ensemble/decisiontree/batched_levelalgo/builder.mojo:1698",
-    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:5344"
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:5188"
    ],
    "binding": "_mojolearn_rf,_mojolearn_trees",
    "bits_change": false,
@@ -391,7 +371,8 @@
    "default": "off",
    "source": [
     "ensemble/tree_identical_ideas.mojo:56",
-    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:6007"
+    "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:1793",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:5851"
    ],
    "binding": "_mojolearn_rf,_mojolearn_trees",
    "bits_change": false,
@@ -458,7 +439,10 @@
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
    "status": "kept",
-   "note": "fused partition chain, depthwise"
+   "note": "fused partition chain, depthwise",
+   "exclusive_with": [
+    "MOJOLEARN_TREES_T21"
+   ]
   },
   "T19_DEFER": {
    "define": "MOJOLEARN_TREES_T19_DEFER",
@@ -505,9 +489,6 @@
     "1": [],
     "2": [
      "MOJOLEARN_TREES_T21_STREAMS=2"
-    ],
-    "4": [
-     "MOJOLEARN_TREES_T21_STREAMS=4"
     ]
    },
    "default": "1",
@@ -518,7 +499,10 @@
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
    "status": "rewritten",
-   "note": "symmetric 8-bit histogram replica streams; replaces T21_STREAM / T21_STREAM4"
+   "note": "symmetric 8-bit histogram replica streams; replaces T21_STREAM / T21_STREAM4",
+   "exclusive_with": [
+    "MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL"
+   ]
   },
   "T22": {
    "define": "MOJOLEARN_TREES_T22",
@@ -610,7 +594,9 @@
    "binding": "_mojolearn_gbdt",
    "bits_change": true,
    "status": "kept",
-   "note": "numeric version: host column changes together; RMSE depthwise/lossguide, 1 permutation"
+   "note": "numeric version: host column changes together; RMSE depthwise/lossguide, 1 permutation",
+   "grid": "exclude",
+   "prune_note": "RMSE-only; no RMSE board lane"
   },
   "T27": {
    "define": "MOJOLEARN_TREES_T27",
@@ -628,7 +614,9 @@
    ],
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
-   "status": "kept"
+   "status": "kept",
+   "grid": "exclude",
+   "prune_note": "inert on board: device walk never calls move_to; alias of MOJOLEARN_2030_FUSED_EST_MOVE"
   },
   "T28": {
    "define": "MOJOLEARN_TREES_T28",
@@ -725,7 +713,9 @@
    ],
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
-   "status": "kept"
+   "status": "kept",
+   "grid": "exclude",
+   "prune_note": "one-block score grid needs <=256 cells; unreachable at 254 borders x >1 feature"
   },
   "C47_GBDT": {
    "define": "MOJOLEARN_TREES_C47_GBDT",
@@ -743,7 +733,9 @@
    ],
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
-   "status": "kept"
+   "status": "kept",
+   "grid": "exclude",
+   "prune_note": "width cap subsumed by T17_BATCH"
   },
   "FOREST_ROUTE": {
    "define": "MOJOLEARN_TREES_FOREST_ROUTE",
@@ -755,12 +747,16 @@
     ],
     "leaf_reuse_finite": [
      "MOJOLEARN_TREES_FOREST_ROUTE=2"
+    ],
+    "leaf_reuse_finite_t33": [
+     "MOJOLEARN_TREES_FOREST_ROUTE=2",
+     "MOJOLEARN_TREES_T33_COST_SCHEDULE"
     ]
    },
    "default": "walk_fold",
    "source": [
     "core/forest_experiments.mojo:30",
-    "core/forest_inference.mojo:509",
+    "core/forest_inference.mojo:559",
     "core/forest_inference_model.mojo:355"
    ],
    "binding": "_mojolearn_rf,_mojolearn_trees",
@@ -799,13 +795,15 @@
    "default": "off",
    "source": [
     "core/forest_experiments.mojo:14",
-    "core/forest_inference.mojo:520",
-    "core/forest_inference.mojo:1383"
+    "core/forest_inference.mojo:570",
+    "core/forest_inference.mojo:1442"
    ],
    "binding": "_mojolearn_rf,_mojolearn_trees",
    "bits_change": false,
    "status": "kept",
-   "note": "acts in walk_fold (grove) and leaf_reuse* (leaf-ID launch); inert in the single cell walk_fold + T34"
+   "note": "acts in walk_fold (grove) and leaf_reuse* (leaf-ID launch); inert in the single cell walk_fold + T34",
+   "grid": "exclude",
+   "prune_note": "merged into FOREST_ROUTE (arm leaf_reuse_finite_t33); inert on route 0"
   },
   "T34": {
    "define": "MOJOLEARN_TREES_T34_CHUNK_FOLD",
@@ -819,7 +817,7 @@
    "default": "off",
    "source": [
     "core/forest_experiments.mojo:15",
-    "core/forest_inference.mojo:513",
+    "core/forest_inference.mojo:563",
     "core/forest_host_predict.mojo:254"
    ],
    "binding": "_mojolearn_rf,_mojolearn_trees",
@@ -843,7 +841,9 @@
    ],
    "binding": "_mojolearn_rf,_mojolearn_trees",
    "bits_change": false,
-   "status": "kept"
+   "status": "kept",
+   "grid": "exclude",
+   "prune_note": "engages only on the 2x batch coincidence"
   },
   "T38": {
    "define": "MOJOLEARN_TREES_T38_FUSED_LABELS",
@@ -933,7 +933,9 @@
    ],
    "binding": "_mojolearn_svm",
    "bits_change": false,
-   "status": "kept"
+   "status": "kept",
+   "grid": "exclude",
+   "prune_note": "DROP_REDUNDANT: batch_trees = n_trees at board shape (isolation_forest.mojo:1028-1033); memory rule, never faster here"
   },
   "T42": {
    "define": "MOJOLEARN_TREES_T42_CORRECTION_CACHE",
@@ -950,7 +952,9 @@
    ],
    "binding": "_mojolearn_svm",
    "bits_change": false,
-   "status": "kept"
+   "status": "kept",
+   "grid": "exclude",
+   "prune_note": "DROP_REDUNDANT: c(n) cache read only at leaf creation (isolation_tree_builder.mojo:264-268), below any A/A floor"
   },
   "C47_IF": {
    "define": "MOJOLEARN_TREES_C47_IF_LIVE_TASKS",
@@ -1105,7 +1109,8 @@
      "T34"
     ]
    ],
-   "note": "T03 does not fire on the default sqrt classifier or regressor; T14 regressor only"
+   "note": "T03 does not fire on the default sqrt classifier or regressor; T14 regressor only",
+   "notes": "Only T12=256MiB T12=1024MiB T13=4MiB T13=16MiB reach this lane."
   },
   "trees:et": {
    "binding": "_mojolearn_trees",
@@ -1146,7 +1151,8 @@
      "T33",
      "T34"
     ]
-   ]
+   ],
+   "notes": "Only T11_LEVELS=8 T11_LEVELS=16 T12=64MiB T12=256MiB T14=on reach this lane."
   },
   "trees:gbdt-symmetric": {
    "binding": "_mojolearn_gbdt",
@@ -1197,12 +1203,12 @@
     "T19",
     "T19_DEFER",
     "T21",
-    "T18",
     "T26",
     "T23",
     "T27",
     "C45_GBDT",
-    "C50_GB"
+    "C50_GB",
+    "T21_STREAMS"
    ],
    "interaction_groups": [
     [
@@ -1226,27 +1232,22 @@
     "C47_GBDT",
     "T19_DEFER",
     "T21",
-    "T18",
     "T26",
     "T23",
     "T27",
     "C45_GBDT",
-    "C50_GB"
+    "C50_GB",
+    "T19",
+    "T21_STREAMS"
    ],
    "interaction_groups": [
     [
-     "T17_BATCH",
-     "C47_GBDT"
+     "T17_BATCH"
     ],
     [
+     "T19",
      "T19_DEFER",
-     "T21",
-     "C45_GBDT"
-    ],
-    [
-     "T23",
-     "T27",
-     "T26"
+     "T21"
     ]
    ]
   },
@@ -1254,64 +1255,49 @@
    "binding": "_mojolearn_gbdt",
    "route": "fit: symmetric searcher, multi-dim leaf estimation (T23 off for blocked-Hessian); predict: C50_GB",
    "controls": [
-    "T21_STREAMS",
-    "T23",
-    "T27",
     "C45_GBDT",
     "C50_GB"
    ],
-   "interaction_groups": [
-    [
-     "T21_STREAMS",
-     "C45_GBDT"
-    ],
-    [
-     "T23",
-     "T27"
-    ]
-   ]
+   "interaction_groups": []
   },
   "trees:gbdt-categorical": {
    "binding": "_mojolearn_gbdt",
-   "route": "fit: CTR prep (T28 arms) + ordered/doc-parallel searcher (T22, T18), noise (T24), leaf reuse (T25); predict: C50_GB guarded",
+   "route": "fit: Plain Lossguide, 4 CTR permutations: CTR prep (T28 arms) + greedy_search_helper_depthwise lossguide (T17_BATCH, T19_DEFER, T21, T18 multi-permutation batch) + 8-bit hist2 (T21_STREAMS); predict: non-symmetric resident model (C50_GB | gbdt_ns_predict_bitvec)",
    "controls": [
     "T28",
-    "T22",
     "T18",
-    "T24",
-    "T25",
     "T23",
     "T27",
     "C45_GBDT",
-    "C50_GB"
+    "C50_GB",
+    "T17_BATCH",
+    "T19_DEFER",
+    "T21",
+    "T21_STREAMS"
    ],
    "interaction_groups": [
+    [
+     "T17_BATCH"
+    ],
+    [
+     "T19_DEFER",
+     "T21"
+    ],
     [
      "T28"
     ],
     [
-     "T22",
-     "T18",
-     "T25"
-    ],
-    [
-     "T24"
-    ],
-    [
-     "T23",
-     "T27"
+     "T18"
     ]
    ]
   },
   "trees:gbdt-ordered": {
    "binding": "_mojolearn_gbdt",
-   "route": "fit: ordered boosting (T22, T24, T25, T18; T28 if cat features); predict: C50_GB guarded",
+   "route": "fit: SymmetricTree Ordered boosting, 4 permutations, no categorical columns (T22, T24, T25); predict: C50_GB guarded",
    "controls": [
     "T22",
     "T24",
     "T25",
-    "T18",
-    "T28",
     "T23",
     "T27",
     "C45_GBDT",
@@ -1320,18 +1306,10 @@
    "interaction_groups": [
     [
      "T22",
-     "T18",
      "T25"
     ],
     [
      "T24"
-    ],
-    [
-     "T28"
-    ],
-    [
-     "T23",
-     "T27"
     ]
    ]
   },
@@ -1339,7 +1317,6 @@
    "binding": "_mojolearn_gbdt",
    "route": "fit: yeti_rank objective (T29) + symmetric searcher; predict: C50_GB",
    "controls": [
-    "T29",
     "T21_STREAMS",
     "T23",
     "T27",
@@ -1379,8 +1356,6 @@
    "route": "fit: isolation_tree_builder (T40, T41, C47_IF, C48_IF); score: isolation_forest (T42, C50_IF; T43 contamination variant)",
    "controls": [
     "T40",
-    "T41",
-    "T42",
     "C47_IF",
     "C48_IF",
     "C50_IF",
@@ -1389,13 +1364,8 @@
    "interaction_groups": [
     [
      "T40",
-     "T41",
      "C47_IF",
      "C48_IF"
-    ],
-    [
-     "T42",
-     "C50_IF"
     ]
    ]
   }
