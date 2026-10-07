@@ -60,6 +60,7 @@ from gemm.neural_dispatch import (
     ANY_SABOTAGE as GEMM_SABOTAGE, identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
+from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.neural_backward import (
     ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE, identical_gemm_backward_a_into,
     identical_gemm_backward_b_into, identical_gemm_backward_workspace_max_floats,
@@ -1466,7 +1467,7 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
             config.d_model,
         )
     else:
-        identical_gemm_into(ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
+        identical_gemm_into[ROLE=ROLE_HEAD](ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
             tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
     # No wait: the cross entropy forward below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
@@ -1715,7 +1716,7 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     # waits only there, like the `step.head_backward_da` tick below.
     var pg = StepPhaseClock(ctx)
     if not config.chunked_lm_head_v2:
-        identical_gemm_backward_a_into(ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
+        identical_gemm_backward_a_into[ROLE_HEAD](ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
             tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
     pg.tick(ctx, "gemm.head_dA")
     # dA and dB share one wait below; the tick between them waits ONLY
