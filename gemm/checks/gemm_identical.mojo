@@ -4289,7 +4289,21 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
     # tile so no thread row idles; then the small outputs under the tuned
     # plans' 128 K-cell floor.
     var p_count = contract_partition(k)[1]
-    if p_count >= 4 and identical_gemm_splitk_fits(m, n, k):
+    # lane/neural-small (2026-10-07), IDENTICAL grid int sweep
+    # `gemm_split_min_leaves`: -D MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES=4|3|2
+    # (absent = 4, main). The floor exists only to keep the P = 3 fixtures
+    # on their documented plans; below it a short-contraction product
+    # (k of two or three leaves) whose output is under about 1.5 blocks per
+    # SM/CU runs on too few tuned tiles, and a split plan multiplies the
+    # blocks by P with the SAME leaves and the same fold tree, at any model
+    # width with such a k. No bits (`check_device_is_launch_invariant`);
+    # under 3 or 2 the batch-invariance fixtures that name the P = 3 plans
+    # see the split plan instead (plan id only, same words).
+    comptime SPLIT_MIN_LEAVES = get_defined_int["MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES", 4]()
+    comptime assert (
+        SPLIT_MIN_LEAVES == 4 or SPLIT_MIN_LEAVES == 3 or SPLIT_MIN_LEAVES == 2
+    ), "MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES legal set is 4, 3, 2"
+    if p_count >= SPLIT_MIN_LEAVES and identical_gemm_splitk_fits(m, n, k):
         var cap = gemm_split_cells_cap()
         if m <= 8 and n >= 256:
             if m == 1:
