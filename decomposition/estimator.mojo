@@ -355,6 +355,8 @@ def square_in_place_kernel(
 # tiled arm changes the fold and must also be selected by the host column. -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (or
 # -D MOJOLEARN_IDN_ALL_OFF) restores the direct one-block-per-column launch.
 from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
+from experiments.classical_identical_ideas.linear_controls import TSVD_FUSED_STATS
+from core.blocked_moments import bm_tsvd_variances
 
 
 def _column_variance(
@@ -448,6 +450,38 @@ def tsvd_explained_host(
     binding (lane/algos-decomp, 2026-09-27; it had run through the x_decomp
     expansion binding). X V^T is `tsvd_transform_host`'s `gemm_nt`."""
     pca_validate(n_rows, n_features, n_components)
+    comptime if TSVD_FUSED_STATS:
+        # MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (lane classical-decomp,
+        # 2026-10-07; default OFF): both column variances from one blocked
+        # kernel over [X | X V^T] (core/blocked_moments.mojo
+        # `bm_tsvd_variances`; the projection is never stored), then the
+        # same device tail. Host column: pca_oracle `host_tsvd_explained`.
+        # NOT MEASURED.
+        var fx = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+        var fv = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
+        var both = ctx.enqueue_create_buffer[DType.float32](n_features + n_components)
+        ctx.enqueue_copy(dst_buf=fx, src_ptr=x_ptr)
+        ctx.enqueue_copy(dst_buf=fv, src_ptr=components_ptr)
+        bm_tsvd_variances(ctx, _mp(both), _mp(fx), _mp(fv), n_rows, n_features, n_components)
+        var f_exp = ctx.enqueue_create_buffer[DType.float32](max(n_components, 1))
+        var f_rat = ctx.enqueue_create_buffer[DType.float32](max(n_components, 1))
+        var var_t_p = MutPointer[Float32, MutAnyOrigin](
+            unsafe_from_address=Int(both.unsafe_ptr()) + 4 * n_features
+        )
+        ctx.enqueue_function[tsvd_finish_kernel](
+            var_t_p, Int32(n_components), _mp(both), Int32(n_features), _mp(f_exp), _mp(f_rat),
+            grid_dim=1, block_dim=TSVD_FIN_TPB,
+        )
+        if n_components > 0:
+            ctx.enqueue_copy(dst_ptr=explained_ptr, src_buf=f_exp)
+            ctx.enqueue_copy(dst_ptr=ratio_ptr, src_buf=f_rat)
+        ctx.synchronize()
+        _ = fx^
+        _ = fv^
+        _ = both^
+        _ = f_exp^
+        _ = f_rat^
+        return
     var x: DeviceBuffer[DType.float32]
     comptime if TSVD_FAST_POOL:
         x = pool_take[_PCA_POOL](ctx, n_rows * n_features)
