@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 from pathlib import Path
 import sys
@@ -24,6 +25,35 @@ class Owner(unittest.TestCase):
         O.validate(self.c)
         for key,value in [('idle_seconds',0),('renew_minutes',120),('capture_timeout',6000)]:
             with self.assertRaises(ValueError):O.validate(dict(self.c,**{key:value}))
+    def test_hour_retention_boundary_after_verified_final_capture(self):
+        c=dict(self.c,idle_seconds=3600);O.validate(c)
+        with self.assertRaises(ValueError):O.validate(dict(c,capture_timeout=1801))
+        observed=dict(done=True,shared_queue_busy=False,progress='final',command_exit='0',rows=[])
+        local=Path(c['local_out']);local.mkdir()
+        for now,expected_down in ((3609,False),(3610,True)):
+            with self.subTest(now=now):
+                (local/'owner-status.json').write_text(json.dumps(dict(idle_since=10,capture_digest=O.digest([]))))
+                with patch.object(O.time,'time',return_value=now),patch.object(O,'probe',return_value=observed),patch.object(O,'steward') as control,patch.object(O,'command'):
+                    O.manage(c,once=True)
+                self.assertEqual(any('down' in call.args for call in control.call_args_list),expected_down)
+                self.assertTrue(any(call.args==(c,'extend','90') for call in control.call_args_list))
+    def test_hour_retention_pending_queue_clears_previous_idle_capture(self):
+        c=dict(self.c,idle_seconds=3600);O.validate(c)
+        observed=dict(done=True,shared_queue_busy=True,progress='queued',command_exit='0')
+        local=Path(c['local_out']);local.mkdir()
+        (local/'owner-status.json').write_text(json.dumps(dict(idle_since=10,capture_digest='old')))
+        with patch.object(O.time,'time',return_value=4000),patch.object(O,'probe',return_value=observed),patch.object(O,'steward') as control,patch.object(O,'command') as command:
+            O.manage(c,once=True)
+            command.assert_not_called()
+            self.assertFalse(any('down' in call.args for call in control.call_args_list))
+        state=json.loads((local/'owner-status.json').read_text())
+        self.assertIsNone(state['idle_since']);self.assertIsNone(state['capture_digest'])
+    def test_plan_reports_hour_and_unchanged_orphan_policy(self):
+        p=self.root/'config.json';p.write_text(json.dumps(dict(self.c,idle_seconds=3600)))
+        with patch('sys.argv',['owner','plan',str(p)]),patch('sys.stdout',new_callable=io.StringIO) as out:
+            O.main()
+        plan=json.loads(out.getvalue())
+        self.assertEqual(plan['idle_minutes'],60);self.assertEqual(plan['orphan_minutes'],90)
     def test_refuse_other_steward(self):
         self.assertEqual(O.steward_state(self.c)['IP'],'192.0.2.1')
         with self.assertRaisesRegex(ValueError,'identity changed'):O.steward_state(dict(self.c,droplet_id='456'))
