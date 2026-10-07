@@ -1009,7 +1009,8 @@ def class_stats_group_unit[weighted: Bool](t: Int, f: FP, q: IP):
 # C08 fit-local dictionary and inverse map. One canonical dictionary is
 # constructed and immediately consumed before this unit releases ownership.
 # Output codes belong to this fit_transform invocation; no cross-call cache.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+# This unit is the host column's form only: on the device the op runs as the
+# parallel index radix sort + run scan of x_prep/ddict.mojo (same words).
 def unique_inverse_unit(t: Int, f: FP, q: IP):
     # q=[sorted,n,d,dictionary,counts,X,codes], one unit per column.
     unique_cols_unit(t, f, q)
