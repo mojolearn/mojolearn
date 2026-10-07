@@ -167,6 +167,7 @@ class MappingTests(unittest.TestCase):
         self.assertTrue(any('not raced by board lane' in n for n in notes))
         self.assertEqual(G.map_workloads('expanded:lu-solve', dict(inv))[0], ['expanded:lu-solve@dataset=synthetic'])
         self.assertEqual(G.map_workloads('expanded:ridge-cv', dict(inv))[0], ['expanded:ridge-cv@dataset=taxi'])
+        self.assertEqual(G.map_workloads('more:arima', {'more:arima@dataset=taxi': 's'})[0], ['more:arima@dataset=synthetic'])
 
 
 class RealInputTests(unittest.TestCase):

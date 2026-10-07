@@ -1451,7 +1451,7 @@
    "algorithm": "more:arima",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "more:arima@dataset=istella"
+   "workload_id": "more:arima@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -1460,25 +1460,7 @@
    "algorithm": "more:arima",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "more:arima@dataset=istella"
-  },
-  {
-   "B_builds": [
-    "b53a930ad441769f020b"
-   ],
-   "algorithm": "more:arima",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
-   "workload_id": "more:arima@dataset=taxi"
-  },
-  {
-   "B_builds": [
-    "fd5b978b5d98136798b8"
-   ],
-   "algorithm": "more:arima",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "more:arima@dataset=taxi"
+   "workload_id": "more:arima@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -1487,7 +1469,7 @@
    "algorithm": "more:ets",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "more:ets@dataset=istella"
+   "workload_id": "more:ets@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -1496,25 +1478,7 @@
    "algorithm": "more:ets",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "more:ets@dataset=istella"
-  },
-  {
-   "B_builds": [
-    "7ae74817427d874e4bce"
-   ],
-   "algorithm": "more:ets",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
-   "workload_id": "more:ets@dataset=taxi"
-  },
-  {
-   "B_builds": [
-    "4de7ad19fc2bdd67b918"
-   ],
-   "algorithm": "more:ets",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "more:ets@dataset=taxi"
+   "workload_id": "more:ets@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -10329,7 +10293,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane more:arima (it races synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -10344,8 +10310,7 @@
     "_mojolearn_arima"
    ],
    "workloads": [
-    "more:arima@dataset=istella",
-    "more:arima@dataset=taxi"
+    "more:arima@dataset=synthetic"
    ]
   },
   "more:ets": {
@@ -10390,7 +10355,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane more:ets (it races synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -10405,8 +10372,7 @@
     "_mojolearn_tsa"
    ],
    "workloads": [
-    "more:ets@dataset=istella",
-    "more:ets@dataset=taxi"
+    "more:ets@dataset=synthetic"
    ]
   },
   "more:gmm": {
@@ -38855,7 +38821,7 @@
  "summary": {
   "a_builds_after_packing": 636,
   "a_builds_before_packing": 768,
-  "aa_pairs": 318,
+  "aa_pairs": 314,
   "algorithms": 86,
   "algorithms_with_configs": 75,
   "b_builds": 50,
@@ -38889,7 +38855,7 @@
   "builds_after_packing": 686,
   "builds_before_packing": 818,
   "cap": 16,
-  "cells": 2474,
+  "cells": 2470,
   "configs": 540,
   "configs_per_vendor": 540,
   "controls": 222,
@@ -38902,7 +38868,7 @@
   "packed_multi_member": 104,
   "packs": 287,
   "unmapped_algorithms": 2,
-  "workloads": 159
+  "workloads": 157
  },
  "unmapped": [
   {

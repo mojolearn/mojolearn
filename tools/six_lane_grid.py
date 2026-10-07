@@ -339,12 +339,23 @@ def algos_lane_datasets():
     return _ALGOS_DATASETS
 
 
+def board_lane_datasets(target):
+    """Datasets the board races for an expanded: (bench_board_algos) or more: (bench_board_more) lane."""
+    lane = target.split(':', 1)[1].split('@', 1)[0]
+    if target.startswith('expanded:'):
+        return algos_lane_datasets().get(lane)
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import bench_board_more
+    return tuple(bench_board_more.datasets_of(lane)) if lane in bench_board_more.LANES else None
+
+
 def map_workloads(algo_id, inv):
     """-> (workload ids, notes) or (None, reason). Never substitutes smaller data.
 
-    expanded: workloads keep only the datasets their bench_board_algos lane races (2026-10-07: the time-series
-    lanes race taxi-hourly and synthetic, lu-solve synthetic only; the stale matrix inventory named taxi and
-    istella for them, which no board race can run). The lane's own datasets are added when missing."""
+    expanded: and more: workloads keep only the datasets their board lane races (2026-10-07: the expanded
+    time-series lanes race taxi-hourly and synthetic, lu-solve and more:arima/ets synthetic only; the stale
+    matrix inventory named taxi and istella for them, which no board race can run). The lane's own datasets
+    are added when missing."""
     if algo_id in UNMAPPED_REASONS:
         return None, UNMAPPED_REASONS[algo_id]
     target, notes = algo_id, []
@@ -361,8 +372,8 @@ def map_workloads(algo_id, inv):
         out, capped = [], []
         datasets = sorted({w.split('@dataset=', 1)[1].split('@', 1)[0] for w in inv
                            if w.startswith(target + '@dataset=')})
-        if target.startswith('expanded:'):
-            own = algos_lane_datasets().get(target.split(':', 1)[1].split('@', 1)[0])
+        if target.startswith(('expanded:', 'more:')):
+            own = board_lane_datasets(target)
             if own:
                 dropped = [d for d in datasets if d not in own]
                 datasets = sorted(set(d for d in datasets if d in own) |
