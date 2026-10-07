@@ -2302,7 +2302,6 @@ def gmm_m_step(
     if paired:
         ctx.synchronize()  # pending pair scratch must outlive the last GEMM
     _ = pair_buffers^
-    _ = sym_bufs^
     trace.record_device(ctx, tag + ".covariances", cov, ncomp * d * d)
     if ph_on:
         ctx.synchronize()
