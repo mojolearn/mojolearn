@@ -1,4 +1,5 @@
 #!/bin/sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
 # THE ONE CPU-ONLY BUILDER for every host binding (the CPU training lane,
 # 2026-09-13; folded 2026-09-14 when the seventh family, trees, would have
 # been the seventh copy of one script; the byte LM, forest and estimators
@@ -97,7 +98,7 @@ if [ "$family" = tokenizer ]; then
 fi
 host_tmpdir=$(mktemp -d "$host_outdir/.${family}-host-build.XXXXXX")
 trap 'rm -rf "$host_tmpdir"' EXIT HUP INT TERM
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings \
     "$source_file" -o "$host_tmpdir/_mojolearn_${family}_host.so"
 ln "$host_tmpdir/_mojolearn_${family}_host.so" "$host_destination"

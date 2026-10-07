@@ -325,8 +325,37 @@ def workload_inventory():
     return inv
 
 
+_ALGOS_DATASETS = None
+
+
+def algos_lane_datasets():
+    """{lane: datasets} of tools/bench_board_algos.py LANES, the lanes `expanded:` workloads race (lq RACE and
+    tools/bench_board.py's algos family). Imported, not parsed: several lanes compute their dataset tuple."""
+    global _ALGOS_DATASETS
+    if _ALGOS_DATASETS is None:
+        sys.path.insert(0, str(ROOT / 'tools'))
+        import bench_board_algos
+        _ALGOS_DATASETS = {k: tuple(v.get('datasets') or ()) for k, v in bench_board_algos.LANES.items()}
+    return _ALGOS_DATASETS
+
+
+def board_lane_datasets(target):
+    """Datasets the board races for an expanded: (bench_board_algos) or more: (bench_board_more) lane."""
+    lane = target.split(':', 1)[1].split('@', 1)[0]
+    if target.startswith('expanded:'):
+        return algos_lane_datasets().get(lane)
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import bench_board_more
+    return tuple(bench_board_more.datasets_of(lane)) if lane in bench_board_more.LANES else None
+
+
 def map_workloads(algo_id, inv):
-    """-> (workload ids, notes) or (None, reason). Never substitutes smaller data."""
+    """-> (workload ids, notes) or (None, reason). Never substitutes smaller data.
+
+    expanded: and more: workloads keep only the datasets their board lane races (2026-10-07: the expanded
+    time-series lanes race taxi-hourly and synthetic, lu-solve and more:arima/ets synthetic only; the stale
+    matrix inventory named taxi and istella for them, which no board race can run). The lane's own datasets
+    are added when missing."""
     if algo_id in UNMAPPED_REASONS:
         return None, UNMAPPED_REASONS[algo_id]
     target, notes = algo_id, []
@@ -343,6 +372,17 @@ def map_workloads(algo_id, inv):
         out, capped = [], []
         datasets = sorted({w.split('@dataset=', 1)[1].split('@', 1)[0] for w in inv
                            if w.startswith(target + '@dataset=')})
+        if target.startswith(('expanded:', 'more:')):
+            own = board_lane_datasets(target)
+            if own:
+                dropped = [d for d in datasets if d not in own]
+                datasets = sorted(set(d for d in datasets if d in own) |
+                                  ({d for d in own if '@' not in target} if dropped else set()))
+                if dropped:
+                    notes.append('datasets ' + ','.join(dropped) + ' are not raced by board lane ' + target +
+                                 ' (it races ' + ','.join(own) + ')')
+                    for d in own:
+                        inv.setdefault(target + '@dataset=' + d, 'board lane datasets (tools/bench_board_algos.py LANES)')
         for ds in datasets:
             base = target + '@dataset=' + ds
             variants = sorted(w for w in inv if w.startswith(base + '@input='))

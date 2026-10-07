@@ -1,4 +1,5 @@
 #!/bin/sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
 # Build the IVF-FLAT CPython extension (mojolearn.IVFIndex) into
 # python/mojolearn/_mojolearn_ivf.so. Run from anywhere; requires pixi.
 # Mirrors bindings/build_gp.sh line for line except where this family is named.
@@ -151,7 +152,7 @@ out="$tmpdir/_mojolearn_ivf.so"
 # the import fails with "dynamic module does not define module export
 # function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \

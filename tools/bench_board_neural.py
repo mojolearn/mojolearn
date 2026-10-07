@@ -544,6 +544,23 @@ def _sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def outputs_digest(outs):
+    """sha256 (first 16 hex) over a race's saved outputs {name: array}: every name in sorted order with its
+    dtype, shape and C-order bytes. Recorded per arm as `outputs_digest` and printed as `NEURAL-DIGEST`,
+    so the training lanes, whose per-round `digest` is None (their state changes every round), still carry
+    one output hash per race for the NVIDIA == AMD identity check (tools/six_lane_grid_lq.py). Hashed after
+    the timed rounds, from the arrays the race already saved; never inside a clock."""
+    import numpy as np
+    if not outs:
+        return None
+    h = hashlib.sha256()
+    for name in sorted(outs):
+        arr = np.ascontiguousarray(np.asarray(outs[name]))
+        h.update(("%s|%s|%s;" % (name, arr.dtype.str, ",".join(str(int(s)) for s in arr.shape))).encode())
+        h.update(arr.tobytes())
+    return h.hexdigest()[:16]
+
+
 def _load(name, alias=None):
     path = os.path.join(HERE, name + ".py")
     alias = alias or ("bbn_" + name)
@@ -2248,6 +2265,9 @@ def race(args):
             if msg is not None and msg.get("event") == "saved":
                 with np.load(path) as z:
                     outs[arm] = {k: z[k] for k in z.files}
+                result["arms"][arm]["outputs_digest"] = outputs_digest(outs[arm])
+                print("NEURAL-DIGEST lane=%s arm=%s digest=%s"
+                      % (lane, arm, result["arms"][arm]["outputs_digest"]), flush=True)
                 if getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES:
                     # Retain the measured trainer state for independent identity checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
