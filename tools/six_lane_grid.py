@@ -541,9 +541,15 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP):
     rep = {k: arm_info[k]['arms'][0] for k in eligible}
 
     def with_parent(assign):
-        keys = {k for k, _ in assign}
-        extra = [(parents[k][0], rep[parents[k][0]]) for k, _ in assign if k in parents and parents[k][0] not in keys]
-        ordered = unique(extra + list(assign))
+        # Transitive: a grandchild (nn20_split_kv_leaves -> nn20_split_kv ->
+        # attn_softmax) carries every ancestor's representative arm.
+        ordered = list(assign)
+        while True:
+            keys = {k for k, _ in ordered}
+            extra = [(parents[k][0], rep[parents[k][0]]) for k, _ in ordered if k in parents and parents[k][0] not in keys]
+            if not extra:
+                break
+            ordered = unique(extra + ordered)
         return tuple(sorted(ordered, key=lambda ka: eligible.index(ka[0])))
 
     candidates, seen = [], {(): 'B'}
