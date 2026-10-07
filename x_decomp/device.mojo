@@ -161,8 +161,9 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 comptime U32Ptr = MutPointer[UInt32, MutAnyOrigin]
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import (
-    ts_apply_device, ts_factor_device, ts_free_device, ts_pack_center_device, ts_pack_device,
+    TS_SMEM_OK, ts_apply_device, ts_apply_device_buf, ts_factor_device, ts_free_device, ts_pack_center_device, ts_pack_device,
 )
+from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
 from x_decomp.jacobi_par import (
     PJ_TPB,
@@ -2363,12 +2364,62 @@ def launch_absmax(ctx: DeviceContext, a: F32Ptr, dst: F32Ptr, p: F32Ptr, n: Int,
         )
 
 
+def orth_tsqr_select_kernel(r: F32Ptr, c: F32Ptr, l: Int32):
+    """RSVD_IDN_TSQR_ORTHO: C = diag(R[j, j] != 0) from the rank-guarded R
+    (one thread per cell of the l x l C)."""
+    var ll = Int(l)
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if q < ll * ll:
+        var i = q // ll
+        var j = q - i * ll
+        var v = Float32(0)
+        if i == j and r.unsafe_load(j * ll + j) != Float32(0):
+            v = Float32(1)
+        c.unsafe_store(q, v)
+
+
+def _orth_tsqr_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int) raises:
+    """RSVD_IDN_TSQR_ORTHO (x_decomp/tsqr_core.mojo): `da` (m x l) replaced
+    by Q of its blocked TSQR with the rank-guarded selection, Q = Q_full C.
+    One factor pass (R comes home as the TSQR's contract, a NaN check), the
+    guard and the selection on the device, one apply pass, one copy back."""
+    var cells = m * l
+    var dw = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=dw, src_buf=da)
+    var r = List[Float32](length=l * l, fill=Float32(0))
+    var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
+    ts_factor_device(ctx, dw, m, l, pr, True)
+    var dr = ctx.enqueue_create_buffer[DType.float32](l * l)
+    var dc = ctx.enqueue_create_buffer[DType.float32](l * l)
+    ctx.enqueue_copy(dst_buf=dr, src_ptr=pr)
+    ctx.enqueue_function[orth_guard_kernel](dr.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
+    ctx.enqueue_function[orth_tsqr_select_kernel](
+        dr.unsafe_ptr(), dc.unsafe_ptr(), Int32(l), grid_dim=_blocks(l * l), block_dim=TPB
+    )
+    var dq = ts_apply_device_buf(ctx, dc, m, l, l)
+    var dd = da
+    ctx.enqueue_copy(dst_buf=dd, src_buf=dq)
+    ctx.synchronize()
+    _ = r^
+    _ = dw^
+    _ = dr^
+    _ = dc^
+    _ = dq^
+    _ = dd^
+
+
 def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int) raises:
     """DevExec.orth's two passes on a device matrix, in place (its values
     replaced by the orthonormalized columns): R of the matrix (`qr_factor`
     on a device copy, as `device_qr_r`), the rank guard on the host
     (DEVIATION 5318), then A R^-1 by rows (`trsm_kernel`, DEVIATION 5309).
-    Waits for the device (the guard reads R on the host)."""
+    Waits for the device (the guard reads R on the host).
+    RSVD_IDN_TSQR_ORTHO: one blocked TSQR pass instead (`_orth_tsqr_device`)
+    for the shapes the TSQR takes."""
+    comptime if RSVD_IDN_TSQR_ORTHO and TS_SMEM_OK:
+        if orth_tsqr_shape_ok(m, l):
+            _orth_tsqr_device(ctx, da, m, l)
+            return
     var none = ctx.enqueue_create_buffer[DType.float32](1)
     orth_on_device_diag(ctx, da, m, l, none, False)
     _ = none^

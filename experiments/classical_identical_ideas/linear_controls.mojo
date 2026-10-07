@@ -73,6 +73,12 @@ comptime _ESB_RAW = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS", 0
 comptime ENETCV_SCORE_BLOCKS = _ESB_RAW if CLASSICAL_IDN else 0
 comptime ENETCV_SCORE_BLOCKS_LEGAL = _ESB_RAW == 0 or _ESB_RAW == 1024 or _ESB_RAW == 4096
 comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
+# lane/classical-structural (2026-10-07), default off:
+# `-D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE` (OLS and Ridge). One resident
+# centered-Gram fit (glm/impl/gram_solve.mojo) instead of OLS's 14-panel
+# TSQR of a centered copy and Ridge's four PCIe crossings + untiled U = A V.
+# Bits change; the host column (glm/host/gram_solve_host.mojo) follows.
+comptime LINEAR_GRAM_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE"]()
 comptime C16_GLM_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C16_GLM_FUSED"]()
 comptime C17_OVR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C17_OVR"]()
 comptime C17_LS_TRIALS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C17_LS_TRIALS"]()

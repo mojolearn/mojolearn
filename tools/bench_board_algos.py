@@ -219,15 +219,16 @@ _add("sgd-clf", xlane="linear", ours="SGDClassifier", task="clf", block="cls",
      cuml="cuml.linear_model:MBSGDClassifier",
      cuml_params=dict(loss="hinge", penalty="l2", alpha=1e-4, epochs=100, batch_size=4096,
                       learning_rate="constant", eta0=0.005, tol=0.0, shuffle=True),
-     mism=["cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are "
-           "per-sample SGD (the reference)", "cuML reads epochs=100, the others max_iter=100"])
+     mism=["cuML MBSGD and ours are mini-batch SGD (batch_size 4096, ours the default of "
+           "python/mojolearn/_expansion_linear.py); scikit-learn is per-sample SGD (the reference)",
+           "cuML reads epochs=100, the others max_iter=100"])
 _add("sgd-reg", xlane="linear", ours="SGDRegressor", task="reg", block="reg",
      sk="sklearn.linear_model:SGDRegressor", params=dict(_SGD, loss="squared_error"),
      cuml="cuml.linear_model:MBSGDRegressor",
      cuml_params=dict(loss="squared_loss", penalty="l2", alpha=1e-4, epochs=100,
                       batch_size=4096, learning_rate="constant", eta0=0.005,
                       tol=0.0, shuffle=True),
-     mism=["cuML MBSGD is mini-batch SGD (batch_size 4096)"])
+     mism=["cuML MBSGD and ours are mini-batch SGD (batch_size 4096); scikit-learn is per-sample"])
 for _slug, _cls, _kw, _why in (
         ("poisson", "PoissonRegressor", {}, "y = the reg target (taxi fare > 0; Istella grade >= 0)"),
         ("gamma", "GammaRegressor", {}, "y = the reg target + 1 (Gamma needs y > 0; Istella grades start at 0)"),

@@ -487,6 +487,32 @@ def _ols_normal_eq_default(b):
     return bool(q()) if q is not None else False
 
 
+def _linear_gram_fit(b, x, y, rows, cols, alpha, fit_intercept):
+    """MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE (lane/classical-structural):
+    `(coef, x_mean, y_mean)` from the binding's resident centered-Gram fit
+    (glm/impl/gram_solve.mojo: X and y up once, the blocked centered Gram and
+    cross, the IDENTICAL Cholesky), or None when the build lacks the route or
+    the binding reports status 1 (the Gram did not factor or a pivot failed
+    the trust gate): the caller's incumbent route then runs. Glue only: the
+    binding computes every number."""
+    q = _optional_export(b, "linear_gram_solve_default")
+    fn = _optional_export(b, "linear_gram_fit")
+    if q is None or fn is None or not bool(q()):
+        return None
+    coef = empty((cols,), "<f4")
+    mu = empty((cols,), "<f4")
+    ymean = empty((1,), "<f8")
+    status = int(fn(addr_ro(x, name="X"), addr_ro(y, name="y"),
+                    addr(coef, name="coef_"), addr(mu, name="column means"),
+                    addr(ymean, name="y mean"),
+                    [int(rows), int(cols), float(alpha), 1 if fit_intercept else 0]))
+    if status != 0:
+        return None
+    if fit_intercept:
+        return coef, mu, float(ymean.tolist()[0])
+    return coef, zeros((cols,), "<f4"), 0.0
+
+
 def _optional_export(b, name):
     """`name` from binding `b`, or None when it does not export it. A host
     binding's stand-in raises ImportError (by name) for a missing export
@@ -689,6 +715,14 @@ class LinearRegression(NumericModeMixin):
                 self._y_mean = 0.0
             self._set_intercept(cols)
             return self
+        if weights is None:
+            # MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE: the resident centered-Gram
+            # fit; None when the build lacks it or the Gram is not trusted
+            gram = _linear_gram_fit(b, x, target, rows, cols, 0.0, self.fit_intercept)
+            if gram is not None:
+                self.coef_, self._x_mean, self._y_mean = gram
+                self._set_intercept(cols)
+                return self
         if self.fit_intercept and weights is None and not normal_eq:
             # lane idn-dense-linalg: center + TSQR in one entry, X up once
             got = _ols_tsqr_centered(x, target, rows, cols, getattr(self, "numeric_mode", None))
@@ -885,7 +919,13 @@ class Ridge(NumericModeMixin):
         q = getattr(b, "ridge_resident_default", None)
         resident = getattr(b, "ridge_fit_resident", None)
         use_resident = q is not None and resident is not None and bool(q())
-        if use_resident:
+        # MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE: the resident centered-Gram
+        # fit; None when the build lacks it or the Gram is not trusted
+        gram = _linear_gram_fit(b, x, target, rows, cols, float(self.alpha), self.fit_intercept)
+        if gram is not None:
+            self.coef_, self._x_mean, self._y_mean = gram
+            use_resident = True
+        elif use_resident:
             # lane apple-fast-ridgespeed: FAST Apple builds (default unless
             # -D MOJOLEARN_RIDGE_RESIDENT_OFF): X and y uploaded once, the same
             # column sums, center and ridgeEig on the resident buffers (the

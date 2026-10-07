@@ -107,6 +107,8 @@ from glm.estimator import (
     ridge_fit_host,
     ridge_fit_resident_host,
 )
+from glm.impl.gram_solve import linear_gram_fit_host
+from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from checks.soft_f64 import (
     SF64_ONE, SF64_ZERO, sf64_add, sf64_div, sf64_exp, sf64_from_f32, sf64_gt, sf64_neg,
@@ -788,6 +790,54 @@ def ridge_fit_binding(
         ridge_fit_host(ctx, xp, yp, wp, nr, nf, alpha)
         ctx.synchronize()
     return PythonObject(0)
+
+
+def linear_gram_solve_default_binding() raises -> PythonObject:
+    """True when this build has MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE
+    (lane/classical-structural): LinearRegression.fit and Ridge.fit try the
+    resident centered-Gram fit `linear_gram_fit` first."""
+    return PythonObject(LINEAR_GRAM_SOLVE)
+
+
+def linear_gram_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    mu_addr: PythonObject,
+    ymean_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE (glm/impl/gram_solve.mojo): OLS
+    (alpha 0) or Ridge (alpha > 0) by the resident centered Gram and the
+    IDENTICAL Cholesky, X and y uploaded once. params: n_rows, n_features,
+    alpha, center (0/1). Returns 0 with coef (and, with center, mu float32
+    [n_features] and ymean float64 [1]) written, or 1 with nothing written
+    when the Gram is not trusted: the caller then runs its incumbent route."""
+    comptime if not LINEAR_GRAM_SOLVE:
+        raise Error("linear_gram_fit: only a build with -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE has this route")
+    if len(params) != 4:
+        raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var mp = _f32_ptr(Int(py=mu_addr))
+    var ymp = _f64_ptr(Int(py=ymean_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var alpha = Float32(Float64(py=params[2]))
+    var center = Int(py=params[3]) != 0
+    if nr <= 0 or nf <= 0:
+        raise Error("linear_gram_fit: n_rows and n_features must be positive")
+    if alpha > Float32(0.0) and nf == 1:
+        # Ridge at one column selects ridgeSVD in the incumbent (refused by
+        # name there); the same answer here: the caller's route decides.
+        return PythonObject(1)
+    var status = 1
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        status = linear_gram_fit_host(ctx, xp, yp, wp, mp, ymp, nr, nf, alpha, center)
+        ctx.synchronize()
+    return PythonObject(status)
 
 
 def ridge_resident_default_binding() raises -> PythonObject:
@@ -1513,6 +1563,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[ridge_fit_resident_binding]("ridge_fit_resident")
         m.def_function[ridge_resident_default_binding]("ridge_resident_default")
+        m.def_function[linear_gram_fit_binding]("linear_gram_fit")
+        m.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")
         comptime if MULTIOUT_RIDGE:
             m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
             m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")

@@ -873,6 +873,57 @@ comptime SGD_IDN_MB_FUSE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
+# lane/classical-structural (2026-10-07), IDENTICAL only, default off:
+# `-D MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS`. The minibatch kernels read
+# their rows through the epoch's permutation (`x[idx[p] * d + j]`,
+# `ys[idx[p]]`, `sw[idx[p]]`): a 4096-row batch touches 4096 rows scattered
+# over the whole of X, so every row load is its own cache line fetch and the
+# (d + 2) x nsub partial chains wait on scattered 44-byte rows. Here, once per
+# epoch and per problem right after `sgd_perm_kernel`, one wide gather writes
+# the permuted copies xp[p] = x[idx[p]], ysp[p] = ys[idx[p]], swp[p] =
+# sw[idx[p]], and the batch kernels run on those copies with the identity
+# order, so a batch reads `batch * d` contiguous words (L2-resident for the
+# chains). Cost reasoning: the gather is two streaming passes over X per
+# epoch (read + write), against batches-per-epoch x scattered-row latency; it
+# pays whenever n * d is above a few hundred rows a batch. No bits move: for
+# the row at batch position p every kernel sees the SAME operands
+# (x row idx[p], ys[idx[p]], sw[idx[p]]) in the SAME batch at the SAME
+# position, and the folds in `mb_dot` / `mb_part` are indexed by the batch
+# position r, not by the row id, so the operand order of every fmad is
+# unchanged. The host twin (`sgd_mb_one`) keeps its idx form and needs no
+# change. FAST (`SGD_FAST_EPOCH_RESIDENT`) is untouched: this flag is
+# IDENTICAL only. A memory gate (free device memory must cover the copies
+# twice over) falls back to the gathered-load route.
+comptime SGD_IDN_EPOCH_CONTIGUOUS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS"]()
+)
+
+
+def sgd_gather_x_kernel(dst: FP, src: FP, idx: IP, n: Int32, d: Int32, wf: IP, woff: Int32, nonce: Int32):
+    """SGD_IDN_EPOCH_CONTIGUOUS: dst[p * d + j] = src[idx[p] * d + j], one
+    thread per word (coalesced stores; a row's d words are contiguous in the
+    source too)."""
+    var dd = Int(d)
+    var o = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if o < Int(n) * dd:
+        var p = o // dd
+        var j = o - p * dd
+        st(dst, o, ld(src, Int(ldi(idx, p)) * dd + j))
+    witness_end(wf, woff, nonce)
+
+
+def sgd_gather_vec_kernel(dst_ys: FP, src_ys: FP, dst_sw: FP, src_sw: FP, idn: IP, idx: IP, n: Int32,
+                          wf: IP, woff: Int32, nonce: Int32):
+    """SGD_IDN_EPOCH_CONTIGUOUS: the targets and sample weights in the
+    epoch's order, plus the identity order the batch kernels then read."""
+    var p = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if p < Int(n):
+        var i = Int(ldi(idx, p))
+        st(dst_ys, p, ld(src_ys, i))
+        st(dst_sw, p, ld(src_sw, i))
+        sti(idn, p, p)
+    witness_end(wf, woff, nonce)
+
 
 def sgd_mb_steprows_kernel(
     parts: FP, w0: FP, b0: FP, w1: FP, b1: FP, obj: FP, x: FP, ys: FP, idx: IP, swp: FP, dlv: FP, lv: FP,
@@ -1666,6 +1717,18 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     # SGD_IDN_MB_FUSE: the pair the fused step writes while it reads dw / dbias
     var dw2 = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var dbias2 = ctx.enqueue_create_buffer[DType.float32](2)
+    # SGD_IDN_EPOCH_CONTIGUOUS: the permuted copies (one word each otherwise).
+    # Gate: free device memory covers the copies twice over (the batch
+    # kernels' own buffers are small; the margin is for the allocator).
+    var contiguous = False
+    comptime if SGD_IDN_EPOCH_CONTIGUOUS:
+        if do_shuffle:
+            var mem = ctx.get_memory_info()
+            contiguous = Int(mem[0]) >= 2 * 4 * (n_x + 2 * n)
+    var dxp = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1) if contiguous else 1)
+    var dysp = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if contiguous else 1)
+    var dswp = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if contiguous else 1)
+    var didn = ctx.enqueue_create_buffer[DType.int32](max(n, 1) if contiguous else 1)
     var wcap = 0
     var ws0 = 0
     while ws0 < n:
@@ -1673,6 +1736,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
         wcap += _sgd_row_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2) + (1 if ocm == 2 else 0)
         ws0 += wbs
     wcap += _xg_blocks(n)
+    if contiguous:
+        wcap += _xg_blocks(n_x) + _xg_blocks(n)
     var wit = Witness(ctx, max(wcap, 1))
     var chunk = _sgd_chunk()
     var dci = ctx.enqueue_create_buffer[DType.int32](17)
@@ -1779,6 +1844,29 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                         didx.unsafe_ptr(), Int32(n), seed_lo, seed_hi, Int32(epoch), Int32(c), Int32(1),
                         grid_dim=_xg_blocks(n), block_dim=XG_TPB,
                     )
+                # SGD_IDN_EPOCH_CONTIGUOUS: the epoch's rows, targets and
+                # weights gathered once into contiguous copies (inside the
+                # guarded unit, so a replay regathers); the batch kernels
+                # below read the copies through the identity order
+                var xk = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
+                var ysk = FP(unsafe_from_address=Int(dys.unsafe_ptr()))
+                var swk = FP(unsafe_from_address=Int(dsw.unsafe_ptr()))
+                var idxk = IP(unsafe_from_address=Int(didx.unsafe_ptr()))
+                if contiguous:
+                    ctx.enqueue_function[sgd_gather_x_kernel](
+                        dxp.unsafe_ptr(), dx.unsafe_ptr(), didx.unsafe_ptr(), Int32(n), Int32(d),
+                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n_x), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(n_x)
+                    ctx.enqueue_function[sgd_gather_vec_kernel](
+                        dysp.unsafe_ptr(), dys.unsafe_ptr(), dswp.unsafe_ptr(), dsw.unsafe_ptr(), didn.unsafe_ptr(),
+                        didx.unsafe_ptr(), Int32(n), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(n)
+                    xk = FP(unsafe_from_address=Int(dxp.unsafe_ptr()))
+                    ysk = FP(unsafe_from_address=Int(dysp.unsafe_ptr()))
+                    swk = FP(unsafe_from_address=Int(dswp.unsafe_ptr()))
+                    idxk = IP(unsafe_from_address=Int(didn.unsafe_ptr()))
                 dobj.enqueue_fill(Float32(0))
                 var start = 0
                 var fast_fused = False
@@ -1884,8 +1972,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                         var et = mb_eta(lr, eta0, eta0, alpha, power_t, opt_init, t)
                         if bs_prev == 0:
                             ctx.enqueue_function[sgd_mb_rows_kernel](
-                                dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
-                                dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
+                                xk, ysk, idxk, Int32(start), Int32(bs), Int32(d),
+                                dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, swk, Int32(1 if has_sw else 0),
                                 wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
                                 Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
                             )
@@ -1896,7 +1984,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                             var b_dst = FP(unsafe_from_address=bb if cur == 0 else ba)
                             ctx.enqueue_function[sgd_mb_steprows_kernel](
                                 dparts.unsafe_ptr(), w_src, b_src, w_dst, b_dst,
-                                dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
+                                dobj.unsafe_ptr(), xk, ysk, idxk, swk,
                                 ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp, ddlt.unsafe_ptr(),
                                 Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(dev_eta),
                                 wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
@@ -1913,7 +2001,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                             )
                             wo += 1
                         ctx.enqueue_function[sgd_mb_parts_kernel](
-                            dx.unsafe_ptr(), Int32(d), didx.unsafe_ptr(), Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
+                            xk, Int32(d), idxk, Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
                             Int32(bs), Int32(nsub), dparts.unsafe_ptr(), Int32(sub), wit.p(), Int32(wo), nonce,
                             grid_dim=_xg_blocks((d + 2) * mb_subs(bs, sub)), block_dim=XG_TPB,
                         )
@@ -1936,7 +2024,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                     elif bs_prev > 0:
                         ctx.enqueue_function[sgd_mb_steprows_kernel](
                             dparts.unsafe_ptr(), dw2.unsafe_ptr(), dbias2.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
-                            dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
+                            dobj.unsafe_ptr(), xk, ysk, idxk, swk,
                             ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp, ddlt.unsafe_ptr(),
                             Int32(start), Int32(bs_prev), Int32(0), et_prev, Int32(dev_eta),
                             wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
@@ -1947,8 +2035,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                         var bs = min(batch, n - start)
                         var et = mb_eta(lr, eta0, eta0, alpha, power_t, opt_init, t)
                         ctx.enqueue_function[sgd_mb_rows_kernel](
-                            dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
-                            dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
+                            xk, ysk, idxk, Int32(start), Int32(bs), Int32(d),
+                            dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, swk, Int32(1 if has_sw else 0),
                             wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
                             Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
                         )
@@ -1961,7 +2049,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                             )
                             wo += 1
                         ctx.enqueue_function[sgd_mb_parts_kernel](
-                            dx.unsafe_ptr(), Int32(d), didx.unsafe_ptr(), Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
+                            xk, Int32(d), idxk, Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
                             Int32(bs), Int32(nsub), dparts.unsafe_ptr(), Int32(sub), wit.p(), Int32(wo), nonce,
                             grid_dim=_xg_blocks((d + 2) * mb_subs(bs, sub)), block_dim=XG_TPB,
                         )

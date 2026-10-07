@@ -77,6 +77,7 @@ from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
+from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.host.center_host import center_on_cpu, col_sums_on_cpu
 from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
@@ -557,9 +558,31 @@ struct HostExec(Exec):
 
     @staticmethod
     def orth(a: F32Ptr, m: Int, l: Int) raises:
+        comptime if RSVD_IDN_TSQR_ORTHO:
+            if orth_tsqr_shape_ok(m, l):
+                HostExec._orth_tsqr(a, m, l)
+                return
         var none = List[Float32](length=1, fill=Float32(1))
         HostExec._orth_passes(a, m, l, F32Ptr(unsafe_from_address=Int(none.unsafe_ptr())), False)
         _ = none^
+
+    @staticmethod
+    def _orth_tsqr(a: F32Ptr, m: Int, l: Int) raises:
+        """RSVD_IDN_TSQR_ORTHO's host column (x_decomp/tsqr_core.mojo): the
+        TSQR's host replay of `_orth_tsqr_device`: factor (a copied into the
+        kept state), the rank guard on R, the selection C = diag(R[j, j] != 0),
+        then Q C written over `a`."""
+        var r = List[Float32](length=l * l, fill=Float32(0))
+        var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
+        ts_factor_host(a, a, pr, m, l, 0, True)
+        orth_rank_guard(pr, l)
+        var c = List[Float32](length=l * l, fill=Float32(0))
+        for j in range(l):
+            if pr.unsafe_load(j * l + j) != Float32(0):
+                c[j * l + j] = Float32(1)
+        ts_apply_host(F32Ptr(unsafe_from_address=Int(c.unsafe_ptr())), a, m, l, l)
+        _ = r^
+        _ = c^
 
     @staticmethod
     def orth_diag(a: F32Ptr, m: Int, l: Int, diag: F32Ptr) raises:

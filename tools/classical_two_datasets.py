@@ -128,6 +128,11 @@ ratio is never a sentence here.
 CTD-SPAN, one per arm, says what was INSIDE that arm's clock and what was
 outside it: `input_home` (a device-resident input was uploaded before the
 clock started), `upload_ms_untimed`, `fit_ms_untimed`, `pre_clock_fit`.
+For ours it also carries `upload_ms_separate`, a SEPARATE upload of the same
+input timed after each scored round outside every clock (`_ours_upload_probe`),
+and `fit_minus_upload_ms`, derived from the two medians: a kernel-only
+reading beside the whole-operation one. The scored clock's boundary is
+unchanged.
 CTD-RATIO carries a `span_asymmetry=` field naming every opponent whose clock
 covers less work than ours. Every term of it was already being recorded in the
 ready records and none of it used to reach the line a reader reads. Ours
@@ -831,6 +836,59 @@ def _ours_info(ml, est):
         raise RuntimeError("ours is not %s: numeric_mode_used() = %r"
                            % (want.upper(), info.get("numeric_mode_used"),))
     return info
+
+
+def _ours_upload_probe(runner):
+    """A SEPARATE host-to-device upload of the arm's main input, timed on its
+    own and OUTSIDE the scored clock (lane/classical-structural, 2026-10-07).
+
+    Ours uploads inside its clock (`_span_facts`: `inside_clock =
+    host_to_device_upload,host_validation,call`) and the GPU opponents do
+    not, so the scored time has no kernel-only reading beside it. This takes
+    one: the same float32 words the public call uploads go up once more
+    through the resident-array binding (`x_cnn_res_upload`, an enqueue_copy
+    followed by a device synchronize), after the round's scored call and its
+    outputs are done, and the time is recorded as its own field
+    (`upload_separate`). NOTHING MOVES: the scored clock, its boundary and
+    the whole-operation clock are exactly what they were; this is a second
+    measurement beside them, not a split of them. `fit_minus_upload_ms` is
+    DERIVED from the two medians and says so. Device memory for the copy is
+    allocated and freed outside every clock. When the binding or the input is
+    not available the field says why instead of guessing."""
+    x = getattr(runner, "X", None)
+    if x is None:
+        x = getattr(runner, "index", None)
+    if x is None:
+        x = getattr(runner, "q", None)
+    if x is None:
+        return {"unavailable": "the arm holds no host input array"}
+    ml = getattr(runner, "ml", None)
+    if ml is None:
+        return {"unavailable": "the arm has no mojolearn module"}
+    try:
+        b = ml._backend.binding("_mojolearn_x_cnn", ml._backend.default_mode())
+    except Exception as exc:  # noqa: BLE001
+        return {"unavailable": "no resident-array binding: %r" % (exc,)}
+    a = np.ascontiguousarray(x, dtype=np.float32)  # glue: the words the fit uploads (already f32 C)
+    words = int(a.size)
+    if words <= 0:
+        return {"unavailable": "empty input"}
+    try:
+        h = int(b.x_cnn_res_alloc(words))
+    except Exception as exc:  # noqa: BLE001
+        return {"unavailable": "res_alloc failed: %r" % (exc,)}
+    try:
+        t0 = time.perf_counter()
+        b.x_cnn_res_upload(h, a.ctypes.data, words)
+        ms = (time.perf_counter() - t0) * 1000.0
+    finally:
+        try:
+            b.x_cnn_res_free(h)
+        except Exception:  # noqa: BLE001
+            pass
+    return {"ms": ms, "bytes": words * 4, "scope": "host_to_device_upload_separate",
+            "input": "X" if x is getattr(runner, "X", None) else ("index" if x is getattr(runner, "index", None) else "q"),
+            "outside_scored_clock": True}
 
 
 class OursKMeans:
@@ -2261,12 +2319,18 @@ def worker(args):
                 digest = _digest(outputs)
                 from bench_board_state import scored_receipt
                 state_receipt = scored_receipt(outputs, runner) if r > 0 else None
+                # the separate upload clock (ours only), after every scored
+                # clock of this round has closed; see _ours_upload_probe
+                upload_sep = None
+                if (runner.info or {}).get("library") == "mojolearn":
+                    upload_sep = _ours_upload_probe(runner)
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "upload_separate": upload_sep,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -2821,6 +2885,9 @@ def race(args):
                 result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
             if msg.get("state_receipt") is not None:
                 result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
+            if msg.get("upload_separate") is not None:
+                result["arms"][arm].setdefault("upload_separate", []).append(
+                    dict(msg["upload_separate"], round=r, warmup=r == 0))
             result["arms"][arm]["mem"].append(msg.get("mem"))
             print("CTD-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)
@@ -2889,15 +2956,24 @@ def race(args):
         # WHAT WAS INSIDE THIS ARM'S CLOCK, beside its time. Assembled from the
         # ready record the arm already sent; no timing is affected.
         span = _span_facts(arm, a.get("info"))
+        # THE SEPARATE UPLOAD CLOCK (ours only; `_ours_upload_probe`): the
+        # median of the scored rounds' separate uploads, beside the scored
+        # median, and the DERIVED difference. The scored median is untouched.
+        ups = [u["ms"] for u in a.get("upload_separate", []) if not u.get("warmup") and "ms" in u]
+        span["upload_ms_separate"] = statistics.median(ups) if ups else None
+        span["fit_minus_upload_ms"] = ((a["median_ms"] - span["upload_ms_separate"])
+                                       if (ok and span["upload_ms_separate"] is not None) else None)
+        span["fit_minus_upload_ms_source"] = "derived: scored median - separate upload median"
         spans[arm] = span
         a["span"] = span
         print("CTD-SPAN lane=%s dataset=%s arm=%s input_home=%s inside_clock=%s "
               "upload_ms_untimed=%s fit_ms_untimed=%s pre_clock_fit=%s "
-              "pre_clock_fit_source=%s"
+              "pre_clock_fit_source=%s upload_ms_separate=%s fit_minus_upload_ms=%s"
               % (lane, ds, arm, span["input_home"], span["inside_clock"],
                  _fmt_span(span["upload_ms_untimed"]), _fmt_span(span["fit_ms_untimed"]),
                  str(span["pre_clock_fit"]).lower(),
-                 span.get("pre_clock_fit_source", "declared")), flush=True)
+                 span.get("pre_clock_fit_source", "declared"),
+                 _fmt_span(span["upload_ms_separate"]), _fmt_span(span["fit_minus_upload_ms"])), flush=True)
         if span.get("pre_clock_fit_warning"):
             print("CTD-SPAN-WARNING lane=%s dataset=%s arm=%s %s"
                   % (lane, ds, arm, span["pre_clock_fit_warning"]), flush=True)

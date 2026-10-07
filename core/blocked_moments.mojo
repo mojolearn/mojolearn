@@ -551,6 +551,57 @@ def bm_centered_gram_panels(
     _ = part^
 
 
+def bm_leaf_cross_kernel(
+    part: BmPtr, x: BmPtr, cx: BmPtr, y: BmPtr, cy: BmPtr, n_in: Int32, d_in: Int32, leaf_in: Int32,
+):
+    """Block k: leaf `k`; thread j (strided by BM_TPB): column j of X. The
+    leaf's centered cross products `(x_rj - cx_j)(y_r - cy)` chained over
+    ascending rows (adjacent threads read adjacent columns of a row), into
+    `part[k * d + j]`. The same cells as `bm_leaf_gram_kernel` (bm_sub,
+    bm_fma), so a Gram over [X | y] would hold the same words in its last
+    column."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var leaf = Int(leaf_in)
+    var k = Int(block_idx.x)
+    var r0 = k * leaf
+    var r1 = min(n, r0 + leaf)
+    var c_y = ftz(cy.unsafe_load(0))
+    var j = Int(thread_idx.x)
+    while j < d:
+        var c_x = ftz(cx.unsafe_load(j))
+        var acc = Float32(0.0)
+        for r in range(r0, r1):
+            acc = bm_fma(bm_sub(x.unsafe_load(r * d + j), c_x), bm_sub(y.unsafe_load(r), c_y), acc)
+        part.unsafe_store(k * d + j, acc)
+        j += BM_TPB
+
+
+def bm_centered_cross_panels(
+    ctx: DeviceContext, dst: BmPtr, x: BmPtr, cx: BmPtr, y: BmPtr, cy: BmPtr, n: Int, d: Int, leaf: Int,
+) raises:
+    """`dst[j]` = sum over rows of (x_rj - cx_j)(y_r - cy): the centered
+    cross moments X^T y in leaves of `leaf` rows folded by the binary
+    counter (the value of `core/classical_centered.mojo::centered_cross_v1_cell`
+    at `contract_leaf_size(n)`), computed leaf-parallel. Waits for the
+    device (bm_sum_fold)."""
+    if d < 1:
+        return
+    var leaves = bm_leaf_count(n, leaf)
+    if leaves == 0:
+        ctx.enqueue_function[bm_sum_final_kernel](
+            dst, dst, Int32(d), Int32(0), Int32(0), grid_dim=_grid(d), block_dim=BM_TPB,
+        )
+        ctx.synchronize()
+        return
+    var part = ctx.enqueue_create_buffer[DType.float32](leaves * d)
+    ctx.enqueue_function[bm_leaf_cross_kernel](
+        _bp(part), x, cx, y, cy, Int32(n), Int32(d), Int32(leaf), grid_dim=leaves, block_dim=BM_TPB,
+    )
+    bm_sum_fold(ctx, part, leaves, d, dst, 0)
+    _ = part^
+
+
 def bm_onepass_covariance(
     ctx: DeviceContext, mu: BmPtr, cov: BmPtr, x: BmPtr, n: Int, d: Int,
 ) raises:
