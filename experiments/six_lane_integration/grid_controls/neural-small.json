@@ -246,7 +246,11 @@
    ],
    "bits_change": false,
    "status": "kept",
-   "note": "Rollback arm of the Oct 4 per-launch dq/dkdv tile rule (pins dq rows to ATTN_DQ_TQ and dk/dv keys to the old 32): the owed rule-removal A/B with the old rule as arm B. Backward only (train lanes). Same bits."
+   "note": "Rollback arm of the Oct 4 per-launch dq/dkdv tile rule (pins dq rows to ATTN_DQ_TQ and dk/dv keys to the old 32): the owed rule-removal A/B with the old rule as arm B. Backward only (train lanes). Same bits.",
+   "owed_removal": {
+    "ab": "B arm = MOJOLEARN_ATTN_TILE_RULE_OFF (the Oct 4 rule rolled back), A arm = main; single A/B, no crosses",
+    "reason": "rollback arm of the Oct 4 attention tile rule (fused_attention.mojo:4537-4592); an owed rule-removal single, not a grid dimension (prune_neural.md item 8)"
+   }
   },
   "gemm_kpack_rpt4": {
    "define": "MOJOLEARN_GEMM_KPACK_RPT4",
