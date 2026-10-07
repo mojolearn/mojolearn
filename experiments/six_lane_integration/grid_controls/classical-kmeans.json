@@ -1,0 +1,435 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "classical-kmeans",
+ "branch": "lane/classical-kmeans",
+ "head": "24dbc6581",
+ "controls": {
+  "kmeans_assign": {
+   "define": "MOJOLEARN_KMEANS_ROW_ASSIGN",
+   "kind": "arms",
+   "arms": {
+    "tiled": [],
+    "rows2": [
+     "MOJOLEARN_KMEANS_ROW_ASSIGN=2"
+    ],
+    "rows4": [
+     "MOJOLEARN_KMEANS_ROW_ASSIGN=4"
+    ],
+    "direct2": [
+     "MOJOLEARN_KMEANS_ROW_ASSIGN=2",
+     "MOJOLEARN_KMEANS_DIRECT_DISTANCE"
+    ],
+    "direct4": [
+     "MOJOLEARN_KMEANS_ROW_ASSIGN=4",
+     "MOJOLEARN_KMEANS_DIRECT_DISTANCE"
+    ]
+   },
+   "default": "tiled",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:43",
+    "experiments/classical_identical_ideas/graph_controls.mojo:45",
+    "cluster/impl/detail/min_cluster_distance_compute.mojo:92",
+    "cluster/impl/detail/classical_assignment.mojo:13",
+    "cluster/impl/detail/kmeans.mojo:644",
+    "cluster/host/kmeans_oracle.mojo:564"
+   ],
+   "binding": "_mojolearn",
+   "bits_change": "rows2/rows4: false (incumbent chain); direct2/direct4: true (host column kmeans_oracle follows KMEANS_DIRECT_DISTANCE)",
+   "status": "split_from:C30_DIRECT_DISTANCE+C36_CENTROID_TILES (C30_ROWS_4/C36_ROWS_4 merged)",
+   "note": "expanded row arms only while k*d <= 512 (cost rule), else the tiled kernel; direct arms at every size and also in k-means++, k-means|| and transform, and skip the X/candidate norms they never read. MOJOLEARN_KMEANS_DIRECT_DISTANCE alone is a compile error."
+  },
+  "c37_fused_accumulate": {
+   "define": "MOJOLEARN_C37_FUSED_ACCUMULATE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_C37_FUSED_ACCUMULATE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:74",
+    "cluster/impl/detail/kmeans_fused_accumulate.mojo:84",
+    "cluster/impl/detail/kmeans.mojo:1550,1721,1818"
+   ],
+   "binding": "_mojolearn",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "fused Lloyd assignment + Int32 row-block centroid/weight accumulation in shared memory, then the incumbent folds; X read once per iteration; takes the iteration while k*d+k fits a sixteenth of the column shared budget, single device"
+  },
+  "c37_fused_rows": {
+   "define": "MOJOLEARN_C37_FUSED_ROWS",
+   "kind": "int_sweep",
+   "arms": {
+    "256": [],
+    "512": [
+     "MOJOLEARN_C37_FUSED_ROWS=512"
+    ],
+    "1024": [
+     "MOJOLEARN_C37_FUSED_ROWS=1024"
+    ]
+   },
+   "default": "256",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:77"
+   ],
+   "binding": "_mojolearn",
+   "bits_change": false,
+   "status": "split_from:C37_PANEL_128",
+   "note": "only meaningful with c37_fused_accumulate on"
+  },
+  "xcluster_row_assign": {
+   "define": "MOJOLEARN_XCLUSTER_ROW_ASSIGN",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "2": [
+     "MOJOLEARN_XCLUSTER_ROW_ASSIGN=2"
+    ],
+    "4": [
+     "MOJOLEARN_XCLUSTER_ROW_ASSIGN=4"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:64",
+    "x_cluster/device_ops.mojo:1950,2732"
+   ],
+   "binding": "_mojolearn_x_cluster",
+   "bits_change": "unverified (kept old C36 x_cluster arithmetic; no host twin edit)",
+   "status": "split_from:C36_CENTROID_TILES"
+  },
+  "xcluster_kpp_distinct": {
+   "define": "MOJOLEARN_XCLUSTER_KPP_DISTINCT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_XCLUSTER_KPP_DISTINCT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:82",
+    "x_cluster/common.mojo:99"
+   ],
+   "binding": "_mojolearn_x_cluster",
+   "bits_change": false,
+   "status": "split_from:C38_REUSE_NEAREST"
+  },
+  "c39_retain_state": {
+   "define": "MOJOLEARN_C39_RETAIN_STATE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_C39_RETAIN_STATE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:83",
+    "x_cluster/minibatch.mojo:374",
+    "x_cluster/bisect.mojo:174"
+   ],
+   "binding": "_mojolearn_x_cluster",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "knn_direct": {
+   "define": "MOJOLEARN_KNN_DIRECT_DISTANCE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KNN_DIRECT_DISTANCE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:19"
+   ],
+   "binding": "_mojolearn",
+   "bits_change": true,
+   "status": "split_from:C30_DIRECT_DISTANCE",
+   "note": "neighbors/impl/detail/knn_brute_force.mojo, classical_stream_topk.mojo, ball_cover/common.mojo, core/knn_host_predict.mojo (host twin); reaches every caller of the kNN primitive (KNN, RBC, HDBSCAN/UMAP/Spectral kNN graphs, DBSCAN RBC eps)"
+  },
+  "kde_direct": {
+   "define": "MOJOLEARN_KDE_DIRECT_DISTANCE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KDE_DIRECT_DISTANCE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:20"
+   ],
+   "binding": "_mojolearn",
+   "bits_change": true,
+   "status": "split_from:C30_DIRECT_DISTANCE",
+   "note": "kde/impl/neighbors/kernel_density.mojo, kde/impl/distance/distance.mojo, kde/host/kde_oracle.mojo; distance.mojo is also called by kernel_methods kernel_matrix"
+  },
+  "dbscan_direct": {
+   "define": "MOJOLEARN_DBSCAN_DIRECT_DISTANCE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_DBSCAN_DIRECT_DISTANCE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:21"
+   ],
+   "binding": "_mojolearn",
+   "bits_change": true,
+   "status": "split_from:C30_DIRECT_DISTANCE",
+   "note": "dbscan/impl/neighbors/epsilon_neighborhood.mojo, dbscan/host/dbscan_oracle.mojo"
+  },
+  "graph_direct": {
+   "define": "MOJOLEARN_GRAPH_DIRECT_DISTANCE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_GRAPH_DIRECT_DISTANCE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:29"
+   ],
+   "binding": "_mojolearn_hdbscan",
+   "bits_change": true,
+   "status": "split_from:C30_DIRECT_DISTANCE",
+   "note": "hdbscan sparse_mr_mst + host oracle, hierarchy connectivities/multi_gpu tile + linkage_oracle (Agglomerative shares it)"
+  },
+  "ivf_direct": {
+   "define": "MOJOLEARN_IVF_DIRECT_DISTANCE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IVF_DIRECT_DISTANCE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/graph_controls.mojo:30"
+   ],
+   "binding": "_mojolearn_ivf",
+   "bits_change": true,
+   "status": "split_from:C30_DIRECT_DISTANCE",
+   "note": "ivf identical_ivf_scan, ivf_balanced_tasks, ivf_flat_search tile, ivf_host twin"
+  },
+  "c06_norm_rows": {
+   "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "2": [
+     "MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2"
+    ],
+    "4": [
+     "MOJOLEARN_CLASSICAL_C06_NORM_ROWS=4"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/shared_controls.mojo:21",
+    "core/row_norms.mojo:228"
+   ],
+   "binding": "_mojolearn",
+   "bits_change": "unverified (old C06 batched tree adds ftz)",
+   "status": "rewritten (was C06_ROWS2/C06_ROWS4)"
+  },
+  "c06_small_d_thread": {
+   "define": "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/shared_controls.mojo:28",
+    "core/row_norms.mojo:139,220"
+   ],
+   "binding": "_mojolearn",
+   "bits_change": false,
+   "status": "new",
+   "note": "one thread per row while d <= 32, replays the incumbent halving tree"
+  }
+ },
+ "algorithms": {
+  "classical:kmeans": {
+   "binding": "_mojolearn (host twin _mojolearn_core_host)",
+   "route": "fit: cluster.estimator kmeans_fit -> k-means|| / k-means++ (min_cluster_and_distance_compute, gemm_nt or direct trial) -> Lloyd loop (fused C37 pass, or min_cluster_and_distance_compute[_gated] + launch_accumulate_*_blocked + fold) -> finalize; predict: min_cluster_and_distance_compute",
+   "controls": [
+    "kmeans_assign",
+    "c37_fused_accumulate",
+    "c37_fused_rows",
+    "c06_norm_rows",
+    "c06_small_d_thread"
+   ],
+   "interaction_groups": [
+    [
+     "kmeans_assign",
+     "c37_fused_accumulate",
+     "c37_fused_rows"
+    ],
+    [
+     "c06_norm_rows",
+     "c06_small_d_thread"
+    ]
+   ]
+  },
+  "more:gmm": {
+   "binding": "_mojolearn_mixture",
+   "route": "fit: mixture/estimator.mojo:80 init_params=kmeans -> cluster.estimator.kmeans_fit (same as classical:kmeans)",
+   "controls": [
+    "kmeans_assign",
+    "c37_fused_accumulate",
+    "c37_fused_rows"
+   ],
+   "interaction_groups": [
+    [
+     "kmeans_assign",
+     "c37_fused_accumulate",
+     "c37_fused_rows"
+    ]
+   ]
+  },
+  "expanded:minibatch-kmeans": {
+   "binding": "_mojolearn_x_cluster",
+   "route": "fit: x_cluster/minibatch.mojo -> ops.mb_assign/nearest (device_ops) -> mb_update (_mb_centers_block_kernel); init x_cluster/common.mojo k-means++",
+   "controls": [
+    "xcluster_row_assign",
+    "xcluster_kpp_distinct",
+    "c39_retain_state"
+   ],
+   "interaction_groups": []
+  },
+  "expanded:bisecting-kmeans": {
+   "binding": "_mojolearn_x_cluster",
+   "route": "fit: x_cluster/bisect.mojo -> ops.nearest -> k-means++ x_cluster/common.mojo",
+   "controls": [
+    "xcluster_row_assign",
+    "xcluster_kpp_distinct",
+    "c39_retain_state"
+   ],
+   "interaction_groups": []
+  },
+  "more:ivf": {
+   "binding": "_mojolearn_ivf",
+   "route": "build: coarse kmeans (cluster kmeans_fit); search: ivf_flat_search pinned tile + identical_ivf_scan",
+   "controls": [
+    "ivf_direct",
+    "kmeans_assign",
+    "c37_fused_accumulate"
+   ],
+   "interaction_groups": [
+    [
+     "kmeans_assign",
+     "c37_fused_accumulate"
+    ]
+   ]
+  },
+  "classical:knn": {
+   "binding": "_mojolearn",
+   "route": "knn_brute_force (pinned tile / stream top-k) ; host twin knn_host_predict",
+   "controls": [
+    "knn_direct",
+    "c06_norm_rows",
+    "c06_small_d_thread"
+   ],
+   "interaction_groups": []
+  },
+  "classical:kde": {
+   "binding": "_mojolearn",
+   "route": "kernel_density + kde/impl/distance",
+   "controls": [
+    "kde_direct",
+    "c06_norm_rows"
+   ],
+   "interaction_groups": []
+  },
+  "classical:dbscan": {
+   "binding": "_mojolearn",
+   "route": "epsilon_neighborhood (brute) or RBC eps (knn primitive)",
+   "controls": [
+    "dbscan_direct",
+    "knn_direct"
+   ],
+   "interaction_groups": [
+    [
+     "dbscan_direct",
+     "knn_direct"
+    ]
+   ]
+  },
+  "classical:hdbscan": {
+   "binding": "_mojolearn_hdbscan",
+   "route": "kNN core distances (knn primitive) -> sparse_mr_mst / linkage",
+   "controls": [
+    "graph_direct",
+    "knn_direct"
+   ],
+   "interaction_groups": [
+    [
+     "graph_direct",
+     "knn_direct"
+    ]
+   ]
+  }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_C37_ROW_PANELS",
+   "reason": "per-(cluster,feature) serial sum over all rows (1 block at taxi), 25x/43x kmeans taxi; replaced by MOJOLEARN_C37_FUSED_ACCUMULATE (incumbent bits)"
+  },
+  {
+   "define": "MOJOLEARN_C37_PANEL_128",
+   "reason": "sub-knob of the deleted C37; the new sweep is MOJOLEARN_C37_FUSED_ROWS"
+  },
+  {
+   "define": "MOJOLEARN_C38_REUSE_NEAREST",
+   "reason": "KMeans half no-op on NVIDIA/AMD; x_cluster half renamed MOJOLEARN_XCLUSTER_KPP_DISTINCT"
+  },
+  {
+   "define": "MOJOLEARN_C38_DEVICE_POTENTIAL",
+   "reason": "no-op on NVIDIA/AMD (incumbent flags already on)"
+  },
+  {
+   "define": "MOJOLEARN_C30_DIRECT_DISTANCE",
+   "reason": "spanned ~12 algorithms; split into KMEANS_DIRECT_DISTANCE (arm of KMEANS_ROW_ASSIGN) and KNN/KDE/DBSCAN/GRAPH/IVF_DIRECT_DISTANCE"
+  },
+  {
+   "define": "MOJOLEARN_C30_ROWS_4",
+   "reason": "same knob as C36_ROWS_4; now KMEANS_ROW_ASSIGN=4"
+  },
+  {
+   "define": "MOJOLEARN_C36_CENTROID_TILES",
+   "reason": "same kernel as C30 in kmeans; now KMEANS_ROW_ASSIGN (cluster) and XCLUSTER_ROW_ASSIGN (x_cluster)"
+  },
+  {
+   "define": "MOJOLEARN_C36_ROWS_4",
+   "reason": "now the =4 arm of KMEANS_ROW_ASSIGN / XCLUSTER_ROW_ASSIGN"
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C06_ROWS2",
+   "reason": "now MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2"
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C06_ROWS4",
+   "reason": "now MOJOLEARN_CLASSICAL_C06_NORM_ROWS=4"
+  }
+ ]
+}
