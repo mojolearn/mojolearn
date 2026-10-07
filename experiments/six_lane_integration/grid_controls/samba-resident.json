@@ -17,8 +17,9 @@
    "source": [
     "training/neural_identical_experiments.mojo:88",
     "training/samba_resident.mojo:1",
+    "training/samba_resident.mojo:769",
     "bindings/_mojolearn_training.mojo:1533",
-    "python/mojolearn/_samba_impl.py:395",
+    "python/mojolearn/_samba_impl.py:405",
     "core/six_lane_experiment_guards.mojo:25"
    ],
    "binding": "_mojolearn_training",

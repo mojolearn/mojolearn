@@ -47162,7 +47162,7 @@
     "head": "3ccf36dd8",
     "lane": "samba-resident",
     "path": "experiments/six_lane_integration/grid_controls/samba-resident.json",
-    "sha256": "f1aefc7662df16c972bdb0d5acea3f2aac6aa49c4cb1deb270764badea8f0890"
+    "sha256": "07056f4dc41cc1a11a0bf5c27fba523e341c853ac945c808e3b99da7bfea2a70"
    },
    "trees-cleanup": {
     "branch": "lane/trees-cleanup",
