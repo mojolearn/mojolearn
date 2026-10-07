@@ -61,7 +61,7 @@
     "decomposition/impl/linalg/detail/pca.mojo:214",
     "decomposition/impl/linalg/detail/pca.mojo:227",
     "core/blocked_moments.mojo:521",
-    "core/blocked_moments.mojo:553",
+    "core/blocked_moments.mojo:554",
     "decomposition/host/pca_oracle.mojo:737"
    ],
    "binding": "_mojolearn_estimators",
@@ -119,7 +119,7 @@
    "default": "off",
    "source": [
     "decomposition/estimator.mojo:453",
-    "core/blocked_moments.mojo:580",
+    "core/blocked_moments.mojo:578",
     "decomposition/host/pca_oracle.mojo:819"
    ],
    "binding": "_mojolearn_estimators",
