@@ -29,7 +29,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.info import has_apple_gpu_accelerator
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
 from core.apple_fast_tree_experiments import (
@@ -197,6 +197,56 @@ def forest_ordered_kernel[RF_INPUT: Bool, PACKED: Bool = False](
                 var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,worker//outputs,features)
                 total = forest_add(total,leaves.unsafe_load(node*outputs+worker%outputs))
             output.unsafe_store(worker,ftz(identical_div(ftz(total),Float32(trees))))
+
+
+#: Lane trees-small (2026-10-07): MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS, IDENTICAL
+#: switch, default off. The ordered route (`forest_ordered_kernel`) gives each
+#: (row, output) pair its own thread, so a K-output forest walks every tree K
+#: times per row. This arm gives each ROW one thread: it walks each tree once
+#: and adds the reached leaf's K contiguous values into K register sums, in
+#: chunks of FOREST_ROW_OUTPUTS_CHUNK outputs (so K > chunk walks the forest
+#: ceil(K / chunk) times instead of K). Cost reasoning: node loads drop from
+#: rows * K to rows * ceil(K / chunk) walks, and the extra leaf loads of one
+#: node are contiguous; it holds for any class count >= 2 and any row count.
+#: BITS UNCHANGED: every output's sum is the same `forest_add` chain over trees
+#: 0..trees-1 from +0.0, then the same `identical_div` by the tree count; only
+#: the thread that runs the chain changed. Host column unchanged. Reached only
+#: on FOREST_ROUTE=0 with T34 off and the ordered (GROVE=False) dispatch.
+#: NOT COMPILED -- NOT TESTED -- NOT MEASURED.
+comptime FOREST_PREDICT_ROW_OUTPUTS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS"]()
+)
+#: Register sums per walk: 8 Float32 covers binary and small multiclass in
+#: one walk without spilling at the 128-thread block.
+comptime FOREST_ROW_OUTPUTS_CHUNK = 8
+
+
+def forest_row_outputs_kernel[RF_INPUT: Bool, PACKED: Bool = False](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, features_in: Int32, outputs_in: Int32, trees_in: Int32,
+):
+    var rows = Int(rows_in)
+    var features = Int(features_in)
+    var outputs = Int(outputs_in)
+    var trees = Int(trees_in)
+    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if row >= rows:
+        return
+    var first = 0
+    while first < outputs:
+        var totals = SIMD[DType.float32, FOREST_ROW_OUTPUTS_CHUNK](0)
+        for tree in range(trees):
+            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
+            comptime for o in range(FOREST_ROW_OUTPUTS_CHUNK):
+                if first + o < outputs:
+                    totals[o] = forest_add(totals[o], leaves.unsafe_load(node*outputs+first+o))
+        comptime for o in range(FOREST_ROW_OUTPUTS_CHUNK):
+            if first + o < outputs:
+                output.unsafe_store(row*outputs+first+o, ftz(identical_div(ftz(totals[o]),Float32(trees))))
+        first += FOREST_ROW_OUTPUTS_CHUNK
 
 
 @always_inline
@@ -532,6 +582,15 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
                 return
         _launch_grove_lanes[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
     else:
+        comptime if FOREST_PREDICT_ROW_OUTPUTS:
+            # MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS: one thread per row, same
+            # per-output tree-order sums (see `forest_row_outputs_kernel`).
+            ctx.enqueue_function[forest_row_outputs_kernel[RF_INPUT,PACKED]](
+                doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                grid_dim=(n_rows+127)//128,block_dim=128,
+            )
+            return
         ctx.enqueue_function[forest_ordered_kernel[RF_INPUT,PACKED]](
             doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
             dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
