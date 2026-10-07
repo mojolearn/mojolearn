@@ -1448,3 +1448,17 @@ both NVIDIA and AMD results, no material vendor regression, same-version
 identity on Apple and the host column, and end-to-end quality/performance
 on taxi + Istella or enwik8 + Pile GitHub as appropriate. No default flips
 are authorized by the synthetic screen alone.
+
+## Classical IDENTICAL decomposition switches (lane/classical-decomp, 2026-10-07)
+
+The serial one-thread-per-cell kernels below were the measured culprits of the all-on IDENTICAL A/B
+(`~/mojolearn-evidence/board-review-20261007/review_classical.md`; NVIDIA / AMD all-on time ratios). Their code is
+deleted; the ideas return as row-parallel rewrites (`core/blocked_moments.mojo`), default OFF and unmeasured.
+Old code is recoverable at main 8be4d20d4.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_CLASSICAL_C01_LEAF64` / `_LEAF128` (mean kernel part) | tsvd taxi, pca taxi | main @ 8be4d20d4 | six-lane all-on 20261006 | tsvd taxi x4.8 NV / x6.6 AMD (all-on) | DROPPED-slower | one GPU thread per column over all rows (d = 11 threads); replaced by `MOJOLEARN_CLASSICAL_C01_MEAN` (leaf column sums + binary-counter fold); the metrics leaf became `MOJOLEARN_CLASSICAL_C01_LEAF=32\|64\|128` |
+| `MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS` (PCA) | pca taxi | main @ 8be4d20d4 | six-lane all-on 20261006 | pca taxi x3.0 NV / x3.7 AMD (all-on, with C01) | DROPPED-slower | d*d = 121 threads each over all rows; replaced by `MOJOLEARN_CLASSICAL_PCA_COV=23` (one blocked pass, per-leaf centering, Chan merge) |
+| `MOJOLEARN_CLASSICAL_C04_LOAD_CENTER` (PCA) | pca istella | main @ 8be4d20d4 | none (shadowed by C23 in all-on) | - | DROPPED-serial | per-cell serial kernel, never reached at d <= 128 (split-K took precedence); replaced by `MOJOLEARN_CLASSICAL_PCA_COV=4` (same cell values, row-parallel, every width); LDA use renamed `MOJOLEARN_CLASSICAL_C04_LDA` |
+| `MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS` (MCD) | min-cov-det, elliptic-envelope | main @ 8be4d20d4 | not measured alone | - | REWRITTEN | split to `MOJOLEARN_CLASSICAL_C23_MCD`; same panel-256 cell values computed row-parallel |
