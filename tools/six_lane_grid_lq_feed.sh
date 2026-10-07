@@ -12,7 +12,7 @@ max=${3:-4}; poll=${4:-300}; LQ=${LQ:-$HOME/mojolearn-evidence/lq/lq}
 case $box in nv|amd) ;; *) echo "box must be nv or amd" >&2; exit 2;; esac
 state=$lines.fed-$box; done_n=$(cat "$state" 2>/dev/null || echo 0); total=$(grep -c '^lq add ' "$lines")
 depth() {
-  local s; s=$("$LQ" status 2>/dev/null | grep "^$box:")
+  local s; s=$("$LQ" status 2>/dev/null </dev/null | grep "^$box:")
   if [ "$box" = amd ]; then
     echo "$s" | awk '{n=$2; p=$NF} END {if (n ~ /^[0-9]+$/ && p ~ /^[0-9]+$/) print n-p; else print -1}'
   else
@@ -29,7 +29,7 @@ while IFS= read -r line; do
     echo "$(date -u +%FT%TZ) $box depth=${d} (max $max); line $n/$total waits ${poll}s"; sleep "$poll"
   done
   # shellcheck disable=SC2086
-  out=$("$LQ" ${line#lq } 2>&1); rc=$?
+  out=$("$LQ" ${line#lq } 2>&1 </dev/null); rc=$?   # stdin detached: lq ssh-es, and would otherwise eat the lines file
   echo "$(date -u +%FT%TZ) line $n/$total rc=$rc $(echo "$out" | tail -1 | cut -c1-160)"
   case "$out" in *queued*) ;; *) echo "lq did not queue line $n; stopping (state $state = $done_n)" >&2; exit 1;; esac
   [ $rc -eq 0 ] || { echo "lq rc=$rc on line $n; stopping" >&2; exit 1; }
