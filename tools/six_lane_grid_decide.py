@@ -96,7 +96,10 @@ def timing_index(verdict_docs, voters=None):
                     verdict = own[0]
                 elif not vendors and case.get('vendors'):
                     verdict = 'UNMEASURED'  # only non-voting vendors measured this cell
-            out[(case['configuration'], case['workload_id'])] = dict(verdict=verdict,
+            reasons = ((case.get('phases') or {}).get('scored') or {}).get('reasons') or []
+            if verdict == 'NO_VERDICT' and any('within floor' not in r for r in reasons):
+                verdict = 'INCOMPLETE'  # a voter has no pair, no floor or no phase: not a neutral result
+            out[(case['configuration'], case['workload_id'])] = dict(verdict=verdict, reasons=reasons,
                                                                        ratios=ratios, evidence=[v.get('evidence') for v in vendors.values()])
     return out
 
@@ -176,7 +179,7 @@ def algorithm_verdict(rows):
         return 'HOLD_IDENTITY'
     if any(q in QUALITY_BAD for q in qualities):
         return 'HOLD_QUALITY'
-    if any(t == 'UNMEASURED' for t in timings):
+    if any(t in ('UNMEASURED', 'INCOMPLETE') for t in timings):
         return 'UNMEASURED'
     if any(i != 'MATCH' for i in identities):
         return 'IDENTITY_INCOMPLETE'
@@ -261,11 +264,18 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
         (ctrl, arm), = assign.items()
         single_by_arm[(ctrl, arm)][g['algorithm']] = evidence[c['id']]
 
+    # An algorithm is complete when every configuration that reaches it has a verdict (singles, crosses, factorial).
+    # Winners and losers are declared only then: a neutral single is not deleted before its crosses are judged.
+    complete = {algo: all(evidence[c['id']]['verdict'] not in ('UNMEASURED', 'IDENTITY_INCOMPLETE') for c in cfgs)
+                for algo, cfgs in by_algo.items()}
     controls = defaultdict(dict)  # control -> arm -> decision
     for (ctrl, arm), algos in sorted(single_by_arm.items()):
         per_algo = {a: e['verdict'] for a, e in algos.items()}
         rec = arm_recommendation(per_algo)
+        if rec in ('PROMOTE', 'DELETE', 'SPLIT') and not all(complete.get(a, False) for a in per_algo):
+            rec = 'PARTIAL_' + rec  # points this way so far; a reached algorithm still has unmeasured configurations
         controls[ctrl][arm] = dict(recommendation=rec, per_algorithm=per_algo,
+                                   algorithms_complete={a: complete.get(a, False) for a in per_algo},
                                    combined_ratio=geo_mean([e['combined_ratio'] for e in algos.values()]),
                                    configurations=sorted(e['configuration'] for e in algos.values()),
                                    promote_for=sorted(a for a, v in per_algo.items() if v == 'FASTER') if rec == 'SPLIT' else [],
@@ -281,6 +291,8 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
             overall = arms[best]['recommendation']
         elif recs <= {'DELETE'}:
             overall = 'DELETE'
+        elif any(r.startswith('PARTIAL_') for r in recs):
+            overall = sorted(r for r in recs if r.startswith('PARTIAL_'))[0]
         elif 'HOLD_IDENTITY' in recs:
             overall = 'HOLD_IDENTITY'
         elif 'HOLD_QUALITY' in recs:
@@ -334,7 +346,7 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
                 algorithm='SLOWER if any workload SLOWER; FASTER if any FASTER and none SLOWER; NEUTRAL otherwise',
                 arm='PROMOTE: every reached algorithm FASTER or NEUTRAL, at least one FASTER. SPLIT: FASTER and SLOWER both present '
                     '(flip per algorithm). DELETE: SLOWER or NEUTRAL everywhere (noise is a loser). HOLD_*: identity MISMATCH or quality WORSE. '
-                    'NOT_MEASURED: any reached algorithm without evidence.',
+                    'NOT_MEASURED: any reached algorithm without evidence. PARTIAL_<rec>: the arm points that way but a reached algorithm still has unmeasured configurations (nothing is flipped or deleted before that algorithm grid is complete). A NO_VERDICT with a missing pair, floor or phase is INCOMPLETE, not neutral.',
                 best_arm='PROMOTE/SPLIT arm with the smallest combined candidate/incumbent ratio',
                 interaction='cross or all-on verdict that the member singles do not predict',
                 recommended_configuration='per algorithm: FASTER configuration with the smallest combined ratio')

@@ -35,7 +35,7 @@ class DecideTests(unittest.TestCase):
             cfg(A1, {'z': '2'}, 'single'), cfg(A1, {'z': '4'}, 'single'),            # arm 2 noise, arm 4 faster
             cfg(A1, {'w': 'on'}, 'single'),                                           # identity mismatch
             cfg(A1, {'v': 'on'}, 'single'),                                           # quality worse
-            cfg(A1, {'u': 'on'}, 'single'),                                           # unmeasured
+            cfg('classical:a4', {'u': 'on'}, 'single'),                               # unmeasured (its own algorithm, so a1 stays complete)
             cfg(A1, {'x': 'on', 'y': 'on'}, 'cross'),                                 # interaction: slower together
         ]
         matrix = dict(schema='m', base_main='abc', configurations=self.configs)
@@ -198,6 +198,33 @@ class Phase2MergeTests(unittest.TestCase):
             dec = D.decide(m, D.timing_index([dict(cases=t)]), D.identity_index([dict(cases=ident)]), {})
             self.assertEqual(len(dec['algorithms'][A]['interactions']), 1, tier)
 
+
+
+class IncompleteAndPartialTests(unittest.TestCase):
+    """A missing pair is not a neutral result, and nothing is promoted or deleted before the algorithm grid is complete."""
+
+    def test_missing_pair_is_incomplete_not_neutral(self):
+        case = dict(configuration='G.classical:a1.x=on', workload_id='classical:a1@dataset=taxi', verdict='NO_VERDICT',
+                    phases=dict(scored=dict(verdict='NO_VERDICT', reasons=['nvidia: no A/B pair', 'amd: no A/B pair'])),
+                    vendors={})
+        idx = D.timing_index([dict(cases=[case])])
+        self.assertEqual(idx[('G.classical:a1.x=on', 'classical:a1@dataset=taxi')]['verdict'], 'INCOMPLETE')
+        within = dict(case, phases=dict(scored=dict(verdict='NO_VERDICT', reasons=['nvidia: |log ratio| 0.01 within floor 0.05',
+                                                                                     'amd: |log ratio| 0.02 within floor 0.05'])))
+        idx = D.timing_index([dict(cases=[within])])
+        self.assertEqual(idx[('G.classical:a1.x=on', 'classical:a1@dataset=taxi')]['verdict'], 'NO_VERDICT')
+
+    def test_partial_algorithm_grid_defers_the_flip(self):
+        A1 = 'classical:a1'
+        configs = [cfg(A1, {'x': 'on'}, 'single'), cfg(A1, {'y': 'on'}, 'single'), cfg(A1, {'x': 'on', 'y': 'on'}, 'cross')]
+        matrix = dict(schema='m', configurations=configs)
+        t, ident = [], []
+        for wid in configs[0]['workloads']:  # x alone is measured FASTER on both; y and the cross are not measured yet
+            t.append(tcase('G.classical:a1.x=on', wid, 'FASTER', 0.5, 0.5)); ident.append(icase('G.classical:a1.x=on', wid, 'MATCH'))
+        dec = D.decide(matrix, D.timing_index([dict(cases=t)]), D.identity_index([dict(cases=ident)]), {})
+        self.assertEqual(dec['controls']['x']['arms']['on']['recommendation'], 'PARTIAL_PROMOTE')
+        self.assertEqual(dec['controls']['x']['recommendation'], 'PARTIAL_PROMOTE')
+        self.assertEqual(dec['controls']['y']['recommendation'], 'NOT_MEASURED')
 
 if __name__ == '__main__':
     unittest.main()
