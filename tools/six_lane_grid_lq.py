@@ -11,12 +11,20 @@
 
 Metadata only: never builds, runs, times or connects to a box. lq is the only way to a box.
 
-Workload ids map to tools/bench_board_algos.py lanes, the harness `lq ... RACE` runs:
-`family:lane@dataset=ds[@input=variant]` -> lane `lane`, dataset `ds`. A workload whose lane is not a
-bench_board_algos lane (classical/more harness lanes, trees, neural), whose dataset the lane does not
-race, or that names a lane variant (`lane@variant@dataset=...`) is refused by name, never substituted.
-`@input=<variant>` is accepted and recorded: lq races the board's rows-full block for that lane, not the
-registered full-input variant, so A and B share one input but it is not the saved recipe's input.
+Two routes per workload id, both one build per line:
+  RACE  `expanded:lane@dataset=ds[@input=v]` -> `lq add <box> RACE ... lane ds` (tools/bench_board_algos.py
+        race, through box_job.sh / overlay_race_job2.sh); prints ALGOS lines with digest=.
+  CMD   every other family -> `lq add <box> CMD <branch> <tag> ... tools/six_lane_grid_bb.py --race
+        family:lane:dataset ...`, which runs tools/bench_board.py (families trees, classical, classical2,
+        neural) at full rows, IDENTICAL, ours only, and prints GRIDBB lines (median_ms, output hash, quality).
+        classical:L@dataset=D -> classical/L/D; more:L@dataset=D -> classical2/L/D; neural:L -> neural/L/<its
+        data>; tree L:D -> trees/L/<board dataset> (task lanes map their driver dataset back through
+        bench_board TREE_TASK_DATASETS).
+Lane and dataset names are checked against bench_board_algos LANES (RACE) and the races bench_board.plan_races
+plans on the vendor (CMD). Anything else (a lane variant `lane@variant@...`, a tree driver dataset with no board
+dataset such as rf:year or iforest:anomaly) is refused by name, never substituted. `@input=<variant>` is accepted
+and recorded: the board races its own full-row block, not the registered full-input variant, so A and B share
+one input but it is not the saved recipe's input.
 """
 from __future__ import annotations
 
@@ -44,7 +52,8 @@ DEFINES_ENV = 'MOJOLEARN_BUILD_DEFINES'
 IDENTITY_COLUMN = {'nvidia': 'nvidia-native', 'amd': 'amd'}  # six_lane_compare_results REQUIRED_IDENTICAL
 DIGEST_CHARS = 16  # box_job.sh keeps the first 16 hex characters of the race digest
 QUALITY_REL = 1e-6
-TIMING_SOURCE = 'lq ALGOS median_ms (tools/bench_board_algos.py race, arm ours; one run per arm)'
+TIMING_SOURCE = ('median_ms of our arm: lq RACE ALGOS lines (tools/bench_board_algos.py) or lq CMD GRIDBB lines '
+                 '(tools/bench_board.py cells); one run per arm')
 
 # ------------------------------------------------------------------ plan + lanes
 
@@ -112,6 +121,89 @@ def binding_builds(bindings):
     return out
 
 
+CMD_PY = '$PWD/.pixi/envs/default/bin/python'  # the branch tree's pixi interpreter (box_job.sh CMD cwd = the tree)
+CMD_SCRIPT = 'tools/six_lane_grid_bb.py'
+FAMILY_OF_PREFIX = {'classical': 'classical', 'more': 'classical2', 'neural': 'neural'}
+
+
+def load_board(vendor):
+    """What tools/bench_board.py races on this vendor in IDENTICAL: {races: {(family, lane, dataset)},
+    neural_data: {lane: data}, tree_task: {lane: {board ds: driver ds}}, tree_lanes: [...]}."""
+    import bench_board as BB  # metadata only: plan_races runs nothing
+    fams = [f for f in BB.FAMILIES if f != 'algos']
+    races = BB.plan_races(vendor, ['identical'], fams, None, list(BB.DATASETS))
+    return dict(races={(r['family'], r['lane'], r['dataset']) for r in races}, neural_data=dict(BB.NEURAL_DATA),
+                tree_task={k: dict(v) for k, v in BB.TREE_TASK_DATASETS.items()},
+                tree_lanes=list(BB.family_lanes('trees')), board_datasets=list(BB.DATASETS))
+
+
+def map_board(wid, board):
+    """workload id -> (family, lane, dataset, note) for a tools/bench_board.py race, or raise ValueError."""
+    prefix, _, rest = wid.partition(':')
+    note = None
+    if prefix in ('classical', 'more'):
+        parts = rest.split('@')
+        lane, kv = parts[0], {}
+        for q in parts[1:]:
+            if '=' not in q:
+                raise ValueError('lane variant @%s has no bench_board race' % q)
+            k, v = q.split('=', 1)
+            kv[k] = v
+        extra = sorted(set(kv) - {'dataset', 'input'})
+        if extra or 'dataset' not in kv:
+            raise ValueError('workload qualifier(s) %s have no bench_board race' % (','.join(extra) or 'no @dataset='))
+        fam, ds = FAMILY_OF_PREFIX[prefix], kv['dataset']
+        if 'input' in kv:
+            note = 'input=%s not reproduced: bench_board races its own full-row block' % kv['input']
+    elif prefix == 'neural':
+        fam, lane = 'neural', rest
+        if '@' in lane or lane not in board['neural_data']:
+            raise ValueError('neural lane %r is not a tools/bench_board.py neural lane' % lane)
+        ds = board['neural_data'][lane]
+    elif prefix in board['tree_lanes'] and '@' not in rest:
+        fam, lane, drv = 'trees', prefix, rest
+        if lane in board['tree_task']:
+            back = {v: k for k, v in board['tree_task'][lane].items()}
+            if drv not in back:
+                raise ValueError('tree lane %s driver dataset %r has no board dataset (bench_board TREE_TASK_DATASETS %s)'
+                                 % (lane, drv, ','.join(sorted(back))))
+            ds = back[drv]
+        elif drv in board['board_datasets']:
+            ds = drv
+        else:
+            raise ValueError('tree lane %s races %s on the board, not driver dataset %r'
+                             % (lane, '/'.join(board['board_datasets']), drv))
+    else:
+        raise ValueError('family %r has no bench_board route' % prefix)
+    if (fam, lane, ds) not in board['races']:
+        raise ValueError('bench_board plans no %s/%s/%s race in IDENTICAL on this vendor' % (fam, lane, ds))
+    return fam, lane, ds, note
+
+
+def route(wid, lanes, board):
+    """-> dict(kind race|cmd, key (family, lane, dataset), lane, dataset, family, note) or raise ValueError."""
+    if wid and wid.startswith('expanded:'):
+        lane, ds, note = map_workload(wid, lanes)  # its reason stands: expanded lanes are bench_board_algos lanes
+        return dict(kind='race', key=('algos', lane, ds), family='algos', lane=lane, dataset=ds, note=note)
+    if board is None:
+        raise ValueError('no bench_board registry for the CMD route')
+    fam, lane, ds, note = map_board(wid or '', board)
+    return dict(kind='cmd', key=(fam, lane, ds), family=fam, lane=lane, dataset=ds, note=note)
+
+
+def cmd_line(box, vendor, branch, tag, races, envs, builds):
+    toks = ['lq', 'add', box, 'CMD', branch, tag] + ['%s=%s' % kv for kv in envs] + [
+        CMD_PY, CMD_SCRIPT, '--tag', tag, '--vendor', vendor]
+    for fam, lane, ds in sorted(set(races)):
+        toks += ['--race', '%s:%s:%s' % (fam, lane, ds)]
+    if builds:
+        toks.append('BUILDS=' + ','.join(builds))
+    bad = [x for x in toks if x != CMD_PY and not re.fullmatch(r'[A-Za-z0-9_.,=@:+/-]+', x)]
+    if bad:
+        raise ValueError('lq CMD token(s) %r are not plain words' % bad)
+    return ' '.join(toks)
+
+
 def _pack_num(pid):
     m = re.search(r'\d+', pid or '')
     return int(m.group()) if m else 0
@@ -141,8 +233,8 @@ def lq_line(box, branch, pairs, envs, builds):
     return line
 
 
-def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None):
-    """A jobs (one per pack, with the kept member cells), refused cells, and the per-workload B info."""
+def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=None):
+    """A jobs (one per pack, with the kept member cells, RACE and CMD), refused cells, per-workload B info."""
     packs = {p['id']: p for p in plan['builds']['packs']}
     algos = plan.get('algorithms', {})
     configs = {c['id']: c for c in matrix['configurations']}
@@ -160,10 +252,11 @@ def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None):
             continue
         for wid in wids:
             try:
-                lane, ds, note = map_workload(wid, lanes)
+                r = route(wid, lanes, board)
             except ValueError as exc:
                 refused.append(dict(configuration=cid, workload_id=wid, algorithm=algo, reason=str(exc)))
                 continue
+            lane, ds, note = r['lane'], r['dataset'], r['note']
             if only_lanes and lane not in only_lanes:
                 continue
             job = jobs.setdefault(g['pack'], dict(pack=g['pack'], regime_rank=REGIME_RANK.get(regime, 9),
@@ -174,15 +267,17 @@ def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None):
             job['priority'] = min(job['priority'], c.get('priority') or 9)
             job['configs'].add(cid)
             job['bindings'].update((algos.get(algo) or {}).get('workload_bindings') or [])
-            job['cells'].append(dict(configuration=cid, workload_id=wid, lane=lane, dataset=ds, note=note))
-            workload_bindings.setdefault(wid, dict(lane=lane, dataset=ds, algorithm=algo, bindings=set()))['bindings'].update(
+            job['cells'].append(dict(configuration=cid, workload_id=wid, lane=lane, dataset=ds, note=note,
+                                     kind=r['kind'], family=r['family']))
+            workload_bindings.setdefault(wid, dict(lane=lane, dataset=ds, algorithm=algo, kind=r['kind'],
+                                                   family=r['family'], bindings=set()))['bindings'].update(
                 (algos.get(algo) or {}).get('workload_bindings') or [])
     for job in jobs.values():
         seen = {}
         for cell in job['cells']:
-            key = (cell['lane'], cell['dataset'])
+            key = (cell['family'], cell['lane'], cell['dataset'])
             if key in seen and seen[key] != (cell['configuration'], cell['workload_id']):
-                raise ValueError('pack %s races %s@%s for two cells: %s and %s' % (job['pack'], key[0], key[1], seen[key], (cell['configuration'], cell['workload_id'])))
+                raise ValueError('pack %s races %s for two cells: %s and %s' % (job['pack'], '/'.join(key), seen[key], (cell['configuration'], cell['workload_id'])))
             seen[key] = (cell['configuration'], cell['workload_id'])
     order = sorted(jobs.values(), key=lambda j: (j['regime_rank'], j['priority'], _pack_num(j['pack']), j['pack']))
     return order, refused, workload_bindings
@@ -192,23 +287,24 @@ def b_groups(workloads, info, group_size):
     """Group incumbent workloads by binding set (one build covers them), chunks of at most group_size."""
     by_bind = {}
     for wid in sorted(workloads):
-        key = tuple(sorted(info[wid]['bindings']))
+        key = (info[wid]['kind'], tuple(sorted(info[wid]['bindings'])))
         by_bind.setdefault(key, []).append(wid)
     out = []
-    for key, wids in sorted(by_bind.items()):
+    for (kind, key), wids in sorted(by_bind.items()):
         for i in range(0, len(wids), group_size):
-            out.append(dict(bindings=list(key), workloads=wids[i:i + group_size]))
+            out.append(dict(kind=kind, bindings=list(key), workloads=wids[i:i + group_size]))
     return out
 
 
 def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=None, budget_hours=None,
-           lanes=None, b_group_size=8, run_id=None):
+           lanes=None, b_group_size=8, run_id=None, board=None):
     plan, matrix = load_plan(plan_dir)
     lanes = lanes if lanes is not None else load_lanes()
+    board = board if board is not None else load_board(vendor)
     run_id = run_id or run_id_of(plan_dir)
     box = BOX[vendor]
     per_race = PAIR_SECONDS[vendor] / 2.0
-    jobs, refused, info = plan_jobs(plan, matrix, vendor, lanes, only_lanes, phase)
+    jobs, refused, info = plan_jobs(plan, matrix, vendor, lanes, only_lanes, phase, board)
     # budget: keep A jobs in order while A races + b_repeats x (new workloads) fit
     kept, covered, races = [], set(), 0
     cut = 0
@@ -230,49 +326,67 @@ def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=
             slots.setdefault(pos, []).append((gi, r, grp))
     lines, manifest = [], []
 
-    def emit_b(gi, r, grp):
-        tag = '%s.B%03dr%d' % (run_id, gi + 1, r + 1)
-        pairs = [(info[w]['lane'], info[w]['dataset']) for w in grp['workloads']]
-        line = lq_line(box, branch, pairs, [(TAG_ENV, tag)], binding_builds(grp['bindings']))
+    def emit(arm, tag, kind, cells, envs, bindings, **extra):
+        if kind == 'race':
+            line = lq_line(box, branch, [(c['lane'], c['dataset']) for c in cells], envs, binding_builds(bindings))
+        else:  # bench_board needs the base binding beside the ones the configuration reaches
+            line = cmd_line(box, vendor, branch, tag, [(c['family'], c['lane'], c['dataset']) for c in cells], envs,
+                            binding_builds(['_mojolearn'] + sorted(set(bindings) - {'_mojolearn'})))
         lines.append(line)
-        manifest.append(dict(line=len(lines), tag=tag, arm='B', repeat=r + 1, workloads=grp['workloads']))
+        manifest.append(dict(extra, line=len(lines), tag=tag, arm=arm, kind=kind, cells=cells))
+
+    def emit_b(gi, r, grp):
+        tag = '%s.%s%03dr%d' % (run_id, 'B' if grp['kind'] == 'race' else 'C', gi + 1, r + 1)
+        cells = [dict(workload_id=w, lane=info[w]['lane'], dataset=info[w]['dataset'], family=info[w]['family'])
+                 for w in grp['workloads']]
+        emit('B', tag, grp['kind'], cells, [(TAG_ENV, tag)], grp['bindings'], repeat=r + 1, workloads=grp['workloads'])
 
     for i, job in enumerate(kept):
         for gi, r, grp in slots.get(i, []):
             emit_b(gi, r, grp)
-        tag = '%s.%s' % (run_id, job['pack'])
-        pairs = [(c['lane'], c['dataset']) for c in job['cells']]
-        envs = [(TAG_ENV, tag), (DEFINES_ENV, ','.join(job['defines']))]
-        line = lq_line(box, branch, pairs, envs, binding_builds(sorted(job['bindings'])))
-        lines.append(line)
-        manifest.append(dict(line=len(lines), tag=tag, arm='A', pack=job['pack'], defines=job['defines'],
-                             regime=[k for k, v in REGIME_RANK.items() if v == job['regime_rank']][0],
-                             configurations=sorted(job['configs']), cells=job['cells']))
+        regime = [k for k, v in REGIME_RANK.items() if v == job['regime_rank']][0]
+        for kind in ('race', 'cmd'):
+            cells = [c for c in job['cells'] if c['kind'] == kind]
+            if not cells:
+                continue
+            tag = '%s.%s%s' % (run_id, job['pack'], '' if kind == 'race' else '.bb')
+            emit('A', tag, kind, cells, [(TAG_ENV, tag), (DEFINES_ENV, ','.join(job['defines']))], sorted(job['bindings']),
+                 pack=job['pack'], defines=job['defines'], regime=regime,
+                 configurations=sorted({c['configuration'] for c in cells}))
     for pos in sorted(p for p in slots if p >= len(kept)):
         for gi, r, grp in slots[pos]:
             emit_b(gi, r, grp)
-    a_lines = sum(1 for m in manifest if m['arm'] == 'A')
-    b_lines = len(lines) - a_lines
-    a_races = sum(len(m['cells']) for m in manifest if m['arm'] == 'A')
-    b_races = sum(len(m['workloads']) for m in manifest if m['arm'] == 'B')
-    cfgs = {c for m in manifest if m['arm'] == 'A' for c in m['configurations']}
-    regimes = {}
+    A = [m for m in manifest if m['arm'] == 'A']
+    Bm = [m for m in manifest if m['arm'] == 'B']
+    cfgs = {c for m in A for c in m['configurations']}
+    regimes, by_kind = {}, {}
+    for m in A:
+        r = regimes.setdefault(m['regime'], dict(lines=0, cells=0))
+        r['lines'] += 1
+        r['cells'] += len(m['cells'])
     for m in manifest:
-        if m['arm'] == 'A':
-            r = regimes.setdefault(m['regime'], dict(lines=0, cells=0))
-            r['lines'] += 1
-            r['cells'] += len(m['cells'])
-    noted = sorted({c['workload_id'] for m in manifest if m['arm'] == 'A' for c in m['cells'] if c['note']})
+        k = by_kind.setdefault('%s_%s' % (m['arm'], m['kind']), dict(lines=0, races=0))
+        k['lines'] += 1
+        k['races'] += len(m['cells'])
+    by_family = {}
+    for m in A:
+        for c in m['cells']:
+            by_family[c['family']] = by_family.get(c['family'], 0) + 1
+    a_races = sum(len(m['cells']) for m in A)
+    b_races = sum(len(m['cells']) for m in Bm)
+    noted = sorted({c['workload_id'] for m in A for c in m['cells'] if c['note']})
     totals = dict(vendor=vendor, box=box, branch=branch, run_id=run_id, lines=len(lines), builds=len(lines),
-                  a_lines=a_lines, b_lines=b_lines, b_repeats=b_repeats, b_groups=len(groups),
-                  a_races=a_races, b_races=b_races, configurations=len(cfgs), workloads=len(covered),
-                  regimes=regimes, refused_cells=len(refused),
-                  refused_workloads=len({r['workload_id'] for r in refused}),
+                  a_lines=len(A), b_lines=len(Bm), b_repeats=b_repeats, b_groups=len(groups),
+                  a_races=a_races, b_races=b_races, by_kind=by_kind, a_cells_by_family=by_family,
+                  configurations=len(cfgs), workloads=len(covered), regimes=regimes,
+                  plan_cells=sum(1 for c in matrix['cells'] if c.get('vendor') == vendor),
+                  refused_cells=len(refused), refused_workloads=len({r['workload_id'] for r in refused}),
                   cut_a_lines_by_budget=cut, budget_hours=budget_hours,
                   projected_race_hours=round((a_races + b_races) * per_race / 3600.0, 2),
-                  projected_note='races x pair_seconds/2 (%g s); binding build time per line is not included' % per_race,
+                  projected_note='races x pair_seconds/2 (%g s, the plan median pair); binding build time per line '
+                                 'is not included, and tree and neural races run longer than the median' % per_race,
                   input_variant_workloads=noted)
-    return lines, dict(schema='mojolearn.six-lane-grid-lq-render/1', plan_dir=str(plan_dir), totals=totals,
+    return lines, dict(schema='mojolearn.six-lane-grid-lq-render/2', plan_dir=str(plan_dir), totals=totals,
                        lines=manifest, refused=refused,
                        refused_by_reason=_by_reason(refused))
 
@@ -294,6 +408,9 @@ ALGOS_RE = re.compile(r'(?:^|\s)ALGOS lane=(?P<lane>\S+) dataset=(?P<ds>\S+) arm
                       r'median_ms=(?P<ms>\S+)(?: quality=(?P<q>.*))?$')
 TAG_RE = re.compile(TAG_ENV + r'=([A-Za-z0-9_.-]+)')
 DIGEST_TAIL_RE = re.compile(r' digest=([0-9a-f]+|none)$')
+GRIDBB_RE = re.compile(r'^GRIDBB tag=(?P<tag>\S+) vendor=(?P<vendor>\S+) head=(?P<head>\S+) family=(?P<family>\S+) '
+                       r'lane=(?P<lane>\S+) dataset=(?P<ds>\S+) status=(?P<status>\S+) median_ms=(?P<ms>\S+) '
+                       r'hash=(?P<hash>\S+) quality=(?P<q>.*)$')
 ROUND_RE = re.compile(r'^ALGOS-ROUND lane=(?P<lane>\S+) dataset=(?P<ds>\S+) arm=(?P<arm>\S+) .*digest=(?P<digest>[0-9a-f]+)')
 
 
@@ -339,6 +456,10 @@ def parse_results(paths):
             job = jobs.setdefault(key, dict(tag=None, head=m.group('head'), branch=m.group('branch')))
             if tag:
                 job['tag'] = tag.group(1)
+            cmd = re.match(r' CMD (\S+) rc=(-?\d+)', rest)
+            if cmd:
+                job.update(cmd_tag=cmd.group(1), cmd_rc=int(cmd.group(2)))
+                continue
             if ' NO-RESULT' in rest:
                 nores.append(dict(vendor=key[0], id=key[1], line=raw[:300], evidence=str(path)))
                 continue
@@ -353,13 +474,36 @@ def _log_id(path):
     return Path(path).parent.name
 
 
-def parse_logs(paths):
-    """Race logs (directories walked for race-*.log, or `grep -H` dumps of them) ->
-    {(id, lane, dataset): dict(algos=<last ALGOS arm ours>, digest=<last round digest>)}."""
+def parse_gridbb(line, evidence, jid):
+    m = GRIDBB_RE.match(line.strip())
+    if not m:
+        return None
+    try:
+        q = json.loads(m.group('q'))
+    except ValueError:
+        q = None
+    h = m.group('hash')
+    return dict(kind='cmd', key=(m.group('family'), m.group('lane'), m.group('ds')), family=m.group('family'),
+                lane=m.group('lane'), dataset=m.group('ds'), arm='ours', status=m.group('status'),
+                median_ms=_num(m.group('ms')), quality=q, digest=None if h in ('none', 'None', '') else h[:DIGEST_CHARS],
+                vendor=m.group('vendor'), head=m.group('head'), tag=m.group('tag'), id=jid, evidence=evidence,
+                truncated=q is None)
+
+
+def parse_logs(paths, gridbb=None):
+    """Race logs and CMD logs (directories walked for *.log under <id>/, or `grep -H` dumps of them) ->
+    {(id, lane, dataset): dict(algos=<last ALGOS arm ours>, digest=<last round digest>)}; GRIDBB lines
+    (tools/six_lane_grid_bb.py) are appended to `gridbb`, the last per (job, family, lane, dataset)."""
     per_file = {}
+    bb = {}
 
     def feed(file_key, line):
         line = line.rstrip('\n')
+        if line.startswith('GRIDBB '):
+            o = parse_gridbb(line, file_key, _log_id(file_key))
+            if o:
+                bb[(o['id'], o['vendor']) + o['key']] = o
+            return
         rec = per_file.setdefault(file_key, dict(algos=None, digest=None, lane=None, ds=None))
         r = ROUND_RE.match(line)
         if r:
@@ -380,7 +524,7 @@ def parse_logs(paths):
     for raw in paths:
         p = Path(raw)
         if p.is_dir():
-            for f in sorted(p.glob('**/race-*.log')):
+            for f in sorted(p.glob('**/*.log')):
                 for line in f.read_text(errors='replace').splitlines():
                     feed(str(f), line)
         else:
@@ -396,6 +540,8 @@ def parse_logs(paths):
         if rec['lane'] is None:
             continue
         out[(_log_id(fname), rec['lane'], rec['ds'])] = dict(rec, evidence=fname)
+    if gridbb is not None:
+        gridbb.extend(bb.values())
     return out
 
 
@@ -476,23 +622,36 @@ def _median(xs):
     return statistics.median(xs) if xs else None
 
 
-def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_samples=2):
+def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_samples=2, board=None):
     plan, matrix = load_plan(plan_dir)
     lanes = lanes if lanes is not None else load_lanes()
+    board = board if board is not None else load_board('nvidia')
     run_id = run_id or run_id_of(plan_dir)
     packs = {p['id']: p for p in plan['builds']['packs']}
     configs = {c['id']: c for c in matrix['configurations']}
     jobs, obs, nores = parse_results(results)
-    obs = merge_observations(jobs, obs, parse_logs(logs or []))
-    # (lane, dataset) -> workload ids, per pack and globally (for the incumbent)
+    bb_obs = []
+    obs = merge_observations(jobs, obs, parse_logs(logs or [], bb_obs))
+    for o in obs:
+        o.setdefault('kind', 'race')
+        o['key'] = ('algos', o['lane'], o['dataset'])
+    obs += bb_obs
+    key_of = {}
+
+    def wkey(wid):
+        if wid not in key_of:
+            try:
+                key_of[wid] = route(wid, lanes, board)['key']
+            except ValueError:
+                key_of[wid] = None
+        return key_of[wid]
+
+    # (family, lane, dataset) -> workload ids (for the incumbent)
     lane_to_wids = {}
     for c in configs.values():
         for wid in c.get('workloads') or []:
-            try:
-                lane, ds, _ = map_workload(wid, lanes)
-            except ValueError:
-                continue
-            lane_to_wids.setdefault((lane, ds), set()).add(wid)
+            if wkey(wid):
+                lane_to_wids.setdefault(wkey(wid), set()).add(wid)
     A, B, ignored = {}, {}, dict(other_campaign=0, untagged=0, not_ours=0, unknown_cell=0)
     for o in obs:
         tag = o.get('tag')
@@ -506,19 +665,15 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
         if rid != run_id:
             ignored['other_campaign'] += 1
             continue
-        if re.match(r'^B\d+r\d+$', rest):
-            for wid in lane_to_wids.get((o['lane'], o['dataset']), ()):
+        if re.match(r'^[BC]\d+r\d+$', rest):
+            for wid in lane_to_wids.get(o['key'], ()):
                 B.setdefault((wid, o['vendor']), []).append(o)
             continue
-        pack = packs.get(rest)
+        pack = packs.get(rest[:-3] if rest.endswith('.bb') else rest)
         hit = None
         for cid in (pack or {}).get('members', []):
             for wid in configs[cid].get('workloads') or []:
-                try:
-                    lane, ds, _ = map_workload(wid, lanes)
-                except ValueError:
-                    continue
-                if (lane, ds) == (o['lane'], o['dataset']):
+                if wkey(wid) == o['key']:
                     hit = (cid, wid)
         if hit is None:
             ignored['unknown_cell'] += 1
@@ -583,6 +738,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
         else:
             verdict, detail, unjudged = quality_verdict(a.get('quality'), bs[0].get('quality'))
         quality_rows.append(dict(configuration=cid, workload_id=wid, lane=a['lane'], dataset=a['dataset'], vendor=vendor,
+                                 family=a['key'][0], route=a.get('kind'),
                                  candidate_vs_baseline=dict(verdict=verdict, metrics=detail, unjudged=unjudged,
                                                             a_status=a['status'], rel_tolerance=QUALITY_REL),
                                  evidence='%s:%s' % (a['evidence'], a['id'])))
@@ -662,7 +818,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
         v = cell['vendor']
         key = (cell['configuration'], cell['workload_id'], v)
         try:
-            map_workload(cell['workload_id'], lanes)
+            route(cell['workload_id'], lanes, board)
             state = 'MEASURED' if key in A and any(ok(s) for s in A[key]) else 'FAILED' if key in A else 'MISSING'
         except ValueError:
             state = 'REFUSED'
@@ -674,6 +830,9 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                   no_result=nores, coverage=coverage, verdict_counts=_count(verdict_cases, 'verdict'),
                   identity_counts=counts, quality_counts=_count(quality_rows, None),
                   truncated_without_log=sum(1 for o in obs if o.get('truncated') and not o.get('log_evidence')),
+                  cmd_jobs_without_gridbb=sorted('%s:%s' % k for k, j in jobs.items()
+                                                 if (j.get('cmd_tag') or '').startswith(run_id + '.')
+                                                 and (k[0], k[1]) not in {(o['vendor'], o['id']) for o in bb_obs}),
                   jobs_without_algos=sorted('%s:%s' % k for k, j in jobs.items()
                                             if (j.get('tag') or '').startswith(run_id + '.') and k not in with_obs
                                             and k not in {(n['vendor'], n['id']) for n in nores}))
@@ -710,6 +869,7 @@ def main(argv=None):
     r.add_argument('--budget-hours', type=float, help='cut A lines (in order) at this many race hours incl. their B repeats')
     r.add_argument('--run-id', help='tag prefix (default: hash of the plan files)')
     r.add_argument('--lanes-json', help='lane registry JSON {lane: [datasets]} instead of importing bench_board_algos')
+    r.add_argument('--board-json', help='bench_board registry JSON (load_board shape, races as [family, lane, dataset] lists)')
     r.add_argument('--out', type=Path, required=True, help='lines file; <out>.json gets the manifest')
     c = s.add_parser('collect', help='lq results + race logs -> verdicts, identity summary, quality rows')
     c.add_argument('--results', nargs='+', required=True, help='results.txt copies (one per box)')
@@ -718,29 +878,34 @@ def main(argv=None):
     c.add_argument('--run-id')
     c.add_argument('--min-samples', type=int, default=2)
     c.add_argument('--lanes-json')
+    c.add_argument('--board-json')
     c.add_argument('--out', type=Path, required=True)
     args = p.parse_args(argv)
     lanes = load_lanes(args.lanes_json)
+    board = None
+    if args.board_json:
+        board = json.loads(Path(args.board_json).read_text())
+        board['races'] = {tuple(r) for r in board['races']}
     if args.cmd == 'render':
         only = {x for x in (args.only_lanes or '').split(',') if x} or None
         if only:
-            unknown = sorted(only - set(lanes))
+            unknown = sorted(only - set(lanes) - {r[1] for r in (board or load_board(args.vendor))['races']})
             if unknown:
                 p.error('unknown lane(s): ' + ','.join(unknown))
         lines, manifest = render(args.plan_dir, args.vendor, args.branch, args.b_repeats, only, args.phase,
-                                 args.budget_hours, lanes, args.b_group_size, args.run_id)
+                                 args.budget_hours, lanes, args.b_group_size, args.run_id, board)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(''.join(line + '\n' for line in lines))
         Path(str(args.out) + '.json').write_text(json.dumps(manifest, indent=1, sort_keys=True) + '\n')
         t = manifest['totals']
         print(json.dumps({k: t[k] for k in ('vendor', 'run_id', 'lines', 'a_lines', 'b_lines', 'b_repeats', 'a_races', 'b_races',
-                                            'configurations', 'workloads', 'refused_cells', 'refused_workloads',
-                                            'cut_a_lines_by_budget', 'projected_race_hours')}))
+                                            'by_kind', 'plan_cells', 'configurations', 'workloads', 'refused_cells',
+                                            'refused_workloads', 'cut_a_lines_by_budget', 'projected_race_hours')}))
         return 0
-    report = collect(args.results, args.logs, args.plan_dir, args.out, lanes, args.run_id, args.min_samples)
+    report = collect(args.results, args.logs, args.plan_dir, args.out, lanes, args.run_id, args.min_samples, board)
     print(json.dumps({k: report[k] for k in ('run_id', 'observations', 'a_cells', 'coverage', 'verdict_counts',
                                              'identity_counts', 'quality_counts', 'ignored', 'truncated_without_log',
-                                             'jobs_without_algos')}))
+                                             'jobs_without_algos', 'cmd_jobs_without_gridbb')}))
     return 0
 
 

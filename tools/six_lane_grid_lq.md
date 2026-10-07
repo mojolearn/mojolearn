@@ -1,8 +1,8 @@
 # Running the IDENTICAL switch grid over lq
 
 `tools/six_lane_grid_lq.py` turns a grid plan into `lq add` lines, one file per box. After the runs it turns the
-lq results into the three inputs that `tools/six_lane_grid_decide.py` reads. It never builds, races or connects
-to a box. Lanes queue nothing. The orchestrator feeds the lines and copies the results back.
+lq results and job logs into the three inputs that `tools/six_lane_grid_decide.py` reads. It never builds, races
+or connects to a box. Lanes queue nothing. The orchestrator feeds the lines and copies the results back.
 
 ## Commands
 
@@ -24,11 +24,12 @@ bash tools/six_lane_grid_lq_feed.sh nv  ~/mojolearn-evidence/grid-lq/nvidia.line
 bash tools/six_lane_grid_lq_feed.sh amd ~/mojolearn-evidence/grid-lq/amd.lines    4 300 > ~/mojolearn-evidence/grid-lq/feed-amd.log 2>&1 &
 
 # 3. Progress (grep-sized): the run id is in <lines>.json totals.run_id
-lq results nv  'MOJOLEARN_GRID_TAG=<run_id>' | tail -5
-lq results amd 'NO-RESULT' | tail -5
+lq results nv  '<run_id>' | tail -5
+lq results amd 'NO-RESULT|CMD .* rc=[1-9]' | tail -5
 
-# 4. Collect (orchestrator copies, per box: /root/lq/results.txt, plus the race-log dump made ON the box with
-#    grep -H -E '^ALGOS|digest=' /root/lq/out/*/race-*.log > /root/lq/grid-logs.txt)
+# 4. Collect. The orchestrator copies two files per box:
+#      /root/lq/results.txt
+#      a dump made ON the box: grep -H -E '^(ALGOS|GRIDBB)' /root/lq/out/*/*.log > /root/lq/grid-logs.txt
 python3 tools/six_lane_grid_lq.py collect --plan-dir ~/mojolearn-evidence/grid-lq/plan \
   --results ~/mojolearn-evidence/grid-lq/nv-results.txt ~/mojolearn-evidence/grid-lq/amd-results.txt \
   --logs ~/mojolearn-evidence/grid-lq/nv-grid-logs.txt ~/mojolearn-evidence/grid-lq/amd-grid-logs.txt \
@@ -42,63 +43,84 @@ python3 tools/six_lane_grid_decide.py --matrix ~/mojolearn-evidence/grid-lq/plan
   --out ~/mojolearn-evidence/grid-lq/decide
 ```
 
-`render` options: `--only-lanes ridge-cv,qda` (bench_board_algos lane names), `--phase factorial|pairwise`,
-`--budget-hours H` and `--b-group-size N` (default 8 workloads per incumbent line).
+`render` options: `--only-lanes`, `--phase factorial|pairwise`, `--budget-hours H`, `--b-group-size N`
+(default 8 workloads per incumbent line), and `--lanes-json`/`--board-json` (registries for tests).
 
-`--budget-hours H` keeps A lines in order while the A races plus their new workloads' B repeats fit in H hours.
-Each race is costed at half the plan's pair time: nvidia 38 s, amd 24 s per pair. Build time is not included.
+`--budget-hours H` keeps A lines in order while their races plus the new workloads' B repeats fit in H hours.
+Each race is costed at half the plan's pair time: nvidia 38 s, amd 24 s per pair.
 
-`collect` options: `--min-samples` (default 2 incumbent repeats for a floor), `--run-id`.
+`collect` options: `--min-samples` (default 2 incumbent repeats for a floor) and `--run-id`.
 
-## What a line is
+## Two routes, one line per build
+
+Every line carries `MOJOLEARN_GRID_TAG=<run>.<...>`. The run id is a hash of the plan files, so collect ignores
+lines from another campaign.
+
+A lines carry `MOJOLEARN_BUILD_DEFINES=<D1=1,D2=3>` with the pack's define set. A pack is the planner's set of
+configurations that share one define set (`grid-plan.json` `builds.packs`), so one build covers them all. B lines
+(the incumbent) carry no defines. Each workload's B is repeated `--b-repeats` times, spread evenly through the
+file; the repeats are the noise floor.
+
+**RACE: `expanded:` workloads** (tools/bench_board_algos.py lanes)
 
 ```
-lq add nv RACE <branch> <lane[,lane]> <ds[,ds]> MOJOLEARN_GRID_TAG=<run>.<pack> MOJOLEARN_BUILD_DEFINES=<D1=1,D2=3> BUILDS=build_x,...
-lq add nv RACE <branch> <lane@ds,lane@ds,...> PAIRS MOJOLEARN_GRID_TAG=<run>.B<grp>r<k> BUILDS=build_x
+lq add nv RACE <branch> <lane[,lane]> <ds[,ds]> MOJOLEARN_GRID_TAG=<run>.<pack> MOJOLEARN_BUILD_DEFINES=... BUILDS=build_x,...
+lq add nv RACE <branch> <lane@ds,...> PAIRS MOJOLEARN_GRID_TAG=<run>.B<grp>r<k> BUILDS=build_x
 ```
 
-- **Arm A, one line per build pack.** A pack is the planner's set of configurations that share one define set
-  (`grid-plan.json` `builds.packs`), so one build covers all of them. Packs never race the same workload twice.
-  The lanes and datasets come from the members' workload ids.
-  - The comma form is used when the cells are a full lanes x datasets product.
-  - Otherwise the line uses `lane@ds,... PAIRS`, which box_job.sh accepts.
-  - Lines are ordered: factorial regime first (a pack is factorial if any member is), then pairwise, then
-    config priority, then pack number.
-- **Arm B, the incumbent.** The same branch with no defines. Workloads are grouped by binding set: at most
-  8 per line, one build each. Every workload's B is repeated `--b-repeats` times, spread evenly through the
-  file. The repeats are the noise floor, so no separate A/A pass is needed (as in
-  `six_lane_timing.py floors --from-pairs`).
-- **`MOJOLEARN_GRID_TAG`.** The run id plus the pack, or the B group and repeat. The run id is a hash of the
-  plan files, so collect ignores lines from another campaign. It is the first ENV, so lq's 600-character cut
-  never removes it. No build or race reads it.
-- **How the defines reach the build.** box_job.sh (2026-10-07) exports every `MOJOLEARN_*=` token before the
-  builds and the races. Every binding build script sources `bindings/build_defines.sh`, which expands
-  `MOJOLEARN_BUILD_DEFINES` into `-D NAME=VALUE` on its `mojo build` line.
-  - When the variable is empty, the mojo argv is unchanged.
-  - The older `MOJOLEARN_EXTRA_DEFINES` and `MOJOLEARN_BUILD_EXTRA_DEFINES` still work.
-- **`BUILDS=`.** The device build scripts for the pack's bindings and the members' workload bindings.
-  If a race needs another binding, overlay_race_job2.sh builds it with the same exported defines and retries.
+- box_job.sh runs overlay_race_job2.sh and prints one `ALGOS ... median_ms= quality={json} digest=<16 hex>` line
+  per race.
+- A binding the line did not list is built with the same exported defines, and the race is retried.
 
-## Where results come from
+**CMD: every other family**, through tools/bench_board.py
 
-- **`/root/lq/results.txt` on each box.** box_job.sh writes one line per race:
+```
+lq add nv CMD <branch> <run>.<pack>.bb MOJOLEARN_GRID_TAG=<run>.<pack>.bb MOJOLEARN_BUILD_DEFINES=... \
+   $PWD/.pixi/envs/default/bin/python tools/six_lane_grid_bb.py --tag <run>.<pack>.bb --vendor nvidia \
+   --race classical:kmeans:taxi --race trees:rf:istella ... BUILDS=build,build_<x>,...
+```
 
-  ```
-  <id> <nvidia|amd> <branch>@<head> [ MOJOLEARN_GRID_TAG=... MOJOLEARN_BUILD_DEFINES=...] ALGOS lane= dataset= arm=ours status= median_ms= quality={json} digest=<16 hex>
-  ```
+- The B lines use the tag `<run>.C<grp>r<k>`.
+- The mapping:
+  - `classical:L@dataset=D` -> `classical/L/D`
+  - `more:L@dataset=D` -> `classical2/L/D`
+  - `neural:L` -> `neural/L/<its data>`
+  - tree `L:D` -> `trees/L/<board dataset>`. Task lanes map their driver dataset back through
+    `TREE_TASK_DATASETS`: `gbdt-multiclass:taximc` -> taxi, `gbdt-rank-*:istellarank` -> istella,
+    `gbdt-categorical:taxicat` -> taxi.
 
-  The line is cut at 600 characters. Long define sets push the quality JSON, the digest, or the whole ALGOS
-  text past the cut.
-- **`/root/lq/out/<id>/race-*.log`.** These hold the full `ALGOS` line and the `ALGOS-ROUND ... digest=` lines.
-  Pass `--logs` with either form:
-  - the lq out directories (`<id>/race-*.log`), or
-  - a `grep -H -E '^ALGOS|digest=' /root/lq/out/*/race-*.log` dump.
+  Each (family, lane, dataset) must be a race that `bench_board.plan_races` plans in IDENTICAL on the vendor.
+- `BUILDS=`: the base `build` (core `_mojolearn`), plus the pack's bindings, plus the members' workload bindings
+  from the plan. The CMD path has no retry-on-missing-binding loop, so this list must be complete.
+- box_job.sh (CMD) builds those bindings in a detached worktree of the branch, with every `MOJOLEARN_*` token
+  exported. That export is the box delegate's change of 2026-10-07; the tokens also sit before the interpreter
+  as an environment prefix. It then runs the command in the worktree.
+- tools/six_lane_grid_bb.py:
+  1. Puts the tree's `python/` on the pixi interpreter with a `.pth` file. bench_board drops `PYTHONPATH`, and
+     the `.pth` is how the built bindings get installed here. It also installs scikit-learn if it is missing.
+  2. Runs `bench_board.py --modes identical --rows full --rounds 1 --no-infer --skip-install --python-env
+     <that python> --cache /root/board-0833/cache --no-smoke-gate`. Our arm only, since the opponent store at
+     `<job dir>/opponent-store.jsonl` is empty. Output goes to `--out /root/lq/out/<id>/bb` (the job dir outlives
+     the worktree). It runs once per (family, dataset set), so only the requested cells race.
+  3. Prints one `GRIDBB tag= vendor= head= family= lane= dataset= status= median_ms= hash=<16 hex> quality={json}`
+     line per requested race, from `bb/board.json`, and then `GRIDBB-DONE`. results.txt gets only the CMD log's
+     last line, so collect reads the GRIDBB lines from the log dump.
 
-  Collect fills cut fields from the logs. `collect-report.json` lists `truncated_without_log` and
-  `jobs_without_algos` (a tagged job with no ALGOS line and no logs). Both should be 0.
-- **`lq results <box>` and `lq log` are for progress only.** They return the last 40 lines, cut at 400 characters.
+**Output digests.** Every bench_board cell carries `hash`:
+- trees: the FSPEED prediction hash.
+- classical, classical2, algos: the last round digest.
+- neural: the last round digest. The training lanes (lm-train-step, samba-train-step) had none, so
+  `bench_board_neural.outputs_digest` now hashes the race's saved outputs (sha256, 16 hex). It is recorded as
+  `outputs_digest`, printed as `NEURAL-DIGEST`, and used by `bench_board.classical_cells` when the rounds carry
+  no digest.
 
-## What collect writes (`--out`)
+**Box prerequisites for CMD lines.**
+- The board caches under `/root/board-0833/cache`: ctd-data, more-data and algos-data blocks. bench_board preps a
+  missing block itself, untimed, once.
+- The taxi/Istella npz under bench_board's `--data-root` default (`$GBM_BENCH_DATA` or `~/datasets/gbm-bench`).
+- pip in the pixi env. The script bootstraps it with ensurepip, as overlay_race_job2.sh does.
+
+## Collect outputs (`--out`)
 
 | file | schema | read by |
 | --- | --- | --- |
@@ -106,28 +128,22 @@ lq add nv RACE <branch> <lane@ds,lane@ds,...> PAIRS MOJOLEARN_GRID_TAG=<run>.B<g
 | `summary.json` | `mojolearn.six-lane-comparison/1` | decide `--identity` |
 | `quality.json` | rows | decide `--quality` |
 | `floors.json` | `mojolearn.six-lane-aa-floors/1` | the floors from the B repeats |
-| `collect-report.json` | | coverage per vendor (MEASURED/FAILED/MISSING/REFUSED), counts, ignored lines, NO-RESULT jobs |
+| `collect-report.json` | | coverage and job health |
 
-**`grid-verdicts.json`.** Cases list a configuration, a workload_id, and per vendor
-`candidate_over_baseline.scored` = A_ms / median(B_ms), `log_ratio` and `floor`.
-- B is taken from the same head when it exists.
+**`grid-verdicts.json`.**
+- scored = A_ms / median(B_ms), with B from the same head when it exists.
 - floor = log(p90/p10) of the B repeats with 4 or more samples, else log(max/min) (`six_lane_timing._spread`).
-- The verdict comes from `six_lane_timing.judge`: FASTER or SLOWER only when the change is beyond the floor on
-  both NVIDIA and AMD and both agree in direction. Otherwise NO_VERDICT.
-- lq reports one `median_ms` per race, so only the `scored` phase is judged.
+- The verdict comes from `six_lane_timing.judge`: FASTER or SLOWER only beyond the floor on both NVIDIA and AMD,
+  in the same direction. Only the scored phase is judged.
 
-**`summary.json`.** Per (configuration_id, workload_id), `arms.A` and `arms.B` compare the NVIDIA digest with the
-AMD digest. Each arm is one of:
+**`summary.json`.** `arms.A` and `arms.B` compare the NVIDIA digest with the AMD digest. Each arm is one of:
 - MATCH: the digests are equal.
-- MISMATCH: same head, digests differ. Also used when the incumbent's digest changes from run to run on one vendor.
-- INCOMPLETE: a digest is missing or the race failed. Also used when the digests differ and the vendors raced
-  different heads.
+- MISMATCH: same head, different digests. Also used when the incumbent's digest changes from run to run on one
+  vendor.
+- INCOMPLETE: a digest is missing or the race failed. Also used when the digests differ and the heads differ.
 
-`output_sha256` holds the digest per vendor: the bench_board_algos race digest, first 16 hex characters, as
-box_job.sh records it.
-
-**`quality.json`.** One row per configuration, lane, dataset and vendor. `candidate_vs_baseline.verdict` is set
-from the board quality JSON:
+**`quality.json`.** One row per configuration, workload and vendor. The A quality JSON is compared with B's,
+metric by metric:
 - WORSE or BETTER: a metric moves beyond 1e-6 relative.
   - Lower is better: rmse, logloss, inertia, error, residual, diff, ...
   - Higher is better: accuracy, auc, r2, trustworthiness, recall, silhouette, ...
@@ -135,37 +151,48 @@ from the board quality JSON:
 - FAIL: the A race failed.
 - PENDING: there is no incumbent.
 
-Keys with no known direction (`n_clusters`, `fraction_flagged`, ...) are listed in `unjudged`, not judged.
+Keys with no known direction are listed in `unjudged`.
 
-## Coverage at 8d8771a8e (`--crosses auto --cap 0`, both vendors identical)
+**`collect-report.json`.** Coverage per vendor (MEASURED/FAILED/MISSING/REFUSED), plus these job-health lists,
+which should all be empty:
+- `no_result`: RACE jobs that reported no result.
+- `jobs_without_algos`: a RACE job whose results line lost its ALGOS text to the cut, with no logs to fill it.
+- `truncated_without_log`.
+- `cmd_jobs_without_gridbb`: a CMD job with no GRIDBB lines in the dump.
 
-| | nvidia | amd |
+## Totals at this branch (`--crosses auto --cap 0`, after the planner dataset fix; nvidia and amd identical)
+
+| | per box |
+| --- | --- |
+| plan cells | 3,354 |
+| cells raced (A) | 2,361 (70%) |
+| RACE A cells (expanded) | 535 |
+| CMD A cells: neural / trees / classical / classical2 | 932 / 670 / 174 / 50 |
+| lines (= builds) | 1,285 |
+| A lines: RACE / CMD | 145 / 1,038 (factorial 252, pairwise 931) |
+| B lines: RACE / CMD | 36 / 66 (3 repeats; 186 + 201 races) |
+| configurations / workloads | 1,707 / 129 |
+| projected race hours | nvidia 14.5, amd 9.2 |
+
+The projected hours count only the races, at the plan's median pair time. Build time is not counted: each of
+the 1,285 lines is a fresh worktree, pixi install, libMojolearnMath and its bindings. Tree and neural races also
+run longer than the median.
+
+**Refused cells: 993 per vendor (28 workloads), each named with its reason in `<lines>.json`.**
+
+| refused | cells | reason |
 | --- | --- | --- |
-| lines (= builds) | 164 | 164 |
-| A lines (packs) | 137 (factorial 109, pairwise 28) | 137 |
-| B lines (9 groups x 3 repeats) | 27 | 27 |
-| A races (cells) | 509 of 3,358 | 509 of 3,358 |
-| B races | 144 | 144 |
-| configurations / workloads | 269 / 48 | 269 / 48 |
-| projected race hours (builds excluded) | 3.45 | 2.18 |
+| rf, et: `istellamc`, `istellareg`, `taximc`, `taxireg`, `year` | 480 | tree driver datasets with no board race (the board races these lanes on taxi/istella only) |
+| gbdt-symmetric(-1000), gbdt-depthwise, gbdt-lossguide: `istellareg`, `taxireg`, `year` | 336 | same |
+| gbdt-ordered: `istellareg`, `taxireg` | 94 | no board dataset in `TREE_TASK_DATASETS` |
+| `iforest:anomaly` | 47 | the board races iforest on taxi/istella |
+| `gbdt-categorical:criteo` | 32 | criteo is not a board dataset |
+| `expanded:sgd-reg@regression_report` | 4 | lane variant; no race form |
 
-`lq RACE` runs `tools/bench_board_algos.py race` only. The other 2,849 cells per vendor are refused by name:
+**Fixed in the planner** (`tools/six_lane_grid.py map_workloads`). `expanded:` and `more:` workloads now keep only
+the datasets their board lane races:
+- the time-series lanes race `taxi-hourly` and `synthetic`;
+- `lu-solve`, `more:arima` and `more:ets` race `synthetic`.
 
-| refused | cells per vendor | reason |
-| --- | --- | --- |
-| trees (`rf:`, `et:`, `gbdt-*:`, `iforest:`) | 1,659 | Tree board workloads (`<lane>:<dataset>`). Not bench_board_algos lanes. |
-| neural (`neural:*`) | 932 | bench_board_neural workloads. |
-| classical (dbscan, hdbscan, kde, kmeans, knn, ols, pca, svc) | 174 | Classical harness lanes. Not in bench_board_algos `LANES`. |
-| more (arima, ets, gmm, ivf, linearsvc/svr, logreg, nystroem, rbf-sampler, ridge, svr, tsvd) | 52 | bench_board_more lanes. Not in `LANES`. |
-| expanded time-series (auto-theta, autoarima, damped-ets, dynamic(-optimized)-theta, optimized-theta, theta) | 26 | The grid names `dataset=taxi/istella`, but these lanes race `taxi-hourly` and `synthetic`. |
-| expanded `lu-solve@dataset=taxi/istella` | 2 | The lane races `synthetic` only (its `synthetic` cells are kept). |
-| expanded `sgd-reg@regression_report` | 4 | A lane variant with no lq RACE form. |
-
-Accepted with a note: 16 `@input=classification-full-v1` and `@input=tsvd-full-v1` workloads (gaussian-nb, lda-clf,
-minibatch-kmeans, qda, randomized-svd, ridge-clf, standard-scaler, target-encoder). lq races the board's rows-full
-block for these lanes, not the registered full-input variant. A and B share that input, so the A/B comparison holds,
-but the input is not the saved recipe's.
-
-Reaching the refused families needs a harness entry that lq can run with exported defines. Today box_job.sh `CMD`
-does not export ENV tokens before its builds. Running time-series cells needs a planner mapping to `taxi-hourly` or
-`synthetic`. Neither is substituted here.
+**Accepted with a note.** 22 `@input=` variant workloads (classification-full-v1, tsvd-full-v1) race the board's
+own full-row block, not the registered variant input.

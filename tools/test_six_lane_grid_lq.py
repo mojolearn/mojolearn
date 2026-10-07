@@ -12,10 +12,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import six_lane_grid_decide as D  # noqa: E402
+import six_lane_grid_bb as BBW  # noqa: E402
 import six_lane_grid_lq as G  # noqa: E402
 
 LANES = {'ridge-cv': ['taxi', 'istella'], 'lasso-cv': ['taxi', 'istella'], 'theta': ['taxi-hourly', 'synthetic'],
          'qda': ['taxi', 'istella'], 'sgd-reg': ['taxi', 'istella']}
+BOARD = dict(races={('classical', 'kmeans', 'taxi'), ('trees', 'rf', 'taxi'), ('trees', 'rf', 'istella'),
+                    ('trees', 'gbdt-multiclass', 'taxi'), ('neural', 'lm-train-step', 'bytes')},
+             neural_data={'lm-train-step': 'bytes'}, tree_task={'gbdt-multiclass': {'taxi': 'taximc'}},
+             tree_lanes=['rf', 'gbdt-multiclass'], board_datasets=['taxi', 'istella'])
 
 
 def wl(algo, ds, extra=''):
@@ -45,7 +50,7 @@ def write_plan(d):
                [wl('classical:kmeans', 'taxi')], assignment={'f': 'on'}),
         config('G.expanded:sgd-reg@rr.g=on', 'expanded:sgd-reg@rr', 'P006', ['MOJOLEARN_G=1'],
                [wl('expanded:sgd-reg@regression_report', 'taxi')], assignment={'g': 'on'}),
-        config('G.rf.h=on', 'trees:rf', 'P007', ['MOJOLEARN_H=1'], ['rf:taxi'], assignment={'h': 'on'}),
+        config('G.rf.h=on', 'trees:rf', 'P007', ['MOJOLEARN_H=1'], ['rf:taxi', 'rf:year'], assignment={'h': 'on'}),
     ]
     packs = {}
     for c in configs:
@@ -85,14 +90,22 @@ class RenderTests(unittest.TestCase):
 
     def render(self, **kw):
         kw.setdefault('lanes', LANES)
+        kw.setdefault('board', BOARD)
         return G.render(self.d, kw.pop('vendor', 'nvidia'), **kw)
 
     def test_lines_packs_and_order(self):
         lines, m = self.render(b_repeats=0)
         a = [x for x in m['lines'] if x['arm'] == 'A']
         # a pack is in the factorial phase when any member is; then priority, then pack number
-        self.assertEqual([x['pack'] for x in a], ['P001', 'P003', 'P002'])
-        self.assertEqual([x['regime'] for x in a], ['factorial'] * 3)
+        self.assertEqual([x['pack'] for x in a], ['P001', 'P003', 'P005', 'P002', 'P007'])
+        self.assertEqual([x['regime'] for x in a], ['factorial'] * 4 + ['pairwise'])
+        self.assertEqual([x['kind'] for x in a], ['race', 'race', 'cmd', 'race', 'cmd'])
+        rid = G.run_id_of(self.d)
+        k = [l for l in lines if '.P005.bb ' in l][0]
+        self.assertEqual(k, 'lq add nv CMD main %s.P005.bb MOJOLEARN_GRID_TAG=%s.P005.bb MOJOLEARN_BUILD_DEFINES=MOJOLEARN_F=1 '
+                            '$PWD/.pixi/envs/default/bin/python tools/six_lane_grid_bb.py --tag %s.P005.bb --vendor nvidia '
+                            '--race classical:kmeans:taxi BUILDS=build,build_x_linear' % (rid, rid, rid))
+        self.assertIn('--race trees:rf:taxi BUILDS=', [l for l in lines if '.P007.bb ' in l][0])
         p1 = [l for l in lines if '.P001 ' in l][0]
         self.assertIn('lq add nv RACE main lasso-cv@taxi,ridge-cv@istella,ridge-cv@taxi PAIRS', p1)
         self.assertIn('MOJOLEARN_BUILD_DEFINES=MOJOLEARN_A=1,MOJOLEARN_B=2', p1)
@@ -107,11 +120,21 @@ class RenderTests(unittest.TestCase):
     def test_refusals_by_name(self):
         _, m = self.render(b_repeats=0)
         why = {r['workload_id']: r['reason'] for r in m['refused']}
-        self.assertIn("not a tools/bench_board_algos.py lane", why['classical:kmeans@dataset=taxi'])
         self.assertIn("races datasets taxi-hourly,synthetic, not 'taxi'", why['expanded:theta@dataset=taxi'])
         self.assertIn('lane variant @regression_report', why['expanded:sgd-reg@regression_report@dataset=taxi'])
-        self.assertIn('no @dataset=', why['rf:taxi'])
-        self.assertEqual(m['totals']['refused_workloads'], 4)
+        self.assertIn("not driver dataset 'year'", why['rf:year'])
+        self.assertEqual(m['totals']['refused_workloads'], 3)
+
+    def test_map_board(self):
+        self.assertEqual(G.map_board('gbdt-multiclass:taximc', BOARD)[:3], ('trees', 'gbdt-multiclass', 'taxi'))
+        self.assertEqual(G.map_board('neural:lm-train-step', BOARD)[:3], ('neural', 'lm-train-step', 'bytes'))
+        self.assertEqual(G.map_board('classical:kmeans@dataset=taxi', BOARD)[:3], ('classical', 'kmeans', 'taxi'))
+        for wid, why in (('classical:kmeans@dataset=istella', 'plans no classical/kmeans/istella'),
+                         ('gbdt-multiclass:istellamc', 'has no board dataset'), ('neural:gemm', 'not a tools/bench_board.py'),
+                         ('more:ridge@dataset=taxi', 'plans no classical2/ridge/taxi'), ('oob:rf:taxi', 'no bench_board route')):
+            with self.assertRaises(ValueError) as cm:
+                G.map_board(wid, BOARD)
+            self.assertIn(why, str(cm.exception))
 
     def test_b_repeats_spread(self):
         lines, m = self.render(b_repeats=3)
@@ -120,37 +143,42 @@ class RenderTests(unittest.TestCase):
         for x in b:
             for w in x['workloads']:
                 seen.setdefault(w, []).append(x['line'])
-        self.assertEqual(len(seen), 4)
+        self.assertEqual(len(seen), 6)
         self.assertTrue(all(len(v) == 3 and len(set(v)) == 3 for v in seen.values()))
         for line in lines:
-            if '.B0' in line:
+            if '.B0' in line or '.C0' in line:
                 self.assertNotIn('MOJOLEARN_BUILD_DEFINES', line)
-        self.assertEqual(m['totals']['b_races'], 12)
+        self.assertEqual(m['totals']['b_races'], 18)
+        self.assertEqual({x['kind'] for x in b if x['tag'].split('.')[1].startswith('C')}, {'cmd'})
 
     def test_filters_and_budget(self):
         _, m = self.render(b_repeats=1, phase='pairwise')
-        self.assertEqual([x['pack'] for x in m['lines'] if x['arm'] == 'A'], ['P001'])
-        self.assertEqual([x['regime'] for x in m['lines'] if x['arm'] == 'A'], ['pairwise'])
-        self.assertEqual({c['lane'] for x in m['lines'] if x['arm'] == 'A' for c in x['cells']}, {'lasso-cv'})
+        self.assertEqual([x['pack'] for x in m['lines'] if x['arm'] == 'A'], ['P001', 'P007'])
+        self.assertEqual([x['regime'] for x in m['lines'] if x['arm'] == 'A'], ['pairwise', 'pairwise'])
+        self.assertEqual({c['lane'] for x in m['lines'] if x['arm'] == 'A' for c in x['cells']}, {'lasso-cv', 'rf'})
         _, m = self.render(b_repeats=1, only_lanes={'ridge-cv'})
         self.assertEqual({c['lane'] for x in m['lines'] if x['arm'] == 'A' for c in x['cells']}, {'ridge-cv'})
         # first job (P001: 3 A + 3 new workloads x 1 B = 6 races x 19 s = 114 s) fits in 120 s, the next does not
         _, m = self.render(b_repeats=1, budget_hours=120 / 3600.0)
         self.assertEqual([x['pack'] for x in m['lines'] if x['arm'] == 'A'], ['P001'])
-        self.assertEqual(m['totals']['cut_a_lines_by_budget'], 2)
+        self.assertEqual(m['totals']['cut_a_lines_by_budget'], 4)
 
     def test_amd_box_and_cli(self):
         out = self.d / 'out' / 'amd.lines'
         lanes = self.d / 'lanes.json'
         lanes.write_text(json.dumps(LANES))
-        rc = G.main(['render', '--plan-dir', str(self.d), '--vendor', 'amd', '--out', str(out), '--lanes-json', str(lanes)])
+        board = self.d / 'board.json'
+        board.write_text(json.dumps(dict(BOARD, races=sorted(BOARD['races']))))
+        rc = G.main(['render', '--plan-dir', str(self.d), '--vendor', 'amd', '--out', str(out), '--lanes-json', str(lanes),
+                     '--board-json', str(board)])
         self.assertEqual(rc, 0)
         text = out.read_text().splitlines()
-        self.assertTrue(text and all(l.startswith('lq add amd RACE main ') for l in text))
+        self.assertTrue(text and all(l.startswith(('lq add amd RACE main ', 'lq add amd CMD main ')) for l in text))
+        self.assertTrue(all('--vendor amd' in l for l in text if ' CMD ' in l))
         self.assertTrue(Path(str(out) + '.json').exists())
         with self.assertRaises(SystemExit):
             G.main(['render', '--plan-dir', str(self.d), '--vendor', 'amd', '--out', str(out), '--lanes-json', str(lanes),
-                    '--only-lanes', 'kmeans'])
+                    '--board-json', str(board), '--only-lanes', 'no-such-lane'])
 
     def test_plain_tokens(self):
         with self.assertRaises(ValueError):
@@ -194,6 +222,26 @@ class CollectTests(unittest.TestCase):
         amd.append('a0103 amd main@abc1234 ridge-cv taxi NO-RESULT builds=0/1 see /root/lq/out/a0103/rc.txt')
         # another campaign's line is ignored
         nv.append(algos_line('n0104', 'nvidia', 'abc1234', 'gdeadbeef.P002', 'ridge-cv', 'taxi', 1, qb, '9' * 16, 'X=1'))
+        # CMD route (tools/six_lane_grid_bb.py GRIDBB lines in the job logs): kmeans faster + same hash on both
+        # vendors; rf hash differs between vendors; one CMD job printed no GRIDBB line
+        def bbl(jid, vendor, tag, fam, lane, ds, ms, h, q=None):
+            return '/root/lq/out/%s/%s.log:GRIDBB tag=%s vendor=%s head=abc1234 family=%s lane=%s dataset=%s status=ok ' \
+                   'median_ms=%s hash=%s quality=%s' % (jid, tag, tag, vendor, fam, lane, ds, ms, h, json.dumps(q or {'inertia': 5.0}))
+        self.bb = {'nvidia': [], 'amd': []}
+        for rep_, (mn, ma) in enumerate(((1000, 500), (1010, 505), (1020, 510))):
+            for vendor, ms in (('nvidia', mn), ('amd', ma)):
+                pre = 'n' if vendor == 'nvidia' else 'a'
+                tag = '%s.C001r%d' % (r, rep_ + 1)
+                self.bb[vendor].append(bbl('%s03%02d' % (pre, rep_), vendor, tag, 'classical', 'kmeans', 'taxi', ms, 'k' * 16))
+                self.bb[vendor].append(bbl('%s03%02d' % (pre, rep_), vendor, tag, 'trees', 'rf', 'taxi', ms, 'r' * 16))
+        self.bb['nvidia'].append(bbl('n0310', 'nvidia', r + '.P005.bb', 'classical', 'kmeans', 'taxi', 700, '5' * 16))
+        self.bb['amd'].append(bbl('a0310', 'amd', r + '.P005.bb', 'classical', 'kmeans', 'taxi', 350, '5' * 16))
+        self.bb['nvidia'].append(bbl('n0311', 'nvidia', r + '.P007.bb', 'trees', 'rf', 'taxi', 1000, '6' * 16))
+        self.bb['amd'].append(bbl('a0311', 'amd', r + '.P007.bb', 'trees', 'rf', 'taxi', 505, '7' * 16))
+        nv.append('n0310 nvidia main@abc1234 CMD %s.P005.bb rc=0 builds=[build rc=0 ] last: GRIDBB-DONE races=1 ok=1' % r)
+        nv.append('n0312 nvidia main@abc1234 CMD %s.P099.bb rc=1 builds=[build rc=1 ] last: error' % r)
+        (self.d / 'nv-bb.txt').write_text('\n'.join(self.bb['nvidia']) + '\n')
+        (self.d / 'amd-bb.txt').write_text('\n'.join(self.bb['amd']) + '\n')
         (self.d / 'nv-results.txt').write_text('\n'.join(nv) + '\n')
         (self.d / 'amd-results.txt').write_text('\n'.join(amd) + '\n')
         log = self.d / 'nv-out' / 'n0101' / 'race-lasso-cv-taxi-def.log'
@@ -202,12 +250,12 @@ class CollectTests(unittest.TestCase):
                        'ALGOS-ROUND lane=lasso-cv dataset=taxi arm=ours round=0 ms=101.0 infer_ms=None digest=' + 'f' * 64 + '\n'
                        'ALGOS-ROUND lane=lasso-cv dataset=taxi arm=ours round=1 ms=100.0 infer_ms=None digest=' + 'f' * 64 + '\n'
                        'ALGOS lane=lasso-cv dataset=taxi arm=ours status=ok median_ms=100.0 quality={"r2": 0.8, "rmse": 1.0}\n')
-        return [self.d / 'nv-results.txt', self.d / 'amd-results.txt'], [self.d / 'nv-out']
+        return [self.d / 'nv-results.txt', self.d / 'amd-results.txt'], [self.d / 'nv-out', self.d / 'nv-bb.txt', self.d / 'amd-bb.txt']
 
     def test_collect_and_decide(self):
         results, logs = self.results()
         out = self.d / 'collected'
-        rep = G.collect(results, logs, self.d, out, lanes=LANES)
+        rep = G.collect(results, logs, self.d, out, lanes=LANES, board=BOARD)
         self.assertEqual(rep['ignored']['other_campaign'], 1)
         self.assertEqual(rep['truncated_without_log'], 0)
         self.assertEqual(len(rep['no_result']), 1)
@@ -233,7 +281,15 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(rows[('G.expanded:lasso-cv.b=on', 'expanded:lasso-cv@dataset=taxi', 'nvidia')], 'WORSE')
         self.assertEqual(rows[('G.expanded:lasso-cv.b=on', 'expanded:lasso-cv@dataset=taxi', 'amd')], 'SAME')
         self.assertEqual(rows[('G.expanded:qda.d=on', 'expanded:qda@dataset=taxi@input=classification-full-v1', 'amd')], 'FAIL')
-        self.assertEqual(rep['coverage']['nvidia']['REFUSED'], 4)
+        self.assertEqual(rep['coverage']['nvidia']['REFUSED'], 3)
+        self.assertEqual(rep['cmd_jobs_without_gridbb'], ['nvidia:n0312'])
+        km = cases[('G.classical:kmeans.f=on', 'classical:kmeans@dataset=taxi')]
+        self.assertEqual(km['verdict'], 'FASTER')
+        self.assertAlmostEqual(km['vendors']['amd']['candidate_over_baseline']['scored'], 350 / 505)
+        self.assertEqual(ids[('G.classical:kmeans.f=on', 'classical:kmeans@dataset=taxi')]['arms']['A']['status'], 'MATCH')
+        self.assertEqual(ids[('G.classical:kmeans.f=on', 'classical:kmeans@dataset=taxi')]['arms']['B']['status'], 'MATCH')
+        self.assertEqual(ids[('G.rf.h=on', 'rf:taxi')]['arms']['A']['status'], 'MISMATCH')
+        self.assertEqual(rows[('G.classical:kmeans.f=on', 'classical:kmeans@dataset=taxi', 'nvidia')], 'SAME')
         # decide runs unchanged on the three outputs
         dec_out = self.d / 'decide'
         rc = D.main(['--matrix', str(self.d / 'grid-matrix.json.gz'), '--verdicts', str(out / 'grid-verdicts.json'),
@@ -248,15 +304,15 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(rows['expanded:ridge-cv@dataset=taxi']['quality'], 'SAME')
 
     def test_grep_dump_logs(self):
-        results, _ = self.results()
+        results, logs_ = self.results()
         dump = self.d / 'nv-logs.txt'
         f = '/root/lq/out/n0101/race-lasso-cv-taxi-def.log'
         dump.write_text(f + ':ALGOS-ROUND lane=lasso-cv dataset=taxi arm=ours round=1 ms=100.0 infer_ms=None digest=' + 'f' * 64 + '\n'
                         + f + ':ALGOS lane=lasso-cv dataset=taxi arm=ours status=ok median_ms=100.0 quality={"r2": 0.8}\n')
-        rep = G.collect(results, [dump], self.d, self.d / 'c2', lanes=LANES)
+        rep = G.collect(results, [dump] + logs_[1:], self.d, self.d / 'c2', lanes=LANES, board=BOARD)
         self.assertEqual(rep['truncated_without_log'], 0)
         self.assertEqual(rep['jobs_without_algos'], [])
-        rep = G.collect(results, [], self.d, self.d / 'c3', lanes=LANES)  # lq cut the whole ALGOS text: reported
+        rep = G.collect(results, [], self.d, self.d / 'c3', lanes=LANES, board=BOARD)  # lq cut the whole ALGOS text: reported
         self.assertEqual(rep['jobs_without_algos'], ['nvidia:n0101'])
 
     def test_quality_directions(self):
@@ -293,6 +349,50 @@ class FeedTests(unittest.TestCase):
             r = subprocess.run(['bash', str(feed), 'nv', str(lines), '1', '1'], env=env, capture_output=True, text=True)
             self.assertEqual(len((t / 'added').read_text().splitlines()), 2)  # resumed: nothing re-added
             self.assertIn('fed 2/2', r.stdout)
+
+
+
+class BoardWrapperTests(unittest.TestCase):
+    def test_groups_and_commands(self):
+        races = [('classical', 'kmeans', 'taxi'), ('classical', 'kmeans', 'istella'), ('classical', 'pca', 'taxi'),
+                 ('neural', 'lm-train-step', 'bytes'), ('classical2', 'arima', 'synthetic')]
+        g = BBW.groups(races)
+        self.assertIn(('classical', ['kmeans'], ['istella', 'taxi']), g)
+        self.assertIn(('classical', ['pca'], ['taxi']), g)
+        self.assertIn(('neural', ['lm-train-step'], ['taxi']), g)
+        self.assertIn(('classical2', ['arima'], ['taxi']), g)
+        self.assertEqual(len(g), 4)
+
+    def test_summary_lines_parse_back(self):
+        import contextlib
+        import io
+        board = {'races': {'classical/kmeans/taxi/rows=full': {'family': 'classical', 'lane': 'kmeans', 'dataset': 'taxi',
+                                                               'cells': [{'arm': 'ours', 'status': 'ok', 'median_ms': 12.5,
+                                                                          'hash': 'abcdef0123456789ff', 'quality': {'inertia': 3.0}}]},
+                           'neural/lm-train-step/bytes/shape=full': {'family': 'neural', 'lane': 'lm-train-step', 'dataset': 'bytes',
+                                                                     'cells': [{'arm': 'ours', 'status': 'REFUSED(x y)'}]}}}
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            ok = BBW.summarize(board, [('classical', 'kmeans', 'taxi'), ('neural', 'lm-train-step', 'bytes'),
+                                       ('trees', 'rf', 'taxi')], 'g1.P1.bb', 'amd', 'abc1234')
+        self.assertEqual(ok, 1)
+        lines = buf.getvalue().splitlines()
+        o = G.parse_gridbb(lines[0], '/root/lq/out/a0001/g1.P1.bb.log', 'a0001')
+        self.assertEqual((o['key'], o['median_ms'], o['digest'], o['quality'], o['tag'], o['vendor']),
+                         (('classical', 'kmeans', 'taxi'), 12.5, 'abcdef0123456789', {'inertia': 3.0}, 'g1.P1.bb', 'amd'))
+        self.assertEqual(G.parse_gridbb(lines[1], 'x', 'a0001')['status'], 'REFUSED(x_y)')
+        self.assertEqual(G.parse_gridbb(lines[2], 'x', 'a0001')['status'], 'NO-RECORD')
+
+    def test_dry_run_command(self):
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            BBW.main(['--tag', 't', '--vendor', 'nvidia', '--race', 'trees:rf:taxi', '--dry-run'])
+        cmd = buf.getvalue().split()
+        for flag in ('--modes identical', '--families trees', '--lanes rf', '--datasets taxi', '--skip-install',
+                     '--no-smoke-gate', '--no-infer', '--rows full', '--vendor nvidia'):
+            self.assertIn(flag, ' '.join(cmd))
 
 
 if __name__ == '__main__':
