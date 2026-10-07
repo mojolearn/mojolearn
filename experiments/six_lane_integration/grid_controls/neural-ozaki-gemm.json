@@ -1,0 +1,62 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "neural-ozaki-gemm",
+ "branch": "lane/neural-ozaki-gemm",
+ "head": "8cf3e444c",
+ "controls": {
+  "neural_gemm_ozaki_slices": {
+   "define": "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES",
+   "kind": "int_sweep",
+   "arms": {
+    "off": [],
+    "4": [
+     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4"
+    ],
+    "5": [
+     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
+    ],
+    "6": [
+     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=6"
+    ]
+   },
+   "default": "off",
+   "legal_set": [
+    4,
+    5,
+    6
+   ],
+   "source": [
+    "gemm/experiments/neural_ozaki.mojo:89",
+    "gemm/experiments/neural_ozaki.mojo:600",
+    "gemm/neural_dispatch.mojo:143",
+    "gemm/neural_dispatch.mojo:82"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": true,
+   "status": "new",
+   "notes": "Ozaki scheme: S int8 slices per row/column with a shared power-of-two scale, S(S+1)/2 int8 MMA products (IMMA m16n8k32 sm_80+, MFMA 16x16x32 i8 gfx942) into S exact Int32 diagonals, k split across blocks with exact Int32 atomic adds, one integer RNE epilogue. Identical bits on every column by construction (integer sums; PIECES kernel on columns with no int8 unit incl. host). Mutually exclusive with the other NN* neural GEMM routes (comptime assert). Also forces CNN direct-conv off (NEURAL_GEMM_EXPERIMENT_ENABLED). Products with k > ozaki_max_k[S] (131071/104857/64512) use the incumbent. Accuracy evidence owed: gemm/experiments/neural_ozaki_check.mojo."
+  }
+ },
+ "algorithms": {
+  "neural:cnn-clf": {
+   "binding": "_mojolearn_x_cnn",
+   "route": "fit: CNNClassifier -> x_cnn/device.mojo:539 device_gemm (NEURAL_GEMM_EXPERIMENT_ENABLED) -> gemm/neural_dispatch.mojo identical_gemm_into -> neural_ozaki_into; bias grads x_cnn/device.mojo:805 -> device_gemm; predict: same device_gemm",
+   "controls": [
+    "neural_gemm_ozaki_slices"
+   ],
+   "interaction_groups": []
+  }
+ },
+ "not_reached": [
+  {
+   "workload": "neural:mlp-clf",
+   "reason": "MLPClassifier routes through bindings/_mojolearn_x_sequence -> sequence/mlp_fit.mojo -> sequence/recurrent.gemm, not gemm/neural_dispatch"
+  },
+  {
+   "workload": "neural:mlp-reg",
+   "reason": "same as mlp-clf"
+  }
+ ],
+ "other_reach": "non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch: training (mlp_ops, neural_session_mlp), transformer, mamba/samba backward, byte_lm",
+ "removed": []
+}
