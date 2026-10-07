@@ -98,6 +98,7 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
    board tools only. A full-board run is IDENTICAL on the three; FAST is not rerun.
 4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
 5. Read logs with grep and short tails; never paste whole logs. Tell every subagent the same.
+6. OWED (Andrew, 2026-10-07): re-score the opponents whose clock excludes the host-to-device copy while ours includes it. Our board fit clock starts before X is uploaded (tools/classical_two_datasets.py, the fit timing start); a torch opponent fed device tensors never pays that copy, a cuML opponent fed NumPy does. Inflates PCA, OLS and NB ratios most. Step 1 (lane classical-structural): record the upload time as its own field beside the scored clock. Step 2: compare kernel-only vs opponent, and for every workload where the copy is a material share of the gap, re-score that opponent ONCE with matched input placement (record where its input lived). Until then no opponent column is rerun (opponents are scored once).
 
 ## No Python in the runtime
 
