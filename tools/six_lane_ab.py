@@ -308,6 +308,37 @@ def comparable_compile_argv(values, binding):
     return normalized
 
 
+def nvidia_build_target(explicit_arch, target_kind, hardware):
+    """Select a supported native target without pretending a CPU builder has a GPU.
+
+    An explicit native target is ordinary Mojo cross compilation. The existing
+    observed-device route and default compiler target route retain their probes;
+    this does not introduce a synthetic device or a portable PTX build mode.
+    """
+    if explicit_arch:
+        if target_kind != 'native':
+            raise ValueError('--nvidia-arch requires --nvidia-target native')
+        if not re.fullmatch(r'sm_[0-9]+[a-z]?', explicit_arch):
+            raise ValueError('--nvidia-arch must be a supported native sm target')
+        hardware.update(requested_native_accelerator=explicit_arch,
+                        accelerator_selection='explicit compile target; not detected hardware',
+                        gpu_probe='not performed for explicit compile-only target')
+        return explicit_arch
+    try:
+        observed = subprocess.check_output(
+            ['nvidia-smi', '--query-gpu=name,uuid,driver_version,compute_cap',
+             '--format=csv,noheader'], text=True).strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError('NVIDIA device probe unavailable: native CPU-only builds require '
+                         '--nvidia-target native --nvidia-arch sm_<target>; '
+                         'default-target builds retain the accepted GPU route') from exc
+    caps = {line.rsplit(',', 1)[1].strip().replace('.', '') for line in observed.splitlines()}
+    if len(caps) != 1 or not re.fullmatch(r'[0-9]+[a-z]?', next(iter(caps), '')):
+        raise ValueError('Need one native NVIDIA architecture')
+    hardware.update(gpu=observed, accelerator_selection='observed nvidia-smi compute capability')
+    return 'sm_' + caps.pop()
+
+
 def compile_jobs(args):
     apple=platform.system()=='Darwin' and platform.machine()=='arm64'
     linux=platform.system()=='Linux' and platform.machine()=='x86_64'
@@ -316,6 +347,7 @@ def compile_jobs(args):
     if apple and args.vendor in ('nvidia','amd'):raise ValueError('NVIDIA/AMD compilation requires an authorized Linux worker')
     if args.vendor=='amd' and not re.fullmatch(r'gfx[0-9a-f]+',args.accelerator or ''):raise ValueError('AMD requires an explicit supported native gfx architecture; no generic/portable target')
     if args.vendor!='amd' and args.accelerator:raise ValueError('--accelerator is only for the native AMD target')
+    if getattr(args,'nvidia_arch',None) and args.vendor!='nvidia':raise ValueError('--nvidia-arch is only for NVIDIA')
     source=frozen(args.source_manifest);check_benchmark();plan=json.loads(args.plan.read_text());compiler=args.compiler.resolve()
     if not compiler.is_file():raise ValueError('Compiler missing')
     out=args.output.resolve()
@@ -339,10 +371,7 @@ def compile_jobs(args):
             hardware[name]=path.read_text().strip() if path.exists() else 'unavailable'
         hardware['cpu_model']=next((x.split(':',1)[1].strip() for x in Path('/proc/cpuinfo').read_text().splitlines() if x.startswith('model name')),'unavailable')
         if args.vendor=='nvidia':
-            hardware['gpu']=subprocess.check_output(['nvidia-smi','--query-gpu=name,uuid,driver_version,compute_cap','--format=csv,noheader'],text=True).strip()
-            caps={line.rsplit(',',1)[1].strip().replace('.','') for line in hardware['gpu'].splitlines()}
-            if len(caps)!=1:raise ValueError('Need one native NVIDIA architecture')
-            accelerator='sm_'+caps.pop()
+            accelerator=nvidia_build_target(getattr(args,'nvidia_arch',None),args.nvidia_target,hardware)
         if args.vendor=='amd':
             accelerator=args.accelerator
             hardware['requested_native_accelerator']=accelerator
@@ -522,6 +551,7 @@ def main(argv=None):
     b=s.add_parser('compile',help='compile shared libraries only, never import or execute')
     b.add_argument('--plan',type=Path,default=STORE/'build_plan.json');b.add_argument('--compiler',type=Path,required=True);b.add_argument('--output',type=Path,required=True);b.add_argument('--binding',action='append');b.add_argument('--key',action='append');b.add_argument('--limit',type=int);b.add_argument('--keep-going',action='store_true');b.add_argument('--reuse',type=Path,action='append',help='Prior compile evidence roots; exact source-closure/toolchain matches only')
     b.add_argument('--vendor',choices=('apple','host','nvidia','amd'));b.add_argument('--accelerator',help='AMD native gfx target, e.g. gfx942; portable/generic targets forbidden');b.add_argument('--nvidia-target',choices=('native','default'),default='native',help='native pins the observed sm target; default preserves shipped compiler target selection, recorded separately');b.add_argument('--jobs',type=int,default=2);b.add_argument('--source-manifest',type=Path,help='Exact committed-source manifest for a verified archive on the authorized NVIDIA worker')
+    b.add_argument('--nvidia-arch',help='Explicit supported native sm target for CPU-only cross compilation; requires --nvidia-target native and never claims detected GPU hardware')
     q=s.add_parser('queue',help='write future queue; incomplete cells stay blocked');q.add_argument('--vendor',choices=VENDORS,required=True);q.add_argument('--recipes',type=Path);q.add_argument('--matrix',type=Path,default=STORE/'matrix.json.gz');q.add_argument('--select',action='append');q.add_argument('--output',type=Path,required=True)
     bp=s.add_parser('board-plan',help='write inputs and command for the existing board tool, without invoking it');bp.add_argument('--output',type=Path,required=True)
     args=p.parse_args(argv)
