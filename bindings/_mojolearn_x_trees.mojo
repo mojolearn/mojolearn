@@ -9,7 +9,8 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from xtrees.api import register
+from xtrees.api import register, tree_shap_cache_create_args, tree_shap_cache_values_args
+from xtrees import shap_device as shap_dev
 from xtrees.shap_device import shap_prepare, tree_shap_values, shap_pair_count
 from xtrees.dart_device import DART_DEVICE, dart_open, dart_step, dart_add, dart_close, dart_predict
 from xtrees.dart_units import IDN_DART_DEVICE
@@ -185,11 +186,36 @@ def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObj
     return PythonObject(p[0])
 
 
+def tree_shap_cache_create_binding(forest: PythonObject, tscale: PythonObject,
+                                   cover: PythonObject, params: PythonObject) raises -> PythonObject:
+    var a = tree_shap_cache_create_args(forest, params)
+    var addresses = List[Int]()
+    for i in range(5):
+        addresses.append(a[i])
+    return PythonObject(shap_dev.shap_cache_create(addresses, Int(py=tscale), Int(py=cover), a[5], a[6], a[7], a[8]))
+
+
+def tree_shap_cache_values_binding(handle: PythonObject, x: PythonObject,
+                                   phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    var a = tree_shap_cache_values_args(params)
+    if a[0] > 0:
+        shap_dev.shap_cache_values(Int(py=handle), Int(py=x), Int(py=phi), a[0], a[1], a[2])
+    return PythonObject(a[0])
+
+
+def tree_shap_cache_release_binding(handle: PythonObject) raises -> PythonObject:
+    shap_dev.shap_cache_release(Int(py=handle))
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_x_trees() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_trees")
         register(m)
+        m.def_function[tree_shap_cache_create_binding]("x_trees_tree_shap_cache_create")
+        m.def_function[tree_shap_cache_values_binding]("x_trees_tree_shap_cache_values")
+        m.def_function[tree_shap_cache_release_binding]("x_trees_tree_shap_cache_release")
         m.def_function[x_trees_shap_pair_count_binding]("x_trees_shap_pair_count")
         m.def_function[tree_shap_prepare_binding]("x_trees_tree_shap_prepare")
         m.def_function[tree_shap_binding]("x_trees_tree_shap")
