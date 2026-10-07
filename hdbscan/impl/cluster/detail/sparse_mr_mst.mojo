@@ -298,7 +298,7 @@ def sparse_mr_search_tiled_kernel(
                         uc = c
                     elif c != uc:
                         uc = Int32(-2)
-            uc_s[0] = uc if uc >= 0 else Int32(-2)
+            uc_s[unsafe_offset=0] = uc if uc >= 0 else Int32(-2)
         barrier()
     var ci = InlineArray[Int32, SMR_RI](fill=Int32(-1))
     var ni = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
@@ -323,18 +323,18 @@ def sparse_mr_search_tiled_kernel(
             else:
                 cj_s[unsafe_offset=tid] = Int32(-1)
         comptime if C61_SAME_COMPONENT_SKIP:
-            # uc_s[1]: 1 when some j < jb of this tile leaves the block's
+            # uc_s[unsafe_offset=1]: 1 when some j < jb of this tile leaves the block's
             # component. Reset, barrier, mark, barrier, then a block-uniform
             # read; the trailing barrier on a skip keeps the next reset
             # behind every read.
             if tid == 0:
-                uc_s[1] = Int32(0)
+                uc_s[unsafe_offset=1] = Int32(0)
             barrier()
             if tid < SMR_TJ and jt + tid < jb:
-                if cj_s[unsafe_offset=tid] != uc_s[0]:
-                    uc_s[1] = Int32(1)
+                if cj_s[unsafe_offset=tid] != uc_s[unsafe_offset=0]:
+                    uc_s[unsafe_offset=1] = Int32(1)
             barrier()
-            if uc_s[0] >= 0 and uc_s[1] == Int32(0):
+            if uc_s[unsafe_offset=0] >= 0 and uc_s[unsafe_offset=1] == Int32(0):
                 barrier()
                 jt += SMR_TJ
                 continue
