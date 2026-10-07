@@ -458,13 +458,12 @@ def ocsvm_rho_from(sum_free: Float32, lb: Float32, ub: Float32, nr_free: Int) ->
 
 def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
     """libsvm's calculate_rho, y = +1 throughout, as a blocked fold: block
-    partials (ocsvm_rho_part), then the partials in the lane's fixed tree
-    (`ocsvm_rho_tree`: XN_TREE slots, each partials s, s + XN_TREE, ...
-    ascending from zero, then halving). lb / ub are maxima / minima and the
-    free count an integer sum, exact in any order; the free sum takes the
-    tree's order. The GPU runs the same steps (ocsvm_rho_part_item, then
-    `ocsvm_rho_fin_kernel`: one block of XN_TREE threads), so the host column
-    and every GPU column have the same word."""
+    partials (ocsvm_rho_part_item), then the partials in a fixed pairwise
+    tree (`ocsvm_rho_level_item`, levels stride = 1, 2, 4, ...). lb / ub are
+    maxima / minima and the free count an integer sum, exact in any order;
+    the free sum takes the tree's order. The GPU launches the same items
+    (ocsvm_rho_part_kernel, then one ocsvm_rho_level_kernel per level), so
+    the host column and every GPU column have the same word."""
     var nb = xn_fold_blocks(n)
     var pfl = List[Float32](length=max(3 * nb, 1), fill=Float32(0))
     var pcl = List[Int32](length=max(nb, 1), fill=Int32(0))
@@ -472,7 +471,16 @@ def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
     var pc = IP(unsafe_from_address=Int(pcl.unsafe_ptr()))
     for b in range(nb):
         ocsvm_rho_part_item(b, g, alpha, cv, pf, pc, n)
-    var r = ocsvm_rho_tree(pf, pc, nb)
+    var info = InlineArray[Float32, 1](fill=Float32(0))
+    var ip = FP(unsafe_from_address=Int(info.unsafe_ptr()))
+    var stride = 1
+    while True:
+        for t in range(ocsvm_rho_level_items(nb, stride)):
+            ocsvm_rho_level_item(t, pf, pc, ip, nb, stride)
+        if ocsvm_rho_levels_done(nb, stride):
+            break
+        stride *= 2
+    var r = info[0]
     _ = pfl^
     _ = pcl^
     return r
@@ -488,67 +496,48 @@ def ocsvm_rho_part_item(t: Int, g: FP, alpha: FP, cv: FP, pf: FP, pc: IP, n: Int
 
 
 @always_inline
-def ocsvm_rho_slot(pf: FP, pc: IP, s: Int, nb: Int) -> Tuple[Float32, Float32, Float32, Int]:
-    """Slot s of the rho tree: partials s, s + XN_TREE, ... ascending from
-    (0, -inf, +inf, 0); the free sum by `_add`, lb / ub by strict `>` / `<`."""
-    var lb = bitcast[DType.float32](UInt32(0xFF800000))
-    var ub = bitcast[DType.float32](UInt32(0x7F800000))
-    var sum_free = Float32(0)
-    var nr_free = 0
-    var b = s
-    while b < nb:
-        sum_free = _add(sum_free, pf.unsafe_load(3 * b))
-        var plb = pf.unsafe_load(3 * b + 1)
-        var pub = pf.unsafe_load(3 * b + 2)
-        if plb > lb:
-            lb = plb
-        if pub < ub:
-            ub = pub
-        nr_free += Int(pc.unsafe_load(b))
-        b += XN_TREE
-    return (sum_free, lb, ub, nr_free)
+def ocsvm_rho_levels_done(nb: Int, stride: Int) -> Bool:
+    """Whether the level at `stride` is the rho fold's last (slot 0 then
+    holds every partial)."""
+    return 2 * stride >= nb
 
 
 @always_inline
-def ocsvm_rho_merge(
-    a: Tuple[Float32, Float32, Float32, Int], b: Tuple[Float32, Float32, Float32, Int]
-) -> Tuple[Float32, Float32, Float32, Int]:
-    """One halving step of the rho tree: slot a takes slot b (a's index is
-    the lower). lb / ub / count are exact; the sum is `_add(a, b)`."""
-    var lb = a[1]
-    if b[1] > lb:
-        lb = b[1]
-    var ub = a[2]
-    if b[2] < ub:
-        ub = b[2]
-    return (_add(a[0], b[0]), lb, ub, a[3] + b[3])
+def ocsvm_rho_level_items(nb: Int, stride: Int) -> Int:
+    """Items of the rho fold's level at `stride` (at least one, so the last
+    level's item 0 always runs and writes rho)."""
+    return max((nb + 2 * stride - 1) // (2 * stride), 1)
 
 
-def ocsvm_rho_tree(pf: FP, pc: IP, nb: Int) -> Float32:
-    """The rho partials folded in the lane's fixed tree on one thread (the
-    host column; `ocsvm_rho_fin_kernel` runs the same steps across one block
-    of XN_TREE threads): XN_TREE slots (`ocsvm_rho_slot`), then halving,
-    slot s takes slot s + h for h = XN_TREE / 2 .. 1; then libsvm's rho."""
-    var ss = InlineArray[Float32, XN_TREE](fill=Float32(0))
-    var sl = InlineArray[Float32, XN_TREE](fill=Float32(0))
-    var su = InlineArray[Float32, XN_TREE](fill=Float32(0))
-    var sc = InlineArray[Int, XN_TREE](fill=0)
-    for s in range(XN_TREE):
-        var v = ocsvm_rho_slot(pf, pc, s, nb)
-        ss[s] = v[0]
-        sl[s] = v[1]
-        su[s] = v[2]
-        sc[s] = v[3]
-    var h = XN_TREE // 2
-    while h > 0:
-        for s in range(h):
-            var m = ocsvm_rho_merge((ss[s], sl[s], su[s], sc[s]), (ss[s + h], sl[s + h], su[s + h], sc[s + h]))
-            ss[s] = m[0]
-            sl[s] = m[1]
-            su[s] = m[2]
-            sc[s] = m[3]
-        h //= 2
-    return ocsvm_rho_from(ss[0], sl[0], su[0], sc[0])
+def ocsvm_rho_level_item(t: Int, pf: FP, pc: IP, info: FP, nb: Int, stride: Int):
+    """One item of the rho partials' fixed pairwise tree (lane serial-cleanup,
+    2026-10-07; was one item walking all partials ascending). Level `stride`
+    (1, 2, 4, ...): slot i = 2 * stride * t takes slot i + stride when it
+    exists: the free sum by `_add(slot i, slot j)`, lb / ub by strict `>` /
+    `<`, the free count an integer sum (exact in any order). Each item owns
+    its two slots, so a level is race-free in place and its shape is a
+    function of nb alone. On the last level item 0 writes libsvm's rho from
+    slot 0 (no partials: the empty fold's (0, -inf, +inf, 0)). The device
+    launches each level over its items; the host (`ocsvm_rho`) runs the same
+    items level by level, so every column has the same word."""
+    var i = 2 * stride * t
+    var j = i + stride
+    if j < nb:
+        pf.unsafe_store(3 * i, _add(pf.unsafe_load(3 * i), pf.unsafe_load(3 * j)))
+        var plb = pf.unsafe_load(3 * j + 1)
+        if plb > pf.unsafe_load(3 * i + 1):
+            pf.unsafe_store(3 * i + 1, plb)
+        var pub = pf.unsafe_load(3 * j + 2)
+        if pub < pf.unsafe_load(3 * i + 2):
+            pf.unsafe_store(3 * i + 2, pub)
+        pc.unsafe_store(i, pc.unsafe_load(i) + pc.unsafe_load(j))
+    if t == 0 and ocsvm_rho_levels_done(nb, stride):
+        if nb > 0:
+            info.unsafe_store(0, ocsvm_rho_from(pf.unsafe_load(0), pf.unsafe_load(1), pf.unsafe_load(2), Int(pc.unsafe_load(0))))
+        else:
+            info.unsafe_store(0, ocsvm_rho_from(
+                Float32(0), bitcast[DType.float32](UInt32(0xFF800000)), bitcast[DType.float32](UInt32(0x7F800000)), 0
+            ))
 
 
 def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int, eps: Float32, max_iter: Int):
