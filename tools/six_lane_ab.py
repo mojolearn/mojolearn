@@ -549,6 +549,7 @@ def main(argv=None):
     b.add_argument('--vendor',choices=('apple','host','nvidia','amd'));b.add_argument('--accelerator',help='AMD native gfx target, e.g. gfx942; portable/generic targets forbidden');b.add_argument('--nvidia-target',choices=('native','default'),default='native',help='native pins the observed sm target; default preserves shipped compiler target selection, recorded separately');b.add_argument('--jobs',type=int,default=2);b.add_argument('--source-manifest',type=Path,help='Exact committed-source manifest for a verified archive on the authorized NVIDIA worker')
     b.add_argument('--nvidia-arch',help='Explicit supported native sm target for CPU-only cross compilation; requires --nvidia-target native and never claims detected GPU hardware')
     q=s.add_parser('queue',help='write future queue; incomplete cells stay blocked');q.add_argument('--vendor',choices=VENDORS,required=True);q.add_argument('--recipes',type=Path);q.add_argument('--matrix',type=Path,default=STORE/'matrix.json.gz');q.add_argument('--select',action='append');q.add_argument('--output',type=Path,required=True)
+    aa=s.add_parser('aa-queue',help='A/A noise-floor queue: one pair per workload, both arms the incumbent build');aa.add_argument('--queue',type=Path,required=True);aa.add_argument('--workers',type=Path);aa.add_argument('--output',type=Path,required=True)
     bp=s.add_parser('board-plan',help='write inputs and command for the existing board tool, without invoking it');bp.add_argument('--output',type=Path,required=True)
     args=p.parse_args(argv)
     if args.command=='refresh':
@@ -572,6 +573,10 @@ def main(argv=None):
         print(json.dumps(rows,indent=2))
     elif args.command=='compile':return compile_jobs(args)
     elif args.command=='board-plan':board_plan(args)
+    elif args.command=='aa-queue':
+        from six_lane_timing import main as timing_main
+        extra=['--workers',str(args.workers)] if args.workers else []
+        return timing_main(['aa-queue','--queue',str(args.queue),'--output',str(args.output)]+extra)
     else:queue(args)
     return 0
 
