@@ -7,8 +7,11 @@ opponent measurements or automatic default decisions.
 """
 import argparse
 import collections
+import hashlib
+import html
 import json
 import math
+import os
 from pathlib import Path
 
 
@@ -92,6 +95,193 @@ def escape(value):
     return str(value).replace('|', '\\|').replace('\n', ' ')
 
 
+def anchor(prefix, value):
+    return prefix + '-' + hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def attempt_anchor(card, cell):
+    return anchor('attempt', [card['id'], cell['vendor'], cell.get('case'), cell.get('evidence')])
+
+
+def profile_data(cell):
+    return {key: cell.get(key) for key in ('controls', 'requested_controls')}
+
+
+def profile_anchor(cell):
+    return anchor('toggles', profile_data(cell))
+
+
+def coverage_data(cell):
+    return {key: cell.get(key, []) for key in ('implementation_ids', 'source_coverage_pending')}
+
+
+def coverage_anchor(cell):
+    return anchor('coverage', coverage_data(cell))
+
+
+def observed_seconds(cell):
+    timing = cell.get('unqualified_timing', cell)
+    return tuple(timing.get(key) / 1000 if positive(timing.get(key)) else None
+                 for key in ('candidate_ms', 'baseline_ms'))
+
+
+def display(value, compact=False):
+    if value is None:
+        return '—'
+    if compact and isinstance(value, float) and math.isfinite(value):
+        return f'{value:.6g}'
+    return json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
+
+
+def flatten(values, prefix=''):
+    if isinstance(values, dict):
+        return {path: value for key, child in sorted(values.items())
+                for path, value in flatten(child, prefix + str(key) + '.').items()}
+    return {prefix.rstrip('.'): values}
+
+
+def quality_metrics(cell, arm):
+    saved = cell.get('quality_metrics', {}).get(arm, {})
+    metrics = saved.get('metrics', {}) if isinstance(saved, dict) else {}
+    # Public runners name the single own arm ours / ours-fast. The A/B labels
+    # below already identify it; retain other namespaces when present.
+    if len(metrics) == 1 and next(iter(metrics)) in ('ours', 'ours-fast'):
+        metrics = next(iter(metrics.values()))
+    return flatten(metrics)
+
+
+def quality_summary(cell):
+    verdict = cell.get('quality_assessment') or cell.get('quality', 'NOT_RECORDED')
+    a, b = quality_metrics(cell, 'A'), quality_metrics(cell, 'B')
+    metrics = [f'{key} A/B={display(a.get(key), True)}/{display(b.get(key), True)}'
+               for key in sorted(a.keys() | b.keys())]
+    return display(verdict) + '; ' + ('; '.join(metrics) if metrics else 'metrics not recorded')
+
+
+def control_values(config):
+    if not isinstance(config, dict):
+        return {}
+    values = {}
+    defines = config.get('defines', [])
+    if isinstance(defines, dict):
+        values.update({'define ' + key: display(value) for key, value in defines.items()})
+    else:
+        for define in defines:
+            key, equal, value = str(define).partition('=')
+            name = 'define ' + key
+            value = value if equal else '(defined without a value)'
+            # Preserve repeated definitions instead of guessing precedence.
+            values[name] = values[name] + '; ' + value if name in values else value
+    for key, value in config.items():
+        if key != 'defines':
+            values.update({key + '.' + name: display(item) for name, item in flatten(value).items()})
+    return values
+
+
+def control_table(controls):
+    if not isinstance(controls, dict):
+        return ['Configuration not recorded.']
+    a, b = (control_values(controls.get(arm)) for arm in ('A', 'B'))
+    if not (a or b):
+        return ['No explicit overrides recorded; incumbent defaults remain in effect.'
+                if all(isinstance(controls.get(arm), dict) for arm in ('A', 'B'))
+                else 'Configuration not recorded for both arms.']
+    lines = ['| Recorded control | A: candidate | B: incumbent |', '|---|---|---|']
+    for key in sorted(a.keys() | b.keys()):
+        values = [key] + [arm.get(key, 'incumbent default (no explicit override)')
+                          if isinstance(controls.get(name), dict) else 'NOT_RECORDED'
+                          for name, arm in (('A', a), ('B', b))]
+        lines.append('| ' + ' | '.join(map(escape, values)) + ' |')
+    return lines
+
+
+def evidence_link(cell, out):
+    value = cell.get('evidence')
+    if not value:
+        return 'Evidence not recorded'
+    if str(value).startswith(('https://', 'http://')):
+        target = str(value)
+    else:
+        path = Path(value)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[1] / path
+        target = Path(os.path.relpath(path, out)).as_posix()
+    return f'[retained receipt](<{target}>)'
+
+
+def experiment_details(data, out):
+    rows = [(card, cell) for card in data['cards'] for cell in card['cells']]
+    lines = ['', '## Experiments run: toggles, timing and quality', '',
+             'A is the candidate; B preserves the frozen incumbent. These are recorded arm configurations, '
+             'not proof that every requested switch was compiled or reached at runtime. An omitted define '
+             'is not OFF. Combined timings do not establish individual toggle winners.', '',
+             'Expand a toggle profile or an attempt below. Metric values come from the saved scored results; '
+             'their presence does not imply quality acceptance, complete model identity or promotion.', '']
+    profiles, coverage = {}, {}
+    for _, cell in rows:
+        profiles.setdefault(profile_anchor(cell), cell)
+        if any(coverage_data(cell).values()):
+            coverage.setdefault(coverage_anchor(cell), coverage_data(cell))
+    for key, cell in profiles.items():
+        lines += [f'<a id="{key}"></a>', '<details>',
+                  f'<summary>Recorded toggle profile {key.removeprefix("toggles-")}</summary>', '']
+        lines += control_table(cell.get('controls'))
+        requested = cell.get('requested_controls')
+        if requested is not None and requested != cell.get('controls'):
+            lines += ['', 'Requested selection differs from the recorded arm configuration:', '']
+            lines += control_table(requested)
+        lines += ['', '</details>', '']
+    # Identical catalog disclosures occur in many receipts. Keep each exact
+    # disclosure once, with per-attempt links, so the board remains readable.
+    for key, saved in coverage.items():
+        lines += [f'<a id="{key}"></a>', '<details>',
+                  f'<summary>Recorded implementation IDs and source coverage {key.removeprefix("coverage-")}</summary>', '',
+                  'These are recorded source disclosures, not proof of runtime reach.', '',
+                  'Implementation IDs: ' + escape(display(saved['implementation_ids'])), '',
+                  'Source coverage pending:', '']
+        lines += ['- ' + escape(display(value)) for value in saved['source_coverage_pending']] or ['None recorded.']
+        lines += ['', '</details>', '']
+    for card, cell in rows:
+        key = attempt_anchor(card, cell)
+        label = f"{card['id']} — {cell['vendor']}/{cell.get('route', 'default')} — {cell.get('case', '')}"
+        a_seconds, b_seconds = observed_seconds(cell)
+        lines += [f'<a id="{key}"></a>', '<details>', f'<summary>{html.escape(label)}</summary>', '',
+                  f"[Recorded toggles](#{profile_anchor(cell)}) · {evidence_link(cell, out)}", '',
+                  f"Status: {escape(cell['status'])}. Scope: {escape(cell.get('scope', 'NOT_RECORDED'))}. "
+                  f"Observed A: {display(a_seconds)} s; B: {display(b_seconds)} s.", '',
+                  f"Quality assessment: {escape(cell.get('quality_assessment', cell.get('quality', 'NOT_RECORDED')))}. "
+                  f"Identity: {escape(cell.get('identity', 'NOT_RECORDED'))}.", '']
+        if cell.get('quality_reason'):
+            lines += [escape(cell['quality_reason']), '']
+        metrics_a, metrics_b = quality_metrics(cell, 'A'), quality_metrics(cell, 'B')
+        if metrics_a or metrics_b:
+            lines += ['| Saved quality metric | A: candidate | B: incumbent |', '|---|---:|---:|']
+            for metric in sorted(metrics_a.keys() | metrics_b.keys()):
+                lines.append('| ' + ' | '.join(map(escape, [metric, display(metrics_a.get(metric)),
+                                                          display(metrics_b.get(metric))])) + ' |')
+        else:
+            lines.append('Scored quality metrics not recorded for this attempt.')
+        if cell.get('quality_comparisons'):
+            lines += ['', 'Saved quality gate and opponent comparisons (no reassessment):', '',
+                      '| Evidence field | Recorded value |', '|---|---|']
+            for field, value in flatten(cell['quality_comparisons']).items():
+                lines.append('| ' + escape(field) + ' | ' + escape(display(value)) + ' |')
+        lines += ['', 'Source: ' + escape(cell.get('source_sha', 'NOT_RECORDED')),
+                  'Samples (warmup/scored): ' + escape(json.dumps(cell.get('actual_sample_counts', {
+                      'warmups': cell.get('warmups'), 'scored_samples': cell.get('scored_samples')}), sort_keys=True)),
+                  'Worker exits: ' + escape(cell.get('worker_returncodes', cell.get('returncode', 'NOT_RECORDED')))]
+        if any(coverage_data(cell).values()):
+            lines.append(f"[Recorded implementation IDs and {len(cell.get('source_coverage_pending', []))} "
+                         f"source coverage gaps](#{coverage_anchor(cell)})")
+        for field, title in [('failure_reasons', 'Failures'), ('resource_limitations', 'Resource limitations')]:
+            if cell.get(field):
+                lines += [title + ': ' + escape(display(cell[field]))]
+        lines += ['', '</details>', '']
+    if not rows:
+        lines.append('No experiment attempts recorded.')
+    return lines
+
+
 def write(board, out):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -148,15 +338,19 @@ def write(board, out):
                       'Unrun, source-rejected and previously decided work remain distinct. This ledger is not a claim that every listed entry has runnable binaries.']
         lines += ['', '## Captured evidence', '',
                   'Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.', '',
-                  '| Candidate | Vendor / route | Case | Scope | Status | Admitted A/B | Observed A/B | Evidence |',
-                  '|---|---|---|---|---|---:|---:|---|']
+                  '[Exact toggle profiles and per-attempt quality details](#experiments-run-toggles-timing-and-quality) are at the bottom. Times below are seconds; A is candidate and B is incumbent.', '',
+                  '| Candidate | Vendor / route | Case | Scope | Status | A (s) | B (s) | Admitted A/B | Observed A/B | Quality (A/B) | Toggles / details | Evidence |',
+                  '|---|---|---|---|---|---:|---:|---:|---:|---|---|---|']
         for card in data['cards']:
             for cell in card['cells']:
                 ratio = cell.get('candidate_over_baseline')
                 observed = cell.get('unqualified_timing', {}).get('observed_candidate_over_baseline', ratio)
+                a_seconds, b_seconds = observed_seconds(cell)
                 values = [card['id'], cell['vendor'] + '/' + cell.get('route', 'default'), cell.get('case', ''),
-                          cell.get('scope', ''), cell['status'], f'{ratio:.4f}' if ratio is not None else '—',
-                          f'{observed:.4f}' if observed is not None else '—', cell.get('evidence', '')]
+                          cell.get('scope', ''), cell['status'], display(a_seconds, True), display(b_seconds, True),
+                          f'{ratio:.4f}' if ratio is not None else '—', f'{observed:.4f}' if observed is not None else '—',
+                          quality_summary(cell), f'[toggles](#{profile_anchor(cell)}) / [details](#{attempt_anchor(card, cell)})',
+                          evidence_link(cell, out)]
                 lines.append('| ' + ' | '.join(map(escape, values)) + ' |')
         lines += ['', '## Campaign notes', ''] + ['- ' + escape(n) for n in data['notes']]
         if data['decisions']:
@@ -191,9 +385,10 @@ def write(board, out):
                 lines.append('| ' + ' | '.join(map(escape, values)) + ' |')
         else:
             lines.append('No failed or quality-rejected attempts recorded for this scope.')
+        lines += experiment_details(data, out)
         target = out / (name + '.md')
         temp = target.with_suffix('.tmp')
-        temp.write_text('\n'.join(lines) + '\n')
+        temp.write_text('\n'.join(lines).rstrip() + '\n')
         temp.replace(target)
 
 

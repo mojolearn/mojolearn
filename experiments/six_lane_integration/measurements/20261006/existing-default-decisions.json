@@ -1,0 +1,55 @@
+{
+  "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/defaults-inline-audit/audit-and-comment-handoff.json",
+  "source_sha256": "e41d33eb05e148541e25a54e06de4fad0fec447e8f5f6e50b3e09c2f29de240f",
+  "promotions": [
+    {
+      "commit": "0f779ed5d3f0a2ab2f418e054d3af950a766e5f1",
+      "file": "resample/estimator.mojo",
+      "switches": [
+        "RESAMPLE_GPU_GATHER",
+        "RESAMPLE_FAST_WAIT_PAIR",
+        "RESAMPLE_FAST_TILED_GATHER"
+      ],
+      "evidence_scope": "Six full dataset pairs, one excluded warmup+score each arm; gather-off old default not retimed; explicit owner decision.",
+      "switch_lines": {
+        "RESAMPLE_GPU_GATHER": 2320,
+        "RESAMPLE_FAST_WAIT_PAIR": 2341,
+        "RESAMPLE_FAST_TILED_GATHER": 2360
+      }
+    },
+    {
+      "commit": "709f43abb0f5e18973e2027dfbda9a34ea40d505",
+      "file": "kde/resident_fit.mojo",
+      "switches": [
+        "KDE_FAST_DIRECT_PREP"
+      ],
+      "evidence_scope": "Historical scoped509x3/521x7/997x13, not this full campaign.",
+      "switch_lines": {
+        "KDE_FAST_DIRECT_PREP": 79
+      }
+    },
+    {
+      "commit": "429622bef670f9f3e4c0e8f7110bd3b716c2c3e0",
+      "file": "hdbscan/impl/detail/fast_apple.mojo",
+      "switches": [
+        "HDB_LINKAGE_DEVICE"
+      ],
+      "evidence_scope": "Historical scoped509x7/997x13/1031x67, not this full campaign.",
+      "switch_lines": {
+        "HDB_LINKAGE_DEVICE": 84
+      }
+    },
+    {
+      "commit": "b953bc9a2759c175181069bf447719fdc7c93a61",
+      "file": "training/byte_lm_afn.mojo",
+      "switches": [
+        "AFN_LM_BWD_NOSYNC"
+      ],
+      "evidence_scope": "Historical12-step single-shape train/checkpoint/refusal task, not this full campaign.",
+      "switch_lines": {
+        "AFN_LM_BWD_NOSYNC": 55
+      }
+    }
+  ],
+  "scope": "Recorded earlier Apple FAST promotions, not new decisions from this campaign"
+}

@@ -243,6 +243,7 @@ No Python compute in the runtime, ever. The Python package is only the API surfa
 
 These are the canonical pages. Update them in place; don't start new ones.
 
+- [Full-dataset A/B experiment board](experiments/six_lane_integration/measurements/20261006/BOARD.md): NVIDIA/AMD IDENTICAL and Apple FAST attempts, recorded toggles, A/B times, quality metrics and decisions. Failed attempts and unrun experiments remain visible; combined measurements do not qualify individual switches.
 - [Apple M3 Ultra board](bench/results/bench_board/m3ultra-0834/BOARD.md): every lane, with our FAST and IDENTICAL arms next to the opponents. The IDENTICAL cells come from the 2026-10-04 sweep (`tools/af_board_ident_update.py`); FAST and opponent cells come from the 0.8.34 board.
 - [Apple FAST refresh](docs/apple-fast/BOARD_M3_FAST.md): FAST before and after for each lane against the best opponent (`tools/af_board_merge.py`).
 - [Apple IDENTICAL refresh](docs/apple-fast/BOARD_M3_IDENTICAL.md): the same view for IDENTICAL (`tools/af_board_merge.py --mode identical`).

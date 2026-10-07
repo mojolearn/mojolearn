@@ -85,6 +85,8 @@ def remaining_catalog(cells):
                 unresolved_members=unresolved_members,
                 recipe_status='SOURCE_RECIPE_UNRESOLVED' if not modes or not workloads or unresolved_members else 'REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION',
                 affected_workloads=workloads,arm_ids=sorted(selection_ids-{record['id']}),
+                arm_controls=[{key:arm.get(key) for key in ('id','A','B')}
+                              for arm in record.get('arms',[])],
                 authored_prerequisites=record.get('prerequisites',[]),authored_gaps=record.get('gaps',[]),
                 source_record=record.get('source_record'),source_status=record.get('source_status'),
                 receipts=[c['evidence'] for c in direct]))
@@ -138,6 +140,12 @@ def main():
                      identity='NOT_REQUIRED' if receipt['mode']=='fast' else 'INCOMPLETE',
                      route={'nvidia':'native-sm90','amd':'amd-native-gfx942','apple':'apple-fast'}[vendor],
                      receipt_sha256=digest,source_coverage_pending=job.get('source_coverage_pending',[]))
+            # Display the arm configuration actually recorded with this workload,
+            # separately from the broader requested selection. These controls are
+            # not an attestation that every enabled code path executed.
+            row['controls']={arm:job.get('arms',{}).get(arm,{}).get('configuration') for arm in ('A','B')}
+            row['requested_controls']={arm:job['master_selection'].get(arm) for arm in ('A','B')}
+            row['implementation_ids']=job.get('implementation_ids',[])
             if vendor=='apple' and source in [ROOT/'apple/captured/runs',ROOT/'apple/captured/kmeans-repair2/runs']:
                 row['resource_limitations']=['Shared workspace storage I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established.']
             detail=dict(configuration=config,workload=job['workload_id'],vendor=vendor,
@@ -158,6 +166,9 @@ def main():
                 assessment=reviewed[digest]
                 row['quality_assessment']=assessment['quality_assessment']
                 row['quality_reason']=assessment['reason']
+                row['quality_comparisons']={key:assessment[key] for key in (
+                    'candidate_vs_baseline','candidate_vs_opponents','baseline_vs_opponents',
+                    'opponent_metrics','metric_directions','new_full_opponent_review') if key in assessment}
                 row['quality']='FAIL' if row['quality_assessment'] in ('FAILED_FAST_OPPONENT_GATE','QUALITY_FAILED') else 'PASS_TASK_METRICS' if row['quality_assessment']=='TASK_METRIC_GATE_PASSED' else 'PENDING'
                 if row['quality']=='FAIL':row['status']='QUALITY_FAILED'
                 detail['quality_assessment']=row['quality_assessment']
@@ -246,6 +257,18 @@ def main():
                     commit=c['source_sha'],evidence=c['evidence'],
                     default_changed=False,individual_constituents='Not decided by this combined-configuration result')
                for c in cells if c['status']=='QUALITY_FAILED']
+    defaults_audit=ROOT/'quality-review/defaults-inline-audit/audit-and-comment-handoff.json'
+    if defaults_audit.exists():
+        audit=json.loads(defaults_audit.read_text())
+        write(OUT/'existing-default-decisions.json',dict(source=str(defaults_audit),
+              source_sha256=hashlib.sha256(defaults_audit.read_bytes()).hexdigest(),
+              promotions=audit.get('existing_promotions',[]),
+              scope='Recorded earlier Apple FAST promotions, not new decisions from this campaign'))
+        decisions[:0]=[dict(candidate=', '.join(p['switches']),
+            decision='PREVIOUSLY PROMOTED ON (Apple FAST): '+p['evidence_scope'],
+            commit=p['commit'],evidence=p['file']+'; existing-default-decisions.json',
+            default_changed=False,historical_decision=True)
+            for p in audit.get('existing_promotions',[])]
     remaining={
         'nvidia': 'Native combined configurations measured; PTX, individual controls and other full-workload recipe gaps remain pending.',
         'amd': 'Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending.',
