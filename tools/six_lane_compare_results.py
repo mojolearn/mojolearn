@@ -23,9 +23,20 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = 'mojolearn.six-lane-comparison-input/1'
 COLUMNS = {'nvidia-native': 'nvidia', 'nvidia-ptx': 'nvidia',
            'amd': 'amd', 'apple': 'apple', 'host': 'host'}
+# IDENTICAL identity is decided by the two GPU vendors (owner, 2026-10-07):
+# NVIDIA native and AMD must agree. PTX, Apple and host columns are compared
+# when supplied but are never required and never make a case INCOMPLETE.
+REQUIRED_IDENTICAL = ('nvidia-native', 'amd')
 SCOPE = ('source_sha', 'workload_id', 'dataset_sha256', 'dataset_version',
          'dataset_split', 'seed', 'mode', 'dimensions', 'estimator_settings',
          'harness_sha256', 'timed_boundary')
+# Kernel/runtime scope for --accept-kernel-equivalent-sources: a column whose
+# attempt ran a different commit is accepted when `git diff --name-only` between
+# the pinned commit and that commit touches none of these paths, so the compiled
+# kernels and the runtime are the same source (the rule lq uses for ID checks).
+# The full changed-file list is recorded in the report either way.
+KERNEL_SCOPE = ('*.mojo', 'bindings/', 'python/mojolearn/')
+ACCEPT_KERNEL_EQUIVALENT = False
 # These choose a backend/code container, never an experiment's arithmetic.
 # Exclusions require explicit per-column values in the comparison manifest.
 TRANSPORT_ENV = {'MOJOLEARN_VENDOR', 'MOJOLEARN_CUDA_CODE_FORMAT'}
@@ -111,9 +122,13 @@ def expected_scope(case):
     require(type(expected['repeated_operations']) is int and expected['repeated_operations'] >= 0,
             'invalid repeated operation count')
     paths = expected.get('capture_paths', {})
-    required = ('outputs', 'model_state') if case['mode'] == 'identical' else ('outputs',)
-    require(isinstance(paths, dict) and all(string_list(paths.get(k)) for k in required),
-            'pin nonempty complete output and applicable model-state path sets')
+    require(isinstance(paths, dict) and string_list(paths.get('outputs')),
+            'pin nonempty complete output path set')
+    # Model state is compared when both columns captured it completely; the
+    # output bits alone decide identity when a complete typed state export is
+    # absent (owner, 2026-10-07). An inconsistent declaration is still refused.
+    require(paths.get('model_state') is None or string_list(paths.get('model_state')),
+            'model-state path set must be nonempty when declared')
     return expected
 
 
@@ -223,7 +238,9 @@ def check_scored(run, receipt, case, expected, column, transport, equivalent_sou
         require(len({a['path'] for a in declared}) == len(declared)
                 and {a['path']: a['sha256'] for a in declared} == artifacts,
                 'loaded artifact declarations differ')
-        names = ('outputs', 'model_state') if case['mode'] == 'identical' else ('outputs',)
+        names = ('outputs',)
+        if case['mode'] == 'identical' and state_declared(data, expected):
+            names = ('outputs', 'model_state')
         for name in names:
             capture_signature(data.get(name), expected['capture_paths'][name], name)
         require(data.get('output_sha256') == data['outputs']['sha256'], 'output hash aliases differ')
@@ -270,6 +287,12 @@ def read_column(spec, base, case, expected, column):
         transport = spec.get('transport_environment', {})
         require(isinstance(transport, dict) and set(transport) <= {'A', 'B'}, 'invalid transport mapping')
         equivalent_source = None
+        attempt_source = receipt.get('source_sha')
+        if (ACCEPT_KERNEL_EQUIVALENT and sha(attempt_source, 40) and attempt_source != expected['source_sha']
+                and column in REQUIRED_IDENTICAL):
+            report['source_equivalence'] = kernel_equivalence(expected['source_sha'], attempt_source)
+            if report['source_equivalence']['status'] == 'KERNEL_EQUIVALENT':
+                equivalent_source = attempt_source
         if case.get('freeze_equivalence') and column in ('nvidia-native', 'amd'):
             try:
                 from six_lane_freeze_equivalence import validate
@@ -307,30 +330,68 @@ def read_column(spec, base, case, expected, column):
     return report
 
 
+def state_declared(data, expected):
+    """True when the pinned scope declares model state and this result captured it completely."""
+    if not expected['capture_paths'].get('model_state'):
+        return False
+    state = data.get('model_state')
+    return (isinstance(state, dict) and state.get('status') == 'CAPTURED'
+            and state.get('completeness') == 'complete_declared_scope' and state.get('missing_state') == [])
+
+
 def compare_arm(columns, arm, expected):
     pairs = []
-    for left, right in itertools.combinations(COLUMNS, 2):
+    present = [c for c in COLUMNS if c in columns]
+    for left, right in itertools.combinations(present, 2):
         a = columns.get(left, {}).get('arms', {}).get(arm, {})
         b = columns.get(right, {}).get('arms', {}).get(arm, {})
         row = dict(left=left, right=right, status='INCOMPLETE', parts={})
         if a.get('status') == b.get('status') == 'READY':
-            for name in ('outputs', 'model_state'):
+            both_state = state_declared(a['result'], expected) and state_declared(b['result'], expected)
+            names = ('outputs', 'model_state') if both_state else ('outputs',)
+            if not both_state:
+                row['parts']['model_state'] = 'NOT_CAPTURED'
+            for name in names:
                 x = capture_signature(a['result'][name], expected['capture_paths'][name], name)
                 y = capture_signature(b['result'][name], expected['capture_paths'][name], name)
                 row['parts'][name] = 'MATCH' if x == y else 'MISMATCH'
             for index in range(expected['repeated_operations']):
-                for name in ('outputs', 'model_state'):
+                for name in names:
                     x = capture_signature(a['result']['repeated_use'][index][name], expected['capture_paths'][name], name)
                     y = capture_signature(b['result']['repeated_use'][index][name], expected['capture_paths'][name], name)
                     row['parts'][f'repeated.{index}.{name}'] = 'MATCH' if x == y else 'MISMATCH'
-            row['status'] = 'MATCH' if all(s == 'MATCH' for s in row['parts'].values()) else 'MISMATCH'
+            row['status'] = 'MATCH' if all(s in ('MATCH', 'NOT_CAPTURED') for s in row['parts'].values()) else 'MISMATCH'
         else:
             row['issues'] = {name: value.get('issues', ['missing column/capture'])
                              for name, value in ((left, a), (right, b)) if value.get('status') != 'READY'}
         pairs.append(row)
     states = {r['status'] for r in pairs}
-    return dict(status='MISMATCH' if 'MISMATCH' in states else ('MATCH' if states == {'MATCH'} else 'INCOMPLETE'),
-                pairs=pairs)
+    decisive = [r for r in pairs if {r['left'], r['right']} == set(REQUIRED_IDENTICAL)]
+    status = 'INCOMPLETE'
+    if 'MISMATCH' in states:
+        status = 'MISMATCH'
+    elif decisive and decisive[0]['status'] == 'MATCH':
+        status = 'MATCH'  # the two GPU vendors agree; other supplied columns matched too
+    return dict(status=status, decided_by=list(REQUIRED_IDENTICAL), pairs=pairs)
+
+
+def kernel_equivalence(anchor, attempt):
+    """Record whether two commits share every kernel/runtime source file (metadata only; nothing is built)."""
+    def names(*pathspec):
+        out = subprocess.run(['git', '-C', str(ROOT), 'diff', '--name-only', anchor, attempt, '--', *pathspec],
+                             capture_output=True, text=True)
+        if out.returncode != 0:
+            raise ValueError('git diff failed: ' + out.stderr.strip()[:200])
+        return sorted(line for line in out.stdout.split('\n') if line and not line.startswith('experiments/'))
+    try:
+        kernel = names(*KERNEL_SCOPE)
+        every = names()
+    except (OSError, ValueError) as exc:
+        return dict(status='UNRESOLVED', anchor_source_sha=anchor, attempt_source_sha=attempt, error=str(exc))
+    return dict(status='KERNEL_EQUIVALENT' if not kernel else 'KERNEL_SOURCE_DIFFERS',
+                anchor_source_sha=anchor, attempt_source_sha=attempt, kernel_scope=list(KERNEL_SCOPE),
+                kernel_files_changed=kernel, other_files_changed=every,
+                rule='Accepted only when no *.mojo, bindings/ or python/mojolearn/ file differs between the two commits.')
 
 
 def compare_cases(manifest, base):
@@ -361,7 +422,7 @@ def compare_cases(manifest, base):
                             arm['status'] = 'INCOMPLETE'
                             arm.setdefault('issues', []).append('same receipt reused for distinct columns')
                             arm['observed_outputs'] = dict(status='INCOMPLETE', qualified_identity=False)
-            required = COLUMNS if case['mode'] == 'identical' else ('apple',)
+            required = REQUIRED_IDENTICAL if case['mode'] == 'identical' else ('apple',)
             if all(report['columns'].get(name, {}).get('status') == 'READY' for name in required):
                 report['receipt_status'] = 'COMPLETE'
             if case['mode'] == 'fast':
@@ -371,7 +432,7 @@ def compare_cases(manifest, base):
                 report['observed_output_bits'] = {}
                 for arm in ('A', 'B'):
                     observations = []
-                    for left, right in itertools.combinations(COLUMNS, 2):
+                    for left, right in itertools.combinations([c for c in COLUMNS if c in specs], 2):
                         a = report['columns'].get(left, {}).get('arms', {}).get(arm, {}).get('observed_outputs', {})
                         b = report['columns'].get(right, {}).get('arms', {}).get(arm, {}).get('observed_outputs', {})
                         status = 'INCOMPLETE'
@@ -383,15 +444,18 @@ def compare_cases(manifest, base):
                 report['arms'] = {arm: compare_arm(report['columns'], arm, expected) for arm in ('A', 'B')}
                 states = {r['status'] for r in report['arms'].values()}
                 report['status'] = 'MISMATCH' if 'MISMATCH' in states else ('MATCH' if states == {'MATCH'} else 'INCOMPLETE')
-                report['missing_columns'] = sorted(set(COLUMNS) - set(specs))
+                report['missing_columns'] = sorted(set(REQUIRED_IDENTICAL) - set(specs))
+                report['optional_columns_absent'] = sorted(set(COLUMNS) - set(REQUIRED_IDENTICAL) - set(specs))
         except (ValueError, KeyError, TypeError) as exc:
             report['error'] = str(exc)
         output.append(report)
     counts = {status: sum(c['status'] == status for c in output) for status in ('MATCH', 'MISMATCH', 'INCOMPLETE', 'NOT_REQUIRED')}
     return dict(schema='mojolearn.six-lane-comparison/1', cases=output, counts=counts,
                 incomplete_receipt_cases=sum(c['receipt_status'] != 'COMPLETE' for c in output),
-                required_identical_columns=list(COLUMNS), promotion_voters=['nvidia', 'amd'],
+                required_identical_columns=list(REQUIRED_IDENTICAL), optional_columns=sorted(set(COLUMNS) - set(REQUIRED_IDENTICAL)),
+                promotion_voters=['nvidia', 'amd'],
                 apple_timing_votes=False, accepted=False, promoted=False,
+                kernel_equivalent_sources_accepted=ACCEPT_KERNEL_EQUIVALENT,
                 route_attribution='Explicit manifest columns; compiler/target provenance is retained, not inferred from hardware or recompiled.',
                 policy='Scored A across routes and scored B across routes separately. MATCH covers declared captures only; no quality, admission or promotion inferred.',
                 history_policy='Explicit history summaries and all previous_receipt/log references retained; history never substitutes for selected current evidence.')
@@ -453,10 +517,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True, help='new output directory; existing evidence is never overwritten')
+    parser.add_argument('--accept-kernel-equivalent-sources', action='store_true',
+                        help='accept a required column whose commit differs from the pinned one only outside *.mojo, bindings/ and python/mojolearn/ (recorded per column)')
     parser.add_argument('--catalog', type=Path, default=ROOT / 'experiments/six_lane_integration/catalog.json')
     parser.add_argument('--previous-inventory', type=Path)
     parser.add_argument('--previous-index', type=Path)
     args = parser.parse_args(argv)
+    global ACCEPT_KERNEL_EQUIVALENT
+    ACCEPT_KERNEL_EQUIVALENT = bool(args.accept_kernel_equivalent_sources)
     require(bool(args.previous_inventory) == bool(args.previous_index), 'supply both previous board inputs together')
     manifest, manifest_hash = read(args.manifest)
     report = compare_cases(manifest, args.manifest.resolve().parent)

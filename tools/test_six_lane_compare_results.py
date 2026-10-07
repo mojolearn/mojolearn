@@ -86,14 +86,22 @@ class ComparisonMetadataTest(unittest.TestCase):
         self.assertFalse(report['apple_timing_votes'])
         self.assertEqual(len(report['cases'][0]['arms']['A']['pairs']), 10)
 
-    def test_partial_native_ptx_amd_matches_do_not_pass_full_policy(self):
+    def test_native_and_amd_agreement_decides_identity(self):
+        # Owner policy (2026-10-07): identity is required across the two GPU
+        # vendors only. Apple, host and PTX columns are optional.
         del self.case['columns']['apple']
         del self.case['columns']['host']
         case = self.compare()['cases'][0]
-        self.assertEqual(case['status'], 'INCOMPLETE')
+        self.assertEqual(case['status'], 'MATCH')
         self.assertEqual(self.pair(case)['status'], 'MATCH')
         self.assertEqual(self.pair(case, left='nvidia-ptx')['status'], 'MATCH')
-        self.assertEqual(case['missing_columns'], ['apple', 'host'])
+        self.assertEqual(case['missing_columns'], [])
+        self.assertEqual(case['optional_columns_absent'], ['apple', 'host'])
+        self.assertEqual(case['arms']['A']['decided_by'], ['nvidia-native', 'amd'])
+        del self.case['columns']['amd']
+        case = self.compare()['cases'][0]
+        self.assertEqual(case['status'], 'INCOMPLETE')
+        self.assertEqual(case['missing_columns'], ['amd'])
 
     def test_structured_saved_split_is_pinned_without_string_coercion(self):
         split = {'fit': [0, 3], 'evaluation_rows': 2}
@@ -107,12 +115,17 @@ class ComparisonMetadataTest(unittest.TestCase):
         self.assertEqual(case['status'], 'INCOMPLETE')
         self.assertIn('scope differs: dataset_split', case['columns']['amd']['arms']['A']['issues'])
 
-    def test_output_match_does_not_replace_missing_model_state(self):
+    def test_output_match_decides_when_model_state_is_not_captured(self):
+        # Owner policy (2026-10-07): the stored output hash decides identity
+        # when a complete typed model-state export is absent; model state is
+        # compared whenever both columns captured it completely.
         self.result()['model_state'] = dict(status='UNAVAILABLE', reason='no public complete state')
         case = self.compare()['cases'][0]
-        self.assertEqual(case['status'], 'INCOMPLETE')
+        self.assertEqual(case['status'], 'MATCH')
         self.assertEqual(case['arms']['B']['status'], 'MATCH')
-        self.assertEqual(self.pair(case)['status'], 'INCOMPLETE')
+        self.assertEqual(self.pair(case)['parts'], {'outputs': 'MATCH', 'model_state': 'NOT_CAPTURED'})
+        self.result()['outputs']['sha256'] = self.result()['output_sha256'] = 'e' * 64
+        self.assertEqual(self.compare()['cases'][0]['status'], 'MISMATCH')
 
     def test_model_hash_mismatch_is_preserved(self):
         self.result()['model_state']['sha256'] = 'e' * 64
@@ -126,14 +139,26 @@ class ComparisonMetadataTest(unittest.TestCase):
         self.assertEqual(self.pair(case)['parts']['outputs'], 'MISMATCH')
 
     def test_untyped_incomplete_or_wrong_paths_never_match(self):
-        original = copy.deepcopy(self.result()['model_state'])
+        original = copy.deepcopy(self.result()['outputs'])
         changes = [dict(completeness='scope_not_qualified'), dict(missing_state=['$.missing']),
                    dict(manifest=[]), dict(sha256='bad'), dict(scope='')]
         for change in changes:
             with self.subTest(change=change):
-                self.result()['model_state'] = dict(original, **change)
+                self.result()['outputs'] = dict(original, **change)
                 self.assertEqual(self.compare()['cases'][0]['status'], 'INCOMPLETE')
-        self.result()['model_state'] = original
+        self.result()['outputs'] = copy.deepcopy(original)
+        self.result()['outputs']['manifest'][0]['path'] = '$.not-the-declared-output'
+        self.assertEqual(self.compare()['cases'][0]['status'], 'INCOMPLETE')
+        self.result()['outputs'] = copy.deepcopy(original)
+        # An incompletely captured model state is NOT_CAPTURED, never a match or a mismatch.
+        state = copy.deepcopy(self.result()['model_state'])
+        for change in (dict(completeness='scope_not_qualified'), dict(missing_state=['$.missing'])):
+            with self.subTest(change=change):
+                self.result()['model_state'] = dict(state, **change)
+                case = self.compare()['cases'][0]
+                self.assertEqual(case['status'], 'MATCH')
+                self.assertEqual(self.pair(case)['parts']['model_state'], 'NOT_CAPTURED')
+        self.result()['model_state'] = state
         self.result()['model_state']['manifest'][0]['path'] = '$.not-the-declared-model'
         self.assertEqual(self.compare()['cases'][0]['status'], 'INCOMPLETE')
 

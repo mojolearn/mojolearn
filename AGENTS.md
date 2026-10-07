@@ -42,8 +42,8 @@ toolchain internals, or ship unsupported build modes. Record the ask for Modular
 No dispatch, tile, threshold, cap or route rule may key on an exact benchmark dimension, a size chosen to sit just above or
 below a board row (rows, features, classes, k, vocabulary), or a board dataset name. This applies to FAST and to IDENTICAL on
 every vendor. A rule must come from size, hardware or cost reasoning that covers neighboring shapes, stated in a comment.
-In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA, AMD,
-Apple and the host column within one version, never across versions. Change all columns together. Each removal gets an
+In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA and
+AMD within one version, never across versions (Andrew, 2026-10-07: identity across the two GPU vendors only). Change all columns together. Each removal gets an
 A/B with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
 
 ## Measurement process (owner, 2026-10-05)

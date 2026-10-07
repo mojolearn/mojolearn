@@ -1,0 +1,3314 @@
+{
+ "accepted": false,
+ "amd_source_equivalence": {
+  "KERNEL_EQUIVALENT": 84
+ },
+ "arm_counts": {
+  "A:MATCH": 84,
+  "B:MATCH": 84
+ },
+ "cases": [
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "5e804a724c9a74603c02",
+   "output_sha256": {
+    "A": {
+     "amd": "97e000a27d7b558743dbf6d9501b6effc33fd162ff4c2fe229b02efcffd86f25",
+     "nvidia-native": "97e000a27d7b558743dbf6d9501b6effc33fd162ff4c2fe229b02efcffd86f25"
+    },
+    "B": {
+     "amd": "58ffd6b449422f5b7dee93f3d5f3efb87a4088bd3a1996440ada290f2cc485f7",
+     "nvidia-native": "58ffd6b449422f5b7dee93f3d5f3efb87a4088bd3a1996440ada290f2cc485f7"
+    }
+   },
+   "source_sha": {
+    "amd": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+    "nvidia-native": "ad4214558e482c1391e7e7e59579bddbf54204bc"
+   },
+   "status": "MATCH",
+   "workload_id": "classical:kmeans@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "75bfc93a6d141404e2b7",
+   "output_sha256": {
+    "A": {
+     "amd": "3dd42a40580a95bb85f4cd447e4b9a853b64cc77e6afac0ed687d8c8afccba8b",
+     "nvidia-native": "3dd42a40580a95bb85f4cd447e4b9a853b64cc77e6afac0ed687d8c8afccba8b"
+    },
+    "B": {
+     "amd": "d6dd38bfbfcd968d6d74405912d982c39b5322e7662292412a85002f3eaa1af9",
+     "nvidia-native": "d6dd38bfbfcd968d6d74405912d982c39b5322e7662292412a85002f3eaa1af9"
+    }
+   },
+   "source_sha": {
+    "amd": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+    "nvidia-native": "ad4214558e482c1391e7e7e59579bddbf54204bc"
+   },
+   "status": "MATCH",
+   "workload_id": "classical:kmeans@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "1da65df0be8099cd5252",
+   "output_sha256": {
+    "A": {
+     "amd": "865496d9bfd3c0af2dda421e71fc1b2b55ca08c896c33f9ee85a9f93f2bf266c",
+     "nvidia-native": "865496d9bfd3c0af2dda421e71fc1b2b55ca08c896c33f9ee85a9f93f2bf266c"
+    },
+    "B": {
+     "amd": "0d6cbbff3bca073df48f9c4b57cf33daa91f124f3330335a8cb8374c5824e8de",
+     "nvidia-native": "0d6cbbff3bca073df48f9c4b57cf33daa91f124f3330335a8cb8374c5824e8de"
+    }
+   },
+   "source_sha": {
+    "amd": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+    "nvidia-native": "ad4214558e482c1391e7e7e59579bddbf54204bc"
+   },
+   "status": "MATCH",
+   "workload_id": "classical:ols@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "96b8b5ee7ddf14de5cba",
+   "output_sha256": {
+    "A": {
+     "amd": "f963240213a321d709b6ac4cda1d0640cbf2b2951a6abbd57704d91a796c9d4d",
+     "nvidia-native": "f963240213a321d709b6ac4cda1d0640cbf2b2951a6abbd57704d91a796c9d4d"
+    },
+    "B": {
+     "amd": "96e03215b99c750c484fb8a261984b3dce16d8d93439f52e38210245498bdd5a",
+     "nvidia-native": "96e03215b99c750c484fb8a261984b3dce16d8d93439f52e38210245498bdd5a"
+    }
+   },
+   "source_sha": {
+    "amd": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+    "nvidia-native": "ad4214558e482c1391e7e7e59579bddbf54204bc"
+   },
+   "status": "MATCH",
+   "workload_id": "classical:ols@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "dc859e15212839618267",
+   "output_sha256": {
+    "A": {
+     "amd": "d8a61cff309c5e4da3c6b116bf1adb57052d3684aae3aca7ca135b4b36fb6952",
+     "nvidia-native": "d8a61cff309c5e4da3c6b116bf1adb57052d3684aae3aca7ca135b4b36fb6952"
+    },
+    "B": {
+     "amd": "2b9e1705dab7acdeaa0bcf539a3036f741cf723a4cda247080b7f80824071d0c",
+     "nvidia-native": "2b9e1705dab7acdeaa0bcf539a3036f741cf723a4cda247080b7f80824071d0c"
+    }
+   },
+   "source_sha": {
+    "amd": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+    "nvidia-native": "ad4214558e482c1391e7e7e59579bddbf54204bc"
+   },
+   "status": "MATCH",
+   "workload_id": "classical:pca@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "f30c23852b06c79b8790",
+   "output_sha256": {
+    "A": {
+     "amd": "0e30e3ecba77ab458a50b8065dccabad88bb23d129343e1745228fffc6222e47",
+     "nvidia-native": "0e30e3ecba77ab458a50b8065dccabad88bb23d129343e1745228fffc6222e47"
+    },
+    "B": {
+     "amd": "a67abce4f3dfc239c8c754d012316db9fd90a28a572c0000ff6b5e43536475e4",
+     "nvidia-native": "a67abce4f3dfc239c8c754d012316db9fd90a28a572c0000ff6b5e43536475e4"
+    }
+   },
+   "source_sha": {
+    "amd": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+    "nvidia-native": "ad4214558e482c1391e7e7e59579bddbf54204bc"
+   },
+   "status": "MATCH",
+   "workload_id": "classical:pca@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "d41b9fe3b0fe2c7d2361",
+   "output_sha256": {
+    "A": {
+     "amd": "66c0bbefc099064a8aa1bf4dfc89b2150eb01fcae6e0c6a0707461b92bdf72e3",
+     "nvidia-native": "66c0bbefc099064a8aa1bf4dfc89b2150eb01fcae6e0c6a0707461b92bdf72e3"
+    },
+    "B": {
+     "amd": "66c0bbefc099064a8aa1bf4dfc89b2150eb01fcae6e0c6a0707461b92bdf72e3",
+     "nvidia-native": "66c0bbefc099064a8aa1bf4dfc89b2150eb01fcae6e0c6a0707461b92bdf72e3"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:bayesian-ridge@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "6975f83960c37a95ad6a",
+   "output_sha256": {
+    "A": {
+     "amd": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
+     "nvidia-native": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb"
+    },
+    "B": {
+     "amd": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
+     "nvidia-native": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:bayesian-ridge@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "e1fd9a8db0384e1c9ab1",
+   "output_sha256": {
+    "A": {
+     "amd": "8c725903d5e7965028090aa2e2fee49ebdd35b398a6160e828939327eb9b6ed5",
+     "nvidia-native": "8c725903d5e7965028090aa2e2fee49ebdd35b398a6160e828939327eb9b6ed5"
+    },
+    "B": {
+     "amd": "8c725903d5e7965028090aa2e2fee49ebdd35b398a6160e828939327eb9b6ed5",
+     "nvidia-native": "8c725903d5e7965028090aa2e2fee49ebdd35b398a6160e828939327eb9b6ed5"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:categorical-nb@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "f80b2508b965518451b6",
+   "output_sha256": {
+    "A": {
+     "amd": "9e1c867661eb10eafe129d6bcd94f6905b1befff21e11c300a9662cd3b4a1682",
+     "nvidia-native": "9e1c867661eb10eafe129d6bcd94f6905b1befff21e11c300a9662cd3b4a1682"
+    },
+    "B": {
+     "amd": "9e1c867661eb10eafe129d6bcd94f6905b1befff21e11c300a9662cd3b4a1682",
+     "nvidia-native": "9e1c867661eb10eafe129d6bcd94f6905b1befff21e11c300a9662cd3b4a1682"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:categorical-nb@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "e49c23163db2f7002a4f",
+   "output_sha256": {
+    "A": {
+     "amd": "296fb97ece7fd0c0fd510b6de95ae142203136fffa7976e8f75bee21f7f9222d",
+     "nvidia-native": "296fb97ece7fd0c0fd510b6de95ae142203136fffa7976e8f75bee21f7f9222d"
+    },
+    "B": {
+     "amd": "296fb97ece7fd0c0fd510b6de95ae142203136fffa7976e8f75bee21f7f9222d",
+     "nvidia-native": "296fb97ece7fd0c0fd510b6de95ae142203136fffa7976e8f75bee21f7f9222d"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:cca@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "663d1d4ab5889643cb3f",
+   "output_sha256": {
+    "A": {
+     "amd": "5c56e594470b4cfe28c028de8e81f4e59bcea4b82fede23496d13113655fb066",
+     "nvidia-native": "5c56e594470b4cfe28c028de8e81f4e59bcea4b82fede23496d13113655fb066"
+    },
+    "B": {
+     "amd": "5c56e594470b4cfe28c028de8e81f4e59bcea4b82fede23496d13113655fb066",
+     "nvidia-native": "5c56e594470b4cfe28c028de8e81f4e59bcea4b82fede23496d13113655fb066"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:cca@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "ef0371c6e962169c3568",
+   "output_sha256": {
+    "A": {
+     "amd": "6c8958bdb3ffa97f9d759f8e9e04b18e0da3eafdb2d3116ae7035232c4315fb6",
+     "nvidia-native": "6c8958bdb3ffa97f9d759f8e9e04b18e0da3eafdb2d3116ae7035232c4315fb6"
+    },
+    "B": {
+     "amd": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287",
+     "nvidia-native": "7e61466bfc249d2ccc665a1812ca5c6cb8c2c1b532207332cab3499156ea6287"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:enet-cv@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "ab6019905f8f5a3cb736",
+   "output_sha256": {
+    "A": {
+     "amd": "46a7555765fda05ee0080b7cf0b902088bf15e53a3e8872b76c44f947b94d810",
+     "nvidia-native": "46a7555765fda05ee0080b7cf0b902088bf15e53a3e8872b76c44f947b94d810"
+    },
+    "B": {
+     "amd": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9",
+     "nvidia-native": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:enet-cv@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "1a47390d9add3e8a3039",
+   "output_sha256": {
+    "A": {
+     "amd": "66483069208d1c24ca4010ce3f2ef79c0a701e41ee8d38a1cfb4d774d0ab6b15",
+     "nvidia-native": "66483069208d1c24ca4010ce3f2ef79c0a701e41ee8d38a1cfb4d774d0ab6b15"
+    },
+    "B": {
+     "amd": "66483069208d1c24ca4010ce3f2ef79c0a701e41ee8d38a1cfb4d774d0ab6b15",
+     "nvidia-native": "66483069208d1c24ca4010ce3f2ef79c0a701e41ee8d38a1cfb4d774d0ab6b15"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:factor-analysis@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "97b5b3fc42ceb348e658",
+   "output_sha256": {
+    "A": {
+     "amd": "a6d7b582c3799d6e1757a12f260b6def285dbf379975515c59254252c7b3a2f1",
+     "nvidia-native": "a6d7b582c3799d6e1757a12f260b6def285dbf379975515c59254252c7b3a2f1"
+    },
+    "B": {
+     "amd": "a6d7b582c3799d6e1757a12f260b6def285dbf379975515c59254252c7b3a2f1",
+     "nvidia-native": "a6d7b582c3799d6e1757a12f260b6def285dbf379975515c59254252c7b3a2f1"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:factor-analysis@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "2361ffdcc8574c89c864",
+   "output_sha256": {
+    "A": {
+     "amd": "21082ca2661106b4a87b82cf1934b5cc069b1e7243f1d15904a1c5a1939ad84f",
+     "nvidia-native": "21082ca2661106b4a87b82cf1934b5cc069b1e7243f1d15904a1c5a1939ad84f"
+    },
+    "B": {
+     "amd": "21082ca2661106b4a87b82cf1934b5cc069b1e7243f1d15904a1c5a1939ad84f",
+     "nvidia-native": "21082ca2661106b4a87b82cf1934b5cc069b1e7243f1d15904a1c5a1939ad84f"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:fastica@dataset=istella@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "e1b898779ec2f69256cb",
+   "output_sha256": {
+    "A": {
+     "amd": "333fe8b41ff296724dc03d37f945b06726eb9a6e94b56d06fc591f4bcdfd062e",
+     "nvidia-native": "333fe8b41ff296724dc03d37f945b06726eb9a6e94b56d06fc591f4bcdfd062e"
+    },
+    "B": {
+     "amd": "333fe8b41ff296724dc03d37f945b06726eb9a6e94b56d06fc591f4bcdfd062e",
+     "nvidia-native": "333fe8b41ff296724dc03d37f945b06726eb9a6e94b56d06fc591f4bcdfd062e"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:fastica@dataset=taxi@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "526d2b9c9b98dd31d842",
+   "output_sha256": {
+    "A": {
+     "amd": "b1ca8c865be1c28f1ccf97577e1c156ffe850cd107ffb6b9d2179fc486cdf2c0",
+     "nvidia-native": "b1ca8c865be1c28f1ccf97577e1c156ffe850cd107ffb6b9d2179fc486cdf2c0"
+    },
+    "B": {
+     "amd": "b1ca8c865be1c28f1ccf97577e1c156ffe850cd107ffb6b9d2179fc486cdf2c0",
+     "nvidia-native": "b1ca8c865be1c28f1ccf97577e1c156ffe850cd107ffb6b9d2179fc486cdf2c0"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:gamma@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "3ff754e3deaaaf72d8a8",
+   "output_sha256": {
+    "A": {
+     "amd": "c553175985514fec3e83efe07defa47f0db95d505e619d6d978e2f82d1772141",
+     "nvidia-native": "c553175985514fec3e83efe07defa47f0db95d505e619d6d978e2f82d1772141"
+    },
+    "B": {
+     "amd": "c553175985514fec3e83efe07defa47f0db95d505e619d6d978e2f82d1772141",
+     "nvidia-native": "c553175985514fec3e83efe07defa47f0db95d505e619d6d978e2f82d1772141"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:gamma@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "f1cb1e7fb82555a384fb",
+   "output_sha256": {
+    "A": {
+     "amd": "8c4b421fe036978ba5fd4f8180639e777d29988ad08d231eae44585f82daad3d",
+     "nvidia-native": "8c4b421fe036978ba5fd4f8180639e777d29988ad08d231eae44585f82daad3d"
+    },
+    "B": {
+     "amd": "b8273c26957428d7f589c1f1b51b9797b6c0f15963ceac64b8badf02de94f6af",
+     "nvidia-native": "b8273c26957428d7f589c1f1b51b9797b6c0f15963ceac64b8badf02de94f6af"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "0979c39569231fcb93de",
+   "output_sha256": {
+    "A": {
+     "amd": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+     "nvidia-native": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b"
+    },
+    "B": {
+     "amd": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f",
+     "nvidia-native": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "75b97ff11f72a26aa6b6",
+   "output_sha256": {
+    "A": {
+     "amd": "72246e7ebb5101719f6b11763e1376fa3b5873324e3607f733360e2a9e24c5ad",
+     "nvidia-native": "72246e7ebb5101719f6b11763e1376fa3b5873324e3607f733360e2a9e24c5ad"
+    },
+    "B": {
+     "amd": "72246e7ebb5101719f6b11763e1376fa3b5873324e3607f733360e2a9e24c5ad",
+     "nvidia-native": "72246e7ebb5101719f6b11763e1376fa3b5873324e3607f733360e2a9e24c5ad"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:gaussian-rp@dataset=istella@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "fbc8875381459241e37e",
+   "output_sha256": {
+    "A": {
+     "amd": "b8d060c96fb876d58f2b7c841f1b4b7158060491b3ef4d2f68c9b12d326fbac5",
+     "nvidia-native": "b8d060c96fb876d58f2b7c841f1b4b7158060491b3ef4d2f68c9b12d326fbac5"
+    },
+    "B": {
+     "amd": "b8d060c96fb876d58f2b7c841f1b4b7158060491b3ef4d2f68c9b12d326fbac5",
+     "nvidia-native": "b8d060c96fb876d58f2b7c841f1b4b7158060491b3ef4d2f68c9b12d326fbac5"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "9bdfce02e5bc1df55751",
+   "output_sha256": {
+    "A": {
+     "amd": "2d1070dece0b742aea70deceda82deabc8f493d829d5b347cd7d3ac44eb5f319",
+     "nvidia-native": "2d1070dece0b742aea70deceda82deabc8f493d829d5b347cd7d3ac44eb5f319"
+    },
+    "B": {
+     "amd": "2d1070dece0b742aea70deceda82deabc8f493d829d5b347cd7d3ac44eb5f319",
+     "nvidia-native": "2d1070dece0b742aea70deceda82deabc8f493d829d5b347cd7d3ac44eb5f319"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:incremental-pca@dataset=istella@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "1e1d9279be09bb2fb882",
+   "output_sha256": {
+    "A": {
+     "amd": "9d3f49076a7a083204c35dc16f4f9c28d988a77d7a9e8192d35b4bd29e544ac0",
+     "nvidia-native": "9d3f49076a7a083204c35dc16f4f9c28d988a77d7a9e8192d35b4bd29e544ac0"
+    },
+    "B": {
+     "amd": "9d3f49076a7a083204c35dc16f4f9c28d988a77d7a9e8192d35b4bd29e544ac0",
+     "nvidia-native": "9d3f49076a7a083204c35dc16f4f9c28d988a77d7a9e8192d35b4bd29e544ac0"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "b99284f45564c4a1d0d4",
+   "output_sha256": {
+    "A": {
+     "amd": "e66b0d8cbedfd1dc5a4ada42a77ffb459efc72d797cba180dc550abab377a8f5",
+     "nvidia-native": "e66b0d8cbedfd1dc5a4ada42a77ffb459efc72d797cba180dc550abab377a8f5"
+    },
+    "B": {
+     "amd": "8545ae72dd826fc60485bf962599bc95fc741c9b59005cbde00d683147852912",
+     "nvidia-native": "8545ae72dd826fc60485bf962599bc95fc741c9b59005cbde00d683147852912"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:lasso-cv@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "ed497f13284054687514",
+   "output_sha256": {
+    "A": {
+     "amd": "6fd654bf51028df8ee08cd7213039af50bca7e6718582417c535cc82f6ddea97",
+     "nvidia-native": "6fd654bf51028df8ee08cd7213039af50bca7e6718582417c535cc82f6ddea97"
+    },
+    "B": {
+     "amd": "8dc2e83675dfccd5b5670e67320efd2e8f5f8fe3cbaf7165a2292186eb4f8fec",
+     "nvidia-native": "8dc2e83675dfccd5b5670e67320efd2e8f5f8fe3cbaf7165a2292186eb4f8fec"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:lasso-cv@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "18a4c523ee3e65a45e17",
+   "output_sha256": {
+    "A": {
+     "amd": "912e64be7735c13bf011ec218269ba074c0df675c551f0f7d83df50938e51b21",
+     "nvidia-native": "912e64be7735c13bf011ec218269ba074c0df675c551f0f7d83df50938e51b21"
+    },
+    "B": {
+     "amd": "814362ea3d0d63dda2b74211d4031a49931caa478f2e14f16a55f71bfa70e7f0",
+     "nvidia-native": "814362ea3d0d63dda2b74211d4031a49931caa478f2e14f16a55f71bfa70e7f0"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:lda-clf@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "e9de221517c39d945878",
+   "output_sha256": {
+    "A": {
+     "amd": "4aafe9cf3bb85219c002704e19102e02f1715ec630ae2fb1c3d56d93d4415fb9",
+     "nvidia-native": "4aafe9cf3bb85219c002704e19102e02f1715ec630ae2fb1c3d56d93d4415fb9"
+    },
+    "B": {
+     "amd": "28ee66132ac6c5da08b207ff76160ceb1f750570d69a2e33cecc107724681419",
+     "nvidia-native": "28ee66132ac6c5da08b207ff76160ceb1f750570d69a2e33cecc107724681419"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:lda-clf@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "7ddf4a1c2c1f680398d7",
+   "output_sha256": {
+    "A": {
+     "amd": "388b4a6bebd60c724b1825708f6c9139d83a5d54773b62e2a64dfd621d86e9c3",
+     "nvidia-native": "388b4a6bebd60c724b1825708f6c9139d83a5d54773b62e2a64dfd621d86e9c3"
+    },
+    "B": {
+     "amd": "388b4a6bebd60c724b1825708f6c9139d83a5d54773b62e2a64dfd621d86e9c3",
+     "nvidia-native": "388b4a6bebd60c724b1825708f6c9139d83a5d54773b62e2a64dfd621d86e9c3"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:maxabs-scaler@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "9c65baeb2e47ba89b327",
+   "output_sha256": {
+    "A": {
+     "amd": "e135747436a69939443473838c5ab4ca88cd139f7fca57aa94f2cb2e8abcfbc6",
+     "nvidia-native": "e135747436a69939443473838c5ab4ca88cd139f7fca57aa94f2cb2e8abcfbc6"
+    },
+    "B": {
+     "amd": "e135747436a69939443473838c5ab4ca88cd139f7fca57aa94f2cb2e8abcfbc6",
+     "nvidia-native": "e135747436a69939443473838c5ab4ca88cd139f7fca57aa94f2cb2e8abcfbc6"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:maxabs-scaler@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "7ca5b29b7d645c802c77",
+   "output_sha256": {
+    "A": {
+     "amd": "36c2314c1cc374535a235bb4eb00eafde27a7ac37fb5180aa48af8473a66b53b",
+     "nvidia-native": "36c2314c1cc374535a235bb4eb00eafde27a7ac37fb5180aa48af8473a66b53b"
+    },
+    "B": {
+     "amd": "a16f47dfbd4d3850b76083a5e005bdcf23024f5e1f0d8a42e357027a2b73e0b5",
+     "nvidia-native": "a16f47dfbd4d3850b76083a5e005bdcf23024f5e1f0d8a42e357027a2b73e0b5"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:minibatch-kmeans@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "96ee601e1c0b8c8b1f8d",
+   "output_sha256": {
+    "A": {
+     "amd": "0f4d907faa137083209ac1fa3a42fac00ffa94778a8e7da526a1d3e9c3b3118d",
+     "nvidia-native": "0f4d907faa137083209ac1fa3a42fac00ffa94778a8e7da526a1d3e9c3b3118d"
+    },
+    "B": {
+     "amd": "61d82af3bdfac3d3c39255a6124cfcdaad4fe80ecdf6e5bed52fb96368e91b08",
+     "nvidia-native": "61d82af3bdfac3d3c39255a6124cfcdaad4fe80ecdf6e5bed52fb96368e91b08"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:minibatch-kmeans@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "8cc02044eea6c67b0f1c",
+   "output_sha256": {
+    "A": {
+     "amd": "8e72e557f5d4ad53a6ac99549653850823ef6b1a60acdcc3d629b307427ccf24",
+     "nvidia-native": "8e72e557f5d4ad53a6ac99549653850823ef6b1a60acdcc3d629b307427ccf24"
+    },
+    "B": {
+     "amd": "8e72e557f5d4ad53a6ac99549653850823ef6b1a60acdcc3d629b307427ccf24",
+     "nvidia-native": "8e72e557f5d4ad53a6ac99549653850823ef6b1a60acdcc3d629b307427ccf24"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:minmax-scaler@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "b2f07c796bee9ade082b",
+   "output_sha256": {
+    "A": {
+     "amd": "648e709741c324451d497409d8d14ae6b056a563e277b06802d105a7fefed8e1",
+     "nvidia-native": "648e709741c324451d497409d8d14ae6b056a563e277b06802d105a7fefed8e1"
+    },
+    "B": {
+     "amd": "648e709741c324451d497409d8d14ae6b056a563e277b06802d105a7fefed8e1",
+     "nvidia-native": "648e709741c324451d497409d8d14ae6b056a563e277b06802d105a7fefed8e1"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:minmax-scaler@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "6fa435bc217bd3f599c3",
+   "output_sha256": {
+    "A": {
+     "amd": "58436a4dfa8fa38e401c94b5356bf8dd845e455c1fd604b0c37e2fe188927472",
+     "nvidia-native": "58436a4dfa8fa38e401c94b5356bf8dd845e455c1fd604b0c37e2fe188927472"
+    },
+    "B": {
+     "amd": "58436a4dfa8fa38e401c94b5356bf8dd845e455c1fd604b0c37e2fe188927472",
+     "nvidia-native": "58436a4dfa8fa38e401c94b5356bf8dd845e455c1fd604b0c37e2fe188927472"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:nmf@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "9df03fdaee32d70aef12",
+   "output_sha256": {
+    "A": {
+     "amd": "c4f99ff0ea0b258678c24ab7d6724f9994b57224026760fd70ce38afa8fc8bf7",
+     "nvidia-native": "c4f99ff0ea0b258678c24ab7d6724f9994b57224026760fd70ce38afa8fc8bf7"
+    },
+    "B": {
+     "amd": "c4f99ff0ea0b258678c24ab7d6724f9994b57224026760fd70ce38afa8fc8bf7",
+     "nvidia-native": "c4f99ff0ea0b258678c24ab7d6724f9994b57224026760fd70ce38afa8fc8bf7"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:nmf@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "3c2e30c66a37c811469b",
+   "output_sha256": {
+    "A": {
+     "amd": "994e8efcdd70e40058ab82a4b4bf4593f0305a2a999c762b2f736f89347ead48",
+     "nvidia-native": "994e8efcdd70e40058ab82a4b4bf4593f0305a2a999c762b2f736f89347ead48"
+    },
+    "B": {
+     "amd": "994e8efcdd70e40058ab82a4b4bf4593f0305a2a999c762b2f736f89347ead48",
+     "nvidia-native": "994e8efcdd70e40058ab82a4b4bf4593f0305a2a999c762b2f736f89347ead48"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:pa-clf@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "2b5a674deff7ff6e8ef0",
+   "output_sha256": {
+    "A": {
+     "amd": "8b9240aef4c8b3e0b2d132734174074e473bb434140057465444957e41187d3a",
+     "nvidia-native": "8b9240aef4c8b3e0b2d132734174074e473bb434140057465444957e41187d3a"
+    },
+    "B": {
+     "amd": "8b9240aef4c8b3e0b2d132734174074e473bb434140057465444957e41187d3a",
+     "nvidia-native": "8b9240aef4c8b3e0b2d132734174074e473bb434140057465444957e41187d3a"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:pa-clf@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "a7ec2c45cd1086d7718e",
+   "output_sha256": {
+    "A": {
+     "amd": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
+     "nvidia-native": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2"
+    },
+    "B": {
+     "amd": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
+     "nvidia-native": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:pa-reg@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "9a3ba7d7918ac5678d68",
+   "output_sha256": {
+    "A": {
+     "amd": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+     "nvidia-native": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a"
+    },
+    "B": {
+     "amd": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+     "nvidia-native": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:pa-reg@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "58058d60b3f901cf02ab",
+   "output_sha256": {
+    "A": {
+     "amd": "33ea2f185f712abec84a013fa7b9f51d1e6926f3fa3ab0b5f1399275f92edc79",
+     "nvidia-native": "33ea2f185f712abec84a013fa7b9f51d1e6926f3fa3ab0b5f1399275f92edc79"
+    },
+    "B": {
+     "amd": "33ea2f185f712abec84a013fa7b9f51d1e6926f3fa3ab0b5f1399275f92edc79",
+     "nvidia-native": "33ea2f185f712abec84a013fa7b9f51d1e6926f3fa3ab0b5f1399275f92edc79"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:perceptron@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "c0f7a83d7e5da07928ef",
+   "output_sha256": {
+    "A": {
+     "amd": "405d37798446ea2c548db38c43512db94a0aacd815905ad76ef21d5c69453993",
+     "nvidia-native": "405d37798446ea2c548db38c43512db94a0aacd815905ad76ef21d5c69453993"
+    },
+    "B": {
+     "amd": "405d37798446ea2c548db38c43512db94a0aacd815905ad76ef21d5c69453993",
+     "nvidia-native": "405d37798446ea2c548db38c43512db94a0aacd815905ad76ef21d5c69453993"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:perceptron@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "dc6b9dd1517a48ebe8ce",
+   "output_sha256": {
+    "A": {
+     "amd": "46f1a145c85248c83516cdbd7b6982d33d4dd7f1a4afa9938c5c8d2b4eb06a40",
+     "nvidia-native": "46f1a145c85248c83516cdbd7b6982d33d4dd7f1a4afa9938c5c8d2b4eb06a40"
+    },
+    "B": {
+     "amd": "46f1a145c85248c83516cdbd7b6982d33d4dd7f1a4afa9938c5c8d2b4eb06a40",
+     "nvidia-native": "46f1a145c85248c83516cdbd7b6982d33d4dd7f1a4afa9938c5c8d2b4eb06a40"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:pls-canonical@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "03d09345763b5edafe21",
+   "output_sha256": {
+    "A": {
+     "amd": "459c87c513621f580b688430b2a477dacb926bfafe8a5963dc6a20469d3107f4",
+     "nvidia-native": "459c87c513621f580b688430b2a477dacb926bfafe8a5963dc6a20469d3107f4"
+    },
+    "B": {
+     "amd": "459c87c513621f580b688430b2a477dacb926bfafe8a5963dc6a20469d3107f4",
+     "nvidia-native": "459c87c513621f580b688430b2a477dacb926bfafe8a5963dc6a20469d3107f4"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:pls-canonical@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "a74c35d24cd54d36db9c",
+   "output_sha256": {
+    "A": {
+     "amd": "8df98c6c744fe30eb8f407c6220426cc1a73abe5142a5fddc17f82734025ba5b",
+     "nvidia-native": "8df98c6c744fe30eb8f407c6220426cc1a73abe5142a5fddc17f82734025ba5b"
+    },
+    "B": {
+     "amd": "8df98c6c744fe30eb8f407c6220426cc1a73abe5142a5fddc17f82734025ba5b",
+     "nvidia-native": "8df98c6c744fe30eb8f407c6220426cc1a73abe5142a5fddc17f82734025ba5b"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:poisson@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "436e71bd073537cb13cf",
+   "output_sha256": {
+    "A": {
+     "amd": "b85c404a130b60eeb8d40c050874782a544311d4a49c8e3f375ed85de851e45d",
+     "nvidia-native": "b85c404a130b60eeb8d40c050874782a544311d4a49c8e3f375ed85de851e45d"
+    },
+    "B": {
+     "amd": "b85c404a130b60eeb8d40c050874782a544311d4a49c8e3f375ed85de851e45d",
+     "nvidia-native": "b85c404a130b60eeb8d40c050874782a544311d4a49c8e3f375ed85de851e45d"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:poisson@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "d97f1167c9e4f5f8486d",
+   "output_sha256": {
+    "A": {
+     "amd": "afb9ac1d3e11cee6a2a8ab76b9593a9989ae8504f56956e21559f5762efb1779",
+     "nvidia-native": "afb9ac1d3e11cee6a2a8ab76b9593a9989ae8504f56956e21559f5762efb1779"
+    },
+    "B": {
+     "amd": "03ba538fe40c583b76e9146e8d42d7c41084cc441f01709e6c0b67997253ff4a",
+     "nvidia-native": "03ba538fe40c583b76e9146e8d42d7c41084cc441f01709e6c0b67997253ff4a"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:qda@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "8c478ce30573cec311f7",
+   "output_sha256": {
+    "A": {
+     "amd": "c009f149320403c7901caada56dd622385ba29459dc3b88d4df90dcccfb2d88b",
+     "nvidia-native": "c009f149320403c7901caada56dd622385ba29459dc3b88d4df90dcccfb2d88b"
+    },
+    "B": {
+     "amd": "71dcae0077379e7a0f896e63f1ffacb56ee2f166a3012693d44634e6751e4a2f",
+     "nvidia-native": "71dcae0077379e7a0f896e63f1ffacb56ee2f166a3012693d44634e6751e4a2f"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:qda@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "269fa719c5881c3d01ec",
+   "output_sha256": {
+    "A": {
+     "amd": "59b9eb001dd874917e1b39ea9893777fd12db14cd784b1ac084015e2d3deaa26",
+     "nvidia-native": "59b9eb001dd874917e1b39ea9893777fd12db14cd784b1ac084015e2d3deaa26"
+    },
+    "B": {
+     "amd": "59b9eb001dd874917e1b39ea9893777fd12db14cd784b1ac084015e2d3deaa26",
+     "nvidia-native": "59b9eb001dd874917e1b39ea9893777fd12db14cd784b1ac084015e2d3deaa26"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:randomized-svd@dataset=istella@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "fe191fbb355f314f8726",
+   "output_sha256": {
+    "A": {
+     "amd": "7781c9bdac1c681602ec5a92565677553b4cc291b42d09a8ad28c8999a45069d",
+     "nvidia-native": "7781c9bdac1c681602ec5a92565677553b4cc291b42d09a8ad28c8999a45069d"
+    },
+    "B": {
+     "amd": "7781c9bdac1c681602ec5a92565677553b4cc291b42d09a8ad28c8999a45069d",
+     "nvidia-native": "7781c9bdac1c681602ec5a92565677553b4cc291b42d09a8ad28c8999a45069d"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:randomized-svd@dataset=taxi@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "c00287df00fa64760e75",
+   "output_sha256": {
+    "A": {
+     "amd": "39d6c2be0e8b17e4167bf109a2bee8b8418dd62dca22ddbb0558c4fe0a1b02d8",
+     "nvidia-native": "39d6c2be0e8b17e4167bf109a2bee8b8418dd62dca22ddbb0558c4fe0a1b02d8"
+    },
+    "B": {
+     "amd": "39d6c2be0e8b17e4167bf109a2bee8b8418dd62dca22ddbb0558c4fe0a1b02d8",
+     "nvidia-native": "39d6c2be0e8b17e4167bf109a2bee8b8418dd62dca22ddbb0558c4fe0a1b02d8"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:ridge-clf@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "55eda84e4dc2571a50a5",
+   "output_sha256": {
+    "A": {
+     "amd": "1bc7e5bef60d83aa30dc1690ffc6304448713832bef300a3a8c05ca6bcbfd9a4",
+     "nvidia-native": "1bc7e5bef60d83aa30dc1690ffc6304448713832bef300a3a8c05ca6bcbfd9a4"
+    },
+    "B": {
+     "amd": "1bc7e5bef60d83aa30dc1690ffc6304448713832bef300a3a8c05ca6bcbfd9a4",
+     "nvidia-native": "1bc7e5bef60d83aa30dc1690ffc6304448713832bef300a3a8c05ca6bcbfd9a4"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:ridge-clf@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "a3cffdf3cbb61ca58365",
+   "output_sha256": {
+    "A": {
+     "amd": "25d72f9792abbe24d7beb0e193031c2b31640ff29709481834f404c9ce9c3fc4",
+     "nvidia-native": "25d72f9792abbe24d7beb0e193031c2b31640ff29709481834f404c9ce9c3fc4"
+    },
+    "B": {
+     "amd": "25d72f9792abbe24d7beb0e193031c2b31640ff29709481834f404c9ce9c3fc4",
+     "nvidia-native": "25d72f9792abbe24d7beb0e193031c2b31640ff29709481834f404c9ce9c3fc4"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:ridge-cv@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "c815d7908f8d05736fed",
+   "output_sha256": {
+    "A": {
+     "amd": "8b2155215cc45d82ae53c80066fd061aecfd224611fb992976714de933a6ff21",
+     "nvidia-native": "8b2155215cc45d82ae53c80066fd061aecfd224611fb992976714de933a6ff21"
+    },
+    "B": {
+     "amd": "8b2155215cc45d82ae53c80066fd061aecfd224611fb992976714de933a6ff21",
+     "nvidia-native": "8b2155215cc45d82ae53c80066fd061aecfd224611fb992976714de933a6ff21"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:ridge-cv@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "844ad2d535c1bd6e0b67",
+   "output_sha256": {
+    "A": {
+     "amd": "2b93be9741c38d5e896d37898ffe4b9efd18511c4bc91fcde6736ef054fa62af",
+     "nvidia-native": "2b93be9741c38d5e896d37898ffe4b9efd18511c4bc91fcde6736ef054fa62af"
+    },
+    "B": {
+     "amd": "2b93be9741c38d5e896d37898ffe4b9efd18511c4bc91fcde6736ef054fa62af",
+     "nvidia-native": "2b93be9741c38d5e896d37898ffe4b9efd18511c4bc91fcde6736ef054fa62af"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:sgd-clf@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "6f69d33ee268152edd65",
+   "output_sha256": {
+    "A": {
+     "amd": "a26cd524a724e13390ddc063f14671709cce36a1f3693ebcb7cf1382252e9aa8",
+     "nvidia-native": "a26cd524a724e13390ddc063f14671709cce36a1f3693ebcb7cf1382252e9aa8"
+    },
+    "B": {
+     "amd": "a26cd524a724e13390ddc063f14671709cce36a1f3693ebcb7cf1382252e9aa8",
+     "nvidia-native": "a26cd524a724e13390ddc063f14671709cce36a1f3693ebcb7cf1382252e9aa8"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:sgd-clf@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "e7d2bedc38a2d158176e",
+   "output_sha256": {
+    "A": {
+     "amd": "8707b0cd9e96a36126a1dd379d3e9238fd842d20728faf4b573ee5a38fc9742f",
+     "nvidia-native": "8707b0cd9e96a36126a1dd379d3e9238fd842d20728faf4b573ee5a38fc9742f"
+    },
+    "B": {
+     "amd": "8707b0cd9e96a36126a1dd379d3e9238fd842d20728faf4b573ee5a38fc9742f",
+     "nvidia-native": "8707b0cd9e96a36126a1dd379d3e9238fd842d20728faf4b573ee5a38fc9742f"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:sgd-ocsvm@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "16eb4aed742ac338fb45",
+   "output_sha256": {
+    "A": {
+     "amd": "dbca0b858ae4c803fe13ae537b6e4e2bfe640777a5c3ce819116654e304182bf",
+     "nvidia-native": "dbca0b858ae4c803fe13ae537b6e4e2bfe640777a5c3ce819116654e304182bf"
+    },
+    "B": {
+     "amd": "dbca0b858ae4c803fe13ae537b6e4e2bfe640777a5c3ce819116654e304182bf",
+     "nvidia-native": "dbca0b858ae4c803fe13ae537b6e4e2bfe640777a5c3ce819116654e304182bf"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:sgd-ocsvm@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "67670706fe0397d423c1",
+   "output_sha256": {
+    "A": {
+     "amd": "af07cd5fa9f5313f8fa51013d032103c1b664e7e54eef1dd6dfb336ef2bc4128",
+     "nvidia-native": "af07cd5fa9f5313f8fa51013d032103c1b664e7e54eef1dd6dfb336ef2bc4128"
+    },
+    "B": {
+     "amd": "af07cd5fa9f5313f8fa51013d032103c1b664e7e54eef1dd6dfb336ef2bc4128",
+     "nvidia-native": "af07cd5fa9f5313f8fa51013d032103c1b664e7e54eef1dd6dfb336ef2bc4128"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:sgd-reg@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "c138ad0750b5c3c23464",
+   "output_sha256": {
+    "A": {
+     "amd": "15a12182f1bd02a77203c26f26e5e32f069b4e3a9955294c68738686b7414304",
+     "nvidia-native": "15a12182f1bd02a77203c26f26e5e32f069b4e3a9955294c68738686b7414304"
+    },
+    "B": {
+     "amd": "15a12182f1bd02a77203c26f26e5e32f069b4e3a9955294c68738686b7414304",
+     "nvidia-native": "15a12182f1bd02a77203c26f26e5e32f069b4e3a9955294c68738686b7414304"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:sgd-reg@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "ed3328940cdd87234585",
+   "output_sha256": {
+    "A": {
+     "amd": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
+     "nvidia-native": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0"
+    },
+    "B": {
+     "amd": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
+     "nvidia-native": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "06cedf31b5b79a820085",
+   "output_sha256": {
+    "A": {
+     "amd": "3144ef7aa15edb7412fe15cb3ef825911e00d68acd0ec0142871b325a047671a",
+     "nvidia-native": "3144ef7aa15edb7412fe15cb3ef825911e00d68acd0ec0142871b325a047671a"
+    },
+    "B": {
+     "amd": "3144ef7aa15edb7412fe15cb3ef825911e00d68acd0ec0142871b325a047671a",
+     "nvidia-native": "3144ef7aa15edb7412fe15cb3ef825911e00d68acd0ec0142871b325a047671a"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "c79dfc95cc29eb7e1c84",
+   "output_sha256": {
+    "A": {
+     "amd": "58e43649e822c1984fadad3de723140bf7d787cdf076716af6913d5148a6a913",
+     "nvidia-native": "58e43649e822c1984fadad3de723140bf7d787cdf076716af6913d5148a6a913"
+    },
+    "B": {
+     "amd": "58e43649e822c1984fadad3de723140bf7d787cdf076716af6913d5148a6a913",
+     "nvidia-native": "58e43649e822c1984fadad3de723140bf7d787cdf076716af6913d5148a6a913"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:standard-scaler@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "763ddcf1331d40fc5436",
+   "output_sha256": {
+    "A": {
+     "amd": "b58cc382ed7ed18108199e189d1b0881d89295128eb19c5ccc75346cefc9166f",
+     "nvidia-native": "b58cc382ed7ed18108199e189d1b0881d89295128eb19c5ccc75346cefc9166f"
+    },
+    "B": {
+     "amd": "b58cc382ed7ed18108199e189d1b0881d89295128eb19c5ccc75346cefc9166f",
+     "nvidia-native": "b58cc382ed7ed18108199e189d1b0881d89295128eb19c5ccc75346cefc9166f"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:standard-scaler@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "b4e6804830086a44e622",
+   "output_sha256": {
+    "A": {
+     "amd": "105d8159cd0f3b78eb9293181d59ca5e953bcd18d1ee64c306355e162aee8327",
+     "nvidia-native": "105d8159cd0f3b78eb9293181d59ca5e953bcd18d1ee64c306355e162aee8327"
+    },
+    "B": {
+     "amd": "105d8159cd0f3b78eb9293181d59ca5e953bcd18d1ee64c306355e162aee8327",
+     "nvidia-native": "105d8159cd0f3b78eb9293181d59ca5e953bcd18d1ee64c306355e162aee8327"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:target-encoder@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "ba0a9339ea811c187409",
+   "output_sha256": {
+    "A": {
+     "amd": "7aab085c20ce187b7144ff42a74faf1df5b76808d6ca53e6b6112f35ea48e51f",
+     "nvidia-native": "7aab085c20ce187b7144ff42a74faf1df5b76808d6ca53e6b6112f35ea48e51f"
+    },
+    "B": {
+     "amd": "7aab085c20ce187b7144ff42a74faf1df5b76808d6ca53e6b6112f35ea48e51f",
+     "nvidia-native": "7aab085c20ce187b7144ff42a74faf1df5b76808d6ca53e6b6112f35ea48e51f"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "db59bb9557035da8fd11b0a020a84e33b0581c30"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:target-encoder@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "b7b0e1c7abe88faf44f1",
+   "output_sha256": {
+    "A": {
+     "amd": "c9649c99747c071c3e03049496baa1d1911e8052e3d1f6cd9fea48ba0a0bbd93",
+     "nvidia-native": "c9649c99747c071c3e03049496baa1d1911e8052e3d1f6cd9fea48ba0a0bbd93"
+    },
+    "B": {
+     "amd": "c9649c99747c071c3e03049496baa1d1911e8052e3d1f6cd9fea48ba0a0bbd93",
+     "nvidia-native": "c9649c99747c071c3e03049496baa1d1911e8052e3d1f6cd9fea48ba0a0bbd93"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:tweedie@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "e867c6e2d662b89c521f",
+   "output_sha256": {
+    "A": {
+     "amd": "7ea6f5c4c21bfcf613b43235c491d3cb5ba5ba50568ae89909bd6d550ca898ee",
+     "nvidia-native": "7ea6f5c4c21bfcf613b43235c491d3cb5ba5ba50568ae89909bd6d550ca898ee"
+    },
+    "B": {
+     "amd": "7ea6f5c4c21bfcf613b43235c491d3cb5ba5ba50568ae89909bd6d550ca898ee",
+     "nvidia-native": "7ea6f5c4c21bfcf613b43235c491d3cb5ba5ba50568ae89909bd6d550ca898ee"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+   },
+   "status": "MATCH",
+   "workload_id": "expanded:tweedie@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "b08d9ef06d420ea51d27",
+   "output_sha256": {
+    "A": {
+     "amd": "6a83378c1df1c6f06f75d6de1b36f4b84f5c053d6179db842ee002548789c4f4",
+     "nvidia-native": "6a83378c1df1c6f06f75d6de1b36f4b84f5c053d6179db842ee002548789c4f4"
+    },
+    "B": {
+     "amd": "6a83378c1df1c6f06f75d6de1b36f4b84f5c053d6179db842ee002548789c4f4",
+     "nvidia-native": "6a83378c1df1c6f06f75d6de1b36f4b84f5c053d6179db842ee002548789c4f4"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+   },
+   "status": "MATCH",
+   "workload_id": "more:elasticnet@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "a793ffdde8ffe59fb934",
+   "output_sha256": {
+    "A": {
+     "amd": "412d73a150f01529b304ce45d709bb4b6c008c7502ae003486df4b022079711c",
+     "nvidia-native": "412d73a150f01529b304ce45d709bb4b6c008c7502ae003486df4b022079711c"
+    },
+    "B": {
+     "amd": "412d73a150f01529b304ce45d709bb4b6c008c7502ae003486df4b022079711c",
+     "nvidia-native": "412d73a150f01529b304ce45d709bb4b6c008c7502ae003486df4b022079711c"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+   },
+   "status": "MATCH",
+   "workload_id": "more:elasticnet@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "571d36507613499deea6",
+   "output_sha256": {
+    "A": {
+     "amd": "653d598f98dbc4acbd8694e1099483f493a4214bfa90f4c9b226771398b1aae8",
+     "nvidia-native": "653d598f98dbc4acbd8694e1099483f493a4214bfa90f4c9b226771398b1aae8"
+    },
+    "B": {
+     "amd": "653d598f98dbc4acbd8694e1099483f493a4214bfa90f4c9b226771398b1aae8",
+     "nvidia-native": "653d598f98dbc4acbd8694e1099483f493a4214bfa90f4c9b226771398b1aae8"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+   },
+   "status": "MATCH",
+   "workload_id": "more:lasso@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "1deb2566154155d035ff",
+   "output_sha256": {
+    "A": {
+     "amd": "26beed452801d91dee89b3a0155e4e48e97686695641ca899f76faf3f326faed",
+     "nvidia-native": "26beed452801d91dee89b3a0155e4e48e97686695641ca899f76faf3f326faed"
+    },
+    "B": {
+     "amd": "26beed452801d91dee89b3a0155e4e48e97686695641ca899f76faf3f326faed",
+     "nvidia-native": "26beed452801d91dee89b3a0155e4e48e97686695641ca899f76faf3f326faed"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+   },
+   "status": "MATCH",
+   "workload_id": "more:lasso@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "9f18d3947ae39551d9e6",
+   "output_sha256": {
+    "A": {
+     "amd": "08bf5d51d775fa2c5c36e7b78f2c0c73e5219b7c28b9a079060e504fc7a6a7f3",
+     "nvidia-native": "08bf5d51d775fa2c5c36e7b78f2c0c73e5219b7c28b9a079060e504fc7a6a7f3"
+    },
+    "B": {
+     "amd": "08bf5d51d775fa2c5c36e7b78f2c0c73e5219b7c28b9a079060e504fc7a6a7f3",
+     "nvidia-native": "08bf5d51d775fa2c5c36e7b78f2c0c73e5219b7c28b9a079060e504fc7a6a7f3"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "779cd5453425139e00229fb99cfa4ec852d7677c"
+   },
+   "status": "MATCH",
+   "workload_id": "more:linearsvc@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "1ecb9099d266f589c90b",
+   "output_sha256": {
+    "A": {
+     "amd": "7d5a9a8e31cf2eca464e558c1749232984bbe59da7652979b59f9e36bacc7803",
+     "nvidia-native": "7d5a9a8e31cf2eca464e558c1749232984bbe59da7652979b59f9e36bacc7803"
+    },
+    "B": {
+     "amd": "7d5a9a8e31cf2eca464e558c1749232984bbe59da7652979b59f9e36bacc7803",
+     "nvidia-native": "7d5a9a8e31cf2eca464e558c1749232984bbe59da7652979b59f9e36bacc7803"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "779cd5453425139e00229fb99cfa4ec852d7677c"
+   },
+   "status": "MATCH",
+   "workload_id": "more:linearsvc@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "f1ac8fc4339afbc164d9",
+   "output_sha256": {
+    "A": {
+     "amd": "d2c0d162ba015f0bbd08a522a03202949870814d679c5be9c9f242403d4c76db",
+     "nvidia-native": "d2c0d162ba015f0bbd08a522a03202949870814d679c5be9c9f242403d4c76db"
+    },
+    "B": {
+     "amd": "d2c0d162ba015f0bbd08a522a03202949870814d679c5be9c9f242403d4c76db",
+     "nvidia-native": "d2c0d162ba015f0bbd08a522a03202949870814d679c5be9c9f242403d4c76db"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+   },
+   "status": "MATCH",
+   "workload_id": "more:linearsvr@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "a7b048e240b683d4ce48",
+   "output_sha256": {
+    "A": {
+     "amd": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db",
+     "nvidia-native": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db"
+    },
+    "B": {
+     "amd": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db",
+     "nvidia-native": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+   },
+   "status": "MATCH",
+   "workload_id": "more:linearsvr@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "22d76a7a48ab7376d07e",
+   "output_sha256": {
+    "A": {
+     "amd": "d88ed0167efd9221042e2bcfdcb0850bda67252a9f12fca35ca1f4fecaee5c9a",
+     "nvidia-native": "d88ed0167efd9221042e2bcfdcb0850bda67252a9f12fca35ca1f4fecaee5c9a"
+    },
+    "B": {
+     "amd": "d88ed0167efd9221042e2bcfdcb0850bda67252a9f12fca35ca1f4fecaee5c9a",
+     "nvidia-native": "d88ed0167efd9221042e2bcfdcb0850bda67252a9f12fca35ca1f4fecaee5c9a"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "779cd5453425139e00229fb99cfa4ec852d7677c"
+   },
+   "status": "MATCH",
+   "workload_id": "more:logreg@dataset=istella@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "ec9054331cd932fe4a00",
+   "output_sha256": {
+    "A": {
+     "amd": "0515480f4573c42c80f35b2c1e9d6329b9253b79b854d956e90a32474f15b2fa",
+     "nvidia-native": "0515480f4573c42c80f35b2c1e9d6329b9253b79b854d956e90a32474f15b2fa"
+    },
+    "B": {
+     "amd": "0515480f4573c42c80f35b2c1e9d6329b9253b79b854d956e90a32474f15b2fa",
+     "nvidia-native": "0515480f4573c42c80f35b2c1e9d6329b9253b79b854d956e90a32474f15b2fa"
+    }
+   },
+   "source_sha": {
+    "amd": "137caf2704fe0139c6a08a39e63869f74a827a8b",
+    "nvidia-native": "779cd5453425139e00229fb99cfa4ec852d7677c"
+   },
+   "status": "MATCH",
+   "workload_id": "more:logreg@dataset=taxi@input=classification-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "de51c172b6cb2c7118b7",
+   "output_sha256": {
+    "A": {
+     "amd": "65a3c3799c68b59ab1af9b1feba05fa50bee91d8724be182d131d3bfe0156df9",
+     "nvidia-native": "65a3c3799c68b59ab1af9b1feba05fa50bee91d8724be182d131d3bfe0156df9"
+    },
+    "B": {
+     "amd": "65a3c3799c68b59ab1af9b1feba05fa50bee91d8724be182d131d3bfe0156df9",
+     "nvidia-native": "65a3c3799c68b59ab1af9b1feba05fa50bee91d8724be182d131d3bfe0156df9"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+   },
+   "status": "MATCH",
+   "workload_id": "more:ridge@dataset=istella"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "bed51d83fd401220ddf3",
+   "output_sha256": {
+    "A": {
+     "amd": "a3d9fd79a253e586a5bab06994e523b476db0f1e72358c29dcdc402bc66d52ce",
+     "nvidia-native": "a3d9fd79a253e586a5bab06994e523b476db0f1e72358c29dcdc402bc66d52ce"
+    },
+    "B": {
+     "amd": "a3d9fd79a253e586a5bab06994e523b476db0f1e72358c29dcdc402bc66d52ce",
+     "nvidia-native": "a3d9fd79a253e586a5bab06994e523b476db0f1e72358c29dcdc402bc66d52ce"
+    }
+   },
+   "source_sha": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+   },
+   "status": "MATCH",
+   "workload_id": "more:ridge@dataset=taxi"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "f0d0c165f1db81e1622c",
+   "output_sha256": {
+    "A": {
+     "amd": "c7843eda93803e220441b3de1334723f15d330613eabdeb5ff001d2226a6d0dd",
+     "nvidia-native": "c7843eda93803e220441b3de1334723f15d330613eabdeb5ff001d2226a6d0dd"
+    },
+    "B": {
+     "amd": "c7843eda93803e220441b3de1334723f15d330613eabdeb5ff001d2226a6d0dd",
+     "nvidia-native": "c7843eda93803e220441b3de1334723f15d330613eabdeb5ff001d2226a6d0dd"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "more:tsvd@dataset=istella@input=tsvd-full-v1"
+  },
+  {
+   "amd_source_equivalence": "KERNEL_EQUIVALENT",
+   "arms": {
+    "A": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    },
+    "B": {
+     "parts": {
+      "model_state": "NOT_CAPTURED",
+      "outputs": "MATCH",
+      "repeated.0.outputs": "MATCH"
+     },
+     "status": "MATCH"
+    }
+   },
+   "configuration_id": "I.X.complete-proposed",
+   "id": "2dd2a30fa14f942128ba",
+   "output_sha256": {
+    "A": {
+     "amd": "85e0a804aa3127f54ab7e80fb200b7944a69deab88cdcfc7f6b89d0e8c6161a3",
+     "nvidia-native": "85e0a804aa3127f54ab7e80fb200b7944a69deab88cdcfc7f6b89d0e8c6161a3"
+    },
+    "B": {
+     "amd": "85e0a804aa3127f54ab7e80fb200b7944a69deab88cdcfc7f6b89d0e8c6161a3",
+     "nvidia-native": "85e0a804aa3127f54ab7e80fb200b7944a69deab88cdcfc7f6b89d0e8c6161a3"
+    }
+   },
+   "source_sha": {
+    "amd": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+    "nvidia-native": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+   },
+   "status": "MATCH",
+   "workload_id": "more:tsvd@dataset=taxi@input=tsvd-full-v1"
+  }
+ ],
+ "counts": {
+  "INCOMPLETE": 0,
+  "MATCH": 84,
+  "MISMATCH": 0,
+  "NOT_REQUIRED": 0
+ },
+ "evidence_dir": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/nv-amd-only-20261007T103903Z",
+ "manifest": "/Users/andrewhendel/CascadeProjects/mojolearn/experiments/six_lane_integration/measurements/20261006/comparisons/amd-nvidia-same-arm/snapshot-20261006T213415Z/input.json",
+ "manifest_sha256": "b62c753fab15d767a706100ec7864979e0181df1339d439c2190ebcf19e27db4",
+ "model_state_parts": {
+  "NOT_CAPTURED": 168
+ },
+ "optional_columns": [
+  "apple",
+  "host",
+  "nvidia-ptx"
+ ],
+ "policy": "Owner decision 2026-10-07: IDENTICAL identity is required across NVIDIA and AMD only; Apple, host and PTX columns are optional. Identity is the stored scored output hash (and complete typed model state when both columns captured it). AMD receipts whose commit differs from the pinned NVIDIA commit are accepted when no *.mojo, bindings/ or python/mojolearn/ file differs between the two commits; the full changed-file list is in report.json.",
+ "promoted": false,
+ "report_sha256": "0cee2bc8d296a5a1dd0ec6e51232a0e6fad178e8f19e7789ccb0da01452125ee",
+ "required_identical_columns": [
+  "nvidia-native",
+  "amd"
+ ],
+ "schema": "mojolearn.six-lane-comparison-summary/1",
+ "tool_sha256": "5428f8b6b9b3a3506c1e60693e5d8ee8df4cb932ec6e5a2abbd0a554e4a9ba32"
+}

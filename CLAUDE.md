@@ -19,7 +19,7 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
 - **Code, then queue.** A lane subagent writes code, compiles, commits and pushes, then queues its own GPU runs with `~/mojolearn-evidence/lq/lq` (run it with no arguments for usage). It never runs tests, timing, identity runs or Metal jobs on the laptop, and never ssh-es to, rents, extends or releases a box. `lq` is the only way a lane reaches a box:
   - `lq add nv|amd RACE <branch> <lane[,lane]> <ds[,ds]> [ARMS=..] [BUILDS=..] [ENV=V]`: one build covers every lane x dataset, so batch them.
   - Apple (the M2 Pro) is for same-bits ID checks only: no Apple timing for IDENTICAL. The M3 Ultra belongs to the Apple FAST peer (lane/apple-fast only). One lane and one dataset per line. Never RACE with `MOJOLEARN_VENDOR=cpu`: our CPU is never raced or timed; the host digest comes from the ID check.
-  - **Same-bits checks use `lq add <box> ID <branch> <lane[,lane]> <ds[,ds]>`, never full board races.** It races the lane once on the device and once on the host column, over a 50k-row copy of the board data (identical on every box). It prints `IDCHECK <lane> <ds> <device>=<d> host=<d> MATCH|DIFFER`. Queue it on nv, amd and apple. `lq` refuses it when the branch changes no `.mojo` or `bindings/` file: then the kernels are main's and no check is needed.
+  - **Same-bits checks use `lq add <box> ID <branch> <lane[,lane]> <ds[,ds]>`, never full board races.** It races the lane once on the device and once on the host column, over a 50k-row copy of the board data (identical on every box). It prints `IDCHECK <lane> <ds> <device>=<d> host=<d> MATCH|DIFFER`. Queue it on nv and amd; identity is the nv device digest equal to the amd device digest (the host digest is a convenience, not a requirement). Apple ID checks are optional. `lq` refuses it when the branch changes no `.mojo` or `bindings/` file: then the kernels are main's and no check is needed.
   - Full-size RACE lines are for speed and quality only: NVIDIA and AMD timing and opponent comparisons. IDENTICAL speed work targets NVIDIA and AMD.
   - `lq add <box> CMD <branch> <tag> '<command>'`: runs in the branch tree. Scripts it calls must be committed in the branch.
   - `lq results <box> [pattern]` and `lq log <box> <id|tag> [pattern]`: grep-sized output only.
@@ -55,7 +55,7 @@ The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<
 ## GPU rules (summary; the plans in docs/plans/ have the details)
 
 - The GPU path is GPU only and parallel. No host steps inside a GPU fit, transform or predict, and no serial one-thread, one-block or per-sample default.
-- (IDENTICAL) Same bits on NVIDIA, AMD, Apple and the host column, within one version. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
+- (IDENTICAL) Same bits on NVIDIA and AMD, within one version (Andrew, 2026-10-07: identity is required across the two GPU vendors only; Apple and host digests are recorded, never required). Identity is decided by the output hash each measurement run already stores: equal on NVIDIA and AMD means identical. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
 - **FAST mode needs no identical anything.** Not the same bits across vendors, not the same bits as arm A, not the same digests run to run, not an exact match with IDENTICAL. FAST is judged on two things only: speed, and quality that does not go down. The board's quality metric (AUC, recall, error, trustworthiness, inertia, p-value, ...) must show no material drop against FAST main (arm A), and must be at least as good as the best opponent's. A FAST candidate is never held for a noise-level metric change, a different fold order or different bits. It is held for any real quality loss against FAST main or the opponent. The same-bits rules above apply to IDENTICAL only.
 - **NO PYTHON COMPUTE IN THE RUNTIME, EVER.** Python is only the public API surface: argument checks, routing, and calling compiled Mojo. No arithmetic on data, no loops or comprehensions over values, no NumPy math, no per-element work in Python at runtime, not even for a handful of values. Every computed number (including small ones like criteria, penalties and statistics) comes from Mojo, on the GPU for GPU paths. If a value is missing, add it to the Mojo kernel; never patch it in Python. The no-host-routes push hook enforces this.
 - Never time a CPU or host route. The CPU is for verification digests, CPU-only installs and inference.
@@ -75,8 +75,8 @@ toolchain internals, or ship unsupported build modes. Record the ask for Modular
 No dispatch, tile, threshold, cap or route rule may key on an exact benchmark dimension, a size chosen to sit just above or
 below a board row (rows, features, classes, k, vocabulary), or a board dataset name. This applies to FAST and to IDENTICAL on
 every vendor. A rule must come from size, hardware or cost reasoning that covers neighboring shapes, stated in a comment.
-In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA, AMD,
-Apple and the host column within one version, never across versions. Change all columns together. Each removal gets an
+In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA and
+AMD within one version, never across versions. Change all columns together. Each removal gets an
 A/B with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
 
 ## Measurement process (owner, 2026-10-05)
@@ -84,7 +84,7 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 1. Freeze one commit per A/B round. Compile it once on cheap boxes (Apple on the M2; NVIDIA/AMD on cheap fast-CPU boxes).
    Only a green frozen build goes to the timing GPUs. New code waits for the next freeze.
 2. IDENTICAL switches are decided by NVIDIA and AMD together: combined faster, and neither vendor materially slower.
-   Apple never votes on IDENTICAL switches and IDENTICAL is never tuned for Apple; Apple must only match bits.
+   Apple never votes on IDENTICAL switches and IDENTICAL is never tuned for Apple; Apple digests are recorded but not required to match (2026-10-07).
 3. Measure IDENTICAL on NVIDIA, AMD and Apple and update every board (main board included) as results land, through the
    board tools only. A full-board run is IDENTICAL on the three; FAST is not rerun.
 4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
