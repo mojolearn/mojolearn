@@ -33,10 +33,14 @@ from gemm.experiments.neural_streaming import (
 from gemm.experiments.neural_tiled import NN09,NN15,neural_tiled_ab
 from gemm.experiments.neural_plans import NN01,NN08,NN10,NN12,neural_schedule_ab,neural_async_ab,neural_cost_plan
 from gemm.experiments.neural_grouped import NN05,NN07,_neural_operand_pack_kernel
+from gemm.experiments.neural_ozaki import (
+    NEURAL_OZAKI,OZAKI_SLICES,neural_ozaki_into,ozaki_workspace_floats,
+)
 
 comptime NEURAL_PAIR_ENABLED = NN05 or NN07
 comptime NEURAL_GEMM_EXPERIMENT_ENABLED = (
     NEURAL_PROFILE_CHANGED or NN01 or NN02 or NN08 or NN09 or NN10 or NN11 or NN12 or NN15 or NN16
+    or NEURAL_OZAKI
 )
 comptime _STREAM_GROUP = get_defined_int["MOJOLEARN_IDN_NEURAL_STREAM_GROUP",8]()
 comptime _DEPTH = get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]()
@@ -75,6 +79,10 @@ def identical_gemm_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
         return max(1,m*n*leaves)
     comptime if NEURAL_PROFILE_CHANGED or _STAGING or NN08 or NN11:
         return 1
+    comptime if NEURAL_OZAKI:
+        # The planes, row scales and Int32 diagonals; the incumbent's own
+        # workspace for the shapes outside the exactness bound.
+        return max(_incumbent_workspace(m,n,k),ozaki_workspace_floats[OZAKI_SLICES](m,n,k))
     return _incumbent_workspace(m,n,k)
 
 
@@ -131,6 +139,18 @@ def identical_gemm_into[allow_vendor: Bool = True](
         return
     _admit_product(c,a,b,ws,m,n,k,op)
     if m==0 or n==0:
+        return
+    comptime if NEURAL_OZAKI:
+        # NN-OZ replaces the whole product; it does not cross the other
+        # schedule routes (they would never be reached).
+        comptime assert _ROUTES == 0 and not NEURAL_PROFILE_CHANGED, (
+            "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES excludes the other neural GEMM routes"
+        )
+        comptime assert OZAKI_SLICES >= 4 and OZAKI_SLICES <= 6, (
+            "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES legal set is 4, 5, 6 (fp32-equivalent error)"
+        )
+        if not neural_ozaki_into[OZAKI_SLICES](ctx,c,a,b,ws,m,n,k,op):
+            _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
         return
     comptime if NN01:
         _ = neural_schedule_ab[not _CONTROL](ctx,c,a,b,ws,m,n,k,op,_ARM)
