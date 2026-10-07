@@ -607,32 +607,6 @@
    "status": "kept",
    "note": "In scope, not in this lane's merge list; unchanged."
   },
-  "gemm_compact_live_tile": {
-   "define": "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gemm/checks/gemm_identical.mojo:7375"
-   ],
-   "binding": [
-    "_mojolearn_byte_lm",
-    "_mojolearn_transformer",
-    "_mojolearn_training",
-    "_mojolearn_mamba",
-    "_mojolearn_linalg"
-   ],
-   "bits_change": false,
-   "status": "kept",
-   "note": "In scope, not in this lane's merge list; unchanged.",
-   "grid": "exclude",
-   "prune_note": "ALWAYS_OFF_DELETE (A05 loser)"
-  },
   "grouped_projections_v2": {
    "define": "MOJOLEARN_NI07_GROUPED_PROJECTIONS",
    "kind": "switch",
@@ -658,7 +632,7 @@
    "note": "Read in llama_attention_forward (modeling_llama.mojo:4836), the route of lm-forward, lm-train-step, transformer-forward and samba-*: replaces the q/k/v llama_proj calls (they skip gemm/neural_dispatch). Declared for those lanes in neural-small.json, crossed with neural_gemm_pair/neural_gemm_schedule."
   },
   "gemm_group_slack": {
-   "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8 / MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY",
+   "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8",
    "kind": "switch",
    "arms": {
     "off": [],
@@ -682,7 +656,7 @@
    ],
    "bits_change": false,
    "status": "kept",
-   "note": "NI03; still separate defines (owed: one int sweep). Not in this lane's merge list."
+   "note": "NI03; still separate defines (owed: one int sweep). The tiles_body arm (MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY) was deleted by lane/grid-prune 2026-10-07 (OVN N01 noise)."
   },
   "legacy_apple_plan64": {
    "define": "MOJOLEARN_LEGACY_SHAPE_APPLE_PLAN64",
@@ -964,7 +938,6 @@
     "gemm_contract_leaf",
     "neural_gemm_schedule",
     "gemm_one_page",
-    "gemm_compact_live_tile",
     "gemm_group_slack",
     "gemm_global_workspace",
     "legacy_apple_plan64",
@@ -976,7 +949,6 @@
      "gemm_contract_leaf",
      "neural_gemm_schedule",
      "gemm_one_page",
-     "gemm_compact_live_tile",
      "gemm_group_slack",
      "gemm_global_workspace"
     ]
@@ -1112,6 +1084,11 @@
   {
    "define": "MOJOLEARN_NN28_DEAD_TRAINING_CACHE",
    "reason": "merged into train_no_decode_cache; the old define is refused by core/six_lane_experiment_guards.mojo"
+  },
+  {
+   "define": "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE",
+   "control": "gemm_compact_live_tile",
+   "reason": "DELETED by lane/grid-prune 2026-10-07: OVN A05 slower on NVIDIA and AMD. Recoverable at main ab554bb4a."
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."

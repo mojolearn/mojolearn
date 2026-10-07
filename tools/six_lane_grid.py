@@ -82,10 +82,8 @@ ARM_EXCLUSIONS = [
 GLOBAL_REACH = {
     ('gemm_contract_leaf', 'all256'): 'note: "NI08 contract leaf 256 for every GEMM caller in the build (gemm lane and classical too)"',
     ('gemm_tile_min_blocks', '*'): 'note: "Reaches every gemm_identical tuned-tile caller in the build (classical included)"',
-    ('gemm_tile_short_k', '*'): 'note: "Reaches every gemm_identical tuned-tile caller in the build (classical included)"',
     ('gemm_split_min_leaves', '*'): 'note: "the split-plan floor of every gemm_identical caller (classical included)"',
     ('gemm_kpack_rpt4', '*'): 'note: "Reaches classical callers"',
-    ('gemm_fs2', '*'): 'note: "Reaches classical callers"',
     ('neural_gemm_schedule', 'stream_all'): 'note: "stream_all (NI02) moves every GEMM caller (gemm lane, classical, neural)"',
     ('neural_gemm_ozaki_slices', '*'): 'other_reach: "non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch"',
 }

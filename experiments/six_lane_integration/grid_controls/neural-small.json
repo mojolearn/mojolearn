@@ -101,45 +101,6 @@
    "status": "new",
    "note": "Define-ized MOJOLEARN_GEMM_TILE_MIN_BLOCKS (env knob); the define wins over the env var when defined. off = column default (AMD 1024, NVIDIA 192). Arms equal to a column default are expected neutral on that column. Execution plan only. Reaches every gemm_identical tuned-tile caller in the build (classical included): never pack with classical."
   },
-  "gemm_tile_short_k": {
-   "define": "MOJOLEARN_IDN_GEMM_TILE_SHORT_K",
-   "kind": "int_sweep",
-   "arms": {
-    "off": [],
-    "0": [
-     "MOJOLEARN_IDN_GEMM_TILE_SHORT_K=0"
-    ],
-    "512": [
-     "MOJOLEARN_IDN_GEMM_TILE_SHORT_K=512"
-    ],
-    "1024": [
-     "MOJOLEARN_IDN_GEMM_TILE_SHORT_K=1024"
-    ]
-   },
-   "default": "off",
-   "legal_set": [
-    0,
-    512,
-    1024
-   ],
-   "source": [
-    "gemm/checks/gemm_identical.mojo:4082",
-    "gemm/checks/gemm_identical.mojo:4141"
-   ],
-   "binding": [
-    "_mojolearn_byte_lm",
-    "_mojolearn_transformer",
-    "_mojolearn_training",
-    "_mojolearn_mamba",
-    "_mojolearn_x_cnn",
-    "_mojolearn_linalg"
-   ],
-   "bits_change": false,
-   "status": "new",
-   "note": "Define-ized MOJOLEARN_GEMM_TILE_SHORT_K; define wins over the env var. off = column default (NVIDIA 512, else 0). Inert on AMD (min_k default 0 already steps down at every k) and wherever the block floor is 0. Execution plan only.",
-   "grid": "exclude",
-   "prune_note": "ALWAYS_OFF_DELETE"
-  },
   "gemm_split_min_leaves": {
    "define": "MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES",
    "kind": "int_sweep",
@@ -311,38 +272,6 @@
    "bits_change": false,
    "status": "kept",
    "note": "NVIDIA kpack TUNED_128 body at 4 rows per thread (64-row tile). AMD takes the MFMA body for TUNED_128 calls: inert there. MOJOLEARN_GEMM_KPACK_CPT4 is not gridded: lib_gemm_kpack_narrow_for already selects the narrow column count on NVIDIA, so it is a no-op. EXPERIMENTS.md lists RPT4 as OPEN/unmeasured. Schedule only, same bits. Reaches classical callers."
-  },
-  "gemm_fs2": {
-   "define": "MOJOLEARN_IDN_GEMM_FS2",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GEMM_FS2=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gemm/checks/gemm_identical.mojo:7326",
-    "gemm/checks/gemm_identical.mojo:8196",
-    "gemm/checks/gemm_identical.mojo:8444"
-   ],
-   "binding": [
-    "_mojolearn_byte_lm",
-    "_mojolearn_transformer",
-    "_mojolearn_training",
-    "_mojolearn_mamba",
-    "_mojolearn_x_cnn",
-    "_mojolearn_linalg"
-   ],
-   "bits_change": false,
-   "status": "kept",
-   "note": "NVIDIA only: fold-split 2 for TUNED_128 calls whose fold bound is <= 2 leaves; does nothing under LEGACY_SHAPE_NV_FS4 or GEMM_NV_FS4_OFF. Never run before (EXPERIMENTS.md). Schedule only, same bits. Reaches classical callers.",
-   "exclusive_with": [
-    "MOJOLEARN_LEGACY_SHAPE_NV_FS4"
-   ],
-   "grid": "exclude",
-   "prune_note": "ALWAYS_OFF_DELETE (N02 noise)"
   }
  },
  "algorithms": {
@@ -356,10 +285,8 @@
     "grouped_projections_v2",
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
@@ -377,10 +304,8 @@
     ],
     [
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
-     "gemm_fs2",
      "gemm_leaf",
      "neural_gemm_schedule"
     ]
@@ -395,10 +320,8 @@
     "grouped_projections_v2",
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
@@ -414,10 +337,8 @@
     ],
     [
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
-     "gemm_fs2",
      "gemm_leaf",
      "neural_gemm_schedule"
     ]
@@ -432,10 +353,8 @@
     "grouped_projections_v2",
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
@@ -452,10 +371,8 @@
     ],
     [
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
-     "gemm_fs2",
      "gemm_leaf",
      "neural_gemm_schedule"
     ]
@@ -473,10 +390,8 @@
     "m3_angle_block",
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
@@ -491,10 +406,8 @@
     ],
     [
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
-     "gemm_kpack_rpt4",
-     "gemm_fs2"
+     "gemm_kpack_rpt4"
     ]
    ],
    "notes": "Only attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
@@ -512,10 +425,8 @@
     "m3_s17_tail",
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
@@ -536,10 +447,8 @@
     ],
     [
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
-     "gemm_fs2",
      "gemm_leaf",
      "neural_gemm_schedule"
     ]
@@ -551,18 +460,14 @@
    "controls": [
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
-     "gemm_fs2",
      "gemm_leaf",
      "neural_gemm_schedule",
      "neural_gemm_epilogue"
@@ -583,10 +488,8 @@
     "neural_gemm_chains",
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
@@ -594,10 +497,8 @@
      "gemm_leaf",
      "neural_gemm_chains",
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
-     "gemm_kpack_rpt4",
-     "gemm_fs2"
+     "gemm_kpack_rpt4"
     ]
    ],
    "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist).",
@@ -615,10 +516,8 @@
     "neural_gemm_chains",
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
@@ -626,10 +525,8 @@
      "gemm_leaf",
      "neural_gemm_chains",
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
-     "gemm_kpack_rpt4",
-     "gemm_fs2"
+     "gemm_kpack_rpt4"
     ]
    ],
    "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist).",
@@ -647,10 +544,8 @@
     "neural_gemm_chains",
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4",
-    "gemm_fs2",
     "m3_angle_parallel",
     "m3_angle_block"
    ],
@@ -660,10 +555,8 @@
      "gemm_leaf",
      "neural_gemm_chains",
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
-     "gemm_kpack_rpt4",
-     "gemm_fs2"
+     "gemm_kpack_rpt4"
     ],
     [
      "m3_angle_parallel",
@@ -690,10 +583,8 @@
     "nn46_gather_bounds",
     "cnn_conv_relu",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
@@ -711,10 +602,8 @@
     ],
     [
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
-     "gemm_fs2",
      "neural_gemm_ozaki_slices"
     ]
    ],
@@ -733,22 +622,17 @@
     "gemm_ozaki_linalg",
     "gemm_contract_leaf",
     "gemm_tile_min_blocks",
-    "gemm_tile_short_k",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4",
-    "gemm_fs2"
+    "gemm_kpack_rpt4"
    ],
    "interaction_groups": [
     [
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
-     "gemm_fs2",
      "gemm_contract_leaf",
      "gemm_group_slack",
      "gemm_one_page",
-     "gemm_compact_live_tile",
      "gemm_global_workspace"
     ]
    ],
@@ -774,6 +658,16 @@
   {
    "define": "MOJOLEARN_IDN_ATTN_TILE_ORDER=desc|paired",
    "reason": "desc is main (DEVIATION 2900 _bswz); paired not built (EXPERIMENTS.md)."
+  },
+  {
+   "define": "MOJOLEARN_IDN_GEMM_TILE_SHORT_K",
+   "control": "gemm_tile_short_k",
+   "reason": "DELETED by lane/grid-prune 2026-10-07 (code + define; refused in core/six_lane_experiment_guards.mojo): arms equal measured pass62 losers or the NVIDIA column default; inert on AMD. Recoverable at main ab554bb4a."
+  },
+  {
+   "define": "MOJOLEARN_IDN_GEMM_FS2",
+   "control": "gemm_fs2",
+   "reason": "DELETED by lane/grid-prune 2026-10-07: OVN N02 FS2 vs FS4 noise (0.996/0.995). Recoverable at main ab554bb4a."
   }
  ],
  "notes": {
