@@ -37,7 +37,7 @@
    },
    "default": "on",
    "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:101",
+    "experiments/classical_identical_ideas/linear_controls.mojo:100",
     "glm/impl/gram_solve.mojo:179",
     "glm/host/gram_solve_host.mojo:23",
     "core/blocked_moments.mojo (bm_centered_cross_panels)",

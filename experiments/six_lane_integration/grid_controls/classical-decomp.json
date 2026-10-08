@@ -143,9 +143,9 @@
    },
    "default": "rows2048",
    "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:158",
+    "experiments/classical_identical_ideas/linear_controls.mojo:157",
+    "experiments/classical_identical_ideas/linear_controls.mojo:174",
     "experiments/classical_identical_ideas/linear_controls.mojo:175",
-    "experiments/classical_identical_ideas/linear_controls.mojo:176",
     "x_decomp/tsqr_core.mojo:55",
     "x_decomp/qr_sliced.mojo:82"
    ],
