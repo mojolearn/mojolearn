@@ -114,6 +114,12 @@ if smoke_sha:
     doc["light_smoke"] = {"source_commit": source, "receipts": {smoke_name: smoke_sha}}
 if tsha:
     doc["linux_qualification"] = {"file": "linux-qualification.tar.gz", "sha256": tsha, "wheel": wheel}
+# tools/release.py (2026-10-08, releases rent nothing): a native set with no installed smoke is named,
+# e.g. {"sm_90a": "not run (no Hopper box held)"}; it publishes on its GitHub build receipt
+import os
+notes = json.loads(os.environ.get("MOJOLEARN_ALPHA_SMOKE_NOTES") or "{}")
+if notes:
+    doc["smoke"] = {str(k): str(v) for k, v in sorted(notes.items())}
 open(out, "w").write(json.dumps(doc, indent=2, sort_keys=True) + "\n")
 EOF
 MSHA=$(shasum -a 256 "$ART/alpha-manifest.json" | cut -d' ' -f1)
@@ -143,6 +149,7 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
   esac
   [ "$LIGHT_PLATFORM" != macos ] || NOTES="macOS arm64 wheel built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -z "$LIGHT_ASSET" ] || NOTES="$NOTES Exact installed wheel passed the expanded smoke; its receipt is attached."
+  [ -z "${MOJOLEARN_ALPHA_SMOKE_NOTES:-}" ] || NOTES="$NOTES Installed smoke per native set: $MOJOLEARN_ALPHA_SMOKE_NOTES (alpha-manifest.json smoke)."
   # shellcheck disable=SC2086
   gh release create "$TAG" --latest --target "$HEAD_SHA" --title "$(basename "$WHL" | cut -d- -f1 | tr _ -) $VERSION $LIGHT_PLATFORM" --notes "$NOTES" \
     "$ART/$(basename "$WHL")" "$ART/alpha-manifest.json" ${TAR:+"$TAR"} ${LIGHT_ASSET:+"$LIGHT_ASSET"}

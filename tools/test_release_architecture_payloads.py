@@ -24,8 +24,13 @@ def test_registry_parity_and_no_experimental_publication():
 
 
 def test_payloads_cannot_publish_before_own_architecture_checks():
+    # 2026-10-08, releases rent nothing: the Hopper column gates publish-nvidia only when a Hopper box is held
+    # (Release.hopper_required adds the need); otherwise publish-nvidia waits for it to settle (AFTER)
     for vendor, columns in release.NATIVE_COLUMNS.items():
         for column in columns:
+            if column == 'nvidia-hopper':
+                assert 'gpu-column-nvidia-hopper' in release.AFTER['publish-nvidia']
+                continue
             assert 'gpu-column-' + column in release.NEEDS['publish-' + vendor]
         assert 'linux-joint-diff' in release.NEEDS['publish-' + vendor]
     assert {'publish-nvidia', 'publish-amd'} <= set(release.NEEDS['publish-core-linux'])

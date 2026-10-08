@@ -27,6 +27,7 @@ WHEEL = "mojolearn-0.8.14-py3-none-manylinux_2_35_x86_64.whl"
 def args(**kw):
     base = dict(version="0.8.14", dry_run=False, publish=None, only="", redo="", build_backend="gpu-legs",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
+                smoke_via="rent", hopper_box="", smoke_branch="main",   # the rented route's mechanics; lq: test_release_lq_smoke.py
                 cpu_column=False)
     base.update(kw)
     return argparse.Namespace(**base)
@@ -106,6 +107,8 @@ class Columns(unittest.TestCase):
             # each column's smoke receipt: the core, with both plugins installed beside it
             (out / "results.json").write_text(json.dumps(dict(
                 status="PASSED", scope="expanded", source_commit=COMMIT,
+                # the loader's selection on the box (Release.column_arch_ok)
+                installed=dict(vendor=vendor, gpu_arch="sm_89" if vendor == "cuda" else "gfx942"),
                 wheel_sha256=hashlib.sha256(self.final.read_bytes()).hexdigest(),
                 plugins=[dict(wheel=str(p), wheel_sha256=hashlib.sha256(p.read_bytes()).hexdigest())
                          for p in self.plugins.values()])))
@@ -130,7 +133,7 @@ class Columns(unittest.TestCase):
         self.assertEqual(len(self.spawned), 2)
         nv, amd = (c[2] for c in self.spawned)
         self.assertIn("release_wheel_smoke.sh", nv)
-        self.assertIn("--gpu 'NVIDIA GeForce RTX 4090'", nv)
+        self.assertIn(f"--gpu '{release.NVIDIA_WALK['sm_89'][0]}'", nv)   # the sm_89 walk's head
         self.assertIn("--vendor hip", amd)
         self.assertIn("--provider auto", amd)
         # both diffed against the Apple column, not the CPU column
@@ -139,9 +142,9 @@ class Columns(unittest.TestCase):
             self.assertNotIn("cpu/column.json", c)
             self.assertNotIn("--cpu-column", c)
         msg = str(cm.exception)
-        self.assertIn("AMD column", msg)
-        self.assertNotIn("NVIDIA column", msg)
-        self.assertIn("NVIDIA column: PASSED", "\n".join(r.lines))
+        self.assertIn("amd column", msg)
+        self.assertNotIn("nvidia column", msg)
+        self.assertIn("nvidia column: PASSED", "\n".join(r.lines))
 
     def test_both_failing_are_both_reported(self):
         self.reference("metal")
@@ -149,8 +152,8 @@ class Columns(unittest.TestCase):
         self.hooks = [lambda r: (self.finish(r, "amd", rc=1), self.finish(r, "nvidia", rc=3))]
         with self.assertRaises(release.StepFailed) as cm:
             self.columns(r)
-        self.assertIn("NVIDIA column", str(cm.exception))
-        self.assertIn("AMD column", str(cm.exception))
+        self.assertIn("nvidia column", str(cm.exception))
+        self.assertIn("amd column", str(cm.exception))
         self.assertIn("exit 3", str(cm.exception))
 
     def test_all_identical_passes_and_a_divergent_amd_cell_fails(self):
@@ -182,7 +185,7 @@ class Columns(unittest.TestCase):
                                  self.finish(r, "nvidia"))]
         with self.assertRaises(release.StepFailed) as cm:
             self.columns(r)
-        self.assertIn("AMD column", str(cm.exception))
+        self.assertIn("amd column", str(cm.exception))
 
     def test_a_passed_column_is_not_rerun(self):
         self.reference("metal")
@@ -203,7 +206,7 @@ class Columns(unittest.TestCase):
                       lambda r: self.finish(r, "nvidia")]
         self.columns(r)
         self.assertEqual(len(self.spawned), 3)
-        self.assertIn("--gpu 'NVIDIA L40S'", self.spawned[2][2])
+        self.assertIn(f"--gpu '{release.NVIDIA_WALK['sm_89'][1]}'", self.spawned[2][2])
         self.assertEqual((r.rel / "columns" / "nvidia.gpu").read_text(), "1")
         self.assertEqual(len(list((r.rel / "columns").glob("nvidia.log.failed-*"))), 1)
 

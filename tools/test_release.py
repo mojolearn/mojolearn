@@ -22,6 +22,7 @@ COMMIT = "a" * 40
 def args(**kw):
     base = dict(version="0.8.14", dry_run=False, publish=None, only="", redo="", build_backend="gpu-legs",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
+                smoke_via="rent", hopper_box="", smoke_branch="main",   # the rented route's mechanics; lq: test_release_lq_smoke.py
                 cpu_column=False)
     base.update(kw)
     return argparse.Namespace(**base)
@@ -337,7 +338,14 @@ class RunTests(unittest.TestCase):
         self.assertIn("amd: ", gpu)
         self.assertIn("would launch nvidia", gpu)
         self.assertIn("would launch amd", gpu)
-        self.assertEqual(gpu.count("--plugin"), 3 * (len(release.SPLIT_PACKAGES) - 1))
+        # releases rent nothing (2026-10-08): the Ada and AMD columns go through
+        # lq to the boxes we hold; the Hopper column is skipped with no Hopper box
+        self.assertEqual(gpu.count("--plugin"), 2 * (len(release.SPLIT_PACKAGES) - 1))
+        self.assertEqual(gpu.count("tools/release_lq_smoke.py"), 2)
+        self.assertNotIn("--rent", gpu)
+        self.assertIn("--box nv", gpu)
+        self.assertIn("--box amd", gpu)
+        self.assertIn("no Hopper box held", gpu)
         self.assertIn("metal/column.json", gpu)
         self.assertNotIn("cpu/column.json", gpu)
         self.assertIn("identity_break.py --diff", gpu.split("-- linux-joint-diff", 1)[1])
@@ -350,7 +358,7 @@ class RunTests(unittest.TestCase):
         if not any(n in legs for n in ("cuda-", "hip-")):
             self.assertIn("no build leg", out.stdout)
         self.assertIn("pack-linux-wheel", out.stdout)
-        self.assertIn("release_wheel_smoke.sh", out.stdout)
+        self.assertIn("release_lq_smoke.py", out.stdout)   # runs release_wheel_smoke.sh --local on the held box
         self.assertIn("--publish", out.stdout)
         self.assertFalse(self.state.exists())
 
