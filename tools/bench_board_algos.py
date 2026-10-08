@@ -3782,11 +3782,21 @@ def _build_layer(lane, arm, D):
             info["config"] = "mojolearn.layer_norm_forward / layer_norm_backward, eps %g" % kw["eps"]
             info["weights_loaded"] = info["output_comparable"] = True
             dyh = {}
+            # lane gap-neural-io: x (and dy, on the first fit) on the device before the clock,
+            # y and dx left there, as the torch arm's tensors (MOJOLEARN_SEQ_DEVICE_IO_OFF=1 keeps
+            # host arrays: the before arm). y is read back in outputs(), outside the clock.
+            from mojolearn._x_sequence_device import to_device as seq_to_dev
+            x = seq_to_dev(x)
+            on_dev = getattr(x, "_device_tensor", False)
+            if on_dev:
+                info["input_home"] = "device"
 
             def fit():
                 y = cls(x, None, w_, b_, kw["eps"])
                 if "dy" not in dyh:
-                    dyh["dy"] = torch.randn(tuple(np.shape(y)), generator=g).numpy()
+                    dyh["dy"] = torch.randn(tuple(y.shape), generator=g).numpy()
+                    if on_dev:
+                        dyh["dy"] = seq_to_dev(dyh["dy"])
                 if bwd is None:
                     raise RuntimeError("CONTRACT: mojolearn has no layer_norm_backward")
                 bwd(dyh["dy"], x, None, w_, b_, kw["eps"])
@@ -3977,10 +3987,25 @@ def _build_optim(lane, arm, D):
         info = _ours_info(lane)
         info["config"] = "mojolearn.%s([p], %s).step(g) x %d" % (name, hyper, STEPS)
 
+        # lane gap-neural-io: the gradients on the device before the clock and the parameter
+        # uploaded inside it and left there, as the torch arm (`p0.to(dev)` in fit, `g_dev`
+        # outside it); read back in the outputs, outside the clock. The optimizers without the
+        # device step, or MOJOLEARN_SEQ_DEVICE_IO_OFF=1 (the before arm), keep host arrays.
+        to_dev = None
+        grads_run = grads
+        if getattr(cls, "__module__", "").endswith("_x_sequence_optim"):
+            from mojolearn._x_sequence_device import to_device as to_dev
+            g0 = to_dev(grads[0])
+            if getattr(g0, "_device_tensor", False):
+                grads_run = [g0] + [to_dev(gr) for gr in grads[1:]]
+                info["input_home"] = "device"
+            else:
+                to_dev = None
+
         def fit():
-            p = p0.copy()
+            p = to_dev(p0) if to_dev else p0.copy()
             opt = cls([p], **hyper)
-            for gr in grads:
+            for gr in grads_run:
                 opt.step([gr])
             S["p"] = p
         rec = dict(hyper, __library__="mojolearn")

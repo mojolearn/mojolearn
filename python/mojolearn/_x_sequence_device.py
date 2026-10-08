@@ -21,6 +21,11 @@ np = require_numpy('_x_sequence_device')
 from . import _backend
 
 _BINDING = "_mojolearn_x_sequence"
+#: the before arm of the A/B (as x_cnn's MOJOLEARN_XCNN_DEVICE_IO_OFF):
+#: `to_device` returns the host array, so every call takes the host-array
+#: entries again; the wave's MOJOLEARN_IDN_ALL_OFF arm turns it off too
+_DEVICE_IO_OFF = (__import__("os").environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") == "1"
+                  or __import__("os").environ.get("MOJOLEARN_IDN_ALL_OFF", "") == "1")
 _ENTRIES = ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download")
 
 
@@ -127,6 +132,8 @@ def to_device(x, numeric_mode=None):
     if a.dtype != np.float32:
         raise TypeError(f"mojolearn: to_device takes float32 (got {a.dtype}); convert it yourself")
     a = np.ascontiguousarray(a)
+    if _DEVICE_IO_OFF:
+        return a
     b = _backend.binding(_BINDING, numeric_mode)
     if not resident_binding(b):
         return a
