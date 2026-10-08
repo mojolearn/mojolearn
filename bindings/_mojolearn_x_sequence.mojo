@@ -17,6 +17,11 @@ from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
+from sequence.opt_resident import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
+from sequence.seq_tensor import (
+    seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
+)
+from sequence.layernorm_dev import layer_norm_dev_py
 from sequence.sched_table import sched_exp_block_py
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
@@ -96,6 +101,30 @@ def adafactor_resident_step_binding(handle: PythonObject, addrs: PythonObject, i
     return adafactor_resident_step_py(handle, addrs, ip, fp)
 
 
+# lane gap-neural-io (2026-10-08): resident sequence tensors and the device
+# forms of the optimizer steps and LayerNorm (sequence/seq_tensor.mojo)
+def seq_tensor_alloc_binding(n: PythonObject, zero: PythonObject) raises -> PythonObject:
+    return seq_tensor_alloc_py(n, zero)
+def seq_tensor_free_binding(h: PythonObject) raises -> PythonObject:
+    return seq_tensor_free_py(h)
+def seq_tensor_upload_binding(h: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    return seq_tensor_upload_py(h, addr, n)
+def seq_tensor_download_binding(h: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    return seq_tensor_download_py(h, addr, n)
+def seq_tensor_copy_binding(dst: PythonObject, src: PythonObject, n: PythonObject) raises -> PythonObject:
+    return seq_tensor_copy_py(dst, src, n)
+def optimizer_resident_step_dev_binding(handle: PythonObject, handles: PythonObject, ip: PythonObject,
+                                        fp: PythonObject) raises -> PythonObject:
+    return opt_resident_step_dev_py(handle, handles, ip, fp)
+def lamb_resident_step_dev_binding(handle: PythonObject, handles: PythonObject, ip: PythonObject,
+                                   fp: PythonObject) raises -> PythonObject:
+    return lamb_resident_step_dev_py(handle, handles, ip, fp)
+def adafactor_resident_step_dev_binding(handle: PythonObject, handles: PythonObject, ip: PythonObject,
+                                        fp: PythonObject) raises -> PythonObject:
+    return adafactor_resident_step_dev_py(handle, handles, ip, fp)
+def layer_norm_dev_binding(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
+                           fp: PythonObject) raises -> PythonObject:
+    return layer_norm_dev_py(handles, addrs, ip, fp)
 def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return stl_py(ex, addrs, ip)
@@ -269,6 +298,19 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
             m.def_function[adafactor_resident_open_binding]("adafactor_resident_open")
             m.def_function[adafactor_resident_step_binding]("adafactor_resident_step")
         m.def_function[layer_norm_binding]("layer_norm")
+        # lane gap-neural-io: resident tensors and the device-I/O entries
+        # (the Python side uses them only when they exist; the host binding
+        # has none)
+        m.def_function[seq_tensor_alloc_binding]("seq_tensor_alloc")
+        m.def_function[seq_tensor_free_binding]("seq_tensor_free")
+        m.def_function[seq_tensor_upload_binding]("seq_tensor_upload")
+        m.def_function[seq_tensor_download_binding]("seq_tensor_download")
+        m.def_function[seq_tensor_copy_binding]("seq_tensor_copy")
+        m.def_function[optimizer_resident_step_dev_binding]("optimizer_resident_step_dev")
+        m.def_function[lamb_resident_step_dev_binding]("lamb_resident_step_dev")
+        comptime if AF_RESIDENT:
+            m.def_function[adafactor_resident_step_dev_binding]("adafactor_resident_step_dev")
+        m.def_function[layer_norm_dev_binding]("layer_norm_dev")
         m.def_function[theta_binding]("theta")
         m.def_function[croston_binding]("croston")
         m.def_function[croston_forecast_binding]("croston_forecast")

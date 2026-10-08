@@ -32,6 +32,7 @@ from sequence.exec_device import DeviceExec, X_SEQUENCE_POOL, _pool_host, _pool_
 from sequence.ops import FP, OP_OPT, Args
 from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
 from sequence.pyapi import adafactor_core, fptr, fval, ival, lamb_bias, lamb_core, lamb_offsets, lamb_table, opt_of, opt_slots
+from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
 
 #: Apple FAST transport switches of the resident step (lane
 #: apple-fast-optspeed, 2026-10-03). At the board's one tensor of 16,777,216
@@ -746,4 +747,209 @@ def adafactor_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: Py
     _upload_all(ex, P, G, pg[0], pg[1], sizes)
     adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp)
     _download_all(ex, P, pg[0], sizes)
+    return PythonObject(n)
+
+
+# ---- device-parameter steps (lane gap-neural-io, 2026-10-08) -----------------------
+# Plan docs/plans/gaps-2026-10-08.md Section 4: the board's torch columns time
+# ten `opt.step()` calls on a parameter and gradients already on the device;
+# every resident step above still moved P and G up and P down (3 x 67 MB at
+# 16,777,216 floats, ~15-25 ms) around ~1 ms of launches. The `_dev` forms
+# take the parameters and gradients as resident sequence tensors
+# (`sequence/seq_tensor.mojo` handles, `python/mojolearn/_x_sequence_device.py`)
+# and update the parameters where they live: no transfer at all, one wait
+# (the executor's drain when the call returns). The launches are the host
+# forms' (`opt_step`'s Args through `_opt_args`, `lamb_core`,
+# `adafactor_core`) on the same values: no bit moves. Several element-wise
+# tensors are one `op_opt` launch each over their own range of the flat
+# state slots (`op_opt` is per element, the scalars computed once, as
+# OPT_STREAM's chunks); LAMB's per-tensor norms read one flat buffer, so its
+# tensors are copied device to device into it and the parameters back.
+
+
+def _dev_ptrs(handles: PythonObject, J: Int, sizes: List[Int], n: Int) raises -> Tuple[List[Int], List[Int]]:
+    """The J parameter and J gradient device addresses (handles[0:J],
+    handles[J:2J]), each tensor's size checked, the sizes adding up to n."""
+    var tot = 0
+    for j in range(J):
+        if sizes[j] < 1:
+            raise Error("optimizer_resident_step_dev: every tensor holds at least one value")
+        tot += sizes[j]
+    if tot != n:
+        raise Error("optimizer_resident_step_dev: the tensors hold " + String(tot) + " values, the handle " + String(n))
+    var ps = List[Int]()
+    var gs = List[Int]()
+    for j in range(J):  # small-loop(J: parameter tensors of the model): one handle lookup per tensor, no data
+        ps.append(Int(seq_tensor_ptr(handles[j], sizes[j], "params")))
+        gs.append(Int(seq_tensor_ptr(handles[J + j], sizes[j], "grads")))
+    return (ps^, gs^)
+
+
+def opt_resident_step_dev_py(handle: PythonObject, handles: PythonObject, ip: PythonObject,
+                             fp: PythonObject) raises -> PythonObject:
+    """`opt_resident_step_py` on resident tensors: handles = [param_0 ..
+    param_{J-1}, grad_0 .. grad_{J-1}] (seq_tensor handles), then the host
+    address of the float32[3] scalars; ip and fp as there. Every parameter
+    tensor is updated in place on the device. Returns n."""
+    var h = _handle(handle, RES_ELEMENTWISE)
+    if len(ip) < 6 or len(fp) != 6:
+        raise Error("optimizer_resident_step_dev: requires >= 6 integer and 6 float parameters")
+    var J = ival(ip, 0)
+    if J < 1 or len(ip) != 5 + J or len(handles) != 2 * J + 1:
+        raise Error("optimizer_resident_step_dev: J >= 1 tensors, 2 J + 1 handles and J sizes")
+    var t = ival(ip, 3)
+    var t0 = ival(ip, 4)
+    if t < 1 or t0 < 0 or t0 >= t:
+        raise Error("optimizer_resident_step_dev: the one-based step t >= 1 and the scalars' step 0 <= t0 < t")
+    var pool = _RES.get_or_create_ptr()
+    var n = pool[].n[h]
+    var used = pool[].used[h]
+    var sizes = List[Int]()
+    for j in range(J):
+        sizes.append(ival(ip, 5 + j))
+    var pg = _dev_ptrs(handles, J, sizes, n)
+    var cfg = opt_of(ip, 1, fp, 1)
+    var u = opt_slots(cfg)
+    var want = (1 if u[0] else 0) | (2 if u[1] else 0) | (4 if u[2] else 0)
+    if (want & used) != want:
+        raise Error("optimizer_resident_step_dev: the configuration uses a state slot the handle did not open")
+    var sc = fptr(handles[2 * J], "scalars")
+    var st = OptState()
+    var k0 = 1
+    if t0 > 0:
+        st.pw1 = sc.unsafe_load(0)
+        st.pw2 = sc.unsafe_load(1)
+        st.mu_prod = sc.unsafe_load(2)
+        k0 = t0 + 1
+    for k in range(k0, t):
+        _ = opt_scalars(cfg, st, k, fval(fp, 0))
+    var ex = DeviceExec()
+    var P0 = FP(unsafe_from_address=pg[0][0])
+    # an unused slot names the first parameter tensor (never read by op_opt
+    # for that kind); the scalars advance once for the whole step
+    var a0 = _opt_args(cfg, st, t, fval(fp, 0), P0, FP(unsafe_from_address=pg[1][0]),
+                       _slot_ptr(h, 0) if u[0] else P0, _slot_ptr(h, 1) if u[1] else P0,
+                       _slot_ptr(h, 2) if u[2] else P0)
+    var off = 0
+    for j in range(J):  # small-loop(J: parameter tensors of the model): one element-wise launch per tensor
+        var a = a0
+        var pj = FP(unsafe_from_address=pg[0][j])
+        a.p0 = pj
+        a.p1 = FP(unsafe_from_address=pg[1][j])
+        a.p2 = (a0.p2 + off) if u[0] else pj
+        a.p3 = (a0.p3 + off) if u[1] else pj
+        a.p4 = (a0.p4 + off) if u[2] else pj
+        ex.launch[OP_OPT](a, sizes[j])
+        off += sizes[j]
+    ex.sync()
+    sc.unsafe_store(0, st.pw1)
+    sc.unsafe_store(1, st.pw2)
+    sc.unsafe_store(2, st.mu_prod)
+    return PythonObject(n)
+
+
+def lamb_resident_step_dev_py(handle: PythonObject, handles: PythonObject, ip: PythonObject,
+                              fp: PythonObject) raises -> PythonObject:
+    """`lamb_resident_step_py` on resident tensors: handles = [param_0 ..
+    param_{J-1}, grad_0 .. grad_{J-1}] (seq_tensor handles), then the host
+    address of the scalars; ip and fp as there. One tensor is updated where
+    it lives; several are copied device to device into the flat buffers
+    `lamb_core` folds and the parameters copied back. Returns n."""
+    var h = _handle(handle, RES_LAMB)
+    if len(ip) != 3 or len(fp) != 7:
+        raise Error("lamb_resident_step_dev: requires 3 integer and 7 float parameters")
+    var pool = _RES.get_or_create_ptr()
+    var nt = pool[].nt[h]
+    var n = pool[].n[h]
+    var nb = pool[].nb[h]
+    var J = ival(ip, 0)
+    var t = ival(ip, 1)
+    var flags = ival(ip, 2)
+    if J != nt or len(handles) != 2 * J + 1 or t < 1:
+        raise Error("lamb_resident_step_dev: the handle's " + String(nt) + " tensors, 2 J + 1 handles and t >= 1")
+    var sizes = List[Int]()
+    for k in range(nt):  # small-loop(nt: parameter tensors of the handle): per-tensor sizes from the offset table
+        sizes.append(pool[].offs[h][k + 1] - pool[].offs[h][k])
+    var pg = _dev_ptrs(handles, J, sizes, n)
+    var t0 = 0
+    if (flags & 8) != 0:
+        t0 = Int(Float64(py=fp[6]))
+        if t0 < 0 or t0 >= t or Float64(t0) != Float64(py=fp[6]):
+            raise Error("lamb_resident_step_dev: the scalars' step t0 must be an integer with 0 <= t0 < t")
+    var sc = fptr(handles[2 * J], "scalars")
+    var bias = lamb_bias(flags, t, t0, fval(fp, 1), fval(fp, 2), sc, True)
+    var ex = DeviceExec()
+    var P: FP
+    var G: FP
+    if J == 1:
+        P = FP(unsafe_from_address=pg[0][0])
+        G = FP(unsafe_from_address=pg[1][0])
+    else:
+        P = ex._alloc(n, False)
+        G = ex._alloc(n, False)
+        var o = 0
+        for j in range(J):  # small-loop(J: parameter tensors of the model): one device copy per tensor into the flat buffers
+            var fpp = ex._find(P + o, sizes[j])
+            var vp = ex._sub(fpp[0], fpp[1], sizes[j])
+            var sp = seq_tensor_view(handles[j], sizes[j], "params")
+            ex.ctx.enqueue_copy(dst_buf=vp, src_buf=sp)
+            var fgg = ex._find(G + o, sizes[j])
+            var vg = ex._sub(fgg[0], fgg[1], sizes[j])
+            var sg = seq_tensor_view(handles[J + j], sizes[j], "grads")
+            ex.ctx.enqueue_copy(dst_buf=vg, src_buf=sg)
+            _ = vp^
+            _ = sp^
+            _ = vg^
+            _ = sg^
+            o += sizes[j]
+    var U = ex._alloc(n, False)
+    var partsA = ex._alloc(nb, False)
+    var partsB = ex._alloc(nb, False)
+    var nrm = ex._alloc(nt, False)
+    var ratio = ex._alloc(nt, False)
+    var scal = ex._alloc(1, False)
+    var TAB = FP(unsafe_from_address=Int(pool[].tab[h].unsafe_ptr()))
+    lamb_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), U, TAB, partsA, partsB, nrm, ratio, scal,
+              n, nt, nb, flags, fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4),
+              fval(fp, 5), bias[0], bias[1])
+    if J > 1:
+        var o2 = 0
+        for j in range(J):  # small-loop(J: parameter tensors of the model): one device copy back per tensor
+            var fpp2 = ex._find(P + o2, sizes[j])
+            var vp2 = ex._sub(fpp2[0], fpp2[1], sizes[j])
+            var dp = seq_tensor_view(handles[j], sizes[j], "params")
+            ex.ctx.enqueue_copy(dst_buf=dp, src_buf=vp2)
+            _ = vp2^
+            _ = dp^
+            o2 += sizes[j]
+    ex.sync()
+    if (flags & 8) != 0:
+        sc.unsafe_store(0, bias[2])
+        sc.unsafe_store(1, bias[3])
+    return PythonObject(n)
+
+
+def adafactor_resident_step_dev_py(handle: PythonObject, handles: PythonObject, ip: PythonObject,
+                                   fp: PythonObject) raises -> PythonObject:
+    """AF_RESIDENT: `adafactor_resident_step_py` on resident tensors:
+    handles = [param, grad] (seq_tensor handles); ip = [R, C, t]; fp =
+    `adafactor_step`'s six. The parameter is updated where it lives (the
+    same `adafactor_core` launches). Returns n."""
+    comptime if not AF_RESIDENT:
+        raise Error("adafactor_resident_step_dev: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default, off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
+    var h = _handle(handle, RES_ADAFACTOR)
+    if len(handles) != 2 or len(ip) != 3 or len(fp) != 6:
+        raise Error("adafactor_resident_step_dev: requires 2 handles, 3 integer and 6 float parameters")
+    var pool = _RES.get_or_create_ptr()
+    var R = ival(ip, 0)
+    var C = ival(ip, 1)
+    var t = ival(ip, 2)
+    if R != pool[].nt[h] or C != pool[].nb[h] or t < 1:
+        raise Error("adafactor_resident_step_dev: the handle's shape and a one-based step t >= 1")
+    var n = pool[].n[h]
+    var P = seq_tensor_ptr(handles[0], n, "param")
+    var G = seq_tensor_ptr(handles[1], n, "grad")
+    var ex = DeviceExec()
+    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp)
+    ex.sync()
     return PythonObject(n)

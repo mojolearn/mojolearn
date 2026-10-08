@@ -1168,18 +1168,7 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
     var Y = ex.alloc(M * D)
     var mean = ex.alloc(M)
     var rstd = ex.alloc(M)
-    var a = Args()
-    a.p0 = X
-    a.p1 = W
-    a.p2 = Bb
-    a.p3 = Y
-    a.p4 = mean
-    a.p5 = rstd
-    a.i0 = D
-    a.i1 = 1 if hw else 0
-    a.i2 = 1 if hb else 0
-    a.f0 = fval(fp, 0)
-    ex.launch[OP_LN_FWD](a, M)
+    layer_norm_fwd_core(ex, X, W, Bb, Y, mean, rstd, M, D, hw, hb, fval(fp, 0))
     if bwd:
         var DY: FP
         comptime if LN_NOFILL:
@@ -1190,46 +1179,7 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
         var DX = ex.alloc(M * D)
         var DW = ex.alloc(D)
         var DB = ex.alloc(D)
-        var b = Args()
-        b.p0 = DY
-        b.p1 = X
-        b.p2 = W
-        b.p3 = DX
-        b.p4 = mean
-        b.p5 = rstd
-        b.i0 = D
-        b.i1 = 1 if hw else 0
-        ex.launch[OP_LN_BWD_X](b, M)
-        var c = Args()
-        c.p0 = DY
-        c.p1 = X
-        c.p2 = DW
-        c.p3 = DB
-        c.p4 = mean
-        c.p5 = rstd
-        c.i0 = D
-        c.i1 = M
-        # FAST: the column folds split over row blocks (about 8192 threads,
-        # at least 1024 rows each), then one ordered sum of the S partials
-        var S = min(max(8192 // D, 1), M // 1024) if _fast_norms() else 0
-        var RS = (M + S - 1) // S if S > 1 else M
-        # IDENTICAL (lane idn-loss-norm-folds, sequence/layernorm.mojo
-        # LN_FOLD_BLOCK): fixed blocks of ln_fold_rows(M) rows
-        comptime if LN_FOLD_BLOCK:
-            RS = ln_fold_rows(M)
-        S = (M + RS - 1) // RS
-        if S > 1:
-            var PW = ex.alloc(S * D)
-            var PB = ex.alloc(S * D)
-            c.p6 = PW
-            c.p7 = PB
-            c.i2 = S
-            c.i3 = RS
-            ex.launch[OP_LN_BWD_W](c, S * D)
-            c.i4 = 1
-            ex.launch[OP_LN_BWD_W](c, D)
-        else:
-            ex.launch[OP_LN_BWD_W](c, D)
+        layer_norm_bwd_core(ex, X, W, DY, DX, DW, DB, mean, rstd, M, D, hw)
         ex.download_async(fptr(addrs[5], "dx"), DX, M * D)
         if hw:
             ex.download_async(fptr(addrs[6], "dweight"), DW, D)
@@ -1241,6 +1191,72 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
         ex.download_async(fptr(addrs[3], "y"), Y, M * D)
     ex.sync()
     return PythonObject(M * D)
+
+
+def layer_norm_fwd_core[E: Exec](mut ex: E, X: FP, W: FP, Bb: FP, Y: FP, mean: FP, rstd: FP,
+                                 M: Int, D: Int, hw: Bool, hb: Bool, eps: Float32) raises:
+    """The forward launch of `layer_norm_py` on executor-side buffers, queued,
+    no transfer (lane gap-neural-io: shared with the resident-tensor entry
+    `sequence/layernorm_dev.mojo`, the same launch on the same values)."""
+    var a = Args()
+    a.p0 = X
+    a.p1 = W
+    a.p2 = Bb
+    a.p3 = Y
+    a.p4 = mean
+    a.p5 = rstd
+    a.i0 = D
+    a.i1 = 1 if hw else 0
+    a.i2 = 1 if hb else 0
+    a.f0 = eps
+    ex.launch[OP_LN_FWD](a, M)
+
+
+def layer_norm_bwd_core[E: Exec](mut ex: E, X: FP, W: FP, DY: FP, DX: FP, DW: FP, DB: FP, mean: FP,
+                                 rstd: FP, M: Int, D: Int, hw: Bool) raises:
+    """The backward launches of `layer_norm_py` (dx, then the dweight / dbias
+    column folds) after `layer_norm_fwd_core` wrote mean and rstd, queued, no
+    transfer (lane gap-neural-io: shared with `sequence/layernorm_dev.mojo`)."""
+    var b = Args()
+    b.p0 = DY
+    b.p1 = X
+    b.p2 = W
+    b.p3 = DX
+    b.p4 = mean
+    b.p5 = rstd
+    b.i0 = D
+    b.i1 = 1 if hw else 0
+    ex.launch[OP_LN_BWD_X](b, M)
+    var c = Args()
+    c.p0 = DY
+    c.p1 = X
+    c.p2 = DW
+    c.p3 = DB
+    c.p4 = mean
+    c.p5 = rstd
+    c.i0 = D
+    c.i1 = M
+    # FAST: the column folds split over row blocks (about 8192 threads,
+    # at least 1024 rows each), then one ordered sum of the S partials
+    var S = min(max(8192 // D, 1), M // 1024) if _fast_norms() else 0
+    var RS = (M + S - 1) // S if S > 1 else M
+    # IDENTICAL (lane idn-loss-norm-folds, sequence/layernorm.mojo
+    # LN_FOLD_BLOCK): fixed blocks of ln_fold_rows(M) rows
+    comptime if LN_FOLD_BLOCK:
+        RS = ln_fold_rows(M)
+    S = (M + RS - 1) // RS
+    if S > 1:
+        var PW = ex.alloc(S * D)
+        var PB = ex.alloc(S * D)
+        c.p6 = PW
+        c.p7 = PB
+        c.i2 = S
+        c.i3 = RS
+        ex.launch[OP_LN_BWD_W](c, S * D)
+        c.i4 = 1
+        ex.launch[OP_LN_BWD_W](c, D)
+    else:
+        ex.launch[OP_LN_BWD_W](c, D)
 
 
 def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
