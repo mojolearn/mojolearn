@@ -241,8 +241,9 @@ def lq_line(box, branch, pairs, envs, builds, prebuilt=None):
     return line
 
 
-def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=None):
-    """A jobs (one per pack, with the kept member cells, RACE and CMD), refused cells, per-workload B info."""
+def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=None, only_cells=None):
+    """A jobs (one per pack, with the kept member cells, RACE and CMD), refused cells, per-workload B info.
+    only_cells: a set of (configuration, workload_id) to keep (render --rerun-undecided); None keeps every cell."""
     packs = {p['id']: p for p in plan['builds']['packs']}
     algos = plan.get('algorithms', {})
     configs = {c['id']: c for c in matrix['configurations']}
@@ -259,6 +260,8 @@ def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=No
         if phase and regime != phase:
             continue
         for wid in wids:
+            if only_cells is not None and (cid, wid) not in only_cells:
+                continue
             try:
                 r = route(wid, lanes, board)
             except ValueError as exc:
@@ -305,14 +308,14 @@ def b_groups(workloads, info, group_size):
 
 
 def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=None, budget_hours=None,
-           lanes=None, b_group_size=8, run_id=None, board=None, prebuilt=None):
+           lanes=None, b_group_size=8, run_id=None, board=None, prebuilt=None, only_cells=None, race_seconds=None):
     plan, matrix = load_plan(plan_dir)
     lanes = lanes if lanes is not None else load_lanes()
     board = board if board is not None else load_board(vendor)
     run_id = run_id or run_id_of(plan_dir)
     box = BOX[vendor]
     per_race = PAIR_SECONDS[vendor] / 2.0
-    jobs, refused, info = plan_jobs(plan, matrix, vendor, lanes, only_lanes, phase, board)
+    jobs, refused, info = plan_jobs(plan, matrix, vendor, lanes, only_lanes, phase, board, only_cells)
     # budget: keep A jobs in order while A races + b_repeats x (new workloads) fit
     kept, covered, races = [], set(), 0
     cut = 0
@@ -394,9 +397,119 @@ def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=
                   projected_note='races x pair_seconds/2 (%g s, the plan median pair); binding build time per line '
                                  'is not included, and tree and neural races run longer than the median' % per_race,
                   input_variant_workloads=noted)
+    if race_seconds is not None:
+        # First-pass measured medians (render --rerun-undecided --first-pass DIR): each A cell at its own first-pass
+        # candidate median, each B race at the workload's first-pass incumbent median, the plan default where the first
+        # pass has no number. These are the timed medians the racer reports (one run per arm), not the job wall time
+        # (data load, warm-up and the prebuilt install are not in them), so the figure is a lower bound.
+        sec, hit = 0.0, 0
+        for m in manifest:
+            for c in m['cells']:
+                key = (m['arm'], c.get('configuration'), c['workload_id'])
+                v = race_seconds.get(key) if m['arm'] == 'A' else race_seconds.get(('B', None, c['workload_id']))
+                hit += v is not None
+                sec += v if v is not None else per_race
+        totals.update(measured_race_hours=round(sec / 3600.0, 3), measured_races=hit,
+                      measured_note='first-pass timed medians where measured (%d of %d races), plan default %g s '
+                                    'elsewhere; timed medians only, so a lower bound on the box time' % (hit, a_races + b_races, per_race))
     return lines, dict(schema='mojolearn.six-lane-grid-lq-render/2', plan_dir=str(plan_dir), totals=totals,
                        lines=manifest, refused=refused,
                        refused_by_reason=_by_reason(refused))
+
+
+# ------------------------------------------------------------------ render --rerun-undecided (second pass)
+
+# A control whose roll-up is final has been acted on (flipped on, deleted or held): its configurations are not re-run.
+FINAL_CONTROL = ('PROMOTE', 'SPLIT', 'DELETE', 'HOLD_IDENTITY', 'HOLD_QUALITY', 'HOLD_BROKEN')
+DECIDED_TIMING = ('FASTER', 'SLOWER')  # a cell beyond the floor on both voting vendors (timeouts count as SLOWER)
+UNDECIDED_TIMING = ('NO_VERDICT', 'INCOMPLETE')
+RERUN_SUFFIX = 'r2'
+
+
+def undecided_cells(decisions, skip_controls=()):
+    """grid-decisions.json -> (set of (configuration, workload_id) to re-run, report).
+
+    A decision row's `timing` is the case verdict over both voting vendors: FASTER/SLOWER only when the cell is
+    beyond its floor on both and they agree, so NO_VERDICT/INCOMPLETE means the cell is undecided on at least one
+    vendor. A configuration is re-run when every measured cell is undecided; it is skipped when any cell is decided
+    (FASTER/SLOWER, BROKEN = the candidate race failed, quality WORSE, identity MISMATCH) or when its assignment
+    touches a control that is already final (flipped, deleted or held) or named in skip_controls. Only the
+    configuration's NO_VERDICT/INCOMPLETE cells are re-run: an UNMEASURED cell is first-pass work still owed (or a
+    refused route), not a second data point."""
+    flipped = {k for k, c in (decisions.get('controls') or {}).items() if c.get('recommendation') in FINAL_CONTROL}
+    flipped |= set(skip_controls or ())
+    keep, skipped, unmeasured_cells = set(), {}, 0
+    selected = []
+    for cid, ev in sorted((decisions.get('configurations') or {}).items()):
+        rows = ev.get('rows') or []
+        assign = ev.get('assignment') or {}
+        if any(k in flipped for k in assign):
+            why = 'flipped_switch'
+        elif any(r.get('timing') in DECIDED_TIMING for r in rows):
+            why = 'decided_cell'
+        elif any(r.get('quality') == 'FAIL' for r in rows):
+            why = 'broken_cell'
+        elif any(str(r.get('quality')).upper() in ('WORSE', 'REGRESSED') for r in rows):
+            why = 'quality_worse'
+        elif any(r.get('identity') == 'MISMATCH' for r in rows):
+            why = 'identity_mismatch'
+        elif not any(r.get('timing') in UNDECIDED_TIMING for r in rows):
+            why = 'unmeasured'
+        else:
+            why = None
+        if why:
+            skipped[why] = skipped.get(why, 0) + 1
+            continue
+        cells = [r['workload_id'] for r in rows if r.get('timing') in UNDECIDED_TIMING]
+        unmeasured_cells += len(rows) - len(cells)
+        keep.update((cid, w) for w in cells)
+        selected.append(cid)
+    report = dict(configurations=len(selected), cells=len(keep), skipped_configurations=dict(sorted(skipped.items())),
+                  unmeasured_cells_not_rerun=unmeasured_cells, final_controls=sorted(flipped),
+                  rule='re-run the NO_VERDICT/INCOMPLETE cells of configurations with no decided cell (FASTER/SLOWER, '
+                       'BROKEN, WORSE, MISMATCH) and no final control (%s) in their assignment' % '/'.join(FINAL_CONTROL))
+    return keep, sorted(selected), report
+
+
+def first_pass_seconds(collect_dir, vendor):
+    """First-pass collect output -> {('A', cid, wid): s, ('B', None, wid): s} timed medians on this vendor (or None)."""
+    path = Path(collect_dir) / 'grid-verdicts.json'
+    if not path.exists():
+        return None
+    out, b = {}, {}
+    for case in json.loads(path.read_text()).get('cases', []):
+        row = (case.get('vendors') or {}).get(vendor) or {}
+        if row.get('a_ms'):
+            out[('A', case['configuration'], case['workload_id'])] = row['a_ms'] / 1000.0
+        if row.get('b_ms'):
+            b.setdefault(case['workload_id'], []).append(row['b_ms'] / 1000.0)
+    for wid, xs in b.items():
+        out[('B', None, wid)] = statistics.median(xs)
+    return out
+
+
+def render_rerun(plan_dir, vendor, decide_dir, branch='main', b_repeats=1, rerun_id=None, first_pass=None,
+                 skip_controls=(), **kw):
+    """Second pass over the undecided configurations: render() restricted to their undecided cells, under a new run
+    id (same pack ids in the tags), with b_repeats incumbent lines per workload group they touch."""
+    dec_path = Path(decide_dir)
+    dec_path = dec_path / 'grid-decisions.json' if dec_path.is_dir() else dec_path
+    decisions = json.loads(dec_path.read_text())
+    cells, selected, sel = undecided_cells(decisions, skip_controls)
+    rerun_id = rerun_id or (kw.pop('run_id', None) or run_id_of(plan_dir)) + RERUN_SUFFIX
+    kw.pop('run_id', None)
+    if '.' in rerun_id or not re.fullmatch(r'[A-Za-z0-9_-]+', rerun_id):
+        raise ValueError('rerun id %r must be a plain word without a dot (tags are <run>.<pack>)' % rerun_id)
+    secs = first_pass_seconds(first_pass, vendor) if first_pass else None
+    lines, manifest = render(plan_dir, vendor, branch, b_repeats, run_id=rerun_id, only_cells=cells, race_seconds=secs, **kw)
+    t = manifest['totals']
+    t.update(rerun=dict(sel, decisions=str(dec_path), selected=selected, first_pass=str(first_pass) if first_pass else None,
+                        rendered_configurations=t['configurations']))
+    if secs is None:
+        t['measured_note'] = ('no first-pass collect output (--first-pass DIR with grid-verdicts.json): projected_race_hours '
+                              'uses the plan default per race')
+    manifest['schema'] = 'mojolearn.six-lane-grid-lq-render/2'
+    return lines, manifest
 
 
 def _by_reason(refused):
@@ -632,11 +745,35 @@ def _median(xs):
     return statistics.median(xs) if xs else None
 
 
+def run_ids_of(run_id, plan_dir):
+    """--run-id value(s) -> ordered list of passes (a str, a comma list or a list; default the plan hash)."""
+    if not run_id:
+        return [run_id_of(plan_dir)]
+    items = [run_id] if isinstance(run_id, str) else list(run_id)
+    out = []
+    for item in items:
+        for r in str(item).split(','):
+            if r and r not in out:
+                out.append(r)
+    return out
+
+
+def merge_quality(verdicts):
+    """Per-pass quality verdicts of one cell -> one: WORSE in any pass wins, then FAIL, TIMEOUT, SAME, BETTER, PENDING."""
+    for v in ('WORSE', 'FAIL', 'TIMEOUT', 'SAME', 'BETTER'):
+        if v in verdicts:
+            return v
+    return 'PENDING'
+
+
 def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_samples=2, board=None):
+    """run_id: one run or several passes (list or comma list). Each pass' A is judged against the same pass' B
+    median; a cell's log ratio is the mean over its passes; floors pool the incumbent repeats of every pass."""
     plan, matrix = load_plan(plan_dir)
     lanes = lanes if lanes is not None else load_lanes()
     board = board if board is not None else load_board('nvidia')
-    run_id = run_id or run_id_of(plan_dir)
+    run_ids = run_ids_of(run_id, plan_dir)
+    run_id = run_ids[0] if len(run_ids) == 1 else ','.join(run_ids)
     packs = {p['id']: p for p in plan['builds']['packs']}
     configs = {c['id']: c for c in matrix['configurations']}
     jobs, obs, nores = parse_results(results)
@@ -672,9 +809,10 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             ignored['untagged'] += 1
             continue
         rid, _, rest = tag.partition('.')
-        if rid != run_id:
+        if rid not in run_ids:
             ignored['other_campaign'] += 1
             continue
+        o['pass'] = rid
         if re.match(r'^[BC]\d+r\d+$', rest):
             for wid in lane_to_wids.get(o['key'], ()):
                 B.setdefault((wid, o['vendor']), []).append(o)
@@ -709,6 +847,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             f = max(f, FLOOR_MIN)  # two or three repeats that happen to agree are not a 0.1% floor
         floors[wid + '|' + vendor] = dict(workload_id=wid, vendor=vendor, samples=len(ms), builds_seen=len(by_head),
                                           b_head=head, timing_source=TIMING_SOURCE,
+                                          passes=sorted({s['pass'] for s in best}, key=run_ids.index),
                                           evidence=sorted({'%s:%s' % (s['evidence'], s['id']) for s in best}),
                                           floor={p: (f if p == 'scored' else None) for p in T.PHASES} if f is not None else None)
     # Provisional floor for workloads with fewer than min_samples incumbent repeats: the median of the measured floors
@@ -727,62 +866,93 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                      rejected=[dict(key=k, samples=v['samples'], reason='fewer than %d incumbent repeats: provisional floor used' % min_samples)
                                for k, v in floors.items() if v.get('floor_source', '').startswith('provisional')],
                      provisional_floor=provisional,
-                     policy='Floor from the incumbent arm B repeated through the lq grid file (same head): '
-                            'log(p90/p10) of median_ms with 4+ samples, log(max/min) below that (six_lane_timing._spread).')
+                     policy='Floor from the incumbent arm B repeated through the lq grid file (same head, repeats of '
+                            'every pass pooled): log(p90/p10) of median_ms with 4+ samples, log(max/min) below that '
+                            '(six_lane_timing._spread).', runs=run_ids)
 
-    def b_ref(wid, vendor, head):
+    def b_ref(wid, vendor, head, run=None):
+        """Incumbent samples for one A head: the same pass when run is given (else every pass), same head preferred.
+        -> (samples, head_differs, from_other_pass)."""
         samples = [s for s in B.get((wid, vendor), []) if ok(s)]
+        other = False
+        if run is not None:
+            mine = [s for s in samples if s['pass'] == run]
+            other = bool(samples) and not mine  # the pass has no incumbent of its own: fall back to the other passes
+            samples = mine or samples
         same = [s for s in samples if s['head'] == head]
         use = same or samples
-        return use, bool(samples) and not same
+        return use, bool(samples) and not same, other
 
     cases, quality_rows, identity_cases = {}, [], {}
     for (cid, wid, vendor), samples in sorted(A.items()):
         c = configs[cid]
-        good = [s for s in samples if ok(s)]
-        a = good[-1] if good else samples[-1]
-        bs, head_differs = b_ref(wid, vendor, a['head'])
-        timed_out = not good and any('timeout' in str(s.get('status') or '').lower() for s in samples)
         case = cases.setdefault((cid, wid), dict(configuration=cid, workload_id=wid, mode=c.get('mode', 'identical'), vendors={}))
-        if timed_out and bs:
-            # The candidate did not finish inside the racer's cap while the incumbent did: that is a loss, not a hole.
-            # Recorded as TIMEOUT_RATIO x the incumbent (beyond any floor) with timed_out=True, so the verdict is SLOWER
-            # on this vendor; the true ratio is unknown and at least this large.
-            b_ms = _median([s['median_ms'] for s in bs])
-            r = math.log(TIMEOUT_RATIO)
+        per_pass = []
+        for rid in run_ids:
+            mine = [s for s in samples if s['pass'] == rid]
+            if not mine:
+                continue
+            good = [s for s in mine if ok(s)]
+            a = good[-1] if good else mine[-1]
+            bs, head_differs, other = b_ref(wid, vendor, a['head'], rid)
+            timed_out = not good and any('timeout' in str(s.get('status') or '').lower() for s in mine)
+            pp = dict(run=rid, a=a, good=good, bs=bs, head_differs=head_differs, b_other_pass=other, timed_out=False,
+                      r=None, a_ms=None, b_ms=_median([s['median_ms'] for s in bs]) if bs else None)
+            if timed_out and bs:
+                # The candidate did not finish inside the racer's cap while the incumbent did: that is a loss, not a
+                # hole. Recorded as TIMEOUT_RATIO x the incumbent (beyond any floor) with timed_out=True, so the
+                # verdict is SLOWER on this vendor; the true ratio is unknown and at least this large.
+                pp.update(timed_out=True, r=math.log(TIMEOUT_RATIO))
+            elif good and bs:
+                pp['a_ms'] = _median([s['median_ms'] for s in good])
+                pp['r'] = math.log(pp['a_ms'] / pp['b_ms'])
+            # quality: A vs the incumbent sample of the same head (first in queue order) of the same pass
+            if timed_out and bs:
+                pp['quality'] = ('TIMEOUT', {}, [])  # judged by timing (SLOWER), not by quality
+            elif not good:
+                pp['quality'] = ('FAIL', {}, [])
+            elif not bs:
+                pp['quality'] = ('PENDING', {}, [])
+            else:
+                pp['quality'] = quality_verdict(a.get('quality'), bs[0].get('quality'))
+            per_pass.append(pp)
+        last = per_pass[-1]
+        a = last['a']
+        timed = [pp for pp in per_pass if pp['r'] is not None]
+        if timed:
+            # The cell's log ratio is the mean of the per-pass log ratios (each pass' A over the SAME pass' B median).
+            # a_ms / b_ms are the geometric means of the per-pass medians (one pass: exactly the medians).
+            ref = timed[-1]
+            r = sum(pp['r'] for pp in timed) / len(timed)
+            a_ok = [pp['a_ms'] for pp in timed if pp['a_ms']]
+            gm = (lambda xs: math.exp(sum(math.log(x) for x in xs) / len(xs)) if xs else None)
             fl = floors.get(wid + '|' + vendor) or {}
-            case['vendors'][vendor] = dict(
-                evidence='%s:%s' % (a['evidence'], a['id']), a_ms=None, b_ms=b_ms, b_samples=len(bs), timed_out=True,
-                a_status=a['status'], log_ratio={p: (r if p == 'scored' else None) for p in T.PHASES},
-                candidate_over_baseline={p: (TIMEOUT_RATIO if p == 'scored' else None) for p in T.PHASES},
-                timing_source=TIMING_SOURCE + ' (candidate timed out: ratio is a lower bound)', floor=fl.get('floor'),
-                floor_evidence=fl.get('evidence'), floor_source=fl.get('floor_source'), a_head=a['head'], b_head_differs=head_differs)
-        elif good and bs:
-            a_ms = _median([s['median_ms'] for s in good])
-            b_ms = _median([s['median_ms'] for s in bs])
-            r = math.log(a_ms / b_ms)
-            fl = floors.get(wid + '|' + vendor) or {}
-            case['vendors'][vendor] = dict(
-                evidence='%s:%s' % (a['evidence'], a['id']), a_ms=a_ms, b_ms=b_ms, b_samples=len(bs),
+            any_timeout = any(pp['timed_out'] for pp in timed)
+            row = dict(
+                evidence='%s:%s' % (ref['a']['evidence'], ref['a']['id']), a_ms=gm(a_ok), b_ms=gm([pp['b_ms'] for pp in timed]),
+                b_samples=sum(len(pp['bs']) for pp in timed),
                 log_ratio={p: (r if p == 'scored' else None) for p in T.PHASES},
                 candidate_over_baseline={p: (math.exp(r) if p == 'scored' else None) for p in T.PHASES},
-                timing_source=TIMING_SOURCE, floor=fl.get('floor'), floor_evidence=fl.get('evidence'),
-                floor_source=fl.get('floor_source'), a_head=a['head'], b_head_differs=head_differs)
-        # quality: A vs the incumbent sample of the same head (first in queue order)
-        if timed_out and bs:
-            verdict, detail, unjudged = 'TIMEOUT', {}, []  # judged by timing (SLOWER), not by quality
-        elif not good:
-            verdict, detail, unjudged = 'FAIL', {}, []
-        elif not bs:
-            verdict, detail, unjudged = 'PENDING', {}, []
-        else:
-            verdict, detail, unjudged = quality_verdict(a.get('quality'), bs[0].get('quality'))
+                timing_source=TIMING_SOURCE + (' (candidate timed out: ratio is a lower bound)' if any_timeout else ''),
+                floor=fl.get('floor'), floor_evidence=fl.get('evidence'), floor_source=fl.get('floor_source'),
+                a_head=ref['a']['head'], b_head_differs=any(pp['head_differs'] for pp in timed),
+                passes=len(timed), pass_runs=[pp['run'] for pp in timed], pass_log_ratios=[pp['r'] for pp in timed])
+            if any_timeout:
+                row.update(timed_out=True, a_status=ref['a']['status'], timed_out_passes=sum(pp['timed_out'] for pp in timed))
+            if any(pp['b_other_pass'] for pp in timed):
+                row['b_from_other_pass'] = [pp['run'] for pp in timed if pp['b_other_pass']]
+            case['vendors'][vendor] = row
+        verdicts_p = [pp['quality'][0] for pp in per_pass]
+        verdict = merge_quality(verdicts_p)
+        judged = [pp for pp in per_pass if pp['quality'][0] == verdict] or per_pass
+        _, detail, unjudged = judged[-1]['quality']
         quality_rows.append(dict(configuration=cid, workload_id=wid, lane=a['lane'], dataset=a['dataset'], vendor=vendor,
-                                 family=a['key'][0], route=a.get('kind'),
+                                 family=a['key'][0], route=a.get('kind'), passes=len(per_pass),
+                                 pass_verdicts={pp['run']: pp['quality'][0] for pp in per_pass},
                                  candidate_vs_baseline=dict(verdict=verdict, metrics=detail, unjudged=unjudged,
                                                             a_status=a['status'], rel_tolerance=QUALITY_REL),
                                  evidence='%s:%s' % (a['evidence'], a['id'])))
-        identity_cases.setdefault((cid, wid), {})[vendor] = a
+        identity_cases.setdefault((cid, wid), {})[vendor] = dict(a=a, passes=per_pass)
     verdict_cases = []
     for case in cases.values():
         voters = T.VOTERS.get(case['mode'], T.VOTERS['identical'])
@@ -809,22 +979,43 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             return 'INCOMPLETE', 'digests differ but the vendors raced different heads (%s vs %s)' % (hn, ha)
         return 'MISMATCH', None
 
-    out_cases = []
-    for (cid, wid), per in sorted(identity_cases.items()):
+    out_cases, mismatch_run = [], []
+    for (cid, wid), per_v in sorted(identity_cases.items()):
         c = configs[cid]
+        per = {v: x['a'] for v, x in per_v.items()}  # the last pass' candidate sample per vendor
         arms, columns = {}, {}
         a_n, a_a = per.get('nvidia'), per.get('amd')
         dn = a_n['digest'] if a_n and ok(a_n) else None
         da = a_a['digest'] if a_a and ok(a_a) else None
-        st, why = arm_status(dn, da, a_n and a_n['head'], a_a and a_a['head'], [])
+        # MISMATCH-RUN: the candidate digest changed between passes on one vendor at one head (a run-to-run bits bug,
+        # like the RidgeCV warm/cold one). Reported apart from the NVIDIA-vs-AMD MISMATCH; the cell is not MATCH.
+        run_unstable = {}
+        for vendor, x in sorted(per_v.items()):
+            by_head = {}
+            for pp in x['passes']:
+                if ok(pp['a']) and pp['a'].get('digest'):
+                    by_head.setdefault(pp['a']['head'], {})[pp['run']] = pp['a']['digest']
+            for head, digs in by_head.items():
+                if len(set(digs.values())) > 1:
+                    run_unstable[vendor] = dict(head=head, digests=digs)
+        if run_unstable:
+            st, why = 'MISMATCH_RUN', 'candidate digest changed between passes on ' + ','.join(sorted(run_unstable))
+            for vendor, u in sorted(run_unstable.items()):
+                mismatch_run.append(dict(configuration=cid, workload_id=wid, arm='A', vendor=vendor, **u))
+        else:
+            st, why = arm_status(dn, da, a_n and a_n['head'], a_a and a_a['head'], [])
         arms['A'] = dict(status=st, decided_by=list(IDENTITY_COLUMN.values()), nvidia=dn, amd=da, issue=why)
         bd, bh, unstable = {}, {}, []
         for vendor in ('nvidia', 'amd'):
             head = (per.get(vendor) or {}).get('head')
-            samples, _ = b_ref(wid, vendor, head)
+            samples = b_ref(wid, vendor, head)[0]
             ds = {s['digest'] for s in samples if s.get('digest')}
             if len(ds) > 1 and len({s['head'] for s in samples}) == 1:
                 unstable.append(vendor)
+                if len({s['pass'] for s in samples}) > 1:
+                    mismatch_run.append(dict(configuration=cid, workload_id=wid, arm='B', vendor=vendor, head=samples[0]['head'],
+                                             digests={r: sorted({s['digest'] for s in samples if s['pass'] == r and s.get('digest')})
+                                                      for r in sorted({s['pass'] for s in samples}, key=run_ids.index)}))
             bd[vendor] = sorted(ds)[0] if ds else None
             bh[vendor] = samples[0]['head'] if samples else None
         st, why = arm_status(bd['nvidia'], bd['amd'], bh['nvidia'], bh['amd'], unstable)
@@ -836,13 +1027,16 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                 arms=dict(A=dict(output_sha256=a and a.get('digest'), head=a and a['head'], status=a and a['status']),
                           B=dict(output_sha256=bd[vendor], head=bh[vendor])))
         states = {arms['A']['status'], arms['B']['status']}
-        status = 'MISMATCH' if 'MISMATCH' in states else 'MATCH' if states == {'MATCH'} else 'INCOMPLETE'
+        status = 'MISMATCH' if 'MISMATCH' in states else 'MISMATCH_RUN' if 'MISMATCH_RUN' in states else \
+            'MATCH' if states == {'MATCH'} else 'INCOMPLETE'
         out_cases.append(dict(id='%s|%s' % (cid, wid), configuration_id=cid, workload_id=wid,
                               implementation_ids=(c.get('members') or []), mode=c.get('mode', 'identical'),
                               status=status, columns=columns, arms=arms,
                               output_sha256={v: (per.get(v) or {}).get('digest') for v in ('nvidia', 'amd')},
                               accepted=False, promoted=False))
     counts = {s: sum(c['status'] == s for c in out_cases) for s in ('MATCH', 'MISMATCH', 'INCOMPLETE', 'NOT_REQUIRED')}
+    if len(run_ids) > 1:
+        counts['MISMATCH_RUN'] = sum(c['status'] == 'MISMATCH_RUN' for c in out_cases)
     summary = dict(schema='mojolearn.six-lane-comparison/1', cases=out_cases, counts=counts,
                    required_identical_columns=list(IDENTITY_COLUMN.values()), promotion_voters=['nvidia', 'amd'],
                    digest='bench_board_algos race output digest (first %d hex, as box_job.sh records it)' % DIGEST_CHARS,
@@ -864,17 +1058,23 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             state = 'REFUSED'
         coverage.setdefault(v, {}).setdefault(state, 0)
         coverage[v][state] += 1
-    report = dict(schema='mojolearn.six-lane-grid-lq-collect/1', run_id=run_id, plan_dir=str(plan_dir),
+    passes_hist = {}
+    for case in verdict_cases:
+        for vendor, row in case['vendors'].items():
+            k = '%s:%d' % (vendor, row.get('passes', 1))
+            passes_hist[k] = passes_hist.get(k, 0) + 1
+    report = dict(schema='mojolearn.six-lane-grid-lq-collect/1', run_id=run_id, run_ids=run_ids, plan_dir=str(plan_dir),
+                  passes_per_cell=dict(sorted(passes_hist.items())), mismatch_run=mismatch_run,
                   results=[str(p) for p in results], logs=[str(p) for p in (logs or [])],
                   observations=len(obs), a_cells=len(A), b_workload_vendor=len(B), ignored=ignored,
                   no_result=nores, coverage=coverage, verdict_counts=_count(verdict_cases, 'verdict'),
                   identity_counts=counts, quality_counts=_count(quality_rows, None),
                   truncated_without_log=sum(1 for o in obs if o.get('truncated') and not o.get('log_evidence')),
                   cmd_jobs_without_gridbb=sorted('%s:%s' % k for k, j in jobs.items()
-                                                 if (j.get('cmd_tag') or '').startswith(run_id + '.')
+                                                 if (j.get('cmd_tag') or '').partition('.')[0] in run_ids
                                                  and (k[0], k[1]) not in {(o['vendor'], o['id']) for o in bb_obs}),
                   jobs_without_algos=sorted('%s:%s' % k for k, j in jobs.items()
-                                            if (j.get('tag') or '').startswith(run_id + '.') and k not in with_obs
+                                            if (j.get('tag') or '').partition('.')[0] in run_ids and k not in with_obs
                                             and k not in {(n['vendor'], n['id']) for n in nores}))
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -902,7 +1102,7 @@ def main(argv=None):
     r.add_argument('--plan-dir', type=Path, required=True, help='dir with grid-plan.json + grid-matrix.json.gz')
     r.add_argument('--vendor', choices=sorted(BOX), required=True)
     r.add_argument('--branch', default='main', help='pushed branch both arms build (freeze one commit per round)')
-    r.add_argument('--b-repeats', type=int, default=3)
+    r.add_argument('--b-repeats', type=int, help='incumbent repeats per workload group (default 3; 1 with --rerun-undecided)')
     r.add_argument('--b-group-size', type=int, default=8, help='workloads per incumbent line (one build covers them)')
     r.add_argument('--only-lanes', help='comma list of bench_board_algos lanes')
     r.add_argument('--phase', choices=sorted(REGIME_RANK))
@@ -913,11 +1113,18 @@ def main(argv=None):
     r.add_argument('--out', type=Path, required=True, help='lines file; <out>.json gets the manifest')
     r.add_argument('--prebuilt', metavar='STORE', help='add PREBUILT=STORE to every line (e.g. /root/grid-prebuilt): box_job.sh '
                    'installs tools/six_lane_grid_prebuild.py artifacts instead of building, and builds when none fit')
+    r.add_argument('--rerun-undecided', metavar='DECIDE_DIR', type=Path,
+                   help='second pass: only the undecided cells of configurations with no decided cell, from DECIDE_DIR/grid-decisions.json')
+    r.add_argument('--rerun-id', help='run id of the second pass (default: <plan run id>%s); tags keep the pack ids' % RERUN_SUFFIX)
+    r.add_argument('--first-pass', metavar='COLLECT_DIR', type=Path,
+                   help='first-pass collect output (grid-verdicts.json): measured medians for the projected hours')
+    r.add_argument('--skip-controls', help='comma list of controls already flipped by hand (final controls are skipped anyway)')
     c = s.add_parser('collect', help='lq results + race logs -> verdicts, identity summary, quality rows')
     c.add_argument('--results', nargs='+', required=True, help='results.txt copies (one per box)')
     c.add_argument('--logs', nargs='*', default=[], help='lq out dirs (race-*.log under <id>/) or `grep -H` dumps of them')
     c.add_argument('--plan-dir', type=Path, required=True)
-    c.add_argument('--run-id')
+    c.add_argument('--run-id', nargs='+', help='one run id, or several passes (first pass first) merged per cell')
+    c.add_argument('--runs', help='comma list of passes (same as several --run-id values)')
     c.add_argument('--min-samples', type=int, default=2)
     c.add_argument('--lanes-json')
     c.add_argument('--board-json')
@@ -934,8 +1141,17 @@ def main(argv=None):
             unknown = sorted(only - set(lanes) - {r[1] for r in (board or load_board(args.vendor))['races']})
             if unknown:
                 p.error('unknown lane(s): ' + ','.join(unknown))
-        lines, manifest = render(args.plan_dir, args.vendor, args.branch, args.b_repeats, only, args.phase,
-                                 args.budget_hours, lanes, args.b_group_size, args.run_id, board, args.prebuilt)
+        if args.rerun_undecided:
+            lines, manifest = render_rerun(args.plan_dir, args.vendor, args.rerun_undecided, args.branch,
+                                           1 if args.b_repeats is None else args.b_repeats, args.rerun_id, args.first_pass,
+                                           [x for x in (args.skip_controls or '').split(',') if x], only_lanes=only,
+                                           phase=args.phase, budget_hours=args.budget_hours, lanes=lanes,
+                                           b_group_size=args.b_group_size, run_id=args.run_id, board=board, prebuilt=args.prebuilt)
+        else:
+            if args.rerun_id or args.first_pass or args.skip_controls:
+                p.error('--rerun-id, --first-pass and --skip-controls need --rerun-undecided')
+            lines, manifest = render(args.plan_dir, args.vendor, args.branch, 3 if args.b_repeats is None else args.b_repeats,
+                                     only, args.phase, args.budget_hours, lanes, args.b_group_size, args.run_id, board, args.prebuilt)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(''.join(line + '\n' for line in lines))
         Path(str(args.out) + '.json').write_text(json.dumps(manifest, indent=1, sort_keys=True) + '\n')
@@ -943,11 +1159,23 @@ def main(argv=None):
         print(json.dumps({k: t[k] for k in ('vendor', 'run_id', 'lines', 'a_lines', 'b_lines', 'b_repeats', 'a_races', 'b_races',
                                             'by_kind', 'plan_cells', 'configurations', 'workloads', 'refused_cells',
                                             'refused_workloads', 'cut_a_lines_by_budget', 'projected_race_hours')}))
+        if 'rerun' in t:
+            rr = t['rerun']
+            print(json.dumps(dict(rerun_configurations=rr['configurations'], rerun_cells=rr['cells'],
+                                  rendered_configurations=rr['rendered_configurations'], lines=t['lines'],
+                                  races=t['a_races'] + t['b_races'], skipped_configurations=rr['skipped_configurations'],
+                                  unmeasured_cells_not_rerun=rr['unmeasured_cells_not_rerun'],
+                                  projected_race_hours=t['projected_race_hours'],
+                                  measured_race_hours=t.get('measured_race_hours'), measured_note=t.get('measured_note'))))
         return 0
-    report = collect(args.results, args.logs, args.plan_dir, args.out, lanes, args.run_id, args.min_samples, board)
-    print(json.dumps({k: report[k] for k in ('run_id', 'observations', 'a_cells', 'coverage', 'verdict_counts',
+    runs = list(args.run_id or []) + [x for x in (args.runs or '').split(',') if x]
+    report = collect(args.results, args.logs, args.plan_dir, args.out, lanes, runs or None, args.min_samples, board)
+    print(json.dumps({k: report[k] for k in ('run_id', 'passes_per_cell', 'observations', 'a_cells', 'coverage', 'verdict_counts',
                                              'identity_counts', 'quality_counts', 'ignored', 'truncated_without_log',
                                              'jobs_without_algos', 'cmd_jobs_without_gridbb')}))
+    if report['mismatch_run']:
+        print('MISMATCH-RUN %d cell arm(s): digest changed between passes on one vendor (see collect-report.json mismatch_run)'
+              % len(report['mismatch_run']))
     return 0
 
 
