@@ -94,12 +94,23 @@ def test_ova_dimensions_link_weights_and_saved_mode(classes, monkeypatch, tmp_pa
     assert selected_modes and set(selected_modes) == {"identical"}
 
 
+class _LabelGuard:
+    """Admits only the input-free layout probe `fit` reads before staging X
+    (`gbdt_fit_row_major_available`, a82b3f89d); any other entry fails."""
+
+    def gbdt_fit_row_major_available(self):
+        return 0
+
+    def __getattr__(self, name):
+        pytest.fail("unsafe labels reached native binding")
+
+
 @pytest.mark.parametrize("labels", [
     [-1, 0, 1], [0, 0.5, 1], [0, np.nan, 1], [0, np.inf, 1], [0, 0, 0],
 ])
 def test_unsafe_ova_labels_refused_before_binding(labels):
     model = GradientBoosting(loss="MultiClassOneVsAll", class_weights=[1, 2])
-    model._bind = lambda name: pytest.fail("unsafe labels reached native binding")
+    model._bind = lambda name: _LabelGuard()
     with pytest.raises(ValueError, match="class"):
         model.fit(np.zeros((3, 2), np.float32), labels)
 
