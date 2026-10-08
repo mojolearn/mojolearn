@@ -32,9 +32,25 @@ exactly), each to the candidate community of strictly larger gain scanned
 in ascending id (equal gains: the smallest id). Its k_i,in per community
 is the fold of its edges to that community in ascending column order
 (an in-thread heap sort of (community, column) keys). The community
-totals are recomputed after every colour by a segmented fold: the vertices
-sorted by (community, id) (a merge sort by rank, unique keys), each
-community's degrees folded ascending by its first position, no atomics.
+totals are FIXED-POINT INTEGERS updated incrementally (lane gap-graph,
+2026-10-08, docs/plans/gaps-2026-10-08.md 5.1): every degree is quantized
+once to an int64 at a power-of-two scale chosen from 2m (`_lv_shift`), a
+community's total is the int64 sum of its members' quantized degrees held
+as two int32 words, and after a colour's moves each mover adds +dq to its
+new community and -dq to its old one with 32-bit integer atomics
+(`_lv_tadd`: the low word's carry is folded into the high word). Integer
+addition is associative and commutative, so the totals do not depend on
+the order the atomics land in: the same bits on NVIDIA, AMD, Apple and
+the host column, with no sort per colour. The float total a gain or the
+modularity reads is the int64 converted once (`_lv_totf`: exact in
+double below 2^52, rounded once to float32, scaled by the exact power of
+two). NEW BITS versus the float segmented folds (lane hr-graph).
+CSR entries (`pr_drive_csr`, `lv_drive_csr`): the caller's indptr/indices
+(and weights) go to the device as they are; PageRank sorts (column, entry)
+keys once to build its column lists (rows ascending, the dense sweep's
+order), Louvain fills its graph slot directly and checks the rows on the
+device (columns strictly ascending, the mirror entry present with the same
+weight) before the first level.
 A sweep that lowers the modularity is undone and ends the level; one that
 raises it by no more than `threshold` ends it. Aggregation sorts the edge
 records by (community pair, edge index) and folds each pair's weights in
@@ -48,6 +64,8 @@ from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NO
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
+from std.atomic import Atomic
+from std.memory import bitcast
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from x_neighbors.items import FP, IP, _add, _sub
 
@@ -65,8 +83,13 @@ comptime GP_SORT_RUN = 16
 """Keys per item of the merge sort's first (insertion) pass."""
 comptime LV_MAX_SWEEPS = 100
 """Sweeps per Louvain level at most (each must raise the modularity)."""
-comptime LV_COLOR_CHUNK = 8
-"""Colouring rounds launched between two reads of the uncoloured flag."""
+comptime LV_COLOR_CHUNK = 16
+"""Colouring rounds launched between two reads of the uncoloured flag. A
+greedy distance-1 colouring uses at most max-degree + 1 colours, and each
+Jones-Plassmann round settles at least the local priority maxima, so a
+graph whose degrees stay in the tens is done in one or two chunks of 16;
+a spare round costs one O(nnz) launch, a read costs a host wait (a rule
+from the degree bound, not from any dataset)."""
 
 
 @always_inline
@@ -151,7 +174,13 @@ trait GExec:
     def get_is(mut self, slot: Int, count: Int) raises -> List[Int32]:
         ...
 
+    def get_fs(mut self, slot: Int, count: Int) raises -> List[Float32]:
+        ...
+
     def up_f(mut self, slot: Int, addr: Int, count: Int) raises:
+        ...
+
+    def up_i(mut self, slot: Int, addr: Int, count: Int) raises:
         ...
 
     def down_f(mut self, slot: Int, addr: Int, count: Int) raises:
@@ -213,8 +242,8 @@ comptime LV_COFF = 22
 comptime LV_COPYL = 23
 comptime LV_SAVE = 24
 comptime LV_MOVE = 25
-comptime LV_SKEY = 26
-comptime LV_SFOLD = 27
+comptime LV_APPLY = 26
+comptime LV_TZERO = 27
 comptime LV_QV = 28
 comptime LV_RESTORE = 29
 comptime LV_FLAGZ = 30
@@ -226,7 +255,18 @@ comptime LV_HEAD = 35
 comptime LV_AGG = 36
 comptime LV_AIP = 37
 comptime LV_COPYI = 38
-comptime GP_NST = 39
+comptime LV_TADD = 39
+comptime LV_FLAGF = 40
+comptime LV_CSRSRC = 41
+comptime LV_CSRCHK = 42
+comptime GP_FFIN2 = 43
+comptime PR_UFILL = 44
+comptime PR_CSR_ROW = 45
+comptime PR_CSR_OFF = 46
+comptime PR_CSR_FILL = 47
+comptime PR_ADPART = 48
+comptime GP_IZERO = 49
+comptime GP_NST = 50
 
 
 # ------------------------------------------------------------------ generic stages
@@ -346,6 +386,30 @@ def _ffin(t: Int, g: GA):
     _fs(g, g.n6).unsafe_store(g.n7, acc)
 
 
+@always_inline
+def _izero(t: Int, g: GA):
+    """int32 slot n4's entry t = 0 (the arenas are not zeroed on the
+    device: every flag word is cleared by a stage before its writers)."""
+    _is(g, g.n4).unsafe_store(t, Int32(0))
+
+
+@always_inline
+def _ffin2(t: Int, g: GA):
+    """Two blocked folds' stage 2 in ONE item (lane gap-graph): n1 parts of
+    slot n5 into slot n6 at index n7, and n1 parts of slot n4 into slot n6
+    at index n2; each folded ascending from zero exactly as `_ffin` does,
+    so the two sums are `_ffin`'s bits with one launch fewer."""
+    var pa = _fs(g, g.n5)
+    var pb = _fs(g, g.n4)
+    var acc_a = Float32(0)
+    var acc_b = Float32(0)
+    for b in range(g.n1):
+        acc_a = _add(acc_a, pa.unsafe_load(b))
+        acc_b = _add(acc_b, pb.unsafe_load(b))
+    _fs(g, g.n6).unsafe_store(g.n7, acc_a)
+    _fs(g, g.n6).unsafe_store(g.n2, acc_b)
+
+
 # ------------------------------------------------------------------ PageRank
 comptime P_CNT = 0
 comptime P_PART = 1
@@ -359,7 +423,99 @@ comptime P_P = 8
 comptime P_DW = 9
 comptime P_FP = 10
 comptime P_SUM = 11
-comptime P_NSLOT = 12
+# the CSR entry's slots (lane gap-graph): the caller's lists, the row of
+# every entry, the sort keys, the dangling partials, the check flags
+comptime P_IP = 12
+comptime P_IDX = 13
+comptime P_W = 14
+comptime P_SRC = 15
+comptime P_KA = 16
+comptime P_KB = 17
+comptime P_DP = 18
+comptime P_IC = 19
+comptime P_NSLOT = 20
+
+
+@always_inline
+def _pr_ufill(t: Int, g: GA):
+    """Slot n4's entry t = x0 (the uniform 1/n the caller used to fill on
+    the host; lane gap-graph: one stage inside the op)."""
+    _fs(g, g.n4).unsafe_store(t, g.x0)
+
+
+@always_inline
+def _pr_csr_row(t: Int, g: GA):
+    """Row t of the caller's CSR (P_IP, P_IDX, P_W): the row of every entry
+    into P_SRC, the (column, entry) sort key into P_KA (an explicit zero
+    weight is not an edge: its key lies past every column), the row sum
+    over its edges in entry order (1.0 each when n1, the unweighted graph;
+    the dense sweep's ascending-column order when the row's columns are
+    ascending, which the flag checks) and the dangling flag. n0 = n, n2 =
+    nnz, n3 = 1 when the caller gave weights. IC[0] = 1 when a row's
+    columns are not strictly ascending, IC[1] = 1 when a column is out of
+    range (every writer stores 1)."""
+    var n = g.n0
+    var nnz = Int64(g.n2)
+    var ip = _is(g, P_IP)
+    var idx = _is(g, P_IDX)
+    var w = _fs(g, P_W)
+    var src = _is(g, P_SRC)
+    var ka = _ls(g, P_KA)
+    var ic = _is(g, P_IC)
+    var s = Float32(0)
+    var c = 0
+    var prev = -1
+    for e in range(Int(ip.unsafe_load(t)), Int(ip.unsafe_load(t + 1))):
+        var j = Int(idx.unsafe_load(e))
+        if j < 0 or j >= n:
+            ic.unsafe_store(1, Int32(1))
+            j = 0
+        if j <= prev:
+            ic.unsafe_store(0, Int32(1))
+        prev = j
+        var v = w.unsafe_load(e) if g.n3 != 0 else Float32(1)
+        src.unsafe_store(e, Int32(t))
+        if v != Float32(0):
+            c += 1
+            s = _add(s, Float32(1) if g.n1 != 0 else v)
+            ka.unsafe_store(e, Int64(j) * nnz + Int64(e))
+        else:
+            ka.unsafe_store(e, Int64(n) * nnz + Int64(e))
+    _fs(g, P_RS).unsafe_store(t, s)
+    _is(g, P_DG).unsafe_store(t, Int32(1 if c == 0 else 0))
+
+
+@always_inline
+def _pr_csr_off(t: Int, g: GA):
+    """Column t's first position among the sorted keys (slot n4, n2 keys):
+    P_CNT as the column offsets; t = n gives the number of edges (the
+    zero-weight entries sort past it). n0 = n."""
+    _is(g, P_CNT).unsafe_store(t, Int32(_lower_bound(_ls(g, g.n4), 0, g.n2, Int64(t) * Int64(g.n2))))
+
+
+@always_inline
+def _pr_csr_fill(t: Int, g: GA):
+    """Sorted position t (slot n4, n2 keys): its entry's row into P_ROWS and
+    its row-normalized value into P_VALS (`_pr_colfill`'s quotient: the
+    flushed value over the row sum, 1 for an all-zero sum). Within a column
+    the keys ascend by entry index, and a CSR's entries ascend by row, so
+    the rows ascend: the dense sweep's order. n1 the unweighted flag, n3
+    the weights flag."""
+    var nnz = Int64(g.n2)
+    var key = _ls(g, g.n4).unsafe_load(t)
+    if key // nnz >= Int64(g.n0):
+        return
+    var e = Int(key % nnz)
+    var i = Int(_is(g, P_SRC).unsafe_load(e))
+    var v = _fs(g, P_W).unsafe_load(e) if g.n3 != 0 else Float32(1)
+    var s = _fs(g, P_RS).unsafe_load(i)
+    if s == Float32(0):
+        s = Float32(1)
+    _is(g, P_ROWS).unsafe_store(t, Int32(i))
+    comptime if C43_RESIDENT_NORMALIZATION:
+        _fs(g, P_VALS).unsafe_store(t, ftz(Float32(1) if g.n1 != 0 else v))
+    else:
+        _fs(g, P_VALS).unsafe_store(t, ftz(identical_div(ftz(Float32(1) if g.n1 != 0 else v), s)))
 
 
 @always_inline
@@ -488,6 +644,29 @@ def _pr_apart(t: Int, g: GA):
     _fs(g, P_FP).unsafe_store(t, acc)
 
 
+@always_inline
+def _pr_adpart(t: Int, g: GA):
+    """`_pr_apart` and the NEXT step's `_pr_dpart` in one item (lane
+    gap-graph): block t of sum |x' - x| into P_FP and block t of the
+    dangling nodes' x' into P_DP, each ascending from zero over the same
+    GP_FOLD_BLOCK partition, so both partials are the separate stages'
+    bits with one launch fewer per iteration."""
+    var a = _fs(g, g.n5)
+    var b = _fs(g, g.n4)
+    var dg = _is(g, P_DG)
+    var lo = t * GP_FOLD_BLOCK
+    var hi = min(lo + GP_FOLD_BLOCK, g.n0)
+    var acc = Float32(0)
+    var dacc = Float32(0)
+    for i in range(lo, hi):
+        var xn = a.unsafe_load(i)
+        acc = _add(acc, abs(_sub(xn, b.unsafe_load(i))))
+        if Int(dg.unsafe_load(i)) != 0:
+            dacc = _add(dacc, xn)
+    _fs(g, P_FP).unsafe_store(t, acc)
+    _fs(g, P_DP).unsafe_store(t, dacc)
+
+
 # ------------------------------------------------------------------ Louvain
 # A graph is four consecutive slots: indptr (int32, nodes + 1), the source
 # row of every entry, the column, the weight (rows ascending, each row's
@@ -505,8 +684,8 @@ comptime L_SEGH = 18
 comptime L_COFF = 19
 comptime L_IC = 20
 comptime L_DEG = 21
-comptime L_STOT = 22
-comptime L_SSAVE = 23
+comptime L_TLO = 22
+comptime L_THI = 23
 comptime L_VQ = 24
 comptime L_FP = 25
 comptime L_FV = 26
@@ -514,7 +693,18 @@ comptime L_KA = 27
 comptime L_KB = 28
 comptime L_EK = 29
 comptime L_ORD = 30
-comptime L_NSLOT = 31
+comptime L_SLO = 31
+comptime L_SHI = 32
+comptime L_PREV = 33
+comptime L_NSLOT = 34
+"""L_TLO/L_THI: a community's fixed-point total as the low and high int32
+words of an int64 (module note); L_SLO/L_SHI their copy at a sweep's
+start; L_PREV a node's community before the colour's move."""
+# The int64 total's quantization: the shift s rides in GA.n6 of every
+# Louvain stage. Degrees are scaled by 2^s and truncated to int64; the
+# bound 2m * 2^s < 2^52 (`_lv_shift`) keeps every total exact in double.
+comptime LV_SHIFT_BITS = 51
+comptime LV_SHIFT_MAX = 60
 
 
 @always_inline
@@ -535,6 +725,83 @@ def _gcol(g: GA, b: Int) -> IP:
 @always_inline
 def _gval(g: GA, b: Int) -> FP:
     return _fs(g, b + 3)
+
+
+# ---- the fixed-point community totals (module note; every helper is pure
+# integer and power-of-two float work, the same on every column)
+@always_inline
+def _pow2(e: Int) -> Float32:
+    """2^e as a float32 built from its bits (e in [-126, 127]): exact."""
+    return bitcast[DType.float32](UInt32(127 + e) << UInt32(23))
+
+
+def _lv_shift(m: Float32) -> Int:
+    """The quantization shift from m (each undirected edge's weight once;
+    the degree sum over any level is 2m): the largest s with
+    2m * 2^s < 2^(LV_SHIFT_BITS + 1), so every community total, a sum of
+    truncated non-negative terms bounded by 2m * 2^s, is below 2^52 and
+    exact in double; clamped to [0, LV_SHIFT_MAX]. A driver control value
+    read from the same fold on both columns."""
+    if not (m > Float32(0)):
+        return 0
+    var e = Int((bitcast[DType.uint32](m) >> UInt32(23)) & UInt32(0xFF)) - 127
+    # 2m has exponent e + 1; 2m * 2^s < 2^(e + 2 + s) <= 2^(LV_SHIFT_BITS + 1)
+    var s = LV_SHIFT_BITS - 1 - e
+    if s < 0:
+        s = 0
+    if s > LV_SHIFT_MAX:
+        s = LV_SHIFT_MAX
+    return s
+
+
+@always_inline
+def _lv_dq(deg: Float32, g: GA) -> Int64:
+    """Node degree -> fixed-point int64: deg * 2^s (exact: a power of two)
+    truncated toward zero (fptosi, the same on every target)."""
+    return identical_mul(ftz(deg), _pow2(g.n6)).cast[DType.int64]()
+
+
+@always_inline
+def _lv_tot(g: GA, c: Int) -> Int64:
+    """Community c's total: the two int32 words as one int64."""
+    var lo = _is(g, L_TLO).unsafe_load(c).cast[DType.uint32]().cast[DType.uint64]()
+    var hi = _is(g, L_THI).unsafe_load(c).cast[DType.int64]()
+    return (hi << Int64(32)) | lo.cast[DType.int64]()
+
+
+@always_inline
+def _lv_tset(g: GA, c: Int, v: Int64):
+    """Community c's total = v (a plain store: one writer per c)."""
+    _is(g, L_TLO).unsafe_store(c, v.cast[DType.int32]())
+    _is(g, L_THI).unsafe_store(c, (v >> Int64(32)).cast[DType.int32]())
+
+
+@always_inline
+def _lv_tadd(g: GA, c: Int, d: Int64):
+    """Community c's total += d with 32-bit integer atomics (Metal has no
+    64-bit atomic add; NVIDIA and AMD run the same two-word form): the low
+    word takes d's low word, its unsigned carry (the new low word wrapped
+    below the old one) and d's high word go to the high word. Every step
+    is modular addition, so the int64 after the launch is the exact sum
+    whatever order the atomics land in: bit-identical across vendors and
+    equal to the host column's sequential adds."""
+    var dlo = d.cast[DType.int32]()
+    var dhi = (d >> Int64(32)).cast[DType.int32]()
+    var old = Atomic[DType.int32].fetch_add(_is(g, L_TLO) + c, dlo)
+    var new_lo = (old + dlo).cast[DType.uint32]()
+    var carry = Int32(1) if new_lo < old.cast[DType.uint32]() else Int32(0)
+    _ = Atomic[DType.int32].fetch_add(_is(g, L_THI) + c, dhi + carry)
+
+
+@always_inline
+def _lv_totf(g: GA, c: Int) -> Float32:
+    """Community c's total as the float32 the gain and the modularity read:
+    the int64 (below 2^52, exact in double) rounded once to float32, times
+    the exact 2^-s. Both conversions are IEEE round-to-nearest on every
+    target (cvt.rn / v_cvt), so the float is a pure function of the
+    integer."""
+    var v = _lv_tot(g, c).cast[DType.float64]().cast[DType.float32]()
+    return ftz(identical_mul(v, _pow2(-g.n6)))
 
 
 @always_inline
@@ -600,7 +867,7 @@ def _lv_deg(t: Int, g: GA):
     _fs(g, L_DEG).unsafe_store(t, dg)
     if g.n1 != 0:
         _is(g, L_COMM).unsafe_store(t, Int32(t))
-        _fs(g, L_STOT).unsafe_store(t, _add(Float32(0), dg))
+        _lv_tset(g, t, _lv_dq(dg, g))
 
 
 @always_inline
@@ -694,13 +961,15 @@ def _lv_copyl(t: Int, g: GA):
 @always_inline
 def _lv_save(t: Int, g: GA):
     _is(g, L_SAVE).unsafe_store(t, _is(g, L_COMM).unsafe_load(t))
-    _fs(g, L_SSAVE).unsafe_store(t, _fs(g, L_STOT).unsafe_load(t))
+    _is(g, L_SLO).unsafe_store(t, _is(g, L_TLO).unsafe_load(t))
+    _is(g, L_SHI).unsafe_store(t, _is(g, L_THI).unsafe_load(t))
 
 
 @always_inline
 def _lv_restore(t: Int, g: GA):
     _is(g, L_COMM).unsafe_store(t, _is(g, L_SAVE).unsafe_load(t))
-    _fs(g, L_STOT).unsafe_store(t, _fs(g, L_SSAVE).unsafe_load(t))
+    _is(g, L_TLO).unsafe_store(t, _is(g, L_SLO).unsafe_load(t))
+    _is(g, L_THI).unsafe_store(t, _is(g, L_SHI).unsafe_load(t))
 
 
 @always_inline
@@ -747,16 +1016,18 @@ def lv_move_item(t: Int, g: GA):
     the candidates come in ascending community id; a strictly larger gain
     moves (equal gains: the smallest id; no gain: stay). The community
     totals are the colour's start values (the colour's other movers are
-    not neighbours, so k_i,in is exact). Writes comm[u] only; IC[0] = 1 on
-    a move."""
+    not neighbours, so k_i,in is exact; the totals change only in the
+    apply stage after the colour). Writes comm[u] and prev[u] (the
+    community before the move) only; IC[0] = 1 on a move."""
     var nn = g.n0
     var u = Int(_ls(g, L_ORD).unsafe_load(g.n1 + t) % Int64(nn))
     var ip = _gip(g, g.n3)
     var col = _gcol(g, g.n3)
     var val = _gval(g, g.n3)
     var comm = _is(g, L_COMM)
-    var stot = _fs(g, L_STOT)
     var ek = _ls(g, L_EK)
+    var cu = Int(comm.unsafe_load(u))
+    _is(g, L_PREV).unsafe_store(u, Int32(cu))
     var lo = Int(ip.unsafe_load(u))
     var d = Int(ip.unsafe_load(u + 1)) - lo
     var cnt = 0
@@ -771,9 +1042,8 @@ def lv_move_item(t: Int, g: GA):
     var m = _fs(g, L_FV).unsafe_load(0)
     var res = g.x0
     var two_m2 = ftz(identical_mul(Float32(2), ftz(identical_mul(m, m))))
-    var cu = Int(comm.unsafe_load(u))
     var du = _fs(g, L_DEG).unsafe_load(u)
-    var stot_cu = _sub(stot.unsafe_load(cu), du)
+    var stot_cu = _sub(_lv_totf(g, cu), du)
     # k_i,in of u's own community
     var kcu = Float32(0)
     var d64 = Int64(d)
@@ -796,7 +1066,7 @@ def lv_move_item(t: Int, g: GA):
             r += 1
         if kc == Float32(0):
             continue
-        var sc = stot_cu if c == cu else stot.unsafe_load(c)
+        var sc = stot_cu if c == cu else _lv_totf(g, c)
         var gain = _sub(
             _add(remove_cost, ftz(identical_div(kc, m))),
             ftz(identical_div(ftz(identical_mul(res, ftz(identical_mul(sc, du)))), two_m2)),
@@ -810,30 +1080,99 @@ def lv_move_item(t: Int, g: GA):
 
 
 @always_inline
-def _lv_skey(t: Int, g: GA):
-    """The key (community, node) of node t into KA; stot[t] = 0 (an empty
-    community's total). n0 nodes."""
-    _ls(g, L_KA).unsafe_store(t, Int64(_is(g, L_COMM).unsafe_load(t)) * Int64(g.n0) + Int64(t))
-    _fs(g, L_STOT).unsafe_store(t, Float32(0))
+def _lv_apply(t: Int, g: GA):
+    """The totals after a colour's moves (one item per node of the colour,
+    n1 its first position in ORD, as `lv_move_item`): a mover adds its
+    quantized degree to its new community and takes it from its old one
+    (`_lv_tadd`, order-independent integer atomics: two movers into one
+    community land the same int64 whichever adds first). A node that
+    stayed writes nothing."""
+    var u = Int(_ls(g, L_ORD).unsafe_load(g.n1 + t) % Int64(g.n0))
+    var cu = Int(_is(g, L_COMM).unsafe_load(u))
+    var pu = Int(_is(g, L_PREV).unsafe_load(u))
+    if cu == pu:
+        return
+    var dq = _lv_dq(_fs(g, L_DEG).unsafe_load(u), g)
+    _lv_tadd(g, cu, dq)
+    _lv_tadd(g, pu, -dq)
 
 
 @always_inline
-def _lv_sfold(t: Int, g: GA):
-    """At a community's first position among the sorted keys (slot n4):
-    its members' degrees folded in ascending node id into stot."""
-    var nn = g.n0
-    var k = _ls(g, g.n4)
-    var n64 = Int64(nn)
-    var c = k.unsafe_load(t) // n64
-    if t > 0 and k.unsafe_load(t - 1) // n64 == c:
-        return
-    var deg = _fs(g, L_DEG)
-    var acc = Float32(0)
-    var r = t
-    while r < nn and k.unsafe_load(r) // n64 == c:
-        acc = _add(acc, deg.unsafe_load(Int(k.unsafe_load(r) % n64)))
-        r += 1
-    _fs(g, L_STOT).unsafe_store(Int(c), acc)
+def _lv_tzero(t: Int, g: GA):
+    """Community t's total = 0."""
+    _lv_tset(g, t, Int64(0))
+
+
+@always_inline
+def _lv_tadd_item(t: Int, g: GA):
+    """Node t's quantized degree added to its community's total (every
+    node, integer atomics after `_lv_tzero`): the totals of an arbitrary
+    partition, order-independent."""
+    _lv_tadd(g, Int(_is(g, L_COMM).unsafe_load(t)), _lv_dq(_fs(g, L_DEG).unsafe_load(t), g))
+
+
+@always_inline
+def _lv_flagf(t: Int, g: GA):
+    """FV[2] = IC[0] as a float (ONE item): the sweep's move flag rides
+    with the modularity in one read."""
+    _fs(g, L_FV).unsafe_store(2, Float32(1) if Int(_is(g, L_IC).unsafe_load(0)) != 0 else Float32(0))
+
+
+@always_inline
+def _lv_csrsrc(t: Int, g: GA):
+    """Row t of the caller's CSR, already in G0's indptr and column slots:
+    the row of every entry into the source slot, 1.0 into the weight slot
+    when n1 (no weights given); labels[t] = t. A column out of range sets
+    IC[3] = 1 (every writer stores 1) and is clamped so the check stage
+    can run."""
+    var ip = _gip(g, L_G0)
+    var col = _gcol(g, L_G0)
+    var src = _gsrc(g, L_G0)
+    var val = _gval(g, L_G0)
+    for e in range(Int(ip.unsafe_load(t)), Int(ip.unsafe_load(t + 1))):
+        var j = Int(col.unsafe_load(e))
+        if j < 0 or j >= g.n0:
+            _is(g, L_IC).unsafe_store(3, Int32(1))
+            col.unsafe_store(e, Int32(0))
+        src.unsafe_store(e, Int32(t))
+        if g.n1 != 0:
+            val.unsafe_store(e, Float32(1))
+    _is(g, L_LAB).unsafe_store(t, Int32(t))
+
+
+@always_inline
+def _lv_csrchk(t: Int, g: GA):
+    """Row t of G0 checked on the device (no Python pass): IC[4] = 1 when
+    its columns are not strictly ascending (the dense sweep's order, which
+    the move and the aggregation keys assume), IC[5] = 1 when an entry
+    (t, v, w) has no mirror (v, t, w) in row v (the graph is directed or
+    the weights differ: `graph_symmetry`'s test on the lists), IC[6] = 1
+    when the row has a nonzero weight (the no-edge test). Every writer
+    stores 1; the driver reads the words once."""
+    var ip = _gip(g, L_G0)
+    var col = _gcol(g, L_G0)
+    var val = _gval(g, L_G0)
+    var ic = _is(g, L_IC)
+    var prev = -1
+    for e in range(Int(ip.unsafe_load(t)), Int(ip.unsafe_load(t + 1))):
+        var v = Int(col.unsafe_load(e))
+        var w = val.unsafe_load(e)
+        if v <= prev:
+            ic.unsafe_store(4, Int32(1))
+        prev = v
+        if w != Float32(0):
+            ic.unsafe_store(6, Int32(1))
+        # the mirror: a binary search of row v for column t (rows ascending)
+        var a = Int(ip.unsafe_load(v))
+        var b = Int(ip.unsafe_load(v + 1))
+        while a < b:
+            var mid = (a + b) // 2
+            if Int(col.unsafe_load(mid)) < t:
+                a = mid + 1
+            else:
+                b = mid
+        if a >= Int(ip.unsafe_load(v + 1)) or Int(col.unsafe_load(a)) != t or val.unsafe_load(a) != w:
+            ic.unsafe_store(5, Int32(1))
 
 
 @always_inline
@@ -856,7 +1195,7 @@ def _lv_qv(t: Int, g: GA):
     var m = _fs(g, L_FV).unsafe_load(0)
     var two_m = ftz(identical_mul(Float32(2), m))
     var lc = ftz(identical_div(inner, m))
-    var fr = ftz(identical_div(_fs(g, L_STOT).unsafe_load(t), two_m))
+    var fr = ftz(identical_div(_lv_totf(g, t), two_m))
     _fs(g, L_VQ).unsafe_store(t, _sub(lc, ftz(identical_mul(g.x0, ftz(identical_mul(fr, fr))))))
 
 
@@ -1016,10 +1355,10 @@ def gp_item[S: Int](t: Int, g: GA):
         _lv_save(t, g)
     elif S == LV_MOVE:
         lv_move_item(t, g)
-    elif S == LV_SKEY:
-        _lv_skey(t, g)
-    elif S == LV_SFOLD:
-        _lv_sfold(t, g)
+    elif S == LV_APPLY:
+        _lv_apply(t, g)
+    elif S == LV_TZERO:
+        _lv_tzero(t, g)
     elif S == LV_QV:
         _lv_qv(t, g)
     elif S == LV_RESTORE:
@@ -1042,6 +1381,28 @@ def gp_item[S: Int](t: Int, g: GA):
         _lv_aip(t, g)
     elif S == LV_COPYI:
         _lv_copyi(t, g)
+    elif S == LV_TADD:
+        _lv_tadd_item(t, g)
+    elif S == LV_FLAGF:
+        _lv_flagf(t, g)
+    elif S == LV_CSRSRC:
+        _lv_csrsrc(t, g)
+    elif S == LV_CSRCHK:
+        _lv_csrchk(t, g)
+    elif S == GP_FFIN2:
+        _ffin2(t, g)
+    elif S == PR_UFILL:
+        _pr_ufill(t, g)
+    elif S == PR_CSR_ROW:
+        _pr_csr_row(t, g)
+    elif S == PR_CSR_OFF:
+        _pr_csr_off(t, g)
+    elif S == PR_CSR_FILL:
+        _pr_csr_fill(t, g)
+    elif S == PR_ADPART:
+        _pr_adpart(t, g)
+    elif S == GP_IZERO:
+        _izero(t, g)
 
 
 # ------------------------------------------------------------------ drivers (shared by both columns)
@@ -1095,28 +1456,11 @@ def gp_fold[E: GExec](mut ex: E, g: GA, xs: Int, ps: Int, count: Int, out_slot: 
     ex.run(GP_FFIN, 1, q)
 
 
-def pr_drive[E: GExec](
-    mut ex: E, n: Int, max_iter: Int, thr: Float64, binary: Int, alpha: Float32,
-    x: Int, p: Int, dw: Int, info: Int,
-) raises:
-    """PageRank's power iteration (`op_pr_iterate_sparse`'s contract): the
-    column lists built from the dense adjacency on the executor, then per
-    iteration the dangling fold, the step, the |x' - x| fold; the sum is
-    read back and compared in double against thr (Python's n * tol). `x`
-    in: the start, out: the last iterate. info (int32 x 2): iterations,
-    converged."""
+def _pr_layout(mut lb: Lay, n: Int, nnz: Int):
+    """The iteration's slots (both entries): the column lists, the vectors,
+    the partials."""
     var nbs = gp_scan_blocks(n)
-    var la = Lay(P_NSLOT)
-    la.i(P_CNT, n + 1)
-    la.i(P_PART, nbs + 1)
-    var g = ex.alloc(la)
-    var q = g
-    q.n0 = n
-    ex.run(PR_COLCNT, n, q)
-    gp_scan(ex, g, P_CNT, P_PART, n)
-    var nnz = ex.get_i(P_CNT, n)
     var nbf = gp_fold_blocks(n)
-    var lb = Lay(P_NSLOT)
     lb.i(P_CNT, n + 1)
     lb.i(P_PART, nbs + 1)
     lb.i(P_DG, n)
@@ -1128,39 +1472,79 @@ def pr_drive[E: GExec](
     lb.f(P_P, n)
     lb.f(P_DW, n)
     lb.f(P_FP, nbf)
+    lb.f(P_DP, nbf)
     lb.f(P_SUM, 2)
-    g = ex.alloc(lb)
-    q = g
-    q.n0 = n
-    q.n1 = binary
-    ex.run(PR_COLCNT, n, q)
-    gp_scan(ex, g, P_CNT, P_PART, n)
-    ex.run(PR_ROWSUM, n, q)
-    ex.run(PR_COLFILL, n, q)
-    ex.up_f(P_XA, x, n)
-    ex.up_f(P_P, p, n)
-    ex.up_f(P_DW, dw, n)
+
+
+def _pr_vectors[E: GExec](mut ex: E, g: GA, n: Int, x: Int, p: Int, dw: Int, x_uniform: Int, p_uniform: Int,
+                          dw_uniform: Int) raises:
+    """The start vector, the personalization and the dangling weights: the
+    caller's arrays uploaded, or [1/n] * n filled on the executor (1/n in
+    IEEE double rounded once to float32, the value the caller's
+    `p2m_fill` carried; lane gap-graph: no separate binding calls)."""
+    var u = g
+    u.x0 = Float32(1.0 / Float64(n)) if n > 0 else Float32(0)
+    if x_uniform != 0:
+        u.n4 = P_XA
+        ex.run(PR_UFILL, n, u)
+    else:
+        ex.up_f(P_XA, x, n)
+    if p_uniform != 0:
+        u.n4 = P_P
+        ex.run(PR_UFILL, n, u)
+    else:
+        ex.up_f(P_P, p, n)
+    if dw_uniform != 0:
+        u.n4 = P_DW
+        ex.run(PR_UFILL, n, u)
+    else:
+        ex.up_f(P_DW, dw, n)
+
+
+def _pr_iterate[E: GExec](mut ex: E, g: GA, n: Int, max_iter: Int, thr: Float64, alpha: Float32, x: Int,
+                          info: Int) raises:
+    """The power iteration over the column lists in the slots: the dangling
+    fold of the start once, then per iteration the step, the fused
+    |x' - x| and next-dangling partials and their one fold (`_pr_adpart`,
+    `_ffin2`: the separate stages' bits, three launches instead of five);
+    the sum is read back and compared in double against thr (Python's
+    n * tol). `x` out: the last iterate. info (int32 x 2): iterations,
+    converged."""
+    var nbf = gp_fold_blocks(n)
     var cur = P_XA
     var nxt = P_XB
+    var s = g
+    s.n0 = n
+    s.n4 = cur
+    s.n5 = nxt
+    s.x0 = alpha
+    var f = g
+    f.n1 = nbf
+    f.n5 = P_FP
+    f.n6 = P_SUM
+    f.n7 = 1
+    f.n4 = P_DP
+    f.n2 = 0
+    # the dangling mass of the start: P_DP partials, folded into P_SUM[0]
+    var d0 = g
+    d0.n0 = n
+    d0.n4 = cur
+    ex.run(PR_DPART, nbf, d0)
+    var f0 = g
+    f0.n1 = nbf
+    f0.n5 = P_FP
+    f0.n6 = P_SUM
+    f0.n7 = 0
+    ex.run(GP_FFIN, 1, f0)
     var n_iter = 0
     var converged = False
     for it in range(max_iter):
-        var s = g
-        s.n0 = n
         s.n4 = cur
         s.n5 = nxt
-        s.x0 = alpha
-        var f = g
-        f.n1 = nbf
-        f.n5 = P_FP
-        f.n6 = P_SUM
-        f.n7 = 0
-        ex.run(PR_DPART, nbf, s)
-        ex.run(GP_FFIN, 1, f)
         ex.run(PR_STEP, n, s)
-        ex.run(PR_APART, nbf, s)
-        f.n7 = 1
-        ex.run(GP_FFIN, 1, f)
+        # |x' - x| -> P_FP -> P_SUM[1]; the dangling mass of x' -> P_DP -> P_SUM[0]
+        ex.run(PR_ADPART, nbf, s)
+        ex.run(GP_FFIN2, 1, f)
         var sm = ex.get_f(P_SUM, 1)
         var tmp = cur
         cur = nxt
@@ -1175,6 +1559,91 @@ def pr_drive[E: GExec](
     inf.unsafe_store(1, Int32(1 if converged else 0))
 
 
+def pr_drive[E: GExec](
+    mut ex: E, n: Int, max_iter: Int, thr: Float64, binary: Int, alpha: Float32,
+    x: Int, p: Int, dw: Int, info: Int,
+) raises:
+    """PageRank's power iteration (`op_pr_iterate_sparse`'s contract): the
+    column lists built from the dense adjacency on the executor, then the
+    iteration (`_pr_iterate`). `x` in: the start, out: the last iterate.
+    info (int32 x 2): iterations, converged."""
+    var nbs = gp_scan_blocks(n)
+    var la = Lay(P_NSLOT)
+    la.i(P_CNT, n + 1)
+    la.i(P_PART, nbs + 1)
+    var g = ex.alloc(la)
+    var q = g
+    q.n0 = n
+    ex.run(PR_COLCNT, n, q)
+    gp_scan(ex, g, P_CNT, P_PART, n)
+    var nnz = ex.get_i(P_CNT, n)
+    var lb = Lay(P_NSLOT)
+    _pr_layout(lb, n, nnz)
+    g = ex.alloc(lb)
+    q = g
+    q.n0 = n
+    q.n1 = binary
+    ex.run(PR_COLCNT, n, q)
+    gp_scan(ex, g, P_CNT, P_PART, n)
+    ex.run(PR_ROWSUM, n, q)
+    ex.run(PR_COLFILL, n, q)
+    _pr_vectors(ex, g, n, x, p, dw, 0, 0, 0)
+    _pr_iterate(ex, g, n, max_iter, thr, alpha, x, info)
+
+
+def pr_drive_csr[E: GExec](
+    mut ex: E, n: Int, nnz: Int, indptr: Int, indices: Int, vals: Int, has_vals: Int,
+    max_iter: Int, thr: Float64, binary: Int, alpha: Float32,
+    x: Int, p: Int, dw: Int, x_uniform: Int, p_uniform: Int, dw_uniform: Int, info: Int,
+) raises:
+    """PageRank from the caller's CSR (lane gap-graph, plan 5.2): indptr
+    (n + 1), indices (nnz) and, when has_vals, the weights (nnz) go up as
+    they are; the column lists are built by ONE sort of the (column, entry)
+    keys (`_pr_csr_row`, `gp_sort`, `_pr_csr_off`, `_pr_csr_fill`: rows
+    ascending within a column, the dense sweep's order), the row sums in
+    entry order (the dense sweep's ascending-column order: the rows are
+    checked ascending on the executor, IC[0]), then `_pr_iterate`. One
+    arena allocation (nnz is known). Raises on an unsorted row or a column
+    out of range; never sorts on the host."""
+    var lb = Lay(P_NSLOT)
+    _pr_layout(lb, n, nnz)
+    lb.i(P_IP, n + 1)
+    lb.i(P_IDX, nnz)
+    lb.f(P_W, nnz if has_vals != 0 else 1)
+    lb.i(P_SRC, nnz)
+    lb.l(P_KA, nnz)
+    lb.l(P_KB, nnz)
+    lb.i(P_IC, 4)
+    var g = ex.alloc(lb)
+    ex.up_i(P_IP, indptr, n + 1)
+    ex.up_i(P_IDX, indices, nnz)
+    if has_vals != 0:
+        ex.up_f(P_W, vals, nnz)
+    var q = g
+    q.n0 = n
+    q.n1 = binary
+    q.n2 = nnz
+    q.n3 = has_vals
+    var z = g
+    z.n4 = P_IC
+    ex.run(GP_IZERO, 4, z)
+    ex.run(PR_CSR_ROW, n, q)
+    var ic = ex.get_is(P_IC, 2)
+    if Int(ic[1]) != 0:
+        raise Error("PageRank: a column index of the CSR adjacency is outside [0, n)")
+    if Int(ic[0]) != 0:
+        raise Error("PageRank: the CSR adjacency's columns must be strictly ascending within every row "
+                    "(scipy: A.sort_indices(), and no duplicate entries)")
+    if nnz > 0:
+        q.n4 = gp_sort(ex, g, P_KA, P_KB, nnz)
+    else:
+        q.n4 = P_KA
+    ex.run(PR_CSR_OFF, n + 1, q)
+    ex.run(PR_CSR_FILL, nnz, q)
+    _pr_vectors(ex, g, n, x, p, dw, x_uniform, p_uniform, dw_uniform)
+    _pr_iterate(ex, g, n, max_iter, thr, alpha, x, info)
+
+
 def _lv_modularity[E: GExec](mut ex: E, g: GA, gb: Int, nn: Int, res: Float32) raises -> Float32:
     """The modularity of comm on graph gb (stot current) into FV[1], read."""
     var q = g
@@ -1186,14 +1655,46 @@ def _lv_modularity[E: GExec](mut ex: E, g: GA, gb: Int, nn: Int, res: Float32) r
     return ex.get_f(L_FV, 1)
 
 
-def _lv_totals[E: GExec](mut ex: E, g: GA, nn: Int) raises:
-    """stot from comm and deg: the (community, node) keys sorted, each
-    community's degrees folded ascending."""
+def _lv_rebuild[E: GExec](mut ex: E, g: GA, nn: Int) raises:
+    """The totals of the current comm from scratch: zeroed, then every
+    node's quantized degree added (integer atomics, order-independent)."""
     var q = g
     q.n0 = nn
-    ex.run(LV_SKEY, nn, q)
-    q.n4 = gp_sort(ex, g, L_KA, L_KB, nn)
-    ex.run(LV_SFOLD, nn, q)
+    ex.run(LV_TZERO, nn, q)
+    ex.run(LV_TADD, nn, q)
+
+
+def _lv_layout(mut lb: Lay, n: Int, nnz: Int):
+    """Every Louvain slot for n nodes and nnz entries (both entries)."""
+    var cap = max(n, nnz)
+    for b in range(3):
+        var gb = L_G0 + 4 * b
+        lb.i(gb, n + 1)
+        lb.i(gb + 1, nnz)
+        lb.i(gb + 2, nnz)
+        lb.f(gb + 3, nnz)
+    lb.i(L_PART, gp_scan_blocks(cap) + 1)
+    lb.i(L_COMM, n)
+    lb.i(L_SAVE, n)
+    lb.i(L_COLOR, n)
+    lb.i(L_LAB, n)
+    lb.i(L_FLAG, n + 1)
+    lb.i(L_SEGH, nnz + 1)
+    lb.i(L_COFF, n + LV_COLOR_CHUNK + 2)
+    lb.i(L_IC, 8)
+    lb.i(L_TLO, n)
+    lb.i(L_THI, n)
+    lb.i(L_SLO, n)
+    lb.i(L_SHI, n)
+    lb.i(L_PREV, n)
+    lb.f(L_DEG, n)
+    lb.f(L_VQ, n)
+    lb.f(L_FP, gp_fold_blocks(n) + 1)
+    lb.f(L_FV, 4)
+    lb.l(L_KA, cap)
+    lb.l(L_KB, cap)
+    lb.l(L_EK, nnz)
+    lb.l(L_ORD, n)
 
 
 def lv_drive[E: GExec](
@@ -1211,43 +1712,78 @@ def lv_drive[E: GExec](
     ex.run(LV_ROWCNT, n, q)
     gp_scan(ex, g, L_G0, L_PART, n)
     var nnz = ex.get_i(L_G0, n)
-    var cap = max(n, nnz)
     var lb = Lay(L_NSLOT)
-    for b in range(3):
-        var gb = L_G0 + 4 * b
-        lb.i(gb, n + 1)
-        lb.i(gb + 1, nnz)
-        lb.i(gb + 2, nnz)
-        lb.f(gb + 3, nnz)
-    lb.i(L_PART, gp_scan_blocks(cap) + 1)
-    lb.i(L_COMM, n)
-    lb.i(L_SAVE, n)
-    lb.i(L_COLOR, n)
-    lb.i(L_LAB, n)
-    lb.i(L_FLAG, n + 1)
-    lb.i(L_SEGH, nnz + 1)
-    lb.i(L_COFF, n + LV_COLOR_CHUNK + 2)
-    lb.i(L_IC, 8)
-    lb.f(L_DEG, n)
-    lb.f(L_STOT, n)
-    lb.f(L_SSAVE, n)
-    lb.f(L_VQ, n)
-    lb.f(L_FP, gp_fold_blocks(n) + 1)
-    lb.f(L_FV, 4)
-    lb.l(L_KA, cap)
-    lb.l(L_KB, cap)
-    lb.l(L_EK, nnz)
-    lb.l(L_ORD, n)
+    _lv_layout(lb, n, nnz)
     g = ex.alloc(lb)
     q = g
     q.n0 = n
     ex.run(LV_ROWCNT, n, q)
     gp_scan(ex, g, L_G0, L_PART, n)
     ex.run(LV_FILL, n, q)
+    _lv_run(ex, g, n, nnz, max_level, res, thr, labels, info)
+
+
+def lv_drive_csr[E: GExec](
+    mut ex: E, n: Int, nnz: Int, indptr: Int, indices: Int, vals: Int, has_vals: Int,
+    max_level: Int, res: Float32, thr: Float32, labels: Int, info: Int,
+) raises:
+    """Louvain from the caller's CSR (lane gap-graph, plan 5.1): indptr,
+    indices and the weights (1.0 each when has_vals is 0) fill graph slot
+    G0 directly (no dense matrix, no `graph_symmetry` pass, one arena
+    allocation); the rows are checked on the executor (`_lv_csrchk`:
+    columns strictly ascending, every entry mirrored with its weight, an
+    edge somewhere) and the levels run as the dense entry's. The dense
+    entry drops zero cells, this one keeps a zero-weight entry in the lists
+    (it colours as an adjacency and moves nothing: `lv_move_item` and the
+    aggregation skip zero weights), so a CSR with explicit zeros can colour
+    differently from its dense twin; one without is the same graph."""
+    var lb = Lay(L_NSLOT)
+    _lv_layout(lb, n, nnz)
+    var g = ex.alloc(lb)
+    ex.up_i(L_G0, indptr, n + 1)
+    ex.up_i(L_G0 + 2, indices, nnz)
+    if has_vals != 0:
+        ex.up_f(L_G0 + 3, vals, nnz)
+    var q = g
+    q.n0 = n
+    q.n1 = 0 if has_vals != 0 else 1
+    q.n4 = L_IC
+    ex.run(GP_IZERO, 8, q)
+    ex.run(LV_CSRSRC, n, q)
+    ex.run(LV_CSRCHK, n, q)
+    var ic = ex.get_is(L_IC, 8)
+    if Int(ic[3]) != 0:
+        raise Error("Louvain: a column index of the CSR adjacency is outside [0, n)")
+    if Int(ic[4]) != 0:
+        raise Error("Louvain: the CSR adjacency's columns must be strictly ascending within every row "
+                    "(scipy: A.sort_indices(), and no duplicate entries)")
+    if Int(ic[5]) != 0:
+        raise Error("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
+    if Int(ic[6]) == 0:
+        raise Error("Louvain: the graph has no edges")
+    _lv_run(ex, g, n, nnz, max_level, res, thr, labels, info)
+
+
+def _lv_run[E: GExec](
+    mut ex: E, g_in: GA, n: Int, nnz: Int, max_level: Int, res: Float32, thr: Float32, labels: Int, info: Int,
+) raises:
+    """The levels over graph slot G0 (filled by either entry): m, the
+    quantization shift, then per level the colouring, the sweeps (per
+    colour one move launch and one totals-apply launch; per sweep one read
+    of the move flag and the modularity together), the renumbering and
+    the aggregation."""
+    var g = g_in
+    var q = g
+    q.n0 = n
     # m: each row's share at columns >= its own, blocked fold
     q.n3 = L_G0
     ex.run(LV_MROW, n, q)
     gp_fold(ex, g, L_VQ, L_FP, n, L_FV, 0)
+    # the fixed-point shift from m, a control value of both columns; it
+    # rides in n6 of every stage from here on (the degree sum of every
+    # level is 2m, so one shift serves them all)
+    var shift = _lv_shift(ex.get_f(L_FV, 0))
+    g.n6 = shift
     var gcur = L_G0
     var gnext = L_GA
     var nn = n
@@ -1302,10 +1838,16 @@ def lv_drive[E: GExec](
                 var mv = q
                 mv.n1 = Int(coff[k])
                 ex.run(LV_MOVE, bk, mv)
-                _lv_totals(ex, g, nn)
-            if ex.get_i(L_IC, 0) == 0:
+                ex.run(LV_APPLY, bk, mv)
+            # the move flag and the modularity in one read: FV[1] the
+            # modularity (`_lv_modularity`'s stages), FV[2] the flag
+            ex.run(LV_FLAGF, 1, q)
+            ex.run(LV_QV, nn, q)
+            gp_fold(ex, g, L_VQ, L_FP, nn, L_FV, 1)
+            var fv = ex.get_fs(L_FV, 3)
+            if fv[2] == Float32(0):
                 break
-            var qn = _lv_modularity(ex, g, gcur, nn, res)
+            var qn = fv[1]
             if qn > qprev:
                 improvement = True
                 var gain = _sub(qn, qprev)
@@ -1359,7 +1901,7 @@ def lv_drive[E: GExec](
     q.x0 = res
     ex.run(LV_DEG, n, q)
     ex.run(LV_COPYI, n, q)
-    _lv_totals(ex, g, n)
+    _lv_rebuild(ex, g, n)
     var qf = _lv_modularity(ex, g, L_G0, n, res)
     ex.down_i(L_LAB, labels, n)
     var inf = FP(unsafe_from_address=info)

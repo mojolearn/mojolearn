@@ -119,6 +119,8 @@ FAMILIES = (
             "xn_lp_iterate_knn",
             "xn_ocsvm",
             "xn_louvain",
+            "xn_pr_csr",
+            "xn_louvain_csr",
             "xn_eigh",
             "x_neighbors_numeric_mode",
             "x_neighbors_py2mojo_off",
