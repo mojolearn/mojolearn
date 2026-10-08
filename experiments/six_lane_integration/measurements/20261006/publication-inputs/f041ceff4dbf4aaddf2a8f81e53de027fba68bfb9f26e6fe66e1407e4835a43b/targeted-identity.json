@@ -1,0 +1,5138 @@
+{
+  "schema": "mojolearn.targeted-saved-identity/1",
+  "input_fingerprint": "ebbd9392bd119f0190b1da1dbb1fb6ecb50c0ccfe15349c1e9ed7609928195b5",
+  "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+  "comparator": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/build/payload-6fe3cfce38fd/source/tools/six_lane_compare_results.py",
+    "sha256": "6766da83eec6678ededbfc07a810ee9910813150980c099ea687d746b7c94586"
+  },
+  "cases": [
+    {
+      "id": "7cfb108d14ec47ae735b",
+      "configuration_id": "T.C13.C18",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/07be8f7c55a769d4ef709eba2f0404d4ad3ab9418e5b2e7d94db703df4695d5a/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "63105bb3f6db9415a9cf",
+      "configuration_id": "T.C13.C18",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/29452de5ef81701b733ef579ebe65bb5243c3c44154d6a2e2510acf28d54418f/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "d276effa713bcd99bf14",
+      "configuration_id": "T.C13.C18",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/21d747d7eb39e9945472abb8556149d57f17c45b6dc0c462e46ae861abb0fdc7/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "205229775568823ac5e0",
+      "configuration_id": "T.C13.C18",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/9cf9fb20c01eb11991c4254d2b1a22c8db549316a012c7a307e22dbae47da9d5/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "64db3b75d3544e30e9eb",
+      "configuration_id": "T.C13.only",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/a472f4db34d2c505c9adc4a1f52df341ac5212c771065222964649dd67ddf8ac/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "cd01d341f30a7319e39a",
+      "configuration_id": "T.C13.only",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/b013cffe9e133be019eb1d6c338f317605e2ed896a9419a3c6614590ff540859/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "1b4dbf0f1c5c08ca3111",
+      "configuration_id": "T.C13.only",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/eb56495ba4a3a70880469781f7dabfabe1b4c834a66f00e740e8dde51cba9115/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "e8548d576030aef02287",
+      "configuration_id": "T.C13.only",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/32318c5c7107f476ec7260729b8ee1a64762c836bf4f057320fe7799522faf4c/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "5f6f6b597a490e59cbe2",
+      "configuration_id": "T.C18.residual-only",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/62f8c1f0b155ef243a0a113bd04820e3721836fdf2716f0c13a7c49d63e8f994/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "6b02bf55982a4668e132",
+      "configuration_id": "T.C18.residual-only",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/47b6926424c4337ee5e8d523c1fea0a7f3e57c7c95898a6f4b582d00050ab7c1/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "d5623cdb8b6cd952ab81",
+      "configuration_id": "T.C18.residual-only",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/51b63ddcf310e0bfe7040d854123c7cfe3b8ef29b0a85b6555719b9ee40ff93d/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "f9d227d2000b57b41a5e",
+      "configuration_id": "T.C18.residual-only",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/8989923e204241b6bedda2209fa2c6637d531eb2a2c40f0954f02e4d4a104f72/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "c18dec59ff5909939905",
+      "configuration_id": "T.C55.only",
+      "workload_id": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/b293b849d89816a1527731e9b26381f70003c8816609e8b813bdc51eff9bd354/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "61ef2595e006a92e2d34",
+      "configuration_id": "T.C55.only",
+      "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/ad466ad7d2d162d587de925a2e14dc80aa3078cbd5278dc7f9ec4098e657e9ea/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "9585fcff643614067885",
+      "configuration_id": "T.C55.only",
+      "workload_id": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/e0842e551d9492f0d335d272a6a9efd9e85d7c8f1f1a1543852995a9b323130b/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "2b434b48836ddaec721b",
+      "configuration_id": "T.C55.only",
+      "workload_id": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/23f08444fc600061486e2c09b04fd0defba35215475341ba29fc4d5d2ce5f362/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "e091c1278db0832e41ef",
+      "configuration_id": "T.CV.local.1d489e1a5ca4",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/f7d16259a4d6143232051646c6f0c00e52a9ca4e8b8b462d1e2e9ab8cfb88b53/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "b09adaf929cb3f1a8271",
+      "configuration_id": "T.CV.local.1d489e1a5ca4",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/30a5dc9c43678b65093e688c8c9fdd722fe144a62646caccb041fe0804cf5732/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "49b6e1543099a023b48b",
+      "configuration_id": "T.CV.local.1d489e1a5ca4",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/566ec038db1f5dd97954950c0006e499649ca06f314db63fd42d532be6bd71bf/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "7bbb939232957fe76205",
+      "configuration_id": "T.CV.local.1d489e1a5ca4",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/40778fdfcf61457797bc6957e5040016a3a7f68ee8d05ea347bd4c827dd43414/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "7f6058cedc58a8d02804",
+      "configuration_id": "T.CV.local.25fdcd3067b2",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/7fce820e011ac24baca79851e5c2078051d1243891033f26ad008633c056e6fd/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "74cb882d244df94b1609",
+      "configuration_id": "T.CV.local.25fdcd3067b2",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/4ce44d278a2f59b0349b079dbb1ff6c9dcdd46dc4cf130a4e57bc6efd605cc3b/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "337dd542c16f61032202",
+      "configuration_id": "T.CV.local.25fdcd3067b2",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/376b310db1ee5c4ae865f1f334842550b6fb3909159a8cfa3280397e29899c10/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "ce1acbbbe62d09831fde",
+      "configuration_id": "T.CV.local.25fdcd3067b2",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/c20ef4c1ea50a3dcd39c2c7fe09f4a4aed2e0ed495881c317800463b41abe151/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "30f2f7bab001d80a80ab",
+      "configuration_id": "T.CV.local.4210e28ea16c",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/8c0c584bf8b8a761d1717941734d9b70dfe62c46b58a4ef8f3ae0fa3331f6428/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "1edec9e51eb23c40a776",
+      "configuration_id": "T.CV.local.4210e28ea16c",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/ec3a2e1ab345a0b4517491ab049ecbeb6ecdd90f4e0e71e103b888ac13b8ef56/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "a24b1c7b7f73329f3389",
+      "configuration_id": "T.CV.local.4210e28ea16c",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/4f33459a648ce7b5f195e76ce2c4ae020ec2227e3a0411e5c470aeda42f241ed/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "c68401ad28d0f9f9b176",
+      "configuration_id": "T.CV.local.4210e28ea16c",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/a0c31878ec231491a04240775e80c74e72271d8140ff9ad622540dd019a63e26/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "89243de26945d84d967d",
+      "configuration_id": "T.CV.local.47b36b46b020",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/a615a21d4ceebaaf53dbfb6352f4325a29b2297195afbdb358ee4d50cfcf7673/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "3f55a45ee94994792e4b",
+      "configuration_id": "T.CV.local.47b36b46b020",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/f503bb3dcb70df338746b50a0b8d1baddddc7babf6ecea65b74d8cb036263ac2/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "1c85a4b4a1852ec8abd1",
+      "configuration_id": "T.CV.local.47b36b46b020",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/d440ae06c9f06e8085111578317e93b8b52348097a77ad9016cfa6bf9edc8782/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "58e5767f8a673dec680c",
+      "configuration_id": "T.CV.local.47b36b46b020",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/be558d27b5b155ec8b342ca4bc50ba217241c02e53411076a50a5fd253f1e32e/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "5255ba5cb5dea5d46524",
+      "configuration_id": "T.CV.local.4c17c43f1dcf",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/fcbaddc616b400058c7b05599b60460725c90adda632246f21be3eab748bcccb/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "102e9e5b501cd4e0c8ad",
+      "configuration_id": "T.CV.local.4c17c43f1dcf",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/b289343fcc104cfe52f7dee9143dc593cc3750cc508e2fc633bfeb7e9a5b19ab/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "7c89ed46bbff17a0a248",
+      "configuration_id": "T.CV.local.4c17c43f1dcf",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/a537433a4ff7de6340425fb03371a7f3a956a3e82dde3b0d884d45ddaff886b0/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "01b8b7d2f175129890dc",
+      "configuration_id": "T.CV.local.4c17c43f1dcf",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/5d807b03ee51cf74c0b3f4a421728c72ee6c58d730d4dc26faf02dab555b7d5a/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "d9ef06192880486d4244",
+      "configuration_id": "T.CV.local.56910b67cfd3",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/82f15ad7a7c916eea18601788dc5fbbca3b335a33532a91353898eadd1cac702/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "53803538e136e16b2b58",
+      "configuration_id": "T.CV.local.56910b67cfd3",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/14b2971a40c97cf42e5fc2cfb9c92ee124213e9562825a9c95496c6c885d28b1/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "7f5795d3c1f4d6ea1c62",
+      "configuration_id": "T.CV.local.56910b67cfd3",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/a9fbcfeee9b4d0af779ad7110dc842026e37cefcc8935ee93edb6d9415392600/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "80ba6a353435fb722778",
+      "configuration_id": "T.CV.local.56910b67cfd3",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/da958abb411d6811e7f384edd15f136faf9d2f31340e7d43f9970082363812cf/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "5db59448e587ae91fafb",
+      "configuration_id": "T.CV.local.5addd299d853",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/993d9416436632dee7730568fbd39a707cc9da8b67cd4a07910baee782a5c11d/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {},
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": []
+    },
+    {
+      "id": "a3cdae28003ee722c655",
+      "configuration_id": "T.CV.local.5addd299d853",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/454fc2db262c7bbef657793ccc7b574f813ea1d2b677fa21f4d920393fc86a5d/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {},
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": []
+    },
+    {
+      "id": "7ddba1f82296969f1e83",
+      "configuration_id": "T.CV.local.5addd299d853",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/ee5c89f771fa7db3bfa74440edc8d6b51f2e68579e878adc6ac05cefdf93c448/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {},
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": []
+    },
+    {
+      "id": "2030837417c20149de61",
+      "configuration_id": "T.CV.local.5addd299d853",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/2c75eac4803b3db9fcfec498a12d2b8814a59e949187154cd13628e7a08258a6/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {},
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": []
+    },
+    {
+      "id": "cd48ddb47c6d21077f4c",
+      "configuration_id": "T.CV.local.5b95f394132e",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/cda7261636fc090f63134c61d558a4f882337c6209083064a87326ab786395f5/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "65b3cbd73f181eca3049",
+      "configuration_id": "T.CV.local.5b95f394132e",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/8424568808928746d34f3e261fac6a40ce5297cec74edcb0b781e66aafc46a68/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "2c67e7c589d455205921",
+      "configuration_id": "T.CV.local.5b95f394132e",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/aecfd25239f6eadfe5d47fd599d25d52b81ca1cf6ccc75bc1160d187d8392e2b/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "94b61042cd80cf4241a6",
+      "configuration_id": "T.CV.local.5b95f394132e",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/4bd8c34962b8a12d0ca1b22b92335f21b72d23bad4e956664f18bae30248ac99/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "d620bf842c5761be8ca9",
+      "configuration_id": "T.CV.local.710590f636c2",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/8af9ab7636553c50c025ecee9da069790e09370cb31dcfdad26f829cb165883a/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "9d13addb4ff8cafe7623",
+      "configuration_id": "T.CV.local.710590f636c2",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/0bffe2526f48efd0fe9cd6ee3677794b0bc5afa24dd6782c130958b0dbca427d/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "7bbcf6317961d0bc363e",
+      "configuration_id": "T.CV.local.710590f636c2",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/e7166d76a4cf23f5fbe1d9eff94799d28891ccbcae1055b44bff204d9b46619c/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "22ecb33a28788614e193",
+      "configuration_id": "T.CV.local.710590f636c2",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/c8a8a76b038f90a3cccee57e41b47d6283aa35687c65d000c98285d0657da877/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "dc862b68441e8682155c",
+      "configuration_id": "T.CV.local.874a0fa1a14e",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/2dd71ce63adf2d9db5fd1381c3b576e7200d6700bf35345a54a050bcfb087412/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "ec134b56da8872561897",
+      "configuration_id": "T.CV.local.874a0fa1a14e",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/80da0de53d0ac6d0830049c078c34750c225bdd0d18ec9ae0e9c136b1e276320/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "416730fc9b3460d701f4",
+      "configuration_id": "T.CV.local.874a0fa1a14e",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/5737398d226fcf5ca18536439f501441bf1108007ac4a1ac61c49a9f0f133a9a/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "72bda4baac2f7e19903d",
+      "configuration_id": "T.CV.local.874a0fa1a14e",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/0360a0bc519a85ab8885a889e469c7ff0427d26353141f0414e6df3b222392ab/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "809665eddbd05f5fa8ac",
+      "configuration_id": "T.CV.local.939213337b9a",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/5c8226260d1627e1f6a0586b5de341e316ce3a4a180141ce36efb9c2481ede63/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {},
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": []
+    },
+    {
+      "id": "0f8615ab5abeaab2baa7",
+      "configuration_id": "T.CV.local.939213337b9a",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/202b20172a9172096964930cec6afe481835602ec68b1716bd3dcadaf1d99bf6/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {},
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": []
+    },
+    {
+      "id": "7d3c2f5ff267bd6131af",
+      "configuration_id": "T.CV.local.939213337b9a",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/874b37a33557750b3c6d4661f6aa0343dffcbcfbeaa80df9a840472b529cf507/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {},
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": []
+    },
+    {
+      "id": "e4929d9e714da64b3fa8",
+      "configuration_id": "T.CV.local.939213337b9a",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/b3340e5035354e9bdd24c997fbd8d50382fd40a9455e74e41726dc2f8b9279f0/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {},
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": []
+    },
+    {
+      "id": "a20324bef4d7cf2d9f59",
+      "configuration_id": "T.CV.local.a8952d6bcb79",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/fdb87301a35fda8a81d64f06b492bfd3268206710fe8d1ee69576765bcbd6189/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "8f547bcd2f6eaf92ad1c",
+      "configuration_id": "T.CV.local.a8952d6bcb79",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/1bbc42007e84d18719f615bc8dd0ef3b7b9603abc4df22156e385998cfa2311b/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "42e03ca08722d20ed4f0",
+      "configuration_id": "T.CV.local.a8952d6bcb79",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/43f1f76b576976186930815678f15621d77adf76204773c2e79b25a4fe130933/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "f842d656a6d8e1fd92c2",
+      "configuration_id": "T.CV.local.a8952d6bcb79",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/b58b38fa337b9f14e9bf5290126beb31e657c2285153b9c5189f1ad8bf91fef4/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "08579921767d8691edd4",
+      "configuration_id": "T.CV.local.ca4bcc07ecfe",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/62fd466150da3bd841f39abdb84f2381703c403cbf3a3c188492db15ab8c4bd3/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "eb7e65912162af200a3b",
+      "configuration_id": "T.CV.local.ca4bcc07ecfe",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/564c05fae7cf0f074ecb1b761eddcce5b0cbf2ce3f53a4f8beccc814162dcaa9/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "057c66856ba4c9df4d56",
+      "configuration_id": "T.CV.local.ca4bcc07ecfe",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/4b9e2e479a56b51067d44ea6417e9dd32835ecb9c679b8c0c92033686cdfe6fe/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "6b8fd61db451eb7614da",
+      "configuration_id": "T.CV.local.ca4bcc07ecfe",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/e38235b30285347ce6e4d2e013b204940b5467e0c085034e7f7aa40b06f6a590/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "2d616f841829db6225d2",
+      "configuration_id": "T.CV.local.cae449b50635",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/544777701c74ab59d5b43686267189885696dd28ae7dffb0ea97dd4c910cbeff/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "b4e5287bff318975e939",
+      "configuration_id": "T.CV.local.cae449b50635",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/605d58f5b1787d76649273a79153f7f0d1ea61ace7ee6bc7f453840784afe082/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "c62d5295bc478d435c75",
+      "configuration_id": "T.CV.local.cae449b50635",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/60de8f6530d17345ef62523a39a2dd522e9fa045172554329e17a7f889c6f997/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "fadc8158c2b3e9991d78",
+      "configuration_id": "T.CV.local.cae449b50635",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/9255306b0408b8f4b96055a99cad3c8f4b0524316513988dd50c57ee85408234/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "610d3302c48f21418391",
+      "configuration_id": "T.CV.local.d9f7769600f0",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/9d65e5ebff19a39f1b4dcf6b0ad1414a967c20ad28ff97e9660171836f5457f8/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "36b1306fdb1f552b2e99",
+      "configuration_id": "T.CV.local.d9f7769600f0",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/638584377a461e5b8d6117c4930f1cc1ec5e85371b15ffcd9b00d2eaf1afaa45/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "50385283e14a7cfd5657",
+      "configuration_id": "T.CV.local.d9f7769600f0",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/2fdd6d67a59a052c20d65ea0adbdff4b943ef1b5255b82abd22c8a219e542b41/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "2b90404e3ad8421bfed5",
+      "configuration_id": "T.CV.local.d9f7769600f0",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/61ef3cd5402890fbbd43a4e33eb24eedd04b20fc8b4a3181bf91e6274372df0f/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "a0a8dbab45b48e7d8824",
+      "configuration_id": "T.CV.local.de099bccad76",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/06ab0036601817362a080983b77b25c49cfe1e5cd8feffe642c0e6ad0995c70f/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "10b11f5ae041874d624d",
+      "configuration_id": "T.CV.local.de099bccad76",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/aebdb72352996760364ade257b89ae0b776c0f71c007b96e8aced1069d12c3f4/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "b8d3e81b0ee3ee2bff6a",
+      "configuration_id": "T.CV.local.de099bccad76",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/4b998dee2532bd7733a5c82b224921df4bc70de4f1c45beb673bcf96f52451bd/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "1df46376267ad50ee0f4",
+      "configuration_id": "T.CV.local.de099bccad76",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/83759cd7cd0f6c9bd015bea3853eae8d36d028efb5d5e081129040f410b4524c/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "21fda348651a66fad525",
+      "configuration_id": "T.CV.local.e6430f146f9a",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/bc146d528738bceac72ecc80db57df85e8da3fb60136f3d03c6df59659ed8806/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "3f5c7e9339869a1ea21e",
+      "configuration_id": "T.CV.local.e6430f146f9a",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/c1256bc14c8a1f4cb243bc8b8f8365de31ba1b1160b36f75645694c3fbb2c127/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "e1395f0efe95a4128f7e",
+      "configuration_id": "T.CV.local.e6430f146f9a",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/41a31d511c5530ac77151beca2bb11bd5d5eac3c204c043a63315a6d52670911/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "bd90c21c5798fa8f485d",
+      "configuration_id": "T.CV.local.e6430f146f9a",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/d78a5e706226678c5317c66fe0b8bb7c132678751b3aaeb9e94cf876c4f1335d/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "26c706503757c1ecb3af",
+      "configuration_id": "T.CV.local.f364954c07b8",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/acacd110d24af65e2db68a1f2b51aa91b1079f044c1d3006f9896819d3f2c5d7/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "01dd37b693209da4f0ea",
+      "configuration_id": "T.CV.local.f364954c07b8",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/d911873e82aade8ca2c77f2a9fa92e20455700a0e7376f51bdee1c8cc8e4db41/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "2af9f6599f782aec2e98",
+      "configuration_id": "T.CV.local.f364954c07b8",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/e70777fa27b7beb6491574a4002649ca4d1f36f1f105d5415eb8f59517e9944d/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "8023048beaf0dc4c86a1",
+      "configuration_id": "T.CV.local.f364954c07b8",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/0e6064b1a858a0a6d7718270713a098d9b658d2d4d3311d020bc56e7041e8001/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "9d074d8ccfbebdcbc3a1",
+      "configuration_id": "T.combined.minus-C13",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/073a317597603bf098de69621dbdb9992e631bb6962bfb51a37e0fec3de11480/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "ac4028fecd7167bf9f9d",
+      "configuration_id": "T.combined.minus-C13",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/d3c4da791d2cd5fddb740539f23d7d7ae61a9d72a6db9e55971021129ce65724/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "9ac57585e361f54442e3",
+      "configuration_id": "T.combined.minus-C13",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/65b5990288cd2e3439c73d908b0084e390d0db377e5cea94c031bc6b698493e6/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "decf7e24dd0c25764a33",
+      "configuration_id": "T.combined.minus-C13",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/294bfb24b4dcc3b53c5662c009e414a19fc5d24ae85d317d6ba242fc524234ee/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "cbca0793afbe2c8e80a5",
+      "configuration_id": "T.combined.minus-C13-C18",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/b2207aee55b4001a166ff2ec985de7102726ea25b26355157fd1c13e207b8010/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "9f4a7210b04d8dce3a87",
+      "configuration_id": "T.combined.minus-C13-C18",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/32aba7d427ba809ddbecbdc1011e6c224cc34cc3a3006fd1c2690ce2fc9b45d7/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "ca5bf5401534756b3d85",
+      "configuration_id": "T.combined.minus-C13-C18",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/7af77c5170f25cd54fde666935d85029efa7498c8412114fbfdb6a05a2effd23/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "7194130103a14b8d408e",
+      "configuration_id": "T.combined.minus-C13-C18",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/41d9cb1580ac02521a8a174fa9ad5a78822b652169b0e8647d9bfcff4ef27353/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "5cb9485c8c839fa78713",
+      "configuration_id": "T.combined.minus-C55",
+      "workload_id": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/7c9df8d0a62b3a78c9e85bd25d4daac5a84c2548691ae1903387c1c51841a345/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "58d5809f596a408173a1",
+      "configuration_id": "T.combined.minus-C55",
+      "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/a5c1a36d0925344f4402b7865ec79896fc7e6207857711ee4c9da2b97b042737/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "2edfa9f176f2a1fbd47f",
+      "configuration_id": "T.combined.minus-C55",
+      "workload_id": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/15aad4703628fc7c11073ae68287e684ab1be4177ed1534b579f20221229baf2/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "a47507665ca6ceb30a72",
+      "configuration_id": "T.combined.minus-C55",
+      "workload_id": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/2760cb23292ffa7a6cfd295868657bf293f6828d4acb032af567032664c39070/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "3e47fe200103aac26926",
+      "configuration_id": "T.combined.reproduction",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/27ca199963a367ac6ce70003e5e932baeb370f8e211b004d67edbe86dca23c73/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "e70ec2ff574f8864bc79",
+      "configuration_id": "T.combined.reproduction",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/b3dd4867983bf80ef8c285bea3fdeba2b585bd935e408c29f69be4a8ce2d494a/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "b389847c72c6f92e2f62",
+      "configuration_id": "T.combined.reproduction",
+      "workload_id": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/a1868fb0e24fdb3eee3f77d1e060084c7bb9ab1ee102ae8fa35a0df11a945ee9/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "5167ee82f2402edd7c95",
+      "configuration_id": "T.combined.reproduction",
+      "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/58216c7ed618fc4e66837d2cdda50cb23e8e1bb0f02ba3f0c02068df2ca03258/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "e06aedd44498db728f1b",
+      "configuration_id": "T.combined.reproduction",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/b56c8e81fa3a15f72d3b053486514aaedef5b89d65b0e5ad444eb6c416c1013a/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "80ec74fbd6ccd80f2e36",
+      "configuration_id": "T.combined.reproduction",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/d96d36a90debe38fa75b8ef8ea6308f5b9b9749fbe50e206b45c7dc7f31f8c6a/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "7103d70bd4a9b87c86fe",
+      "configuration_id": "T.combined.reproduction",
+      "workload_id": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/cd016ae221a52ab1f650480b47e2c7eb573cebd194a27e9cb6a78df28a87d6c4/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    },
+    {
+      "id": "43a7fa942b0a718cd4db",
+      "configuration_id": "T.combined.reproduction",
+      "workload_id": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+      "mode": "identical",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/identity/cases/9f80d22aaf7277e6e67f11629ebe6f6f68a0f923a75361d4f42a5bbcdce79248/case.json",
+      "same_arm_only": true,
+      "nvidia_amd": {
+        "A": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        },
+        "B": {
+          "observed_outputs": "AGREE",
+          "complete_declared_state_pair": {
+            "left": "nvidia-native",
+            "right": "amd",
+            "status": "MATCH",
+            "parts": {
+              "outputs": "MATCH",
+              "model_state": "MATCH",
+              "repeated.0.outputs": "MATCH",
+              "repeated.0.model_state": "MATCH"
+            }
+          },
+          "qualified_full_identity": false
+        }
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_full_identity": false,
+      "accepted": false,
+      "promoted": false,
+      "issues": [],
+      "missing_columns": [
+        "apple",
+        "host",
+        "nvidia-ptx"
+      ]
+    }
+  ],
+  "counts": {
+    "INCOMPLETE": 108
+  },
+  "qualified_full_identity": false,
+  "accepted": false,
+  "promoted": false,
+  "required_columns": [
+    "nvidia-native",
+    "nvidia-ptx",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "apple_timing_votes": false,
+  "policy": "Existing comparator applied to separately pinned A and B columns; NV/AMD pair outcomes do not substitute for absent Apple/host/PTX coverage."
+}

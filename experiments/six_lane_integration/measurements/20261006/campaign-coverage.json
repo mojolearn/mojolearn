@@ -318,7 +318,7 @@
   "remaining_catalog": {
     "schema": "mojolearn.campaign-remaining-work/1",
     "catalog_source": "experiments/six_lane_integration/catalog.json",
-    "catalog_sha256": "7acb465d4fbeb6c2e5f0bb45ca06a8a6c133a3da6f56cab2752788bb160c7879",
+    "catalog_sha256": "8f217652545aa5bfde321c2d76a4708824fec135722523ac741a3e9153dcbad6",
     "entries": 375,
     "interactions": 128,
     "roles": {

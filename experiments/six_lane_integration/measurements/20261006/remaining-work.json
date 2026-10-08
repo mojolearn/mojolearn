@@ -1,7 +1,7 @@
 {
   "schema": "mojolearn.campaign-remaining-work/1",
   "catalog_source": "experiments/six_lane_integration/catalog.json",
-  "catalog_sha256": "7acb465d4fbeb6c2e5f0bb45ca06a8a6c133a3da6f56cab2752788bb160c7879",
+  "catalog_sha256": "8f217652545aa5bfde321c2d76a4708824fec135722523ac741a3e9153dcbad6",
   "entries": 375,
   "interactions": 128,
   "roles": {
@@ -83,7 +83,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF64=1",
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -99,7 +99,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF64=1",
-              "MOJOLEARN_C52_PAIR_512=1"
+              "MOJOLEARN_C52_PAIR_ROWS=512"
             ],
             "environment": {},
             "runtime": {}
@@ -115,7 +115,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF128=1",
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -131,7 +131,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF128=1",
-              "MOJOLEARN_C52_PAIR_512=1"
+              "MOJOLEARN_C52_PAIR_ROWS=512"
             ],
             "environment": {},
             "runtime": {}
@@ -244,14 +244,11 @@
       "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
       "affected_workloads": [
         "classical:ols",
-        "classical:pca",
-        "expanded:gaussian-nb",
         "expanded:standard-scaler",
         "more:ridge"
       ],
       "arm_ids": [
         "I.C.C02:combined",
-        "I.C.C02:combo_paired_stats_linear_pair",
         "I.C.C02:linear_pair",
         "I.C.C02:paired_stats"
       ],
@@ -275,22 +272,6 @@
           "id": "I.C.C02:linear_pair",
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C02:combo_paired_stats_linear_pair",
-          "A": {
-            "defines": [
-              "MOJOLEARN_CLASSICAL_C02_STATS_PAIR=1",
               "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1"
             ],
             "environment": {},
@@ -476,13 +457,11 @@
       "unresolved_members": [],
       "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
       "affected_workloads": [
-        "classical:ols",
         "expanded:sgd-clf@ranking_report",
         "expanded:sgd-reg@regression_report"
       ],
       "arm_ids": [
         "I.C.C05:combined",
-        "I.C.C05:combo_phase_scratch_ols_phase",
         "I.C.C05:ols_phase",
         "I.C.C05:phase_scratch"
       ],
@@ -506,22 +485,6 @@
           "id": "I.C.C05:ols_phase",
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C05_OLS_PHASE=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C05:combo_phase_scratch_ols_phase",
-          "A": {
-            "defines": [
-              "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH=1",
               "MOJOLEARN_CLASSICAL_C05_OLS_PHASE=1"
             ],
             "environment": {},
@@ -1389,14 +1352,9 @@
       "unresolved_members": [],
       "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
       "affected_workloads": [
-        "classical:ols",
-        "expanded:lstsq",
         "expanded:lu-solve",
-        "expanded:pls",
         "expanded:ridge-clf",
-        "expanded:ridge-cv",
-        "more:gpr",
-        "more:ridge"
+        "expanded:ridge-cv"
       ],
       "arm_ids": [
         "I.C.C14:group_rhs"
@@ -1456,11 +1414,7 @@
       "unresolved_members": [],
       "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
       "affected_workloads": [
-        "expanded:ard",
-        "expanded:bayesian-ridge",
-        "expanded:elliptic-envelope",
-        "expanded:min-cov-det",
-        "more:ridge"
+        "expanded:ard"
       ],
       "arm_ids": [
         "I.C.C15:factor_solve"
@@ -1520,10 +1474,7 @@
       "affected_workloads": [
         "expanded:gamma",
         "expanded:poisson",
-        "expanded:tweedie",
-        "more:linearsvc",
-        "more:linearsvr",
-        "more:logreg"
+        "expanded:tweedie"
       ],
       "arm_ids": [
         "I.C.C16:glm_fused"
@@ -1581,14 +1532,12 @@
       "unresolved_members": [],
       "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
       "affected_workloads": [
-        "expanded:logreg-cv",
         "more:linearsvc",
         "more:linearsvr",
         "more:logreg"
       ],
       "arm_ids": [
         "I.C.C17:combined",
-        "I.C.C17:combo_ovr_waves_line_search_pairs",
         "I.C.C17:line_search_pairs",
         "I.C.C17:ovr_waves"
       ],
@@ -1612,22 +1561,6 @@
           "id": "I.C.C17:line_search_pairs",
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C17:combo_ovr_waves_line_search_pairs",
-          "A": {
-            "defines": [
-              "MOJOLEARN_CLASSICAL_C17_OVR=1",
               "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1"
             ],
             "environment": {},
@@ -1873,15 +1806,8 @@
       "selection_only": false,
       "members": [],
       "unresolved_members": [],
-      "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
-      "affected_workloads": [
-        "expanded:pa-clf",
-        "expanded:pa-reg",
-        "expanded:perceptron",
-        "expanded:sgd-clf",
-        "expanded:sgd-ocsvm",
-        "expanded:sgd-reg"
-      ],
+      "recipe_status": "SOURCE_RECIPE_UNRESOLVED",
+      "affected_workloads": [],
       "arm_ids": [
         "I.C.C19:ordered_128",
         "I.C.C19:ordered_32"
@@ -1891,7 +1817,7 @@
           "id": "I.C.C19:ordered_128",
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1"
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
             ],
             "environment": {},
             "runtime": {}
@@ -1906,7 +1832,7 @@
           "id": "I.C.C19:ordered_32",
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_32=1"
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32"
             ],
             "environment": {},
             "runtime": {}
@@ -1955,12 +1881,10 @@
       "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
       "affected_workloads": [
         "classical:svc",
-        "expanded:ocsvm",
         "more:svr"
       ],
       "arm_ids": [
         "I.C.C20:combined",
-        "I.C.C20:combo_row_cache_pair_load",
         "I.C.C20:pair_load",
         "I.C.C20:row_cache"
       ],
@@ -1984,22 +1908,6 @@
           "id": "I.C.C20:pair_load",
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C20:combo_row_cache_pair_load",
-          "A": {
-            "defines": [
-              "MOJOLEARN_CLASSICAL_C20_ROW_CACHE=1",
               "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1"
             ],
             "environment": {},
@@ -2069,7 +1977,6 @@
       "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
       "affected_workloads": [
         "classical:svc",
-        "expanded:ocsvm",
         "more:svr"
       ],
       "arm_ids": [
@@ -2131,9 +2038,6 @@
       "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
       "affected_workloads": [
         "classical:svc",
-        "expanded:kernel-pca",
-        "expanded:ocsvm",
-        "more:kernel-ridge",
         "more:svr"
       ],
       "arm_ids": [
@@ -2866,11 +2770,6 @@
       "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
       "affected_workloads": [
         "classical:knn",
-        "expanded:isomap",
-        "expanded:label-propagation",
-        "expanded:label-spreading",
-        "expanded:lle",
-        "expanded:lof",
         "more:knn-clf",
         "more:knn-reg"
       ],
@@ -2900,7 +2799,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1"
+              "MOJOLEARN_C29_TILE=128"
             ],
             "environment": {},
             "runtime": {}
@@ -2916,7 +2815,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1"
+              "MOJOLEARN_C29_TILE=128"
             ],
             "environment": {},
             "runtime": {}
@@ -4166,7 +4065,7 @@
           "id": "I.C.C52:pair128",
           "A": {
             "defines": [
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -4181,7 +4080,7 @@
           "id": "I.C.C52:pair512",
           "A": {
             "defines": [
-              "MOJOLEARN_C52_PAIR_512=1"
+              "MOJOLEARN_C52_PAIR_ROWS=512"
             ],
             "environment": {},
             "runtime": {}
@@ -4642,17 +4541,6 @@
       ],
       "arm_ids": [
         "I.C.C58:combined",
-        "I.C.C58:combo_forecast_series4_team64",
-        "I.C.C58:combo_hw_scale_once_forecast_series4",
-        "I.C.C58:combo_hw_scale_once_forecast_series4_team64",
-        "I.C.C58:combo_hw_scale_once_hw_series4",
-        "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4",
-        "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4_team64",
-        "I.C.C58:combo_hw_scale_once_hw_series4_team64",
-        "I.C.C58:combo_hw_scale_once_team64",
-        "I.C.C58:combo_hw_series4_forecast_series4",
-        "I.C.C58:combo_hw_series4_forecast_series4_team64",
-        "I.C.C58:combo_hw_series4_team64",
         "I.C.C58:forecast_series4",
         "I.C.C58:hw_scale_once",
         "I.C.C58:hw_series4",
@@ -4708,189 +4596,7 @@
           "id": "I.C.C58:team64",
           "A": {
             "defines": [
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_scale_once_hw_series4",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_SERIES4=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_scale_once_forecast_series4",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_FORECAST4=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_series4_forecast_series4",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_FORECAST4=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_FORECAST4=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_scale_once_team64",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_series4_team64",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_scale_once_hw_series4_team64",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_forecast_series4_team64",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_scale_once_forecast_series4_team64",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_series4_forecast_series4_team64",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4_team64",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -4908,7 +4614,7 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -5022,9 +4728,6 @@
         "expanded:autoarima"
       ],
       "arm_ids": [
-        "I.C.C60:combined",
-        "I.C.C60:combo_lag4_diff_reuse",
-        "I.C.C60:diff_reuse",
         "I.C.C60:lag4"
       ],
       "arm_controls": [
@@ -5033,53 +4736,6 @@
           "A": {
             "defines": [
               "MOJOLEARN_C60_LAG4=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C60:diff_reuse",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C60_DIFF_REUSE=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C60:combo_lag4_diff_reuse",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C60_LAG4=1",
-              "MOJOLEARN_C60_DIFF_REUSE=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          }
-        },
-        {
-          "id": "I.C.C60:combined",
-          "A": {
-            "defines": [
-              "MOJOLEARN_C60_LAG4=1",
-              "MOJOLEARN_C60_DIFF_REUSE=1"
             ],
             "environment": {},
             "runtime": {}
@@ -34665,7 +34321,7 @@
               "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS=1",
               "MOJOLEARN_C37_ROW_PANELS=1",
               "MOJOLEARN_C37_PANEL_128=1",
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -34839,7 +34495,7 @@
             "defines": [
               "MOJOLEARN_CLASSICAL_C06_ROWS2=1",
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1",
+              "MOJOLEARN_C29_TILE=128",
               "MOJOLEARN_C30_DIRECT_DISTANCE=1",
               "MOJOLEARN_C30_ROWS_4=1",
               "MOJOLEARN_C32_COUNT_FUSION=1",
@@ -35115,7 +34771,7 @@
               "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
               "MOJOLEARN_CLASSICAL_C17_OVR=1",
               "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1"
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
             ],
             "environment": {},
             "runtime": {}
@@ -35270,7 +34926,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1",
+              "MOJOLEARN_C29_TILE=128",
               "MOJOLEARN_C31_DEVICE_BUCKETS=1",
               "MOJOLEARN_C32_COUNT_FUSION=1",
               "MOJOLEARN_C32_EMIT_FUSION=1",
@@ -35539,10 +35195,9 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1",
+              "MOJOLEARN_C58_TEAM_MIB=64",
               "MOJOLEARN_C59_TRIAL_STATE=1",
-              "MOJOLEARN_C60_LAG4=1",
-              "MOJOLEARN_C60_DIFF_REUSE=1"
+              "MOJOLEARN_C60_LAG4=1"
             ],
             "environment": {},
             "runtime": {}
@@ -35804,7 +35459,7 @@
               "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
               "MOJOLEARN_CLASSICAL_C18_TILE64=1",
               "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH=1",
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1",
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128",
               "MOJOLEARN_CLASSICAL_C20_ROW_CACHE=1",
               "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1",
               "MOJOLEARN_CLASSICAL_C21_EXTREMA=1",
@@ -35821,7 +35476,7 @@
               "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR=1",
               "MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES=1",
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1",
+              "MOJOLEARN_C29_TILE=128",
               "MOJOLEARN_C30_DIRECT_DISTANCE=1",
               "MOJOLEARN_C30_ROWS_4=1",
               "MOJOLEARN_C31_DEVICE_BUCKETS=1",
@@ -35845,7 +35500,7 @@
               "MOJOLEARN_C42_ACTIVE_TRIANGLE=1",
               "MOJOLEARN_C43_RESIDENT_NORMALIZATION=1",
               "MOJOLEARN_C44_SAMPLING_DESCRIPTORS=1",
-              "MOJOLEARN_C52_PAIR_128=1",
+              "MOJOLEARN_C52_PAIR_ROWS=128",
               "MOJOLEARN_C53_CENTER4=1",
               "MOJOLEARN_C53_BGMM_STATS=1",
               "MOJOLEARN_C54_PREDICT_TILES=1",
@@ -35856,10 +35511,9 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1",
+              "MOJOLEARN_C58_TEAM_MIB=64",
               "MOJOLEARN_C59_TRIAL_STATE=1",
-              "MOJOLEARN_C60_LAG4=1",
-              "MOJOLEARN_C60_DIFF_REUSE=1"
+              "MOJOLEARN_C60_LAG4=1"
             ],
             "environment": {},
             "runtime": {}
@@ -38373,7 +38027,6 @@
         "expanded:auto-theta",
         "expanded:autoarima",
         "expanded:bayesian-gmm",
-        "expanded:bayesian-ridge",
         "expanded:bernoulli-nb",
         "expanded:bisecting-kmeans",
         "expanded:bootstrap",
@@ -38406,7 +38059,6 @@
         "expanded:lda-clf",
         "expanded:lda-clf@lda_outputs",
         "expanded:lle",
-        "expanded:lof",
         "expanded:logreg-cv",
         "expanded:logreg-cv@weighted_cv",
         "expanded:lstsq",
@@ -38420,17 +38072,13 @@
         "expanded:multinomial-nb",
         "expanded:nmf",
         "expanded:normalizer",
-        "expanded:ocsvm",
         "expanded:onehot",
         "expanded:onehot@onehot_fit_transform",
         "expanded:optics",
         "expanded:optimized-theta",
         "expanded:ordinal",
         "expanded:ordinal@ordinal_fit_transform",
-        "expanded:pa-clf",
-        "expanded:pa-reg",
         "expanded:pagerank",
-        "expanded:perceptron",
         "expanded:permutation-test",
         "expanded:pls",
         "expanded:pls-canonical",
@@ -38444,11 +38092,8 @@
         "expanded:resample",
         "expanded:ridge-clf",
         "expanded:ridge-cv",
-        "expanded:sgd-clf",
         "expanded:sgd-clf@classification_report",
         "expanded:sgd-clf@ranking_report",
-        "expanded:sgd-ocsvm",
-        "expanded:sgd-reg",
         "expanded:sgd-reg@regression_report",
         "expanded:sparse-coder",
         "expanded:sparse-rp",
@@ -41175,7 +40820,6 @@
         "expanded:auto-theta",
         "expanded:autoarima",
         "expanded:bayesian-gmm",
-        "expanded:bayesian-ridge",
         "expanded:bernoulli-nb",
         "expanded:bisecting-kmeans",
         "expanded:bootstrap",
@@ -41208,7 +40852,6 @@
         "expanded:lda-clf",
         "expanded:lda-clf@lda_outputs",
         "expanded:lle",
-        "expanded:lof",
         "expanded:logreg-cv",
         "expanded:logreg-cv@weighted_cv",
         "expanded:lstsq",
@@ -41222,17 +40865,13 @@
         "expanded:multinomial-nb",
         "expanded:nmf",
         "expanded:normalizer",
-        "expanded:ocsvm",
         "expanded:onehot",
         "expanded:onehot@onehot_fit_transform",
         "expanded:optics",
         "expanded:optimized-theta",
         "expanded:ordinal",
         "expanded:ordinal@ordinal_fit_transform",
-        "expanded:pa-clf",
-        "expanded:pa-reg",
         "expanded:pagerank",
-        "expanded:perceptron",
         "expanded:permutation-test",
         "expanded:pls",
         "expanded:pls-canonical",
@@ -41246,11 +40885,8 @@
         "expanded:resample",
         "expanded:ridge-clf",
         "expanded:ridge-cv",
-        "expanded:sgd-clf",
         "expanded:sgd-clf@classification_report",
         "expanded:sgd-clf@ranking_report",
-        "expanded:sgd-ocsvm",
-        "expanded:sgd-reg",
         "expanded:sgd-reg@regression_report",
         "expanded:sparse-coder",
         "expanded:sparse-rp",

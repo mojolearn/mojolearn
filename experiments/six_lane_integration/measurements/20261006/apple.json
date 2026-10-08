@@ -561,6 +561,11 @@
           "resource_limitations": [
             "Shared workspace storage I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
           ],
+          "full_operation_ms": {
+            "A": 534.3086250359192,
+            "B": 531.4585829619318
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
@@ -617,9 +622,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 531.4585829619318,
-            "candidate_ms": 534.3086250359192,
-            "observed_candidate_over_baseline": 1.0053626795489943,
+            "baseline_ms": 113.40324999764562,
+            "candidate_ms": 119.43462502676994,
+            "observed_candidate_over_baseline": 1.0531852043856726,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -1170,6 +1175,11 @@
           "resource_limitations": [
             "Shared workspace storage I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
           ],
+          "full_operation_ms": {
+            "A": 1589.4755000481382,
+            "B": 1599.5837500086054
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
@@ -1287,9 +1297,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1599.5837500086054,
-            "candidate_ms": 1589.4755000481382,
-            "observed_candidate_over_baseline": 0.9936806997692913,
+            "baseline_ms": 901.7707910388708,
+            "candidate_ms": 891.2896659458056,
+            "observed_candidate_over_baseline": 0.9883771738925026,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -2934,6 +2944,11 @@
           "resource_limitations": [
             "Shared workspace storage I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
           ],
+          "full_operation_ms": {
+            "A": 498.95141704473644,
+            "B": 500.5222079344094
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
@@ -2974,9 +2989,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 500.5222079344094,
-            "candidate_ms": 498.95141704473644,
-            "observed_candidate_over_baseline": 0.9968616959152414,
+            "baseline_ms": 85.4959589196369,
+            "candidate_ms": 82.49179203994572,
+            "observed_candidate_over_baseline": 0.9648618844954415,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -3527,6 +3542,11 @@
           "resource_limitations": [
             "Shared workspace storage I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
           ],
+          "full_operation_ms": {
+            "A": 1787.2002499643713,
+            "B": 1147.2330000251532
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
@@ -3602,9 +3622,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1147.2330000251532,
-            "candidate_ms": 1787.2002499643713,
-            "observed_candidate_over_baseline": 1.5578354614321475,
+            "baseline_ms": 447.4177920492366,
+            "candidate_ms": 1088.3367089554667,
+            "observed_candidate_over_baseline": 2.4324841977578298,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -4155,6 +4175,11 @@
           "resource_limitations": [
             "Shared workspace storage I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
           ],
+          "full_operation_ms": {
+            "A": 3319.0562500385568,
+            "B": 1665.058874990791
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
@@ -4324,9 +4349,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1665.058874990791,
-            "candidate_ms": 3319.0562500385568,
-            "observed_candidate_over_baseline": 1.9933566914004248,
+            "baseline_ms": 1245.0639170128852,
+            "candidate_ms": 2900.7261249935254,
+            "observed_candidate_over_baseline": 2.3297808934603523,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -4877,6 +4902,11 @@
           "resource_limitations": [
             "Shared workspace storage I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
           ],
+          "full_operation_ms": {
+            "A": 2389.335541985929,
+            "B": 2362.4788330635056
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
@@ -5017,9 +5047,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 2362.4788330635056,
-            "candidate_ms": 2389.335541985929,
-            "observed_candidate_over_baseline": 1.011368020972953,
+            "baseline_ms": 1664.4286250229925,
+            "candidate_ms": 1690.4332919511944,
+            "observed_candidate_over_baseline": 1.015623780159298,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -5563,6 +5593,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 2292.678292025812,
+            "B": 2293.3388750534505
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
@@ -5657,9 +5692,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 2293.3388750534505,
-            "candidate_ms": 2292.678292025812,
-            "observed_candidate_over_baseline": 0.9997119557712014,
+            "baseline_ms": 1539.4023340195417,
+            "candidate_ms": 1536.0184169840068,
+            "observed_candidate_over_baseline": 0.9978017981649415,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -6203,6 +6238,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 755.789791001007,
+            "B": 740.2970410184935
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
@@ -6297,9 +6337,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 740.2970410184935,
-            "candidate_ms": 755.789791001007,
-            "observed_candidate_over_baseline": 1.0209277480850103,
+            "baseline_ms": 269.0499579766765,
+            "candidate_ms": 282.1005000732839,
+            "observed_candidate_over_baseline": 1.0485060179706058,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -6843,6 +6883,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1270.6715419190004,
+            "B": 1315.7004999229684
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
@@ -6904,9 +6949,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1315.7004999229684,
-            "candidate_ms": 1270.6715419190004,
-            "observed_candidate_over_baseline": 0.9657756776663045,
+            "baseline_ms": 477.4662090931088,
+            "candidate_ms": 440.69900002796203,
+            "observed_candidate_over_baseline": 0.9229951599402568,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -7450,6 +7495,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1646.8826250638813,
+            "B": 1642.7078749984503
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_more.py:quality/ridge; independent saved gate pending",
@@ -7630,9 +7680,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1642.7078749984503,
-            "candidate_ms": 1646.8826250638813,
-            "observed_candidate_over_baseline": 1.0025413831204986,
+            "baseline_ms": 807.9953329870477,
+            "candidate_ms": 818.6100419843569,
+            "observed_candidate_over_baseline": 1.0131370919657023,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -8176,6 +8226,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 606.728250044398,
+            "B": 607.1637080749497
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
@@ -8294,9 +8349,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 607.1637080749497,
-            "candidate_ms": 606.728250044398,
-            "observed_candidate_over_baseline": 0.9992827996391084,
+            "baseline_ms": 121.07620795723051,
+            "candidate_ms": 116.12374999094754,
+            "observed_candidate_over_baseline": 0.9590963571634784,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -8840,6 +8895,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 608.2973750308156,
+            "B": 588.7810839340091
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_more.py:quality/ridge; independent saved gate pending",
@@ -9020,9 +9080,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 588.7810839340091,
-            "candidate_ms": 608.2973750308156,
-            "observed_candidate_over_baseline": 1.0331469397189295,
+            "baseline_ms": 98.37766701821238,
+            "candidate_ms": 113.45183302182704,
+            "observed_candidate_over_baseline": 1.1532275206406757,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -9560,6 +9620,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 2676.956541952677,
+            "B": 1840.5577089870349
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_more.py:quality/gmm; independent saved gate pending",
@@ -9626,9 +9691,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1840.5577089870349,
-            "candidate_ms": 2676.956541952677,
-            "observed_candidate_over_baseline": 1.4544268451250904,
+            "baseline_ms": 1290.0032920297235,
+            "candidate_ms": 2126.984415925108,
+            "observed_candidate_over_baseline": 1.6488209208973856,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -10172,6 +10237,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1676.354791969061,
+            "B": 1655.7661250699311
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(bayesian-ridge); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -10233,9 +10303,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1655.7661250699311,
-            "candidate_ms": 1676.354791969061,
-            "observed_candidate_over_baseline": 1.0124345259800869,
+            "baseline_ms": 886.0067089553922,
+            "candidate_ms": 903.6721249576658,
+            "observed_candidate_over_baseline": 1.019938241803046,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -10779,6 +10849,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 602.5629590731114,
+            "B": 600.0144169665873
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(bayesian-ridge); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -10840,9 +10915,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 600.0144169665873,
-            "candidate_ms": 602.5629590731114,
-            "observed_candidate_over_baseline": 1.004247468118197,
+            "baseline_ms": 112.37824999261647,
+            "candidate_ms": 115.84633402526379,
+            "observed_candidate_over_baseline": 1.0308608118819715,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -11386,6 +11461,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1991.6996250394732,
+            "B": 2001.8063749885187
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(lars); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -11447,9 +11527,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 2001.8063749885187,
-            "candidate_ms": 1991.6996250394732,
-            "observed_candidate_over_baseline": 0.9949511850519991,
+            "baseline_ms": 1229.429875034839,
+            "candidate_ms": 1218.8725830055773,
+            "observed_candidate_over_baseline": 0.991412855467692,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -11993,6 +12073,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 7248.178375069983,
+            "B": 7192.7933329716325
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -12054,9 +12139,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 7192.7933329716325,
-            "candidate_ms": 7248.178375069983,
-            "observed_candidate_over_baseline": 1.0077000741623519,
+            "baseline_ms": 6422.087249928154,
+            "candidate_ms": 6476.210374967195,
+            "observed_candidate_over_baseline": 1.0084276533364829,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -12600,6 +12685,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1402.4035409092903,
+            "B": 1394.6241249796003
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(lasso-lars); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -12661,9 +12751,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1394.6241249796003,
-            "candidate_ms": 1402.4035409092903,
-            "observed_candidate_over_baseline": 1.0055781452438333,
+            "baseline_ms": 623.6672910163179,
+            "candidate_ms": 631.1730419984087,
+            "observed_candidate_over_baseline": 1.0120348639253784,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -13207,6 +13297,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1691.912499954924,
+            "B": 1630.2146660163999
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -13268,9 +13363,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1630.2146660163999,
-            "candidate_ms": 1691.912499954924,
-            "observed_candidate_over_baseline": 1.0378464476026885,
+            "baseline_ms": 860.419291886501,
+            "candidate_ms": 919.2320000147447,
+            "observed_candidate_over_baseline": 1.0683535442345726,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -13814,6 +13909,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 2409.1830409597605,
+            "B": 2404.323499999009
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(huber); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -13875,9 +13975,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 2404.323499999009,
-            "candidate_ms": 2409.1830409597605,
-            "observed_candidate_over_baseline": 1.0020211676842794,
+            "baseline_ms": 1633.8251249399036,
+            "candidate_ms": 1637.533999979496,
+            "observed_candidate_over_baseline": 1.0022700563132354,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -14421,6 +14521,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 10201.159375021234,
+            "B": 10198.122665984556
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -14482,9 +14587,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 10198.122665984556,
-            "candidate_ms": 10201.159375021234,
-            "observed_candidate_over_baseline": 1.0002977713777466,
+            "baseline_ms": 9426.432624924928,
+            "candidate_ms": 9430.633208015934,
+            "observed_candidate_over_baseline": 1.0004456174735603,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -15028,6 +15133,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 606.3201669603586,
+            "B": 602.4489999981597
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(lasso-lars); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -15089,9 +15199,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 602.4489999981597,
-            "candidate_ms": 606.3201669603586,
-            "observed_candidate_over_baseline": 1.0064257173009015,
+            "baseline_ms": 112.93329193722457,
+            "candidate_ms": 117.45841603260487,
+            "observed_candidate_over_baseline": 1.040069000183716,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -15635,6 +15745,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 25283.735082950443,
+            "B": 25119.53295895364
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(ridge-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -15696,9 +15811,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 25119.53295895364,
-            "candidate_ms": 25283.735082950443,
-            "observed_candidate_over_baseline": 1.0065368302931872,
+            "baseline_ms": 24349.5042079594,
+            "candidate_ms": 24511.293999967165,
+            "observed_candidate_over_baseline": 1.0066444799296932,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -16242,6 +16357,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 599.3408750509843,
+            "B": 605.4343750001863
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(lars); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -16303,9 +16423,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 605.4343750001863,
-            "candidate_ms": 599.3408750509843,
-            "observed_candidate_over_baseline": 0.9899353254443142,
+            "baseline_ms": 118.2456249371171,
+            "candidate_ms": 110.2332080481574,
+            "observed_candidate_over_baseline": 0.9322392105989485,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -16849,6 +16969,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 628.1062089838088,
+            "B": 622.7400419302285
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -16910,9 +17035,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 622.7400419302285,
-            "candidate_ms": 628.1062089838088,
-            "observed_candidate_over_baseline": 1.0086170258731837,
+            "baseline_ms": 137.8127089701593,
+            "candidate_ms": 142.35379197634757,
+            "observed_candidate_over_baseline": 1.032951119240908,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -17456,6 +17581,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1634.162375004962,
+            "B": 1658.1437500426546
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(enet-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -17517,9 +17647,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1658.1437500426546,
-            "candidate_ms": 1634.162375004962,
-            "observed_candidate_over_baseline": 0.9855372159156432,
+            "baseline_ms": 887.9064579959959,
+            "candidate_ms": 861.1747500253841,
+            "observed_candidate_over_baseline": 0.9698935538424338,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -18063,6 +18193,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 680.5006669601426,
+            "B": 681.9942910224199
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(ridge-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -18124,9 +18259,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 681.9942910224199,
-            "candidate_ms": 680.5006669601426,
-            "observed_candidate_over_baseline": 0.9978099170595135,
+            "baseline_ms": 195.6242920132354,
+            "candidate_ms": 191.5292909834534,
+            "observed_candidate_over_baseline": 0.9790670116290826,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -18670,6 +18805,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 13757.316125091165,
+            "B": 13848.073333036155
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -18731,9 +18871,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 13848.073333036155,
-            "candidate_ms": 13757.316125091165,
-            "observed_candidate_over_baseline": 0.9934462213073008,
+            "baseline_ms": 13361.473834025674,
+            "candidate_ms": 13271.055208984762,
+            "observed_candidate_over_baseline": 0.9932328853714734,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -19277,6 +19417,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 8707.507833023556,
+            "B": 8700.152582954615
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -19338,9 +19483,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 8700.152582954615,
-            "candidate_ms": 8707.507833023556,
-            "observed_candidate_over_baseline": 1.0008454162152685,
+            "baseline_ms": 8213.320749928243,
+            "candidate_ms": 8219.419916975312,
+            "observed_candidate_over_baseline": 1.000742594528178,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -19884,6 +20029,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 2278.183583985083,
+            "B": 1384.035750059411
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(huber); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -19945,9 +20095,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1384.035750059411,
-            "candidate_ms": 2278.183583985083,
-            "observed_candidate_over_baseline": 1.6460438857069188,
+            "baseline_ms": 897.5531249307096,
+            "candidate_ms": 1789.9827909423038,
+            "observed_candidate_over_baseline": 1.9942917485586038,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -20491,6 +20641,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 777.0473749842495,
+            "B": 699.4155829306692
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(lasso-cv); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
@@ -20552,9 +20707,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 699.4155829306692,
-            "candidate_ms": 777.0473749842495,
-            "observed_candidate_over_baseline": 1.1109952279420054,
+            "baseline_ms": 213.03725009784102,
+            "candidate_ms": 290.6198750715703,
+            "observed_candidate_over_baseline": 1.3641739880612338,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -21092,6 +21247,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 151587.3012499651,
+            "B": 152320.42204099707
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_more.py:quality/gmm; independent saved gate pending",
@@ -21153,9 +21313,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 152320.42204099707,
-            "candidate_ms": 151587.3012499651,
-            "observed_candidate_over_baseline": 0.9951869829323696,
+            "baseline_ms": 149129.58408298437,
+            "candidate_ms": 148392.0395000605,
+            "observed_candidate_over_baseline": 0.9950543375584454,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -21699,6 +21859,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 565.7192079816014,
+            "B": 565.0157920317724
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_extra.py:quality(x-qn); unchanged held-out R2/RMSE and matching full opponent gate; pending",
@@ -21760,9 +21925,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 565.0157920317724,
-            "candidate_ms": 565.7192079816014,
-            "observed_candidate_over_baseline": 1.0012449491850475,
+            "baseline_ms": 92.4367910483852,
+            "candidate_ms": 94.59116600919515,
+            "observed_candidate_over_baseline": 1.0233064663579923,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -22306,6 +22471,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 4052.2691670339555,
+            "B": 3815.072833094746
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(pls); unchanged held-out R2/RMSE and matching full opponent gate; pending",
@@ -22367,9 +22537,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 3815.072833094746,
-            "candidate_ms": 4052.2691670339555,
-            "observed_candidate_over_baseline": 1.062173474614061,
+            "baseline_ms": 3043.9408330712467,
+            "candidate_ms": 3280.87079199031,
+            "observed_candidate_over_baseline": 1.0778365848458387,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -22913,6 +23083,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1519.6539169410244,
+            "B": 1186.451124958694
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(pls); unchanged held-out R2/RMSE and matching full opponent gate; pending",
@@ -22974,9 +23149,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1186.451124958694,
-            "candidate_ms": 1519.6539169410244,
-            "observed_candidate_over_baseline": 1.2808398803565808,
+            "baseline_ms": 699.2195420898497,
+            "candidate_ms": 1033.2419999176636,
+            "observed_candidate_over_baseline": 1.4777075549540233,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -23520,6 +23695,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1727.6659170165658,
+            "B": 1730.8373750420287
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_extra.py:quality(x-qn); unchanged held-out R2/RMSE and matching full opponent gate; pending",
@@ -23581,9 +23761,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1730.8373750420287,
-            "candidate_ms": 1727.6659170165658,
-            "observed_candidate_over_baseline": 0.9981676741725167,
+            "baseline_ms": 974.0104998927563,
+            "candidate_ms": 971.4134170208126,
+            "observed_candidate_over_baseline": 0.9973336192246083,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -24121,6 +24301,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1378.3062079455703,
+            "B": 1333.4462499478832
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality/randomized-svd; full-input opponent and complete state qualification pending",
@@ -24164,9 +24349,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1333.4462499478832,
-            "candidate_ms": 1378.3062079455703,
-            "observed_candidate_over_baseline": 1.0336421194325909,
+            "baseline_ms": 867.8805419476703,
+            "candidate_ms": 913.0437501007691,
+            "observed_candidate_over_baseline": 1.0520385075712666,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -24704,6 +24889,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1787.532874965109,
+            "B": 1552.1876660641283
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality/randomized-svd; full-input opponent and complete state qualification pending",
@@ -24747,9 +24937,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1552.1876660641283,
-            "candidate_ms": 1787.532874965109,
-            "observed_candidate_over_baseline": 1.151621620275945,
+            "baseline_ms": 861.7179160937667,
+            "candidate_ms": 1096.2525409413502,
+            "observed_candidate_over_baseline": 1.2721709975704658,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -25293,6 +25483,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 537.2816659510136,
+            "B": 549.7665000148118
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
@@ -25336,9 +25531,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 549.7665000148118,
-            "candidate_ms": 537.2816659510136,
-            "observed_candidate_over_baseline": 0.97729066055596,
+            "baseline_ms": 75.27362497057766,
+            "candidate_ms": 62.87404091563076,
+            "observed_candidate_over_baseline": 0.8352731908448205,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -25882,6 +26077,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1048.1146249221638,
+            "B": 1046.5909579070285
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
@@ -25925,9 +26125,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1046.5909579070285,
-            "candidate_ms": 1048.1146249221638,
-            "observed_candidate_over_baseline": 1.0014558381224528,
+            "baseline_ms": 285.03012494184077,
+            "candidate_ms": 289.67650001868606,
+            "observed_candidate_over_baseline": 1.016301347367382,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -26471,6 +26671,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 543.1199170416221,
+            "B": 556.4376250840724
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
@@ -26514,9 +26719,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 556.4376250840724,
-            "candidate_ms": 543.1199170416221,
-            "observed_candidate_over_baseline": 0.9760661259374075,
+            "baseline_ms": 80.71208302862942,
+            "candidate_ms": 68.09429207351059,
+            "observed_candidate_over_baseline": 0.8436691201409934,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -27060,6 +27265,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1059.5173330511898,
+            "B": 1054.2124159401283
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
@@ -27103,9 +27313,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1054.2124159401283,
-            "candidate_ms": 1059.5173330511898,
-            "observed_candidate_over_baseline": 1.005032114051067,
+            "baseline_ms": 299.0421249996871,
+            "candidate_ms": 298.2324999757111,
+            "observed_candidate_over_baseline": 0.997292605434847,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -27649,6 +27859,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1322.0051670214161,
+            "B": 1315.2390000177547
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
@@ -27692,9 +27907,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1315.2390000177547,
-            "candidate_ms": 1322.0051670214161,
-            "observed_candidate_over_baseline": 1.0051444391502762,
+            "baseline_ms": 845.930750016123,
+            "candidate_ms": 852.2356250323355,
+            "observed_candidate_over_baseline": 1.007453181027043,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -28246,6 +28461,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 4506.303416914307,
+            "B": 4521.4825419243425
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch impute; existing matching full-opponent gates pending",
@@ -28289,9 +28509,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 4521.4825419243425,
-            "candidate_ms": 4506.303416914307,
-            "observed_candidate_over_baseline": 0.9966428876216393,
+            "baseline_ms": 888.0119170062244,
+            "candidate_ms": 878.9279999909922,
+            "observed_candidate_over_baseline": 0.9897705010019945,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -28835,6 +29055,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 594.4271250627935,
+            "B": 597.9228341020644
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -28878,9 +29103,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 597.9228341020644,
-            "candidate_ms": 594.4271250627935,
-            "observed_candidate_over_baseline": 0.9941535782882074,
+            "baseline_ms": 130.78058301471174,
+            "candidate_ms": 128.54912492912263,
+            "observed_candidate_over_baseline": 0.9829373899844284,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -29424,6 +29649,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 6202.25400000345,
+            "B": 3994.893666007556
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
@@ -29467,9 +29697,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 3994.893666007556,
-            "candidate_ms": 6202.25400000345,
-            "observed_candidate_over_baseline": 1.5525454539073877,
+            "baseline_ms": 2354.4264590600505,
+            "candidate_ms": 4037.3628330416977,
+            "observed_candidate_over_baseline": 1.714796746997789,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -30013,6 +30243,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 10737.975417054258,
+            "B": 10721.622625016607
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -30056,9 +30291,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 10721.622625016607,
-            "candidate_ms": 10737.975417054258,
-            "observed_candidate_over_baseline": 1.0015252161552017,
+            "baseline_ms": 10256.382042076439,
+            "candidate_ms": 10274.29737499915,
+            "observed_candidate_over_baseline": 1.001746749765094,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -30602,6 +30837,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 4917.833624989726,
+            "B": 4927.551500033587
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -30645,9 +30885,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 4927.551500033587,
-            "candidate_ms": 4917.833624989726,
-            "observed_candidate_over_baseline": 0.9980278491165855,
+            "baseline_ms": 4172.456166008487,
+            "candidate_ms": 4163.449625018984,
+            "observed_candidate_over_baseline": 0.9978414294527822,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -31191,6 +31431,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 9464.645790983923,
+            "B": 9445.072249975055
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch fa; existing matching full-opponent gates pending",
@@ -31234,9 +31479,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 9445.072249975055,
-            "candidate_ms": 9464.645790983923,
-            "observed_candidate_over_baseline": 1.0020723548206758,
+            "baseline_ms": 8686.43683299888,
+            "candidate_ms": 8707.19858398661,
+            "observed_candidate_over_baseline": 1.0023901343424106,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -31780,6 +32025,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1293.2769579347223,
+            "B": 1028.9566669380292
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
@@ -31823,9 +32073,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1028.9566669380292,
-            "candidate_ms": 1293.2769579347223,
-            "observed_candidate_over_baseline": 1.2568818488569182,
+            "baseline_ms": 561.9143749354407,
+            "candidate_ms": 826.606374932453,
+            "observed_candidate_over_baseline": 1.4710539751317506,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -32369,6 +32619,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1418.8017920823768,
+            "B": 1177.7119589969516
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
@@ -32412,9 +32667,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1177.7119589969516,
-            "candidate_ms": 1418.8017920823768,
-            "observed_candidate_over_baseline": 1.204710354890817,
+            "baseline_ms": 703.3308329991996,
+            "candidate_ms": 951.9568330142647,
+            "observed_candidate_over_baseline": 1.3534979391630737,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -32958,6 +33213,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 4231.699166004546,
+            "B": 4236.502042040229
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
@@ -33001,9 +33261,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 4236.502042040229,
-            "candidate_ms": 4231.699166004546,
-            "observed_candidate_over_baseline": 0.9988663109357621,
+            "baseline_ms": 3411.87687497586,
+            "candidate_ms": 3405.3347919834778,
+            "observed_candidate_over_baseline": 0.9980825559561176,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -33547,6 +33807,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 705.4802079219371,
+            "B": 704.5067499857396
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch outlier; existing matching full-opponent gates pending",
@@ -33590,9 +33855,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 704.5067499857396,
-            "candidate_ms": 705.4802079219371,
-            "observed_candidate_over_baseline": 1.0013817581396023,
+            "baseline_ms": 237.40025004372,
+            "candidate_ms": 239.47829194366932,
+            "observed_candidate_over_baseline": 1.0087533265005686,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -34136,6 +34401,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 555.0444170366973,
+            "B": 539.5590830594301
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
@@ -34179,9 +34449,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 539.5590830594301,
-            "candidate_ms": 555.0444170366973,
-            "observed_candidate_over_baseline": 1.0286999783035096,
+            "baseline_ms": 71.95962499827147,
+            "candidate_ms": 82.68262492492795,
+            "observed_candidate_over_baseline": 1.1490141162758152,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -34725,6 +34995,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 10199.209874961525,
+            "B": 10207.266291952692
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -34768,9 +35043,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 10207.266291952692,
-            "candidate_ms": 10199.209874961525,
-            "observed_candidate_over_baseline": 0.9992107174672695,
+            "baseline_ms": 9453.298875014298,
+            "candidate_ms": 9447.474290966056,
+            "observed_candidate_over_baseline": 0.9993838569873597,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -35314,6 +35589,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 870.55395799689,
+            "B": 876.027874997817
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -35366,9 +35646,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 876.027874997817,
-            "candidate_ms": 870.55395799689,
-            "observed_candidate_over_baseline": 0.9937514351344805,
+            "baseline_ms": 410.49945796839893,
+            "candidate_ms": 406.0643749544397,
+            "observed_candidate_over_baseline": 0.9891958858218501,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -35912,6 +36192,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 6931.29941704683,
+            "B": 6932.964749983512
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -35955,9 +36240,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 6932.964749983512,
-            "candidate_ms": 6931.29941704683,
-            "observed_candidate_over_baseline": 0.9997597949799636,
+            "baseline_ms": 6466.506875003688,
+            "candidate_ms": 6465.326291974634,
+            "observed_candidate_over_baseline": 0.999817431102777,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -36501,6 +36786,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 741.8258750112727,
+            "B": 740.8203750383109
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch fa; existing matching full-opponent gates pending",
@@ -36544,9 +36834,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 740.8203750383109,
-            "candidate_ms": 741.8258750112727,
-            "observed_candidate_over_baseline": 1.0013572790474476,
+            "baseline_ms": 273.54529092554003,
+            "candidate_ms": 272.5380409974605,
+            "observed_candidate_over_baseline": 0.9963177946705954,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -37090,6 +37380,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1307.464167010039,
+            "B": 1279.437833931297
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
@@ -37133,9 +37428,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1279.437833931297,
-            "candidate_ms": 1307.464167010039,
-            "observed_candidate_over_baseline": 1.0219051933087098,
+            "baseline_ms": 451.21445797849447,
+            "candidate_ms": 480.63283402007073,
+            "observed_candidate_over_baseline": 1.0651982123387065,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -37679,6 +37974,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 27917.224499979056,
+            "B": 22648.736208095215
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
@@ -37722,9 +38022,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 22648.736208095215,
-            "candidate_ms": 27917.224499979056,
-            "observed_candidate_over_baseline": 1.2326173188418679,
+            "baseline_ms": 18689.008624991402,
+            "candidate_ms": 23125.23320899345,
+            "observed_candidate_over_baseline": 1.2373707815656856,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -38268,6 +38568,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 669.7097499854863,
+            "B": 634.3664590967819
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -38320,9 +38625,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 634.3664590967819,
-            "candidate_ms": 669.7097499854863,
-            "observed_candidate_over_baseline": 1.0557143121012837,
+            "baseline_ms": 167.71016595885158,
+            "candidate_ms": 204.51133395545185,
+            "observed_candidate_over_baseline": 1.2194331380342776,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -38866,6 +39171,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 595.2678329776973,
+            "B": 597.6734579307958
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -38918,9 +39228,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 597.6734579307958,
-            "candidate_ms": 595.2678329776973,
-            "observed_candidate_over_baseline": 0.9959750179279717,
+            "baseline_ms": 115.88562501128763,
+            "candidate_ms": 114.80062501505017,
+            "observed_candidate_over_baseline": 0.9906373202359501,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -39464,6 +39774,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1186.901375069283,
+            "B": 1198.3942080987617
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
@@ -39516,9 +39831,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1198.3942080987617,
-            "candidate_ms": 1186.901375069283,
-            "observed_candidate_over_baseline": 0.990409805928792,
+            "baseline_ms": 431.92025006283075,
+            "candidate_ms": 431.5888750134036,
+            "observed_candidate_over_baseline": 0.9992327864938517,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -40062,6 +40377,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 5837.604667060077,
+            "B": 4636.70854200609
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
@@ -40105,9 +40425,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 4636.70854200609,
-            "candidate_ms": 5837.604667060077,
-            "observed_candidate_over_baseline": 1.2589975440928651,
+            "baseline_ms": 3880.416666972451,
+            "candidate_ms": 5079.900083015673,
+            "observed_candidate_over_baseline": 1.309112015277234,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -40651,6 +40971,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 41482.47150005773,
+            "B": 22623.44487500377
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
@@ -40694,9 +41019,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 22623.44487500377,
-            "candidate_ms": 41482.47150005773,
-            "observed_candidate_over_baseline": 1.8336054358322305,
+            "baseline_ms": 21866.970582981594,
+            "candidate_ms": 40726.072625024244,
+            "observed_candidate_over_baseline": 1.862446948034042,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -41240,6 +41565,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 673.4981659101322,
+            "B": 654.5286249602214
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
@@ -41292,9 +41622,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 654.5286249602214,
-            "candidate_ms": 673.4981659101322,
-            "observed_candidate_over_baseline": 1.0289819882989284,
+            "baseline_ms": 185.67183299455792,
+            "candidate_ms": 204.45683295838535,
+            "observed_candidate_over_baseline": 1.1011731271289706,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -41838,6 +42168,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 10061.868375050835,
+            "B": 10052.67620808445
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -41881,9 +42216,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 10052.67620808445,
-            "candidate_ms": 10061.868375050835,
-            "observed_candidate_over_baseline": 1.0009143999842542,
+            "baseline_ms": 9299.27995800972,
+            "candidate_ms": 9305.472957901657,
+            "observed_candidate_over_baseline": 1.0006659655285033,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -42967,6 +43302,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 553.7436249433085,
+            "B": 552.7334589278325
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -43019,9 +43359,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 552.7334589278325,
-            "candidate_ms": 553.7436249433085,
-            "observed_candidate_over_baseline": 1.0018275825339675,
+            "baseline_ms": 86.60866599529982,
+            "candidate_ms": 87.76916703209281,
+            "observed_candidate_over_baseline": 1.0133993639488221,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -43565,6 +43905,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 6674.702542019077,
+            "B": 6678.49483306054
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -43608,9 +43953,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 6678.49483306054,
-            "candidate_ms": 6674.702542019077,
-            "observed_candidate_over_baseline": 0.9994321638129162,
+            "baseline_ms": 6212.927374988794,
+            "candidate_ms": 6210.217042011209,
+            "observed_candidate_over_baseline": 0.999563759108388,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -44154,6 +44499,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1949.959292076528,
+            "B": 1910.5208329856396
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -44206,9 +44556,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1910.5208329856396,
-            "candidate_ms": 1949.959292076528,
-            "observed_candidate_over_baseline": 1.0206427788747305,
+            "baseline_ms": 1156.7863338859752,
+            "candidate_ms": 1185.6095000403002,
+            "observed_candidate_over_baseline": 1.0249165859848117,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -44752,6 +45102,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1802.077459054999,
+            "B": 1706.0410000849515
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -44804,9 +45159,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1706.0410000849515,
-            "candidate_ms": 1802.077459054999,
-            "observed_candidate_over_baseline": 1.0562919994099,
+            "baseline_ms": 944.7715419810265,
+            "candidate_ms": 1045.1179998926818,
+            "observed_candidate_over_baseline": 1.1062124052776248,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -45350,6 +45705,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 7227.511374978349,
+            "B": 7266.766374930739
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -45393,9 +45753,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 7266.766374930739,
-            "candidate_ms": 7227.511374978349,
-            "observed_candidate_over_baseline": 0.994598009908807,
+            "baseline_ms": 6510.575999971479,
+            "candidate_ms": 6469.85674998723,
+            "observed_candidate_over_baseline": 0.9937456762682092,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -45947,6 +46307,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 843.325916910544,
+            "B": 836.7519580060616
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch impute; existing matching full-opponent gates pending",
@@ -45990,9 +46355,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 836.7519580060616,
-            "candidate_ms": 843.325916910544,
-            "observed_candidate_over_baseline": 1.0078565204916254,
+            "baseline_ms": 102.1724590100348,
+            "candidate_ms": 103.41579199302942,
+            "observed_candidate_over_baseline": 1.0121689640735034,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -46536,6 +46901,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1643.035624991171,
+            "B": 1627.905625035055
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch outlier; existing matching full-opponent gates pending",
@@ -46579,9 +46949,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1627.905625035055,
-            "candidate_ms": 1643.035624991171,
-            "observed_candidate_over_baseline": 1.0092941505474498,
+            "baseline_ms": 870.8870420232415,
+            "candidate_ms": 886.246292036958,
+            "observed_candidate_over_baseline": 1.017636328562237,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -47125,6 +47495,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 576.7430829582736,
+            "B": 580.5591250536963
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -47177,9 +47552,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 580.5591250536963,
-            "candidate_ms": 576.7430829582736,
-            "observed_candidate_over_baseline": 0.9934269535509069,
+            "baseline_ms": 118.91395796556026,
+            "candidate_ms": 115.34749995917082,
+            "observed_candidate_over_baseline": 0.9700080792246243,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -47723,6 +48098,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 598.6357920337468,
+            "B": 580.2826250437647
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
@@ -47766,9 +48146,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 580.2826250437647,
-            "candidate_ms": 598.6357920337468,
-            "observed_candidate_over_baseline": 1.0316279795360028,
+            "baseline_ms": 136.130457976833,
+            "candidate_ms": 155.0629580160603,
+            "observed_candidate_over_baseline": 1.1390761503384443,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -48312,6 +48692,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1054.0899590123445,
+            "B": 1059.7869580378756
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; n_selected and jaccard_vs_sklearn; existing matching full-opponent gates pending",
@@ -48355,9 +48740,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1059.7869580378756,
-            "candidate_ms": 1054.0899590123445,
-            "observed_candidate_over_baseline": 0.994624392211734,
+            "baseline_ms": 309.6861250232905,
+            "candidate_ms": 303.4585419809446,
+            "observed_candidate_over_baseline": 0.9798906617405685,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -48901,6 +49286,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1828.4146660007536,
+            "B": 1804.4732910348102
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch shape; existing matching full-opponent gates pending",
@@ -48953,9 +49343,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1804.4732910348102,
-            "candidate_ms": 1828.4146660007536,
-            "observed_candidate_over_baseline": 1.0132677912634627,
+            "baseline_ms": 1007.0439169649035,
+            "candidate_ms": 1032.7593330293894,
+            "observed_candidate_over_baseline": 1.0255355458002158,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -49499,6 +49889,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1247.3996250191703,
+            "B": 1231.9236249895766
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
@@ -49551,9 +49946,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1231.9236249895766,
-            "candidate_ms": 1247.3996250191703,
-            "observed_candidate_over_baseline": 1.0125624671170055,
+            "baseline_ms": 480.24799989070743,
+            "candidate_ms": 494.8014160618186,
+            "observed_candidate_over_baseline": 1.0303039599840564,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -50097,6 +50492,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1429.5469589997083,
+            "B": 1350.9567499859259
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch shape; existing matching full-opponent gates pending",
@@ -50149,9 +50549,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 1350.9567499859259,
-            "candidate_ms": 1429.5469589997083,
-            "observed_candidate_over_baseline": 1.0581737416942483,
+            "baseline_ms": 834.5687079709023,
+            "candidate_ms": 913.7421250343323,
+            "observed_candidate_over_baseline": 1.0948674642450054,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -50695,6 +51095,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 689.4132080487907,
+            "B": 643.0268329568207
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
@@ -50738,9 +51143,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 643.0268329568207,
-            "candidate_ms": 689.4132080487907,
-            "observed_candidate_over_baseline": 1.0721375418793524,
+            "baseline_ms": 200.75804204680026,
+            "candidate_ms": 245.51004194654524,
+            "observed_candidate_over_baseline": 1.2229151043887572,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -51284,6 +51689,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 555.2098749903962,
+            "B": 556.4248750451952
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; n_selected and jaccard_vs_sklearn; existing matching full-opponent gates pending",
@@ -51327,9 +51737,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 556.4248750451952,
-            "candidate_ms": 555.2098749903962,
-            "observed_candidate_over_baseline": 0.9978164167180694,
+            "baseline_ms": 93.06624997407198,
+            "candidate_ms": 94.7792079532519,
+            "observed_candidate_over_baseline": 1.0184057913546225,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -51873,6 +52283,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 17623.082916019484,
+            "B": 4204.2725830106065
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; QR R.T@R vs full X.T@X; SVD singular-value reference from full float64 Gram and original stride-row reconstruction. Original gates/opponents unchanged.",
@@ -51916,9 +52331,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 4204.2725830106065,
-            "candidate_ms": 17623.082916019484,
-            "observed_candidate_over_baseline": 4.19170797517603,
+            "baseline_ms": 3451.066792011261,
+            "candidate_ms": 16873.03516594693,
+            "observed_candidate_over_baseline": 4.889223009246201,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -52462,6 +52877,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 1130.0790419336408,
+            "B": 686.1715409904718
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; QR R.T@R vs full X.T@X; SVD singular-value reference from full float64 Gram and original stride-row reconstruction. Original gates/opponents unchanged.",
@@ -52505,9 +52925,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 686.1715409904718,
-            "candidate_ms": 1130.0790419336408,
-            "observed_candidate_over_baseline": 1.6469337103407107,
+            "baseline_ms": 217.6489169942215,
+            "candidate_ms": 663.2784160319716,
+            "observed_candidate_over_baseline": 3.0474694071166977,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -53051,6 +53471,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 4673.548541031778,
+            "B": 4680.020125000738
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; QR R.T@R vs full X.T@X; SVD singular-value reference from full float64 Gram and original stride-row reconstruction. Original gates/opponents unchanged.",
@@ -53103,9 +53528,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 4680.020125000738,
-            "candidate_ms": 4673.548541031778,
-            "observed_candidate_over_baseline": 0.9986171888589991,
+            "baseline_ms": 3585.420042043552,
+            "candidate_ms": 3577.876500086859,
+            "observed_candidate_over_baseline": 0.997896050708638,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -53649,6 +54074,11 @@
             "AF.N.E09",
             "AF.N.E10"
           ],
+          "full_operation_ms": {
+            "A": 732.211249996908,
+            "B": 744.6086250711232
+          },
+          "timing_source": "legacy fit_or_training_seconds + inference_seconds (includes inference setup/capture)",
           "quality_metrics": {
             "A": {
               "gate_source": "tools/bench_board_algos.py:quality; QR R.T@R vs full X.T@X; SVD singular-value reference from full float64 Gram and original stride-row reconstruction. Original gates/opponents unchanged.",
@@ -53701,9 +54131,9 @@
             }
           },
           "unqualified_timing": {
-            "baseline_ms": 744.6086250711232,
-            "candidate_ms": 732.211249996908,
-            "observed_candidate_over_baseline": 0.9833504815055949,
+            "baseline_ms": 233.6536250077188,
+            "candidate_ms": 220.31045809853822,
+            "observed_candidate_over_baseline": 0.9428933879851434,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         }
@@ -54290,15 +54720,15 @@
       "evidence": {
         "quality": {
           "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
-          "sha256": "6313f7b2bb43c3a6ea272dfba7b8ab2972d54220097099c5e5ca3ce846b14a02",
-          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/6313f7b2bb43c3a6ea272dfba7b8ab2972d54220097099c5e5ca3ce846b14a02/targeted-quality.json",
+          "sha256": "d6f4b096bc8fcabcee034172979fed9bd0804207f9edd62f25d23d6958876db7",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/d6f4b096bc8fcabcee034172979fed9bd0804207f9edd62f25d23d6958876db7/targeted-quality.json",
           "kind": "quality",
           "status": "RETAINED"
         },
         "identity": {
           "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-identity.json",
-          "sha256": "d28c10e5b016f884f650819ccb108ae358b66cdd00da0507f9b155175c64ef38",
-          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/d28c10e5b016f884f650819ccb108ae358b66cdd00da0507f9b155175c64ef38/targeted-identity.json",
+          "sha256": "f041ceff4dbf4aaddf2a8f81e53de027fba68bfb9f26e6fe66e1407e4835a43b",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/f041ceff4dbf4aaddf2a8f81e53de027fba68bfb9f26e6fe66e1407e4835a43b/targeted-identity.json",
           "kind": "identity",
           "status": "RETAINED"
         },
@@ -54323,7 +54753,7 @@
   "remaining_catalog": {
     "schema": "mojolearn.campaign-remaining-work/1",
     "catalog_source": "experiments/six_lane_integration/catalog.json",
-    "catalog_sha256": "7acb465d4fbeb6c2e5f0bb45ca06a8a6c133a3da6f56cab2752788bb160c7879",
+    "catalog_sha256": "8f217652545aa5bfde321c2d76a4708824fec135722523ac741a3e9153dcbad6",
     "entries": 375,
     "interactions": 128,
     "roles": {
@@ -54405,7 +54835,7 @@
             "A": {
               "defines": [
                 "MOJOLEARN_CLASSICAL_C01_LEAF64=1",
-                "MOJOLEARN_C52_PAIR_128=1"
+                "MOJOLEARN_C52_PAIR_ROWS=128"
               ],
               "environment": {},
               "runtime": {}
@@ -54421,7 +54851,7 @@
             "A": {
               "defines": [
                 "MOJOLEARN_CLASSICAL_C01_LEAF64=1",
-                "MOJOLEARN_C52_PAIR_512=1"
+                "MOJOLEARN_C52_PAIR_ROWS=512"
               ],
               "environment": {},
               "runtime": {}
@@ -54437,7 +54867,7 @@
             "A": {
               "defines": [
                 "MOJOLEARN_CLASSICAL_C01_LEAF128=1",
-                "MOJOLEARN_C52_PAIR_128=1"
+                "MOJOLEARN_C52_PAIR_ROWS=128"
               ],
               "environment": {},
               "runtime": {}
@@ -54453,7 +54883,7 @@
             "A": {
               "defines": [
                 "MOJOLEARN_CLASSICAL_C01_LEAF128=1",
-                "MOJOLEARN_C52_PAIR_512=1"
+                "MOJOLEARN_C52_PAIR_ROWS=512"
               ],
               "environment": {},
               "runtime": {}
@@ -54566,14 +54996,11 @@
         "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
         "affected_workloads": [
           "classical:ols",
-          "classical:pca",
-          "expanded:gaussian-nb",
           "expanded:standard-scaler",
           "more:ridge"
         ],
         "arm_ids": [
           "I.C.C02:combined",
-          "I.C.C02:combo_paired_stats_linear_pair",
           "I.C.C02:linear_pair",
           "I.C.C02:paired_stats"
         ],
@@ -54597,22 +55024,6 @@
             "id": "I.C.C02:linear_pair",
             "A": {
               "defines": [
-                "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C02:combo_paired_stats_linear_pair",
-            "A": {
-              "defines": [
-                "MOJOLEARN_CLASSICAL_C02_STATS_PAIR=1",
                 "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1"
               ],
               "environment": {},
@@ -54798,13 +55209,11 @@
         "unresolved_members": [],
         "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
         "affected_workloads": [
-          "classical:ols",
           "expanded:sgd-clf@ranking_report",
           "expanded:sgd-reg@regression_report"
         ],
         "arm_ids": [
           "I.C.C05:combined",
-          "I.C.C05:combo_phase_scratch_ols_phase",
           "I.C.C05:ols_phase",
           "I.C.C05:phase_scratch"
         ],
@@ -54828,22 +55237,6 @@
             "id": "I.C.C05:ols_phase",
             "A": {
               "defines": [
-                "MOJOLEARN_CLASSICAL_C05_OLS_PHASE=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C05:combo_phase_scratch_ols_phase",
-            "A": {
-              "defines": [
-                "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH=1",
                 "MOJOLEARN_CLASSICAL_C05_OLS_PHASE=1"
               ],
               "environment": {},
@@ -55711,14 +56104,9 @@
         "unresolved_members": [],
         "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
         "affected_workloads": [
-          "classical:ols",
-          "expanded:lstsq",
           "expanded:lu-solve",
-          "expanded:pls",
           "expanded:ridge-clf",
-          "expanded:ridge-cv",
-          "more:gpr",
-          "more:ridge"
+          "expanded:ridge-cv"
         ],
         "arm_ids": [
           "I.C.C14:group_rhs"
@@ -55778,11 +56166,7 @@
         "unresolved_members": [],
         "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
         "affected_workloads": [
-          "expanded:ard",
-          "expanded:bayesian-ridge",
-          "expanded:elliptic-envelope",
-          "expanded:min-cov-det",
-          "more:ridge"
+          "expanded:ard"
         ],
         "arm_ids": [
           "I.C.C15:factor_solve"
@@ -55842,10 +56226,7 @@
         "affected_workloads": [
           "expanded:gamma",
           "expanded:poisson",
-          "expanded:tweedie",
-          "more:linearsvc",
-          "more:linearsvr",
-          "more:logreg"
+          "expanded:tweedie"
         ],
         "arm_ids": [
           "I.C.C16:glm_fused"
@@ -55903,14 +56284,12 @@
         "unresolved_members": [],
         "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
         "affected_workloads": [
-          "expanded:logreg-cv",
           "more:linearsvc",
           "more:linearsvr",
           "more:logreg"
         ],
         "arm_ids": [
           "I.C.C17:combined",
-          "I.C.C17:combo_ovr_waves_line_search_pairs",
           "I.C.C17:line_search_pairs",
           "I.C.C17:ovr_waves"
         ],
@@ -55934,22 +56313,6 @@
             "id": "I.C.C17:line_search_pairs",
             "A": {
               "defines": [
-                "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C17:combo_ovr_waves_line_search_pairs",
-            "A": {
-              "defines": [
-                "MOJOLEARN_CLASSICAL_C17_OVR=1",
                 "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1"
               ],
               "environment": {},
@@ -56195,15 +56558,8 @@
         "selection_only": false,
         "members": [],
         "unresolved_members": [],
-        "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
-        "affected_workloads": [
-          "expanded:pa-clf",
-          "expanded:pa-reg",
-          "expanded:perceptron",
-          "expanded:sgd-clf",
-          "expanded:sgd-ocsvm",
-          "expanded:sgd-reg"
-        ],
+        "recipe_status": "SOURCE_RECIPE_UNRESOLVED",
+        "affected_workloads": [],
         "arm_ids": [
           "I.C.C19:ordered_128",
           "I.C.C19:ordered_32"
@@ -56213,7 +56569,7 @@
             "id": "I.C.C19:ordered_128",
             "A": {
               "defines": [
-                "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1"
+                "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
               ],
               "environment": {},
               "runtime": {}
@@ -56228,7 +56584,7 @@
             "id": "I.C.C19:ordered_32",
             "A": {
               "defines": [
-                "MOJOLEARN_CLASSICAL_C19_ORDERED_32=1"
+                "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32"
               ],
               "environment": {},
               "runtime": {}
@@ -56277,12 +56633,10 @@
         "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
         "affected_workloads": [
           "classical:svc",
-          "expanded:ocsvm",
           "more:svr"
         ],
         "arm_ids": [
           "I.C.C20:combined",
-          "I.C.C20:combo_row_cache_pair_load",
           "I.C.C20:pair_load",
           "I.C.C20:row_cache"
         ],
@@ -56306,22 +56660,6 @@
             "id": "I.C.C20:pair_load",
             "A": {
               "defines": [
-                "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C20:combo_row_cache_pair_load",
-            "A": {
-              "defines": [
-                "MOJOLEARN_CLASSICAL_C20_ROW_CACHE=1",
                 "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1"
               ],
               "environment": {},
@@ -56391,7 +56729,6 @@
         "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
         "affected_workloads": [
           "classical:svc",
-          "expanded:ocsvm",
           "more:svr"
         ],
         "arm_ids": [
@@ -56453,9 +56790,6 @@
         "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
         "affected_workloads": [
           "classical:svc",
-          "expanded:kernel-pca",
-          "expanded:ocsvm",
-          "more:kernel-ridge",
           "more:svr"
         ],
         "arm_ids": [
@@ -57188,11 +57522,6 @@
         "recipe_status": "REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION",
         "affected_workloads": [
           "classical:knn",
-          "expanded:isomap",
-          "expanded:label-propagation",
-          "expanded:label-spreading",
-          "expanded:lle",
-          "expanded:lof",
           "more:knn-clf",
           "more:knn-reg"
         ],
@@ -57222,7 +57551,7 @@
             "A": {
               "defines": [
                 "MOJOLEARN_C29_STREAM_TOPK=1",
-                "MOJOLEARN_C29_TILE_128=1"
+                "MOJOLEARN_C29_TILE=128"
               ],
               "environment": {},
               "runtime": {}
@@ -57238,7 +57567,7 @@
             "A": {
               "defines": [
                 "MOJOLEARN_C29_STREAM_TOPK=1",
-                "MOJOLEARN_C29_TILE_128=1"
+                "MOJOLEARN_C29_TILE=128"
               ],
               "environment": {},
               "runtime": {}
@@ -58488,7 +58817,7 @@
             "id": "I.C.C52:pair128",
             "A": {
               "defines": [
-                "MOJOLEARN_C52_PAIR_128=1"
+                "MOJOLEARN_C52_PAIR_ROWS=128"
               ],
               "environment": {},
               "runtime": {}
@@ -58503,7 +58832,7 @@
             "id": "I.C.C52:pair512",
             "A": {
               "defines": [
-                "MOJOLEARN_C52_PAIR_512=1"
+                "MOJOLEARN_C52_PAIR_ROWS=512"
               ],
               "environment": {},
               "runtime": {}
@@ -58964,17 +59293,6 @@
         ],
         "arm_ids": [
           "I.C.C58:combined",
-          "I.C.C58:combo_forecast_series4_team64",
-          "I.C.C58:combo_hw_scale_once_forecast_series4",
-          "I.C.C58:combo_hw_scale_once_forecast_series4_team64",
-          "I.C.C58:combo_hw_scale_once_hw_series4",
-          "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4",
-          "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4_team64",
-          "I.C.C58:combo_hw_scale_once_hw_series4_team64",
-          "I.C.C58:combo_hw_scale_once_team64",
-          "I.C.C58:combo_hw_series4_forecast_series4",
-          "I.C.C58:combo_hw_series4_forecast_series4_team64",
-          "I.C.C58:combo_hw_series4_team64",
           "I.C.C58:forecast_series4",
           "I.C.C58:hw_scale_once",
           "I.C.C58:hw_series4",
@@ -59030,189 +59348,7 @@
             "id": "I.C.C58:team64",
             "A": {
               "defines": [
-                "MOJOLEARN_C58_TEAM64=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_scale_once_hw_series4",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SHARED_PREP=1",
-                "MOJOLEARN_C58_SERIES4=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_scale_once_forecast_series4",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SHARED_PREP=1",
-                "MOJOLEARN_C58_FORECAST4=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_series4_forecast_series4",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SERIES4=1",
-                "MOJOLEARN_C58_FORECAST4=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SHARED_PREP=1",
-                "MOJOLEARN_C58_SERIES4=1",
-                "MOJOLEARN_C58_FORECAST4=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_scale_once_team64",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SHARED_PREP=1",
-                "MOJOLEARN_C58_TEAM64=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_series4_team64",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SERIES4=1",
-                "MOJOLEARN_C58_TEAM64=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_scale_once_hw_series4_team64",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SHARED_PREP=1",
-                "MOJOLEARN_C58_SERIES4=1",
-                "MOJOLEARN_C58_TEAM64=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_forecast_series4_team64",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_FORECAST4=1",
-                "MOJOLEARN_C58_TEAM64=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_scale_once_forecast_series4_team64",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SHARED_PREP=1",
-                "MOJOLEARN_C58_FORECAST4=1",
-                "MOJOLEARN_C58_TEAM64=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_series4_forecast_series4_team64",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SERIES4=1",
-                "MOJOLEARN_C58_FORECAST4=1",
-                "MOJOLEARN_C58_TEAM64=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4_team64",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C58_SHARED_PREP=1",
-                "MOJOLEARN_C58_SERIES4=1",
-                "MOJOLEARN_C58_FORECAST4=1",
-                "MOJOLEARN_C58_TEAM64=1"
+                "MOJOLEARN_C58_TEAM_MIB=64"
               ],
               "environment": {},
               "runtime": {}
@@ -59230,7 +59366,7 @@
                 "MOJOLEARN_C58_SHARED_PREP=1",
                 "MOJOLEARN_C58_SERIES4=1",
                 "MOJOLEARN_C58_FORECAST4=1",
-                "MOJOLEARN_C58_TEAM64=1"
+                "MOJOLEARN_C58_TEAM_MIB=64"
               ],
               "environment": {},
               "runtime": {}
@@ -59344,9 +59480,6 @@
           "expanded:autoarima"
         ],
         "arm_ids": [
-          "I.C.C60:combined",
-          "I.C.C60:combo_lag4_diff_reuse",
-          "I.C.C60:diff_reuse",
           "I.C.C60:lag4"
         ],
         "arm_controls": [
@@ -59355,53 +59488,6 @@
             "A": {
               "defines": [
                 "MOJOLEARN_C60_LAG4=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C60:diff_reuse",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C60_DIFF_REUSE=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C60:combo_lag4_diff_reuse",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C60_LAG4=1",
-                "MOJOLEARN_C60_DIFF_REUSE=1"
-              ],
-              "environment": {},
-              "runtime": {}
-            },
-            "B": {
-              "defines": [],
-              "environment": {},
-              "runtime": {}
-            }
-          },
-          {
-            "id": "I.C.C60:combined",
-            "A": {
-              "defines": [
-                "MOJOLEARN_C60_LAG4=1",
-                "MOJOLEARN_C60_DIFF_REUSE=1"
               ],
               "environment": {},
               "runtime": {}
@@ -88987,7 +89073,7 @@
                 "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS=1",
                 "MOJOLEARN_C37_ROW_PANELS=1",
                 "MOJOLEARN_C37_PANEL_128=1",
-                "MOJOLEARN_C52_PAIR_128=1"
+                "MOJOLEARN_C52_PAIR_ROWS=128"
               ],
               "environment": {},
               "runtime": {}
@@ -89161,7 +89247,7 @@
               "defines": [
                 "MOJOLEARN_CLASSICAL_C06_ROWS2=1",
                 "MOJOLEARN_C29_STREAM_TOPK=1",
-                "MOJOLEARN_C29_TILE_128=1",
+                "MOJOLEARN_C29_TILE=128",
                 "MOJOLEARN_C30_DIRECT_DISTANCE=1",
                 "MOJOLEARN_C30_ROWS_4=1",
                 "MOJOLEARN_C32_COUNT_FUSION=1",
@@ -89437,7 +89523,7 @@
                 "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
                 "MOJOLEARN_CLASSICAL_C17_OVR=1",
                 "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
-                "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1"
+                "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
               ],
               "environment": {},
               "runtime": {}
@@ -89592,7 +89678,7 @@
             "A": {
               "defines": [
                 "MOJOLEARN_C29_STREAM_TOPK=1",
-                "MOJOLEARN_C29_TILE_128=1",
+                "MOJOLEARN_C29_TILE=128",
                 "MOJOLEARN_C31_DEVICE_BUCKETS=1",
                 "MOJOLEARN_C32_COUNT_FUSION=1",
                 "MOJOLEARN_C32_EMIT_FUSION=1",
@@ -89861,10 +89947,9 @@
                 "MOJOLEARN_C58_SHARED_PREP=1",
                 "MOJOLEARN_C58_SERIES4=1",
                 "MOJOLEARN_C58_FORECAST4=1",
-                "MOJOLEARN_C58_TEAM64=1",
+                "MOJOLEARN_C58_TEAM_MIB=64",
                 "MOJOLEARN_C59_TRIAL_STATE=1",
-                "MOJOLEARN_C60_LAG4=1",
-                "MOJOLEARN_C60_DIFF_REUSE=1"
+                "MOJOLEARN_C60_LAG4=1"
               ],
               "environment": {},
               "runtime": {}
@@ -90126,7 +90211,7 @@
                 "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
                 "MOJOLEARN_CLASSICAL_C18_TILE64=1",
                 "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH=1",
-                "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1",
+                "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128",
                 "MOJOLEARN_CLASSICAL_C20_ROW_CACHE=1",
                 "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1",
                 "MOJOLEARN_CLASSICAL_C21_EXTREMA=1",
@@ -90143,7 +90228,7 @@
                 "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR=1",
                 "MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES=1",
                 "MOJOLEARN_C29_STREAM_TOPK=1",
-                "MOJOLEARN_C29_TILE_128=1",
+                "MOJOLEARN_C29_TILE=128",
                 "MOJOLEARN_C30_DIRECT_DISTANCE=1",
                 "MOJOLEARN_C30_ROWS_4=1",
                 "MOJOLEARN_C31_DEVICE_BUCKETS=1",
@@ -90167,7 +90252,7 @@
                 "MOJOLEARN_C42_ACTIVE_TRIANGLE=1",
                 "MOJOLEARN_C43_RESIDENT_NORMALIZATION=1",
                 "MOJOLEARN_C44_SAMPLING_DESCRIPTORS=1",
-                "MOJOLEARN_C52_PAIR_128=1",
+                "MOJOLEARN_C52_PAIR_ROWS=128",
                 "MOJOLEARN_C53_CENTER4=1",
                 "MOJOLEARN_C53_BGMM_STATS=1",
                 "MOJOLEARN_C54_PREDICT_TILES=1",
@@ -90178,10 +90263,9 @@
                 "MOJOLEARN_C58_SHARED_PREP=1",
                 "MOJOLEARN_C58_SERIES4=1",
                 "MOJOLEARN_C58_FORECAST4=1",
-                "MOJOLEARN_C58_TEAM64=1",
+                "MOJOLEARN_C58_TEAM_MIB=64",
                 "MOJOLEARN_C59_TRIAL_STATE=1",
-                "MOJOLEARN_C60_LAG4=1",
-                "MOJOLEARN_C60_DIFF_REUSE=1"
+                "MOJOLEARN_C60_LAG4=1"
               ],
               "environment": {},
               "runtime": {}
@@ -92695,7 +92779,6 @@
           "expanded:auto-theta",
           "expanded:autoarima",
           "expanded:bayesian-gmm",
-          "expanded:bayesian-ridge",
           "expanded:bernoulli-nb",
           "expanded:bisecting-kmeans",
           "expanded:bootstrap",
@@ -92728,7 +92811,6 @@
           "expanded:lda-clf",
           "expanded:lda-clf@lda_outputs",
           "expanded:lle",
-          "expanded:lof",
           "expanded:logreg-cv",
           "expanded:logreg-cv@weighted_cv",
           "expanded:lstsq",
@@ -92742,17 +92824,13 @@
           "expanded:multinomial-nb",
           "expanded:nmf",
           "expanded:normalizer",
-          "expanded:ocsvm",
           "expanded:onehot",
           "expanded:onehot@onehot_fit_transform",
           "expanded:optics",
           "expanded:optimized-theta",
           "expanded:ordinal",
           "expanded:ordinal@ordinal_fit_transform",
-          "expanded:pa-clf",
-          "expanded:pa-reg",
           "expanded:pagerank",
-          "expanded:perceptron",
           "expanded:permutation-test",
           "expanded:pls",
           "expanded:pls-canonical",
@@ -92766,11 +92844,8 @@
           "expanded:resample",
           "expanded:ridge-clf",
           "expanded:ridge-cv",
-          "expanded:sgd-clf",
           "expanded:sgd-clf@classification_report",
           "expanded:sgd-clf@ranking_report",
-          "expanded:sgd-ocsvm",
-          "expanded:sgd-reg",
           "expanded:sgd-reg@regression_report",
           "expanded:sparse-coder",
           "expanded:sparse-rp",
@@ -95497,7 +95572,6 @@
           "expanded:auto-theta",
           "expanded:autoarima",
           "expanded:bayesian-gmm",
-          "expanded:bayesian-ridge",
           "expanded:bernoulli-nb",
           "expanded:bisecting-kmeans",
           "expanded:bootstrap",
@@ -95530,7 +95604,6 @@
           "expanded:lda-clf",
           "expanded:lda-clf@lda_outputs",
           "expanded:lle",
-          "expanded:lof",
           "expanded:logreg-cv",
           "expanded:logreg-cv@weighted_cv",
           "expanded:lstsq",
@@ -95544,17 +95617,13 @@
           "expanded:multinomial-nb",
           "expanded:nmf",
           "expanded:normalizer",
-          "expanded:ocsvm",
           "expanded:onehot",
           "expanded:onehot@onehot_fit_transform",
           "expanded:optics",
           "expanded:optimized-theta",
           "expanded:ordinal",
           "expanded:ordinal@ordinal_fit_transform",
-          "expanded:pa-clf",
-          "expanded:pa-reg",
           "expanded:pagerank",
-          "expanded:perceptron",
           "expanded:permutation-test",
           "expanded:pls",
           "expanded:pls-canonical",
@@ -95568,11 +95637,8 @@
           "expanded:resample",
           "expanded:ridge-clf",
           "expanded:ridge-cv",
-          "expanded:sgd-clf",
           "expanded:sgd-clf@classification_report",
           "expanded:sgd-clf@ranking_report",
-          "expanded:sgd-ocsvm",
-          "expanded:sgd-reg",
           "expanded:sgd-reg@regression_report",
           "expanded:sparse-coder",
           "expanded:sparse-rp",

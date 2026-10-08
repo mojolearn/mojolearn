@@ -48,95 +48,95 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 
 | Candidate | Vendor / route | Case | Scope | Status | A (s) | B (s) | Admitted A/B | Observed A/B | Quality (A/B) | Toggles / details | Evidence |
 |---|---|---|---|---|---:|---:|---:|---:|---|---|---|
-| AF.X.complete-proposed | apple/apple-fast | classical/ols@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.534309 | 0.531459 | — | 1.0054 | BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING; finite A/B=true/true; r2 A/B=0.908775/0.908775; rmse A/B=4.69807/4.69807 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-a32782c39b49d75b) | [retained receipt](<receipts/apple/apple--captured--runs/440956ba5f3a721465b8/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical/ols@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.58948 | 1.59958 | — | 0.9937 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.331943/0.331943; rmse A/B=0.682027/0.682027 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-c6dd0878e8d6b977) | [retained receipt](<receipts/apple/apple--captured--runs/4a650353219f94bd483f/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical/ols@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.119435 | 0.113403 | — | 1.0532 | BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING; finite A/B=true/true; r2 A/B=0.908775/0.908775; rmse A/B=4.69807/4.69807 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-a32782c39b49d75b) | [retained receipt](<receipts/apple/apple--captured--runs/440956ba5f3a721465b8/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical/ols@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.89129 | 0.901771 | — | 0.9884 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.331943/0.331943; rmse A/B=0.682027/0.682027 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-c6dd0878e8d6b977) | [retained receipt](<receipts/apple/apple--captured--runs/4a650353219f94bd483f/attempt-0001/receipt.json>) |
 | AF.X.complete-proposed | apple/apple-fast | classical/kmeans@dataset=istella/attempt-0001 | full_workload | FAILED_OR_INCOMPLETE | — | — | — | — | NOT_ASSESSED; metrics not recorded | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-322ccbf903df0c22) | [retained receipt](<receipts/apple/apple--captured--runs/69a08c873718b0d710ad/attempt-0001/receipt.json>) |
 | AF.X.complete-proposed | apple/apple-fast | classical/kmeans@dataset=istella/attempt-0002 | full_workload | FAILED_OR_INCOMPLETE | — | — | — | — | NOT_ASSESSED; metrics not recorded | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-c8a6ac85f8cf9cb3) | [retained receipt](<receipts/apple/apple--captured--runs/69a08c873718b0d710ad/attempt-0002/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical/pca@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.498951 | 0.500522 | — | 0.9969 | BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING; explained_variance_ratio_sum A/B=0.999997/0.999997 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-91aaa1753ba2f73e) | [retained receipt](<receipts/apple/apple--captured--runs/75455971e66712016083/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical/pca@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.7872 | 1.14723 | — | 1.5578 | TASK_METRIC_GATE_PASSED; explained_variance_ratio_sum A/B=1/1 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-c1ffb3d13c13dc5e) | [retained receipt](<receipts/apple/apple--captured--runs/918eace39f801d37fc21/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical/kmeans@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 3.31906 | 1.66506 | — | 1.9934 | PENDING; inertia A/B=4.01988e+08/4.01988e+08; n_iter A/B=84/84 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-288af0845518e7db) | [retained receipt](<receipts/apple/apple--captured--kmeans-repair2--runs/449522fb6bd97f700c04/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical/kmeans@dataset=istella/attempt-0001 | full_workload | QUALITY_FAILED | 2.38934 | 2.36248 | — | 1.0114 | FAILED_FAST_OPPONENT_GATE; inertia A/B=6.05072e+17/6.05072e+17; n_iter A/B=33/33 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-3cb7b17e87b2b93c) | [retained receipt](<receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/resample@dataset=istella/attempt-0001 | full_workload | QUALITY_FAILED | 2.29268 | 2.29334 | — | 0.9997 | QUALITY_FAILED; max_mean_shift_over_std A/B=0.00194692/0.00194692 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-e10674a2304dcc24) | [retained receipt](<receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/resample@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.75579 | 0.740297 | — | 1.0209 | TASK_METRIC_GATE_PASSED; max_mean_shift_over_std A/B=0.000818294/0.000818294 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-62c30d7b110ec4fe) | [retained receipt](<receipts/apple/apple--captured--resample-full--runs/661a766183dd2fb07d65/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical2/linearsvr@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.27067 | 1.3157 | — | 0.9658 | PENDING; finite A/B=true/true; r2 A/B=-0.107028/-0.107028; rmse A/B=0.87796/0.87796 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-454ec65777dc4431) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/05207b357bcbe067ca6a/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical2/ridge@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.64688 | 1.64271 | — | 1.0025 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.332534/0.332534; rmse A/B=0.681726/0.681726 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-74b2f6f2bb84e966) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/6d77306d88d72aab7b44/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical2/linearsvr@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.606728 | 0.607164 | — | 0.9993 | PENDING; finite A/B=true/true; r2 A/B=0.899284/0.899284; rmse A/B=4.93641/4.93641 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-4557bd5b84099a1e) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/71dfc119e59c074352bb/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical2/ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.608297 | 0.588781 | — | 1.0331 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69815/4.69815 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-60094147f639ef4f) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/94c802682d07720f1572/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical2/gmm@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 2.67696 | 1.84056 | — | 1.4544 | TASK_METRIC_GATE_PASSED; bic A/B=-1.88789e+08/-1.88789e+08; mean_log_likelihood A/B=11.6016/11.6016; n_iter A/B=24/24 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-7927b956ba0b72c1) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/d4f24411b4f604c84997/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/bayesian-ridge@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.67635 | 1.65577 | — | 1.0124 | PENDING; finite A/B=true/true; r2 A/B=0.33211/0.332103; rmse A/B=0.681943/0.681946 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-de5212f72587e628) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/11f34b0bacc6a216cbf5/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/bayesian-ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.602563 | 0.600014 | — | 1.0042 | PENDING; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69813/4.69813 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-c5e9f9f7b828c55f) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/121d2bf7022b542e4d6e/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/lars@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.9917 | 2.00181 | — | 0.9950 | PENDING; finite A/B=true/true; r2 A/B=0.332579/0.332252; rmse A/B=0.681703/0.68187 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-158387d3db293254) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/1ffab8882758257c9f23/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/sgd-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 7.24818 | 7.19279 | — | 1.0077 | PENDING; finite A/B=true/true; r2 A/B=0.331677/0.331677; rmse A/B=0.682163/0.682163 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-5b6dea355b89327d) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/22c62826ae044e079978/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/lasso-lars@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.4024 | 1.39462 | — | 1.0056 | PENDING; finite A/B=true/true; r2 A/B=0.314676/0.314669; rmse A/B=0.690785/0.690789 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-beeef7a464f96181) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/3a40940bae1961555f78/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/lasso-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.69191 | 1.63021 | — | 1.0378 | PENDING; finite A/B=true/true; r2 A/B=0.329438/0.329438; rmse A/B=0.683305/0.683305 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-5f43961bc834421b) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/3cfd7d59ee9c8efa1497/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/huber@dataset=istella/attempt-0001 | full_workload | QUALITY_FAILED | 2.40918 | 2.40432 | — | 1.0020 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=-0.00708934/-0.00595219; rmse A/B=0.837393/0.83692 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-f3328cbf23ffeea8) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/pa-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 10.2012 | 10.1981 | — | 1.0003 | PENDING; finite A/B=true/true; r2 A/B=0.310359/0.310359; rmse A/B=0.692958/0.692958 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-541855c4db4d9e40) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/6fcf310a716926c2d853/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/lasso-lars@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.60632 | 0.602449 | — | 1.0064 | PENDING; finite A/B=true/true; r2 A/B=0.908794/0.908794; rmse A/B=4.69757/4.69757 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-5be9ee86049e552d) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/791dbcdb69bd137c8ef4/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/ridge-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 25.2837 | 25.1195 | — | 1.0065 | PENDING; finite A/B=true/true; r2 A/B=0.332506/0.332506; rmse A/B=0.68174/0.68174 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-ff24a097f693b2ad) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/805874e87463199882f2/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/lars@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.599341 | 0.605434 | — | 0.9899 | PENDING; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69813/4.69813 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-35e944e0962689e1) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/980247052f23e672228d/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/enet-cv@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.628106 | 0.62274 | — | 1.0086 | PENDING; finite A/B=true/true; r2 A/B=0.908812/0.908812; rmse A/B=4.69711/4.69711 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-a2e3080382d098f0) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/9f64ff019913cdb9b802/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/enet-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.63416 | 1.65814 | — | 0.9855 | PENDING; finite A/B=true/true; r2 A/B=0.330799/0.330799; rmse A/B=0.682612/0.682612 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-2d655de64969c832) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/b1e39171e9fbf74e3e34/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/ridge-cv@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.680501 | 0.681994 | — | 0.9978 | PENDING; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69813/4.69813 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-ac28476b0071d590) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/ba6202e41915aa8b651c/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/sgd-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 13.7573 | 13.8481 | — | 0.9934 | PENDING; finite A/B=true/true; r2 A/B=0.908771/0.908771; rmse A/B=4.69817/4.69817 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-f0865758948fef12) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/d3adb34325456bfba29c/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/pa-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 8.70751 | 8.70015 | — | 1.0008 | PENDING; finite A/B=true/true; r2 A/B=0.90038/0.90038; rmse A/B=4.90947/4.90947 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8e3c6a1a864efe0a) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/d74a68acdb33bdd77426/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/huber@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 2.27818 | 1.38404 | — | 1.6460 | PENDING; finite A/B=true/true; r2 A/B=0.899614/0.899614; rmse A/B=4.92832/4.92832 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-9a79641563131b6c) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/f0c4179bfa4fda6936f2/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/lasso-cv@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.777047 | 0.699416 | — | 1.1110 | PENDING; finite A/B=true/true; r2 A/B=0.908831/0.908831; rmse A/B=4.69662/4.69662 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-bef083c3b647560e) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/f2b21063131028aae994/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | classical2/gmm@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 151.587 | 152.32 | — | 0.9952 | PENDING; bic A/B=-8.53062e+08/-8.53062e+08; mean_log_likelihood A/B=210.071/210.071; n_iter A/B=33/33 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-be9c56d14626b19f) | [retained receipt](<receipts/apple/apple--captured--gmm-istella-full--runs/e54f3cfdf88e2e305a71/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/qn-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.565719 | 0.565016 | — | 1.0012 | PENDING; finite A/B=true/true; r2 A/B=0.90876/0.90876; rmse A/B=4.69845/4.69845 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-6013393bb5e97f57) | [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/177e591a0085ff705250/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/pls@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 4.05227 | 3.81507 | — | 1.0622 | PENDING; finite A/B=true/true; r2 A/B=0.294361/0.29436; rmse A/B=0.700949/0.700949 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-3f1ba240a3e2e646) | [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/1f0fc8e14b88c7e0588c/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/pls@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.51965 | 1.18645 | — | 1.2808 | PENDING; finite A/B=true/true; r2 A/B=0.905574/0.905574; rmse A/B=4.77978/4.77978 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-47df8a4a5f60750d) | [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/258012ade2a00a9645a9/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/qn-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.72767 | 1.73084 | — | 0.9982 | PENDING; finite A/B=true/true; r2 A/B=0.3314/0.3314; rmse A/B=0.682305/0.682305 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1efdeca8d0da4aaa) | [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/e93854e1cf11c7c7adfb/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/randomized-svd@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.37831 | 1.33345 | — | 1.0336 | PENDING; relative_reconstruction_error A/B=0.0272095/0.0272095 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-baa89f17be306cf6) | [retained receipt](<receipts/apple/apple--captured--tsvd-full-v1--runs/aad81edca8ccf47b9ecc/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/randomized-svd@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.78753 | 1.55219 | — | 1.1516 | PENDING; relative_reconstruction_error A/B=0.000229582/0.000229582 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-0911613709b5f581) | [retained receipt](<receipts/apple/apple--captured--tsvd-full-v1--runs/c8188af9b06dceb11c17/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/select-f-regression@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.537282 | 0.549767 | — | 0.9773 | PENDING; n_selected A/B=5/5 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-9421af25cd249ea1) | [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/3bb7fcd8cc23a07afee7/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/select-r-regression@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.04811 | 1.04659 | — | 1.0015 | PENDING; n_selected A/B=110/110 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-27030ad779657eb1) | [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/ab68cf756738987139b1/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/select-r-regression@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.54312 | 0.556438 | — | 0.9761 | PENDING; n_selected A/B=5/5 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-7d1d9f8dfabff0fe) | [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/b9e816c552496edb13ef/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/select-f-regression@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.05952 | 1.05421 | — | 1.0050 | PENDING; n_selected A/B=110/110 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1acc7d37a06507d4) | [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/bceac841eda6c1e6cc53/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/power-transformer@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.32201 | 1.31524 | — | 1.0051 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-e320bd1611c96447) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/0f6d07d5f7a9fa8e86ec/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/simple-imputer@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.5063 | 4.52148 | — | 0.9966 | PENDING; masked_rmse A/B=348517/348517 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-fdd957e4ecd00693) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/10caf828bd0b75b5e3ca/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/ridge-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.594427 | 0.597923 | — | 0.9942 | PENDING; accuracy A/B=0.764828/0.764828 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-630a225f29927d08) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/186156f500974335532d/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/nmf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 6.20225 | 3.99489 | — | 1.5525 | PENDING; relative_reconstruction_error A/B=0.101238/0.101238 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-b9198196ba07ffb9) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/1e141f7a4b0c299d303b/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/sgd-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 10.738 | 10.7216 | — | 1.0015 | PENDING; accuracy A/B=0.75694/0.75694 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-9082213724626923) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/21217534b9ec24fdec13/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/ridge-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.91783 | 4.92755 | — | 0.9980 | PENDING; accuracy A/B=0.91056/0.91056 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8a57f086dc9f2da5) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/2da7ce7cebbe7ae16fd0/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/factor-analysis@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 9.46465 | 9.44507 | — | 1.0021 | PENDING; mean_log_likelihood A/B=98.2948/98.2948 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-12eb27621ba6bf16) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/31a029c7a61734cee829/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/pls-canonical@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.29328 | 1.02896 | — | 1.2569 | PENDING; mean_canonical_corr A/B=0.557279/0.557279 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-9821b20e14150fa2) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/366d7ef45f2e1ab38840/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/cca@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.4188 | 1.17771 | — | 1.2047 | PENDING; mean_canonical_corr A/B=0.574828/0.574828 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-4e3ed81580ca885c) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/43f0120c502ae1170075/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/power-transformer@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.2317 | 4.2365 | — | 0.9989 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-34adcad1c2d9bfd1) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/50e1b5764b66cafe829d/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/sgd-ocsvm@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.70548 | 0.704507 | — | 1.0014 | PENDING; fraction_flagged A/B=0.066736/0.066736 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-ab70a58c367cac51) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/5b496fffda8d73e5cc95/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/maxabs-scaler@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.555044 | 0.539559 | — | 1.0287 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-2a21e87a2423c72e) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/7012c5ed73f2ea3883ad/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/pa-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 10.1992 | 10.2073 | — | 0.9992 | PENDING; accuracy A/B=0.922242/0.922242 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-15b4ecb49cddb1d1) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/706c6c218583c2556f05/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/qda@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.870554 | 0.876028 | — | 0.9938 | PENDING; accuracy A/B=0.727134/0.727134; logloss A/B=1.0698/1.0698 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1cf44a8254f4654b) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/83311ee493aec7159caa/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/pa-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 6.9313 | 6.93296 | — | 0.9998 | PENDING; accuracy A/B=0.76288/0.76288 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-f9bccd951073f002) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/871ec7c64114eeac953f/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/factor-analysis@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.741826 | 0.74082 | — | 1.0014 | PENDING; mean_log_likelihood A/B=-14.8357/-14.8357 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-0b3bc089cb244b34) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/8aced037a81f1cc42846/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/maxabs-scaler@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.30746 | 1.27944 | — | 1.0219 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-db5834c9c27efd57) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/95058e058d6c35a7f5aa/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/nmf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 27.9172 | 22.6487 | — | 1.2326 | PENDING; relative_reconstruction_error A/B=0.326038/0.326038 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1ee4c1fbc8012177) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/9c048f5b19f91cda3a34/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/lda-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.66971 | 0.634366 | — | 1.0557 | PENDING; accuracy A/B=0.76362/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8d6e9a07d67df7b4) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/ac6458a148bfb4f9c011/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/categorical-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.595268 | 0.597673 | — | 0.9960 | PENDING; accuracy A/B=0.767572/0.767572; logloss A/B=0.536612/0.536612 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8e4baeb2c2495265) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/acff99fbeb6c301c3fc0/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/minibatch-kmeans@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.1869 | 1.19839 | — | 0.9904 | PENDING; n_clusters A/B=8/8; silhouette A/B=0.076493/0.076493 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-3927c5ee2b7a6960) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/ad3d45e08cb8ab6c00e7/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/pls-canonical@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.8376 | 4.63671 | — | 1.2590 | PENDING; mean_canonical_corr A/B=0.876301/0.876301 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8e4ca1617bad6848) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/b0667caada66668f51aa/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/cca@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 41.4825 | 22.6234 | — | 1.8336 | PENDING; mean_canonical_corr A/B=0.989054/0.989054 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-b397bfed2fe659b4) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/b17b6e514c1006f88c5f/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/minibatch-kmeans@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.673498 | 0.654529 | — | 1.0290 | PENDING; n_clusters A/B=8/8; silhouette A/B=0.17146/0.17146 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-854651a37285160d) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/ba1006a727002dda6a90/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/perceptron@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 10.0619 | 10.0527 | — | 1.0009 | PENDING; accuracy A/B=0.874976/0.874976 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1517e260d7d8b58f) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/bcdd603c81cc1f7814d2/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical/pca@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.0824918 | 0.085496 | — | 0.9649 | BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING; explained_variance_ratio_sum A/B=0.999997/0.999997 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-91aaa1753ba2f73e) | [retained receipt](<receipts/apple/apple--captured--runs/75455971e66712016083/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical/pca@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.08834 | 0.447418 | — | 2.4325 | TASK_METRIC_GATE_PASSED; explained_variance_ratio_sum A/B=1/1 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-c1ffb3d13c13dc5e) | [retained receipt](<receipts/apple/apple--captured--runs/918eace39f801d37fc21/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical/kmeans@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 2.90073 | 1.24506 | — | 2.3298 | PENDING; inertia A/B=4.01988e+08/4.01988e+08; n_iter A/B=84/84 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-288af0845518e7db) | [retained receipt](<receipts/apple/apple--captured--kmeans-repair2--runs/449522fb6bd97f700c04/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical/kmeans@dataset=istella/attempt-0001 | full_workload | QUALITY_FAILED | 1.69043 | 1.66443 | — | 1.0156 | FAILED_FAST_OPPONENT_GATE; inertia A/B=6.05072e+17/6.05072e+17; n_iter A/B=33/33 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-3cb7b17e87b2b93c) | [retained receipt](<receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/resample@dataset=istella/attempt-0001 | full_workload | QUALITY_FAILED | 1.53602 | 1.5394 | — | 0.9978 | QUALITY_FAILED; max_mean_shift_over_std A/B=0.00194692/0.00194692 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-e10674a2304dcc24) | [retained receipt](<receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/resample@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.282101 | 0.26905 | — | 1.0485 | TASK_METRIC_GATE_PASSED; max_mean_shift_over_std A/B=0.000818294/0.000818294 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-62c30d7b110ec4fe) | [retained receipt](<receipts/apple/apple--captured--resample-full--runs/661a766183dd2fb07d65/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical2/linearsvr@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.440699 | 0.477466 | — | 0.9230 | PENDING; finite A/B=true/true; r2 A/B=-0.107028/-0.107028; rmse A/B=0.87796/0.87796 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-454ec65777dc4431) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/05207b357bcbe067ca6a/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical2/ridge@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.81861 | 0.807995 | — | 1.0131 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.332534/0.332534; rmse A/B=0.681726/0.681726 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-74b2f6f2bb84e966) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/6d77306d88d72aab7b44/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical2/linearsvr@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.116124 | 0.121076 | — | 0.9591 | PENDING; finite A/B=true/true; r2 A/B=0.899284/0.899284; rmse A/B=4.93641/4.93641 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-4557bd5b84099a1e) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/71dfc119e59c074352bb/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical2/ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.113452 | 0.0983777 | — | 1.1532 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69815/4.69815 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-60094147f639ef4f) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/94c802682d07720f1572/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical2/gmm@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 2.12698 | 1.29 | — | 1.6488 | TASK_METRIC_GATE_PASSED; bic A/B=-1.88789e+08/-1.88789e+08; mean_log_likelihood A/B=11.6016/11.6016; n_iter A/B=24/24 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-7927b956ba0b72c1) | [retained receipt](<receipts/apple/apple--captured--reg-full--runs/d4f24411b4f604c84997/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/bayesian-ridge@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.903672 | 0.886007 | — | 1.0199 | PENDING; finite A/B=true/true; r2 A/B=0.33211/0.332103; rmse A/B=0.681943/0.681946 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-de5212f72587e628) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/11f34b0bacc6a216cbf5/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/bayesian-ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.115846 | 0.112378 | — | 1.0309 | PENDING; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69813/4.69813 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-c5e9f9f7b828c55f) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/121d2bf7022b542e4d6e/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/lars@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.21887 | 1.22943 | — | 0.9914 | PENDING; finite A/B=true/true; r2 A/B=0.332579/0.332252; rmse A/B=0.681703/0.68187 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-158387d3db293254) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/1ffab8882758257c9f23/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/sgd-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 6.47621 | 6.42209 | — | 1.0084 | PENDING; finite A/B=true/true; r2 A/B=0.331677/0.331677; rmse A/B=0.682163/0.682163 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-5b6dea355b89327d) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/22c62826ae044e079978/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/lasso-lars@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.631173 | 0.623667 | — | 1.0120 | PENDING; finite A/B=true/true; r2 A/B=0.314676/0.314669; rmse A/B=0.690785/0.690789 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-beeef7a464f96181) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/3a40940bae1961555f78/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/lasso-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.919232 | 0.860419 | — | 1.0684 | PENDING; finite A/B=true/true; r2 A/B=0.329438/0.329438; rmse A/B=0.683305/0.683305 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-5f43961bc834421b) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/3cfd7d59ee9c8efa1497/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/huber@dataset=istella/attempt-0001 | full_workload | QUALITY_FAILED | 1.63753 | 1.63383 | — | 1.0023 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=-0.00708934/-0.00595219; rmse A/B=0.837393/0.83692 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-f3328cbf23ffeea8) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/pa-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 9.43063 | 9.42643 | — | 1.0004 | PENDING; finite A/B=true/true; r2 A/B=0.310359/0.310359; rmse A/B=0.692958/0.692958 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-541855c4db4d9e40) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/6fcf310a716926c2d853/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/lasso-lars@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.117458 | 0.112933 | — | 1.0401 | PENDING; finite A/B=true/true; r2 A/B=0.908794/0.908794; rmse A/B=4.69757/4.69757 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-5be9ee86049e552d) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/791dbcdb69bd137c8ef4/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/ridge-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 24.5113 | 24.3495 | — | 1.0066 | PENDING; finite A/B=true/true; r2 A/B=0.332506/0.332506; rmse A/B=0.68174/0.68174 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-ff24a097f693b2ad) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/805874e87463199882f2/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/lars@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.110233 | 0.118246 | — | 0.9322 | PENDING; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69813/4.69813 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-35e944e0962689e1) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/980247052f23e672228d/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/enet-cv@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.142354 | 0.137813 | — | 1.0330 | PENDING; finite A/B=true/true; r2 A/B=0.908812/0.908812; rmse A/B=4.69711/4.69711 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-a2e3080382d098f0) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/9f64ff019913cdb9b802/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/enet-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.861175 | 0.887906 | — | 0.9699 | PENDING; finite A/B=true/true; r2 A/B=0.330799/0.330799; rmse A/B=0.682612/0.682612 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-2d655de64969c832) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/b1e39171e9fbf74e3e34/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/ridge-cv@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.191529 | 0.195624 | — | 0.9791 | PENDING; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69813/4.69813 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-ac28476b0071d590) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/ba6202e41915aa8b651c/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/sgd-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 13.2711 | 13.3615 | — | 0.9932 | PENDING; finite A/B=true/true; r2 A/B=0.908771/0.908771; rmse A/B=4.69817/4.69817 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-f0865758948fef12) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/d3adb34325456bfba29c/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/pa-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 8.21942 | 8.21332 | — | 1.0007 | PENDING; finite A/B=true/true; r2 A/B=0.90038/0.90038; rmse A/B=4.90947/4.90947 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8e3c6a1a864efe0a) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/d74a68acdb33bdd77426/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/huber@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.78998 | 0.897553 | — | 1.9943 | PENDING; finite A/B=true/true; r2 A/B=0.899614/0.899614; rmse A/B=4.92832/4.92832 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-9a79641563131b6c) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/f0c4179bfa4fda6936f2/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/lasso-cv@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.29062 | 0.213037 | — | 1.3642 | PENDING; finite A/B=true/true; r2 A/B=0.908831/0.908831; rmse A/B=4.69662/4.69662 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-bef083c3b647560e) | [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/f2b21063131028aae994/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | classical2/gmm@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 148.392 | 149.13 | — | 0.9951 | PENDING; bic A/B=-8.53062e+08/-8.53062e+08; mean_log_likelihood A/B=210.071/210.071; n_iter A/B=33/33 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-be9c56d14626b19f) | [retained receipt](<receipts/apple/apple--captured--gmm-istella-full--runs/e54f3cfdf88e2e305a71/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/qn-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.0945912 | 0.0924368 | — | 1.0233 | PENDING; finite A/B=true/true; r2 A/B=0.90876/0.90876; rmse A/B=4.69845/4.69845 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-6013393bb5e97f57) | [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/177e591a0085ff705250/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/pls@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 3.28087 | 3.04394 | — | 1.0778 | PENDING; finite A/B=true/true; r2 A/B=0.294361/0.29436; rmse A/B=0.700949/0.700949 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-3f1ba240a3e2e646) | [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/1f0fc8e14b88c7e0588c/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/pls@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.03324 | 0.69922 | — | 1.4777 | PENDING; finite A/B=true/true; r2 A/B=0.905574/0.905574; rmse A/B=4.77978/4.77978 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-47df8a4a5f60750d) | [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/258012ade2a00a9645a9/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/qn-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.971413 | 0.97401 | — | 0.9973 | PENDING; finite A/B=true/true; r2 A/B=0.3314/0.3314; rmse A/B=0.682305/0.682305 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1efdeca8d0da4aaa) | [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/e93854e1cf11c7c7adfb/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/randomized-svd@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.913044 | 0.867881 | — | 1.0520 | PENDING; relative_reconstruction_error A/B=0.0272095/0.0272095 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-baa89f17be306cf6) | [retained receipt](<receipts/apple/apple--captured--tsvd-full-v1--runs/aad81edca8ccf47b9ecc/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/randomized-svd@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.09625 | 0.861718 | — | 1.2722 | PENDING; relative_reconstruction_error A/B=0.000229582/0.000229582 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-0911613709b5f581) | [retained receipt](<receipts/apple/apple--captured--tsvd-full-v1--runs/c8188af9b06dceb11c17/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/select-f-regression@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.062874 | 0.0752736 | — | 0.8353 | PENDING; n_selected A/B=5/5 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-9421af25cd249ea1) | [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/3bb7fcd8cc23a07afee7/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/select-r-regression@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.289677 | 0.28503 | — | 1.0163 | PENDING; n_selected A/B=110/110 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-27030ad779657eb1) | [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/ab68cf756738987139b1/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/select-r-regression@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.0680943 | 0.0807121 | — | 0.8437 | PENDING; n_selected A/B=5/5 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-7d1d9f8dfabff0fe) | [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/b9e816c552496edb13ef/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/select-f-regression@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.298232 | 0.299042 | — | 0.9973 | PENDING; n_selected A/B=110/110 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1acc7d37a06507d4) | [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/bceac841eda6c1e6cc53/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/power-transformer@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.852236 | 0.845931 | — | 1.0075 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-e320bd1611c96447) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/0f6d07d5f7a9fa8e86ec/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/simple-imputer@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.878928 | 0.888012 | — | 0.9898 | PENDING; masked_rmse A/B=348517/348517 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-fdd957e4ecd00693) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/10caf828bd0b75b5e3ca/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/ridge-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.128549 | 0.130781 | — | 0.9829 | PENDING; accuracy A/B=0.764828/0.764828 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-630a225f29927d08) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/186156f500974335532d/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/nmf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.03736 | 2.35443 | — | 1.7148 | PENDING; relative_reconstruction_error A/B=0.101238/0.101238 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-b9198196ba07ffb9) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/1e141f7a4b0c299d303b/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/sgd-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 10.2743 | 10.2564 | — | 1.0017 | PENDING; accuracy A/B=0.75694/0.75694 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-9082213724626923) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/21217534b9ec24fdec13/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/ridge-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.16345 | 4.17246 | — | 0.9978 | PENDING; accuracy A/B=0.91056/0.91056 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8a57f086dc9f2da5) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/2da7ce7cebbe7ae16fd0/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/factor-analysis@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 8.7072 | 8.68644 | — | 1.0024 | PENDING; mean_log_likelihood A/B=98.2948/98.2948 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-12eb27621ba6bf16) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/31a029c7a61734cee829/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/pls-canonical@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.826606 | 0.561914 | — | 1.4711 | PENDING; mean_canonical_corr A/B=0.557279/0.557279 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-9821b20e14150fa2) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/366d7ef45f2e1ab38840/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/cca@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.951957 | 0.703331 | — | 1.3535 | PENDING; mean_canonical_corr A/B=0.574828/0.574828 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-4e3ed81580ca885c) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/43f0120c502ae1170075/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/power-transformer@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.40533 | 3.41188 | — | 0.9981 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-34adcad1c2d9bfd1) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/50e1b5764b66cafe829d/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/sgd-ocsvm@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.239478 | 0.2374 | — | 1.0088 | PENDING; fraction_flagged A/B=0.066736/0.066736 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-ab70a58c367cac51) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/5b496fffda8d73e5cc95/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/maxabs-scaler@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.0826826 | 0.0719596 | — | 1.1490 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-2a21e87a2423c72e) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/7012c5ed73f2ea3883ad/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/pa-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 9.44747 | 9.4533 | — | 0.9994 | PENDING; accuracy A/B=0.922242/0.922242 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-15b4ecb49cddb1d1) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/706c6c218583c2556f05/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/qda@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.406064 | 0.410499 | — | 0.9892 | PENDING; accuracy A/B=0.727134/0.727134; logloss A/B=1.0698/1.0698 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1cf44a8254f4654b) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/83311ee493aec7159caa/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/pa-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 6.46533 | 6.46651 | — | 0.9998 | PENDING; accuracy A/B=0.76288/0.76288 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-f9bccd951073f002) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/871ec7c64114eeac953f/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/factor-analysis@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.272538 | 0.273545 | — | 0.9963 | PENDING; mean_log_likelihood A/B=-14.8357/-14.8357 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-0b3bc089cb244b34) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/8aced037a81f1cc42846/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/maxabs-scaler@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.480633 | 0.451214 | — | 1.0652 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-db5834c9c27efd57) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/95058e058d6c35a7f5aa/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/nmf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 23.1252 | 18.689 | — | 1.2374 | PENDING; relative_reconstruction_error A/B=0.326038/0.326038 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1ee4c1fbc8012177) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/9c048f5b19f91cda3a34/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/lda-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.204511 | 0.16771 | — | 1.2194 | PENDING; accuracy A/B=0.76362/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8d6e9a07d67df7b4) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/ac6458a148bfb4f9c011/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/categorical-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.114801 | 0.115886 | — | 0.9906 | PENDING; accuracy A/B=0.767572/0.767572; logloss A/B=0.536612/0.536612 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8e4baeb2c2495265) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/acff99fbeb6c301c3fc0/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/minibatch-kmeans@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.431589 | 0.43192 | — | 0.9992 | PENDING; n_clusters A/B=8/8; silhouette A/B=0.076493/0.076493 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-3927c5ee2b7a6960) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/ad3d45e08cb8ab6c00e7/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/pls-canonical@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.0799 | 3.88042 | — | 1.3091 | PENDING; mean_canonical_corr A/B=0.876301/0.876301 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8e4ca1617bad6848) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/b0667caada66668f51aa/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/cca@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 40.7261 | 21.867 | — | 1.8624 | PENDING; mean_canonical_corr A/B=0.989054/0.989054 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-b397bfed2fe659b4) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/b17b6e514c1006f88c5f/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/minibatch-kmeans@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.204457 | 0.185672 | — | 1.1012 | PENDING; n_clusters A/B=8/8; silhouette A/B=0.17146/0.17146 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-854651a37285160d) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/ba1006a727002dda6a90/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/perceptron@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 9.30547 | 9.29928 | — | 1.0007 | PENDING; accuracy A/B=0.874976/0.874976 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-1517e260d7d8b58f) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/bcdd603c81cc1f7814d2/attempt-0001/receipt.json>) |
 | AF.X.complete-proposed | apple/apple-fast | algos/multinomial-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | FAILED_OR_INCOMPLETE | — | — | — | — | NOT_ASSESSED; metrics not recorded | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-56dabedb926fcb84) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/dc3d41d16eac72f9f13f/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/categorical-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.553744 | 0.552733 | — | 1.0018 | PENDING; accuracy A/B=0.840176/0.840176; logloss A/B=0.411866/0.411866 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-98caf060dd85817f) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/de43e5d216cb8ccb8197/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/perceptron@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 6.6747 | 6.67849 | — | 0.9994 | PENDING; accuracy A/B=0.493462/0.493462 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-7e5e1e28baf80d16) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/df871bd8e0d9c37c890f/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/lda-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.94996 | 1.91052 | — | 1.0206 | PENDING; accuracy A/B=0.913552/0.913612; logloss A/B=0.233257/0.233327 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-42a608e0ac18b8d1) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/e9508d14d3370dfade6c/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/qda@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.80208 | 1.70604 | — | 1.0563 | PENDING; accuracy A/B=0.879716/0.879682; logloss A/B=3.41997/3.41964 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-0d0b5594fa0a8d2f) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fa0b1575c2b165e284aa/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/sgd-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 7.22751 | 7.26677 | — | 0.9946 | PENDING; accuracy A/B=0.92238/0.92238 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-b13a046d3cf309c0) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fad0e0840b7714d0907f/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/simple-imputer@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.843326 | 0.836752 | — | 1.0079 | PENDING; masked_rmse A/B=6.08788/6.08788 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-912ad3119709ba21) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fbe0df53cb628d25849b/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/sgd-ocsvm@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.64304 | 1.62791 | — | 1.0093 | PENDING; fraction_flagged A/B=0.123182/0.123182 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-cd7c19865a39cfae) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fd25410fa324ee1d2da7/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.576743 | 0.580559 | — | 0.9934 | PENDING; accuracy A/B=0.720538/0.720538; logloss A/B=1.14088/1.14088 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-f4706d9f505de501) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/0d1e6d8e4700016071f0/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/target-encoder@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.598636 | 0.580283 | — | 1.0316 | PENDING; output_shape A/B=500000x8/500000x8 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-190f057efefd762d) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/27ef5795de5e53b035e7/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/select-f-classif@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.05409 | 1.05979 | — | 0.9946 | PENDING; n_selected A/B=110/110 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-16f51e15b7f26080) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/6fc9ae71c2c1506ffb73/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/random-trees-embedding@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.82841 | 1.80447 | — | 1.0133 | PENDING; nonzeros_per_row A/B=10/10; output_columns A/B=219/219 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-116c12bf79353864) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/786c65354ed40e98b838/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/gaussian-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.2474 | 1.23192 | — | 1.0126 | PENDING; accuracy A/B=0.868346/0.868346; logloss A/B=3.51944/3.51944 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8174c832fc88ba19) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/93e940c30f835c0f74ce/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/random-trees-embedding@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.42955 | 1.35096 | — | 1.0582 | PENDING; nonzeros_per_row A/B=10/10; output_columns A/B=283/283 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-278ee34473875268) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/b18d2fcc10233c33faf1/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/target-encoder@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.689413 | 0.643027 | — | 1.0721 | PENDING; output_shape A/B=500000x5/500000x5 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-79d26a9761586603) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/be8c92995859ff28b0ea/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/select-f-classif@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.55521 | 0.556425 | — | 0.9978 | PENDING; n_selected A/B=5/5 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8c82b1970257ac99) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/d1c0ff06e93ce2c5d6e4/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/qr@dataset=istella/attempt-0001 | full_workload | QUALITY_FAILED | 17.6231 | 4.20427 | — | 4.1917 | QUALITY_FAILED; relative_gram_difference A/B=2.35619e-06/1.60183e-07 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-c12c57c7c2220909) | [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/2268b1fe4abee7294d5e/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/qr@dataset=taxi/attempt-0001 | full_workload | QUALITY_FAILED | 1.13008 | 0.686172 | — | 1.6469 | QUALITY_FAILED; relative_gram_difference A/B=2.44216e-06/7.3759e-07 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-09b759b2c9f3e9fd) | [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/svd@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 4.67355 | 4.68002 | — | 0.9986 | PENDING; max_rel_singular_value_error A/B=2210.04/2210.04; relative_reconstruction_error_100k_rows A/B=3.43081e-05/3.43503e-05 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-79b79ad3b31ac9c5) | [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/92b2b8e22831f6a2b014/attempt-0001/receipt.json>) |
-| AF.X.complete-proposed | apple/apple-fast | algos/svd@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.732211 | 0.744609 | — | 0.9834 | PENDING; max_rel_singular_value_error A/B=9.44616e-07/9.44616e-07; relative_reconstruction_error_100k_rows A/B=1.77648e-06/1.77648e-06 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-7f7a1c3b05abd44c) | [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/cd159d14eb49f9042c45/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/categorical-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.0877692 | 0.0866087 | — | 1.0134 | PENDING; accuracy A/B=0.840176/0.840176; logloss A/B=0.411866/0.411866 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-98caf060dd85817f) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/de43e5d216cb8ccb8197/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/perceptron@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 6.21022 | 6.21293 | — | 0.9996 | PENDING; accuracy A/B=0.493462/0.493462 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-7e5e1e28baf80d16) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/df871bd8e0d9c37c890f/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/lda-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.18561 | 1.15679 | — | 1.0249 | PENDING; accuracy A/B=0.913552/0.913612; logloss A/B=0.233257/0.233327 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-42a608e0ac18b8d1) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/e9508d14d3370dfade6c/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/qda@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.04512 | 0.944772 | — | 1.1062 | PENDING; accuracy A/B=0.879716/0.879682; logloss A/B=3.41997/3.41964 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-0d0b5594fa0a8d2f) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fa0b1575c2b165e284aa/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/sgd-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 6.46986 | 6.51058 | — | 0.9937 | PENDING; accuracy A/B=0.92238/0.92238 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-b13a046d3cf309c0) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fad0e0840b7714d0907f/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/simple-imputer@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.103416 | 0.102172 | — | 1.0122 | PENDING; masked_rmse A/B=6.08788/6.08788 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-912ad3119709ba21) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fbe0df53cb628d25849b/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/sgd-ocsvm@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.886246 | 0.870887 | — | 1.0176 | PENDING; fraction_flagged A/B=0.123182/0.123182 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-cd7c19865a39cfae) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fd25410fa324ee1d2da7/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.115347 | 0.118914 | — | 0.9700 | PENDING; accuracy A/B=0.720538/0.720538; logloss A/B=1.14088/1.14088 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-f4706d9f505de501) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/0d1e6d8e4700016071f0/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/target-encoder@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.155063 | 0.13613 | — | 1.1391 | PENDING; output_shape A/B=500000x8/500000x8 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-190f057efefd762d) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/27ef5795de5e53b035e7/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/select-f-classif@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.303459 | 0.309686 | — | 0.9799 | PENDING; n_selected A/B=110/110 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-16f51e15b7f26080) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/6fc9ae71c2c1506ffb73/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/random-trees-embedding@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.03276 | 1.00704 | — | 1.0255 | PENDING; nonzeros_per_row A/B=10/10; output_columns A/B=219/219 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-116c12bf79353864) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/786c65354ed40e98b838/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/gaussian-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.494801 | 0.480248 | — | 1.0303 | PENDING; accuracy A/B=0.868346/0.868346; logloss A/B=3.51944/3.51944 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8174c832fc88ba19) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/93e940c30f835c0f74ce/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/random-trees-embedding@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.913742 | 0.834569 | — | 1.0949 | PENDING; nonzeros_per_row A/B=10/10; output_columns A/B=283/283 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-278ee34473875268) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/b18d2fcc10233c33faf1/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/target-encoder@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.24551 | 0.200758 | — | 1.2229 | PENDING; output_shape A/B=500000x5/500000x5 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-79d26a9761586603) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/be8c92995859ff28b0ea/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/select-f-classif@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.0947792 | 0.0930662 | — | 1.0184 | PENDING; n_selected A/B=5/5 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-8c82b1970257ac99) | [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/d1c0ff06e93ce2c5d6e4/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/qr@dataset=istella/attempt-0001 | full_workload | QUALITY_FAILED | 16.873 | 3.45107 | — | 4.8892 | QUALITY_FAILED; relative_gram_difference A/B=2.35619e-06/1.60183e-07 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-c12c57c7c2220909) | [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/2268b1fe4abee7294d5e/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/qr@dataset=taxi/attempt-0001 | full_workload | QUALITY_FAILED | 0.663278 | 0.217649 | — | 3.0475 | QUALITY_FAILED; relative_gram_difference A/B=2.44216e-06/7.3759e-07 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-09b759b2c9f3e9fd) | [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/svd@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 3.57788 | 3.58542 | — | 0.9979 | PENDING; max_rel_singular_value_error A/B=2210.04/2210.04; relative_reconstruction_error_100k_rows A/B=3.43081e-05/3.43503e-05 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-79b79ad3b31ac9c5) | [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/92b2b8e22831f6a2b014/attempt-0001/receipt.json>) |
+| AF.X.complete-proposed | apple/apple-fast | algos/svd@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.22031 | 0.233654 | — | 0.9429 | PENDING; max_rel_singular_value_error A/B=9.44616e-07/9.44616e-07; relative_reconstruction_error_100k_rows A/B=1.77648e-06/1.77648e-06 | [toggles](#toggles-b5f3f72f7b33aadb) / [details](#attempt-7f7a1c3b05abd44c) | [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/cd159d14eb49f9042c45/attempt-0001/receipt.json>) |
 
 ## Campaign notes
 
@@ -249,12 +249,12 @@ Original attempts remain visible after repairs. A quality failure may have compl
 |---|---|---|---|---|---:|---|
 | AF.X.complete-proposed | apple / classical/kmeans@dataset=istella/attempt-0001 | FAILED_OR_INCOMPLETE: Workload failed or did not write result JSON | [1] | A: 0/0; B: 0/0 | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/69a08c873718b0d710ad/attempt-0001/receipt.json |
 | AF.X.complete-proposed | apple / classical/kmeans@dataset=istella/attempt-0002 | FAILED_OR_INCOMPLETE: Workload failed or did not write result JSON | [1] | A: 0/0; B: 0/0 | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/69a08c873718b0d710ad/attempt-0002/receipt.json |
-| AF.X.complete-proposed | apple / classical/kmeans@dataset=istella/attempt-0001 | QUALITY_FAILED: Candidate and baseline both have worse inertia than retained same-data sklearn; deficit is inherited, not introduced by candidate. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.0114 (2.3893s / 2.3625s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json |
-| AF.X.complete-proposed | apple / algos/resample@dataset=istella/attempt-0001 | QUALITY_FAILED: Saved candidate task metrics are worse than at least one exact-full-input/settings opponent under existing tolerance; no default admission. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 0.9997 (2.2927s / 2.2933s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json |
-| AF.X.complete-proposed | apple / algos/huber@dataset=istella/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.0020 (2.4092s / 2.4043s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple / classical/kmeans@dataset=istella/attempt-0001 | QUALITY_FAILED: Candidate and baseline both have worse inertia than retained same-data sklearn; deficit is inherited, not introduced by candidate. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.0156 (1.6904s / 1.6644s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple / algos/resample@dataset=istella/attempt-0001 | QUALITY_FAILED: Saved candidate task metrics are worse than at least one exact-full-input/settings opponent under existing tolerance; no default admission. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 0.9978 (1.5360s / 1.5394s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple / algos/huber@dataset=istella/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.0023 (1.6375s / 1.6338s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json |
 | AF.X.complete-proposed | apple / algos/multinomial-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | FAILED_OR_INCOMPLETE: Workload failed or did not write result JSON | [1] | A: 0/0; B: 0/0 | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/dc3d41d16eac72f9f13f/attempt-0001/receipt.json |
-| AF.X.complete-proposed | apple / algos/qr@dataset=istella/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 4.1917 (17.6231s / 4.2043s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/2268b1fe4abee7294d5e/attempt-0001/receipt.json |
-| AF.X.complete-proposed | apple / algos/qr@dataset=taxi/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.6469 (1.1301s / 0.6862s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple / algos/qr@dataset=istella/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 4.8892 (16.8730s / 3.4511s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/2268b1fe4abee7294d5e/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple / algos/qr@dataset=taxi/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 3.0475 (0.6633s / 0.2176s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json |
 
 ## Experiments run: toggles, timing and quality
 
@@ -449,7 +449,7 @@ None recorded.
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--runs/440956ba5f3a721465b8/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5343086250359192 s; B: 0.5314585829619318 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.11943462502676994 s; B: 0.11340324999764562 s.
 
 Quality assessment: BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING. Identity: NOT_REQUIRED.
 
@@ -486,7 +486,7 @@ Resource limitations: ["Shared workspace storage I/O overlapped first four PCA/O
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--runs/4a650353219f94bd483f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.5894755000481382 s; B: 1.5995837500086054 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.8912896659458056 s; B: 0.9017707910388708 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: NOT_REQUIRED.
 
@@ -580,7 +580,7 @@ Resource limitations: ["Shared workspace storage I/O overlapped first four PCA/O
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--runs/75455971e66712016083/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.49895141704473644 s; B: 0.5005222079344094 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.08249179203994572 s; B: 0.0854959589196369 s.
 
 Quality assessment: BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING. Identity: NOT_REQUIRED.
 
@@ -613,7 +613,7 @@ Resource limitations: ["Shared workspace storage I/O overlapped first four PCA/O
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--runs/918eace39f801d37fc21/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7872002499643713 s; B: 1.1472330000251532 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0883367089554667 s; B: 0.4474177920492366 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: NOT_REQUIRED.
 
@@ -655,7 +655,7 @@ Resource limitations: ["Shared workspace storage I/O overlapped first four PCA/O
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--kmeans-repair2--runs/449522fb6bd97f700c04/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.3190562500385568 s; B: 1.665058874990791 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.9007261249935254 s; B: 1.2450639170128852 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -695,7 +695,7 @@ Resource limitations: ["Shared workspace storage I/O overlapped first four PCA/O
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 2.389335541985929 s; B: 2.3624788330635056 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 1.6904332919511944 s; B: 1.6644286250229925 s.
 
 Quality assessment: FAILED_FAST_OPPONENT_GATE. Identity: NOT_REQUIRED.
 
@@ -756,7 +756,7 @@ Resource limitations: ["Shared workspace storage I/O overlapped first four PCA/O
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 2.292678292025812 s; B: 2.2933388750534505 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 1.5360184169840068 s; B: 1.5394023340195417 s.
 
 Quality assessment: QUALITY_FAILED. Identity: NOT_REQUIRED.
 
@@ -794,7 +794,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--resample-full--runs/661a766183dd2fb07d65/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.755789791001007 s; B: 0.7402970410184935 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.2821005000732839 s; B: 0.2690499579766765 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: NOT_REQUIRED.
 
@@ -832,7 +832,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--reg-full--runs/05207b357bcbe067ca6a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2706715419190004 s; B: 1.3157004999229684 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.44069900002796203 s; B: 0.4774662090931088 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -871,7 +871,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--reg-full--runs/6d77306d88d72aab7b44/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6468826250638813 s; B: 1.6427078749984503 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.8186100419843569 s; B: 0.8079953329870477 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: NOT_REQUIRED.
 
@@ -915,7 +915,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--reg-full--runs/71dfc119e59c074352bb/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.606728250044398 s; B: 0.6071637080749497 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.11612374999094754 s; B: 0.12107620795723051 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -959,7 +959,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--reg-full--runs/94c802682d07720f1572/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6082973750308156 s; B: 0.5887810839340091 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.11345183302182704 s; B: 0.09837766701821238 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: NOT_REQUIRED.
 
@@ -1003,7 +1003,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--reg-full--runs/d4f24411b4f604c84997/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.676956541952677 s; B: 1.8405577089870349 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.126984415925108 s; B: 1.2900032920297235 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: NOT_REQUIRED.
 
@@ -1045,7 +1045,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/11f34b0bacc6a216cbf5/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.676354791969061 s; B: 1.6557661250699311 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9036721249576658 s; B: 0.8860067089553922 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1084,7 +1084,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/121d2bf7022b542e4d6e/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6025629590731114 s; B: 0.6000144169665873 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.11584633402526379 s; B: 0.11237824999261647 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1123,7 +1123,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/1ffab8882758257c9f23/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.9916996250394732 s; B: 2.0018063749885187 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2188725830055773 s; B: 1.229429875034839 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1162,7 +1162,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/22c62826ae044e079978/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.248178375069983 s; B: 7.1927933329716325 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.476210374967195 s; B: 6.422087249928154 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1201,7 +1201,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/3a40940bae1961555f78/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.4024035409092903 s; B: 1.3946241249796003 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6311730419984087 s; B: 0.6236672910163179 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1240,7 +1240,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/3cfd7d59ee9c8efa1497/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.691912499954924 s; B: 1.6302146660163999 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9192320000147447 s; B: 0.860419291886501 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1279,7 +1279,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 2.4091830409597605 s; B: 2.404323499999009 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 1.637533999979496 s; B: 1.6338251249399036 s.
 
 Quality assessment: QUALITY_FAILED. Identity: NOT_REQUIRED.
 
@@ -1318,7 +1318,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/6fcf310a716926c2d853/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 10.201159375021234 s; B: 10.198122665984556 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.430633208015934 s; B: 9.426432624924928 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1357,7 +1357,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/791dbcdb69bd137c8ef4/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6063201669603586 s; B: 0.6024489999981597 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.11745841603260487 s; B: 0.11293329193722457 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1396,7 +1396,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/805874e87463199882f2/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 25.283735082950443 s; B: 25.11953295895364 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 24.511293999967165 s; B: 24.3495042079594 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1435,7 +1435,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/980247052f23e672228d/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5993408750509843 s; B: 0.6054343750001863 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.1102332080481574 s; B: 0.1182456249371171 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1474,7 +1474,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/9f64ff019913cdb9b802/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6281062089838088 s; B: 0.6227400419302285 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.14235379197634757 s; B: 0.1378127089701593 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1513,7 +1513,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/b1e39171e9fbf74e3e34/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.634162375004962 s; B: 1.6581437500426546 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.8611747500253841 s; B: 0.8879064579959959 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1552,7 +1552,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/ba6202e41915aa8b651c/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6805006669601426 s; B: 0.6819942910224199 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.1915292909834534 s; B: 0.1956242920132354 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1591,7 +1591,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/d3adb34325456bfba29c/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 13.757316125091165 s; B: 13.848073333036155 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 13.271055208984762 s; B: 13.361473834025674 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1630,7 +1630,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/d74a68acdb33bdd77426/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.707507833023556 s; B: 8.700152582954615 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.219419916975312 s; B: 8.213320749928243 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1669,7 +1669,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/f0c4179bfa4fda6936f2/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.278183583985083 s; B: 1.384035750059411 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7899827909423038 s; B: 0.8975531249307096 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1708,7 +1708,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--expanded-reg--runs/f2b21063131028aae994/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.7770473749842495 s; B: 0.6994155829306692 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.2906198750715703 s; B: 0.21303725009784102 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1747,7 +1747,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--gmm-istella-full--runs/e54f3cfdf88e2e305a71/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 151.5873012499651 s; B: 152.32042204099707 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 148.3920395000605 s; B: 149.12958408298437 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1786,7 +1786,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/177e591a0085ff705250/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5657192079816014 s; B: 0.5650157920317724 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.09459116600919515 s; B: 0.0924367910483852 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1825,7 +1825,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/1f0fc8e14b88c7e0588c/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.0522691670339555 s; B: 3.815072833094746 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.28087079199031 s; B: 3.0439408330712467 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1864,7 +1864,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/258012ade2a00a9645a9/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.5196539169410244 s; B: 1.186451124958694 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0332419999176636 s; B: 0.6992195420898497 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1903,7 +1903,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--pls-qn-full--runs/e93854e1cf11c7c7adfb/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7276659170165658 s; B: 1.7308373750420287 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9714134170208126 s; B: 0.9740104998927563 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1942,7 +1942,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--tsvd-full-v1--runs/aad81edca8ccf47b9ecc/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.3783062079455703 s; B: 1.3334462499478832 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9130437501007691 s; B: 0.8678805419476703 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -1975,7 +1975,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--tsvd-full-v1--runs/c8188af9b06dceb11c17/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.787532874965109 s; B: 1.5521876660641283 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0962525409413502 s; B: 0.8617179160937667 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2008,7 +2008,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/3bb7fcd8cc23a07afee7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5372816659510136 s; B: 0.5497665000148118 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.06287404091563076 s; B: 0.07527362497057766 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2041,7 +2041,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/ab68cf756738987139b1/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0481146249221638 s; B: 1.0465909579070285 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.28967650001868606 s; B: 0.28503012494184077 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2074,7 +2074,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/b9e816c552496edb13ef/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5431199170416221 s; B: 0.5564376250840724 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.06809429207351059 s; B: 0.08071208302862942 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2107,7 +2107,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--selectors-full--runs/bceac841eda6c1e6cc53/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0595173330511898 s; B: 1.0542124159401283 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.2982324999757111 s; B: 0.2990421249996871 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2140,7 +2140,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/0f6d07d5f7a9fa8e86ec/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.3220051670214161 s; B: 1.3152390000177547 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.8522356250323355 s; B: 0.8459307500161231 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2173,7 +2173,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/10caf828bd0b75b5e3ca/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.506303416914307 s; B: 4.5214825419243425 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.8789279999909922 s; B: 0.8880119170062244 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2206,7 +2206,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/186156f500974335532d/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5944271250627935 s; B: 0.5979228341020644 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.12854912492912263 s; B: 0.13078058301471174 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2239,7 +2239,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/1e141f7a4b0c299d303b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.20225400000345 s; B: 3.994893666007556 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.037362833041698 s; B: 2.3544264590600505 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2272,7 +2272,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/21217534b9ec24fdec13/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 10.737975417054258 s; B: 10.721622625016607 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 10.27429737499915 s; B: 10.256382042076439 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2305,7 +2305,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/2da7ce7cebbe7ae16fd0/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.917833624989726 s; B: 4.927551500033587 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.163449625018984 s; B: 4.172456166008487 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2338,7 +2338,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/31a029c7a61734cee829/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.464645790983923 s; B: 9.445072249975055 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.70719858398661 s; B: 8.68643683299888 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2371,7 +2371,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/366d7ef45f2e1ab38840/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2932769579347223 s; B: 1.0289566669380292 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.826606374932453 s; B: 0.5619143749354407 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2404,7 +2404,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/43f0120c502ae1170075/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.4188017920823768 s; B: 1.1777119589969516 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9519568330142647 s; B: 0.7033308329991996 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2437,7 +2437,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/50e1b5764b66cafe829d/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.231699166004546 s; B: 4.236502042040229 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4053347919834778 s; B: 3.41187687497586 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2470,7 +2470,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/5b496fffda8d73e5cc95/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.7054802079219371 s; B: 0.7045067499857396 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.23947829194366932 s; B: 0.23740025004372 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2503,7 +2503,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/7012c5ed73f2ea3883ad/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5550444170366973 s; B: 0.5395590830594301 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.08268262492492795 s; B: 0.07195962499827147 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2536,7 +2536,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/706c6c218583c2556f05/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 10.199209874961525 s; B: 10.207266291952692 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.447474290966056 s; B: 9.453298875014298 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2569,7 +2569,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/83311ee493aec7159caa/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.87055395799689 s; B: 0.876027874997817 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.4060643749544397 s; B: 0.41049945796839893 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2605,7 +2605,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/871ec7c64114eeac953f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.93129941704683 s; B: 6.932964749983512 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.465326291974634 s; B: 6.466506875003688 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2638,7 +2638,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/8aced037a81f1cc42846/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.7418258750112727 s; B: 0.7408203750383109 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.2725380409974605 s; B: 0.27354529092554003 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2671,7 +2671,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/95058e058d6c35a7f5aa/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.307464167010039 s; B: 1.279437833931297 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.48063283402007073 s; B: 0.45121445797849447 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2704,7 +2704,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/9c048f5b19f91cda3a34/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 27.917224499979056 s; B: 22.648736208095215 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 23.12523320899345 s; B: 18.689008624991402 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2737,7 +2737,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/ac6458a148bfb4f9c011/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6697097499854863 s; B: 0.6343664590967819 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.20451133395545185 s; B: 0.16771016595885158 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2773,7 +2773,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/acff99fbeb6c301c3fc0/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5952678329776973 s; B: 0.5976734579307958 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.11480062501505017 s; B: 0.11588562501128763 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2809,7 +2809,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/ad3d45e08cb8ab6c00e7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.186901375069283 s; B: 1.1983942080987617 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.4315888750134036 s; B: 0.43192025006283075 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2845,7 +2845,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/b0667caada66668f51aa/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.837604667060077 s; B: 4.63670854200609 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.079900083015673 s; B: 3.880416666972451 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2878,7 +2878,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/b17b6e514c1006f88c5f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 41.48247150005773 s; B: 22.62344487500377 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 40.726072625024244 s; B: 21.866970582981594 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2911,7 +2911,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/ba1006a727002dda6a90/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6734981659101322 s; B: 0.6545286249602214 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.20445683295838535 s; B: 0.18567183299455792 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -2947,7 +2947,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/bcdd603c81cc1f7814d2/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 10.061868375050835 s; B: 10.05267620808445 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.305472957901657 s; B: 9.29927995800972 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3000,7 +3000,7 @@ Failures: ["Workload failed or did not write result JSON"]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/de43e5d216cb8ccb8197/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5537436249433085 s; B: 0.5527334589278325 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.08776916703209281 s; B: 0.08660866599529982 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3036,7 +3036,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/df871bd8e0d9c37c890f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.674702542019077 s; B: 6.67849483306054 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.210217042011209 s; B: 6.212927374988794 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3069,7 +3069,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/e9508d14d3370dfade6c/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.949959292076528 s; B: 1.9105208329856396 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.1856095000403002 s; B: 1.1567863338859752 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3105,7 +3105,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fa0b1575c2b165e284aa/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.802077459054999 s; B: 1.7060410000849515 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0451179998926818 s; B: 0.9447715419810265 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3141,7 +3141,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fad0e0840b7714d0907f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.227511374978349 s; B: 7.266766374930739 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.46985674998723 s; B: 6.510575999971479 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3174,7 +3174,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fbe0df53cb628d25849b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.843325916910544 s; B: 0.8367519580060616 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.10341579199302942 s; B: 0.1021724590100348 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3207,7 +3207,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1--runs/fd25410fa324ee1d2da7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.643035624991171 s; B: 1.627905625035055 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.886246292036958 s; B: 0.8708870420232415 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3240,7 +3240,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/0d1e6d8e4700016071f0/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5767430829582736 s; B: 0.5805591250536963 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.11534749995917082 s; B: 0.11891395796556026 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3276,7 +3276,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/27ef5795de5e53b035e7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5986357920337468 s; B: 0.5802826250437647 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.1550629580160603 s; B: 0.13613045797683299 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3309,7 +3309,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/6fc9ae71c2c1506ffb73/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0540899590123445 s; B: 1.0597869580378756 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.3034585419809446 s; B: 0.3096861250232905 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3342,7 +3342,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/786c65354ed40e98b838/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.8284146660007536 s; B: 1.8044732910348102 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0327593330293894 s; B: 1.0070439169649035 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3378,7 +3378,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/93e940c30f835c0f74ce/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2473996250191703 s; B: 1.2319236249895766 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.4948014160618186 s; B: 0.48024799989070743 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3414,7 +3414,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/b18d2fcc10233c33faf1/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.4295469589997083 s; B: 1.3509567499859259 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9137421250343323 s; B: 0.8345687079709023 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3450,7 +3450,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/be8c92995859ff28b0ea/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6894132080487907 s; B: 0.6430268329568207 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.24551004194654524 s; B: 0.20075804204680026 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3483,7 +3483,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--classification-full-v1-remaining--runs/d1c0ff06e93ce2c5d6e4/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5552098749903962 s; B: 0.5564248750451952 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.0947792079532519 s; B: 0.09306624997407198 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3516,7 +3516,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/2268b1fe4abee7294d5e/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 17.623082916019484 s; B: 4.2042725830106065 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 16.87303516594693 s; B: 3.451066792011261 s.
 
 Quality assessment: QUALITY_FAILED. Identity: NOT_REQUIRED.
 
@@ -3549,7 +3549,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 1.1300790419336408 s; B: 0.6861715409904718 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 0.6632784160319716 s; B: 0.2176489169942215 s.
 
 Quality assessment: QUALITY_FAILED. Identity: NOT_REQUIRED.
 
@@ -3582,7 +3582,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/92b2b8e22831f6a2b014/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.673548541031778 s; B: 4.680020125000738 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.577876500086859 s; B: 3.585420042043552 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 
@@ -3618,7 +3618,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b5f3f72f7b33aadb) · [retained receipt](<receipts/apple/apple--captured--qr-svd-full--runs/cd159d14eb49f9042c45/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.732211249996908 s; B: 0.7446086250711232 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.22031045809853822 s; B: 0.2336536250077188 s.
 
 Quality assessment: PENDING. Identity: NOT_REQUIRED.
 

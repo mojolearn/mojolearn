@@ -1,7 +1,7 @@
 {
   "count_semantics": "Historical review versions, not new races or scored samples.",
-  "decoded_bytes": 99185230,
-  "decoded_sha256": "1bd28e7655944b8a956a031376c690a0d732c176cd9a26fc7100fed244e35f78",
+  "decoded_bytes": 102626902,
+  "decoded_sha256": "618211cb8f70a6b939028824c5a8c2303f854215c6713d5419c8a6eda3871853",
   "legacy_snapshots": [
     {
       "decoded_bytes": 92301886,
@@ -14,8 +14,8 @@
   ],
   "path": "continuation-quality-reviews.json.gz",
   "policy": "Saved review versions bound to exact receipt SHA256; no quality recomputation or default admission.",
-  "row_count": 10988,
+  "row_count": 11404,
   "schema": "mojolearn.compressed-review-history/1",
-  "stored_bytes": 6072613,
-  "stored_sha256": "cdb117aaa220f0886c2c5b171d1adbd74aeeb17a7d7fc7b12d85e94079746266"
+  "stored_bytes": 6277977,
+  "stored_sha256": "e86fbd7c9171a88a6196b7a8c1140fd28bea9f10b3feb4f3c3c78a233023048b"
 }

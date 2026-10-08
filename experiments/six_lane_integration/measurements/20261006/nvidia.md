@@ -218,206 +218,206 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 | Candidate | Vendor / route | Case | Scope | Status | A (s) | B (s) | Admitted A/B | Observed A/B | Quality (A/B) | Toggles / details | Evidence |
 |---|---|---|---|---|---:|---:|---:|---:|---|---|---|
 | I.X.complete-proposed | nvidia/native-sm90 | more:gmm@dataset=taxi/attempt-0001 | full_workload | FAILED_OR_INCOMPLETE | — | — | — | — | NOT_ASSESSED; metrics not recorded | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-0b62bb230c26e897) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/03f523ab5951d08a295b/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:elasticnet@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.84838 | 1.79688 | — | 1.0287 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.908567/0.908567; rmse A/B=4.70342/4.70342 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ba1bc257b53ddf5d) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/14941dbe10b9bd78a1e4/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:lasso@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.82634 | 1.87186 | — | 0.9757 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.90879/0.90879; rmse A/B=4.69766/4.69766 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-02dfcce6c5351825) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1b07971bfe465c3ca93f/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:lasso@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 3.77187 | 3.79092 | — | 0.9950 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.314679/0.314679; rmse A/B=0.690784/0.690784 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-6c8f3d6b5f21d164) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1e17ae43f1c2de4a7171/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:ridge@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 6.09808 | 6.07967 | — | 1.0030 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.332526/0.332526; rmse A/B=0.68173/0.68173 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-f45822f375fa0f28) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/4238c569b4eada2d0199/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:linearsvr@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.89745 | 1.87698 | — | 1.0109 | PENDING; finite A/B=true/true; r2 A/B=0.899284/0.899284; rmse A/B=4.9364/4.9364 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3f078965f7cbdb63) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/49c28f55539ef700a59f/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:linearsvr@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 3.43209 | 3.54713 | — | 0.9676 | PENDING; finite A/B=true/true; r2 A/B=-0.107029/-0.107029; rmse A/B=0.87796/0.87796 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-5cbbc771f7fa5fc3) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/55b2b5ab6491c0d7e9fe/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:elasticnet@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 3.80053 | 4.22237 | — | 0.9001 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.264635/0.264635; rmse A/B=0.715561/0.715561 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-5345b4b24a7b9e06) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/71d06cebb7470b76364a/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.97202 | 2.01958 | — | 0.9765 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69815/4.69815 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9a4a7c3f81419dc4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/80deb286d318651dcdf8/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:ridge-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 46.3943 | 57.8835 | — | 0.8015 | PENDING; finite A/B=true/true; r2 A/B=0.332506/0.332506; rmse A/B=0.68174/0.68174 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d474710bc9bf339b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/02c09435593c9525da9b/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:poisson@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 5.3048 | 4.11962 | — | 1.2877 | PENDING; finite A/B=true/true; r2 A/B=-9.79308/-9.79308; rmse A/B=2.74137/2.74137 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-f271e9b1ec6f0347) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/0898a3822c64a6e4b5f5/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:gamma@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.41528 | 1.38327 | — | 1.0231 | PENDING; finite A/B=true/true; r2 A/B=-690.901/-690.901; rmse A/B=409.151/409.151 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-a11a3cb15709ec1c) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/165cf7faa6706b7ec7e7/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:ridge-cv@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 2.752 | 29.9546 | — | 0.0919 | PENDING; finite A/B=true/true; r2 A/B=0.90904/0.90904; rmse A/B=4.69123/4.69123 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9af2eb0f7a20789b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/232a328ed5fdd06e4c08/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/attempt-0001 | full_workload | QUALITY_FAILED | 4.86991 | 2.50773 | — | 1.9420 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8fd019d61a492c3a) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 6.93219 | 5.77815 | — | 1.1997 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8f14efcb18cad81b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3dd9972e3d0f5ac10a3b/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:pa-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 6.70714 | 6.7628 | — | 0.9918 | PENDING; finite A/B=true/true; r2 A/B=0.90038/0.90038; rmse A/B=4.90947/4.90947 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ddb798db13cd66e2) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/4f3241f1e19ae885bc04/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:tweedie@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 3.88779 | 3.75191 | — | 1.0362 | PENDING; finite A/B=true/true; r2 A/B=-80230.2/-80230.2; rmse A/B=236.356/236.356 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3a80118e69e043f4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c653b5ce77f0c5b421f/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 10.3689 | 10.3709 | — | 0.9998 | PENDING; finite A/B=true/true; r2 A/B=0.908771/0.908771; rmse A/B=4.69817/4.69817 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-32b2aaaaf002d8ef) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c9e1357590bfdcd9481/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 7.32675 | 7.15365 | — | 1.0242 | PENDING; finite A/B=true/true; r2 A/B=0.331677/0.331677; rmse A/B=0.682163/0.682163 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-65c60c9641f04bbd) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5ebcebb03580bebc2e0b/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:pa-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 10.4087 | 10.6582 | — | 0.9766 | PENDING; finite A/B=true/true; r2 A/B=0.310359/0.310359; rmse A/B=0.692958/0.692958 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-266bfd8b44447740) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/7362b2683eb55fce4826/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:gamma@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 3.53442 | 3.4686 | — | 1.0190 | PENDING; finite A/B=true/true; r2 A/B=0.308178/0.308178; rmse A/B=0.694053/0.694053 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-69cab15d9bb817e9) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8b94af90079b45be7f51/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:tweedie@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.42478 | 1.38282 | — | 1.0303 | PENDING; finite A/B=true/true; r2 A/B=-25.8192/-25.8192; rmse A/B=80.5536/80.5536 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-b172cf12d6703f6c) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8dc79988b03268bfe3f9/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/attempt-0001 | full_workload | QUALITY_FAILED | 4.8659 | 2.54206 | — | 1.9142 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8aed5d56c01bc8ea) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:bayesian-ridge@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 4.28294 | 4.38617 | — | 0.9765 | PENDING; finite A/B=true/true; r2 A/B=0.312812/0.312812; rmse A/B=0.691724/0.691724 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d735ffdb9d7d401f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/9a4596da96b758f8bfcc/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:bayesian-ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 2.27703 | 2.26778 | — | 1.0041 | PENDING; finite A/B=true/true; r2 A/B=0.908986/0.908986; rmse A/B=4.69262/4.69262 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-19f20c6f8e7dfee2) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/bb87a95b60730a62b9b0/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:poisson@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.44759 | 1.42974 | — | 1.0125 | PENDING; finite A/B=true/true; r2 A/B=-0.362746/-0.362746; rmse A/B=18.1581/18.1581 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-f66158b907893123) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/f3338c86505a1c49367a/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 6.89517 | 5.65888 | — | 1.2185 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-4ff6adcd687ec3e4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/ffcd41dde6ea522c48e3/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:gmm@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 39.1712 | 23.0849 | — | 1.6968 | PENDING; bic A/B=-8.53065e+08/-8.53064e+08; mean_log_likelihood A/B=210.072/210.071; n_iter A/B=33/33 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-62933f7cbcc863ac) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-gmm-istella/f579c55ac28cfd6fb99a/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 8.86831 | 8.9564 | — | 0.9902 | PENDING; finite A/B=true/true; r2 A/B=0.294361/0.294361; rmse A/B=0.700949/0.700949 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-244630d62e014052) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/2f8b608f6ae23ccbef94/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 2.95445 | 2.96675 | — | 0.9959 | PENDING; finite A/B=true/true; r2 A/B=0.905574/0.905574; rmse A/B=4.77978/4.77978 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-b7a25bec0b1bfb2b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/53a58fdcb7a34a48e102/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:tsvd@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 8.54526 | 1.77975 | — | 4.8014 | PENDING; explained_variance_ratio_sum A/B=0.999965/0.999965; relative_reconstruction_error A/B=0.00325474/0.00325474 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-5c54fa0cdddb544f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/23a6a15473a435c3d0bc/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:elasticnet@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.04705 | 1.01217 | — | 1.0345 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.908567/0.908567; rmse A/B=4.70342/4.70342 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ba1bc257b53ddf5d) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/14941dbe10b9bd78a1e4/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:lasso@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.03185 | 1.04513 | — | 0.9873 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.90879/0.90879; rmse A/B=4.69766/4.69766 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-02dfcce6c5351825) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1b07971bfe465c3ca93f/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:lasso@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.27103 | 1.28221 | — | 0.9913 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.314679/0.314679; rmse A/B=0.690784/0.690784 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-6c8f3d6b5f21d164) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1e17ae43f1c2de4a7171/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:ridge@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 3.64365 | 3.6132 | — | 1.0084 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.332526/0.332526; rmse A/B=0.68173/0.68173 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-f45822f375fa0f28) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/4238c569b4eada2d0199/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:linearsvr@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.10929 | 1.08455 | — | 1.0228 | PENDING; finite A/B=true/true; r2 A/B=0.899284/0.899284; rmse A/B=4.9364/4.9364 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3f078965f7cbdb63) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/49c28f55539ef700a59f/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:linearsvr@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.22275 | 1.21485 | — | 1.0065 | PENDING; finite A/B=true/true; r2 A/B=-0.107029/-0.107029; rmse A/B=0.87796/0.87796 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-5cbbc771f7fa5fc3) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/55b2b5ab6491c0d7e9fe/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:elasticnet@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.2787 | 1.47024 | — | 0.8697 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.264635/0.264635; rmse A/B=0.715561/0.715561 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-5345b4b24a7b9e06) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/71d06cebb7470b76364a/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.1844 | 1.20881 | — | 0.9798 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69815/4.69815 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9a4a7c3f81419dc4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/80deb286d318651dcdf8/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:ridge-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 44.0669 | 55.5478 | — | 0.7933 | PENDING; finite A/B=true/true; r2 A/B=0.332506/0.332506; rmse A/B=0.68174/0.68174 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d474710bc9bf339b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/02c09435593c9525da9b/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:poisson@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 2.93613 | 1.86968 | — | 1.5704 | PENDING; finite A/B=true/true; r2 A/B=-9.79308/-9.79308; rmse A/B=2.74137/2.74137 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-f271e9b1ec6f0347) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/0898a3822c64a6e4b5f5/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:gamma@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.617279 | 0.606816 | — | 1.0172 | PENDING; finite A/B=true/true; r2 A/B=-690.901/-690.901; rmse A/B=409.151/409.151 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-a11a3cb15709ec1c) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/165cf7faa6706b7ec7e7/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:ridge-cv@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.98233 | 29.1805 | — | 0.0679 | PENDING; finite A/B=true/true; r2 A/B=0.90904/0.90904; rmse A/B=4.69123/4.69123 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9af2eb0f7a20789b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/232a328ed5fdd06e4c08/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/attempt-0001 | full_workload | QUALITY_FAILED | 4.06619 | 1.7388 | — | 2.3385 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8fd019d61a492c3a) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 4.66713 | 3.5226 | — | 1.3249 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8f14efcb18cad81b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3dd9972e3d0f5ac10a3b/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:pa-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 5.93333 | 5.95538 | — | 0.9963 | PENDING; finite A/B=true/true; r2 A/B=0.90038/0.90038; rmse A/B=4.90947/4.90947 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ddb798db13cd66e2) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/4f3241f1e19ae885bc04/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:tweedie@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.65018 | 1.43402 | — | 1.1507 | PENDING; finite A/B=true/true; r2 A/B=-80230.2/-80230.2; rmse A/B=236.356/236.356 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3a80118e69e043f4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c653b5ce77f0c5b421f/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 9.59547 | 9.60047 | — | 0.9995 | PENDING; finite A/B=true/true; r2 A/B=0.908771/0.908771; rmse A/B=4.69817/4.69817 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-32b2aaaaf002d8ef) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c9e1357590bfdcd9481/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 4.94806 | 4.95423 | — | 0.9988 | PENDING; finite A/B=true/true; r2 A/B=0.331677/0.331677; rmse A/B=0.682163/0.682163 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-65c60c9641f04bbd) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5ebcebb03580bebc2e0b/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:pa-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 8.21643 | 8.30511 | — | 0.9893 | PENDING; finite A/B=true/true; r2 A/B=0.310359/0.310359; rmse A/B=0.692958/0.692958 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-266bfd8b44447740) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/7362b2683eb55fce4826/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:gamma@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.27921 | 1.26311 | — | 1.0127 | PENDING; finite A/B=true/true; r2 A/B=0.308178/0.308178; rmse A/B=0.694053/0.694053 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-69cab15d9bb817e9) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8b94af90079b45be7f51/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:tweedie@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.617451 | 0.604315 | — | 1.0217 | PENDING; finite A/B=true/true; r2 A/B=-25.8192/-25.8192; rmse A/B=80.5536/80.5536 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-b172cf12d6703f6c) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8dc79988b03268bfe3f9/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/attempt-0001 | full_workload | QUALITY_FAILED | 4.05677 | 1.743 | — | 2.3275 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8aed5d56c01bc8ea) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:bayesian-ridge@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 2.01596 | 2.03545 | — | 0.9904 | PENDING; finite A/B=true/true; r2 A/B=0.312812/0.312812; rmse A/B=0.691724/0.691724 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d735ffdb9d7d401f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/9a4596da96b758f8bfcc/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:bayesian-ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.4731 | 1.46319 | — | 1.0068 | PENDING; finite A/B=true/true; r2 A/B=0.908986/0.908986; rmse A/B=4.69262/4.69262 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-19f20c6f8e7dfee2) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/bb87a95b60730a62b9b0/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:poisson@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.647342 | 0.627579 | — | 1.0315 | PENDING; finite A/B=true/true; r2 A/B=-0.362746/-0.362746; rmse A/B=18.1581/18.1581 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-f66158b907893123) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/f3338c86505a1c49367a/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 4.54781 | 3.43995 | — | 1.3221 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-4ff6adcd687ec3e4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/ffcd41dde6ea522c48e3/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:gmm@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 32.4871 | 16.1829 | — | 2.0075 | PENDING; bic A/B=-8.53065e+08/-8.53064e+08; mean_log_likelihood A/B=210.072/210.071; n_iter A/B=33/33 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-62933f7cbcc863ac) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-gmm-istella/f579c55ac28cfd6fb99a/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 6.65375 | 6.62662 | — | 1.0041 | PENDING; finite A/B=true/true; r2 A/B=0.294361/0.294361; rmse A/B=0.700949/0.700949 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-244630d62e014052) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/2f8b608f6ae23ccbef94/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 2.17771 | 2.19581 | — | 0.9918 | PENDING; finite A/B=true/true; r2 A/B=0.905574/0.905574; rmse A/B=4.77978/4.77978 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-b7a25bec0b1bfb2b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/53a58fdcb7a34a48e102/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:tsvd@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 7.84194 | 1.03919 | — | 7.5462 | PENDING; explained_variance_ratio_sum A/B=0.999965/0.999965; relative_reconstruction_error A/B=0.00325474/0.00325474 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-5c54fa0cdddb544f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/23a6a15473a435c3d0bc/attempt-0001/receipt.json>) |
 | I.X.complete-proposed | nvidia/native-sm90 | expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | FAILED_OR_INCOMPLETE | — | — | — | — | NOT_ASSESSED; metrics not recorded | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d1d74a2dbd1eaa30) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/2e86e210874fc70e8089/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:tsvd@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 6.25166 | 3.59057 | — | 1.7411 | PENDING; explained_variance_ratio_sum A/B=1/1; relative_reconstruction_error A/B=0.000140589/0.000140589 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3fd72a2713402022) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/7d663b8a073eb568e6c2/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.09802 | 2.07515 | — | 1.0110 | PENDING; explained_variance_fraction A/B=0.999995/0.999995 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-973b15a58509af39) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/2e86e210874fc70e8089/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:gaussian-rp@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.05614 | 2.97267 | — | 1.0281 | PENDING; mean_abs_distortion A/B=0.678255/0.678255 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9fb3b3dd26e9bf84) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/558553fad93edb103bb0/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.71893 | 1.74371 | — | 0.9858 | PENDING; mean_abs_distortion A/B=0.149771/0.149771 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-cd15055a2b529fd2) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/74cf9f90c9322b0e8dfb/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:fastica@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.28698 | 2.49941 | — | 0.9150 | PENDING; mean_abs_excess_kurtosis A/B=12.7864/12.7864 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-2fc729c67b1cb5d9) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7a4fa0ba4b22d86c69f6/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.7343 | 1.76229 | — | 0.9841 | PENDING; mean_abs_distortion A/B=0.349304/0.349304 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-a58d953fa710a406) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7bb70a7fa1aee4e6b601/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:incremental-pca@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.72202 | 5.61325 | — | 1.0194 | PENDING; explained_variance_fraction A/B=1/1 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-66a82341a63de50e) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/bc13a842a218b5d36548/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:fastica@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.52098 | 4.50353 | — | 1.0039 | PENDING; mean_abs_excess_kurtosis A/B=942.634/942.634 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-fa98ad9114180aca) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ce1bd77cb0829daa8a5f/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:randomized-svd@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.18693 | 4.98884 | — | 1.0397 | PENDING; relative_reconstruction_error A/B=0.000229582/0.000229582 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ff0ba915d0fd8132) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/e5b2d774f15e52b0faac/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:sparse-rp@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.03694 | 3.25702 | — | 0.9324 | PENDING; mean_abs_distortion A/B=1.88368/1.88368 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c719653b8b4af3ff) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:randomized-svd@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.51387 | 2.51945 | — | 0.9978 | PENDING; relative_reconstruction_error A/B=0.0272095/0.0272095 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-bf7a56da965014dd) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ef64104419669a66a6c4/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:cross-val-score@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 3.04426 | 3.01754 | — | 1.0089 | PENDING; mean_r2 A/B=0.939079/0.939079 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-45f965c4f09d8f58) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/3f0bb433239eba4eb84a/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:isotonic@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 3.54825 | 3.51352 | — | 1.0099 | PENDING; finite A/B=true/true; r2 A/B=0.891012/0.891012; rmse A/B=5.13513/5.13513 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8335a6294be7b957) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:isotonic@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 15.3918 | 14.3434 | — | 1.0731 | PENDING; finite A/B=true/true; r2 A/B=0.192662/0.192662; rmse A/B=0.749761/0.749761 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-11c33b5c7873ba1e) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/8098b815ba2f70d2d83e/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:cross-val-score@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 11.6143 | 11.4508 | — | 1.0143 | PENDING; mean_r2 A/B=0.336972/0.336972 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d0226afa3354756a) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/ac705e553ce95e6d7c85/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:multinomial-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 68.7057 | 43.4229 | — | 1.5822 | PENDING; accuracy A/B=0.854504/0.854504; logloss A/B=3.61724/3.61724 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3086abf3f2bc48f3) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 7.5846 | 7.59813 | — | 0.9982 | PENDING; accuracy A/B=0.922384/0.922384 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-84d2292541584f0e) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1a2fd8fe185bb3f4831a/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:cca@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.67202 | 2.69169 | — | 0.9927 | PENDING; mean_canonical_corr A/B=0.574828/0.574828 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-01cce040636c8840) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1e60b30fd5d06709dbd8/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:nmf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.62704 | 5.59921 | — | 1.0050 | PENDING; relative_reconstruction_error A/B=0.101238/0.101238 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-dd72792aca714fed) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/203265618a2ec3b9cf54/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:nmf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 21.7976 | 20.0927 | — | 1.0849 | PENDING; relative_reconstruction_error A/B=0.326038/0.326038 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-db99865b7d2c9fa7) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/28a95c96e40d533552b6/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:factor-analysis@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 8.69896 | 8.81858 | — | 0.9864 | PENDING; mean_log_likelihood A/B=98.2918/98.2918 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c941b84bebb52b19) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/2987d88e0b208c1a309e/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:qda@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.60778 | 1.77733 | — | 2.0299 | PENDING; accuracy A/B=0.727134/0.727148; logloss A/B=1.0698/1.06952 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d55868a6556596bc) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/33aeb0153b3f880efede/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | QUALITY_FAILED | 5.83116 | 2.00699 | — | 2.9054 | QUALITY_FAILED; accuracy A/B=0.71871/0.720538; logloss A/B=1.17689/1.14088 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-2b3fa1c8c8a9ded6) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:standard-scaler@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.79745 | 1.9339 | — | 0.9294 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-72c10405a98fa46f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/37e8dac2dc36700f0a79/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:target-encoder@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.31988 | 1.92838 | — | 1.7216 | PENDING; output_shape A/B=500000x8/500000x8 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-287d1467077f7d79) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3c4e16a32a0bde28c8b2/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls-canonical@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 11.4153 | 11.2706 | — | 1.0128 | PENDING; mean_canonical_corr A/B=0.876301/0.876301 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-fe0ead50535eb002) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3fb9a1d72f63cad550da/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:perceptron@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.57201 | 5.57358 | — | 0.9997 | PENDING; accuracy A/B=0.493462/0.493462 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3f3b55c7bb9e71e4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/427f089dccc31312df6e/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:multinomial-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.39799 | 3.37401 | — | 1.0071 | PENDING; accuracy A/B=0.721974/0.721974; logloss A/B=0.593049/0.593049 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-33ea35eeb738d691) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/544180a6a68f814041d1/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:perceptron@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 10.6409 | 10.7247 | — | 0.9922 | PENDING; accuracy A/B=0.874976/0.874976 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8f9afb885aefb515) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/56ec902fd5742bb6a8d4/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:target-encoder@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.79179 | 2.18199 | — | 2.6544 | PENDING; output_shape A/B=500000x5/500000x5 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-14e2b75b88d62789) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/6ff694323765b5e01044/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-ocsvm@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.30807 | 5.29244 | — | 1.0030 | PENDING; fraction_flagged A/B=0.18642/0.18642 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-46423e323002e162) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7190c2762992d986a679/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:categorical-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.61206 | 1.75672 | — | 1.4869 | PENDING; accuracy A/B=0.767572/0.767572; logloss A/B=0.536612/0.536612 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9bda358946b0e331) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/72433aef2997b99228ca/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:ridge-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 9.74278 | 9.62296 | — | 1.0125 | PENDING; accuracy A/B=0.91056/0.91056 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8578636fa173d312) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/744c225f65f592f226eb/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:complement-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 22.8624 | 26.7673 | — | 0.8541 | PENDING; accuracy A/B=0.849848/0.849848; logloss A/B=3.75188/3.75188 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9ae3ade86cfa2be1) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7eea2881505888665bbc/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:minibatch-kmeans@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.73788 | 4.73585 | — | 1.0004 | PENDING; n_clusters A/B=8/8; silhouette A/B=0.0962402/0.0962402 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c7525fd6b4bdfd81) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7f2d85c194475302e867/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:minibatch-kmeans@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.4002 | 1.94018 | — | 1.2371 | PENDING; n_clusters A/B=8/8; silhouette A/B=0.17146/0.171415 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-5743d1c99490c359) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/823d3c6f2b84e29dc172/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.85654 | 3.58833 | — | 1.6321 | PENDING; accuracy A/B=0.86872/0.868346; logloss A/B=3.7338/3.74303 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-aec61734cf52e3c8) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/82bb645731713ca0427f/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:cca@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 14.7843 | 14.9959 | — | 0.9859 | PENDING; mean_canonical_corr A/B=0.989054/0.989054 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d5258a9cd0b097a0) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/8627ad6c4094e07a060d/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:ridge-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.06361 | 2.00468 | — | 1.0294 | PENDING; accuracy A/B=0.765324/0.765324 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-36569f7098501e04) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/913d0db7a411d7dfa5c7/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:pa-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 10.9555 | 10.9926 | — | 0.9966 | PENDING; accuracy A/B=0.922242/0.922242 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-f268ab87091b52a5) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9b7c81efc3ea984c5124/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:maxabs-scaler@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.35527 | 1.36619 | — | 0.9920 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-65d7758574dd138a) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9e3654bc4994eb6559fd/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:complement-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.34627 | 3.36072 | — | 0.9957 | PENDING; accuracy A/B=0.68006/0.68006; logloss A/B=0.720475/0.720475 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-b958323d405c4d2c) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a130a015c2dd50764eec/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:minmax-scaler@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.17586 | 4.05417 | — | 1.0300 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8c8387675db5366c) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a3949cbfd5c89074b638/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 8.66045 | 8.65029 | — | 1.0012 | PENDING; accuracy A/B=0.75694/0.75694 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-0d33d7eacea23002) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b151644ffaf019e1d46b/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls-canonical@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.60174 | 2.63504 | — | 0.9874 | PENDING; mean_canonical_corr A/B=0.557279/0.557279 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-bcbe989dee817812) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b30ff22e3a212cfdfc6f/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:qda@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.50104 | 4.75185 | — | 1.1577 | PENDING; accuracy A/B=0.879722/0.879666; logloss A/B=3.55978/3.55965 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-b640bdda35148a81) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bd96f6301d2a48cd4d44/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:pa-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.89817 | 5.93904 | — | 0.9931 | PENDING; accuracy A/B=0.76288/0.76288 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-1a4d1081cc47e637) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bdb6d74ec2df7f0f981a/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:categorical-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.0879 | 1.63667 | — | 1.2757 | PENDING; accuracy A/B=0.840176/0.840176; logloss A/B=0.411866/0.411866 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-77845bb068a09f18) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/c366ae5c82e1fb3858ad/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:maxabs-scaler@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.64412 | 3.62544 | — | 1.0052 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-441edcfb9b466923) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/d5201c24647176641677/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | QUALITY_FAILED | 4.75689 | 3.8093 | — | 1.2488 | QUALITY_FAILED; accuracy A/B=0.912628/0.913584; logloss A/B=0.234086/0.233661 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c1ef5bc45e1661b0) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.64903 | 1.78523 | — | 2.0440 | PENDING; accuracy A/B=0.763616/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3070b433c9081004) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/e45284c67428eb18d1e8/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:factor-analysis@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.94504 | 1.93578 | — | 1.0048 | PENDING; mean_log_likelihood A/B=-14.8358/-14.8358 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-6d5822c4f25c2b1e) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/ea67f7807d5f024ee41c/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:standard-scaler@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.03597 | 4.05978 | — | 0.9941 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-2d0aca506db8b04f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f032fb902df53bb60773/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-ocsvm@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.23716 | 5.30334 | — | 0.9875 | PENDING; fraction_flagged A/B=2e-06/2e-06 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-15bf710877f22b82) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f1fd154b7e7101ee1bc0/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:minmax-scaler@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.75703 | 2.10964 | — | 0.8329 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-7464a8bf40a2be1d) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f6f713795d0ce17722d7/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:logreg@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 6.02797 | 5.88571 | — | 1.0242 | PENDING; accuracy A/B=0.924952/0.924952; logloss A/B=0.179796/0.179796; nonfinite_proba_rows A/B=0/0 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ac13010f743092b9) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/59c9e0ea23cbe7904fa9/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:linearsvc@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.05502 | 2.06093 | — | 0.9971 | PENDING; accuracy A/B=0.764664/0.764664 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-19d9cb1b12dbd6c4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/91a3e631f7cf85d00d46/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:linearsvc@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.92804 | 4.2035 | — | 0.9345 | PENDING; accuracy A/B=0.923502/0.923502 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-a93fef1b0b83a1c4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/b17a252c27cfe68ec555/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | more:logreg@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.76183 | 1.768 | — | 0.9965 | PENDING; accuracy A/B=0.764716/0.764716; logloss A/B=0.537419/0.537419; nonfinite_proba_rows A/B=0/0 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c23540a41a03c009) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/fe8d8d94e9be894f9b6a/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:mlp-clf@dataset=taxi@input=mlp-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 16.0138 | 16.0505 | — | 0.9977 | PENDING; accuracy A/B=0.76945/0.76945; logloss A/B=0.528099/0.528099 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d75af24cf17fb1e5) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/1ba37c58e15aeeb3e578/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:mlp-clf@dataset=istella@input=mlp-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 11.8673 | 11.8918 | — | 0.9979 | PENDING; accuracy A/B=0.947584/0.947584; logloss A/B=0.129172/0.129172 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-16a73fdc8799be1b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/5db8117591bd18566130/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:mlp-reg@dataset=istella@input=mlp-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 16.3171 | 15.8692 | — | 1.0282 | PENDING; finite A/B=true/true; r2 A/B=0.544171/0.544171; rmse A/B=0.563373/0.563373 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-fa21c22c783bd036) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/b4c0c2f107efa97a3834/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:mlp-reg@dataset=taxi@input=mlp-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 19.9223 | 19.9329 | — | 0.9995 | PENDING; finite A/B=true/true; r2 A/B=0.939585/0.939585; rmse A/B=3.82327/3.82327 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-728f644dbfecbbd4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/e47dbe9078881fe5518f/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.76364 | 1.77021 | — | 0.9963 | BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69813/4.69813 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c52b6c156f36ff11) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/201c5234acc7b0ac4689/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 4.06999 | 3.69303 | — | 1.1021 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.332506/0.332506; rmse A/B=0.68174/0.68174 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9a4ad60ce5184566) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/5df5c5720c0d6d872c16/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | classical:kmeans@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 25.8348 | 4.87872 | — | 5.2954 | BASELINE_NONREGRESSION_WITH_OPPONENT_QUALITY_DEFICIT; inertia A/B=6.04926e+17/6.05072e+17; inertia_over_ours A/B=1/1; n_iter A/B=27/33 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-0bdd0925865883dd) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/8af58db47601e372485e/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | classical:pca@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 5.17628 | 3.51496 | — | 1.4726 | TASK_METRIC_GATE_PASSED; explained_variance_ratio_sum A/B=1/1 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-a739d7ea28c7d453) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/aaee5fbb8a39edad255c/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | classical:pca@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 5.22511 | 1.75027 | — | 2.9853 | BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING; explained_variance_ratio_sum A/B=0.999996/0.999996 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-935f7064666d842b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/d93173a97b8d0e0dd273/attempt-0001/receipt.json>) |
-| I.X.complete-proposed | nvidia/native-sm90 | classical:kmeans@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 56.0735 | 2.21555 | — | 25.3091 | PENDING; inertia A/B=4.0188e+08/4.01988e+08; inertia_over_ours A/B=1/1; n_iter A/B=51/84 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ff871a943b48a16f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/fb6aa398a4fe2f787945/attempt-0001/receipt.json>) |
-| T.C13.only | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.14955 | 5.52992 | — | 1.1120 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-fb1d62f883017cb6) / [details](#attempt-cb428a22a0e289c3) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2a098babe6bda25adfe4/attempt-0001/receipt.json>) |
-| T.C13.only | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 8.25534 | 2.05706 | — | 4.0132 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-fb1d62f883017cb6) / [details](#attempt-2a99658c918f237d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json>) |
-| T.C13.only | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.41284 | 5.57646 | — | 0.7913 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-fb1d62f883017cb6) / [details](#attempt-9153f3e7e1948b1e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json>) |
-| T.C13.only | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.2224 | 5.58349 | — | 1.1144 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-fb1d62f883017cb6) / [details](#attempt-984e0d20db5f922f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fef343a1a02430ef8632/attempt-0001/receipt.json>) |
-| T.C55.only | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 5.31557 | 1.41436 | — | 3.7583 | QUALITY_FAILED; accuracy A/B=0.71871/0.720538; logloss A/B=1.17689/1.14088 | [toggles](#toggles-0a96f530613f81c8) / [details](#attempt-654650bdea86774b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json>) |
-| T.C55.only | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.28348 | 1.37209 | — | 2.3931 | PENDING; accuracy A/B=0.763616/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-0a96f530613f81c8) / [details](#attempt-e858169233b47555) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6a1927d993c3730a4ca2/attempt-0001/receipt.d12e8f1e18983624b53e5a7021478cce3ded2907a6bcd9e2b0b5faba38763869.json>) |
-| T.C55.only | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.79715 | 3.75846 | — | 1.2764 | QUALITY_FAILED; accuracy A/B=0.912628/0.913584; logloss A/B=0.234086/0.233661 | [toggles](#toggles-0a96f530613f81c8) / [details](#attempt-382da1eaba7b3a71) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json>) |
-| T.C55.only | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.82239 | 3.47214 | — | 1.6769 | PENDING; accuracy A/B=0.86872/0.868346; logloss A/B=3.7338/3.74303 | [toggles](#toggles-0a96f530613f81c8) / [details](#attempt-b6b4dd65fa4156f7) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d75d76539c8a32df81e8/attempt-0001/receipt.4197e246bcaaf01c5c89125b016de4a01417e819738cdb2ed53e0407cf0be3c6.json>) |
-| T.C13.C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.43144 | 2.10131 | — | 2.1089 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-74a70b92f6c1f65e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json>) |
-| T.C13.C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.20229 | 5.53773 | — | 1.1200 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-34134fc0557a1c64) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b1c11584d78ed1948ad/attempt-0001/receipt.json>) |
-| T.C13.C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.25058 | 6.03156 | — | 1.0363 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-b44480bdd26a614b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ebc643bc218228636fa5/attempt-0001/receipt.json>) |
-| T.C13.C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.43969 | 2.06398 | — | 2.1510 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-6319650fb820f0b4) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json>) |
-| T.C18.residual-only | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.10109 | 2.08275 | — | 1.0088 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-c0d88ca12c012d0b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/47d0e9c0d197d26c80e2/attempt-0001/receipt.json>) |
-| T.C18.residual-only | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.65859 | 5.62429 | — | 1.0061 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-d4cf713f8bf64c9a) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/51404940ade2d36c81a6/attempt-0001/receipt.json>) |
-| T.C18.residual-only | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.06289 | 2.12744 | — | 0.9697 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-b32661e921d62ee8) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9a604a138bcd1a3009a9/attempt-0001/receipt.json>) |
-| T.C18.residual-only | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.63483 | 5.5973 | — | 1.0067 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-1ca9cbac03165f57) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.8ef93f089139a761eed26f535b632c4e055dfb5236aed0defcd278abefa68c8c.json>) |
-| T.combined.minus-C13 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13916 | 2.11615 | — | 1.0109 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-52f6a4254c4a89d7) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/38928c02ed2c35af3343/attempt-0001/receipt.json>) |
-| T.combined.minus-C13 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.63105 | 5.57635 | — | 1.0098 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-f8fed67958af299f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5559cba282e3db50f398/attempt-0001/receipt.55f845dbf5d059737162e3570516f948083872dfd1a32935f763270e6118e67b.json>) |
-| T.combined.minus-C13 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.10861 | 2.09693 | — | 1.0056 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-3bf77696122abd9e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8454febec213ca782283/attempt-0001/receipt.json>) |
-| T.combined.minus-C13 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.62303 | 5.6152 | — | 1.0014 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-759d36fe9a5a6604) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/c974dc40aa40f2549155/attempt-0001/receipt.json>) |
-| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.55887 | 5.60254 | — | 0.9922 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-1c3e0b87fb1fa1a2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1981486684c39cb7f509/attempt-0001/receipt.json>) |
-| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13617 | 6.31044 | — | 0.3385 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-97e5ada8eeee93aa) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5e07e40b6ceef1c5e078/attempt-0001/receipt.92e3cd9ab2be92d3a0a8d37085b97add0670ffb894b34fc622541e38d21b1662.json>) |
-| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.0538 | 6.10082 | — | 0.3366 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-a4e0cc889f416207) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7a4b73a821dc6bf90408/attempt-0001/receipt.json>) |
-| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.56626 | 5.57469 | — | 0.9985 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-4dcd2caefccfa172) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e6261da8cfbb7a6655eb/attempt-0001/receipt.json>) |
-| T.combined.minus-C55 | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.41452 | 1.41323 | — | 1.0009 | PENDING; accuracy A/B=0.720538/0.720538; logloss A/B=1.14088/1.14088 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-c8d7aac35081af69) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6295dfb45e4447c64d77/attempt-0001/receipt.json>) |
-| T.combined.minus-C55 | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.74991 | 3.69336 | — | 1.8276 | PENDING; accuracy A/B=0.913584/0.913584; logloss A/B=0.233661/0.233661 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-42b4fe3fbad8b160) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/81c7729ed6eceb610740/attempt-0001/receipt.b26760d9975a12e2ce1bb6d96a38beeea2a8dab0df8b6386b3339ca4941c1acf.json>) |
-| T.combined.minus-C55 | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 8.28944 | 6.79572 | — | 1.2198 | PENDING; accuracy A/B=0.868346/0.868346; logloss A/B=3.74303/3.74303 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-776e2df67b56c4c1) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf6a12554a864102b2de/attempt-0001/receipt.96849300116b5856f59294fedfefee1cbe149c6c26826a470dc64690e6e1b3dc.json>) |
-| T.combined.minus-C55 | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.71804 | 2.24903 | — | 1.2085 | PENDING; accuracy A/B=0.763624/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-a6468b4671a7c5c6) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e9c5a887a10f16f7e492/attempt-0001/receipt.json>) |
-| T.combined.reproduction | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.2753 | 7.78284 | — | 0.8063 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-ea7bf436c35909f2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2e059451964d90968061/attempt-0001/receipt.json>) |
-| T.combined.reproduction | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 6.13175 | 1.56304 | — | 3.9230 | QUALITY_FAILED; accuracy A/B=0.71871/0.720538; logloss A/B=1.17689/1.14088 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-d46e5d797dc221f0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json>) |
-| T.combined.reproduction | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.70554 | 3.74197 | — | 1.5247 | PENDING; accuracy A/B=0.86872/0.868346; logloss A/B=3.7338/3.74303 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-72d44872b8132886) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/41bf5dab451f761555e4/attempt-0001/receipt.json>) |
-| T.combined.reproduction | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 5.43547 | 2.06793 | — | 2.6285 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-698132a51d7f1f3c) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json>) |
-| T.combined.reproduction | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.87168 | 3.70012 | — | 1.3166 | QUALITY_FAILED; accuracy A/B=0.912628/0.913584; logloss A/B=0.234086/0.233661 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-2a3d628ebab76e92) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json>) |
-| T.combined.reproduction | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.44386 | 2.12596 | — | 2.0903 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-6169e0b0391158e5) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json>) |
-| T.combined.reproduction | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.32247 | 1.49496 | — | 2.2225 | PENDING; accuracy A/B=0.763616/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-d0039350096b1191) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b641feda5c2241faf598/attempt-0001/receipt.json>) |
-| T.combined.reproduction | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.30239 | 5.60606 | — | 1.1242 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-bcc85e2296e44f4d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e1447e0d669bee705f2e/attempt-0001/receipt.json>) |
-| T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.53694 | 7.30433 | — | 0.7580 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-cf6699a20196b824) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/047dc5950c1d73fd8b3c/attempt-0001/receipt.e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63.json>) |
-| T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.55214 | 5.56559 | — | 0.9976 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-584a6a32814434a0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/060dd5184930208ceb52/attempt-0001/receipt.json>) |
-| T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.04858 | 8.52406 | — | 0.2403 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-363833106ef4062d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf523bdc7b56fd295b5c/attempt-0001/receipt.json>) |
-| T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.11957 | 2.09734 | — | 1.0106 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-8c447e84c35153e9) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ce3fe6a01c8948daa84e/attempt-0001/receipt.json>) |
-| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.60836 | 5.6288 | — | 0.9964 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-31f2635f79335391) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7620c327fe49ddcdb796/attempt-0001/receipt.03e5add0ba810686885d2f8072ef072e8ca4e4768d08665ca6423d94f67e305b.json>) |
-| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.63137 | 5.574 | — | 1.0103 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-36bafc897ee53400) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c51f49f1ef3e073a250/attempt-0001/receipt.json>) |
-| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.08435 | 2.1513 | — | 0.9689 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-64346b896472aa87) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/da492f76e577be7f77f5/attempt-0001/receipt.json>) |
-| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13766 | 2.10536 | — | 1.0153 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-0755f89937a5f723) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fac901f2d6d8cdbf874e/attempt-0001/receipt.json>) |
-| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.09551 | 2.08445 | — | 1.0053 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-b745df58d90dca25) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3f8b82244388722b36b7/attempt-0001/receipt.json>) |
-| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13228 | 2.10415 | — | 1.0134 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-d764101c7a39bfa0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8029c8db5c14e9c672c4/attempt-0001/receipt.json>) |
-| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.63105 | 5.58706 | — | 1.0079 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-60a14a9f32747197) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f56fadc13b00da2175fd/attempt-0001/receipt.76b5992a1a05122e86a222c00c78fcf6353e50702f4991a52f0c6fbe8e91e8d6.json>) |
-| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.59622 | 5.56621 | — | 1.0054 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-e0e4be300d2b742a) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fa05eda4f5869e429b76/attempt-0001/receipt.json>) |
-| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.60335 | 2.11996 | — | 0.7563 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-0bc02b15ec3b34c5) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/111a1de0eda200c4207c/attempt-0001/receipt.json>) |
-| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.61711 | 2.09775 | — | 0.7709 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-46b8e21e61c37523) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1cbdc068cfad5441dd00/attempt-0001/receipt.json>) |
-| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.07365 | 10.3852 | — | 0.4885 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-c989778422bbb55b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7363f44cf9fd07492be0/attempt-0001/receipt.json>) |
-| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 11.1087 | 5.57484 | — | 1.9927 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-a2844b44b89ddc8f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ed61baeb975129a480cf/attempt-0001/receipt.json>) |
-| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.8052 | 5.5763 | — | 1.0410 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-0e88252bb670b050) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5a61b1976ccfb76739c9/attempt-0001/receipt.2375de7e17bf54e9f1d25f86dfa1d3616dcaad4b75fc5000e638d16e5c2d2a0c.json>) |
-| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.11765 | 2.12078 | — | 0.9985 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-740234899f242030) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/66585b08b948599f1ede/attempt-0001/receipt.cd79d8d67b0723938ee288b12893e6b666a6dbf1a833133c49ac9144502ba5ef.json>) |
-| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 11.9775 | 5.56302 | — | 2.1531 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-8197fb0cd63a6331) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/860b43ae6e51336b141b/attempt-0001/receipt.json>) |
-| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13485 | 2.10444 | — | 1.0144 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-fd3d3c4b2c4be802) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ab3c437bbfe26fa5b325/attempt-0001/receipt.json>) |
-| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 5.38364 | 2.24136 | — | 2.4020 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-edbb495afcb11721) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json>) |
-| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 12.9849 | 9.10238 | — | 1.4265 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-a86c9149bb5f5b68) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6422fac533289608328b/attempt-0001/receipt.json>) |
-| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 12.8747 | 11.6233 | — | 1.1077 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-c05483975555697f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf3f84f003228706d0be/attempt-0001/receipt.json>) |
-| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 5.57533 | 3.46583 | — | 1.6087 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-51193d383e6c5753) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json>) |
-| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.91385 | 3.2365 | — | 1.5183 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-12d124bddfcf3124) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json>) |
-| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 12.9076 | 5.60664 | — | 2.3022 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-3f3e971f485ed798) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/394330707fd638afc43a/attempt-0001/receipt.71e420aea4262e7c7de0310b55fffbd5ecb287168e5c9255407fe59678b98415.json>) |
-| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 9.76553 | 5.6235 | — | 1.7366 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-d2d269eab43d852c) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/457a537af5e96a2c24c0/attempt-0001/receipt.json>) |
-| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 3.92051 | 2.05226 | — | 1.9103 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-5cc72e284b9b9ef8) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json>) |
-| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.22509 | 13.5456 | — | 0.4596 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-adbc217b39d7a7ae) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5cb4dedaaed7ef311a8f/attempt-0001/receipt.c55f0227d6eb709f3d30eee37c002b63731b8c80d0fa7c9d604af9084db97eb9.json>) |
-| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.43286 | 2.08827 | — | 2.1227 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-f959064f7a86d183) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json>) |
-| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.44663 | 2.82696 | — | 1.5729 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-dc62d05da75d55ff) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json>) |
-| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 7.60287 | 5.55529 | — | 1.3686 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-a5ef358e658afb29) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f593649f7046c4efcd61/attempt-0001/receipt.011127fb272eb5be5ac1106faf6ca9c5a4db02678469c392bcfac53082f42a33.json>) |
-| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.45653 | 3.15633 | — | 1.4119 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-4dd74a71aef7051e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json>) |
-| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 13.4888 | 5.6068 | — | 2.4058 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-f9804bcbbb2a4d7d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2c79b18ab250a725c636/attempt-0001/receipt.json>) |
-| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.14314 | 5.77668 | — | 1.0634 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-21716a13d7e3852c) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/685e7cf63b47f7fde2d7/attempt-0001/receipt.json>) |
-| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.47387 | 2.15542 | — | 2.0756 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-71e8f3f18b97cf19) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json>) |
-| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.63826 | 2.04979 | — | 0.7992 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-947e1abe740ec967) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/26036ffb056d4cdc7417/attempt-0001/receipt.json>) |
-| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.62012 | 2.08111 | — | 1.2590 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-5326142d98391079) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3a58cc68659a80ad4b20/attempt-0001/receipt.json>) |
-| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 8.90481 | 12.9548 | — | 0.6874 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-11d4df3d62748273) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ba60dbc2213f9edade7a/attempt-0001/receipt.json>) |
-| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.15889 | 5.72878 | — | 0.9005 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-cfcbd685df26b6fb) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f27ccefc2818cfe8d073/attempt-0001/receipt.json>) |
-| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.11031 | 2.58268 | — | 1.2043 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-eeeb77d811860adf) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/029d63b9273714076f9f/attempt-0001/receipt.json>) |
-| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.88047 | 7.59103 | — | 0.7747 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-d07a173c5ed4a9c3) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/14d9a8191cd42715b536/attempt-0001/receipt.e349db9d58761c00d25e99e901aa86ae14dd19d54365a3668328edba865db113.json>) |
-| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.97339 | 2.04638 | — | 1.4530 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-93cc187f089dc2a6) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2ce46e60891e60d7af7d/attempt-0001/receipt.json>) |
-| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.80315 | 5.51137 | — | 1.0529 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-1e5df1a8e315b3f2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/dce7dc54ced12083e966/attempt-0001/receipt.json>) |
-| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.09263 | 2.07054 | — | 1.0107 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-70235d26a1850d4d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2bf4b3e9c25cb546c71b/attempt-0001/receipt.json>) |
-| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 7.26767 | 5.58555 | — | 1.3012 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-953828fce8028929) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61c883edeef8df4e4ff6/attempt-0001/receipt.json>) |
-| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.07125 | 2.08357 | — | 0.9941 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-b13a393715af5da4) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b80e71d1b363beafd13a/attempt-0001/receipt.json>) |
-| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 9.89882 | 5.60497 | — | 1.7661 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-7227df12decca5a2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e50bcc37e0142ad233a6/attempt-0001/receipt.8f1373e86f8c948cf7a11f2e7975f244af8a3e1cb214da0ba4fee53bc11ae04e.json>) |
-| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.06324 | 2.04539 | — | 1.0087 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-ccced2e9c3388dc3) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8b43ca1aa7f8a5569d0f/attempt-0001/receipt.json>) |
-| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.10211 | 2.10182 | — | 1.0001 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-ddcbced97b1fa55d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c1c67600adb873689b3/attempt-0001/receipt.json>) |
-| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.56219 | 5.5332 | — | 1.0052 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-362cf35525eaab67) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e2975cdf3d53a2ec8496/attempt-0001/receipt.json>) |
-| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.6321 | 5.55604 | — | 1.0137 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-23824bb5eaa31c19) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f82556c80ef2b8187cae/attempt-0001/receipt.json>) |
-| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.25434 | 14.7676 | — | 0.3558 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-73d79e13b6f896c2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/726c9a11bd5909685c55/attempt-0001/receipt.26bdc0854b3edd95cf0eb723903fa409e70cf086cd252b21aab6766420b3773a.json>) |
-| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.17205 | 5.6756 | — | 0.9113 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-3ba8fa2e75a263f2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/78b8cf70d3609f7bf839/attempt-0001/receipt.json>) |
-| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.62994 | 2.11865 | — | 0.7693 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-81b2774033834aa7) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d14da02ee4b4eb881e95/attempt-0001/receipt.json>) |
-| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.63297 | 2.10133 | — | 0.7771 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-3023e5613736e422) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f5d979a0b3b8335c0014/attempt-0001/receipt.json>) |
-| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.12802 | 2.12248 | — | 1.0026 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-87093e17b60a845d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a376febd0f4a57d44e7a/attempt-0001/receipt.json>) |
-| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.12758 | 2.40585 | — | 0.8843 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-1537e2b862151a20) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a42415c247a088965dca/attempt-0001/receipt.json>) |
-| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.84623 | 5.64913 | — | 1.0349 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-4133ff7119c49f43) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ef85386b0a6c0b2ef89b/attempt-0001/receipt.json>) |
-| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.92116 | 5.61749 | — | 1.0541 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-c13cf27aee5f7138) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f74f23b5f1bbd73560fd/attempt-0001/receipt.json>) |
-| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.14321 | 2.12639 | — | 1.0079 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-07393df6b0dba573) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/59a4a935cec424ebb419/attempt-0001/receipt.json>) |
-| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.14839 | 2.10329 | — | 1.0214 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-84f3fe30c6d0c873) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99b190e8f08a225c7332/attempt-0001/receipt.json>) |
-| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.96853 | 5.58571 | — | 1.0685 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-3c7c3696a24592de) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b219f4bacd9f4040ba7/attempt-0001/receipt.json>) |
-| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.8413 | 13.1478 | — | 0.4443 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-5ad3b1f8835414d4) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bdda3a6a99a2a96ae6c6/attempt-0001/receipt.1f2957c4e7a37701009449f50edfc6fbae34c4e823b51e9d72bb8a076b21de4a.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:tsvd@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.34638 | 1.68806 | — | 2.5748 | PENDING; explained_variance_ratio_sum A/B=1/1; relative_reconstruction_error A/B=0.000140589/0.000140589 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3fd72a2713402022) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/7d663b8a073eb568e6c2/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.32594 | 1.30999 | — | 1.0122 | PENDING; explained_variance_fraction A/B=0.999995/0.999995 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-973b15a58509af39) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/2e86e210874fc70e8089/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:gaussian-rp@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.10936 | 1.12382 | — | 0.9871 | PENDING; mean_abs_distortion A/B=0.678255/0.678255 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9fb3b3dd26e9bf84) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/558553fad93edb103bb0/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.9635 | 0.962421 | — | 1.0011 | PENDING; mean_abs_distortion A/B=0.149771/0.149771 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-cd15055a2b529fd2) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/74cf9f90c9322b0e8dfb/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:fastica@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.50661 | 1.7441 | — | 0.8638 | PENDING; mean_abs_excess_kurtosis A/B=12.7864/12.7864 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-2fc729c67b1cb5d9) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7a4fa0ba4b22d86c69f6/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.977733 | 0.985216 | — | 0.9924 | PENDING; mean_abs_distortion A/B=0.349304/0.349304 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-a58d953fa710a406) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7bb70a7fa1aee4e6b601/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:incremental-pca@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.74507 | 3.72045 | — | 1.0066 | PENDING; explained_variance_fraction A/B=1/1 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-66a82341a63de50e) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/bc13a842a218b5d36548/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:fastica@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.65055 | 2.55685 | — | 1.0366 | PENDING; mean_abs_excess_kurtosis A/B=942.634/942.634 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-fa98ad9114180aca) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ce1bd77cb0829daa8a5f/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:randomized-svd@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.26647 | 3.03326 | — | 1.0769 | PENDING; relative_reconstruction_error A/B=0.000229582/0.000229582 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ff0ba915d0fd8132) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/e5b2d774f15e52b0faac/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:sparse-rp@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.14426 | 1.31316 | — | 0.8714 | PENDING; mean_abs_distortion A/B=1.88368/1.88368 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c719653b8b4af3ff) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:randomized-svd@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.75418 | 1.74971 | — | 1.0026 | PENDING; relative_reconstruction_error A/B=0.0272095/0.0272095 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-bf7a56da965014dd) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ef64104419669a66a6c4/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:cross-val-score@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 2.29655 | 2.27575 | — | 1.0091 | PENDING; mean_r2 A/B=0.939079/0.939079 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-45f965c4f09d8f58) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/3f0bb433239eba4eb84a/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:isotonic@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 0.833666 | 0.832065 | — | 1.0019 | PENDING; finite A/B=true/true; r2 A/B=0.891012/0.891012; rmse A/B=5.13513/5.13513 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8335a6294be7b957) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:isotonic@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 0.694599 | 0.690462 | — | 1.0060 | PENDING; finite A/B=true/true; r2 A/B=0.192662/0.192662; rmse A/B=0.749761/0.749761 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-11c33b5c7873ba1e) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/8098b815ba2f70d2d83e/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:cross-val-score@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 9.30153 | 9.16304 | — | 1.0151 | PENDING; mean_r2 A/B=0.336972/0.336972 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d0226afa3354756a) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/ac705e553ce95e6d7c85/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:multinomial-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.55401 | 1.53854 | — | 1.0100 | PENDING; accuracy A/B=0.854504/0.854504; logloss A/B=3.61724/3.61724 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3086abf3f2bc48f3) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.30659 | 5.33567 | — | 0.9946 | PENDING; accuracy A/B=0.922384/0.922384 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-84d2292541584f0e) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1a2fd8fe185bb3f4831a/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:cca@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.92825 | 1.93579 | — | 0.9961 | PENDING; mean_canonical_corr A/B=0.574828/0.574828 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-01cce040636c8840) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1e60b30fd5d06709dbd8/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:nmf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.93855 | 2.89209 | — | 1.0161 | PENDING; relative_reconstruction_error A/B=0.101238/0.101238 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-dd72792aca714fed) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/203265618a2ec3b9cf54/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:nmf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 12.6086 | 11.0001 | — | 1.1462 | PENDING; relative_reconstruction_error A/B=0.326038/0.326038 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-db99865b7d2c9fa7) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/28a95c96e40d533552b6/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:factor-analysis@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 6.42901 | 6.51579 | — | 0.9867 | PENDING; mean_log_likelihood A/B=98.2918/98.2918 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c941b84bebb52b19) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/2987d88e0b208c1a309e/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:qda@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.86201 | 1.00501 | — | 2.8477 | PENDING; accuracy A/B=0.727134/0.727148; logloss A/B=1.0698/1.06952 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d55868a6556596bc) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/33aeb0153b3f880efede/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | QUALITY_FAILED | 4.82784 | 0.965052 | — | 5.0027 | QUALITY_FAILED; accuracy A/B=0.71871/0.720538; logloss A/B=1.17689/1.14088 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-2b3fa1c8c8a9ded6) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:standard-scaler@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.994967 | 0.941745 | — | 1.0565 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-72c10405a98fa46f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/37e8dac2dc36700f0a79/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:target-encoder@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.65271 | 1.26165 | — | 2.1026 | PENDING; output_shape A/B=500000x8/500000x8 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-287d1467077f7d79) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3c4e16a32a0bde28c8b2/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls-canonical@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 9.11113 | 8.98891 | — | 1.0136 | PENDING; mean_canonical_corr A/B=0.876301/0.876301 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-fe0ead50535eb002) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3fb9a1d72f63cad550da/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:perceptron@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.79845 | 4.79895 | — | 0.9999 | PENDING; accuracy A/B=0.493462/0.493462 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3f3b55c7bb9e71e4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/427f089dccc31312df6e/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:multinomial-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.16918 | 1.16286 | — | 1.0054 | PENDING; accuracy A/B=0.721974/0.721974; logloss A/B=0.593049/0.593049 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-33ea35eeb738d691) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/544180a6a68f814041d1/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:perceptron@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 8.41251 | 8.47001 | — | 0.9932 | PENDING; accuracy A/B=0.874976/0.874976 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8f9afb885aefb515) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/56ec902fd5742bb6a8d4/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:target-encoder@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.06822 | 1.50685 | — | 3.3635 | PENDING; output_shape A/B=500000x5/500000x5 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-14e2b75b88d62789) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/6ff694323765b5e01044/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-ocsvm@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.06047 | 3.06162 | — | 0.9996 | PENDING; fraction_flagged A/B=0.18642/0.18642 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-46423e323002e162) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7190c2762992d986a679/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:categorical-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.84218 | 0.967496 | — | 1.9041 | PENDING; accuracy A/B=0.767572/0.767572; logloss A/B=0.536612/0.536612 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9bda358946b0e331) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/72433aef2997b99228ca/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:ridge-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 7.47501 | 7.33493 | — | 1.0191 | PENDING; accuracy A/B=0.91056/0.91056 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8578636fa173d312) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/744c225f65f592f226eb/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:complement-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.51082 | 1.42665 | — | 1.0590 | PENDING; accuracy A/B=0.849848/0.849848; logloss A/B=3.75188/3.75188 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9ae3ade86cfa2be1) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7eea2881505888665bbc/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:minibatch-kmeans@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.43437 | 2.4615 | — | 0.9890 | PENDING; n_clusters A/B=8/8; silhouette A/B=0.0962402/0.0962402 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c7525fd6b4bdfd81) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7f2d85c194475302e867/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:minibatch-kmeans@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.6265 | 1.15712 | — | 1.4056 | PENDING; n_clusters A/B=8/8; silhouette A/B=0.17146/0.171415 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-5743d1c99490c359) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/823d3c6f2b84e29dc172/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.4887 | 1.21766 | — | 2.8651 | PENDING; accuracy A/B=0.86872/0.868346; logloss A/B=3.7338/3.74303 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-aec61734cf52e3c8) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/82bb645731713ca0427f/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:cca@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 12.5178 | 12.7262 | — | 0.9836 | PENDING; mean_canonical_corr A/B=0.989054/0.989054 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d5258a9cd0b097a0) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/8627ad6c4094e07a060d/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:ridge-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.27864 | 1.2573 | — | 1.0170 | PENDING; accuracy A/B=0.765324/0.765324 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-36569f7098501e04) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/913d0db7a411d7dfa5c7/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:pa-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 8.69913 | 8.73421 | — | 0.9960 | PENDING; accuracy A/B=0.922242/0.922242 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-f268ab87091b52a5) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9b7c81efc3ea984c5124/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:maxabs-scaler@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.529533 | 0.510959 | — | 1.0364 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-65d7758574dd138a) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9e3654bc4994eb6559fd/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:complement-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.16721 | 1.17146 | — | 0.9964 | PENDING; accuracy A/B=0.68006/0.68006; logloss A/B=0.720475/0.720475 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-b958323d405c4d2c) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a130a015c2dd50764eec/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:minmax-scaler@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.4014 | 1.40373 | — | 0.9983 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-8c8387675db5366c) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a3949cbfd5c89074b638/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 7.90599 | 7.9092 | — | 0.9996 | PENDING; accuracy A/B=0.75694/0.75694 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-0d33d7eacea23002) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b151644ffaf019e1d46b/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls-canonical@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.85318 | 1.86322 | — | 0.9946 | PENDING; mean_canonical_corr A/B=0.557279/0.557279 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-bcbe989dee817812) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b30ff22e3a212cfdfc6f/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:qda@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.22354 | 2.43382 | — | 1.3245 | PENDING; accuracy A/B=0.879722/0.879666; logloss A/B=3.55978/3.55965 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-b640bdda35148a81) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bd96f6301d2a48cd4d44/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:pa-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 5.15937 | 5.17377 | — | 0.9972 | PENDING; accuracy A/B=0.76288/0.76288 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-1a4d1081cc47e637) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bdb6d74ec2df7f0f981a/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:categorical-nb@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.37536 | 0.934493 | — | 1.4718 | PENDING; accuracy A/B=0.840176/0.840176; logloss A/B=0.411866/0.411866 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-77845bb068a09f18) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/c366ae5c82e1fb3858ad/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:maxabs-scaler@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.983481 | 0.98648 | — | 0.9970 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-441edcfb9b466923) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/d5201c24647176641677/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | QUALITY_FAILED | 2.52185 | 1.53649 | — | 1.6413 | QUALITY_FAILED; accuracy A/B=0.912628/0.913584; logloss A/B=0.234086/0.233661 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c1ef5bc45e1661b0) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 2.88441 | 1.02338 | — | 2.8185 | PENDING; accuracy A/B=0.763616/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-3070b433c9081004) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/e45284c67428eb18d1e8/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:factor-analysis@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.18383 | 1.17737 | — | 1.0055 | PENDING; mean_log_likelihood A/B=-14.8358/-14.8358 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-6d5822c4f25c2b1e) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/ea67f7807d5f024ee41c/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:standard-scaler@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.39898 | 1.40392 | — | 0.9965 | PENDING; output_shape A/B=500000x220/500000x220 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-2d0aca506db8b04f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f032fb902df53bb60773/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-ocsvm@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 4.48596 | 4.51273 | — | 0.9941 | PENDING; fraction_flagged A/B=2e-06/2e-06 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-15bf710877f22b82) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f1fd154b7e7101ee1bc0/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:minmax-scaler@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 0.960862 | 0.946655 | — | 1.0150 | PENDING; output_shape A/B=500000x11/500000x11 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-7464a8bf40a2be1d) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f6f713795d0ce17722d7/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:logreg@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 3.6765 | 3.61752 | — | 1.0163 | PENDING; accuracy A/B=0.924952/0.924952; logloss A/B=0.179796/0.179796; nonfinite_proba_rows A/B=0/0 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ac13010f743092b9) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/59c9e0ea23cbe7904fa9/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:linearsvc@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.34306 | 1.32282 | — | 1.0153 | PENDING; accuracy A/B=0.764664/0.764664 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-19d9cb1b12dbd6c4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/91a3e631f7cf85d00d46/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:linearsvc@dataset=istella@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.67212 | 1.95754 | — | 0.8542 | PENDING; accuracy A/B=0.923502/0.923502 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-a93fef1b0b83a1c4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/b17a252c27cfe68ec555/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | more:logreg@dataset=taxi@input=classification-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 1.03899 | 1.02393 | — | 1.0147 | PENDING; accuracy A/B=0.764716/0.764716; logloss A/B=0.537419/0.537419; nonfinite_proba_rows A/B=0/0 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c23540a41a03c009) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/fe8d8d94e9be894f9b6a/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:mlp-clf@dataset=taxi@input=mlp-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 15.2626 | 15.2494 | — | 1.0009 | PENDING; accuracy A/B=0.76945/0.76945; logloss A/B=0.528099/0.528099 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-d75af24cf17fb1e5) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/1ba37c58e15aeeb3e578/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:mlp-clf@dataset=istella@input=mlp-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 9.61959 | 9.6277 | — | 0.9992 | PENDING; accuracy A/B=0.947584/0.947584; logloss A/B=0.129172/0.129172 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-16a73fdc8799be1b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/5db8117591bd18566130/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:mlp-reg@dataset=istella@input=mlp-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 13.9556 | 13.5136 | — | 1.0327 | PENDING; finite A/B=true/true; r2 A/B=0.544171/0.544171; rmse A/B=0.563373/0.563373 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-fa21c22c783bd036) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/b4c0c2f107efa97a3834/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:mlp-reg@dataset=taxi@input=mlp-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | 19.1108 | 19.1363 | — | 0.9987 | PENDING; finite A/B=true/true; r2 A/B=0.939585/0.939585; rmse A/B=3.82327/3.82327 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-728f644dbfecbbd4) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/e47dbe9078881fe5518f/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 1.04934 | 1.03483 | — | 1.0140 | BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING; finite A/B=true/true; r2 A/B=0.908772/0.908772; rmse A/B=4.69813/4.69813 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-c52b6c156f36ff11) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/201c5234acc7b0ac4689/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 1.81946 | 1.49726 | — | 1.2152 | TASK_METRIC_GATE_PASSED; finite A/B=true/true; r2 A/B=0.332506/0.332506; rmse A/B=0.68174/0.68174 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-9a4ad60ce5184566) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/5df5c5720c0d6d872c16/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | classical:kmeans@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 23.5915 | 2.05833 | — | 11.4615 | BASELINE_NONREGRESSION_WITH_OPPONENT_QUALITY_DEFICIT; inertia A/B=6.04926e+17/6.05072e+17; inertia_over_ours A/B=1/1; n_iter A/B=27/33 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-0bdd0925865883dd) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/8af58db47601e372485e/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | classical:pca@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | 2.96303 | 1.27499 | — | 2.3240 | TASK_METRIC_GATE_PASSED; explained_variance_ratio_sum A/B=1/1 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-a739d7ea28c7d453) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/aaee5fbb8a39edad255c/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | classical:pca@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 4.51848 | 1.03796 | — | 4.3532 | BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING; explained_variance_ratio_sum A/B=0.999996/0.999996 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-935f7064666d842b) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/d93173a97b8d0e0dd273/attempt-0001/receipt.json>) |
+| I.X.complete-proposed | nvidia/native-sm90 | classical:kmeans@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | 55.3571 | 1.47439 | — | 37.5458 | PENDING; inertia A/B=4.0188e+08/4.01988e+08; inertia_over_ours A/B=1/1; n_iter A/B=51/84 | [toggles](#toggles-088b7bacc6b25b4e) / [details](#attempt-ff871a943b48a16f) | [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/fb6aa398a4fe2f787945/attempt-0001/receipt.json>) |
+| T.C13.only | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.05307 | 3.4234 | — | 1.1839 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-fb1d62f883017cb6) / [details](#attempt-cb428a22a0e289c3) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2a098babe6bda25adfe4/attempt-0001/receipt.json>) |
+| T.C13.only | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.08425 | 1.69352 | — | 2.4117 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-fb1d62f883017cb6) / [details](#attempt-2a99658c918f237d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json>) |
+| T.C13.only | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.03939 | 1.70685 | — | 2.3666 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-fb1d62f883017cb6) / [details](#attempt-9153f3e7e1948b1e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json>) |
+| T.C13.only | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.09654 | 3.47494 | — | 1.1789 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-fb1d62f883017cb6) / [details](#attempt-984e0d20db5f922f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fef343a1a02430ef8632/attempt-0001/receipt.json>) |
+| T.C55.only | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.93427 | 1.03879 | — | 4.7500 | QUALITY_FAILED; accuracy A/B=0.71871/0.720538; logloss A/B=1.17689/1.14088 | [toggles](#toggles-0a96f530613f81c8) / [details](#attempt-654650bdea86774b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json>) |
+| T.C55.only | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.89671 | 0.986232 | — | 2.9372 | PENDING; accuracy A/B=0.763616/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-0a96f530613f81c8) / [details](#attempt-e858169233b47555) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6a1927d993c3730a4ca2/attempt-0001/receipt.d12e8f1e18983624b53e5a7021478cce3ded2907a6bcd9e2b0b5faba38763869.json>) |
+| T.C55.only | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 2.5642 | 1.50634 | — | 1.7023 | QUALITY_FAILED; accuracy A/B=0.912628/0.913584; logloss A/B=0.234086/0.233661 | [toggles](#toggles-0a96f530613f81c8) / [details](#attempt-382da1eaba7b3a71) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json>) |
+| T.C55.only | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.53615 | 1.28881 | — | 2.7437 | PENDING; accuracy A/B=0.86872/0.868346; logloss A/B=3.7338/3.74303 | [toggles](#toggles-0a96f530613f81c8) / [details](#attempt-b6b4dd65fa4156f7) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d75d76539c8a32df81e8/attempt-0001/receipt.4197e246bcaaf01c5c89125b016de4a01417e819738cdb2ed53e0407cf0be3c6.json>) |
+| T.C13.C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.06455 | 1.73647 | — | 2.3407 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-74a70b92f6c1f65e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json>) |
+| T.C13.C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.08783 | 3.43591 | — | 1.1897 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-34134fc0557a1c64) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b1c11584d78ed1948ad/attempt-0001/receipt.json>) |
+| T.C13.C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.13026 | 3.64765 | — | 1.1323 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-b44480bdd26a614b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ebc643bc218228636fa5/attempt-0001/receipt.json>) |
+| T.C13.C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.06867 | 1.69936 | — | 2.3942 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-6319650fb820f0b4) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json>) |
+| T.C18.residual-only | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.73967 | 1.72102 | — | 1.0108 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-c0d88ca12c012d0b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/47d0e9c0d197d26c80e2/attempt-0001/receipt.json>) |
+| T.C18.residual-only | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.52975 | 3.47531 | — | 1.0157 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-d4cf713f8bf64c9a) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/51404940ade2d36c81a6/attempt-0001/receipt.json>) |
+| T.C18.residual-only | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.68447 | 1.75533 | — | 0.9596 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-b32661e921d62ee8) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9a604a138bcd1a3009a9/attempt-0001/receipt.json>) |
+| T.C18.residual-only | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.51489 | 3.48475 | — | 1.0087 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-1ca9cbac03165f57) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.8ef93f089139a761eed26f535b632c4e055dfb5236aed0defcd278abefa68c8c.json>) |
+| T.combined.minus-C13 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.74534 | 1.74863 | — | 0.9981 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-52f6a4254c4a89d7) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/38928c02ed2c35af3343/attempt-0001/receipt.json>) |
+| T.combined.minus-C13 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.49585 | 3.47668 | — | 1.0055 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-f8fed67958af299f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5559cba282e3db50f398/attempt-0001/receipt.55f845dbf5d059737162e3570516f948083872dfd1a32935f763270e6118e67b.json>) |
+| T.combined.minus-C13 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.71675 | 1.73612 | — | 0.9888 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-3bf77696122abd9e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8454febec213ca782283/attempt-0001/receipt.json>) |
+| T.combined.minus-C13 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.52407 | 3.49813 | — | 1.0074 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-759d36fe9a5a6604) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/c974dc40aa40f2549155/attempt-0001/receipt.json>) |
+| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.43885 | 3.48481 | — | 0.9868 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-1c3e0b87fb1fa1a2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1981486684c39cb7f509/attempt-0001/receipt.json>) |
+| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.75242 | 1.77847 | — | 0.9854 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-97e5ada8eeee93aa) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5e07e40b6ceef1c5e078/attempt-0001/receipt.92e3cd9ab2be92d3a0a8d37085b97add0670ffb894b34fc622541e38d21b1662.json>) |
+| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.69465 | 1.76246 | — | 0.9615 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-a4e0cc889f416207) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7a4b73a821dc6bf90408/attempt-0001/receipt.json>) |
+| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.48113 | 3.47882 | — | 1.0007 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-4dcd2caefccfa172) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e6261da8cfbb7a6655eb/attempt-0001/receipt.json>) |
+| T.combined.minus-C55 | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.02147 | 1.0333 | — | 0.9885 | PENDING; accuracy A/B=0.720538/0.720538; logloss A/B=1.14088/1.14088 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-c8d7aac35081af69) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6295dfb45e4447c64d77/attempt-0001/receipt.json>) |
+| T.combined.minus-C55 | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.5173 | 1.53217 | — | 0.9903 | PENDING; accuracy A/B=0.913584/0.913584; logloss A/B=0.233661/0.233661 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-42b4fe3fbad8b160) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/81c7729ed6eceb610740/attempt-0001/receipt.b26760d9975a12e2ce1bb6d96a38beeea2a8dab0df8b6386b3339ca4941c1acf.json>) |
+| T.combined.minus-C55 | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.38306 | 1.32835 | — | 1.0412 | PENDING; accuracy A/B=0.868346/0.868346; logloss A/B=3.74303/3.74303 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-776e2df67b56c4c1) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf6a12554a864102b2de/attempt-0001/receipt.96849300116b5856f59294fedfefee1cbe149c6c26826a470dc64690e6e1b3dc.json>) |
+| T.combined.minus-C55 | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.10279 | 1.10296 | — | 0.9998 | PENDING; accuracy A/B=0.763624/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-a6468b4671a7c5c6) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e9c5a887a10f16f7e492/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.13673 | 3.46851 | — | 1.1927 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-ea7bf436c35909f2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2e059451964d90968061/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.97365 | 1.17855 | — | 4.2202 | QUALITY_FAILED; accuracy A/B=0.71871/0.720538; logloss A/B=1.17689/1.14088 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-d46e5d797dc221f0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.49466 | 1.44915 | — | 2.4115 | PENDING; accuracy A/B=0.86872/0.868346; logloss A/B=3.7338/3.74303 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-72d44872b8132886) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/41bf5dab451f761555e4/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.1323 | 1.70338 | — | 2.4259 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-698132a51d7f1f3c) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 2.62191 | 1.51108 | — | 1.7351 | QUALITY_FAILED; accuracy A/B=0.912628/0.913584; logloss A/B=0.234086/0.233661 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-2a3d628ebab76e92) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.08479 | 1.75686 | — | 2.3251 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-6169e0b0391158e5) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.92963 | 1.10324 | — | 2.6555 | PENDING; accuracy A/B=0.763616/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-d0039350096b1191) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b641feda5c2241faf598/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.14769 | 3.48157 | — | 1.1913 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-bcc85e2296e44f4d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e1447e0d669bee705f2e/attempt-0001/receipt.json>) |
+| T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.42864 | 3.43744 | — | 0.9974 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-cf6699a20196b824) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/047dc5950c1d73fd8b3c/attempt-0001/receipt.e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63.json>) |
+| T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.4235 | 3.42977 | — | 0.9982 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-584a6a32814434a0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/060dd5184930208ceb52/attempt-0001/receipt.json>) |
+| T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.68914 | 1.71575 | — | 0.9845 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-363833106ef4062d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf523bdc7b56fd295b5c/attempt-0001/receipt.json>) |
+| T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.7466 | 1.72043 | — | 1.0152 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-8c447e84c35153e9) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ce3fe6a01c8948daa84e/attempt-0001/receipt.json>) |
+| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.5027 | 3.52418 | — | 0.9939 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-31f2635f79335391) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7620c327fe49ddcdb796/attempt-0001/receipt.03e5add0ba810686885d2f8072ef072e8ca4e4768d08665ca6423d94f67e305b.json>) |
+| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.47324 | 3.43629 | — | 1.0108 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-36bafc897ee53400) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c51f49f1ef3e073a250/attempt-0001/receipt.json>) |
+| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.72296 | 1.77769 | — | 0.9692 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-64346b896472aa87) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/da492f76e577be7f77f5/attempt-0001/receipt.json>) |
+| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.75022 | 1.73874 | — | 1.0066 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-0755f89937a5f723) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fac901f2d6d8cdbf874e/attempt-0001/receipt.json>) |
+| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.73558 | 1.72507 | — | 1.0061 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-b745df58d90dca25) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3f8b82244388722b36b7/attempt-0001/receipt.json>) |
+| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.7631 | 1.74401 | — | 1.0109 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-d764101c7a39bfa0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8029c8db5c14e9c672c4/attempt-0001/receipt.json>) |
+| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.48788 | 3.46642 | — | 1.0062 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-60a14a9f32747197) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f56fadc13b00da2175fd/attempt-0001/receipt.76b5992a1a05122e86a222c00c78fcf6353e50702f4991a52f0c6fbe8e91e8d6.json>) |
+| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.49195 | 3.46901 | — | 1.0066 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-e0e4be300d2b742a) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fa05eda4f5869e429b76/attempt-0001/receipt.json>) |
+| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.24353 | 1.7469 | — | 0.7118 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-0bc02b15ec3b34c5) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/111a1de0eda200c4207c/attempt-0001/receipt.json>) |
+| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.25774 | 1.73652 | — | 0.7243 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-46b8e21e61c37523) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1cbdc068cfad5441dd00/attempt-0001/receipt.json>) |
+| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.99016 | 3.59781 | — | 0.8311 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-c989778422bbb55b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7363f44cf9fd07492be0/attempt-0001/receipt.json>) |
+| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.08086 | 3.45855 | — | 0.8908 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-a2844b44b89ddc8f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ed61baeb975129a480cf/attempt-0001/receipt.json>) |
+| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.69387 | 3.49372 | — | 1.0573 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-0e88252bb670b050) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5a61b1976ccfb76739c9/attempt-0001/receipt.2375de7e17bf54e9f1d25f86dfa1d3616dcaad4b75fc5000e638d16e5c2d2a0c.json>) |
+| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.73996 | 1.74931 | — | 0.9947 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-740234899f242030) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/66585b08b948599f1ede/attempt-0001/receipt.cd79d8d67b0723938ee288b12893e6b666a6dbf1a833133c49ac9144502ba5ef.json>) |
+| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.80582 | 3.44632 | — | 1.1043 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-8197fb0cd63a6331) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/860b43ae6e51336b141b/attempt-0001/receipt.json>) |
+| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.76258 | 1.72113 | — | 1.0241 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-fd3d3c4b2c4be802) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ab3c437bbfe26fa5b325/attempt-0001/receipt.json>) |
+| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.16928 | 1.85246 | — | 2.2507 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-edbb495afcb11721) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json>) |
+| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.30618 | 3.60524 | — | 1.1944 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-a86c9149bb5f5b68) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6422fac533289608328b/attempt-0001/receipt.json>) |
+| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.42453 | 3.51459 | — | 1.2589 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-c05483975555697f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf3f84f003228706d0be/attempt-0001/receipt.json>) |
+| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.17052 | 1.76636 | — | 2.3611 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-51193d383e6c5753) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json>) |
+| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 3.58836 | 1.76561 | — | 2.0324 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-12d124bddfcf3124) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json>) |
+| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.70482 | 3.44766 | — | 1.0746 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-3f3e971f485ed798) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/394330707fd638afc43a/attempt-0001/receipt.71e420aea4262e7c7de0310b55fffbd5ecb287168e5c9255407fe59678b98415.json>) |
+| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.62486 | 3.48726 | — | 1.0395 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-d2d269eab43d852c) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/457a537af5e96a2c24c0/attempt-0001/receipt.json>) |
+| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 3.56084 | 1.67975 | — | 2.1199 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-5cc72e284b9b9ef8) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json>) |
+| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.09198 | 3.61553 | — | 1.1318 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-adbc217b39d7a7ae) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5cb4dedaaed7ef311a8f/attempt-0001/receipt.c55f0227d6eb709f3d30eee37c002b63731b8c80d0fa7c9d604af9084db97eb9.json>) |
+| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.05327 | 1.72477 | — | 2.3500 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-f959064f7a86d183) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json>) |
+| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.06832 | 1.75162 | — | 2.3226 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-dc62d05da75d55ff) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json>) |
+| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.03907 | 3.451 | — | 1.1704 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-a5ef358e658afb29) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f593649f7046c4efcd61/attempt-0001/receipt.011127fb272eb5be5ac1106faf6ca9c5a4db02678469c392bcfac53082f42a33.json>) |
+| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.08171 | 1.77121 | — | 2.3045 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-4dd74a71aef7051e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json>) |
+| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.06651 | 3.52025 | — | 1.1552 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-f9804bcbbb2a4d7d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2c79b18ab250a725c636/attempt-0001/receipt.json>) |
+| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 4.03996 | 3.68099 | — | 1.0975 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-21716a13d7e3852c) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/685e7cf63b47f7fde2d7/attempt-0001/receipt.json>) |
+| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.11131 | 1.78305 | — | 2.3058 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-71e8f3f18b97cf19) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json>) |
+| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.26823 | 1.68813 | — | 0.7513 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-947e1abe740ec967) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/26036ffb056d4cdc7417/attempt-0001/receipt.json>) |
+| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.28004 | 1.71685 | — | 0.7456 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-5326142d98391079) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3a58cc68659a80ad4b20/attempt-0001/receipt.json>) |
+| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.06343 | 3.61544 | — | 0.8473 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-11d4df3d62748273) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ba60dbc2213f9edade7a/attempt-0001/receipt.json>) |
+| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.03577 | 3.48128 | — | 0.8720 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-cfcbd685df26b6fb) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f27ccefc2818cfe8d073/attempt-0001/receipt.json>) |
+| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.80946 | 1.76709 | — | 1.0240 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-eeeb77d811860adf) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/029d63b9273714076f9f/attempt-0001/receipt.json>) |
+| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.73359 | 3.50893 | — | 1.0640 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-d07a173c5ed4a9c3) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/14d9a8191cd42715b536/attempt-0001/receipt.e349db9d58761c00d25e99e901aa86ae14dd19d54365a3668328edba865db113.json>) |
+| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.76065 | 1.68626 | — | 1.0441 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-93cc187f089dc2a6) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2ce46e60891e60d7af7d/attempt-0001/receipt.json>) |
+| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.66281 | 3.42056 | — | 1.0708 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-1e5df1a8e315b3f2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/dce7dc54ced12083e966/attempt-0001/receipt.json>) |
+| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.73234 | 1.70743 | — | 1.0146 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-70235d26a1850d4d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2bf4b3e9c25cb546c71b/attempt-0001/receipt.json>) |
+| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.50028 | 3.47375 | — | 1.0076 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-953828fce8028929) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61c883edeef8df4e4ff6/attempt-0001/receipt.json>) |
+| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.70995 | 1.7209 | — | 0.9936 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-b13a393715af5da4) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b80e71d1b363beafd13a/attempt-0001/receipt.json>) |
+| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.50212 | 3.43977 | — | 1.0181 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-7227df12decca5a2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e50bcc37e0142ad233a6/attempt-0001/receipt.8f1373e86f8c948cf7a11f2e7975f244af8a3e1cb214da0ba4fee53bc11ae04e.json>) |
+| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.70169 | 1.68382 | — | 1.0106 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-ccced2e9c3388dc3) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8b43ca1aa7f8a5569d0f/attempt-0001/receipt.json>) |
+| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.7287 | 1.73962 | — | 0.9937 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-ddcbced97b1fa55d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c1c67600adb873689b3/attempt-0001/receipt.json>) |
+| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.43761 | 3.4273 | — | 1.0030 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-362cf35525eaab67) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e2975cdf3d53a2ec8496/attempt-0001/receipt.json>) |
+| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.51354 | 3.46618 | — | 1.0137 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-23824bb5eaa31c19) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f82556c80ef2b8187cae/attempt-0001/receipt.json>) |
+| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.11117 | 3.53075 | — | 0.8812 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-73d79e13b6f896c2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/726c9a11bd5909685c55/attempt-0001/receipt.26bdc0854b3edd95cf0eb723903fa409e70cf086cd252b21aab6766420b3773a.json>) |
+| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.04232 | 3.56513 | — | 0.8534 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-3ba8fa2e75a263f2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/78b8cf70d3609f7bf839/attempt-0001/receipt.json>) |
+| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.25653 | 1.74904 | — | 0.7184 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-81b2774033834aa7) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d14da02ee4b4eb881e95/attempt-0001/receipt.json>) |
+| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.25022 | 1.73801 | — | 0.7193 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-3023e5613736e422) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f5d979a0b3b8335c0014/attempt-0001/receipt.json>) |
+| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.75835 | 1.75853 | — | 0.9999 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-87093e17b60a845d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a376febd0f4a57d44e7a/attempt-0001/receipt.json>) |
+| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.76297 | 2.02325 | — | 0.8714 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-1537e2b862151a20) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a42415c247a088965dca/attempt-0001/receipt.json>) |
+| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.70406 | 3.52109 | — | 1.0520 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-4133ff7119c49f43) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ef85386b0a6c0b2ef89b/attempt-0001/receipt.json>) |
+| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.72263 | 3.48538 | — | 1.0681 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-c13cf27aee5f7138) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f74f23b5f1bbd73560fd/attempt-0001/receipt.json>) |
+| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.7695 | 1.76196 | — | 1.0043 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-07393df6b0dba573) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/59a4a935cec424ebb419/attempt-0001/receipt.json>) |
+| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.77376 | 1.73936 | — | 1.0198 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-84f3fe30c6d0c873) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99b190e8f08a225c7332/attempt-0001/receipt.json>) |
+| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.70687 | 3.47564 | — | 1.0665 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-3c7c3696a24592de) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b219f4bacd9f4040ba7/attempt-0001/receipt.json>) |
+| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.69458 | 3.6914 | — | 1.0009 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-5ad3b1f8835414d4) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bdda3a6a99a2a96ae6c6/attempt-0001/receipt.1f2957c4e7a37701009449f50edfc6fbae34c4e823b51e9d72bb8a076b21de4a.json>) |
 
 ## Campaign notes
 
@@ -528,29 +528,29 @@ Original attempts remain visible after repairs. A quality failure may have compl
 | Candidate | Vendor / case | Outcome / reason | Worker exits | Samples A; B (warmup/scored) | Observed A/B time | Evidence |
 |---|---|---|---|---|---:|---|
 | I.X.complete-proposed | nvidia / more:gmm@dataset=taxi/attempt-0001 | FAILED_OR_INCOMPLETE: Workload failed or did not write result JSON | [1] | A: 0/0; B: 0/0 | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/03f523ab5951d08a295b/attempt-0001/receipt.json |
-| I.X.complete-proposed | nvidia / expanded:enet-cv@dataset=taxi/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.9420 (4.8699s / 2.5077s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json |
-| I.X.complete-proposed | nvidia / expanded:lasso-cv@dataset=taxi/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.9142 (4.8659s / 2.5421s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json |
+| I.X.complete-proposed | nvidia / expanded:enet-cv@dataset=taxi/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3385 (4.0662s / 1.7388s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json |
+| I.X.complete-proposed | nvidia / expanded:lasso-cv@dataset=taxi/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3275 (4.0568s / 1.7430s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia / expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1/attempt-0001 | FAILED_OR_INCOMPLETE: Workload failed or did not write result JSON | [1] | A: 0/0; B: 0/0 | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/2e86e210874fc70e8089/attempt-0001/receipt.json |
-| I.X.complete-proposed | nvidia / expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.9054 (5.8312s / 2.0070s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json |
-| I.X.complete-proposed | nvidia / expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.2488 (4.7569s / 3.8093s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json |
-| T.C13.only | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 4.0132 (8.2553s / 2.0571s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json |
-| T.C13.only | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 0.7913 (4.4128s / 5.5765s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json |
-| T.C55.only | nvidia / expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 3.7583 (5.3156s / 1.4144s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json |
-| T.C55.only | nvidia / expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.2764 (4.7972s / 3.7585s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json |
-| T.C13.C18 | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.1089 (4.4314s / 2.1013s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json |
-| T.C13.C18 | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.1510 (4.4397s / 2.0640s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json |
-| T.combined.reproduction | nvidia / expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 3.9230 (6.1317s / 1.5630s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json |
-| T.combined.reproduction | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.6285 (5.4355s / 2.0679s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json |
-| T.combined.reproduction | nvidia / expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.3166 (4.8717s / 3.7001s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json |
-| T.combined.reproduction | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.0903 (4.4439s / 2.1260s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json |
-| T.CV.local.a8952d6bcb79 | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.4020 (5.3836s / 2.2414s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json |
-| T.CV.local.a8952d6bcb79 | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.6087 (5.5753s / 3.4658s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json |
-| T.CV.local.e6430f146f9a | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.5183 (4.9139s / 3.2365s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json |
-| T.CV.local.e6430f146f9a | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.9103 (3.9205s / 2.0523s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json |
-| T.CV.local.4210e28ea16c | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.1227 (4.4329s / 2.0883s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json |
-| T.CV.local.4210e28ea16c | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.5729 (4.4466s / 2.8270s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json |
-| T.CV.local.f364954c07b8 | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.4119 (4.4565s / 3.1563s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json |
-| T.CV.local.f364954c07b8 | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.0756 (4.4739s / 2.1554s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json |
+| I.X.complete-proposed | nvidia / expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 5.0027 (4.8278s / 0.9651s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json |
+| I.X.complete-proposed | nvidia / expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.6413 (2.5218s / 1.5365s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json |
+| T.C13.only | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.4117 (4.0842s / 1.6935s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json |
+| T.C13.only | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3666 (4.0394s / 1.7069s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json |
+| T.C55.only | nvidia / expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 4.7500 (4.9343s / 1.0388s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json |
+| T.C55.only | nvidia / expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.7023 (2.5642s / 1.5063s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json |
+| T.C13.C18 | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3407 (4.0645s / 1.7365s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json |
+| T.C13.C18 | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3942 (4.0687s / 1.6994s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json |
+| T.combined.reproduction | nvidia / expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 4.2202 (4.9737s / 1.1785s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json |
+| T.combined.reproduction | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.4259 (4.1323s / 1.7034s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json |
+| T.combined.reproduction | nvidia / expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.7351 (2.6219s / 1.5111s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json |
+| T.combined.reproduction | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3251 (4.0848s / 1.7569s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json |
+| T.CV.local.a8952d6bcb79 | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.2507 (4.1693s / 1.8525s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json |
+| T.CV.local.a8952d6bcb79 | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3611 (4.1705s / 1.7664s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json |
+| T.CV.local.e6430f146f9a | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.0324 (3.5884s / 1.7656s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json |
+| T.CV.local.e6430f146f9a | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.1199 (3.5608s / 1.6798s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json |
+| T.CV.local.4210e28ea16c | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3500 (4.0533s / 1.7248s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json |
+| T.CV.local.4210e28ea16c | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3226 (4.0683s / 1.7516s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json |
+| T.CV.local.f364954c07b8 | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3045 (4.0817s / 1.7712s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json |
+| T.CV.local.f364954c07b8 | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.3058 (4.1113s / 1.7831s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json |
 
 ## Experiments run: toggles, timing and quality
 
@@ -1967,7 +1967,7 @@ Failures: ["Workload failed or did not write result JSON"]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/14941dbe10b9bd78a1e4/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.8483765109995147 s; B: 1.7968798619986046 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.04704791399854 s; B: 1.0121701659954851 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: INCOMPLETE.
 
@@ -2011,7 +2011,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1b07971bfe465c3ca93f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.8263397490009083 s; B: 1.8718639310027356 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0318510590004735 s; B: 1.0451324070018018 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: INCOMPLETE.
 
@@ -2055,7 +2055,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1e17ae43f1c2de4a7171/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.7718699000033666 s; B: 3.79092280799523 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2710308979949332 s; B: 1.282205283001531 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: INCOMPLETE.
 
@@ -2099,7 +2099,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/4238c569b4eada2d0199/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.098077857001044 s; B: 6.079665773002489 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.643652573999134 s; B: 3.6131983529994613 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: INCOMPLETE.
 
@@ -2143,7 +2143,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/49c28f55539ef700a59f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.897447600000305 s; B: 1.8769762910014833 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.109289654996246 s; B: 1.0845526329940185 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2187,7 +2187,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/55b2b5ab6491c0d7e9fe/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.432090223999694 s; B: 3.547131968996837 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2227547990041785 s; B: 1.214852224002243 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2226,7 +2226,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/71d06cebb7470b76364a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.8005255320022115 s; B: 4.222366255002271 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2787031800035038 s; B: 1.4702400629976182 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: INCOMPLETE.
 
@@ -2270,7 +2270,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/80deb286d318651dcdf8/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.972023963004176 s; B: 2.019583719004004 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.184404439998616 s; B: 1.2088117029998102 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: INCOMPLETE.
 
@@ -2314,7 +2314,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/02c09435593c9525da9b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 46.39427043500473 s; B: 57.88348652199784 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 44.066872986004455 s; B: 55.5478481579994 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2353,7 +2353,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/0898a3822c64a6e4b5f5/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.304797801996756 s; B: 4.11961882399919 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.936130410998885 s; B: 1.8696791819966165 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2392,7 +2392,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/165cf7faa6706b7ec7e7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.4152778830030002 s; B: 1.383267880002677 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6172785279995878 s; B: 0.6068160590002663 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2431,7 +2431,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/232a328ed5fdd06e4c08/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.752001727996685 s; B: 29.95459134200064 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.9823305050013005 s; B: 29.180535400002555 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2470,7 +2470,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.869910581001022 s; B: 2.507730713005003 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.066193400001794 s; B: 1.7387960590058356 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -2509,7 +2509,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3dd9972e3d0f5ac10a3b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.932188960003259 s; B: 5.778150801997981 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.667134631999943 s; B: 3.5226022400020156 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2548,7 +2548,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/4f3241f1e19ae885bc04/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.7071421060027205 s; B: 6.762801338998543 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.93333078300202 s; B: 5.9553825490002055 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2587,7 +2587,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c653b5ce77f0c5b421f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.887791464003385 s; B: 3.751911162005854 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6501777949961252 s; B: 1.4340236329953768 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2626,7 +2626,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c9e1357590bfdcd9481/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 10.368898925000394 s; B: 10.370863170996017 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.595466388003842 s; B: 9.600465247000102 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2665,7 +2665,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5ebcebb03580bebc2e0b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.326748323001084 s; B: 7.1536494710017 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.948061161994701 s; B: 4.954229551003664 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2704,7 +2704,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/7362b2683eb55fce4826/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 10.408685335001792 s; B: 10.65815368899348 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.21642769400205 s; B: 8.305106879997766 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2743,7 +2743,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8b94af90079b45be7f51/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5344189799943706 s; B: 3.46860093199939 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2792139840021264 s; B: 1.2631103820021963 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2782,7 +2782,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8dc79988b03268bfe3f9/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.4247804729966447 s; B: 1.3828198939954746 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6174514679951244 s; B: 0.6043145479998202 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2821,7 +2821,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.865897468000185 s; B: 2.5420597569973324 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.056771635994664 s; B: 1.7429991079989122 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -2860,7 +2860,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/9a4596da96b758f8bfcc/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.282941309000307 s; B: 4.386174325001775 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.01595839500078 s; B: 2.0354512769990833 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2899,7 +2899,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/bb87a95b60730a62b9b0/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.2770266750012524 s; B: 2.2677759090001928 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.4731031359988265 s; B: 1.4631878289947053 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2938,7 +2938,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/f3338c86505a1c49367a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.4475930469998275 s; B: 1.4297423910029465 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6473424310024711 s; B: 0.6275790770014282 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -2977,7 +2977,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/ffcd41dde6ea522c48e3/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.8951746669990825 s; B: 5.6588756929995725 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.547809149997192 s; B: 3.4399530549999326 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3016,7 +3016,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-gmm-istella/f579c55ac28cfd6fb99a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 39.17117511700053 s; B: 23.084857726003975 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 32.48707775599905 s; B: 16.18292734300485 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3055,7 +3055,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/2f8b608f6ae23ccbef94/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.868306825002946 s; B: 8.95639805400424 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.6537480650004 s; B: 6.626624481999897 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3094,7 +3094,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/53a58fdcb7a34a48e102/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.954448112999671 s; B: 2.9667478470000788 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1777083560009487 s; B: 2.1958140689966967 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3133,7 +3133,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/23a6a15473a435c3d0bc/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.545264166998095 s; B: 1.7797539890016196 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.8419375009980286 s; B: 1.0391904219941352 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3189,7 +3189,7 @@ Failures: ["Workload failed or did not write result JSON"]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/7d663b8a073eb568e6c2/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.25166270200134 s; B: 3.590569501000573 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.34637983799621 s; B: 1.6880644869961543 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3225,7 +3225,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/2e86e210874fc70e8089/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.098017970994988 s; B: 2.0751503689971287 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.3259378660004586 s; B: 1.3099858409987064 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3258,7 +3258,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/558553fad93edb103bb0/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.056141736000427 s; B: 2.9726682219989016 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.1093610390016693 s; B: 1.123821034001594 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3291,7 +3291,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/74cf9f90c9322b0e8dfb/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7189317779993871 s; B: 1.7437127700031851 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9635000720008975 s; B: 0.9624211799964542 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3324,7 +3324,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7a4fa0ba4b22d86c69f6/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.2869751190009993 s; B: 2.499407085997518 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.5066100359981647 s; B: 1.7441014279975207 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3357,7 +3357,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7bb70a7fa1aee4e6b601/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7343010430049617 s; B: 1.7622915109968744 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9777332110024872 s; B: 0.9852160020018346 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3390,7 +3390,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/bc13a842a218b5d36548/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.7220178349962225 s; B: 5.613254114003212 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.7450666509976145 s; B: 3.7204486209957395 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3423,7 +3423,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ce1bd77cb0829daa8a5f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.520981898000173 s; B: 4.503534373994626 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.6505452249984955 s; B: 2.556853369998862 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3456,7 +3456,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/e5b2d774f15e52b0faac/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.186932182004966 s; B: 4.9888429710044875 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.2664675709966104 s; B: 3.033258286995988 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3489,7 +3489,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.0369434949971037 s; B: 3.25702029200329 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.144256753999798 s; B: 1.3131646210022154 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3522,7 +3522,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ef64104419669a66a6c4/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.5138678579969564 s; B: 2.519447653001407 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.754178839000815 s; B: 1.7497111810007482 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3555,7 +3555,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/3f0bb433239eba4eb84a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.044256706998567 s; B: 3.017540186003316 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.2965486030007014 s; B: 2.27575448800053 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3588,7 +3588,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.548246916005155 s; B: 3.5135225359990727 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.8336661470020772 s; B: 0.8320651100002578 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3627,7 +3627,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/8098b815ba2f70d2d83e/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 15.391768131994468 s; B: 14.343416595002054 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.6945990150052239 s; B: 0.6904622319998452 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3666,7 +3666,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/ac705e553ce95e6d7c85/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 11.614288439996017 s; B: 11.450838258002477 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.301534293001168 s; B: 9.163040696999815 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3699,7 +3699,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 68.705664248002 s; B: 43.42292142599763 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.554005447003874 s; B: 1.538544830000319 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3735,7 +3735,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1a2fd8fe185bb3f4831a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.58460211000056 s; B: 7.598129449004773 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.306593911001983 s; B: 5.33566574100405 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3768,7 +3768,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1e60b30fd5d06709dbd8/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.6720233029991505 s; B: 2.6916920189978555 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.928253334001056 s; B: 1.9357883539996692 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3801,7 +3801,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/203265618a2ec3b9cf54/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.627040409002802 s; B: 5.599209116000566 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.938551462997566 s; B: 2.892090540000936 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3834,7 +3834,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/28a95c96e40d533552b6/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 21.797617591000744 s; B: 20.092674954001268 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 12.608564249996562 s; B: 11.00005107299512 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3867,7 +3867,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/2987d88e0b208c1a309e/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.69895904000441 s; B: 8.818580999002734 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.429013613000279 s; B: 6.515787126001669 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3900,7 +3900,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/33aeb0153b3f880efede/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.6077835359974415 s; B: 1.7773318710023887 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.8620126969981357 s; B: 1.0050124730041716 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -3936,7 +3936,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.831161632995645 s; B: 2.0069856899935985 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.827840124999057 s; B: 0.9650518199996441 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -3972,7 +3972,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/37e8dac2dc36700f0a79/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7974547780031571 s; B: 1.933896382994135 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9949665530002676 s; B: 0.9417447640007595 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4005,7 +4005,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3c4e16a32a0bde28c8b2/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.319883201002085 s; B: 1.9283775500007323 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.6527087930007838 s; B: 1.2616477409974323 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4038,7 +4038,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3fb9a1d72f63cad550da/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 11.415327243994398 s; B: 11.27056448100484 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.111132402002113 s; B: 8.988914218003629 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4071,7 +4071,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/427f089dccc31312df6e/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.572014416997263 s; B: 5.573584965997725 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.798447351000505 s; B: 4.798946041002637 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4104,7 +4104,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/544180a6a68f814041d1/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.397985397998127 s; B: 3.3740129489960964 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.1691811709970352 s; B: 1.1628551260000677 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4140,7 +4140,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/56ec902fd5742bb6a8d4/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 10.64091472900327 s; B: 10.724716142998659 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.412505365995457 s; B: 8.47001495600125 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4173,7 +4173,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/6ff694323765b5e01044/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.791791308001848 s; B: 2.1819893889987725 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.068216124003811 s; B: 1.5068496500025503 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4206,7 +4206,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7190c2762992d986a679/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.308066885001608 s; B: 5.292437777003215 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.060469848001958 s; B: 3.061620872998901 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4239,7 +4239,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/72433aef2997b99228ca/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.612057548001758 s; B: 1.7567181720005465 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.8421843229953083 s; B: 0.9674957259994699 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4275,7 +4275,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/744c225f65f592f226eb/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.742781450004259 s; B: 9.622962307999842 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.475014477000514 s; B: 7.334934698003053 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4308,7 +4308,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7eea2881505888665bbc/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 22.862360510000144 s; B: 26.7672580369981 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.5108191149993218 s; B: 1.4266522319958312 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4344,7 +4344,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7f2d85c194475302e867/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.737881306995405 s; B: 4.735850103999837 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.434367153000494 s; B: 2.4614967000015895 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4380,7 +4380,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/823d3c6f2b84e29dc172/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.40019889499672 s; B: 1.9401781120031956 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6264966670059948 s; B: 1.1571213339993847 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4416,7 +4416,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/82bb645731713ca0427f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.856539604996215 s; B: 3.5883274270017864 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.488696227002947 s; B: 1.217660465001245 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4452,7 +4452,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/8627ad6c4094e07a060d/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 14.784313187003136 s; B: 14.995944867005164 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 12.517785175004974 s; B: 12.726213304995326 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4485,7 +4485,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/913d0db7a411d7dfa5c7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.0636055110007874 s; B: 2.0046788990002824 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2786436169990338 s; B: 1.257303877006052 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4518,7 +4518,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9b7c81efc3ea984c5124/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 10.95545914700051 s; B: 10.992641907003417 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.699132604000624 s; B: 8.734205107997695 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4551,7 +4551,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9e3654bc4994eb6559fd/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.3552685339964228 s; B: 1.366192831999797 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5295326740015298 s; B: 0.5109585550017073 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4584,7 +4584,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a130a015c2dd50764eec/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.346268935005355 s; B: 3.360715638002148 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.167212117004965 s; B: 1.171457566000754 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4620,7 +4620,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a3949cbfd5c89074b638/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.175863492004282 s; B: 4.054168132999621 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.4013995800050907 s; B: 1.4037253069982398 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4653,7 +4653,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b151644ffaf019e1d46b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.660446068002784 s; B: 8.650293310005509 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.905986113000836 s; B: 7.9092004539998015 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4686,7 +4686,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b30ff22e3a212cfdfc6f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.601739671998075 s; B: 2.6350396039997577 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.8531815460009966 s; B: 1.8632206179972854 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4719,7 +4719,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bd96f6301d2a48cd4d44/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.501044252996508 s; B: 4.751845872000558 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.2235402670048643 s; B: 2.43381535300432 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4755,7 +4755,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bdb6d74ec2df7f0f981a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.898174927999207 s; B: 5.939040232995467 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.159370065004623 s; B: 5.173768578999443 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4788,7 +4788,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/c366ae5c82e1fb3858ad/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.0879036610058392 s; B: 1.6366732320020674 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.3753607789985836 s; B: 0.9344925189943751 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4824,7 +4824,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/d5201c24647176641677/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.6441221080021933 s; B: 3.6254440889970283 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9834807379957056 s; B: 0.9864804690005258 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4857,7 +4857,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.756887828996696 s; B: 3.809299144006218 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 2.521847958996659 s; B: 1.5364921090003918 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -4893,7 +4893,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/e45284c67428eb18d1e8/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.6490276440017624 s; B: 1.7852321660029702 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.8844119380009943 s; B: 1.0233834699974977 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4929,7 +4929,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/ea67f7807d5f024ee41c/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.945036921002611 s; B: 1.9357826650011702 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.1838270030057174 s; B: 1.177370637000422 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4962,7 +4962,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f032fb902df53bb60773/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.03597029500088 s; B: 4.059781825002574 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.3989842910013977 s; B: 1.4039245210005902 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -4995,7 +4995,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f1fd154b7e7101ee1bc0/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.2371642110010725 s; B: 5.30333973300003 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.485956802003784 s; B: 4.512734937998175 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5028,7 +5028,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f6f713795d0ce17722d7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7570257479965221 s; B: 2.109635683002125 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.9608618769998429 s; B: 0.9466554329992505 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5061,7 +5061,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/59c9e0ea23cbe7904fa9/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.02797489400109 s; B: 5.885714098003518 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.676499714005331 s; B: 3.6175221980010974 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5100,7 +5100,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/91a3e631f7cf85d00d46/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.055022820000886 s; B: 2.0609339410002576 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.3430603619999602 s; B: 1.322815735002223 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5133,7 +5133,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/b17a252c27cfe68ec555/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.9280407539990847 s; B: 4.203495353998733 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6721176840001135 s; B: 1.9575396529980935 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5166,7 +5166,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-qn-full-v1/fe8d8d94e9be894f9b6a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7618324950017268 s; B: 1.7679966700015939 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0389909519944922 s; B: 1.023933972006489 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5205,7 +5205,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/1ba37c58e15aeeb3e578/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 16.013767666001513 s; B: 16.050540295997052 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 15.26257899000484 s; B: 15.249420567997731 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5241,7 +5241,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/5db8117591bd18566130/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 11.867338622003444 s; B: 11.89176748799946 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.619588406996627 s; B: 9.627702420999412 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5277,7 +5277,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/b4c0c2f107efa97a3834/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 16.317097924002155 s; B: 15.869207773997914 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 13.955602920999809 s; B: 13.513600051999674 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5316,7 +5316,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-mlp-full-v1/e47dbe9078881fe5518f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 19.922294130999944 s; B: 19.93288852099795 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 19.110792827996192 s; B: 19.136302163002256 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5355,7 +5355,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/201c5234acc7b0ac4689/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7636391530031688 s; B: 1.7702132409976912 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0493436609976925 s; B: 1.0348271999973804 s.
 
 Quality assessment: BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING. Identity: INCOMPLETE.
 
@@ -5391,7 +5391,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/5df5c5720c0d6d872c16/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.069987634000427 s; B: 3.6930256390041905 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.8194623140007025 s; B: 1.4972603360001813 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: INCOMPLETE.
 
@@ -5442,7 +5442,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/8af58db47601e372485e/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 25.834778632000962 s; B: 4.878719724998518 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 23.591517799999565 s; B: 2.058329241001047 s.
 
 Quality assessment: BASELINE_NONREGRESSION_WITH_OPPONENT_QUALITY_DEFICIT. Identity: INCOMPLETE.
 
@@ -5508,7 +5508,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/aaee5fbb8a39edad255c/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.176284803004819 s; B: 3.5149634679983137 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.9630330910003977 s; B: 1.2749890599952778 s.
 
 Quality assessment: TASK_METRIC_GATE_PASSED. Identity: INCOMPLETE.
 
@@ -5549,7 +5549,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/d93173a97b8d0e0dd273/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.225113708998833 s; B: 1.7502666090003913 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.518479534999642 s; B: 1.0379614580015186 s.
 
 Quality assessment: BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING. Identity: INCOMPLETE.
 
@@ -5581,7 +5581,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-088b7bacc6b25b4e) · [retained receipt](<receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/fb6aa398a4fe2f787945/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 56.07348668800114 s; B: 2.2155462149967207 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 55.357130295997194 s; B: 1.4743911330006085 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5622,7 +5622,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fb1d62f883017cb6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2a098babe6bda25adfe4/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.149545788764954 s; B: 5.529921775683761 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.0530663672834635 s; B: 3.423397682607174 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5670,7 +5670,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fb1d62f883017cb6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 8.255340568721294 s; B: 2.0570573210716248 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.084249019622803 s; B: 1.693520488217473 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -5718,7 +5718,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fb1d62f883017cb6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.412843635305762 s; B: 5.576460275799036 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.0393860545009375 s; B: 1.7068538796156645 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -5766,7 +5766,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fb1d62f883017cb6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fef343a1a02430ef8632/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.222399715334177 s; B: 5.583485981449485 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.096537487581372 s; B: 3.474939925596118 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5814,7 +5814,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-0a96f530613f81c8) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.3155699130147696 s; B: 1.4143643341958523 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.934265753254294 s; B: 1.0387864541262388 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -5859,7 +5859,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-0a96f530613f81c8) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6a1927d993c3730a4ca2/attempt-0001/receipt.d12e8f1e18983624b53e5a7021478cce3ded2907a6bcd9e2b0b5faba38763869.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.2834807373583317 s; B: 1.372085526585579 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.896711653098464 s; B: 0.9862319603562355 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5904,7 +5904,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-0a96f530613f81c8) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.797153417021036 s; B: 3.7584602534770966 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 2.564200524240732 s; B: 1.5063369628041983 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -5949,7 +5949,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-0a96f530613f81c8) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d75d76539c8a32df81e8/attempt-0001/receipt.4197e246bcaaf01c5c89125b016de4a01417e819738cdb2ed53e0407cf0be3c6.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.822394425049424 s; B: 3.472144525498152 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5361492205411196 s; B: 1.288812780752778 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -5994,7 +5994,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-0ebe34719111a46e) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.431438382714987 s; B: 2.101310098543763 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.064546519890428 s; B: 1.7364697474986315 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -6042,7 +6042,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-0ebe34719111a46e) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b1c11584d78ed1948ad/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.202290967106819 s; B: 5.537733756005764 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.087830973789096 s; B: 3.4359077364206314 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6090,7 +6090,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-0ebe34719111a46e) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ebc643bc218228636fa5/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.25058176368475 s; B: 6.031563246622682 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.130260409787297 s; B: 3.647648988291621 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6138,7 +6138,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-0ebe34719111a46e) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.439687913283706 s; B: 2.0639792904257774 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.068667344748974 s; B: 1.6993609257042408 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -6186,7 +6186,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/47d0e9c0d197d26c80e2/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.101094599813223 s; B: 2.082751961424947 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7396692335605621 s; B: 1.7210235372185707 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6234,7 +6234,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/51404940ade2d36c81a6/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.658588904887438 s; B: 5.624285841360688 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5297476425766945 s; B: 3.475309370085597 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6282,7 +6282,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9a604a138bcd1a3009a9/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.0628926176577806 s; B: 2.127442976459861 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6844742633402348 s; B: 1.7553337719291449 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6330,7 +6330,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.8ef93f089139a761eed26f535b632c4e055dfb5236aed0defcd278abefa68c8c.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.634828245267272 s; B: 5.597302773967385 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.514894837513566 s; B: 3.4847503192722797 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6378,7 +6378,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-8e5d3efee2c74663) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/38928c02ed2c35af3343/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1391559094190598 s; B: 2.1161527428776026 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7453354187309742 s; B: 1.7486255299299955 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6426,7 +6426,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-8e5d3efee2c74663) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5559cba282e3db50f398/attempt-0001/receipt.55f845dbf5d059737162e3570516f948083872dfd1a32935f763270e6118e67b.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.631052102893591 s; B: 5.57634649053216 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.495847476646304 s; B: 3.476684471592307 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6474,7 +6474,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-8e5d3efee2c74663) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8454febec213ca782283/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.108608704060316 s; B: 2.0969316884875298 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7167536690831184 s; B: 1.7361214403063059 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6522,7 +6522,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-8e5d3efee2c74663) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/c974dc40aa40f2549155/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.6230306923389435 s; B: 5.6152029149234295 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5240741968154907 s; B: 3.4981295503675938 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6570,7 +6570,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-c5bae06aee08a1f5) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1981486684c39cb7f509/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.558865569531918 s; B: 5.602537347003818 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4388521015644073 s; B: 3.4848114736378193 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6618,7 +6618,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-c5bae06aee08a1f5) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5e07e40b6ceef1c5e078/attempt-0001/receipt.92e3cd9ab2be92d3a0a8d37085b97add0670ffb894b34fc622541e38d21b1662.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.136168582364917 s; B: 6.310441147536039 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.75242405757308 s; B: 1.7784745879471302 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6666,7 +6666,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-c5bae06aee08a1f5) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7a4b73a821dc6bf90408/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.053800592198968 s; B: 6.100818736478686 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6946451850235462 s; B: 1.7624649796634912 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6714,7 +6714,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-c5bae06aee08a1f5) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e6261da8cfbb7a6655eb/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.56625559180975 s; B: 5.574685858562589 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4811331909149885 s; B: 3.478823060169816 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6762,7 +6762,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-3d240367ffc8c870) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6295dfb45e4447c64d77/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.414518928155303 s; B: 1.4132333602756262 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.0214665420353413 s; B: 1.033302802592516 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6807,7 +6807,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-3d240367ffc8c870) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/81c7729ed6eceb610740/attempt-0001/receipt.b26760d9975a12e2ce1bb6d96a38beeea2a8dab0df8b6386b3339ca4941c1acf.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.749914228916168 s; B: 3.693358490243554 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.5172990504652262 s; B: 1.53217289224267 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6852,7 +6852,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-3d240367ffc8c870) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf6a12554a864102b2de/attempt-0001/receipt.96849300116b5856f59294fedfefee1cbe149c6c26826a470dc64690e6e1b3dc.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.289439702406526 s; B: 6.795718438923359 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.3830599822103977 s; B: 1.3283460065722466 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6897,7 +6897,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-3d240367ffc8c870) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e9c5a887a10f16f7e492/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.7180448174476624 s; B: 2.2490270994603634 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.1027856543660164 s; B: 1.1029602773487568 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6942,7 +6942,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2e059451964d90968061/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.275295354425907 s; B: 7.782838622108102 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.1367251090705395 s; B: 3.4685101434588432 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -6990,7 +6990,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 6.131748493760824 s; B: 1.5630433931946754 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.973650325089693 s; B: 1.1785456836223602 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -7035,7 +7035,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/41bf5dab451f761555e4/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.705539749935269 s; B: 3.74196582660079 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.494664717465639 s; B: 1.449154645204544 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7080,7 +7080,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.43547142483294 s; B: 2.06792507506907 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.132296126335859 s; B: 1.7033784538507462 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -7128,7 +7128,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.871677244082093 s; B: 3.7001227773725986 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 2.6219121012836695 s; B: 1.511082323268056 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -7173,7 +7173,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.443856639787555 s; B: 2.125964730978012 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.084787990897894 s; B: 1.7568566650152206 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -7221,7 +7221,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b641feda5c2241faf598/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.3224724270403385 s; B: 1.4949555229395628 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.9296262245625257 s; B: 1.1032365802675486 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7266,7 +7266,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e1447e0d669bee705f2e/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.302389597520232 s; B: 5.606060050427914 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.14768691547215 s; B: 3.4815689977258444 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7314,7 +7314,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-5f8e91eb1179e765) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/047dc5950c1d73fd8b3c/attempt-0001/receipt.e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.5369399432092905 s; B: 7.304326960816979 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.428635187447071 s; B: 3.437441200017929 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7362,7 +7362,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-5f8e91eb1179e765) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/060dd5184930208ceb52/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.552143728360534 s; B: 5.565585307776928 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4235004372894764 s; B: 3.4297738894820213 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7410,7 +7410,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-5f8e91eb1179e765) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf523bdc7b56fd295b5c/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.048577858135104 s; B: 8.524058865383267 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.689140222966671 s; B: 1.715752236545086 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7458,7 +7458,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-5f8e91eb1179e765) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ce3fe6a01c8948daa84e/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.119566760957241 s; B: 2.0973420571535826 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7466028816998005 s; B: 1.7204275149852037 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7506,7 +7506,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-378c477026f75f77) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7620c327fe49ddcdb796/attempt-0001/receipt.03e5add0ba810686885d2f8072ef072e8ca4e4768d08665ca6423d94f67e305b.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.608358960598707 s; B: 5.62879915907979 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5026995688676834 s; B: 3.52417572401464 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7554,7 +7554,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-378c477026f75f77) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c51f49f1ef3e073a250/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.631367836147547 s; B: 5.573997162282467 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4732399936765432 s; B: 3.436287084594369 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7602,7 +7602,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-378c477026f75f77) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/da492f76e577be7f77f5/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.0843534637242556 s; B: 2.1513017304241657 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7229556236416101 s; B: 1.777691537514329 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7650,7 +7650,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-378c477026f75f77) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fac901f2d6d8cdbf874e/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.137663621455431 s; B: 2.1053624525666237 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.750215083360672 s; B: 1.73874088563025 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7698,7 +7698,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d78a1ffec4506513) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3f8b82244388722b36b7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.095511069521308 s; B: 2.0844454746693373 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.735575020313263 s; B: 1.7250701449811459 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7746,7 +7746,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d78a1ffec4506513) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8029c8db5c14e9c672c4/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.132279312238097 s; B: 2.1041485462337732 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7630967199802399 s; B: 1.744006896391511 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7794,7 +7794,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d78a1ffec4506513) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f56fadc13b00da2175fd/attempt-0001/receipt.76b5992a1a05122e86a222c00c78fcf6353e50702f4991a52f0c6fbe8e91e8d6.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.6310457829386 s; B: 5.587064705789089 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4878805205225945 s; B: 3.4664164129644632 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7842,7 +7842,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d78a1ffec4506513) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fa05eda4f5869e429b76/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.596217956393957 s; B: 5.566213626414537 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4919517934322357 s; B: 3.4690107852220535 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7890,7 +7890,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-a7b9a63d6e07b986) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/111a1de0eda200c4207c/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6033457815647125 s; B: 2.1199593879282475 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2435278929769993 s; B: 1.7468969859182835 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7938,7 +7938,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-a7b9a63d6e07b986) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1cbdc068cfad5441dd00/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.617109078913927 s; B: 2.0977483708411455 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.257737297564745 s; B: 1.7365169413387775 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -7986,7 +7986,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-a7b9a63d6e07b986) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7363f44cf9fd07492be0/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.073645282536745 s; B: 10.385245878249407 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.990155829116702 s; B: 3.5978075955063105 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8034,7 +8034,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-a7b9a63d6e07b986) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ed61baeb975129a480cf/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 11.108719119802117 s; B: 5.57483578287065 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.0808621402829885 s; B: 3.4585541542619467 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8082,7 +8082,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-38baba74dc983b41) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5a61b1976ccfb76739c9/attempt-0001/receipt.2375de7e17bf54e9f1d25f86dfa1d3616dcaad4b75fc5000e638d16e5c2d2a0c.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.80519887432456 s; B: 5.576301388442516 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.693870710209012 s; B: 3.4937234222888947 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8130,7 +8130,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-38baba74dc983b41) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/66585b08b948599f1ede/attempt-0001/receipt.cd79d8d67b0723938ee288b12893e6b666a6dbf1a833133c49ac9144502ba5ef.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.117650168016553 s; B: 2.120779985561967 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7399593032896519 s; B: 1.7493141051381826 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8178,7 +8178,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-38baba74dc983b41) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/860b43ae6e51336b141b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 11.977522386237979 s; B: 5.56301773712039 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.8058159798383713 s; B: 3.4463171288371086 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8226,7 +8226,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-38baba74dc983b41) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ab3c437bbfe26fa5b325/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1348502319306135 s; B: 2.1044435687363148 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.762580567970872 s; B: 1.7211255449801683 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8274,7 +8274,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-f034d8aac494c23d) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.383642733097076 s; B: 2.2413580305874348 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.169281721115112 s; B: 1.8524640556424856 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -8322,7 +8322,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-f034d8aac494c23d) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6422fac533289608328b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 12.984899258241057 s; B: 9.102382943034172 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.3061837349087 s; B: 3.605235956609249 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8370,7 +8370,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-f034d8aac494c23d) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf3f84f003228706d0be/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 12.874684233218431 s; B: 11.623304177075624 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.424526937305927 s; B: 3.5145889446139336 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8418,7 +8418,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-f034d8aac494c23d) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.575331082567573 s; B: 3.4658262729644775 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.1705178916454315 s; B: 1.7663604337722063 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -8466,7 +8466,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-443f779a9f0f386f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.913850078359246 s; B: 3.23649643920362 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 3.5883571822196245 s; B: 1.7656093277037144 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -8514,7 +8514,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-443f779a9f0f386f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/394330707fd638afc43a/attempt-0001/receipt.71e420aea4262e7c7de0310b55fffbd5ecb287168e5c9255407fe59678b98415.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 12.907611710950732 s; B: 5.6066384967416525 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.704819168895483 s; B: 3.4476615265011787 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8562,7 +8562,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-443f779a9f0f386f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/457a537af5e96a2c24c0/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.765526974573731 s; B: 5.623500373214483 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.624857325106859 s; B: 3.487260241061449 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8610,7 +8610,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-443f779a9f0f386f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 3.920505741611123 s; B: 2.052259750664234 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 3.56084175221622 s; B: 1.6797525435686111 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -8658,7 +8658,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-1280909b5c10ec7c) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5cb4dedaaed7ef311a8f/attempt-0001/receipt.c55f0227d6eb709f3d30eee37c002b63731b8c80d0fa7c9d604af9084db97eb9.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.225087070837617 s; B: 13.545596826821566 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.091977829113603 s; B: 3.6155268158763647 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8706,7 +8706,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-1280909b5c10ec7c) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.432862974703312 s; B: 2.0882678758352995 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.0532715190202 s; B: 1.7247741743922234 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -8754,7 +8754,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-1280909b5c10ec7c) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.44663036800921 s; B: 2.8269635885953903 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.068319167941809 s; B: 1.7516208570450544 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -8802,7 +8802,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-1280909b5c10ec7c) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f593649f7046c4efcd61/attempt-0001/receipt.011127fb272eb5be5ac1106faf6ca9c5a4db02678469c392bcfac53082f42a33.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.602874882519245 s; B: 5.555289905518293 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.039065537974238 s; B: 3.451003685593605 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8850,7 +8850,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-5b22eb188282181b) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.456534199416637 s; B: 3.1563280504196882 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.081710243597627 s; B: 1.7712088823318481 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -8898,7 +8898,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-5b22eb188282181b) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2c79b18ab250a725c636/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 13.488782977685332 s; B: 5.606800625100732 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.066508317366242 s; B: 3.5202482100576162 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8946,7 +8946,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-5b22eb188282181b) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/685e7cf63b47f7fde2d7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.143135132268071 s; B: 5.77668465487659 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.039958264678717 s; B: 3.6809878405183554 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -8994,7 +8994,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-5b22eb188282181b) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json>)
 
-Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.473871037364006 s; B: 2.155421270057559 s.
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.111307643353939 s; B: 1.7830500192940235 s.
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
@@ -9042,7 +9042,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-2ff74ec84b56dae6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/26036ffb056d4cdc7417/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6382554825395346 s; B: 2.049791518598795 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2682256512343884 s; B: 1.6881335098296404 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9090,7 +9090,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-2ff74ec84b56dae6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3a58cc68659a80ad4b20/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.620118170976639 s; B: 2.0811122432351112 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2800395842641592 s; B: 1.7168475985527039 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9138,7 +9138,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-2ff74ec84b56dae6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ba60dbc2213f9edade7a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.904814409092069 s; B: 12.954760873690248 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.06343368627131 s; B: 3.6154412496834993 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9186,7 +9186,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-2ff74ec84b56dae6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f27ccefc2818cfe8d073/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.158887697383761 s; B: 5.7287757731974125 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.0357704777270555 s; B: 3.4812792278826237 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9234,7 +9234,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b9c4e3406852e7ad) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/029d63b9273714076f9f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.1103083696216345 s; B: 2.582681328058243 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.8094603065401316 s; B: 1.7670948300510645 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9282,7 +9282,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b9c4e3406852e7ad) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/14d9a8191cd42715b536/attempt-0001/receipt.e349db9d58761c00d25e99e901aa86ae14dd19d54365a3668328edba865db113.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.880467921495438 s; B: 7.591034468263388 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.733587685972452 s; B: 3.50893110409379 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9330,7 +9330,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b9c4e3406852e7ad) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2ce46e60891e60d7af7d/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.973392629995942 s; B: 2.0463814586400986 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.760653980076313 s; B: 1.6862586420029402 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9378,7 +9378,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-b9c4e3406852e7ad) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/dce7dc54ced12083e966/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.803150760009885 s; B: 5.51137481443584 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.6628095395863056 s; B: 3.4205570239573717 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9426,7 +9426,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d8f3af1f61ff0d7f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2bf4b3e9c25cb546c71b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.092629810795188 s; B: 2.070537840947509 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7323411405086517 s; B: 1.7074264343827963 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9474,7 +9474,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d8f3af1f61ff0d7f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61c883edeef8df4e4ff6/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.26767448335886 s; B: 5.585552720353007 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5002838652580976 s; B: 3.4737513102591038 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9522,7 +9522,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d8f3af1f61ff0d7f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b80e71d1b363beafd13a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.0712474826723337 s; B: 2.083567049354315 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7099518086761236 s; B: 1.7209048587828875 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9570,7 +9570,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d8f3af1f61ff0d7f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e50bcc37e0142ad233a6/attempt-0001/receipt.8f1373e86f8c948cf7a11f2e7975f244af8a3e1cb214da0ba4fee53bc11ae04e.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.898817248642445 s; B: 5.604971822351217 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5021203458309174 s; B: 3.4397691879421473 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9618,7 +9618,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d3b609d13ba0d258) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8b43ca1aa7f8a5569d0f/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.063239911571145 s; B: 2.045389784500003 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.701686717569828 s; B: 1.6838184297084808 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9666,7 +9666,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d3b609d13ba0d258) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c1c67600adb873689b3/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.102114163339138 s; B: 2.1018234975636005 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7287022788077593 s; B: 1.7396191284060478 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9714,7 +9714,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d3b609d13ba0d258) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e2975cdf3d53a2ec8496/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.562187289819121 s; B: 5.533201355487108 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4376143142580986 s; B: 3.42729664221406 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9762,7 +9762,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-d3b609d13ba0d258) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f82556c80ef2b8187cae/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.632097685709596 s; B: 5.556035390123725 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5135368406772614 s; B: 3.4661843217909336 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9810,7 +9810,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-1454037b56a8be78) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/726c9a11bd5909685c55/attempt-0001/receipt.26bdc0854b3edd95cf0eb723903fa409e70cf086cd252b21aab6766420b3773a.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.254341909661889 s; B: 14.767578084021807 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.111173342913389 s; B: 3.5307498164474964 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9858,7 +9858,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-1454037b56a8be78) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/78b8cf70d3609f7bf839/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.172052746638656 s; B: 5.675603296607733 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.0423238277435303 s; B: 3.565126297995448 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9906,7 +9906,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-1454037b56a8be78) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d14da02ee4b4eb881e95/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.629943298175931 s; B: 2.118651770055294 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.2565324865281582 s; B: 1.7490386329591274 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -9954,7 +9954,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-1454037b56a8be78) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f5d979a0b3b8335c0014/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6329678520560265 s; B: 2.101334122940898 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.250218115746975 s; B: 1.7380106784403324 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -10002,7 +10002,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-8c68e4b21652fccd) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a376febd0f4a57d44e7a/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1280223838984966 s; B: 2.1224769577383995 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7583546228706837 s; B: 1.7585260216146708 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -10050,7 +10050,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-8c68e4b21652fccd) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a42415c247a088965dca/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.127580814063549 s; B: 2.40585083886981 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7629732582718134 s; B: 2.02325058914721 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -10098,7 +10098,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-8c68e4b21652fccd) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ef85386b0a6c0b2ef89b/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.846230980008841 s; B: 5.649126563221216 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.7040585093200207 s; B: 3.521087234839797 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -10146,7 +10146,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-8c68e4b21652fccd) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f74f23b5f1bbd73560fd/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.921157270669937 s; B: 5.617488194257021 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.7226279247552156 s; B: 3.4853789191693068 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -10194,7 +10194,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-16bddd9ca1ed4bae) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/59a4a935cec424ebb419/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1432124823331833 s; B: 2.1263929791748524 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7695000506937504 s; B: 1.7619572933763266 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -10242,7 +10242,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-16bddd9ca1ed4bae) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99b190e8f08a225c7332/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1483867410570383 s; B: 2.1032890491187572 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.7737566083669662 s; B: 1.7393643632531166 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -10290,7 +10290,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-16bddd9ca1ed4bae) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b219f4bacd9f4040ba7/attempt-0001/receipt.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.968525011092424 s; B: 5.58570552803576 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.7068742625415325 s; B: 3.4756404645740986 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
@@ -10338,7 +10338,7 @@ Worker exits: [0, 0, 0, 0]
 
 [Recorded toggles](#toggles-16bddd9ca1ed4bae) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bdda3a6a99a2a96ae6c6/attempt-0001/receipt.1f2957c4e7a37701009449f50edfc6fbae34c4e823b51e9d72bb8a076b21de4a.json>)
 
-Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.841303581371903 s; B: 13.147821197286248 s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.6945802066475153 s; B: 3.6914038080722094 s.
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
