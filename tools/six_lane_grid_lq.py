@@ -42,6 +42,7 @@ TOOLS = Path(__file__).resolve().parent
 ROOT = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 import six_lane_timing as T  # noqa: E402  (reuse: PHASES, judge, _spread, VOTERS)
+import six_lane_grid_bb as BBW  # noqa: E402  (pip_arg: what the box runner installs for a line's races)
 
 BOX = {'nvidia': 'nv', 'amd': 'amd'}
 VENDOR_OF_BOX = {v: k for k, v in BOX.items()}
@@ -122,6 +123,39 @@ def binding_builds(bindings):
     return out
 
 
+# Bindings a bench_board neural lane's public class loads beyond the ones its plan entry names (the plan's
+# workload_bindings list the bindings the CONTROLS reach). A worktree on the box holds only the BUILDS= bindings (or
+# the prebuilt ones), so a missing one refuses the race: SmallMLPTrainer._binding() calls
+# _linalg_impl.require_identical() in IDENTICAL (python/mojolearn/_mlp_impl.py), and grid ge123e6f9 refused every
+# mlp-train-step race with "numeric_mode='identical' needs .../_mojolearn_linalg.so, which is not built".
+NEURAL_RUNTIME_BINDINGS = {'mlp-train-step': ('_mojolearn_training', '_mojolearn_linalg')}
+
+# Runtime environment a define set needs: a binary built with an experimental numerical profile refuses to load
+# unless the process names that exact profile (python/mojolearn/_linalg_impl.py _EXPECTED_PROFILE_ENV; the profile
+# name is gemm/contract.mojo GEMM_NUMERICAL_PROFILE). Grid ge123e6f9 refused the MOJOLEARN_IDN_GEMM_LEAF=3 (all256)
+# gemm cells by that check. B lines (no defines) never get these.
+DEFINE_ENVS = {'MOJOLEARN_IDN_GEMM_LEAF=3': ('MOJOLEARN_EXPERIMENT_GEMM_PROFILE', 'mojolearn.identical.gemm.fp32.ni08-leaf256')}
+
+
+def define_envs(defines):
+    """[(name, value)] runtime environment the define list needs (DEFINE_ENVS), in define order."""
+    if 'MOJOLEARN_IDN_ALL_OFF' in {d.split('=', 1)[0] for d in defines or []}:
+        return []  # gemm/contract.mojo: _NEURAL_GEMM_PROFILE_ARM is off under IDN_ALL_OFF, the binary stays v1
+    out = []
+    for d in defines or []:
+        kv = DEFINE_ENVS.get(d)
+        if kv and kv not in out:
+            out.append(kv)
+    return out
+
+
+def workload_selected(wid, only_workloads):
+    """only_workloads: None (all) or a list of workload ids / prefixes (an entry ending in ':' is a family prefix)."""
+    if not only_workloads:
+        return True
+    return any(wid == w or (w.endswith(':') and wid.startswith(w)) or wid.startswith(w + '@') for w in only_workloads)
+
+
 CMD_PY = '.pixi/envs/default/bin/python'  # the branch tree's pixi interpreter (box_job.sh CMD cwd = the tree)
 CMD_SCRIPT = 'tools/six_lane_grid_bb.py'
 FAMILY_OF_PREFIX = {'classical': 'classical', 'more': 'classical2', 'neural': 'neural'}
@@ -189,14 +223,18 @@ def route(wid, lanes, board):
     if board is None:
         raise ValueError('no bench_board registry for the CMD route')
     fam, lane, ds, note = map_board(wid or '', board)
-    return dict(kind='cmd', key=(fam, lane, ds), family=fam, lane=lane, dataset=ds, note=note)
+    extra = NEURAL_RUNTIME_BINDINGS.get(lane, ()) if fam == 'neural' else ()
+    return dict(kind='cmd', key=(fam, lane, ds), family=fam, lane=lane, dataset=ds, note=note, bindings=list(extra))
 
 
-def cmd_line(box, vendor, branch, tag, races, envs, builds, prebuilt=None):
+def cmd_line(box, vendor, branch, tag, races, envs, builds, prebuilt=None, models=None):
     toks = ['lq', 'add', box, 'CMD', branch, tag] + ['%s=%s' % kv for kv in envs] + [
         CMD_PY, CMD_SCRIPT, '--tag', tag, '--vendor', vendor]
     for fam, lane, ds in sorted(set(races)):
         toks += ['--race', '%s:%s:%s' % (fam, lane, ds)]
+    pip = BBW.pip_arg(sorted(set(races)), models)
+    if pip != BBW.DEFAULT_PIP:  # explicit on the line, so a frozen branch's runner (no pip_extra yet) installs it too
+        toks += ['--pip', pip]
     if builds:
         toks.append('BUILDS=' + ','.join(builds))
     if prebuilt:  # box_job.sh installs the store's prebuilt bindings instead of building (falls back on exit 2)
@@ -241,7 +279,7 @@ def lq_line(box, branch, pairs, envs, builds, prebuilt=None):
     return line
 
 
-def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=None, only_cells=None):
+def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=None, only_cells=None, only_workloads=None):
     """A jobs (one per pack, with the kept member cells, RACE and CMD), refused cells, per-workload B info.
     only_cells: a set of (configuration, workload_id) to keep (render --rerun-undecided); None keeps every cell."""
     packs = {p['id']: p for p in plan['builds']['packs']}
@@ -262,6 +300,8 @@ def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=No
         for wid in wids:
             if only_cells is not None and (cid, wid) not in only_cells:
                 continue
+            if not workload_selected(wid, only_workloads):
+                continue
             try:
                 r = route(wid, lanes, board)
             except ValueError as exc:
@@ -278,11 +318,12 @@ def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=No
             job['priority'] = min(job['priority'], c.get('priority') or 9)
             job['configs'].add(cid)
             job['bindings'].update((algos.get(algo) or {}).get('workload_bindings') or [])
+            job['bindings'].update(r.get('bindings') or [])
             job['cells'].append(dict(configuration=cid, workload_id=wid, lane=lane, dataset=ds, note=note,
                                      kind=r['kind'], family=r['family']))
             workload_bindings.setdefault(wid, dict(lane=lane, dataset=ds, algorithm=algo, kind=r['kind'],
                                                    family=r['family'], bindings=set()))['bindings'].update(
-                (algos.get(algo) or {}).get('workload_bindings') or [])
+                list((algos.get(algo) or {}).get('workload_bindings') or []) + list(r.get('bindings') or []))
     for job in jobs.values():
         seen = {}
         for cell in job['cells']:
@@ -308,14 +349,15 @@ def b_groups(workloads, info, group_size):
 
 
 def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=None, budget_hours=None,
-           lanes=None, b_group_size=8, run_id=None, board=None, prebuilt=None, only_cells=None, race_seconds=None):
+           lanes=None, b_group_size=8, run_id=None, board=None, prebuilt=None, only_cells=None, race_seconds=None,
+           only_workloads=None, models=None):
     plan, matrix = load_plan(plan_dir)
     lanes = lanes if lanes is not None else load_lanes()
     board = board if board is not None else load_board(vendor)
     run_id = run_id or run_id_of(plan_dir)
     box = BOX[vendor]
     per_race = PAIR_SECONDS[vendor] / 2.0
-    jobs, refused, info = plan_jobs(plan, matrix, vendor, lanes, only_lanes, phase, board, only_cells)
+    jobs, refused, info = plan_jobs(plan, matrix, vendor, lanes, only_lanes, phase, board, only_cells, only_workloads)
     # budget: keep A jobs in order while A races + b_repeats x (new workloads) fit
     kept, covered, races = [], set(), 0
     cut = 0
@@ -342,7 +384,7 @@ def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=
             line = lq_line(box, branch, [(c['lane'], c['dataset']) for c in cells], envs, binding_builds(bindings), prebuilt)
         else:  # bench_board needs the base binding beside the ones the configuration reaches
             line = cmd_line(box, vendor, branch, tag, [(c['family'], c['lane'], c['dataset']) for c in cells], envs,
-                            binding_builds(['_mojolearn'] + sorted(set(bindings) - {'_mojolearn'})), prebuilt)
+                            binding_builds(['_mojolearn'] + sorted(set(bindings) - {'_mojolearn'})), prebuilt, models)
         lines.append(line)
         manifest.append(dict(extra, line=len(lines), tag=tag, arm=arm, kind=kind, cells=cells))
 
@@ -361,7 +403,8 @@ def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=
             if not cells:
                 continue
             tag = '%s.%s%s' % (run_id, job['pack'], '' if kind == 'race' else '.bb')
-            emit('A', tag, kind, cells, [(TAG_ENV, tag), (DEFINES_ENV, ','.join(job['defines']))], sorted(job['bindings']),
+            envs = [(TAG_ENV, tag), (DEFINES_ENV, ','.join(job['defines']))] + define_envs(job['defines'])
+            emit('A', tag, kind, cells, envs, sorted(job['bindings']),
                  pack=job['pack'], defines=job['defines'], regime=regime,
                  configurations=sorted({c['configuration'] for c in cells}))
     for pos in sorted(p for p in slots if p >= len(kept)):
@@ -392,7 +435,7 @@ def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=
                   configurations=len(cfgs), workloads=len(covered), regimes=regimes,
                   plan_cells=sum(1 for c in matrix['cells'] if c.get('vendor') == vendor),
                   refused_cells=len(refused), refused_workloads=len({r['workload_id'] for r in refused}),
-                  cut_a_lines_by_budget=cut, budget_hours=budget_hours,
+                  cut_a_lines_by_budget=cut, budget_hours=budget_hours, only_workloads=only_workloads or None,
                   projected_race_hours=round((a_races + b_races) * per_race / 3600.0, 2),
                   projected_note='races x pair_seconds/2 (%g s, the plan median pair); binding build time per line '
                                  'is not included, and tree and neural races run longer than the median' % per_race,
@@ -769,13 +812,20 @@ def merge_quality(verdicts):
     return 'PENDING'
 
 
-def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_samples=2, board=None):
+def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_samples=2, board=None, repair_runs=()):
     """run_id: one run or several passes (list or comma list). Each pass' A is judged against the same pass' B
-    median; a cell's log ratio is the mean over its passes; floors pool the incumbent repeats of every pass."""
+    median; a cell's log ratio is the mean over its passes; floors pool the incumbent repeats of every pass.
+    repair_runs: passes that re-ran cells whose earlier race failed for a tooling reason (render --only-workloads, e.g.
+    the neural redo of ge123e6f9: missing torch / binding / profile env on the box). Appended to the passes when absent.
+    Where a repair pass measured a cell (its candidate race ok), the earlier passes' FAIL verdicts for that cell are
+    superseded: kept in pass_verdicts and listed as superseded_fail_passes, not merged (FAIL would otherwise win).
+    A FAIL in the repair pass itself, and any WORSE, still stand."""
     plan, matrix = load_plan(plan_dir)
     lanes = lanes if lanes is not None else load_lanes()
     board = board if board is not None else load_board('nvidia')
     run_ids = run_ids_of(run_id, plan_dir)
+    repair_runs = run_ids_of(list(repair_runs), plan_dir) if repair_runs else []
+    run_ids += [r for r in repair_runs if r not in run_ids]
     run_id = run_ids[0] if len(run_ids) == 1 else ','.join(run_ids)
     packs = {p['id']: p for p in plan['builds']['packs']}
     configs = {c['id']: c for c in matrix['configurations']}
@@ -945,13 +995,18 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             if any(pp['b_other_pass'] for pp in timed):
                 row['b_from_other_pass'] = [pp['run'] for pp in timed if pp['b_other_pass']]
             case['vendors'][vendor] = row
-        verdicts_p = [pp['quality'][0] for pp in per_pass]
+        repaired = any(pp['run'] in repair_runs and pp['good'] for pp in per_pass)
+        superseded = [pp['run'] for pp in per_pass
+                      if repaired and pp['run'] not in repair_runs and pp['quality'][0] == 'FAIL']
+        merged = [pp for pp in per_pass if pp['run'] not in superseded] or per_pass
+        verdicts_p = [pp['quality'][0] for pp in merged]
         verdict = merge_quality(verdicts_p)
-        judged = [pp for pp in per_pass if pp['quality'][0] == verdict] or per_pass
+        judged = [pp for pp in merged if pp['quality'][0] == verdict] or merged
         _, detail, unjudged = judged[-1]['quality']
         quality_rows.append(dict(configuration=cid, workload_id=wid, lane=a['lane'], dataset=a['dataset'], vendor=vendor,
                                  family=a['key'][0], route=a.get('kind'), passes=len(per_pass),
                                  pass_verdicts={pp['run']: pp['quality'][0] for pp in per_pass},
+                                 **(dict(superseded_fail_passes=superseded) if superseded else {}),
                                  candidate_vs_baseline=dict(verdict=verdict, metrics=detail, unjudged=unjudged,
                                                             a_status=a['status'], rel_tolerance=QUALITY_REL),
                                  evidence='%s:%s' % (a['evidence'], a['id'])))
@@ -1067,6 +1122,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             k = '%s:%d' % (vendor, row.get('passes', 1))
             passes_hist[k] = passes_hist.get(k, 0) + 1
     report = dict(schema='mojolearn.six-lane-grid-lq-collect/1', run_id=run_id, run_ids=run_ids, plan_dir=str(plan_dir),
+                  repair_runs=repair_runs,
                   passes_per_cell=dict(sorted(passes_hist.items())), mismatch_run=mismatch_run,
                   results=[str(p) for p in results], logs=[str(p) for p in (logs or [])],
                   observations=len(obs), a_cells=len(A), b_workload_vendor=len(B), ignored=ignored,
@@ -1123,12 +1179,16 @@ def main(argv=None):
                    help='first-pass collect output (grid-verdicts.json): measured medians for the projected hours')
     r.add_argument('--skip-controls', help='comma list of controls already flipped by hand (final controls are skipped anyway)')
     r.add_argument('--skip-broken-controls', action='store_true', help='also skip every configuration of a HOLD_BROKEN control')
+    r.add_argument('--only-workloads', help='comma list of workload ids or family prefixes ending in ":" (e.g. neural:): '
+                   'render only those cells (a one-shot redo; give it its own --run-id so fed tags do not collide)')
     c = s.add_parser('collect', help='lq results + race logs -> verdicts, identity summary, quality rows')
     c.add_argument('--results', nargs='+', required=True, help='results.txt copies (one per box)')
     c.add_argument('--logs', nargs='*', default=[], help='lq out dirs (race-*.log under <id>/) or `grep -H` dumps of them')
     c.add_argument('--plan-dir', type=Path, required=True)
     c.add_argument('--run-id', nargs='+', help='one run id, or several passes (first pass first) merged per cell')
     c.add_argument('--runs', help='comma list of passes (same as several --run-id values)')
+    c.add_argument('--repair-runs', help='comma list of repair passes (e.g. <run>r1n from render --only-workloads): a cell '
+                   'they measured drops the FAIL verdicts of earlier passes (tooling failures), kept as evidence')
     c.add_argument('--min-samples', type=int, default=2)
     c.add_argument('--lanes-json')
     c.add_argument('--board-json')
@@ -1141,6 +1201,7 @@ def main(argv=None):
         board['races'] = {tuple(r) for r in board['races']}
     if args.cmd == 'render':
         only = {x for x in (args.only_lanes or '').split(',') if x} or None
+        only_wl = [x for x in (args.only_workloads or '').split(',') if x] or None
         if only:
             unknown = sorted(only - set(lanes) - {r[1] for r in (board or load_board(args.vendor))['races']})
             if unknown:
@@ -1149,14 +1210,15 @@ def main(argv=None):
             lines, manifest = render_rerun(args.plan_dir, args.vendor, args.rerun_undecided, args.branch,
                                            1 if args.b_repeats is None else args.b_repeats, args.rerun_id, args.first_pass,
                                            [x for x in (args.skip_controls or '').split(',') if x], args.skip_broken_controls,
-                                           only_lanes=only,
+                                           only_lanes=only, only_workloads=only_wl,
                                            phase=args.phase, budget_hours=args.budget_hours, lanes=lanes,
                                            b_group_size=args.b_group_size, run_id=args.run_id, board=board, prebuilt=args.prebuilt)
         else:
             if args.rerun_id or args.first_pass or args.skip_controls or args.skip_broken_controls:
                 p.error('--rerun-id, --first-pass, --skip-controls and --skip-broken-controls need --rerun-undecided')
             lines, manifest = render(args.plan_dir, args.vendor, args.branch, 3 if args.b_repeats is None else args.b_repeats,
-                                     only, args.phase, args.budget_hours, lanes, args.b_group_size, args.run_id, board, args.prebuilt)
+                                     only, args.phase, args.budget_hours, lanes, args.b_group_size, args.run_id, board, args.prebuilt,
+                                     only_workloads=only_wl)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(''.join(line + '\n' for line in lines))
         Path(str(args.out) + '.json').write_text(json.dumps(manifest, indent=1, sort_keys=True) + '\n')
@@ -1174,7 +1236,8 @@ def main(argv=None):
                                   measured_race_hours=t.get('measured_race_hours'), measured_note=t.get('measured_note'))))
         return 0
     runs = list(args.run_id or []) + [x for x in (args.runs or '').split(',') if x]
-    report = collect(args.results, args.logs, args.plan_dir, args.out, lanes, runs or None, args.min_samples, board)
+    report = collect(args.results, args.logs, args.plan_dir, args.out, lanes, runs or None, args.min_samples, board,
+                     [x for x in (args.repair_runs or '').split(',') if x])
     print(json.dumps({k: report[k] for k in ('run_id', 'passes_per_cell', 'observations', 'a_cells', 'coverage', 'verdict_counts',
                                              'identity_counts', 'quality_counts', 'ignored', 'truncated_without_log',
                                              'jobs_without_algos', 'cmd_jobs_without_gridbb')}))
