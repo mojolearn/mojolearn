@@ -39,6 +39,8 @@ from checks.numerics import ftz
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
+    IDN_LU_NB128,
+    lu_blocked_host,
     lu_perm_src,
     lu_result_word,
     lu_finish_host,
@@ -359,6 +361,11 @@ struct HostExec(Exec):
 
     @staticmethod
     def lu(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int) raises:
+        # lane gap-linalg (2026-10-08): the 128-wide blocked order
+        # (x_decomp/cells.mojo IDN_LU_NB128), the device's `launch_lu` twin
+        comptime if IDN_LU_NB128:
+            lu_blocked_host(a, piv, n, info)
+            return
         # lu_serial's statements; each step's row eliminations are tasks of
         # LU_ROWS rows, SIMD across the row (x_decomp/host_simd.mojo lu_rows)
         info.unsafe_store(0, Float32(0))
