@@ -917,7 +917,11 @@ def _backward_dev_run(
     if cfg.accumulate:
         _refuse_nonfinite_resident(ctx, String("the carried dW"), r_dw, cells)
     # a zero-position call reads no dY (one placeholder cell)
-    var r_dy = _tensor_view(dy_h, ty, "dy") if ty > 0 else _pool_f32(ctx, 1)
+    var r_dy: DeviceBuffer[DType.float32]
+    if ty > 0:
+        r_dy = _tensor_view(dy_h, ty, "dy")
+    else:
+        r_dy = _pool_f32(ctx, 1)
     var r_ids = _pool_i32(ctx, n_positions)
     if n_positions > 0:
         ctx.enqueue_copy(dst_buf=r_ids, src_ptr=ids.unsafe_ptr())
