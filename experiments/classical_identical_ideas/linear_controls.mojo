@@ -156,7 +156,23 @@ comptime PCA_COV_C23 = CLASSICAL_IDN and _PCA_COV_RAW == 23
 # over n x d down to 2 reads of each leaf. NOT MEASURED.
 comptime TSVD_FUSED_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS"]()
 comptime C24_PANEL8 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_PANEL8"]()
-comptime C24_ROWS2048 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048"]()
+# C24 ROWS2048: TSQR leaf blocks of 2048 rows instead of 4096
+# (x_decomp/tsqr_core.mojo TS_ROWS; twice the leaf blocks in flight per
+# panel, a fixed row count, not a data shape). Bits change (the leaf
+# boundaries move); the host column reads the same TS_ROWS.
+# PROMOTED to the IDENTICAL default (lane/grid-flips-1, 2026-10-08, Andrew
+# 13:00Z "flip all of these"). Grid run ge123e6f9 (NVIDIA L40S sm_89 + AMD
+# MI325X gfx942, full board data, one scored run per arm), 4096 -> 2048 rows:
+#   OLS taxi    NV 34.04 -> 21.52 ms (0.632x)  AMD 14.46 -> 13.78 ms (0.953x)
+#   OLS istella NV 816.2 -> 733.8 ms (0.899x)  AMD 468.9 -> 432.2 ms (0.922x)
+#   Geometric mean 0.84x. Quality SAME; NV vs AMD output hashes MATCH.
+#   randomized-svd (rsvd_tsqr_ortho route) cells were not measured.
+#   Measured with LINEAR_GRAM_SOLVE off; with it on, OLS reaches TSQR only
+#   when the Gram is not trusted.
+# `-D MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF` restores 4096-row leaves (the
+# grid's "rows4096" arm). PANEL8 and TREE4 stay independent opt-in arms. The
+# old opt-in define is refused in core/six_lane_experiment_guards.mojo.
+comptime C24_ROWS2048 = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF"]()
 comptime C24_TREE4 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_TREE4"]()
 comptime C26_PRODUCTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_PRODUCTS"]()
 comptime C26_UPDATE_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED"]()
