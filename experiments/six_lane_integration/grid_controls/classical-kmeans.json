@@ -139,12 +139,13 @@
    },
    "default": "off",
    "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:19"
+    "experiments/classical_identical_ideas/graph_controls.mojo:19",
+    "neighbors/impl/detail/knn_brute_force.mojo:583"
    ],
    "binding": "_mojolearn",
    "bits_change": true,
    "status": "split_from:C30_DIRECT_DISTANCE",
-   "note": "neighbors/impl/detail/knn_brute_force.mojo (row-major direct tile only; certified MMA and transposed-layout routes closed under it; it no longer routes to the deleted C29 stream kernel, lane serial-cleanup 2026-10-07: changed device route, owes a fresh A/B and ID check), ball_cover/common.mojo, core/knn_host_predict.mojo (host twin); reaches every caller of the kNN primitive (KNN, RBC, HDBSCAN/UMAP/Spectral kNN graphs, DBSCAN RBC eps)"
+   "note": "neighbors/impl/detail/knn_brute_force.mojo (row-major direct tile only; certified MMA and transposed-layout routes closed under it; it no longer routes to the deleted C29 stream kernel, lane serial-cleanup 2026-10-07: changed device route, owes a fresh A/B and ID check), ball_cover/common.mojo, core/knn_host_predict.mojo (host twin); reaches every caller of the kNN primitive (KNN, RBC, HDBSCAN/UMAP/Spectral kNN graphs, DBSCAN RBC eps) | FIX (lane grid-fixups-1 2026-10-08): every knn_direct HDBSCAN cell of grid ge123e6f9 raised \"tiled_brute_force_knn: the distance tile holds 1 cells; query_tile x index_tile needs 268435456 (NVIDIA) / 16777216 (AMD)\": tiled_distance_tile_cells answered one cell for the matrix-free fused/block-top-k launches, which KNN_DIRECT_DISTANCE closes (no transposed layout), so the direct route had no tile. The sizing now follows the route under the define (every caller of the primitive: neighbors/estimator.mojo, neighbors/impl/multi_gpu.mojo). The direct route writes the full query_tile x index_tile matrix (1 GiB on NVIDIA at the HDBSCAN request), the honest cost of the arm. Re-race the failed cells."
   },
   "kde_direct": {
    "define": "MOJOLEARN_KDE_DIRECT_DISTANCE",
@@ -180,7 +181,7 @@
    "binding": "_mojolearn_estimators",
    "bits_change": true,
    "status": "split_from:C30_DIRECT_DISTANCE",
-   "note": "dbscan/impl/neighbors/epsilon_neighborhood.mojo, dbscan/host/dbscan_oracle.mojo | binding fixed (lane classical-fixes 2026-10-07): the public route is density.py:357/371 -> bindings/_mojolearn_estimators.mojo:139/176 dbscan_fit(_core)_binding -> dbscan/impl/runner.mojo -> epsilon_neighborhood.mojo:306; host twin dbscan/host/dbscan_oracle.mojo via _mojolearn_estimators_host; bindings/_mojolearn.mojo exports no KDE or DBSCAN entry."
+   "note": "dbscan/impl/neighbors/epsilon_neighborhood.mojo, dbscan/host/dbscan_oracle.mojo | binding fixed (lane classical-fixes 2026-10-07): the public route is density.py:357/371 -> bindings/_mojolearn_estimators.mojo:139/176 dbscan_fit(_core)_binding -> dbscan/impl/runner.mojo -> epsilon_neighborhood.mojo:306; host twin dbscan/host/dbscan_oracle.mojo via _mojolearn_estimators_host; bindings/_mojolearn.mojo exports no KDE or DBSCAN entry. | TIMEOUTS (lane grid-fixups-1 2026-10-08): grid ge123e6f9 dbscan_direct / knn_direct / all_on cells REFUSED(timeout) on taxi on both vendors, but istella ran in every such arm (AMD 262-268 s, NVIDIA 405-415 s) with one output hash (7494ce8e17368282). The direct path is not wrong: it is the incumbent tiled eps kernel (eps_unexp_neigh_kernel, the same O(batch x n) tile pass) with direct_distance_step in place of the expanded fma; it adds no pass. The taxi timeout is the workload: its eps graph is dense (the 2026-09-29 L40S board refused the incumbent on taxi with -1799116104 int32 CSR edges in one batch), and no incumbent taxi record exists in this grid (the C004 incumbent pack was lost to the PREBUILT loader bug). A taxi timeout is therefore NOT evidence against either switch; decide them on istella until the incumbent taxi cell is measured."
   },
   "graph_direct": {
    "define": "MOJOLEARN_GRAPH_DIRECT_DISTANCE",

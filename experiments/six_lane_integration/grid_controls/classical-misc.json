@@ -152,12 +152,13 @@
       "default": "off",
       "source": [
         "glm/impl/qn/qn_linesearch.mojo:171",
-        "glm/impl/qn/qn_linesearch.mojo:236"
+        "glm/impl/qn/qn_linesearch.mojo:236",
+        "glm/impl/qn/glm_base.mojo:2134"
       ],
       "binding": "_mojolearn_estimators",
       "bits_change": false,
       "status": "kept",
-      "note": "switches qn line search to 2 speculative trials accepted in original order; logreg-cv NOT reached (own L-BFGS). | COST NOTE (lane classical-fixes 2026-10-07): glm/impl/qn/qn_linesearch.mojo:241-251 allocates two n-float device buffers (trial_x, trial_g) per speculative trial plus a results device buffer and a host buffer per line search, and synchronizes twice per search (:260, :306); both arms pay this (on: 2 trials, off: 4), so the A/B mixes allocation cost with trial count. Preallocating once per fit is not done here (not self-contained: the buffers live across min_lbfgs state)."
+      "note": "switches qn line search to 2 speculative trials accepted in original order; logreg-cv NOT reached (own L-BFGS). | COST NOTE (lane classical-fixes 2026-10-07): glm/impl/qn/qn_linesearch.mojo:241-251 allocates two n-float device buffers (trial_x, trial_g) per speculative trial plus a results device buffer and a host buffer per line search, and synchronizes twice per search (:260, :306); the on arm pays this per line search; off is the sequential search (no trial buffers). Preallocating once per fit is not done here (not self-contained: the buffers live across min_lbfgs state). | FIX (lane grid-fixups-1 2026-10-08): every c17_ls_trials cell of grid ge123e6f9 (logreg/linearsvc/linearsvr, NVIDIA and AMD, single and all_on) raised \"qn: deferred exact evaluation requires IDENTICAL trial experiment\" at round 0: the exact-trials search calls evaluate_pen(drain=False), whose gate admitted only MOJOLEARN_IDN_QN_EXACT_TRIALS (the I12 4-trial loser). The gate now admits either define (same predicate as qn_linesearch.mojo:171), so the switch is self-sufficient; C17_LS_TRIALS together with IDN_QN_EXACT_TRIALS is refused in core/six_lane_experiment_guards.mojo (one trial count). The failed cells are a code bug, not a measurement: re-race them."
     },
     "c17_ovr": {
       "define": "MOJOLEARN_CLASSICAL_C17_OVR",

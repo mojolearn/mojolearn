@@ -41439,14 +41439,14 @@
     "head": "24dbc6581",
     "lane": "classical-kmeans",
     "path": "experiments/six_lane_integration/grid_controls/classical-kmeans.json",
-    "sha256": "62e3bfdd1496af22348a46a1c8eb713d5d36d3e9f22c3b0b49b0485675319105"
+    "sha256": "1797b3da9008d6303bf2aa2a2c972b1bb994d85ede509b8d25328397dd2b4042"
    },
    "classical-misc": {
     "branch": "lane/classical-misc",
     "head": "a554ae5a2",
     "lane": "classical-misc",
     "path": "experiments/six_lane_integration/grid_controls/classical-misc.json",
-    "sha256": "8a48a0db9040b3538f23ed9f022b056c37ba8793b9269746f3c2b1fecd351a3a"
+    "sha256": "ce6c226cd207157f6e23816572e27470c374467be6fc1ec6fdb480843236f0a5"
    },
    "classical-nbda": {
     "branch": "lane/classical-nbda",
@@ -41555,9 +41555,9 @@
    }
   },
   "guards": {
-   "asserts": 138,
+   "asserts": 139,
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "11227894f6fcbb93e96b6a9b4dea09b97973439745d626ae8a8a52750d61c9e1"
+   "sha256": "36925e028901880241009912d66b1402690805fc7cca36042b71fb7387003098"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -41735,7 +41735,7 @@
   "deferred_cross_configs": 3516,
   "deferred_cross_groups": 80,
   "excluded_controls": 73,
-  "guard_asserts": 138,
+  "guard_asserts": 139,
   "mapped_algorithms": 86,
   "packed_multi_member": 106,
   "packs": 302,
