@@ -112,7 +112,7 @@ def moe_grouped_offsets(ctx: DeviceContext, poff: FP, n_experts: Int) raises -> 
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
     var out = List[Int]()
-    for e in range(n):  # small-loop(E + 1 offsets: launch sizes, not data)
+    for e in range(n):  # small-loop(n: the E + 1 expert pair offsets): per-expert launch sizes, never data
         out.append(Int(host.unsafe_ptr()[e]))
     _ = view^
     _ = host^
@@ -122,7 +122,7 @@ def moe_grouped_offsets(ctx: DeviceContext, poff: FP, n_experts: Int) raises -> 
 def moe_grouped_workspace(poff: List[Int], n_experts: Int, D: Int, F: Int) -> Int:
     """The GEMM workspace for every expert's two products (the maximum)."""
     var need = 1
-    for e in range(n_experts):  # small-loop(E experts: sizes the scratch, no data)
+    for e in range(n_experts):  # small-loop(n_experts: the experts): one workspace size per expert, no data
         var c = poff[e + 1] - poff[e]
         if c > 0:
             need = max(need, identical_gemm_workspace_max_floats(c, 2 * F, D))
@@ -142,7 +142,7 @@ def moe_grouped_hidden(
         x, order, xg, Int32(D), Int32(k), Int32(n_pairs * D),
         grid_dim=((n_pairs * D + MG_TPB - 1) // MG_TPB, 1, 1), block_dim=(MG_TPB, 1, 1),
     )
-    for e in range(n_experts):  # small-loop(E experts: one GEMM launch each)
+    for e in range(n_experts):  # small-loop(n_experts: the experts): one GEMM launch per expert, no data
         var c = poff[e + 1] - poff[e]
         if c <= 0:
             continue
@@ -168,7 +168,7 @@ def moe_grouped_out(
     combine through slot_of."""
     if n_pairs <= 0:
         return
-    for e in range(n_experts):  # small-loop(E experts: one GEMM launch each)
+    for e in range(n_experts):  # small-loop(n_experts: the experts): one GEMM launch per expert, no data
         var c = poff[e + 1] - poff[e]
         if c <= 0:
             continue
