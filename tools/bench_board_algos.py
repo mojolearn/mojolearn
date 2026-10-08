@@ -3822,7 +3822,6 @@ def _build_layer(lane, arm, D):
             if dev_io:
                 try:
                     layer._dev_module()
-                    info["output_home"] = "device"
                 except RuntimeError:
                     dev_io = False
 
