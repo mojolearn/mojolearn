@@ -41,6 +41,7 @@ from x_ann.ivf_sq_core import sq_candidate_dist
 from x_ann.ivf_rabitq_core import rq_candidate_est, rq_est_tail, rq_rotate
 from x_ann.tsne_core import ts_ftz_nonneg
 from x_ann.stage_timer import AnnStages
+from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
 
 comptime TPB = 128
 #: threads per (query, probe) threadgroup
@@ -66,6 +67,104 @@ def coarse_kernel(count: Int32, q0: Int32, queries: F32P, dim: Int32, centers: F
         var lq = e // Int(n_lists)
         var l = e % Int(n_lists)
         cd.unsafe_store(e, pq_coarse_dist(queries, (Int(q0) + lq) * Int(dim), centers, l, Int(dim)))
+
+
+# lane gap-small-members (2026-10-08, plan docs/plans/gaps-2026-10-08.md
+# section 11): the coarse step as a tiled distance block. `coarse_kernel`
+# gives each (query, list) thread its own pass over both rows from device
+# memory (220 features on istella: every center row read once per query,
+# every query row once per list). Here a block takes CT_Q queries x CT_L
+# lists, stages CT_FC features of both at a time in threadgroup memory, and
+# each thread holds CT_R x CT_R pairs in registers (the knn_sq_tiled2_kernel
+# layout). Each pair's value is `pq_coarse_dist`'s statements on the same
+# words (ftz of each side, ftz of the difference, the identical_mul_add fold
+# over the features ascending), so the stored coarse distances, and every
+# probe, candidate and result after them, keep their bits on every vendor.
+# No dimension rule: any dim (features chunked), any list count (tiles
+# clipped). Tile sizes from the threadgroup page (CT_SMEM_BYTES, under every
+# column's limit; the fits gate keeps `coarse_kernel` where it does not).
+# A GEMM form (|q|^2 + |c|^2 - 2 q.c) would change the fold and cancel at
+# small distances; the direct difference keeps the contract.
+# -D MOJOLEARN_ANN_COARSE_TILED_OFF restores `coarse_kernel`.
+comptime CT_Q = 64
+comptime CT_L = 64
+comptime CT_FC = 16
+comptime CT_TPB = 256
+#: a thread's register block: CT_R queries by CT_R lists (16 x 16 threads)
+comptime CT_R = 4
+comptime CT_XS = CT_FC + 1  # padded rows (bank spread)
+comptime CT_SMEM_BYTES = 4 * (CT_Q * CT_XS + CT_L * CT_XS)
+comptime COARSE_TILED = (not is_defined["MOJOLEARN_ANN_COARSE_TILED_OFF"]()
+                         and lib_smem_page_fits_for[TARGET_COLUMN, CT_SMEM_BYTES]())
+
+
+def coarse_tiled_kernel(c_: Int32, q0_: Int32, queries: F32P, dim_: Int32, centers: F32P, n_lists_: Int32, cd: F32P):
+    """`coarse_kernel`'s cd[lq * n_lists + l] for the block's CT_Q x CT_L
+    tile (block b: query tile b // list tiles, list tile b % list tiles)."""
+    var c = Int(c_)
+    var q0 = Int(q0_)
+    var dim = Int(dim_)
+    var nl = Int(n_lists_)
+    var tid = Int(thread_idx.x)
+    var nlb = (nl + CT_L - 1) // CT_L
+    var b = Int(block_idx.x)
+    var qa = (b // nlb) * CT_Q
+    var la = (b - (b // nlb) * nlb) * CT_L
+    var qs = stack_allocation[CT_Q * CT_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var cs = stack_allocation[CT_L * CT_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var ta = tid // 16
+    var tb = tid - ta * 16
+    var acc = InlineArray[Float32, CT_R * CT_R](fill=Float32(0.0))
+    var f0 = 0
+    while f0 < dim:
+        var fc = min(CT_FC, dim - f0)
+        var q = tid
+        while q < CT_Q * CT_FC:
+            var r = q // CT_FC
+            var f = q - r * CT_FC
+            qs[r * CT_XS + f] = ftz(queries.unsafe_load((q0 + qa + r) * dim + f0 + f)) if (qa + r < c and f < fc) else Float32(0.0)
+            q += CT_TPB
+        q = tid
+        while q < CT_L * CT_FC:
+            var r = q // CT_FC
+            var f = q - r * CT_FC
+            cs[r * CT_XS + f] = ftz(centers.unsafe_load((la + r) * dim + f0 + f)) if (la + r < nl and f < fc) else Float32(0.0)
+            q += CT_TPB
+        barrier()
+        for f in range(fc):
+            var qv = InlineArray[Float32, CT_R](fill=Float32(0.0))
+            var cv = InlineArray[Float32, CT_R](fill=Float32(0.0))
+            comptime for i in range(CT_R):
+                qv[i] = qs[(ta + 16 * i) * CT_XS + f]
+                cv[i] = cs[(tb + 16 * i) * CT_XS + f]
+            comptime for i in range(CT_R):
+                comptime for jj in range(CT_R):
+                    # pq_coarse_dist: ftz(ftz(q) - ftz(center)), then the fold
+                    var diff = ftz(qv[i] - cv[jj])
+                    acc[i * CT_R + jj] = ftz(identical_mul_add(diff, diff, acc[i * CT_R + jj]))
+        barrier()
+        f0 += CT_FC
+    comptime for i in range(CT_R):
+        comptime for jj in range(CT_R):
+            var lq = qa + ta + 16 * i
+            var l = la + tb + 16 * jj
+            if lq < c and l < nl:
+                cd.unsafe_store(lq * nl + l, acc[i * CT_R + jj])
+
+
+def enqueue_coarse(ctx: DeviceContext, c: Int, q0: Int, dq: F32P, dim: Int, dc: F32P, n_lists: Int, cd: F32P) raises:
+    """The coarse distances of queries q0 .. q0 + c - 1 into cd (c x n_lists)."""
+    comptime if COARSE_TILED:
+        var nb = ((c + CT_Q - 1) // CT_Q) * ((n_lists + CT_L - 1) // CT_L)
+        if nb > 0:
+            ctx.enqueue_function[coarse_tiled_kernel](
+                Int32(c), Int32(q0), dq, Int32(dim), dc, Int32(n_lists), cd, grid_dim=nb, block_dim=CT_TPB,
+            )
+        return
+    ctx.enqueue_function[coarse_kernel](
+        Int32(c * n_lists), Int32(q0), dq, Int32(dim), dc, Int32(n_lists),
+        cd, grid_dim=_grid(c * n_lists), block_dim=TPB,
+    )
 
 
 @always_inline
@@ -1051,10 +1150,7 @@ def ivf_scan_search[KIND: Int](
     var q0 = 0
     while q0 < m:
         var c = mc if m - q0 > mc else m - q0
-        ctx.enqueue_function[coarse_kernel](
-            Int32(c * n_lists), Int32(q0), dq, Int32(dim), dc, Int32(n_lists),
-            dcd.unsafe_ptr(), grid_dim=_grid(c * n_lists), block_dim=TPB,
-        )
+        enqueue_coarse(ctx, c, q0, dq, dim, dc, n_lists, rebind[F32P](dcd.unsafe_ptr()))
         st.mark(ctx, "coarse")
         comptime if SERIAL:
             ctx.enqueue_function[probe_kernel](
