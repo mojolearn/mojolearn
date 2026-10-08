@@ -3,9 +3,12 @@
 """The host column of x_neighbors/graph_par.mojo (lane hr-graph): every
 stage's items in ascending t, the same driver, so its bits are the device's
 by construction. CPU-only installs and the verification digests only."""
+from std.memory import bitcast
 from x_neighbors.items import FP, IP
 from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE
-from x_neighbors.graph_par import GA, GExec, Lay, LP, FPU, IPU, LPU, GP_NST, gp_item, pr_drive, lv_drive
+from x_neighbors.graph_par import (
+    GA, GExec, Lay, LP, FPU, IPU, LPU, GP_NST, gp_item, pr_drive, lv_drive, pr_drive_csr, lv_drive_csr,
+)
 
 
 struct GraphCpu(GExec):
@@ -56,11 +59,24 @@ struct GraphCpu(GExec):
             h[k] = self.li[o + k]
         return h^
 
+    def get_fs(mut self, slot: Int, count: Int) raises -> List[Float32]:
+        var h = List[Float32](length=max(count, 1), fill=Float32(0))
+        var o = Int(self.llay[slot])
+        for k in range(count):
+            h[k] = self.lf[o + k]
+        return h^
+
     def up_f(mut self, slot: Int, addr: Int, count: Int) raises:
         var src = FP(unsafe_from_address=addr)
         var o = Int(self.llay[slot])
         for k in range(count):
             self.lf[o + k] = src.unsafe_load(k)
+
+    def up_i(mut self, slot: Int, addr: Int, count: Int) raises:
+        var src = IP(unsafe_from_address=addr)
+        var o = Int(self.llay[slot])
+        for k in range(count):
+            self.li[o + k] = src.unsafe_load(k)
 
     def down_f(mut self, slot: Int, addr: Int, count: Int) raises:
         var dst = FP(unsafe_from_address=addr)
@@ -94,6 +110,36 @@ def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolutio
     """The host column of `graph_dev.op_louvain`."""
     var ex = GraphCpu(a)
     lv_drive(ex, n, max_level, resolution, threshold, labels, info)
+    _ = ex^
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        var pi = FP(unsafe_from_address=info)
+        pi.unsafe_store(0, pi.unsafe_load(0) + Float32(1e-3))
+
+
+def op_pr_csr(
+    indptr: Int, indices: Int, vals: Int, x: Int, p: Int, dw: Int, info: Int,
+    n: Int, nnz: Int, has_vals: Int, max_iter: Int, thr_hi: Int, thr_lo: Int, binary: Int,
+    x_uniform: Int, p_uniform: Int, dw_uniform: Int, alpha: Float32,
+) raises:
+    """The host column of `graph_dev.op_pr_csr` (lane gap-graph)."""
+    var ex = GraphCpu(0)
+    pr_drive_csr(ex, n, nnz, indptr, indices, vals, has_vals, max_iter,
+                 bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo)), binary, alpha,
+                 x, p, dw, x_uniform, p_uniform, dw_uniform, info)
+    _ = ex^
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if n > 0:
+            var px = FP(unsafe_from_address=x)
+            px.unsafe_store(0, px.unsafe_load(0) + Float32(1e-3))
+
+
+def op_louvain_csr(
+    indptr: Int, indices: Int, vals: Int, labels: Int, info: Int,
+    n: Int, nnz: Int, has_vals: Int, max_level: Int, resolution: Float32, threshold: Float32,
+) raises:
+    """The host column of `graph_dev.op_louvain_csr` (lane gap-graph)."""
+    var ex = GraphCpu(0)
+    lv_drive_csr(ex, n, nnz, indptr, indices, vals, has_vals, max_level, resolution, threshold, labels, info)
     _ = ex^
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         var pi = FP(unsafe_from_address=info)
