@@ -928,22 +928,18 @@ def _backward_dev_run(
     comptime if EMB_ATOMIC_BWD:
         fast_embedding_backward_into(ctx, r_dw, r_dy, r_ids, n_positions, cfg)
         ctx.synchronize()
-        _give_i32(r_ids^, n_positions)
-        _ = r_dy^
-        _ = r_dw^
-        _ = ctx^
-        return
-    var r_counts = _pool_i32(ctx, cfg.vocab)
-    var r_begin = _pool_i32(ctx, cfg.vocab + 1)
-    var r_perm = _pool_i32(ctx, n_positions)
-    identical_embedding_backward_prerefused_into(
-        ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
-    )
-    ctx.synchronize()
+    else:
+        var r_counts = _pool_i32(ctx, cfg.vocab)
+        var r_begin = _pool_i32(ctx, cfg.vocab + 1)
+        var r_perm = _pool_i32(ctx, n_positions)
+        identical_embedding_backward_prerefused_into(
+            ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
+        )
+        ctx.synchronize()
+        _give_i32(r_counts^, cfg.vocab)
+        _give_i32(r_begin^, cfg.vocab + 1)
+        _give_i32(r_perm^, n_positions)
     _give_i32(r_ids^, n_positions)
-    _give_i32(r_counts^, cfg.vocab)
-    _give_i32(r_begin^, cfg.vocab + 1)
-    _give_i32(r_perm^, n_positions)
     _ = r_dy^
     _ = r_dw^
     _ = ctx^
