@@ -1,0 +1,61 @@
+{
+ "a_cells": 1661,
+ "b_workload_vendor": 266,
+ "cmd_jobs_without_gridbb": [],
+ "coverage": {
+  "amd": {
+   "FAILED": 21,
+   "MEASURED": 1022,
+   "MISSING": 1573,
+   "REFUSED": 1094
+  },
+  "nvidia": {
+   "FAILED": 30,
+   "MEASURED": 588,
+   "MISSING": 1998,
+   "REFUSED": 1094
+  }
+ },
+ "identity_counts": {
+  "INCOMPLETE": 772,
+  "MATCH": 271,
+  "MISMATCH": 0,
+  "NOT_REQUIRED": 0
+ },
+ "ignored": {
+  "not_ours": 0,
+  "other_campaign": 2,
+  "unknown_cell": 0,
+  "untagged": 16
+ },
+ "jobs_without_algos": [
+  "amd:a0006",
+  "nvidia:n0009"
+ ],
+ "logs": [
+  "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+  "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt"
+ ],
+ "no_result": [],
+ "observations": 2843,
+ "plan_dir": "/Users/andrewhendel/mojolearn-evidence/grid-lq/plan",
+ "quality_counts": {
+  "BETTER": 11,
+  "FAIL": 51,
+  "PENDING": 916,
+  "SAME": 675,
+  "WORSE": 8
+ },
+ "results": [
+  "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+  "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt"
+ ],
+ "run_id": "ge123e6f9",
+ "schema": "mojolearn.six-lane-grid-lq-collect/1",
+ "truncated_without_log": 0,
+ "verdict_counts": {
+  "FASTER": 22,
+  "NO_VERDICT": 977,
+  "SLOWER": 44
+ }
+}
