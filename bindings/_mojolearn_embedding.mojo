@@ -708,6 +708,310 @@ def embedding_backward_binding(
     return PythonObject(vocab * width)
 
 
+# ---- device I/O (lane gap-neural-io, 2026-10-08) ----------------------------------
+# Plan docs/plans/gaps-2026-10-08.md Section 4. The board's cell (V = 32,768,
+# d = 1,024, T = 32,768) moved ~400 MB over the bus per forward + backward:
+# y down (134 MB), dy up (134 MB), the dense dW down (134 MB), into fresh
+# host arrays page-faulted per call, against torch's kernel-only clock on
+# device tensors (399x on the L40S board). Here y, dy and dW are RESIDENT
+# TENSORS of this binding (one pool on this binding's context, the same
+# `seq_tensor_*` entry names the sequence binding exports, so the Python
+# `SequenceDeviceTensor` serves both): `embedding_forward_dev` gathers into
+# a resident y, `embedding_backward_dev` folds a resident dy into a
+# resident dW (a carried dW is that tensor's own bits). The ids (T int32,
+# 128 KB) still go up from the host list the shape and id refusals walked;
+# the table stays resident by token. The kernels are the host-array
+# entries' on the same values: no bit moves. A non-finite refusal reads the
+# one offending word back for the oracle's message.
+
+
+struct _EmbTensors(Defaultable, Movable):
+    var bufs: List[DeviceBuffer[DType.float32]]
+    #: floats per handle (0 marks a free handle)
+    var n: List[Int]
+
+    def __init__(out self):
+        self.bufs = List[DeviceBuffer[DType.float32]]()
+        self.n = List[Int]()
+
+
+comptime _EMB_TENSORS_NAME = "MojoEmbeddingTensorsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoEmbeddingTensorsFast"
+comptime _EMB_TENSORS = _Global[StorageType=_EmbTensors, name=_EMB_TENSORS_NAME, init_fn=_EmbTensors.__init__]
+
+
+def _tensor_n(h: Int) raises -> Int:
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    if h < 1 or h > len(pool[].n) or pool[].n[h - 1] == 0:
+        raise Error("embedding: tensor handle " + String(h) + " is not open")
+    return pool[].n[h - 1]
+
+
+def _tensor_view(h: Int, n: Int, what: String) raises -> DeviceBuffer[DType.float32]:
+    """A view of open handle h, which must hold exactly n floats."""
+    var have = _tensor_n(h)
+    if have != n:
+        raise Error("embedding: " + what + " holds " + String(have) + " floats, the call needs " + String(n))
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    return pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
+
+
+def seq_tensor_alloc_binding(n_obj: PythonObject, zero_obj: PythonObject) raises -> PythonObject:
+    """A resident tensor of n >= 1 floats (+0.0 filled when zero = 1).
+    Returns its handle (>= 1)."""
+    var n = Int(py=n_obj)
+    if n < 1:
+        raise Error("seq_tensor_alloc: n must be >= 1")
+    var zero = Int(py=zero_obj) != 0
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    if zero:
+        enqueue_fill(ctx, buf, Float32(0.0))
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    var h = -1
+    for j in range(len(pool[].n)):  # small-loop(pool: resident tensor handles): free handle slot search, no data
+        if pool[].n[j] == 0 and h < 0:
+            h = j
+    if h < 0:
+        pool[].bufs.append(buf^)
+        pool[].n.append(n)
+        h = len(pool[].n) - 1
+    else:
+        pool[].bufs[h] = buf^
+        pool[].n[h] = n
+    ctx.synchronize()
+    return PythonObject(h + 1)
+
+
+def seq_tensor_free_binding(handle: PythonObject) raises -> PythonObject:
+    var h = Int(py=handle)
+    _ = _tensor_n(h)
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    ctx.synchronize()
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    pool[].bufs[h - 1] = ctx.enqueue_create_buffer[DType.float32](1)
+    pool[].n[h - 1] = 0
+    return PythonObject(h)
+
+
+def seq_tensor_upload_binding(handle: PythonObject, addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
+    var h = Int(py=handle)
+    var n = Int(py=n_obj)
+    if n < 1 or n > _tensor_n(h):
+        raise Error("seq_tensor_upload: n must fit the tensor")
+    var src = f32_ptr(Int(py=addr))
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
+    ctx.enqueue_copy(dst_buf=view, src_ptr=src)
+    ctx.synchronize()
+    _ = view^
+    return PythonObject(n)
+
+
+def seq_tensor_download_binding(handle: PythonObject, addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
+    var h = Int(py=handle)
+    var n = Int(py=n_obj)
+    if n < 1 or n > _tensor_n(h):
+        raise Error("seq_tensor_download: n must fit the tensor")
+    var dst = f32_ptr(Int(py=addr))
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
+    ctx.synchronize()
+    _ = view^
+    return PythonObject(n)
+
+
+def seq_tensor_copy_binding(dst: PythonObject, src: PythonObject, n_obj: PythonObject) raises -> PythonObject:
+    var hd = Int(py=dst)
+    var hs = Int(py=src)
+    var n = Int(py=n_obj)
+    if n < 1 or n > _tensor_n(hd) or n > _tensor_n(hs):
+        raise Error("seq_tensor_copy: n must fit both tensors")
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    var vd = pool[].bufs[hd - 1].create_sub_buffer[DType.float32](0, n)
+    var vs = pool[].bufs[hs - 1].create_sub_buffer[DType.float32](0, n)
+    ctx.enqueue_copy(dst_buf=vd, src_buf=vs)
+    ctx.synchronize()
+    _ = vd^
+    _ = vs^
+    return PythonObject(n)
+
+
+def _refuse_nonfinite_resident(
+    ctx: DeviceContext, name: String, mut buf: DeviceBuffer[DType.float32], n: Int
+) raises:
+    """The non-finite refusal of a resident buffer: the device scan, and on
+    a hit the one offending word read back for the oracle's message (the
+    same name, index and wording as the host-array entries)."""
+    if n <= 0:
+        return
+    var idx = device_first_nonfinite(ctx, buf, n)
+    if idx < 0:
+        return
+    var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var one = buf.create_sub_buffer[DType.float32](idx, 1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=one)
+    ctx.synchronize()
+    var v = h.unsafe_ptr().unsafe_load(0)
+    _ = one^
+    _ = h^
+    nonfinite_refusal(name, idx, v)
+    raise Error(
+        String("embedding: the device scan found a non-finite value in ") + name
+        + " at flat index " + String(idx) + " that the word read back is not (a scan defect)"
+    )
+
+
+def _forward_dev_run(
+    wp: MutPointer[Float32, MutUntrackedOrigin],
+    ids: List[Int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+    y_h: Int,
+    token: Int,
+    w_addr: Int,
+) raises:
+    var cells = n_positions * cfg.width
+    if cells <= 0:
+        return
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var w_cells = cfg.vocab * cfg.width
+    var r_w = _table_take(ctx, token, w_addr, wp, w_cells)
+    var r_ids = _pool_i32(ctx, n_positions)
+    ctx.enqueue_copy(dst_buf=r_ids, src_ptr=ids.unsafe_ptr())
+    var r_y = _tensor_view(y_h, cells, "y")
+    comptime if EMB_ATOMIC_BWD:
+        fast_embedding_forward_into(ctx, r_y, r_w, r_ids, n_positions, cfg)
+    else:
+        identical_embedding_forward_prerefused_into(ctx, r_y, r_w, r_ids, n_positions, cfg)
+    # the ids list is the caller's: the wait keeps it alive past its copy
+    ctx.synchronize()
+    _table_give(r_w^, token, w_addr, w_cells)
+    _give_i32(r_ids^, n_positions)
+    _ = r_y^
+    _ = ctx^
+
+
+def _backward_dev_run(
+    ids: List[Int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+    dy_h: Int,
+    dw_h: Int,
+    plan: Int,
+) raises:
+    var cells = cfg.vocab * cfg.width
+    if cells <= 0:
+        return
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var ty = n_positions * cfg.width
+    var r_dw = _tensor_view(dw_h, cells, "dw")
+    # dY first, then the carried dW: the host refusals' order
+    if ty > 0:
+        var r_dy0 = _tensor_view(dy_h, ty, "dy")
+        _refuse_nonfinite_resident(ctx, String("dY"), r_dy0, ty)
+        _ = r_dy0^
+    if cfg.accumulate:
+        _refuse_nonfinite_resident(ctx, String("the carried dW"), r_dw, cells)
+    # a zero-position call reads no dY (one placeholder cell)
+    var r_dy = _tensor_view(dy_h, ty, "dy") if ty > 0 else _pool_f32(ctx, 1)
+    var r_ids = _pool_i32(ctx, n_positions)
+    if n_positions > 0:
+        ctx.enqueue_copy(dst_buf=r_ids, src_ptr=ids.unsafe_ptr())
+    comptime if EMB_ATOMIC_BWD:
+        fast_embedding_backward_into(ctx, r_dw, r_dy, r_ids, n_positions, cfg)
+        ctx.synchronize()
+        _give_i32(r_ids^, n_positions)
+        _ = r_dy^
+        _ = r_dw^
+        _ = ctx^
+        return
+    var r_counts = _pool_i32(ctx, cfg.vocab)
+    var r_begin = _pool_i32(ctx, cfg.vocab + 1)
+    var r_perm = _pool_i32(ctx, n_positions)
+    identical_embedding_backward_prerefused_into(
+        ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan
+    )
+    ctx.synchronize()
+    _give_i32(r_ids^, n_positions)
+    _give_i32(r_counts^, cfg.vocab)
+    _give_i32(r_begin^, cfg.vocab + 1)
+    _give_i32(r_perm^, n_positions)
+    _ = r_dy^
+    _ = r_dw^
+    _ = ctx^
+
+
+def embedding_forward_dev_binding(
+    addrs: PythonObject, handles: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`embedding_forward` into a resident y. addrs = [weight (V * d, host),
+    ids (T int32, host)]; handles = [y (T * d resident tensor)]; params =
+    [V, d, T, token]. Returns `T * d`."""
+    if len(addrs) != 2 or len(handles) != 1 or len(params) != 4:
+        raise Error("embedding_forward_dev: requires 2 addresses (weight, ids), 1 handle (y) and [V, d, T, token]")
+    var vocab = Int(py=params[0])
+    var width = Int(py=params[1])
+    var n_positions = Int(py=params[2])
+    var token = Int(py=params[3])
+    var cfg = _config(vocab, width, EMB_NO_PADDING_IDX, False)
+    emb_refuse_shape(cfg, n_positions)
+    var w_addr = Int(py=addrs[0])
+    var wp = f32_ptr(w_addr)
+    var ids = read_i32(Int(py=addrs[1]), n_positions)
+    emb_refuse_ids(ids, cfg)
+    var y_h = Int(py=handles[0])
+    if n_positions * width > 0:
+        _ = _tensor_view(y_h, n_positions * width, "y")
+    var no_run = n_positions * width <= 0
+    with GILReleased(Python()):
+        if no_run:
+            _refuse_nonfinite_upload(String("W"), wp, vocab * width)
+        _forward_dev_run(wp, ids, n_positions, cfg, y_h, token, w_addr)
+    return PythonObject(n_positions * width)
+
+
+def embedding_backward_dev_binding(
+    addrs: PythonObject, handles: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`embedding_backward` on resident tensors. addrs = [ids (T int32,
+    host)]; handles = [dy (T * d), dw (V * d; its bits are the carry when
+    accumulate is 1)]; params = [V, d, T, padding_idx, accumulate, plan]
+    as `embedding_backward`'s. Returns `V * d`."""
+    if len(addrs) != 1 or len(handles) != 2 or len(params) != 6:
+        raise Error("embedding_backward_dev: requires 1 address (ids), 2 handles (dy, dw) and 6 params")
+    var vocab = Int(py=params[0])
+    var width = Int(py=params[1])
+    var n_positions = Int(py=params[2])
+    var padding_idx = Int(py=params[3])
+    var acc_code = Int(py=params[4])
+    var plan_code = Int(py=params[5])
+    if plan_code != PLAN_SCAN and plan_code != PLAN_SORT and plan_code != PLAN_AUTO:
+        raise Error(
+            String("embedding_backward_dev: plan must be 0 (PLAN_SCAN), 1 (PLAN_SORT) or 2 (PLAN_AUTO), got ")
+            + String(plan_code)
+        )
+    var plan = emb_resolve_plan(plan_code, vocab, n_positions)
+    if acc_code != 0 and acc_code != 1:
+        raise Error(String("embedding_backward_dev: accumulate must be 0 or 1, got ") + String(acc_code))
+    var cfg = _config(vocab, width, padding_idx, acc_code == 1)
+    emb_refuse_shape(cfg, n_positions)
+    var ids = read_i32(Int(py=addrs[0]), n_positions)
+    emb_refuse_ids(ids, cfg)
+    var dy_h = Int(py=handles[0])
+    var dw_h = Int(py=handles[1])
+    if n_positions * width > 0:
+        _ = _tensor_view(dy_h, n_positions * width, "dy")
+    if vocab * width > 0:
+        _ = _tensor_view(dw_h, vocab * width, "dw")
+    with GILReleased(Python()):
+        _backward_dev_run(ids, n_positions, cfg, dy_h, dw_h, plan)
+    return PythonObject(vocab * width)
+
+
 @export
 def PyInit__mojolearn_embedding() abi("C") -> PythonObject:
     try:
@@ -718,6 +1022,14 @@ def PyInit__mojolearn_embedding() abi("C") -> PythonObject:
         m.def_function[embedding_backward_binding]("embedding_backward")
         m.def_function[embedding_table_release_binding]("embedding_table_release")
         m.def_function[embedding_resident_binding]("embedding_resident")
+        # lane gap-neural-io: resident tensors and the device-I/O entries
+        m.def_function[seq_tensor_alloc_binding]("seq_tensor_alloc")
+        m.def_function[seq_tensor_free_binding]("seq_tensor_free")
+        m.def_function[seq_tensor_upload_binding]("seq_tensor_upload")
+        m.def_function[seq_tensor_download_binding]("seq_tensor_download")
+        m.def_function[seq_tensor_copy_binding]("seq_tensor_copy")
+        m.def_function[embedding_forward_dev_binding]("embedding_forward_dev")
+        m.def_function[embedding_backward_dev_binding]("embedding_backward_dev")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_embedding: ", e))
