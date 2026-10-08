@@ -342,8 +342,7 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
     totals = defaultdict(int)
     for cs in control_summary.values():
         totals[cs['recommendation']] += 1
-    failed_cells = sorted(dict(configuration=cfg['configuration'], workload_id=r['workload_id']) for cfg in evidence.values() for r in cfg['rows'] if r['quality'] == 'FAIL')
-    failed_cells = [dict(t) for t in {tuple(sorted(f.items())) for f in failed_cells}]
+    failed_cells = [dict(configuration=c, workload_id=w) for c, w in sorted({(cfg['configuration'], r['workload_id']) for cfg in evidence.values() for r in cfg['rows'] if r['quality'] == 'FAIL'})]
     rule = dict(cell='timing verdict + NVIDIA==AMD identity MATCH + quality not WORSE',
                 algorithm='SLOWER if any workload SLOWER; FASTER if any FASTER and none SLOWER; NEUTRAL otherwise',
                 arm='PROMOTE: every reached algorithm FASTER or NEUTRAL, at least one FASTER. SPLIT: FASTER and SLOWER both present '
