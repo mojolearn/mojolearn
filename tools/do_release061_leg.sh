@@ -217,7 +217,10 @@ ARCHIVE_BYTES=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
 # 14.46 MB against the old 15 MiB cap, most of it python/mojolearn, which the
 # build needs; one leg moved 9.6 MB in 4 s (2026-09-11), so 24 MiB is still
 # well under a minute.
-[ "$ARCHIVE_BYTES" -lt $((24 * 1024 * 1024)) ] || die "archive is $ARCHIVE_BYTES bytes gzipped, cap 24 MiB"
+# 2026-10-08 (0.8.37 rehearsal): the source archive measured 30.5 MB gzipped against the 24 MiB cap after the measurement records were
+# export-ignored. The remaining growth since 0.8.36 is spread over 441 source files (tools +0.8 MB, docs, python, gbdt, core); the cap
+# exists to catch an accidentally archived broad path (tens of MB at once), so it moves to 40 MiB.
+[ "$ARCHIVE_BYTES" -lt $((40 * 1024 * 1024)) ] || die "archive is $ARCHIVE_BYTES bytes gzipped, cap 40 MiB"
 ARCHIVE_SHA=$(sha256_of "$TMPD/src.tgz")
 mkdir "$TMPD/archive" && tar -xzf "$TMPD/src.tgz" -C "$TMPD/archive" || die "archive does not unpack"
 # The packer compares every proof's inventory against THIS checkout, so the
