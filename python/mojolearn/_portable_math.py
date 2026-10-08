@@ -220,7 +220,10 @@ def fsum(values):
     from ._buffer import _native
     src = array.array("d", values)
     out = array.array("d", [0.0])
-    if int(_native("fsum_f64")(src.buffer_info()[0], len(src), out.buffer_info()[0])):
+    status = int(_native("fsum_f64")(src.buffer_info()[0], len(src), out.buffer_info()[0]))
+    if status == 2:
+        raise OverflowError("math range error")
+    if status:
         raise ValueError("-inf + inf in fsum")
     return out[0]
 
