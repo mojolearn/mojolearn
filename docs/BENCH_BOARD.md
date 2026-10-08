@@ -740,3 +740,24 @@ IDENTICAL predictions agree bit for bit. For comparability, trees carry
 (`SPAN-ASYMMETRIC` names an opponent whose clock excludes an upload or a fit
 that ours includes). A missing arm shows as `UNKNOWN` or `REFUSED(reason)`,
 never as a blank.
+
+### Two clocks
+
+Every fit and inference table also shows `whole ms` (the operation including
+the host-to-device copy of its inputs), `kernel ms` (the same operation with
+its inputs already on the device), `copy ms (source)` and the opponent ratios
+on their clock, `ours IDENTICAL / arm (clock)` and `ours FAST / arm (clock)`
+(AGENTS.md, measurement process item 6). The stored `median ms` and `ours ... /
+arm` columns are unchanged. The copy comes only from a stored field:
+`upload_ms_separate` for ours (the classical racer's separate upload probe,
+since 2026-10-07), `upload_ms_untimed` for a GPU opponent that uploads before
+its clock, and `cpu-arm` (copy 0) for an arm on the CPU. A clock the stored
+fields cannot give is `-`. A torch GPU arm is read kernel/kernel and every
+other arm whole/whole; when a side lacks that clock the ratio uses the other
+common clock and says so, and with no common clock it is the two medians,
+labelled `MIXED ours <clock> / arm <clock>`. The neural family's clocks include
+the copy on both sides (tools/bench_board_neural.py), so its torch ratios read
+whole/whole. `tools/board_clock_audit.py --board NAME=board.json --out DIR`
+writes the per-cell audit (which clock each cell is, whether the copy is
+recoverable, the copy's share of the median) and the rerun candidates; the
+fields are derived at render time and never written into `board.json`.
