@@ -56,7 +56,7 @@ comptime SHAP_TABLE = (
     )
     and not is_defined["MOJOLEARN_TREESHAP_FAST_TABLE_OFF"]()
 )
-"""FAST + Apple DEFAULT (lane fix-treeshap; M3 A/B ab-tshap-table-taxi
+"""FAST + Apple and IDENTICAL (every vendor) DEFAULT (lane fix-treeshap; M3 A/B ab-tshap-table-taxi
 21.4 -> 11.8 ms, ab-tshap-table-istella 71.6 -> 25.1 ms, additivity error
 identical; `-D MOJOLEARN_TREESHAP_FAST_TABLE_OFF` restores the per-row
 units): the leaf table of
@@ -67,7 +67,8 @@ leaf. Taken when the compiled width is 8 (at most 7 merged features per
 path, 128 patterns) and the table fits TABLE_BYTES; otherwise the
 per-row units run. Same terms, same cells, same order: the same bits."""
 comptime TABLE_BYTES = 256 * 1024 * 1024
-#: SHAP_TREE_TAB (FAST + Apple, on top of SHAP_TABLE; the default since
+#: SHAP_TREE_TAB (wherever SHAP_TABLE is on: FAST + Apple and IDENTICAL on
+#: every vendor; the default since
 #: 2026-10-04, rollback `-D MOJOLEARN_SHAP_TREE_TAB_OFF`): the leaf table's row unit finds
 #: each leaf's pattern from ONE decision word per (row, tree) (one x read
 #: and compare per internal node) instead of walking every leaf's root path
