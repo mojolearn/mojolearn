@@ -106,7 +106,11 @@ def test_device_and_host_share_one_estimate_function():
     imports = set(re.findall(r"^from ([\w.]+) import", kernel, re.M))
     assert imports <= {"std.gpu", "std.memory", "std.sys.compile", "max.gpu.host", "max.gpu.memory",
                        "max.gpu.sync", "holtwinters.impl.internal.hw_utils",
-                       "holtwinters.impl.tsa.holtwinters_params", "checks.numerics"}, sorted(imports)
+                       "holtwinters.impl.tsa.holtwinters_params", "checks.numerics",
+                       # the C58 switch (a comptime flag, default off; no code)
+                       "experiments.classical_identical_ideas.stats_controls"}, sorted(imports)
+    controls = (ROOT / "experiments/classical_identical_ideas/stats_controls.mojo").read_text(encoding="utf-8")
+    assert set(re.findall(r"^from ([\w.]+) import", controls, re.M)) <= {"std.sys.compile", "checks.numerics"}
     assert not re.search(r"\bwarp\.|block_reduce|Atomic", kernel)
 
 
