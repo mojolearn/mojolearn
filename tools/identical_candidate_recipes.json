@@ -1226,14 +1226,15 @@
         "estimators",
         "estimators_host"
       ],
-      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "status": "REMOVED_GRID_LOSER",
       "qualification_ready": false,
       "required_fixture_and_gate": "Logistic/SVR Armijo/convergence/line-search fallback fixtures; exact model against all columns at poll boundaries.",
       "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
       "current_gate_ids": [],
       "evidence": null,
       "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
-      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles.",
+      "removed": "2026-10-08 lane/grid-losers-1: IDENTICAL grid ge123e6f9 neutral/slower (1.030x); code deleted, define refused by core/six_lane_experiment_guards.mojo; recoverable at main ad7ed2370 (docs/apple-fast/EXPERIMENTS.md)"
     },
     {
       "id": "qn_device_convergence/4",
@@ -1250,14 +1251,15 @@
         "estimators",
         "estimators_host"
       ],
-      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "status": "REMOVED_GRID_LOSER",
       "qualification_ready": false,
       "required_fixture_and_gate": "Logistic/SVR Armijo/convergence/line-search fallback fixtures; exact model against all columns at poll boundaries.",
       "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
       "current_gate_ids": [],
       "evidence": null,
       "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
-      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles.",
+      "removed": "2026-10-08 lane/grid-losers-1: IDENTICAL grid ge123e6f9 neutral/slower (1.030x); code deleted, define refused by core/six_lane_experiment_guards.mojo; recoverable at main ad7ed2370 (docs/apple-fast/EXPERIMENTS.md)"
     },
     {
       "id": "qn_device_convergence/8",
@@ -1275,14 +1277,15 @@
         "estimators",
         "estimators_host"
       ],
-      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "status": "REMOVED_GRID_LOSER",
       "qualification_ready": false,
       "required_fixture_and_gate": "Logistic/SVR Armijo/convergence/line-search fallback fixtures; exact model against all columns at poll boundaries.",
       "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
       "current_gate_ids": [],
       "evidence": null,
       "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
-      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles.",
+      "removed": "2026-10-08 lane/grid-losers-1: IDENTICAL grid ge123e6f9 neutral/slower (1.030x); code deleted, define refused by core/six_lane_experiment_guards.mojo; recoverable at main ad7ed2370 (docs/apple-fast/EXPERIMENTS.md)"
     },
     {
       "id": "mamba3_parallel_angle/32",
