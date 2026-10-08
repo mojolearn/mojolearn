@@ -25,27 +25,6 @@
    "bits_change": true,
    "status": "new",
    "notes": "te_global / te_enc in the blocked lane-tree order BLT: TEB=4096-position blocks, each block a TREE_W lane tree, block partials folded by a second lane tree in fixed ascending block order (segmented over every category of a column for te_enc); device part+fold kernels per fold, units and the host column (_mojolearn_x_prep_host) spell the same order. Replaces the lane-tree order (one group per unit over all n rows) for these two ops; the MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF / _ENC_TREE_OFF defines are moot with it on. Bits: new fold order on NVIDIA, AMD and host together."
-  },
-  "gmm_cov_sym": {
-   "define": "MOJOLEARN_IDN_GMM_COV_SYM",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GMM_COV_SYM"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "mixture/cov_sym.mojo:34",
-    "mixture/checks/mstep.mojo:1383",
-    "mixture/checks/mstep.mojo:2200",
-    "mixture/host/gmm_host_oracle.mojo:450"
-   ],
-   "binding": "_mojolearn_mixture",
-   "bits_change": true,
-   "status": "new",
-   "notes": "per-component covariance as a two-block cover of the upper triangle (rows [0,h) x d, then (d-h)^2 block, h=d//2) with the shipped identical GEMM as the tile (3/4 of the cells), then cov_finish_sym mirrors cell (min,max) into both triangles. Upper-triangle words unchanged (GEMM contract: a cell depends on k and its operand words only); the lower triangle becomes the transposed upper words, on NVIDIA, AMD and the host (_mojolearn_mixture_host mirrors the same cell). Applies on the plain per-component path only: off for that fit when the paired center kernels (MOJOLEARN_IDN_GMM_CENTER_PAIR / C53) or a sabotage run."
   }
  },
  "algorithms": {
@@ -71,13 +50,17 @@
   },
   "more:gmm": {
    "binding": "_mojolearn_mixture",
-   "route": "fit: python/mojolearn/mixture.py -> bindings/_mojolearn_mixture.mojo gmm_fit_binding -> mixture/estimator.mojo gaussian_mixture_fit -> mixture/checks/mstep.mojo gmm_m_step per-component loop: center_scale_sym_kernel + 2 identical_gemm_into + cov_finish_sym_kernel when on, else center_scale_kernel + identical_gemm_into + cov_finish_kernel",
-   "controls": [
-    "gmm_cov_sym"
-   ],
+   "route": "fit: python/mojolearn/mixture.py -> bindings/_mojolearn_mixture.mojo gmm_fit_binding -> mixture/estimator.mojo gaussian_mixture_fit -> mixture/checks/mstep.mojo gmm_m_step per-component loop: center_scale_kernel + identical_gemm_into + cov_finish_kernel (gmm_cov_sym deleted)",
+   "controls": [],
    "interaction_groups": [],
    "notes": "kmeans_assign / c37 reach only the kmeans init of this fit; the brief asks for the cross and it is declared; the M-step cover itself shares no kernel with them"
   }
  },
- "removed": []
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_GMM_COV_SYM",
+   "control": "gmm_cov_sym",
+   "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 loser on speed AND quality. on/off ms ratio NV/AMD: gmm taxi 1.838/1.452 (SLOWER: 64.12 vs 34.88 ms NV, 92.24 vs 63.52 ms AMD), istella 0.966/0.978 (noise); mean_log_likelihood taxi 12.7082 vs 12.8076 (-0.78%, WORSE), istella SAME. The cover changes results, not a no-op. mixture/cov_sym.mojo, the sym kernels/launch in mixture/checks/mstep.mojo and the host mirror in mixture/host/gmm_host_oracle.mojo deleted (both files back to their pre-b512ddf29 text). Code recoverable at main ad7ed2370; define refused in core/six_lane_experiment_guards.mojo."
+  }
+ ]
 }
