@@ -147,8 +147,48 @@ class IVFIndex(NumericModeMixin):
             )
         return fn
 
+    def _is_built(self):
+        """`fit` (or `load`) has run: the list vectors are in numpy or held
+        on the device by the resident build. Glue: reads two dict keys and
+        never makes the vectors."""
+        d = self.__dict__
+        return "list_data_" in d or "_device_list_data" in d
+
+    def __getattr__(self, name):
+        # `list_data_` of a RESIDENT build (lane gap-ivf, 2026-10-08) is made
+        # on first read, outside fit and search: `save`, a pickle, `extend`,
+        # `_clone` and the shard split read it through here.
+        if name == "list_data_" and "_device_list_data" in self.__dict__:
+            self._materialize_list_data()
+            return self.__dict__["list_data_"]
+        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
+    def _materialize_list_data(self):
+        """Write the resident index's list vectors into a new numpy array
+        (`ivf_flat_index_export`, one device copy in Mojo) and re-key the held
+        handle to it: the handle keeps serving searches, since the array holds
+        the words it holds."""
+        d = self.__dict__
+        if "_device_list_data" not in d:
+            return
+        cached = d.get("_resident")
+        if cached is None:
+            raise RuntimeError("mojolearn IVFIndex: the resident index was released before its list data was read")
+        n, dim = self.n_rows_, self.n_features_in_
+        data = empty((n * dim,), "<f4")
+        cached[2].ivf_flat_index_export(cached[1], addr(data, name="list_data_"), n * dim)
+        d["list_data_"] = data.reshape((n, dim))
+        del d["_device_list_data"]
+        d["_resident"] = (self._resident_key(False) + (id(cached[2]),), cached[1], cached[2])
+
     def fit(self, X, y=None):
-        """Build the index. Returns `self`."""
+        """Build the index. Returns `self`.
+
+        On a GPU binding with `ivf_flat_build_resident` (lane gap-ivf,
+        2026-10-08) the index STAYS ON THE DEVICE: the four small arrays are
+        written here, the list vectors stay in the binding's resident handle
+        that `search` names, and `list_data_` is made on first read."""
+        self.__dict__.pop("_device_list_data", None)
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, dim = (int(s) for s in x.shape)  # glue: the two shape dims
@@ -162,8 +202,31 @@ class IVFIndex(NumericModeMixin):
         norms = empty((n_lists,), "<f4")
         offsets = empty((n_lists + 1,), "<i4")
         indices = empty((n,), "<i4")
+        native = self._extension()
+        resident_build = getattr(native, "ivf_flat_build_resident", None)
+        if resident_build is not None:
+            handle = int(resident_build(
+                # ORDER MATCHES bindings/_mojolearn_ivf.mojo (ivf_flat_build_resident).
+                # x, centers_out, center_norms_out, offsets_out, indices_out
+                [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(norms, name="center_norms_"),
+                 addr(offsets, name="list_offsets_"), addr(indices, name="list_indices_")],
+                # n, dim, n_lists, kmeans_n_iters, metric, seed
+                [n, dim, n_lists, iters, metric, seed],
+            ))
+            self.__dict__.pop("list_data_", None)
+            self.centers_ = centers.reshape((n_lists, dim))
+            self.center_norms_ = norms
+            self.list_offsets_ = offsets
+            self.list_indices_ = indices
+            self.n_features_in_ = dim
+            self.n_rows_ = n
+            self.n_lists_ = n_lists
+            self.metric_code_ = metric
+            self._device_list_data = True
+            self._resident = (self._resident_key(False) + (id(native),), handle, native)
+            return self
         data = empty((n * dim,), "<f4")
-        self._entry(self._extension(), "ivf_flat_build")(
+        self._entry(native, "ivf_flat_build")(
             # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_build).
             # x, centers_out, center_norms_out, offsets_out, indices_out, list_data_out
             [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(norms, name="center_norms_"),
@@ -187,8 +250,10 @@ class IVFIndex(NumericModeMixin):
     # the closure of DEVIATION 1804) --
 
     def _resident_key(self, partial):
-        arrays = tuple(getattr(self, name) for name, _dtype in _INDEX_ARRAYS)  # glue: the five index array names
-        return (tuple((id(a), addr_ro(a, name=name), tuple(a.shape))
+        # a resident build's list vectors are on the device ("device" marks
+        # them); reading the dict, not the attribute, so no export happens
+        arrays = tuple(self.__dict__.get(name) for name, _dtype in _INDEX_ARRAYS)  # glue: the five index array names
+        return (tuple(("device",) if a is None else (id(a), addr_ro(a, name=name), tuple(a.shape))
                       for a, (name, _dtype) in zip(arrays, _INDEX_ARRAYS)),  # glue: addresses of five index arrays
                 self.n_rows_, self.n_features_in_, self.n_lists_, self.metric_code_, bool(partial))
 
@@ -207,6 +272,9 @@ class IVFIndex(NumericModeMixin):
         cached = self.__dict__.get("_resident")
         if cached is not None and cached[0] == key:
             return cached[1]
+        # another binding or a partial-storage search: the vectors come to
+        # numpy first, then the handle is replaced by a prepared one
+        self._materialize_list_data()
         self._release_resident()
         n, dim = self.n_rows_, self.n_features_in_
         handle = int(prepare(
@@ -225,6 +293,8 @@ class IVFIndex(NumericModeMixin):
     def _release_resident(self):
         """Drop the held index, if any. Quiet on a binding that cannot be
         reached any more (interpreter shutdown) or a handle already gone."""
+        # a resident build's vectors live only in the handle: export first
+        self._materialize_list_data()
         cached = self.__dict__.pop("_resident", None)
         if cached is None:
             return
@@ -235,13 +305,16 @@ class IVFIndex(NumericModeMixin):
 
     def __del__(self):
         try:
+            self.__dict__.pop("_device_list_data", None)
             self._release_resident()
         except Exception:  # noqa: BLE001
             pass
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no handle: the integer means
-        something only in the process and registry that minted it."""
+        something only in the process and registry that minted it. A resident
+        build's list vectors are exported first, so the copy carries them."""
+        self._materialize_list_data()
         state = self.__dict__.copy()
         state.pop("_resident", None)
         return state
@@ -265,7 +338,7 @@ class IVFIndex(NumericModeMixin):
         applied to the merged candidates of the probed lists, before any
         distance). A query whose probed lists keep fewer than `n_neighbors`
         rows raises, as an unfiltered short query does (DEVIATION 1794)."""
-        if not hasattr(self, "list_data_"):
+        if not self._is_built():
             raise ValueError("mojolearn IVFIndex: call fit (or load) before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
         m, dim = q.shape
@@ -337,7 +410,7 @@ class IVFIndex(NumericModeMixin):
 
         Public on a CPU-only install: assignment against saved centres trains
         nothing, and `_mojolearn_ivf_search_host` carries it."""
-        if not hasattr(self, "list_data_"):
+        if not self._is_built():
             raise ValueError("mojolearn IVFIndex: call fit (or load) before extend")
         x, _ = as_f32_c(X, ndim=2, name="X")
         m, dim = (int(v) for v in x.shape)  # glue: the two shape dims
@@ -348,6 +421,7 @@ class IVFIndex(NumericModeMixin):
                 f"mojolearn IVFIndex: metric {self.metric!r} does not name the metric this index was "
                 f"built under ({_METRIC_NAMES[self.metric_code_]!r}); a built index has one metric"
             )
+        self._materialize_list_data()   # the extend reads the old vectors
         self._release_resident()
         n, n_lists = self.n_rows_, self.n_lists_
         total = n + m
@@ -379,7 +453,7 @@ class IVFIndex(NumericModeMixin):
         """A new instance holding copies of this index's arrays (cuVS
         `ivf_flat::clone`'s role), so an extend on it leaves this one as it
         was."""
-        if not hasattr(self, "list_data_"):
+        if not self._is_built():
             raise ValueError("mojolearn IVFIndex: call fit (or load) before _clone")
         c = type(self)(n_lists=self.n_lists, n_probes=self.n_probes, n_neighbors=self.n_neighbors,
                        kmeans_n_iters=self.kmeans_n_iters, metric=self.metric, random_state=self.random_state)
@@ -398,7 +472,7 @@ class IVFIndex(NumericModeMixin):
         as `fit` left them, `meta` `<i8` [n_rows, dim, n_lists, metric,
         n_probes, n_neighbors, kmeans_n_iters, random_state] and the tier.
         A loaded index searches; it does not rebuild."""
-        if not hasattr(self, "list_data_"):
+        if not self._is_built():
             raise RuntimeError("mojolearn IVFIndex: call fit before save")
         from .decomposition import _saved_mode
         arrays = {

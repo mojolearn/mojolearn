@@ -84,7 +84,8 @@ def or_build(x: List[Float32], n: Int, dim: Int, n_lists: Int, iters: Int, seed:
         var cb = List[Float32](length=n_codes * pq_len, fill=Float32(0.0))
         var lab = List[UInt32](length=n, fill=UInt32(0))
         _ = host_kmeans_fit(sub, n, pq_len, n_codes, cb, lab, List[Float32](), 0, pq_iters, Float64(1e-4),
-                            UInt64(seed), 1, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, Float64(2.0))
+                            UInt64(seed), 1, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, Float64(2.0),
+                            lazy_shift=True)  # the device codebooks' lazy_shift (x_ann/ivf_pq_device.mojo)
         for e in range(len(cb)):
             codebooks.append(cb[e])
     var codes = List[Int32](length=n * pq_dim, fill=Int32(0))

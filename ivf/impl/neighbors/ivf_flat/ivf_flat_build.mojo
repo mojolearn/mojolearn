@@ -12,7 +12,7 @@ THE REFERENCE'S THREE STEPS AND THIS IMPLEMENTATION'S
 
 | reference | line | here |
 |---|---|---|
-| train the quantizer on a strided subsample | `:414-437` | the WHOLE dataset (DEVIATION 1781) through the implemented k-means |
+| train the quantizer on a strided subsample | `:414-437` | the strided subsample in exact integers (`IVF_TRAINSET_STRIDE`, `ivf_trainset_stride`, lane gap-ivf 2026-10-08; the whole dataset under `-D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF`, DEVIATION 1781) through the implemented k-means |
 | `kmeans::predict` the labels, in batches | `:222-224` | `cluster/impl/kmeans.mojo::predict`, one call |
 | `build_index_kernel` scatters into the lists | `:317-325` | `ivf/checks/list_layout.mojo::build_list_layout` (DEVIATIONS 1782/1783) |
 
@@ -62,7 +62,7 @@ way it is there -- a stale membership is a stale summation set.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32
+from bindings.hostptr import copy_f32, f32_ptr, read_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from cluster.impl.detail.kmeans import kmeans_fit_main_traced
@@ -75,9 +75,16 @@ from cluster.impl.kmeans_params import (
 from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
 from ivf.checks.list_layout import ListLayout, build_list_layout, extend_list_layout
-from ivf.impl.neighbors.ivf_flat.ivf_group_device import ivf_extend_layout_device, ivf_list_layout_device
+from ivf.impl.neighbors.ivf_flat.ivf_group_device import (
+    IvfDeviceLayout,
+    ivf_extend_layout_device,
+    ivf_list_layout_device,
+    ivf_list_layout_device_resident,
+)
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IVF_MAGNITUDE_BOUND,
+    IVF_TRAINSET_STRIDE,
+    ivf_trainset_stride,
     IvfFlatIndex,
     IvfFlatIndexParams,
     ivf_index_params_validate,
@@ -93,6 +100,7 @@ from checks.numerics import NUMERIC_IDENTICAL as _IVF_NUMERIC_IDENTICAL
 from cluster.estimator import plan_sum_scale
 from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
     IVF_IDN_DEVICE_FINITE,
+    ivf_device_first_over_bound,
     ivf_validate_device,
 )
 
@@ -247,6 +255,31 @@ def ivf_gather_rows_kernel(
         c += Int(block_dim.x)
 
 
+comptime IVF_STRIDE_BLOCKS = 1024
+comptime IVF_STRIDE_TPB = 256
+
+
+def ivf_stride_rows_kernel(
+    src: MutPointer[Float32, MutAnyOrigin], stride: Int32, n_train: Int32, dim: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """`IVF_TRAINSET_STRIDE`'s trainset (lane gap-ivf, 2026-10-08): row
+    `j * stride` of the row-major `src` copied to row `j` of `dst`, for
+    `j < n_train`. A grid-stride loop over the `n_train * dim` destination
+    words on IVF_STRIDE_BLOCKS blocks; each word is written once, by a copy,
+    so the result is independent of the launch geometry and of the vendor."""
+    var d = Int(dim)
+    var total = Int(n_train) * d
+    var s = Int(stride)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var step = Int(block_dim.x) * IVF_STRIDE_BLOCKS
+    while t < total:
+        var j = t // d
+        var c = t - j * d
+        dst.unsafe_store(t, src.unsafe_load(j * s * d + c))
+        t += step
+
+
 def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
     """`n_train` distinct row ids, ascending, from a seeded partial
     Fisher-Yates over `0 .. n_rows` (splitmix64)."""
@@ -395,7 +428,7 @@ def compute_row_norms(
 
 
 def plan_quantizer_scale(
-    x: List[Float32], n_rows: Int, dim: Int
+    x: List[Float32], n_rows: Int, dim: Int, stride: Int = 1
 ) raises -> Float64:
     """The fixed-point multiplier for the centroid accumulation.
 
@@ -421,7 +454,9 @@ def plan_quantizer_scale(
         var columns = List[Float64](length=dim, fill=Float64(0.0))
         var xp = x.unsafe_ptr()
         for r in range(n_rows):
-            var b = r * dim
+            # `stride` (lane gap-ivf): row r of the strided trainset is row
+            # r * stride of `x`, so this is the walk over the gathered rows
+            var b = r * stride * dim
             for f in range(dim):
                 columns[f] += Float64(abs(xp.unsafe_load(b + f)))
         var largest = Float64(0.0)
@@ -433,10 +468,62 @@ def plan_quantizer_scale(
     for f in range(dim):
         var column = Float64(0.0)
         for r in range(n_rows):
-            column += Float64(abs(x[r * dim + f]))
+            column += Float64(abs(x[r * stride * dim + f]))
         if column > worst:
             worst = column
     return choose_scale(worst, n_rows)
+
+
+struct IvfFlatBuildDevice(Movable):
+    """The device side a RESIDENT build leaves behind (lane gap-ivf,
+    2026-10-08, docs/plans/gaps-2026-10-08.md section 6 item 1): the coarse
+    centroids, their squared norms, the permuted list vectors and the device
+    CSR pair, the buffers `ivf_flat_search.mojo::IvfFlatDevice` holds. Before,
+    `IVFIndex.fit` downloaded the n_rows x dim list data into numpy and the
+    first search admitted and uploaded it again (the L40S stage log,
+    bench/results/ivf-stages-l40s-20261001.log: copy_out 83 ms, read_admit
+    195 ms, device_prepare 31 ms, plus the layout's 352 MB download). The
+    same words: nothing here computes, the buffers are the build's own.
+    `IvfFlatBuildDevice(ctx)` is the empty placeholder a non-resident build
+    passes (one-word buffers, never read)."""
+
+    var dcenters: DeviceBuffer[DType.float32]
+    var dcenter_norm: DeviceBuffer[DType.float32]
+    var dlist_data: DeviceBuffer[DType.float32]
+    var d_off: DeviceBuffer[DType.int32]
+    var d_ind: DeviceBuffer[DType.uint32]
+
+    def __init__(out self, ctx: DeviceContext) raises:
+        self.dcenters = ctx.enqueue_create_buffer[DType.float32](1)
+        self.dcenter_norm = ctx.enqueue_create_buffer[DType.float32](1)
+        self.dlist_data = ctx.enqueue_create_buffer[DType.float32](1)
+        self.d_off = ctx.enqueue_create_buffer[DType.int32](1)
+        self.d_ind = ctx.enqueue_create_buffer[DType.uint32](1)
+
+
+#: The resident build reads the caller's rows straight from their address
+#: (lane gap-ivf): no n_rows x dim host copy into a Mojo list first (the
+#: stage log's copy_in, 175 ms on the L40S). Only where no host walk of the
+#: rows is compiled in: IDENTICAL (the finiteness scan and the sum scale run
+#: on the device) and none of the Apple FAST host samplers. A refused value
+#: or label copies the rows then, only to name the offender.
+comptime IVF_BUILD_FROM_POINTER = (
+    IVF_IDN_DEVICE_FINITE and IVF_IDN_DEVICE_SCALE
+    and not IVF_FAST_TRAINSET and not IVF_FAST_SEED and not IVF_FAST_RANDOM_INIT
+    and not IVF_FAST_DEVICE_VALIDATE
+)
+
+
+def upload_f32_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`upload_f32` from a caller's float32 buffer at `addr` (alive for the
+    call): the raw host-pointer copy `upload_f32` makes under
+    ANN3_HOST_PASSES, drained before the return."""
+    if n <= 0:
+        raise Error("upload_f32_addr: refusing to upload an empty buffer")
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=f32_ptr(addr))
+    ctx.synchronize()
+    return buf^
 
 
 def ivf_flat_build(
@@ -447,6 +534,43 @@ def ivf_flat_build(
     n_rows: Int,
     dim: Int,
     with_list_data: Bool = True,
+) raises -> IvfFlatIndex:
+    """`ivf_flat::build` (see `_ivf_flat_build_impl`), the index on the host."""
+    var unused = IvfFlatBuildDevice(ctx)
+    var index = _ivf_flat_build_impl[False](ctx, trace, params, x, 0, n_rows, dim, with_list_data, unused)
+    _ = unused^
+    return index^
+
+
+def ivf_flat_build_resident(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    params: IvfFlatIndexParams,
+    x: List[Float32],
+    x_addr: Int,
+    n_rows: Int,
+    dim: Int,
+    mut dev: IvfFlatBuildDevice,
+) raises -> IvfFlatIndex:
+    """`ivf_flat::build` with the index LEFT ON THE DEVICE (lane gap-ivf):
+    `dev` receives the centroids, their norms, the list vectors and the
+    device CSR; the returned host index carries the centres, their norms, the
+    offsets and the carried ids, and an EMPTY `list_data` (filled only on a
+    traced build, whose card records it). `x` may be empty when
+    `IVF_BUILD_FROM_POINTER` holds: the rows are then read from `x_addr`."""
+    return _ivf_flat_build_impl[True](ctx, trace, params, x, x_addr, n_rows, dim, True, dev)
+
+
+def _ivf_flat_build_impl[resident: Bool](
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    params: IvfFlatIndexParams,
+    x: List[Float32],
+    x_addr: Int,
+    n_rows: Int,
+    dim: Int,
+    with_list_data: Bool,
+    mut out_dev: IvfFlatBuildDevice,
 ) raises -> IvfFlatIndex:
     """`ivf_flat::build`, `ivf_flat_build.cuh:390-444`.
 
@@ -481,6 +605,10 @@ def ivf_flat_build(
     # (off: no sync, no print)
     var st = AnnStages("ivf_flat_build")
     ivf_index_params_validate(params, n_rows, dim)
+    # lane gap-ivf: a resident build may read the rows from the caller's buffer
+    var from_ptr = False
+    comptime if resident and IVF_BUILD_FROM_POINTER:
+        from_ptr = len(x) == 0 and x_addr != 0
     comptime if IVF_FAST_DEVICE_VALIDATE:
         # lane af-vsearch: the extent refusal now (it raises before any scan);
         # the word test runs on the device after the upload below
@@ -520,8 +648,16 @@ def ivf_flat_build(
     comptime if IVF_FAST_TRAINSET:
         if n_rows > IVF_FAST_ROWS_PER_LIST * n_lists:
             n_train = IVF_FAST_ROWS_PER_LIST * n_lists
+    # lane gap-ivf (2026-10-08): IDENTICAL on every column, FAST off Apple:
+    # the strided trainset (`IVF_TRAINSET_STRIDE`, ivf_flat_index.mojo), rows
+    # 0, s, 2s, ... gathered ON THE DEVICE from `dx` below (no host gather).
+    # Exclusive with IVF_FAST_TRAINSET (FAST on Apple) by construction.
+    var train_stride = 1
+    comptime if IVF_TRAINSET_STRIDE:
+        train_stride = ivf_trainset_stride(n_rows, n_lists)
+        n_train = n_rows // train_stride
     var xt = List[Float32]()
-    if n_train < n_rows:
+    if n_train < n_rows and train_stride == 1:
         var rows = ivf_trainset_rows(n_rows, n_train, UInt64(params.seed))
         comptime if ANN3_TRAINSET_COPY:
             # lane ann-apple3, OPT-IN: one memcpy per sampled row
@@ -537,7 +673,9 @@ def ivf_flat_build(
 
     var sum_scale = Float64(0.0)
     comptime if not IVF_IDN_DEVICE_SCALE:
-        if n_train < n_rows:
+        if train_stride > 1:
+            sum_scale = plan_quantizer_scale(x, n_train, dim, train_stride)
+        elif n_train < n_rows:
             sum_scale = plan_quantizer_scale(xt, n_train, dim)
         else:
             sum_scale = plan_quantizer_scale(x, n_rows, dim)
@@ -547,10 +685,20 @@ def ivf_flat_build(
     var weight_scale = choose_scale(Float64(n_train), n_train)
     st.host("trainset_scale")
 
-    var dx = upload_f32(ctx, x)
+    var dx: DeviceBuffer[DType.float32]
+    if from_ptr:
+        dx = upload_f32_addr(ctx, x_addr, n_rows * dim)
+    else:
+        dx = upload_f32(ctx, x)
     comptime if IVF_IDN_DEVICE_FINITE and IVF_IDN_DEVICE_SCALE:
         # every training row is one of these rows, so this covers `dxt`
-        ivf_validate_device(ctx, dx, x, n_rows, dim, "dataset")
+        if from_ptr:
+            # the device scan; the rows cross to the host only to name a hit
+            if ivf_device_first_over_bound(ctx, dx, n_rows * dim) >= 0:
+                var xh = read_f32(x_addr, n_rows * dim)
+                ivf_validate_device(ctx, dx, xh, n_rows, dim, "dataset")
+        else:
+            ivf_validate_device(ctx, dx, x, n_rows, dim, "dataset")
     comptime if IVF_FAST_DEVICE_VALIDATE:
         var dflag = ctx.enqueue_create_buffer[DType.int32](1)
         dflag.enqueue_fill(Int32(0))
@@ -567,9 +715,18 @@ def ivf_flat_build(
         _ = hflag^
         _ = dflag^
         st.host("device_validate")
-    if n_train == n_rows:
-        xt.append(Float32(0.0))
-    var dxt = upload_f32(ctx, xt)
+    var dxt: DeviceBuffer[DType.float32]
+    if train_stride > 1:
+        # the strided trainset, gathered from the rows already on the device
+        dxt = ctx.enqueue_create_buffer[DType.float32](n_train * dim)
+        ctx.enqueue_function[ivf_stride_rows_kernel](
+            dx.unsafe_ptr(), Int32(train_stride), Int32(n_train), Int32(dim), dxt.unsafe_ptr(),
+            grid_dim=(IVF_STRIDE_BLOCKS, 1, 1), block_dim=(IVF_STRIDE_TPB, 1, 1),
+        )
+    else:
+        if n_train == n_rows:
+            xt.append(Float32(0.0))
+        dxt = upload_f32(ctx, xt)
     var weights = ctx.enqueue_create_buffer[DType.float32](n_train)
     weights.enqueue_fill(Float32(1.0))
     var centroids = ctx.enqueue_create_buffer[DType.float32](n_lists * dim)
@@ -728,6 +885,64 @@ def ivf_flat_build(
 
     var host_centers = download_f32(ctx, centroids, n_lists * dim)
     var host_center_norms = download_f32(ctx, center_norm, n_lists)
+
+    comptime if resident:
+        # lane gap-ivf: THE RESIDENT TAIL. The same layout kernels as
+        # `ivf_list_layout_device`; the list vectors and the device CSR stay
+        # on the device in `out_dev`, and the labels are downloaded only to
+        # name a bad one.
+        st.host("download")
+        var rl = ivf_list_layout_device_resident(ctx, labels, dx, n_rows, dim, n_lists)
+        if Int(rl.max_label) >= n_lists:
+            var bad_labels = download_u32(ctx, labels, n_rows)
+            if from_ptr:
+                var xh = read_f32(x_addr, n_rows * dim)
+                _ = build_list_layout(bad_labels, xh, n_rows, dim, n_lists, with_data=False)
+            else:
+                _ = build_list_layout(bad_labels, x, n_rows, dim, n_lists, with_data=False)
+            raise Error("build_list_layout: a label lies outside [0, n_lists)")
+        var r_offsets = List[Int32]()
+        var r_indices = List[UInt32]()
+        swap(r_offsets, rl.offsets)
+        swap(r_indices, rl.list_indices)
+        var r_data = List[Float32]()
+        if trace.enabled:
+            # a traced build records the vectors (the card does not change)
+            r_data = download_f32(ctx, rl.d_data, n_rows * dim)
+            trace.record_list_i32("ivf.list_offsets", r_offsets)
+            var r_carried = List[Int32]()
+            for i in range(n_rows):
+                r_carried.append(Int32(r_indices[i]))
+            trace.record_list_i32("ivf.list_indices", r_carried)
+            trace.record_list_f32("ivf.list_data", r_data)
+        swap(out_dev.dcenters, centroids)
+        swap(out_dev.dcenter_norm, center_norm)
+        swap(out_dev.dlist_data, rl.d_data)
+        swap(out_dev.d_off, rl.d_off)
+        swap(out_dev.d_ind, rl.d_ind)
+        _ = rl^
+        _ = dx^
+        _ = dxt^
+        _ = weights^
+        _ = centroids^
+        _ = labels^
+        _ = x_norm^
+        _ = min_dist^
+        _ = center_norm^
+        st.host("layout_resident")
+        return IvfFlatIndex(
+            n_lists,
+            dim,
+            n_rows,
+            params.metric,
+            host_centers^,
+            host_center_norms^,
+            r_offsets^,
+            r_indices^,
+            r_data^,
+            List[UInt32](),
+        )
+
     var host_labels = download_u32(ctx, labels, n_rows)
     st.host("download")
 

@@ -32,6 +32,9 @@ from std.ffi import _Global
 from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from std.memory import memcpy
+from bindings.hostptr import f32_ptr
+from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex, IvfFlatSearchParams
 from ivf.impl.neighbors.ivf_flat.ivf_flat_search import (
     IvfFlatDevice,
@@ -52,6 +55,15 @@ struct ResidentIvfFlat(Movable):
         self.dev = IvfFlatDevice(ctx, index)
         self.index = index^
         self.partial_storage = partial_storage
+
+    def __init__(
+        out self, ctx: DeviceContext, var index: IvfFlatIndex, var built: IvfFlatBuildDevice
+    ) raises:
+        """A RESIDENT build's index (lane gap-ivf, 2026-10-08): the device
+        buffers the build left behind, no upload; `index.list_data` empty."""
+        self.dev = IvfFlatDevice(ctx, index, built^)
+        self.index = index^
+        self.partial_storage = False
 
 
 struct IvfFlatRegistry(Movable):
@@ -84,6 +96,48 @@ def ivf_resident_prepare(ctx: DeviceContext, var index: IvfFlatIndex, partial_st
     state[].next_id += 1
     state[].entries[handle] = entry^
     return handle
+
+
+def ivf_resident_register_built(
+    ctx: DeviceContext, var index: IvfFlatIndex, var built: IvfFlatBuildDevice
+) raises -> Int:
+    """Register a resident build (`ivf_flat_build_resident`) under a new
+    handle: `IVFIndex.fit`'s index stays on the device until its first
+    `search` and every later one (lane gap-ivf, plan section 6 item 1)."""
+    var state = IVF_FLAT_REGISTRY.get_or_create_ptr()
+    if state[].next_id == 9223372036854775807:
+        raise Error("resident IVF-Flat index handle space exhausted")
+    var entry = ResidentIvfFlat(ctx, index^, built^)
+    var handle = state[].next_id
+    state[].next_id += 1
+    state[].entries[handle] = entry^
+    return handle
+
+
+def ivf_resident_export_list_data(ctx: DeviceContext, handle: Int, dst_addr: Int, count: Int) raises:
+    """The handle's n_rows x dim list vectors written to the caller's float32
+    buffer at `dst_addr` (`IVFIndex.list_data_`, made on first read: `save`,
+    a pickle, `extend`, a clone or a shard split; never inside fit or
+    search). One device copy into a staging host buffer, one memcpy."""
+    var state = IVF_FLAT_REGISTRY.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released resident IVF-Flat index handle")
+    ref e = state[].entries[handle]
+    var n = e.index.n_rows * e.index.dim
+    if count != n:
+        raise Error(
+            "ivf_flat_index_export: the buffer holds " + String(count)
+            + " words, the index " + String(n)
+        )
+    if n == 0:
+        return
+    if dst_addr == 0:
+        raise Error("ivf_flat_index_export: null buffer address")
+    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=e.dev.dlist_data)
+    ctx.synchronize()
+    memcpy(dest=f32_ptr(dst_addr), src=host.unsafe_ptr(), count=n)
+    _ = host^
 
 
 def ivf_resident_release(handle: Int) raises:

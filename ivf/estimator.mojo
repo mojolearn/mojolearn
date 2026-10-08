@@ -69,7 +69,12 @@ from max.gpu.host import DeviceContext
 
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from core.identity_trace import IdentityTrace
-from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_flat_build, ivf_flat_extend
+from ivf.impl.neighbors.ivf_flat.ivf_flat_build import (
+    IvfFlatBuildDevice,
+    ivf_flat_build,
+    ivf_flat_build_resident,
+    ivf_flat_extend,
+)
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IvfFlatIndex,
     IvfFlatIndexParams,
@@ -112,6 +117,33 @@ def ivf_flat_build_host(
     params.seed = seed
     var trace = IdentityTrace()
     return ivf_flat_build(ctx, trace, params, x, n_rows, dim, with_list_data)
+
+
+def ivf_flat_build_resident_host(
+    ctx: DeviceContext,
+    x: List[Float32],
+    x_addr: Int,
+    n_rows: Int,
+    dim: Int,
+    n_lists: Int,
+    kmeans_n_iters: Int,
+    metric: Int,
+    seed: UInt64,
+    mut dev: IvfFlatBuildDevice,
+) raises -> IvfFlatIndex:
+    """`ivf_flat_build_host` with the index left on the device (lane gap-ivf,
+    2026-10-08; `ivf_flat_build_resident`): the same parameters, the same
+    statements, the vectors and the device CSR in `dev`. `x` may be empty
+    when the rows are read from `x_addr` (`IVF_BUILD_FROM_POINTER`)."""
+    ivf_refuse_algorithm(String("ivf_flat"))
+    var params = IvfFlatIndexParams.default()
+    params.n_lists = n_lists
+    params.kmeans_n_iters = kmeans_n_iters
+    params.kmeans_trainset_fraction = Float64(1.0)
+    params.metric = metric
+    params.seed = seed
+    var trace = IdentityTrace()
+    return ivf_flat_build_resident(ctx, trace, params, x, x_addr, n_rows, dim, dev)
 
 
 def ivf_flat_search_host(
