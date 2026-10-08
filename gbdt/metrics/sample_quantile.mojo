@@ -318,3 +318,53 @@ def calculate_optimal_const_approx_for_mape(
     comptime if SAMPLE_QUANTILE_SABOTAGE:
         return Float32(calc_sample_quantile(target, w, 0.75))
     return Float32(calc_sample_quantile(target, w, 0.5))
+
+
+# Moved from optimal_const_for_loss.mojo (lane rehearsal-suite-green,
+# 2026-10-08) so the CPU oracles take it without importing the pointwise
+# target kernels; optimal_const_for_loss.mojo imports it back.
+def calculate_weighted_target_average(
+    target: List[Float32],
+    weights: List[Float32],
+    has_weights: Bool,
+) raises -> Float32:
+    """`NCB::CalculateWeightedTargetAverage`, including the float return.
+
+    Their `weights.empty()` is `has_weights == False` here: the fit carries
+    a ones buffer for the unweighted case, and their empty-weights branch
+    is the same arithmetic with weight 1 -- but the BRANCH is kept, because
+    `summaryWeight` is `target.size()` (an exact integer sum) on their
+    empty branch and an accumulated float sum on the other, and those can
+    differ in the last bit at scale.
+
+    THE SUMS ARE `bfa_tree_sum`'s fixed blocked tree (cpu-gpu-cleanup
+    t-gbdt, 2026-10-02; their serial chain before), the order
+    `optimal_const_device.mojo` folds on the device; the weighted target
+    terms are exact products, so the fused `fma` chain they replace has
+    no counterpart left to contract.
+    """
+    var n = len(target)
+    if n == 0:
+        raise Error("optimal const approx: empty target")
+    var summary_weight: Float64
+    var vals = List[Float64](capacity=n)
+    if not has_weights:
+        summary_weight = Float64(n)
+        for i in range(n):
+            vals.append(Float64(target[i]))
+    else:
+        if len(weights) != n:
+            raise Error(
+                "optimal const approx: " + String(len(weights))
+                + " weights for " + String(n) + " targets"
+            )
+        for i in range(n):
+            vals.append(Float64(weights[i]))
+        summary_weight = bfa_tree_sum(vals)
+        for i in range(n):
+            # a float32 times a float32 is exact in double: no rounding
+            # here, whatever the build contracts
+            vals[i] = Float64(target[i]) * Float64(weights[i])
+    var target_sum = bfa_tree_sum(vals)
+    # their `return targetSum / summaryWeight;` through `inline float`
+    return Float32(target_sum / summary_weight)

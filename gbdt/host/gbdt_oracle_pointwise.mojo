@@ -91,7 +91,7 @@ from gbdt.host.gbdt_oracle_ordered import (
     _partition_stat_n,
 )
 from gbdt.host.gbdt_oracle_rmse import GbdtRmseHostFit, gbdt_rmse_host_model_text
-from gbdt.metrics.optimal_const_for_loss import calculate_weighted_target_average
+from gbdt.metrics.sample_quantile import calculate_weighted_target_average
 from gbdt.overfitting_detector.overfitting_detector import (
     OD_ITER,
     make_overfitting_detector,

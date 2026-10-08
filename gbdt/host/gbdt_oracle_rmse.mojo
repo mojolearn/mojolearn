@@ -85,7 +85,7 @@ from std.math import exp, fma, log
 from std.memory import bitcast
 from checks.numerics import ftz, identical_mul_add
 from gbdt.data.permutation import TRandom
-from gbdt.metrics.optimal_const_for_loss import calculate_weighted_target_average
+from gbdt.metrics.sample_quantile import calculate_weighted_target_average
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import (
