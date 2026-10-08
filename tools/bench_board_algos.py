@@ -3811,15 +3811,32 @@ def _build_layer(lane, arm, D):
             info["config"] = "mojolearn.%s(%s, weight=torch's init)" % (name, kw)
             info["weights_loaded"] = info["output_comparable"] = True
             dyh = {}
+            # lane gap-neural-io: y, dy and the (V, d) gradient stay on the device, as the torch
+            # arm's tensors (dy goes up on the first fit, as torch's `.to(dev)`); y is read back in
+            # outputs(), outside the clock. A binding without the device entries, or
+            # MOJOLEARN_SEQ_DEVICE_IO_OFF=1 (the before arm), keeps host arrays.
+            import os as _os
+            dev_io = (getattr(layer, "_device_io", False)
+                      and _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") != "1"
+                      and _os.environ.get("MOJOLEARN_IDN_ALL_OFF", "") != "1")
+            if dev_io:
+                try:
+                    layer._dev_module()
+                    info["output_home"] = "device"
+                except RuntimeError:
+                    dev_io = False
 
             def fit():
-                y = layer.forward(ids)
+                y = layer.forward(ids, device=True) if dev_io else layer.forward(ids)
                 if "dy" not in dyh:
-                    dyh["dy"] = torch.randn(tuple(np.shape(y)), generator=g).numpy()
+                    dyh["dy"] = torch.randn(tuple(y.shape) if dev_io else tuple(np.shape(y)),
+                                            generator=g).numpy()
+                    if dev_io:
+                        dyh["dy"] = layer.to_device(dyh["dy"])
                 layer.backward(ids, dyh["dy"])
 
             def infer():
-                S["y"] = layer.forward(ids)
+                S["y"] = layer.forward(ids, device=True) if dev_io else layer.forward(ids)
             return _with_upload(Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
                                        record=dict(kw, __library__="mojolearn")), [("ids", ids)])
         if s["task"] in ("gcn", "sage"):
