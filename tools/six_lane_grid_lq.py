@@ -52,7 +52,7 @@ DEFINES_ENV = 'MOJOLEARN_BUILD_DEFINES'
 PREBUILT_TOKEN = 'PREBUILT='  # + store path on the box (tools/six_lane_grid_prebuild.py); render --prebuilt
 IDENTITY_COLUMN = {'nvidia': 'nvidia-native', 'amd': 'amd'}  # six_lane_compare_results REQUIRED_IDENTICAL
 DIGEST_CHARS = 16  # box_job.sh keeps the first 16 hex characters of the race digest
-QUALITY_REL = 1e-6
+QUALITY_REL = 1e-3  # relative: a bits-changing IDENTICAL arm legitimately moves a metric in the 6th digit; 0.1% is the material gate (CLAUDE.md "no material drop")
 TIMING_SOURCE = ('median_ms of our arm: lq RACE ALGOS lines (tools/bench_board_algos.py) or lq CMD GRIDBB lines '
                  '(tools/bench_board.py cells); one run per arm')
 
