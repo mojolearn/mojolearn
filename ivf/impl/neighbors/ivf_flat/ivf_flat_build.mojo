@@ -12,7 +12,7 @@ THE REFERENCE'S THREE STEPS AND THIS IMPLEMENTATION'S
 
 | reference | line | here |
 |---|---|---|
-| train the quantizer on a strided subsample | `:414-437` | the WHOLE dataset (DEVIATION 1781) through the implemented k-means |
+| train the quantizer on a strided subsample | `:414-437` | the strided subsample in exact integers (`IVF_TRAINSET_STRIDE`, `ivf_trainset_stride`, lane gap-ivf 2026-10-08; the whole dataset under `-D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF`, DEVIATION 1781) through the implemented k-means |
 | `kmeans::predict` the labels, in batches | `:222-224` | `cluster/impl/kmeans.mojo::predict`, one call |
 | `build_index_kernel` scatters into the lists | `:317-325` | `ivf/checks/list_layout.mojo::build_list_layout` (DEVIATIONS 1782/1783) |
 
@@ -78,6 +78,8 @@ from ivf.checks.list_layout import ListLayout, build_list_layout, extend_list_la
 from ivf.impl.neighbors.ivf_flat.ivf_group_device import ivf_extend_layout_device, ivf_list_layout_device
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IVF_MAGNITUDE_BOUND,
+    IVF_TRAINSET_STRIDE,
+    ivf_trainset_stride,
     IvfFlatIndex,
     IvfFlatIndexParams,
     ivf_index_params_validate,
@@ -247,6 +249,31 @@ def ivf_gather_rows_kernel(
         c += Int(block_dim.x)
 
 
+comptime IVF_STRIDE_BLOCKS = 1024
+comptime IVF_STRIDE_TPB = 256
+
+
+def ivf_stride_rows_kernel(
+    src: MutPointer[Float32, MutAnyOrigin], stride: Int32, n_train: Int32, dim: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """`IVF_TRAINSET_STRIDE`'s trainset (lane gap-ivf, 2026-10-08): row
+    `j * stride` of the row-major `src` copied to row `j` of `dst`, for
+    `j < n_train`. A grid-stride loop over the `n_train * dim` destination
+    words on IVF_STRIDE_BLOCKS blocks; each word is written once, by a copy,
+    so the result is independent of the launch geometry and of the vendor."""
+    var d = Int(dim)
+    var total = Int(n_train) * d
+    var s = Int(stride)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var step = Int(block_dim.x) * IVF_STRIDE_BLOCKS
+    while t < total:
+        var j = t // d
+        var c = t - j * d
+        dst.unsafe_store(t, src.unsafe_load(j * s * d + c))
+        t += step
+
+
 def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
     """`n_train` distinct row ids, ascending, from a seeded partial
     Fisher-Yates over `0 .. n_rows` (splitmix64)."""
@@ -395,7 +422,7 @@ def compute_row_norms(
 
 
 def plan_quantizer_scale(
-    x: List[Float32], n_rows: Int, dim: Int
+    x: List[Float32], n_rows: Int, dim: Int, stride: Int = 1
 ) raises -> Float64:
     """The fixed-point multiplier for the centroid accumulation.
 
@@ -421,7 +448,9 @@ def plan_quantizer_scale(
         var columns = List[Float64](length=dim, fill=Float64(0.0))
         var xp = x.unsafe_ptr()
         for r in range(n_rows):
-            var b = r * dim
+            # `stride` (lane gap-ivf): row r of the strided trainset is row
+            # r * stride of `x`, so this is the walk over the gathered rows
+            var b = r * stride * dim
             for f in range(dim):
                 columns[f] += Float64(abs(xp.unsafe_load(b + f)))
         var largest = Float64(0.0)
@@ -433,7 +462,7 @@ def plan_quantizer_scale(
     for f in range(dim):
         var column = Float64(0.0)
         for r in range(n_rows):
-            column += Float64(abs(x[r * dim + f]))
+            column += Float64(abs(x[r * stride * dim + f]))
         if column > worst:
             worst = column
     return choose_scale(worst, n_rows)
@@ -520,8 +549,16 @@ def ivf_flat_build(
     comptime if IVF_FAST_TRAINSET:
         if n_rows > IVF_FAST_ROWS_PER_LIST * n_lists:
             n_train = IVF_FAST_ROWS_PER_LIST * n_lists
+    # lane gap-ivf (2026-10-08): IDENTICAL on every column, FAST off Apple:
+    # the strided trainset (`IVF_TRAINSET_STRIDE`, ivf_flat_index.mojo), rows
+    # 0, s, 2s, ... gathered ON THE DEVICE from `dx` below (no host gather).
+    # Exclusive with IVF_FAST_TRAINSET (FAST on Apple) by construction.
+    var train_stride = 1
+    comptime if IVF_TRAINSET_STRIDE:
+        train_stride = ivf_trainset_stride(n_rows, n_lists)
+        n_train = n_rows // train_stride
     var xt = List[Float32]()
-    if n_train < n_rows:
+    if n_train < n_rows and train_stride == 1:
         var rows = ivf_trainset_rows(n_rows, n_train, UInt64(params.seed))
         comptime if ANN3_TRAINSET_COPY:
             # lane ann-apple3, OPT-IN: one memcpy per sampled row
@@ -537,7 +574,9 @@ def ivf_flat_build(
 
     var sum_scale = Float64(0.0)
     comptime if not IVF_IDN_DEVICE_SCALE:
-        if n_train < n_rows:
+        if train_stride > 1:
+            sum_scale = plan_quantizer_scale(x, n_train, dim, train_stride)
+        elif n_train < n_rows:
             sum_scale = plan_quantizer_scale(xt, n_train, dim)
         else:
             sum_scale = plan_quantizer_scale(x, n_rows, dim)
@@ -567,9 +606,18 @@ def ivf_flat_build(
         _ = hflag^
         _ = dflag^
         st.host("device_validate")
-    if n_train == n_rows:
-        xt.append(Float32(0.0))
-    var dxt = upload_f32(ctx, xt)
+    var dxt: DeviceBuffer[DType.float32]
+    if train_stride > 1:
+        # the strided trainset, gathered from the rows already on the device
+        dxt = ctx.enqueue_create_buffer[DType.float32](n_train * dim)
+        ctx.enqueue_function[ivf_stride_rows_kernel](
+            dx.unsafe_ptr(), Int32(train_stride), Int32(n_train), Int32(dim), dxt.unsafe_ptr(),
+            grid_dim=(IVF_STRIDE_BLOCKS, 1, 1), block_dim=(IVF_STRIDE_TPB, 1, 1),
+        )
+    else:
+        if n_train == n_rows:
+            xt.append(Float32(0.0))
+        dxt = upload_f32(ctx, xt)
     var weights = ctx.enqueue_create_buffer[DType.float32](n_train)
     weights.enqueue_fill(Float32(1.0))
     var centroids = ctx.enqueue_create_buffer[DType.float32](n_lists * dim)

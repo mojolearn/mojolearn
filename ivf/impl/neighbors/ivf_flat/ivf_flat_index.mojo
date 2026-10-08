@@ -43,6 +43,9 @@ which is a different sentence and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
 """
 
 from std.memory import bitcast
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_ann.switches import ANN3_HOST_PASSES
 
 from cluster.impl.kmeans_params import (
@@ -82,6 +85,49 @@ comptime IVF_DEFAULT_N_LISTS = 1024
 comptime IVF_DEFAULT_KMEANS_N_ITERS = 20
 comptime IVF_DEFAULT_KMEANS_TRAINSET_FRACTION = Float64(0.5)
 comptime IVF_DEFAULT_N_PROBES = 20
+
+
+#: lane gap-ivf (2026-10-08, docs/plans/gaps-2026-10-08.md section 6 item 2):
+#: THE COARSE QUANTIZER TRAINS ON A FIXED-STRIDE SUBSAMPLE, IDENTICAL on every
+#: column (NVIDIA, AMD, Apple and the host restatement in ivf/host/ivf_host.mojo)
+#: and FAST off Apple; FAST on Apple keeps its measured seeded sample
+#: (`IVF_FAST_TRAINSET`, ivf_flat_build.mojo). This is DEVIATION 1781's closure
+#: as its refusal text asks: cuVS's strided trainset (`ivf_flat_build.cuh:414-437`,
+#: `trainset_ratio = max(1, n_rows / max(fraction * n_rows, n_lists))`, rows
+#: `0, ratio, 2 ratio, ...`) in EXACT INTEGER arithmetic, so no float truncation
+#: can pick different rows on two hosts. `kmeans_trainset_fraction` stays 1.0 at
+#: the entries (its refusal is unchanged); the rule below is the build's own.
+#: Every row is still assigned to the trained centroids and laid into the lists.
+#: -D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF trains on every row again.
+comptime IVF_TRAINSET_STRIDE = (
+    not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+    and not is_defined["MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"]()
+)
+#: The training-row target per list. FAISS's `max_points_per_centroid` (256):
+#: past ~256 rows per centroid Lloyd's centroids stop moving measurably, so more
+#: rows only cost time. A cost rule over every shape, not a board size.
+comptime IVF_TRAIN_ROWS_PER_LIST = 256
+
+
+def ivf_trainset_stride(n_rows: Int, n_lists: Int) -> Int:
+    """The training rows' stride under `IVF_TRAINSET_STRIDE`: rows
+    `0, s, 2 s, ..., (n_rows // s - 1) s` train the quantizer.
+
+    The target row count is cuVS's default fraction 1/2 of the rows (as the
+    integer `n_rows // 2`), capped at `IVF_TRAIN_ROWS_PER_LIST * n_lists`
+    (FAISS's rule) and never below `n_lists` (cuVS's floor, so k-means always
+    has a row per centroid): `s = max(1, n_rows // target)`. The count
+    `n_rows // s` is at least `target`, so at least `n_lists`. Integers only:
+    a function of `(n_rows, n_lists)` alone, the same on every vendor and the
+    host column."""
+    if n_rows <= 1 or n_lists < 1:
+        return 1
+    var target = min(n_rows // 2, IVF_TRAIN_ROWS_PER_LIST * n_lists)
+    if target < n_lists:
+        target = n_lists
+    if target <= 0:
+        return 1
+    return max(1, n_rows // target)
 """`ivf_flat.hpp:30,32,34,78`, unchanged."""
 
 
