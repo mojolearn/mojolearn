@@ -266,7 +266,7 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(c['verdict'], 'FASTER')
         self.assertAlmostEqual(c['vendors']['nvidia']['candidate_over_baseline']['scored'], 80 / 102)
         self.assertAlmostEqual(c['vendors']['nvidia']['floor']['scored'], max(__import__('math').log(104 / 100), G.FLOOR_MIN))  # the 4% spread is clamped to the 5% minimum
-        self.assertEqual(cases[('G.expanded:ridge-cv.c=on', 'expanded:ridge-cv@dataset=istella')]['verdict'], 'NO_VERDICT')
+        self.assertEqual(cases[('G.expanded:ridge-cv.c=on', 'expanded:ridge-cv@dataset=istella')]['verdict'], 'SLOWER')  # nv slower beyond its floor, amd within: the average is slower
         s = json.loads((out / 'summary.json').read_text())
         self.assertEqual(s['schema'], 'mojolearn.six-lane-comparison/1')
         ids = {(c['configuration_id'], c['workload_id']): c for c in s['cases']}

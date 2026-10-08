@@ -71,8 +71,10 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 
 1. Freeze one commit per A/B round. Compile it once on cheap boxes (Apple on the M2; NVIDIA/AMD on cheap fast-CPU boxes).
    Only a green frozen build goes to the timing GPUs. New code waits for the next freeze.
-2. IDENTICAL switches are decided by NVIDIA and AMD together: combined faster, and neither vendor materially slower.
-   Apple never votes on IDENTICAL switches and IDENTICAL is never tuned for Apple; Apple must only match bits.
+2. IDENTICAL switches are decided by NVIDIA and AMD together: the verdict is the AVERAGE of the two vendors' ratios against the
+   average noise floor (Andrew, 2026-10-08: "the average of the two must be better"); a vendor pulling the other way is flagged
+   on the cell (vendor split) but does not block the average. Apple never votes on IDENTICAL switches and IDENTICAL is never
+   tuned for Apple; Apple digests are recorded but not required to match (2026-10-07).
 3. Measure IDENTICAL on NVIDIA, AMD and Apple and update every board (main board included) as results land, through the
    board tools only. A full-board run is IDENTICAL on the three; FAST is not rerun.
 4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.

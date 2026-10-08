@@ -74,11 +74,14 @@ class TimingTest(unittest.TestCase):
                  self.dump('ab-amd.json', receipt('w', 'amd', result('amd', amd), result('amd', 1.0)))]
         return T.verdicts(files, floors)['cases'][0]
 
-    def test_verdict_needs_both_vendors_beyond_floor_and_agreeing(self):
+    def test_verdict_is_the_vendor_average_against_the_mean_floor(self):
         self.assertEqual(self.verdict(0.8, 0.85)['verdict'], 'FASTER')
         self.assertEqual(self.verdict(1.3, 1.2)['verdict'], 'SLOWER')
-        self.assertEqual(self.verdict(0.8, 1.02)['verdict'], 'NO_VERDICT')      # AMD inside its floor
-        self.assertEqual(self.verdict(0.8, 1.3)['verdict'], 'NO_VERDICT')       # vendors disagree
+        self.assertEqual(self.verdict(0.8, 1.02)['verdict'], 'FASTER')         # AMD inside its floor; the average is faster
+        split = self.verdict(0.8, 1.3)                                         # vendors disagree: average ~1.02 = within floor, split flagged
+        self.assertEqual(split['verdict'], 'NO_VERDICT')
+        self.assertTrue(any('vendor split' in r for r in split['phases']['scored']['reasons']))
+        self.assertEqual(self.verdict(0.5, 1.3)['verdict'], 'FASTER')          # average 0.81x wins despite the AMD split
         none = self.verdict(0.5, 0.5, floors=dict(floors={}))
         self.assertEqual(none['verdict'], 'NO_VERDICT')
         self.assertIn('nvidia: no A/A floor', none['phases']['scored']['reasons'])

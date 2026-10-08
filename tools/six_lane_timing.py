@@ -174,8 +174,13 @@ def floors_from_pairs(paths, min_samples=2):
 
 
 def judge(per_vendor, voters, phase):
-    """per_vendor: {vendor: {'log_ratio': {...}, 'floor': {...} | None}}."""
-    reasons, signs = [], []
+    """per_vendor: {vendor: {'log_ratio': {...}, 'floor': {...} | None}}.
+
+    IDENTICAL switches are decided by the voting vendors TOGETHER (Andrew, 2026-10-05 and 2026-10-08: "the average
+    of the two must be better"): the verdict is the mean of the vendors' log ratios against the mean of their floors.
+    Every voter must have a pair, a measured phase and a floor, or the cell is NO_VERDICT with the reasons. A vendor
+    whose own ratio points the other way beyond its own floor is listed in `vendor_split` (visible, not blocking)."""
+    reasons, logs, floors, split = [], [], [], []
     for vendor in voters:
         row = per_vendor.get(vendor)
         if row is None:
@@ -187,15 +192,21 @@ def judge(per_vendor, voters, phase):
             reasons.append(vendor + ': phase not measured')
         elif f is None:
             reasons.append(vendor + ': no A/A floor')
-        elif abs(r) <= f:
-            reasons.append(vendor + ': |log ratio| %.4f within floor %.4f' % (abs(r), f))
         else:
-            signs.append(1 if r > 0 else -1)
+            logs.append(r)
+            floors.append(f)
     if reasons:
         return dict(verdict='NO_VERDICT', reasons=reasons)
-    if len(set(signs)) != 1:
-        return dict(verdict='NO_VERDICT', reasons=['voting vendors disagree in direction'])
-    return dict(verdict='SLOWER' if signs[0] > 0 else 'FASTER', reasons=[])
+    mean_log = sum(logs) / len(logs)
+    mean_floor = sum(floors) / len(floors)
+    for vendor, r, f in zip([v for v in voters if per_vendor.get(v)], logs, floors):
+        if abs(r) > f and (r > 0) != (mean_log > 0):
+            split.append('%s: %.3fx against the combined direction' % (vendor, math.exp(r)))
+    if abs(mean_log) <= mean_floor:
+        return dict(verdict='NO_VERDICT', reasons=['combined |log ratio| %.4f within the mean floor %.4f' % (abs(mean_log), mean_floor)]
+                    + (['vendor split: ' + '; '.join(split)] if split else []), combined_ratio=math.exp(mean_log), vendor_split=split)
+    return dict(verdict='SLOWER' if mean_log > 0 else 'FASTER', reasons=(['vendor split: ' + '; '.join(split)] if split else []),
+                combined_ratio=math.exp(mean_log), vendor_split=split)
 
 
 def verdicts(ab_paths, floor_doc):
