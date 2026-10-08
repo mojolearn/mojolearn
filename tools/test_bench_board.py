@@ -400,12 +400,17 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     assert rc == 0
     text = capsys.readouterr().out
     # the races outside the algos family: 93 since Oct 2 2026, when the eight neural lanes
-    # that ran OUR CPU binding left the board and CPU opponents left races that have a GPU one
+    # that ran OUR CPU binding left the board and CPU opponents left races that have a GPU one;
+    # 99 since Oct 7 2026 (347f4b2d9): the six GPU inference lanes transformer-decode,
+    # mamba1-decode, mamba2-decode, mamba3-decode, samba-decode and mlp-predict joined
     algos = bb.plan_races("apple", bb.modes_for("apple"), ["algos"], rows=1000)
     before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000)
-    # 328 since Oct 3 2026: the Apple FAST neural tier adds `ours-fast` to the 12 neural races
-    assert len(before) == 93 and sum(len(r["arms"]) for r in before) == 328
-    assert "TOTAL races=%d cells=%d" % (93 + len(algos), 328 + sum(len(r["arms"]) for r in algos)) in text
+    # 328 since Oct 3 2026: the Apple FAST neural tier adds `ours-fast` to the neural races;
+    # 346 since Oct 7 2026: +18 cells from the six inference lanes (transformer-decode
+    # ours, ours-fast, torch-eager-fp32, torch-eager-bf16 = 4; the four Mamba/Samba decode
+    # lanes race ours and ours-fast alone = 8; mlp-predict ours, ours-fast + 4 torch = 6)
+    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 346
+    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 346 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -413,14 +418,15 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     assert algo_lines and all("[in source]" in ln or "not built yet: SKIPPED" in ln
                               for ln in algo_lines)
     assert "our CPU: never raced (the board races only our GPU)" in text
-    # neural on Apple: the 12 GPU lanes (the 8 that ran our CPU binding left the board),
-    # each `ours` plus its torch GPU arms: 52 cells identical only, 64 with the Apple FAST
-    # arm `ours-fast` (see test_plan_neural_fast_on_apple_only)
+    # neural on Apple: the 18 GPU lanes (the 8 that ran our CPU binding left the board; the
+    # six GPU inference lanes *-decode and mlp-predict joined Oct 7 2026), each `ours` plus
+    # its torch GPU arms: 64 cells identical only, 82 with the Apple FAST arm `ours-fast`
+    # (see test_plan_neural_fast_on_apple_only)
     neural = bb.plan_races("apple", ["identical"], ["neural"])
-    assert len(neural) == 12 and sum(len(r["arms"]) for r in neural) == 52
+    assert len(neural) == 18 and sum(len(r["arms"]) for r in neural) == 64
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
-    assert len(both) == 12 and sum(len(r["arms"]) for r in both) == 64
-    assert "family neural     races=12 cells=64" in text
+    assert len(both) == 18 and sum(len(r["arms"]) for r in both) == 82
+    assert "family neural     races=18 cells=82" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
@@ -652,7 +658,17 @@ NEURAL_IDS = [
     "neural/mamba3-forward/gaussian/shape=full",
     "neural/samba-train-step/bytes/shape=full", "neural/samba-forward/bytes/shape=full",
     "neural/mlp-train-step/gaussian/shape=full",
+    # the GPU inference lanes (Oct 7 2026, 347f4b2d9)
+    "neural/transformer-decode/gaussian/shape=full",
+    "neural/mamba1-decode/gaussian/shape=full",
+    "neural/mamba2-decode/gaussian/shape=full",
+    "neural/mamba3-decode/gaussian/shape=full",
+    "neural/samba-decode/bytes/shape=full",
+    "neural/mlp-predict/gaussian/shape=full",
     "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full"]
+#: decode lanes with no torch carried-state twin race ours alone (bench_board_neural.DECODE_LANES
+#: minus DECODE_TORCH_TWIN); transformer-decode's twin is a per-token loop, never compiled
+NO_TWIN_DECODE = ("mamba1-decode", "mamba2-decode", "mamba3-decode", "samba-decode")
 #: the *-infer lanes and lm-host-train-step run OUR CPU binding: never raced (Oct 2 2026)
 GPU_ARMS = {
     "nvidia": ["torch-eager-fp32", "torch-eager-tf32", "torch-compile-fp32", "torch-compile-tf32",
@@ -681,14 +697,17 @@ def test_plan_neural_fast_on_apple_only(vendor):
             want = [a for a in want if a.endswith("bf16")]
         if r["lane"] == "gemm-int8":
             want = ["torch-eager-int8", "torch-compile-int8"] if vendor == "nvidia" else []
-        if r["lane"].startswith("mamba1-"):
-            # the per-token reference scan is not a compile target (named in NOT_PLANNED)
+        if r["lane"].startswith("mamba1-") or r["lane"] == "transformer-decode":
+            # the per-token reference scan / decode loop is not a compile target (NOT_PLANNED)
             want = [a for a in want if "-compile-" not in a]
+        if r["lane"] in NO_TWIN_DECODE:
+            want = []
         assert r["opponents"] == want, r["id"]
         assert r["arms"] == ours + want
         # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere
         assert any("tf32" in a for a in r["arms"]) == (vendor == "nvidia" and not cpu_lane
-                                                      and not r["lane"].startswith("gemm-"))
+                                                      and not r["lane"].startswith("gemm-")
+                                                      and r["lane"] not in NO_TWIN_DECODE)
     for arm in GPU_ARMS["nvidia"]:
         assert bb.arm_library(arm) == "torch" and bb.arm_device(arm, vendor) == "gpu"
     for arm in CPU_ARMS:
@@ -696,8 +715,9 @@ def test_plan_neural_fast_on_apple_only(vendor):
     small = bb.plan_races(vendor, ["identical"], ["neural"], ["gemm"], neural_shape="small")
     assert [r["id"] for r in small] == ["neural/gemm/gaussian/shape=small"]
     cells = sum(len(r["arms"]) for r in races)
-    assert cells == {"apple": 64, "amd": 52, "nvidia": 73}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 12, "cells": cells}}
+    # +6 inference lanes (Oct 7 2026): apple 64 -> 82, amd 52 -> 64, nvidia 73 -> 88
+    assert cells == {"apple": 82, "amd": 64, "nvidia": 88}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 18, "cells": cells}}
 
 
 def test_fast_for_neural_is_the_apple_tier(env):
@@ -721,16 +741,18 @@ def test_fast_for_neural_is_the_apple_tier(env):
     assert _calls(env) == []
 
 
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 328, 134, 64),
-                                                      ("nvidia", 260, 88, 73),
-                                                      ("amd", 222, 90, 52)])
+# Oct 7 2026: the six GPU inference lanes (transformer-decode, mamba1/2/3-decode, samba-decode,
+# mlp-predict) add 6 races and 18 Apple / 15 NVIDIA / 12 AMD neural cells
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 346, 134, 82),
+                                                      ("nvidia", 275, 88, 88),
+                                                      ("amd", 234, 90, 64)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=93 cells=%d" % cells in text
+    assert "TOTAL races=99 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=12 cells=%d" % neural in text
+    assert "family neural     races=18 cells=%d" % neural in text
     assert "neural: ours IDENTICAL" in text
     assert ("ours-fast, the Apple tier" in text) == (vendor == "apple")
     # what is left off the plan is printed by name, never dropped silently
