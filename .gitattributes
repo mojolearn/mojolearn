@@ -7,3 +7,6 @@
 /bench/results/par_lm_xvendor -export-ignore
 /mamba/corpus/** export-ignore
 /mamba/corpus/gen_corpus.py -export-ignore
+# 2026-10-08: measurement records are not release sources; the release legs archive the tree with a 24 MiB cap
+/experiments/six_lane_integration/measurements/* export-ignore
+/experiments/six_lane_integration/build_coverage.json export-ignore
