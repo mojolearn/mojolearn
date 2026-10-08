@@ -351,6 +351,103 @@ def ivf_list_layout_device(
     return (offsets^, list_indices^, list_data^, max_label)
 
 
+struct IvfDeviceLayout(Movable):
+    """`ivf_list_layout_device`'s CSR KEPT ON THE DEVICE (lane gap-ivf,
+    2026-10-08, the resident build): the offsets and the carried ids also on
+    the host (n_lists + 1 and n_rows words, the index's own fields), the
+    permuted vectors on the device only. The same kernels in the same order
+    as `ivf_list_layout_device`, so the same offsets, ids and words; only the
+    n_rows x dim download is gone."""
+
+    var offsets: List[Int32]
+    var list_indices: List[UInt32]
+    var max_label: UInt32
+    var d_off: DeviceBuffer[DType.int32]
+    var d_ind: DeviceBuffer[DType.uint32]
+    var d_data: DeviceBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        var offsets: List[Int32],
+        var list_indices: List[UInt32],
+        max_label: UInt32,
+        var d_off: DeviceBuffer[DType.int32],
+        var d_ind: DeviceBuffer[DType.uint32],
+        var d_data: DeviceBuffer[DType.float32],
+    ):
+        self.offsets = offsets^
+        self.list_indices = list_indices^
+        self.max_label = max_label
+        self.d_off = d_off^
+        self.d_ind = d_ind^
+        self.d_data = d_data^
+
+
+def ivf_list_layout_device_resident(
+    ctx: DeviceContext,
+    mut labels: DeviceBuffer[DType.uint32],
+    mut dx: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    dim: Int,
+    n_lists: Int,
+) raises -> IvfDeviceLayout:
+    """`ivf_list_layout_device` with the device CSR returned instead of
+    downloaded (see `IvfDeviceLayout`). A max label >= n_lists returns
+    before any list is laid out; the caller refuses it by name. `n_rows >= 1`
+    (the build refuses an empty dataset first)."""
+    var n = n_rows
+    if n < 1:
+        raise Error("ivf_list_layout_device_resident: empty dataset")
+    var keys = ctx.enqueue_create_buffer[DType.uint32](n)
+    var vals = ctx.enqueue_create_buffer[DType.uint32](n)
+    var tk = ctx.enqueue_create_buffer[DType.uint32](n)
+    var tv = ctx.enqueue_create_buffer[DType.uint32](n)
+    var cnt = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
+    ctx.enqueue_function[_pair_keys_kernel](
+        labels.unsafe_ptr(), Int32(n), keys.unsafe_ptr(), vals.unsafe_ptr(),
+        grid_dim=_grid(n), block_dim=_TPB,
+    )
+    fast_radix_sort_pairs_u32(ctx, n, keys, vals, tk, tv, cnt)
+    var hmax = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    ctx.enqueue_copy(dst_ptr=hmax.unsafe_ptr(), src_buf=keys.create_sub_buffer[DType.uint32](n - 1, 1))
+    ctx.synchronize()
+    var max_label = hmax.unsafe_ptr()[0]
+    _ = hmax^
+    var offsets = List[Int32](length=n_lists + 1, fill=Int32(0))
+    var list_indices = List[UInt32](length=n, fill=UInt32(0))
+    var goff = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+    var dd = ctx.enqueue_create_buffer[DType.float32](max(n * dim, 1))
+    if Int(max_label) >= n_lists:
+        _ = keys^
+        _ = tk^
+        _ = tv^
+        _ = cnt^
+        return IvfDeviceLayout(offsets^, list_indices^, max_label, goff^, vals^, dd^)
+    var gcount = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+    ctx.enqueue_function[_zero_kernel](
+        gcount.unsafe_ptr(), Int32(n_lists + 1), grid_dim=_grid(n_lists + 1), block_dim=_TPB,
+    )
+    ctx.enqueue_function[_list_hist_kernel](
+        labels.unsafe_ptr(), Int32(n), gcount.unsafe_ptr(), grid_dim=_grid(n), block_dim=_TPB,
+    )
+    device_exclusive_scan_total_from(ctx, gcount, goff, n_lists)
+    ctx.enqueue_copy(dst_ptr=offsets.unsafe_ptr(), src_buf=goff)
+    ctx.enqueue_copy(dst_ptr=list_indices.unsafe_ptr(), src_buf=vals)
+    if dim > 0:
+        ctx.enqueue_function[_gather_rows_kernel](
+            dx.unsafe_ptr(), vals.unsafe_ptr(), Int32(n), Int32(dim), dd.unsafe_ptr(),
+            grid_dim=_grid(n * dim), block_dim=_TPB,
+        )
+    # drained while the two host lists the copies write are alive
+    ctx.synchronize()
+    _ = gcount^
+    _ = keys^
+    _ = tk^
+    _ = tv^
+    _ = cnt^
+    return IvfDeviceLayout(offsets^, list_indices^, max_label, goff^, vals^, dd^)
+
+
 def _unlayout_labels_kernel(off: _I32P, ind: _U32P, n_lists_in: Int32, n_slots_in: Int32, labels: _U32P):
     """Slot s: labels[ind[s]] = its list (off[l] <= s < off[l + 1])."""
     var s = Int(block_idx.x) * _TPB + Int(thread_idx.x)

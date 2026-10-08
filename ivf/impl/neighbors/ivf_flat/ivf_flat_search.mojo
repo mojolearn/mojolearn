@@ -138,6 +138,7 @@ from ivf.impl.neighbors.ivf_common import (
     postprocess_distances_is_identity,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import (
+    IvfFlatBuildDevice,
     compute_row_norms,
     download_f32,
     download_u32,
@@ -596,6 +597,39 @@ struct IvfFlatDevice(Movable):
                 index.list_indices.copy(),
                 index.list_data.copy(),
             )
+        self.list_sizes = List[Int32]()
+        for l in range(n_lists):  # small-loop(n_lists: one count per IVF list): list-count plan for the probe launches, no row data
+            self.list_sizes.append(Int32(index.list_size(l)))
+
+    def __init__(out self, ctx: DeviceContext, index: IvfFlatIndex, var built: IvfFlatBuildDevice) raises:
+        """The RESIDENT build's buffers (lane gap-ivf, 2026-10-08;
+        `ivf_flat_build_resident`): the centroids, their norms, the list
+        vectors and the device CSR move in as the build left them, so nothing
+        is uploaded and `index.list_data` may be empty. The list norms are the
+        same launch over the same words as the constructor above, and the host
+        offsets the probe plan counts are the index's, so a search through
+        this side returns the bits a search through an uploaded index does."""
+        self.dcenters = ctx.enqueue_create_buffer[DType.float32](1)
+        self.dcenter_norm = ctx.enqueue_create_buffer[DType.float32](1)
+        self.dlist_data = ctx.enqueue_create_buffer[DType.float32](1)
+        self.d_off = ctx.enqueue_create_buffer[DType.int32](1)
+        self.d_ind = ctx.enqueue_create_buffer[DType.uint32](1)
+        swap(self.dcenters, built.dcenters)
+        swap(self.dcenter_norm, built.dcenter_norm)
+        swap(self.dlist_data, built.dlist_data)
+        swap(self.d_off, built.d_off)
+        swap(self.d_ind, built.d_ind)
+        _ = built^
+        self.dlist_norm = ctx.enqueue_create_buffer[DType.float32](index.n_rows)
+        compute_row_norms(ctx, self.dlist_data, self.dlist_norm, index.n_rows, index.dim)
+        self.list_norm = download_f32(ctx, self.dlist_norm, index.n_rows)
+        var n_lists = index.n_lists
+        # the per-query path's host layout is made by `ensure_layout` from the
+        # index; a resident index has no host vectors, and no search path
+        # reads the host layout (every scan reads the device CSR above)
+        self.layout = ListLayout(
+            n_lists, index.n_rows, index.dim, List[Int32](), List[UInt32](), List[Float32]()
+        )
         self.list_sizes = List[Int32]()
         for l in range(n_lists):  # small-loop(n_lists: one count per IVF list): list-count plan for the probe launches, no row data
             self.list_sizes.append(Int32(index.list_size(l)))
