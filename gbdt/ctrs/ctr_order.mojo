@@ -37,7 +37,7 @@ from gbdt.data.permutation import (
     IDENTITY_PERMUTATION_ID,
     ctrs_estimation_permutation,
 )
-from gbdt.grid_creator.gls_borders import border_sample_row
+from gbdt.grid_creator.gls_borders_cells import border_sample_row
 
 
 def ctr_order_key(permutation_id: Int) -> UInt64:
