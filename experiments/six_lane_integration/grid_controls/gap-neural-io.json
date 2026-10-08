@@ -1,0 +1,30 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "gap-neural-io",
+ "branch": "lane/gap-neural-io",
+ "head": "270814938",
+ "controls": {
+  "emb_unique_rows_off": {
+   "define": "MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "embedding/checks/embedding_identical.mojo:654",
+    "embedding/checks/embedding_identical.mojo:1313",
+    "bindings/_mojolearn_embedding.mojo (unique_rows=True callers)"
+   ],
+   "binding": [
+    "_mojolearn_embedding"
+   ],
+   "bits_change": false,
+   "status": "new",
+   "note": "Lane gap-neural-io (plan gaps-2026-10-08 Section 4). Default ON (IDENTICAL, not under sabotage arms): the embedding binding's backward compacts the touched rows from run_begin (3 integer launches), reads U back (one wait) and folds U*d cells instead of V*d (T >= V) or T*d (T < V) when U < min(T, V). Same per-cell fold statements: no bit moves on any column; training loops keep their launch (opt-in parameter). The OFF arm is the old launch rule. Unmeasured: A/B owed on the embedding cell plus a neighboring shape (e.g. V=50,257, T=65,536) and one skewed-id batch."
+  }
+ }
+}
