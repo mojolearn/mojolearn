@@ -49,6 +49,7 @@ PAIR_SECONDS = {'nvidia': 38.0, 'amd': 24.0}  # median scored-pair seconds (tool
 REGIME_RANK = {'factorial': 0, 'pairwise': 1}
 TAG_ENV = 'MOJOLEARN_GRID_TAG'
 DEFINES_ENV = 'MOJOLEARN_BUILD_DEFINES'
+PREBUILT_TOKEN = 'PREBUILT='  # + store path on the box (tools/six_lane_grid_prebuild.py); render --prebuilt
 IDENTITY_COLUMN = {'nvidia': 'nvidia-native', 'amd': 'amd'}  # six_lane_compare_results REQUIRED_IDENTICAL
 DIGEST_CHARS = 16  # box_job.sh keeps the first 16 hex characters of the race digest
 QUALITY_REL = 1e-6
@@ -191,13 +192,15 @@ def route(wid, lanes, board):
     return dict(kind='cmd', key=(fam, lane, ds), family=fam, lane=lane, dataset=ds, note=note)
 
 
-def cmd_line(box, vendor, branch, tag, races, envs, builds):
+def cmd_line(box, vendor, branch, tag, races, envs, builds, prebuilt=None):
     toks = ['lq', 'add', box, 'CMD', branch, tag] + ['%s=%s' % kv for kv in envs] + [
         CMD_PY, CMD_SCRIPT, '--tag', tag, '--vendor', vendor]
     for fam, lane, ds in sorted(set(races)):
         toks += ['--race', '%s:%s:%s' % (fam, lane, ds)]
     if builds:
         toks.append('BUILDS=' + ','.join(builds))
+    if prebuilt:  # box_job.sh installs the store's prebuilt bindings instead of building (falls back on exit 2)
+        toks.append(PREBUILT_TOKEN + prebuilt)
     bad = [x for x in toks if x != CMD_PY and not re.fullmatch(r'[A-Za-z0-9_.,=@:+/-]+', x)]
     if bad:
         raise ValueError('lq CMD token(s) %r are not plain words' % bad)
@@ -221,7 +224,7 @@ def spec_text(pairs):
     return ','.join('%s@%s' % p for p in sorted(set(pairs))), 'PAIRS'
 
 
-def lq_line(box, branch, pairs, envs, builds):
+def lq_line(box, branch, pairs, envs, builds, prebuilt=None):
     lanes, dss = spec_text(pairs)
     toks = ['lq', 'add', box, 'RACE', branch, lanes, dss] + ['%s=%s' % kv for kv in envs]
     # The base binding (_mojolearn, script `build`) is rebuilt on every line: the Python layer refuses a
@@ -229,6 +232,8 @@ def lq_line(box, branch, pairs, envs, builds):
     # step only rebuilds what BUILDS= names.
     builds = ['build'] + [b for b in (builds or []) if b != 'build']
     toks.append('BUILDS=' + ','.join(builds))
+    if prebuilt:  # tools/six_lane_grid_prebuild.py store on the box; box_job.sh installs instead of building
+        toks.append(PREBUILT_TOKEN + prebuilt)
     line = ' '.join(toks)
     bad = [t for t in toks if not re.fullmatch(r'[A-Za-z0-9_.,=@:+/-]+', t)]
     if bad:  # lq refuses shell metacharacters in RACE lines; box_job.sh word-splits the line
@@ -300,7 +305,7 @@ def b_groups(workloads, info, group_size):
 
 
 def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=None, budget_hours=None,
-           lanes=None, b_group_size=8, run_id=None, board=None):
+           lanes=None, b_group_size=8, run_id=None, board=None, prebuilt=None):
     plan, matrix = load_plan(plan_dir)
     lanes = lanes if lanes is not None else load_lanes()
     board = board if board is not None else load_board(vendor)
@@ -331,10 +336,10 @@ def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=
 
     def emit(arm, tag, kind, cells, envs, bindings, **extra):
         if kind == 'race':
-            line = lq_line(box, branch, [(c['lane'], c['dataset']) for c in cells], envs, binding_builds(bindings))
+            line = lq_line(box, branch, [(c['lane'], c['dataset']) for c in cells], envs, binding_builds(bindings), prebuilt)
         else:  # bench_board needs the base binding beside the ones the configuration reaches
             line = cmd_line(box, vendor, branch, tag, [(c['family'], c['lane'], c['dataset']) for c in cells], envs,
-                            binding_builds(['_mojolearn'] + sorted(set(bindings) - {'_mojolearn'})))
+                            binding_builds(['_mojolearn'] + sorted(set(bindings) - {'_mojolearn'})), prebuilt)
         lines.append(line)
         manifest.append(dict(extra, line=len(lines), tag=tag, arm=arm, kind=kind, cells=cells))
 
@@ -378,7 +383,7 @@ def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=
     a_races = sum(len(m['cells']) for m in A)
     b_races = sum(len(m['cells']) for m in Bm)
     noted = sorted({c['workload_id'] for m in A for c in m['cells'] if c['note']})
-    totals = dict(vendor=vendor, box=box, branch=branch, run_id=run_id, lines=len(lines), builds=len(lines),
+    totals = dict(vendor=vendor, box=box, branch=branch, run_id=run_id, lines=len(lines), builds=len(lines), prebuilt=prebuilt,
                   a_lines=len(A), b_lines=len(Bm), b_repeats=b_repeats, b_groups=len(groups),
                   a_races=a_races, b_races=b_races, by_kind=by_kind, a_cells_by_family=by_family,
                   configurations=len(cfgs), workloads=len(covered), regimes=regimes,
@@ -891,6 +896,8 @@ def main(argv=None):
     r.add_argument('--lanes-json', help='lane registry JSON {lane: [datasets]} instead of importing bench_board_algos')
     r.add_argument('--board-json', help='bench_board registry JSON (load_board shape, races as [family, lane, dataset] lists)')
     r.add_argument('--out', type=Path, required=True, help='lines file; <out>.json gets the manifest')
+    r.add_argument('--prebuilt', metavar='STORE', help='add PREBUILT=STORE to every line (e.g. /root/grid-prebuilt): box_job.sh '
+                   'installs tools/six_lane_grid_prebuild.py artifacts instead of building, and builds when none fit')
     c = s.add_parser('collect', help='lq results + race logs -> verdicts, identity summary, quality rows')
     c.add_argument('--results', nargs='+', required=True, help='results.txt copies (one per box)')
     c.add_argument('--logs', nargs='*', default=[], help='lq out dirs (race-*.log under <id>/) or `grep -H` dumps of them')
@@ -913,7 +920,7 @@ def main(argv=None):
             if unknown:
                 p.error('unknown lane(s): ' + ','.join(unknown))
         lines, manifest = render(args.plan_dir, args.vendor, args.branch, args.b_repeats, only, args.phase,
-                                 args.budget_hours, lanes, args.b_group_size, args.run_id, board)
+                                 args.budget_hours, lanes, args.b_group_size, args.run_id, board, args.prebuilt)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(''.join(line + '\n' for line in lines))
         Path(str(args.out) + '.json').write_text(json.dumps(manifest, indent=1, sort_keys=True) + '\n')
