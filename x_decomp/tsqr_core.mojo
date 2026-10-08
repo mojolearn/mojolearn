@@ -63,6 +63,68 @@ comptime TS_TPB = TS_P * TS_NB
 #: tree combine is O(n^3) cells in one threadgroup)
 comptime TS_MAX_N = 512
 
+# lane gap-tsqr (2026-10-08, docs/plans/gaps-2026-10-08.md section 7), IDENTICAL
+# only; a FAST build keeps the per-panel forms. Both switches change bits, on
+# every vendor and in the host replay together.
+#
+# TS_WY_PAIR (`-D MOJOLEARN_IDN_TSQR_WY_PAIR_OFF` restores the per-panel
+# update): two consecutive panels (2 TS_NB reflectors, TS_W2 wide) share ONE
+# blocked update of the trailing columns and ONE pass of Q C. Panel a is
+# factored, its block reflector is applied to panel b's columns only (the
+# words panel b saw before), panel b is factored, and the pair's compact WY
+# factor T2 = [[Ta, -Ta (Ya^T Yb) Tb], [0, Tb]] (larft of the concatenated
+# reflectors) drives x <- (I - Y T2^T Y^T) x over the columns right of the
+# pair. The trailing matrix crosses the device twice per PAIR instead of
+# twice per panel: half the traffic of the update passes, which are
+# bandwidth-bound (TS_W2 multiply-adds per loaded word). The size rule: the
+# pair width is what one thread's register file holds as accumulators
+# (TS_W2 = 32 chains per thread) and what one TS_PART page folds in two
+# rounds; a wider group (64) is the next step after this A/B, never a shape
+# rule. Bits change in every column right of a pair (one 32-wide fold
+# instead of two 16-wide ones); the panel columns themselves and R's first
+# TS_NB columns keep their words.
+#
+# TS_TREE_PAR (`-D MOJOLEARN_IDN_TSQR_TREE_PAR_OFF` restores the serial
+# forms): the tree combine's reflector norm is a lane-parallel fixed fold
+# (lane t of TS_TPB holds alpha^2 (t == 0) then rows i == t (mod TS_TPB)
+# ascending, a halving tree over the TS_TPB partials, `ts_tree_fold`) in
+# place of one serial chain recomputed by every thread; the reflector
+# column is staged in threadgroup memory for the column threads; the Q C
+# tree apply tiles C's columns over threadgroups (TS_TPB a tile) with the
+# reflector staged the same way. Bits change in the tree's norms only; the
+# column updates keep their chains.
+comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime TS_TREE_PAR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: reflectors of a panel pair (the pair's T2 is TS_W2 x TS_W2)
+comptime TS_W2 = 2 * TS_NB
+comptime TS_T2 = TS_W2 * TS_W2
+
+
+def ts_pairs(n: Int) -> Int:
+    """Panel pairs of an n-column factorization: pair q holds panels 2 q and
+    2 q + 1 (the last pair is one panel when ts_panels(n) is odd)."""
+    return (ts_panels(n) + 1) // 2
+
+
+def ts_pair_width(n: Int, q: Int) -> Int:
+    """Reflectors of pair q: TS_W2, or what is left of n."""
+    return min(TS_W2, n - 2 * q * TS_NB)
+
+
+def ts_tree_fold(mut s: List[Float32]):
+    """The combine norm's fold of TS_TPB lane partials, in place: s[t] +=
+    s[t + w] for w = TS_TPB / 2, ..., 1, each sum flushed; s[0] is the sum.
+    The device runs the same tree in threadgroup memory."""
+    var w = TS_TPB // 2
+    while w > 0:
+        for t in range(w):
+            s[t] = ftz(s[t] + s[t + w])
+        w = w // 2
+
 # lane/classical-structural (2026-10-07), IDENTICAL only, default off:
 # `-D MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO`. randomized_svd orthonormalizes its
 # tall sketch (m x l, l small) nine times per fit through `orth`: two passes

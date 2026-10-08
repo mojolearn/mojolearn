@@ -201,6 +201,21 @@ comptime PJ_SYNC_ROUNDS = 512
 comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_XD_SWEEP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime IDN_XD_NO_WAIT = IDN_XD_SWEEP and TARGET_COLUMN != COLUMN_APPLE
 comptime XD_NO_FLAG = Int32(2147483647)
+# lane gap-tsqr (2026-10-08, docs/plans/gaps-2026-10-08.md section 7, item 4),
+# IDENTICAL: svd's round-robin Jacobi enqueues XD_SVD_GROUP sweeps between
+# two convergence readbacks (each sweep its own flag slice and its own
+# lowest-flag word), not one sweep per wait: at n = 220 a sweep is 219
+# launches of ~1 ms of device work behind one wait, so the wait and readback
+# were a fixed cost per sweep. No bit moves: a sweep that rotates nothing
+# leaves R^T and V^T as they were, so the sweeps enqueued after the
+# converging one are identities, and the convergence test (the first sweep
+# without a rotation, the same X_DECOMP_SVD_SWEEPS bound) reads the same
+# flags. 4 sweeps a group: the Jacobi of a well-conditioned R converges in
+# ~8-12 sweeps, so the waits fall 3-4x while at most 3 identity sweeps are
+# spent after convergence; a size, not a shape, rule.
+# `-D MOJOLEARN_IDN_XD_SVD_GROUP_OFF` restores one readback per sweep.
+comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP and not is_defined["MOJOLEARN_IDN_XD_SVD_GROUP_OFF"]()
+comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
 
 # lane fam-decomp (2026-10-04), IDENTICAL: a small eigh (n <= IDN_EIGH_SMALL_N)
 # is ONE launch and one wait, the batched round-robin kernel
@@ -3585,9 +3600,9 @@ struct DevExec(Exec):
         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         var mm = n + (n % 2)
         var h = mm // 2
-        var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1))
-        var dfirst = ctx.enqueue_create_buffer[DType.int32](1)
-        var hfirst = ctx.enqueue_create_host_buffer[DType.int32](1)
+        var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1) * XD_SVD_GROUP)
+        var dfirst = ctx.enqueue_create_buffer[DType.int32](XD_SVD_GROUP)
+        var hfirst = ctx.enqueue_create_host_buffer[DType.int32](XD_SVD_GROUP)
         ctx.synchronize()
         # lane idn-cov-overflow: the power-of-two range scale of
         # x_decomp/eigh_scale.mojo on A before the QR (its column norms and
@@ -3602,25 +3617,32 @@ struct DevExec(Exec):
         var converged = n < 2
         var executed = 0
         while not converged and executed < X_DECOMP_SVD_SWEEPS:
-            executed += 1
+            # XD_SVD_GROUP sweeps behind one wait (IDN_XD_SVD_GROUP), sweep g
+            # of the group on flag slice g and lowest-flag word g
+            var group = min(XD_SVD_GROUP, X_DECOMP_SVD_SWEEPS - executed)
             enqueue_fill(ctx, flags, Float32(0.0))
-            for rd in range(mm - 1):
-                ctx.enqueue_function[rs_round_kernel](
-                    _p(rt), _p(vt), _p(flags), Int32(n), Int32(mm), Int32(rd), X_DECOMP_SVD_TOL,
-                    grid_dim=h, block_dim=RS_TPB,
-                )
-                _round_sync(ctx, rd)
-            # the sweep's rotation flags fold on the device in every mode
-            # (lane cpu3-core: the host walk over the h flags is gone)
             enqueue_fill(ctx, dfirst, XD_NO_FLAG)
-            ctx.enqueue_function[xd_flag_first_kernel](
-                _p(flags), Int32(h), dfirst.unsafe_ptr(), grid_dim=_blocks(h), block_dim=TPB
-            )
+            for sg in range(group):
+                var fl = _p(flags) + sg * h
+                for rd in range(mm - 1):
+                    ctx.enqueue_function[rs_round_kernel](
+                        _p(rt), _p(vt), fl, Int32(n), Int32(mm), Int32(rd), X_DECOMP_SVD_TOL,
+                        grid_dim=h, block_dim=RS_TPB,
+                    )
+                    _round_sync(ctx, rd)
+                # the sweep's rotation flags fold on the device in every mode
+                # (lane cpu3-core: the host walk over the h flags is gone)
+                ctx.enqueue_function[xd_flag_first_kernel](
+                    fl, Int32(h), dfirst.unsafe_ptr() + sg, grid_dim=_blocks(h), block_dim=TPB
+                )
             ctx.enqueue_copy(dst_buf=hfirst, src_buf=dfirst)
             ctx.synchronize()
-            var any = hfirst.unsafe_ptr().unsafe_load(0) != XD_NO_FLAG
-            if not any:
-                converged = True
+            for sg in range(group):  # small-loop(group: sweeps behind one wait, at most XD_SVD_GROUP = 4): one readback word per sweep
+                executed += 1
+                var any = hfirst.unsafe_ptr().unsafe_load(sg) != XD_NO_FLAG
+                if not any:
+                    converged = True
+                    break
         if not converged:
             raise Error(
                 "x_decomp svd: the round-robin one-sided Jacobi did not converge in " + String(X_DECOMP_SVD_SWEEPS)

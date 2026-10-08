@@ -54,17 +54,24 @@ from x_decomp.jacobi2 import dev_barrier
 from x_decomp.tsqr_core import (
     TS_LAUNCH_CELLS,
     TS_LAUNCH_MIN_BLOCKS,
+    TS_MAX_N,
+    TS_T2,
     TS_TREE_ARITY,
+    TS_TREE_PAR,
     TS_NB,
     TS_P,
     TS_ROWS,
     TS_TPB,
+    TS_W2,
+    TS_WY_PAIR,
     ts_block_hi,
     ts_block_lo,
     ts_blocks,
     ts_first_row,
     ts_fma,
     ts_fold,
+    ts_pair_width,
+    ts_pairs,
     ts_panels,
     ts_reflector,
     ts_scale,
@@ -74,6 +81,15 @@ comptime _SH = UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressS
 comptime _TT = TS_NB * TS_NB
 comptime TS_PART = TS_NB * TS_P * TS_NB
 comptime TS_SMEM_BYTES = 4 * (TS_PART + 3 * _TT + TS_TPB + TS_P)
+# lane gap-tsqr (2026-10-08): the pair kernels' page (TS_WY_PAIR, x_decomp/
+# tsqr_core.mojo): one TS_PART fold page reused for the two halves of the
+# pair's TS_W2 reflectors, the TS_W2 x TS_W2 T2 and the TS_W2 x TS_NB z and w
+# (24,576 bytes at TS_NB = 16: under Metal's 32 KB); the merge kernel's page
+# is TS_PART and five TS_NB x TS_NB tiles; the tree kernels add a TS_MAX_N
+# reflector column and TS_TPB fold lanes.
+comptime TS_SMEM2_BYTES = 4 * (TS_PART + TS_T2 + 2 * TS_W2 * TS_NB)
+comptime TS_SMEM_T2_BYTES = 4 * (TS_PART + 5 * _TT)
+comptime TS_SMEM_TREE_BYTES = 4 * (TS_MAX_N + TS_TPB)
 
 # lane idn-dense-linalg (2026-10-04), IDENTICAL speed on NVIDIA and AMD; the
 # same words on every column (the host replay x_decomp/tsqr_host.mojo is
@@ -134,6 +150,11 @@ comptime TS_NORM_FUSED = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_O
 # bundle does not demonstrate a strip improvement. STRIP stays OFF.
 comptime TS_STRIP_UPDATE = _TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_STRIP_UPDATE"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
+comptime TS_SMEM2_OK = (
+    lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM2_BYTES]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_T2_BYTES]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_TREE_BYTES]()
+)
 
 
 @always_inline
@@ -194,6 +215,69 @@ def _wy_chunk_kern[transpose: Bool](
     barrier()
 
 
+@always_inline
+def _wy_chunk_kern2[transpose: Bool](
+    y: F32Ptr, ldy: Int, x: F32Ptr, ldx: Int, c0: Int, c_hi: Int, mb: Int, j0: Int, pw: Int,
+    tsh: _SH, part: _SH, zsh: _SH, wsh: _SH, g: Int, l: Int,
+):
+    """`ts_wy_host[_, TS_W2]` for the columns c0 .. c0 + TS_NB - 1 (< c_hi) of
+    x against a PAIR's pw (<= TS_W2) reflectors (TS_WY_PAIR): tsh is the
+    pair's TS_W2 x TS_W2 T2, zsh and wsh are TS_W2 x TS_NB. Thread (g, l)
+    runs chain g of every reflector's inner product with column c0 + l (TS_W2
+    accumulators), the TS_PART page folds the reflectors TS_NB at a time (two
+    rounds), w = T2^T z (or T2 z), and the update holds w in registers. The
+    chains, folds and fma orders are the host's, statement for statement."""
+    var c = c0 + l
+    var live = c < c_hi
+    var acc = InlineArray[Float32, TS_W2](fill=Float32(0.0))
+    if live:
+        var i = ts_first_row(j0 + 1, g)
+        while i < mb:
+            var xv = ftz(x.unsafe_load(i * ldx + c))
+            comptime for p in range(TS_W2):
+                if p < pw and i > j0 + p:
+                    acc[p] = ts_fma(ftz(y.unsafe_load(i * ldy + j0 + p)), xv, acc[p])
+            i += TS_P
+    comptime for half in range(2):
+        comptime for p in range(TS_NB):
+            part[(p * TS_P + g) * TS_NB + l] = acc[half * TS_NB + p]
+        barrier()
+        var rr = half * TS_NB + g
+        if g < TS_NB and rr < pw and live:
+            var tail = _fold_sh(part, (g * TS_P) * TS_NB + l, TS_NB)
+            zsh[rr * TS_NB + l] = ftz(ftz(x.unsafe_load((j0 + rr) * ldx + c)) + tail)
+        barrier()
+    var r = g
+    while r < TS_W2:
+        if r < pw and live:
+            var w = Float32(0.0)
+            comptime if transpose:
+                for q in range(r + 1):
+                    w = ts_fma(tsh[q * TS_W2 + r], zsh[q * TS_NB + l], w)
+            else:
+                for q in range(r, pw):
+                    w = ts_fma(tsh[r * TS_W2 + q], zsh[q * TS_NB + l], w)
+            wsh[r * TS_NB + l] = w
+        r += TS_P
+    barrier()
+    if live:
+        var wr = InlineArray[Float32, TS_W2](fill=Float32(0.0))
+        comptime for p in range(TS_W2):
+            if p < pw:
+                wr[p] = wsh[p * TS_NB + l]
+        var i = ts_first_row(j0, g)
+        while i < mb:
+            var a2 = ftz(x.unsafe_load(i * ldx + c))
+            var top = min(pw, i - j0 + 1)
+            comptime for p in range(TS_W2):
+                if p < top:
+                    var yv = Float32(1.0) if i == j0 + p else ftz(y.unsafe_load(i * ldy + j0 + p))
+                    a2 = ts_fma(-wr[p], yv, a2)
+            x.unsafe_store(i * ldx + c, a2)
+            i += TS_P
+    barrier()
+
+
 def ts_pack_kernel(a: F32Ptr, b: F32Ptr, dst: F32Ptr, m_in: Int32, d_in: Int32, r_in: Int32):
     """dst (m x (d + r)) = [a | b], one thread per word (data movement)."""
     var d = Int(d_in)
@@ -248,7 +332,8 @@ def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in
     var j0 = pan * TS_NB
     var pw = min(TS_NB, n - j0)
     var npan = ts_panels(n)
-    tsh[tid] = Float32(0.0)
+    if tid < _TT:
+        tsh[tid] = Float32(0.0)
     barrier()
     # (F)
     # have_norm: nrm[] already holds column j's TS_P norm chains (TS_NORM_FUSED:
@@ -349,9 +434,11 @@ def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in
                 s = ts_fma(tsh[l * TS_NB + kk], zsh[kk], s)
             tsh[l * TS_NB + p] = ts_scale(-tsh[p * TS_NB + p], s)
         barrier()
-    tst.unsafe_store((b * npan + pan) * _TT + tid, tsh[tid])
-    # (U): TS_GRID_UPDATE runs it as `ts_leaf_update_kernel`'s launch
-    comptime if not TS_GRID_UPDATE:
+    if tid < _TT:
+        tst.unsafe_store((b * npan + pan) * _TT + tid, tsh[tid])
+    # (U): TS_GRID_UPDATE runs it as `ts_leaf_update_kernel`'s launch;
+    # TS_WY_PAIR as the pair's `ts_pair_mid_kernel` + `ts_pair_update_kernel`
+    comptime if not TS_GRID_UPDATE and not TS_WY_PAIR:
         var c0 = j0 + pw
         while c0 < n:
             _wy_chunk_kern[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
@@ -394,12 +481,225 @@ def ts_leaf_update_kernel[STRIP: Int = 1](
     # One T load for a bounded strip of independent trailing-column chunks.
     # The unchanged helper ends in a barrier before scratch is reused. Each
     # column sees exactly its old row chains, reflector fold and update order.
-    tsh[tid] = tst.unsafe_load((b * npan + pan) * _TT + tid)
+    if tid < _TT:
+        tsh[tid] = tst.unsafe_load((b * npan + pan) * _TT + tid)
     barrier()
     comptime for piece in range(STRIP):
         var c0=first+piece*TS_NB
         if c0<n:
             _wy_chunk_kern[True](blk,n,blk,n,c0,n,mb,j0,pw,tsh,part,zsh,wsh,g,l)
+
+
+def ts_pair_mid_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32, b0_in: Int32, pan_in: Int32):
+    """TS_WY_PAIR: panel `pan`'s block reflector on the NEXT panel's columns
+    only (the pair's second half, before it is factored): `ts_wy_host[True,
+    TS_NB]` over columns j0 + TS_NB .. j0 + TS_NB + pw' - 1, one threadgroup
+    per block b0 + block_idx.x (one chunk). The words panel `pan` + 1 saw
+    from the per-panel update."""
+    var part = stack_allocation[TS_PART, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var zsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var nb = Int(nb_in)
+    var pan = Int(pan_in)
+    var b = Int(b0_in) + Int(block_idx.x)
+    if b >= nb:
+        return
+    var lo = ts_block_lo(b)
+    var mb = ts_block_hi(b, nb, m) - lo
+    var blk = a + lo * n
+    var tid = Int(thread_idx.x)
+    var g = tid // TS_NB
+    var l = tid - g * TS_NB
+    var j0 = pan * TS_NB
+    var pw = min(TS_NB, n - j0)
+    var npan = ts_panels(n)
+    var c0 = j0 + pw
+    if c0 >= n:
+        return
+    var c_hi = min(n, c0 + TS_NB)
+    if tid < _TT:
+        tsh[tid] = tst.unsafe_load((b * npan + pan) * _TT + tid)
+    barrier()
+    _wy_chunk_kern[True](blk, n, blk, n, c0, c_hi, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+
+
+def ts_pair_t_kernel(
+    a: F32Ptr, tst: F32Ptr, tst2: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32, b0_in: Int32, q_in: Int32
+):
+    """TS_WY_PAIR: `ts_pair_t_host` for pair q of block b0 + block_idx.x: T2
+    (TS_W2 x TS_W2) = [[Ta, -Ta (G Tb)], [0, Tb]] into tst2's slot, G =
+    Ya^T Yb. Thread (g, l) runs chain g of G[., l] over rows i > j0b + l
+    (TS_NB accumulators), the TS_PART page folds them, G[p, l] = Ya[j0b + l,
+    p] + tail; thread (p, q) < TS_NB x TS_NB then folds GT[p, q] over kk =
+    0 .. pwb - 1 and M[p, q] = (Ta GT)[p, q] over k = 0 .. TS_NB - 1, each
+    from zero, ascending: the host's loops."""
+    var part = stack_allocation[TS_PART, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ta = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tb = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var gsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var gt = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var msh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var nb = Int(nb_in)
+    var q = Int(q_in)
+    var b = Int(b0_in) + Int(block_idx.x)
+    if b >= nb:
+        return
+    var lo = ts_block_lo(b)
+    var mb = ts_block_hi(b, nb, m) - lo
+    var blk = a + lo * n
+    var tid = Int(thread_idx.x)
+    var g = tid // TS_NB
+    var l = tid - g * TS_NB
+    var npan = ts_panels(n)
+    var npair = ts_pairs(n)
+    var pa = 2 * q
+    var j0a = pa * TS_NB
+    var j0b = j0a + TS_NB
+    var has_b = pa + 1 < npan
+    var pwb = min(TS_NB, n - j0b) if has_b else 0
+    if tid < _TT:
+        ta[tid] = tst.unsafe_load((b * npan + pa) * _TT + tid)
+        tb[tid] = Float32(0.0)
+        if has_b:
+            tb[tid] = tst.unsafe_load((b * npan + pa + 1) * _TT + tid)
+        gsh[tid] = Float32(0.0)
+        gt[tid] = Float32(0.0)
+        msh[tid] = Float32(0.0)
+    barrier()
+    if has_b:
+        # G = Ya^T Yb: column l of Yb (unit at row j0b + l, the stored tail
+        # below), chain g over rows i > j0b + l
+        var live = l < pwb
+        var acc = InlineArray[Float32, TS_NB](fill=Float32(0.0))
+        if live:
+            var i = ts_first_row(j0b + l + 1, g)
+            while i < mb:
+                var xv = ftz(blk.unsafe_load(i * n + j0b + l))
+                comptime for p in range(TS_NB):
+                    acc[p] = ts_fma(ftz(blk.unsafe_load(i * n + j0a + p)), xv, acc[p])
+                i += TS_P
+        comptime for p in range(TS_NB):
+            part[(p * TS_P + g) * TS_NB + l] = acc[p]
+        barrier()
+        if g < TS_NB and live:
+            var tail = _fold_sh(part, (g * TS_P) * TS_NB + l, TS_NB)
+            gsh[g * TS_NB + l] = ftz(ftz(blk.unsafe_load((j0b + l) * n + j0a + g)) + tail)
+        barrier()
+        if tid < _TT:
+            var p = tid // TS_NB
+            var qq = tid - p * TS_NB
+            var acc2 = Float32(0.0)
+            for kk in range(pwb):
+                acc2 = ts_fma(gsh[p * TS_NB + kk], tb[kk * TS_NB + qq], acc2)
+            gt[tid] = acc2
+        barrier()
+        if tid < _TT:
+            var p2 = tid // TS_NB
+            var qq2 = tid - p2 * TS_NB
+            var acc3 = Float32(0.0)
+            for k in range(TS_NB):
+                acc3 = ts_fma(ta[p2 * TS_NB + k], gt[k * TS_NB + qq2], acc3)
+            msh[tid] = acc3
+        barrier()
+    var base = (b * npair + q) * TS_T2
+    var e = tid
+    while e < TS_T2:
+        var r = e // TS_W2
+        var c = e - r * TS_W2
+        var v = Float32(0.0)
+        if r < TS_NB and c < TS_NB:
+            v = ta[r * TS_NB + c]
+        elif r >= TS_NB and c >= TS_NB:
+            v = tb[(r - TS_NB) * TS_NB + (c - TS_NB)]
+        elif r < TS_NB and c >= TS_NB and has_b:
+            v = -msh[r * TS_NB + (c - TS_NB)]
+        tst2.unsafe_store(base + e, v)
+        e += TS_TPB
+
+
+def ts_pair_update_kernel(
+    a: F32Ptr, tst2: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32, b0_in: Int32, q_in: Int32, nch_in: Int32
+):
+    """TS_WY_PAIR: the (U) of pair q, x <- (I - Y T2^T Y^T) x over the
+    columns right of the pair, one threadgroup per (block, chunk of TS_NB
+    columns): threadgroup t is block b0 + t // nch and chunk t % nch."""
+    var part = stack_allocation[TS_PART, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tsh = stack_allocation[TS_T2, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var zsh = stack_allocation[TS_W2 * TS_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wsh = stack_allocation[TS_W2 * TS_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var nb = Int(nb_in)
+    var q = Int(q_in)
+    var nch = Int(nch_in)
+    var bq = Int(block_idx.x) // nch
+    var ch = Int(block_idx.x) - bq * nch
+    var b = Int(b0_in) + bq
+    if b >= nb:
+        return
+    var lo = ts_block_lo(b)
+    var mb = ts_block_hi(b, nb, m) - lo
+    var blk = a + lo * n
+    var tid = Int(thread_idx.x)
+    var g = tid // TS_NB
+    var l = tid - g * TS_NB
+    var npair = ts_pairs(n)
+    var j0 = 2 * q * TS_NB
+    var pw = ts_pair_width(n, q)
+    var c0 = j0 + pw + ch * TS_NB
+    if c0 >= n:
+        return
+    var e = tid
+    while e < TS_T2:
+        tsh[e] = tst2.unsafe_load((b * npair + q) * TS_T2 + e)
+        e += TS_TPB
+    barrier()
+    _wy_chunk_kern2[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+
+
+def ts_pair_apply_kernel(
+    a: F32Ptr, tst2: F32Ptr, q_out: F32Ptr, m_in: Int32, n_in: Int32, k_in: Int32, nb_in: Int32, b0_in: Int32,
+    q_in: Int32, nch_in: Int32,
+):
+    """TS_WY_PAIR: `ts_apply_block_host`'s pair q, x <- (I - Y T2 Y^T) x over
+    C's columns in chunks of TS_NB: threadgroup t is block b0 + t // nch and
+    chunk t % nch (the chunks are independent)."""
+    var part = stack_allocation[TS_PART, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tsh = stack_allocation[TS_T2, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var zsh = stack_allocation[TS_W2 * TS_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wsh = stack_allocation[TS_W2 * TS_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var nb = Int(nb_in)
+    var q = Int(q_in)
+    var nch = Int(nch_in)
+    var bq = Int(block_idx.x) // nch
+    var ch = Int(block_idx.x) - bq * nch
+    var b = Int(b0_in) + bq
+    if b >= nb:
+        return
+    var lo = ts_block_lo(b)
+    var mb = ts_block_hi(b, nb, m) - lo
+    var tid = Int(thread_idx.x)
+    var g = tid // TS_NB
+    var l = tid - g * TS_NB
+    var npair = ts_pairs(n)
+    var j0 = 2 * q * TS_NB
+    var pw = ts_pair_width(n, q)
+    if ch * TS_NB >= k:
+        return
+    var e = tid
+    while e < TS_T2:
+        tsh[e] = tst2.unsafe_load((b * npair + q) * TS_T2 + e)
+        e += TS_TPB
+    barrier()
+    _wy_chunk_kern2[False](a + lo * n, n, q_out + lo * k, k, ch * TS_NB, k, mb, j0, pw, tsh, part, zsh, wsh, g, l)
 
 
 def ts_rtile_kernel(a: F32Ptr, tiles: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32):
@@ -430,13 +730,38 @@ def ts_combine_kernel(tiles: F32Ptr, taus: F32Ptr, n_in: Int32, nb_in: Int32, s_
     var bot = tiles + ib * n * n
     var tp = taus + ib * n
     var tid = Int(thread_idx.x)
+    var ssh = stack_allocation[TS_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var vsh = stack_allocation[TS_MAX_N, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     for j in range(n):
-        # every thread runs the one norm chain (the same loads, the same bits)
         var alpha = ftz(top.unsafe_load(j * n + j))
-        var sg = ts_fma(alpha, alpha, Float32(0.0))
-        for i in range(j + 1):
-            var x = ftz(bot.unsafe_load(i * n + j))
-            sg = ts_fma(x, x, sg)
+        var sg = Float32(0.0)
+        comptime if TS_TREE_PAR:
+            # the lane fold (x_decomp/tsqr_core.mojo TS_TREE_PAR): lane t holds
+            # alpha^2 (t == 0) then rows i == t (mod TS_TPB) of column j
+            # ascending; the TS_TPB partials fold by the halving tree
+            # `ts_tree_fold`. A pure function of (n, j): never of the warp
+            # size, the SM count or the launch geometry.
+            var acc = ts_fma(alpha, alpha, Float32(0.0)) if tid == 0 else Float32(0.0)
+            var i = tid
+            while i <= j:
+                var x = ftz(bot.unsafe_load(i * n + j))
+                acc = ts_fma(x, x, acc)
+                i += TS_TPB
+            ssh[tid] = acc
+            barrier()
+            var w = TS_TPB // 2
+            while w > 0:
+                if tid < w:
+                    ssh[tid] = ftz(ssh[tid] + ssh[tid + w])
+                barrier()
+                w = w // 2
+            sg = ssh[0]
+        else:
+            # every thread runs the one norm chain (the same loads, the same bits)
+            sg = ts_fma(alpha, alpha, Float32(0.0))
+            for i in range(j + 1):
+                var x = ftz(bot.unsafe_load(i * n + j))
+                sg = ts_fma(x, x, sg)
         var normx = ftz(identical_sqrt(sg))
         dev_barrier()
         var zero = normx == Float32(0.0)
@@ -460,30 +785,55 @@ def ts_combine_kernel(tiles: F32Ptr, taus: F32Ptr, n_in: Int32, nb_in: Int32, s_
             tp.unsafe_store(j, tau)
         dev_barrier()
         if tau != Float32(0.0):
+            comptime if TS_TREE_PAR:
+                # the scaled reflector column staged once for the column
+                # threads (the same words as the global loads)
+                var i3 = tid
+                while i3 <= j:
+                    vsh[i3] = ftz(bot.unsafe_load(i3 * n + j))
+                    i3 += TS_TPB
+                barrier()
             var c = j + 1 + tid
             while c < n:
                 var tail = Float32(0.0)
                 for i in range(j + 1):
-                    tail = ts_fma(ftz(bot.unsafe_load(i * n + j)), ftz(bot.unsafe_load(i * n + c)), tail)
+                    var vj: Float32
+                    comptime if TS_TREE_PAR:
+                        vj = vsh[i]
+                    else:
+                        vj = ftz(bot.unsafe_load(i * n + j))
+                    tail = ts_fma(vj, ftz(bot.unsafe_load(i * n + c)), tail)
                 var tc = ftz(top.unsafe_load(j * n + c))
                 var td = ts_scale(tau, ftz(tc + tail))
                 top.unsafe_store(j * n + c, ftz(tc - td))
                 for i in range(j + 1):
-                    bot.unsafe_store(i * n + c, ts_fma(-td, ftz(bot.unsafe_load(i * n + j)), ftz(bot.unsafe_load(i * n + c))))
+                    var vj2: Float32
+                    comptime if TS_TREE_PAR:
+                        vj2 = vsh[i]
+                    else:
+                        vj2 = ftz(bot.unsafe_load(i * n + j))
+                    bot.unsafe_store(i * n + c, ts_fma(-td, vj2, ftz(bot.unsafe_load(i * n + c))))
                 c += TS_TPB
         dev_barrier()
 
 
 def ts_capply_kernel(
-    cbuf: F32Ptr, tiles: F32Ptr, taus: F32Ptr, n_in: Int32, k_in: Int32, nb_in: Int32, s_in: Int32, p0_in: Int32, child_in: Int32 = Int32(1)
+    cbuf: F32Ptr, tiles: F32Ptr, taus: F32Ptr, n_in: Int32, k_in: Int32, nb_in: Int32, s_in: Int32, p0_in: Int32,
+    child_in: Int32 = Int32(1), kt_in: Int32 = Int32(1),
 ):
-    """`ts_capply_host` for pair p0 + block_idx.x of the level with stride s:
-    one thread per column of C (each column's chain is its own)."""
+    """`ts_capply_host` for pair p0 + block_idx.x // kt of the level with
+    stride s: one thread per column of C (each column's chain is its own).
+    TS_TREE_PAR: threadgroup t is pair t // kt and the tile t % kt of TS_TPB
+    columns, and each reflector column is staged in threadgroup memory
+    (the same words); the chains are unchanged."""
     var n = Int(n_in)
     var k = Int(k_in)
     var nb = Int(nb_in)
     var s = Int(s_in)
-    var ia = TS_TREE_ARITY * s * (Int(p0_in) + Int(block_idx.x))
+    var kt = Int(kt_in) if Int(kt_in) > 0 else 1
+    var pair = Int(block_idx.x) // kt
+    var tile = Int(block_idx.x) - pair * kt
+    var ia = TS_TREE_ARITY * s * (Int(p0_in) + pair)
     var ib = ia + Int(child_in) * s
     if ib >= nb:
         return
@@ -491,7 +841,36 @@ def ts_capply_kernel(
     var xb = cbuf + ib * n * k
     var v = tiles + ib * n * n
     var tp = taus + ib * n
-    var c = Int(thread_idx.x)
+    var tid = Int(thread_idx.x)
+    comptime if TS_TREE_PAR:
+        var vsh = stack_allocation[TS_MAX_N, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+        var cc = tile * TS_TPB + tid
+        var live = cc < k
+        if live:
+            for i in range(n):
+                xb.unsafe_store(i * k + cc, Float32(0.0))
+        for jj in range(n):
+            var j = n - 1 - jj
+            var tau = tp.unsafe_load(j)
+            if tau == Float32(0.0):
+                continue
+            var i3 = tid
+            while i3 <= j:
+                vsh[i3] = ftz(v.unsafe_load(i3 * n + j))
+                i3 += TS_TPB
+            barrier()
+            if live:
+                var tail = Float32(0.0)
+                for i in range(j + 1):
+                    tail = ts_fma(vsh[i], ftz(xb.unsafe_load(i * k + cc)), tail)
+                var xv = ftz(xt.unsafe_load(j * k + cc))
+                var td = ts_scale(tau, ftz(xv + tail))
+                xt.unsafe_store(j * k + cc, ftz(xv - td))
+                for i in range(j + 1):
+                    xb.unsafe_store(i * k + cc, ts_fma(-td, vsh[i], ftz(xb.unsafe_load(i * k + cc))))
+            barrier()
+        return
+    var c = tile * TS_TPB + tid
     while c < k:
         for i in range(n):
             xb.unsafe_store(i * k + c, Float32(0.0))
@@ -664,42 +1043,87 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
     r; with `keep` the factored state stays for `ts_apply_device`."""
     comptime if not TS_SMEM_OK:
         raise Error("x_decomp tsqr: the panel kernels' threadgroup memory does not fit this column")
+    comptime if (TS_WY_PAIR or TS_TREE_PAR) and not TS_SMEM2_OK:
+        raise Error("x_decomp tsqr: the pair and tree kernels' threadgroup memory does not fit this column")
     ts_free_device()
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
+    var npair = ts_pairs(n)
     var dt = ctx.enqueue_create_buffer[DType.float32](nb * npan * _TT)
+    var dt2 = ctx.enqueue_create_buffer[DType.float32]((nb * npair * TS_T2) if TS_WY_PAIR else 1)
     var dtl = ctx.enqueue_create_buffer[DType.float32](nb * n * n)
     var dtau = ctx.enqueue_create_buffer[DType.float32](nb * n)
     enqueue_fill(ctx, dtau, Float32(0.0))
     var mbmax = m - ts_block_lo(nb - 1)
     var bpl = _per_launch(3 * mbmax * n * TS_NB)
-    for pan in range(npan):
-        var b0 = 0
-        while b0 < nb:
-            var cnt = min(bpl, nb - b0)
-            ctx.enqueue_function[ts_leaf_panel_kernel](
-                da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(pan),
-                grid_dim=cnt, block_dim=TS_TPB,
-            )
-            _wait_apple(ctx)
-            comptime if TS_GRID_UPDATE:
-                # the trailing chunks of this slice of blocks, one threadgroup each
-                var j1 = pan * TS_NB + min(TS_NB, n - pan * TS_NB)
-                var nch = (n - j1 + TS_NB - 1) // TS_NB
-                if nch > 0:
-                    comptime if TS_STRIP_UPDATE:
-                        var strips=(nch+1)//2
-                        ctx.enqueue_function[ts_leaf_update_kernel[2]](
-                            da.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(n),Int32(nb),Int32(b0),Int32(pan),
-                            Int32(strips),grid_dim=cnt*strips,block_dim=TS_TPB,
-                        )
-                    else:
-                        ctx.enqueue_function[ts_leaf_update_kernel[1]](
-                            da.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(n),Int32(nb),Int32(b0),Int32(pan),
-                            Int32(nch),grid_dim=cnt*nch,block_dim=TS_TPB,
-                        )
+    comptime if TS_WY_PAIR:
+        # pair q: panel a, panel a's reflectors on panel b's columns, panel b,
+        # the pair's T2, ONE update of the columns right of the pair
+        var bpl2 = _per_launch(3 * mbmax * n * TS_W2)
+        for q in range(npair):
+            var pa = 2 * q
+            var has_b = pa + 1 < npan
+            var j1 = pa * TS_NB + ts_pair_width(n, q)
+            var nch = (n - j1 + TS_NB - 1) // TS_NB
+            var b0 = 0
+            while b0 < nb:
+                var cnt = min(bpl2, nb - b0)
+                ctx.enqueue_function[ts_leaf_panel_kernel](
+                    da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(pa),
+                    grid_dim=cnt, block_dim=TS_TPB,
+                )
+                _wait_apple(ctx)
+                if has_b:
+                    ctx.enqueue_function[ts_pair_mid_kernel](
+                        da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(pa),
+                        grid_dim=cnt, block_dim=TS_TPB,
+                    )
                     _wait_apple(ctx)
-            b0 += cnt
+                    ctx.enqueue_function[ts_leaf_panel_kernel](
+                        da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(pa + 1),
+                        grid_dim=cnt, block_dim=TS_TPB,
+                    )
+                    _wait_apple(ctx)
+                ctx.enqueue_function[ts_pair_t_kernel](
+                    da.unsafe_ptr(), dt.unsafe_ptr(), dt2.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(q),
+                    grid_dim=cnt, block_dim=TS_TPB,
+                )
+                _wait_apple(ctx)
+                if nch > 0:
+                    ctx.enqueue_function[ts_pair_update_kernel](
+                        da.unsafe_ptr(), dt2.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(q), Int32(nch),
+                        grid_dim=cnt * nch, block_dim=TS_TPB,
+                    )
+                    _wait_apple(ctx)
+                b0 += cnt
+    comptime if not TS_WY_PAIR:
+        for pan in range(npan):
+            var b0 = 0
+            while b0 < nb:
+                var cnt = min(bpl, nb - b0)
+                ctx.enqueue_function[ts_leaf_panel_kernel](
+                    da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(pan),
+                    grid_dim=cnt, block_dim=TS_TPB,
+                )
+                _wait_apple(ctx)
+                comptime if TS_GRID_UPDATE:
+                    # the trailing chunks of this slice of blocks, one threadgroup each
+                    var j1 = pan * TS_NB + min(TS_NB, n - pan * TS_NB)
+                    var nch = (n - j1 + TS_NB - 1) // TS_NB
+                    if nch > 0:
+                        comptime if TS_STRIP_UPDATE:
+                            var strips=(nch+1)//2
+                            ctx.enqueue_function[ts_leaf_update_kernel[2]](
+                                da.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(n),Int32(nb),Int32(b0),Int32(pan),
+                                Int32(strips),grid_dim=cnt*strips,block_dim=TS_TPB,
+                            )
+                        else:
+                            ctx.enqueue_function[ts_leaf_update_kernel[1]](
+                                da.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(n),Int32(nb),Int32(b0),Int32(pan),
+                                Int32(nch),grid_dim=cnt*nch,block_dim=TS_TPB,
+                            )
+                        _wait_apple(ctx)
+                b0 += cnt
     ctx.enqueue_function[ts_rtile_kernel](
         da.unsafe_ptr(), dtl.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), grid_dim=_grid(nb * n * n), block_dim=TS_TPB
     )
@@ -740,9 +1164,11 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
         st[].bufs.append(dt)
         st[].bufs.append(dtl)
         st[].bufs.append(dtau)
+        st[].bufs.append(dt2)
         st[].m = m
         st[].n = n
     _ = dt^
+    _ = dt2^
     _ = dtl^
     _ = dtau^
 
@@ -754,7 +1180,7 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
     state before replacing/closing the factor context. No content cache is
     inferred and no different factorization is reused."""
     var st = TS_DEV_STATE.get_or_create_ptr()
-    if len(st[].bufs) != 4 or st[].m != m or st[].n != n:
+    if len(st[].bufs) != 5 or st[].m != m or st[].n != n:
         ts_free_device()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
     if keep:
@@ -777,7 +1203,7 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
         comptime if not (_TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_REUSE"]()):
             raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
         var retained_bytes = 0
-        for i in range(4):  # admitted factor, panel, R tiles and tau buffers
+        for i in range(5):  # admitted factor, panel, R tiles, tau and pair T2 buffers
             retained_bytes += len(st[].bufs[i])*4
         if retained_bytes>16*1024*1024:
             raise Error("x_decomp tsqr: retained factor state exceeds16 MiB experiment budget")
@@ -794,7 +1220,7 @@ def ts_apply_device_buf(
     first n * k words), so no host matrix crosses: RSVD_IDN_TSQR_ORTHO's
     selection matrix. The state is released."""
     var st = TS_DEV_STATE.get_or_create_ptr()
-    if len(st[].bufs) != 4 or st[].m != m or st[].n != n:
+    if len(st[].bufs) != 5 or st[].m != m or st[].n != n:
         ts_free_device()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
     var nb = ts_blocks(m)
@@ -815,14 +1241,20 @@ def _ts_apply_dcb(
     var dt = st[].bufs[1]
     var dtl = st[].bufs[2]
     var dtau = st[].bufs[3]
+    var dt2 = st[].bufs[4]
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
+    var npair = ts_pairs(n)
     var strides = List[Int]()
     var s = 1
     while s < nb:
         strides.append(s)
         s *= TS_TREE_ARITY
     var ppl = _per_launch(n * n * k)
+    # TS_TREE_PAR: C's columns tiled over threadgroups, TS_TPB a tile
+    var kt = 1
+    comptime if TS_TREE_PAR:
+        kt = (k + TS_TPB - 1) // TS_TPB
     for li in range(len(strides)):
         var sl = strides[len(strides) - 1 - li]
         var pairs = (nb + TS_TREE_ARITY * sl - 1) // (TS_TREE_ARITY * sl)
@@ -833,7 +1265,7 @@ def _ts_apply_dcb(
                 var cnt = min(ppl, pairs - p0)
                 ctx.enqueue_function[ts_capply_kernel](
                     dcb.unsafe_ptr(), dtl.unsafe_ptr(), dtau.unsafe_ptr(), Int32(n), Int32(k), Int32(nb), Int32(sl), Int32(p0), Int32(child),
-                    grid_dim=cnt, block_dim=TS_TPB,
+                    Int32(kt), grid_dim=cnt * kt, block_dim=TS_TPB,
                 )
                 _wait_apple(ctx)
                 p0 += cnt
@@ -846,21 +1278,38 @@ def _ts_apply_dcb(
     var ach = 0
     comptime if TS_GRID_UPDATE:
         ach = (k + TS_NB - 1) // TS_NB
-    for pp in range(npan):
-        var pan = npan - 1 - pp
-        var b0 = 0
-        while b0 < nb:
-            var cnt = min(bpl, nb - b0)
-            ctx.enqueue_function[ts_leaf_apply_kernel](
-                da.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(n), Int32(k), Int32(nb), Int32(b0), Int32(pan),
-                Int32(ach), grid_dim=cnt * (ach if ach > 0 else 1), block_dim=TS_TPB,
-            )
-            _wait_apple(ctx)
-            b0 += cnt
+    comptime if TS_WY_PAIR:
+        # the pairs last to first, one pass of C's chunks per pair
+        var bpl2 = _per_launch(3 * mbmax * k * TS_W2)
+        var ach2 = (k + TS_NB - 1) // TS_NB
+        for qq in range(npair):
+            var q = npair - 1 - qq
+            var b0 = 0
+            while b0 < nb:
+                var cnt = min(bpl2, nb - b0)
+                ctx.enqueue_function[ts_pair_apply_kernel](
+                    da.unsafe_ptr(), dt2.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(n), Int32(k), Int32(nb), Int32(b0),
+                    Int32(q), Int32(ach2), grid_dim=cnt * ach2, block_dim=TS_TPB,
+                )
+                _wait_apple(ctx)
+                b0 += cnt
+    comptime if not TS_WY_PAIR:
+        for pp in range(npan):
+            var pan = npan - 1 - pp
+            var b0 = 0
+            while b0 < nb:
+                var cnt = min(bpl, nb - b0)
+                ctx.enqueue_function[ts_leaf_apply_kernel](
+                    da.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(n), Int32(k), Int32(nb), Int32(b0), Int32(pan),
+                    Int32(ach), grid_dim=cnt * (ach if ach > 0 else 1), block_dim=TS_TPB,
+                )
+                _wait_apple(ctx)
+                b0 += cnt
     ctx.synchronize()
     _ = dcb^
     _ = da^
     _ = dt^
+    _ = dt2^
     _ = dtl^
     _ = dtau^
     if not keep:
