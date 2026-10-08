@@ -609,17 +609,22 @@ struct IvfFlatDevice(Movable):
         same launch over the same words as the constructor above, and the host
         offsets the probe plan counts are the index's, so a search through
         this side returns the bits a search through an uploaded index does."""
-        self.dcenters = ctx.enqueue_create_buffer[DType.float32](1)
-        self.dcenter_norm = ctx.enqueue_create_buffer[DType.float32](1)
-        self.dlist_data = ctx.enqueue_create_buffer[DType.float32](1)
-        self.d_off = ctx.enqueue_create_buffer[DType.int32](1)
-        self.d_ind = ctx.enqueue_create_buffer[DType.uint32](1)
-        swap(self.dcenters, built.dcenters)
-        swap(self.dcenter_norm, built.dcenter_norm)
-        swap(self.dlist_data, built.dlist_data)
-        swap(self.d_off, built.d_off)
-        swap(self.d_ind, built.d_ind)
+        var dc = ctx.enqueue_create_buffer[DType.float32](1)
+        var dcn = ctx.enqueue_create_buffer[DType.float32](1)
+        var dld = ctx.enqueue_create_buffer[DType.float32](1)
+        var doff = ctx.enqueue_create_buffer[DType.int32](1)
+        var dind = ctx.enqueue_create_buffer[DType.uint32](1)
+        swap(dc, built.dcenters)
+        swap(dcn, built.dcenter_norm)
+        swap(dld, built.dlist_data)
+        swap(doff, built.d_off)
+        swap(dind, built.d_ind)
         _ = built^
+        self.dcenters = dc^
+        self.dcenter_norm = dcn^
+        self.dlist_data = dld^
+        self.d_off = doff^
+        self.d_ind = dind^
         self.dlist_norm = ctx.enqueue_create_buffer[DType.float32](index.n_rows)
         compute_row_norms(ctx, self.dlist_data, self.dlist_norm, index.n_rows, index.dim)
         self.list_norm = download_f32(ctx, self.dlist_norm, index.n_rows)
