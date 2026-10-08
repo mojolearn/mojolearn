@@ -24,17 +24,28 @@ class Pool:
         type(self).closed = True
 
 
-def fit_binary(self, ext, x, y01, *kernel):
+def fit_binary(self, ext, x, y01, *kernel, k=None):
+    # With `k` the worker hands the int32 class codes and the binding builds
+    # the targets `code == k` (_gpc_impl._fit_binary, lane fam2-kernel-gp).
+    if k is not None:
+        y01 = Array.from_list([1.0 if int(c) == k else 0.0 for c in y01.tolist()], '<f4')
     bits = y01.tolist()
     return SimpleNamespace(y_train_=y01, L_=x, pi_=y01, W_sr_=y01,
                            n_iter_=3, log_marginal_likelihood_value_=sum(bits) / 3)
 
 
-def latent(self, ext, est, q, want_proba):
+def latent(self, ext, est, q, want_proba, out_kind=0):
     # Includes exact ties and zeros; class identity changes remaining rows.
     target = est.y_train_.tolist().index(1.0)
     p = [0.0, 0.5, (target + 1) / 7, 0.0][:q.shape[0]]
-    return Array.from_list([-0.0, 1.0, -1.0, 0.0][:q.shape[0]], '<f4'), None, Array.from_list(p, '<f8')
+    mean = Array.from_list([-0.0, 1.0, -1.0, 0.0][:q.shape[0]], '<f4')
+    if not out_kind:
+        return mean, None, Array.from_list(p, '<f8')
+    # out_kind 1 / 2: the binding's fourth item, a binary model's predict
+    # codes or its [1 - p, p] rows (gaussian_process/unnorm.mojo::gpc_binary_out)
+    out = (Array.from_list([int(v > 0.5) for v in p], '<i8') if out_kind == 1
+           else Array.from_list([[1.0 - v, v] for v in p], '<f8'))
+    return mean, None, Array.from_list(p, '<f8'), out
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +53,21 @@ def setup(monkeypatch):
     Pool.fail = False
     monkeypatch.setattr(pg, 'DevicePool', Pool)
     monkeypatch.setattr('mojolearn._backend.default_mode', lambda: 'identical')
-    monkeypatch.setattr(GPC, '_extension', lambda self: None)
+    # The real GP binding stays: the one-vs-rest combine (`gpc_ovr_combine`)
+    # is native on every build. Its all-classes doors (`gp_idn_caps` bit 0:
+    # gpc_fit_all / gpc_predict_all) are hidden so the plain reference takes
+    # the per-class fit and latent the worker shards take, both faked here.
+    real_extension = GPC._extension
+
+    class _PerClass:
+        def __init__(self, ext):
+            self._ext = ext
+
+        def __getattr__(self, name):
+            if name == 'gp_idn_caps':
+                raise AttributeError(name)
+            return getattr(self._ext, name)
+    monkeypatch.setattr(GPC, '_extension', lambda self: _PerClass(real_extension(self)))
     monkeypatch.setattr(GPC, '_fit_binary', fit_binary)
     monkeypatch.setattr(GPC, '_latent', latent)
     from mojolearn._cpu_reference import reference_training
