@@ -9,9 +9,9 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from xtrees.api import register, tree_shap_cache_create_args, tree_shap_cache_values_args
+from xtrees.api import register, tree_shap_cache_values_args
 from xtrees import shap_device as shap_dev
-from xtrees.shap_device import shap_prepare, tree_shap_values, shap_pair_count
+from xtrees.shap_device import shap_prepare, shap_prepare_retain, tree_shap_values, shap_pair_count
 from xtrees.dart_device import DART_DEVICE, dart_open, dart_step, dart_add, dart_close, dart_predict
 from xtrees.dart_units import IDN_DART_DEVICE
 
@@ -186,13 +186,19 @@ def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObj
     return PythonObject(p[0])
 
 
-def tree_shap_cache_create_binding(forest: PythonObject, tscale: PythonObject,
-                                   cover: PythonObject, params: PythonObject) raises -> PythonObject:
-    var a = tree_shap_cache_create_args(forest, params)
-    var addresses = List[Int]()
-    for i in range(5):
-        addresses.append(a[i])
-    return PythonObject(shap_dev.shap_cache_create(addresses, Int(py=tscale), Int(py=cover), a[5], a[6], a[7], a[8]))
+def tree_shap_prepare_retain_binding(forest: PythonObject, tscale: PythonObject, bg: PythonObject,
+                                     cover: PythonObject, ev: PythonObject, meta: PythonObject,
+                                     params: PythonObject) raises -> PythonObject:
+    """`x_trees_tree_shap_prepare` (the same arguments and outputs) that keeps
+    the uploaded forest, the device cover and the leaf table under a handle
+    (returned) for `x_trees_tree_shap_cache_values`; free it with
+    `x_trees_tree_shap_cache_release` (lane gap-shap-nb: one forest upload
+    and one table build per explainer, xtrees/shap_device.mojo)."""
+    var p = _shap_ints(params, 5, "x_trees_tree_shap_prepare_retain")
+    if p[0] < 1 or p[0] >= (1 << 24) or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 1:
+        raise Error("x_trees_tree_shap_prepare_retain: needs 1 <= background rows < 2^24, features, trees, outputs, nodes")
+    return PythonObject(shap_prepare_retain(_shap_forest(forest), Int(py=tscale), Int(py=bg), Int(py=cover),
+                                            Int(py=ev), Int(py=meta), p[0], p[1], p[2], p[3], p[4]))
 
 
 def tree_shap_cache_values_binding(handle: PythonObject, x: PythonObject,
@@ -213,7 +219,7 @@ def PyInit__mojolearn_x_trees() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_trees")
         register(m)
-        m.def_function[tree_shap_cache_create_binding]("x_trees_tree_shap_cache_create")
+        m.def_function[tree_shap_prepare_retain_binding]("x_trees_tree_shap_prepare_retain")
         m.def_function[tree_shap_cache_values_binding]("x_trees_tree_shap_cache_values")
         m.def_function[tree_shap_cache_release_binding]("x_trees_tree_shap_cache_release")
         m.def_function[x_trees_shap_pair_count_binding]("x_trees_shap_pair_count")
