@@ -1,0 +1,88 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "gap-tsqr",
+ "branch": "lane/gap-tsqr",
+ "head": "3c5c5592a",
+ "controls": {
+  "tsqr_wy_pair": {
+   "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "x_decomp/tsqr_core.mojo:96",
+    "x_decomp/tsqr_device.mojo:90",
+    "x_decomp/tsqr_device.mojo:625",
+    "x_decomp/tsqr_host.mojo:138",
+    "x_decomp/tsqr_host.mojo:186"
+   ],
+   "binding": "_mojolearn_x_decomp (device) + _mojolearn_x_decomp_host (host column)",
+   "bits_change": true,
+   "status": "new",
+   "note": "Blocked TSQR (linalg.qr, linalg.svd, lstsq, LinearRegression, RSVD_IDN_TSQR_ORTHO): two consecutive 16-column panels share ONE compact-WY trailing update and ONE Q C pass through the merged T2 = [[Ta, -Ta (Ya^T Yb) Tb], [0, Tb]] (panel a factored, its reflectors applied to panel b's columns only, panel b factored, T2 merged, one 32-reflector update of the columns right of the pair). The trailing matrix crosses the device twice per pair instead of twice per panel: half the traffic of the bandwidth-bound update passes (32 multiply-adds per loaded word). Size rule: the pair width is one thread's 32 accumulators and one TS_PART fold page in two rounds; no shape rule. Bits change right of every pair (one 32-wide fold instead of two 16-wide); host replay (ts_wy_host[_, TS_W2], ts_pair_t_host) folds the same chains. NV and AMD must match per arm. NOT COMPILED (lanes never compile), NOT MEASURED."
+  },
+  "tsqr_tree_par": {
+   "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "x_decomp/tsqr_core.mojo:99",
+    "x_decomp/tsqr_device.mojo:720",
+    "x_decomp/tsqr_device.mojo:820",
+    "x_decomp/tsqr_host.mojo:278"
+   ],
+   "binding": "_mojolearn_x_decomp (device) + _mojolearn_x_decomp_host (host column)",
+   "bits_change": true,
+   "status": "new",
+   "note": "The TSQR combine tree: each reflector's norm is a 256-lane fixed fold (lane t: alpha^2 for t == 0, then rows i == t mod 256 ascending; halving tree ts_tree_fold) instead of one serial chain recomputed by every thread of the pair's threadgroup; the scaled reflector column is staged in threadgroup memory for the column threads (same words). The Q C tree apply (ts_capply_kernel) tiles C's columns over threadgroups (256 a tile) with the reflector column staged. Bits change in the tree norms only; the column chains are unchanged. Host replay (ts_combine_host) folds the same lanes. NV and AMD must match per arm. NOT COMPILED, NOT MEASURED."
+  },
+  "xd_svd_group": {
+   "define": "MOJOLEARN_IDN_XD_SVD_GROUP_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_XD_SVD_GROUP_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "x_decomp/device.mojo:217",
+    "x_decomp/device.mojo:3622"
+   ],
+   "binding": "_mojolearn_x_decomp (device) + _mojolearn_linalg (imports DevExec)",
+   "bits_change": false,
+   "status": "new",
+   "note": "The small SVD of R (DevExec.svd, the round-robin one-sided Jacobi) enqueues 4 sweeps per convergence readback, each sweep on its own flag slice and lowest-flag word, instead of one wait and one readback per sweep. Bit-neutral: a sweep without a rotation is the identity, so the sweeps enqueued after the converging one change nothing; the convergence test and the X_DECOMP_SVD_SWEEPS bound are the same. Requires IDN_XD_SWEEP (IDENTICAL). NOT COMPILED, NOT MEASURED."
+  }
+ },
+ "algorithms": {
+  "linalg:qr": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "_linalg_impl.py _qr_tsqr -> x_decomp_tsqr_r (ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> x_decomp_r_signs -> x_decomp_tsqr_q (_ts_apply_dcb [tsqr_wy_pair, tsqr_tree_par])"
+  },
+  "linalg:svd": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "_linalg_impl.py _svd_tsqr -> x_decomp_tsqr_r [tsqr_wy_pair, tsqr_tree_par] -> _svd_tall(R) -> DevExec.svd _svd_on [xd_svd_group] -> x_decomp_tsqr_q [tsqr_wy_pair, tsqr_tree_par]"
+  },
+  "linalg:lstsq": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "_expansion_decomp.py _tsqr_lstsq_core -> x_decomp_tsqr_r (nrhs > 0, ts_pack_device + ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> SVD of the small R [xd_svd_group]"
+  },
+  "linear_model:linear-regression": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "ols_tsqr_r_py -> DevExec.ols_tsqr_factor -> ts_factor_device [tsqr_wy_pair, tsqr_tree_par]"
+  }
+ }
+}
