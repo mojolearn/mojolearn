@@ -9,7 +9,7 @@
 #   [store]        default $LQ_PREBUILT, else /root/grid-prebuilt; the store holds <vendor>/lookup.tsv + artifacts
 # Exit 0: every listed binding was installed and its sha256 verified (one "PREBUILT installed ..." line each).
 # Exit 2: cannot serve the line (no store, store built from another commit, a host binding, a binding or define
-#         set the store lacks, a corrupt artifact): the caller builds as before. Nothing is left half-installed.
+#         set the store lacks, a corrupt artifact): the caller builds every listed binding as before (overwriting any copied).
 # Exit 1: usage.
 set -u
 [ $# -ge 4 ] || { echo "usage: $0 <tree> <nvidia|amd> <defines-csv|-> <bindings-csv> [store]" >&2; exit 1; }
