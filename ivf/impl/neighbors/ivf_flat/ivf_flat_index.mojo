@@ -127,9 +127,9 @@ def ivf_trainset_stride(n_rows: Int, n_lists: Int) -> Int:
     if n_rows <= 1 or n_lists < 1:
         return 1
     var target = min(n_rows // 2, IVF_TRAIN_ROWS_PER_LIST * n_lists)
-    var floor = min(n_rows, IVF_TRAIN_MIN_ROWS_PER_LIST * n_lists)
-    if target < floor:
-        target = floor
+    var low = min(n_rows, IVF_TRAIN_MIN_ROWS_PER_LIST * n_lists)
+    if target < low:
+        target = low
     if target < n_lists:
         target = n_lists
     if target <= 0:
