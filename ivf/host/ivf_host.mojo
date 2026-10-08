@@ -113,6 +113,8 @@ from ivf.impl.neighbors.ivf_common import (
     postprocess_neighbors,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
+    IVF_TRAINSET_STRIDE,
+    ivf_trainset_stride,
     METRIC_COSINE_EXPANDED,
     IvfFlatIndexParams,
     IvfFlatSearchParams,
@@ -281,18 +283,49 @@ def host_ivf_build(
 
     ivf_index_params_validate(params, n_rows, dim)
     ivf_validate_data(x, n_rows, dim, "dataset")
-    var sum_scale = host_plan_sum_scale(x, n_rows, dim)
-    var weight_scale = choose_scale(Float64(n_rows), n_rows)
-    var weights = List[Float32](length=n_rows, fill=Float32(1.0))
+    # lane gap-ivf (2026-10-08): the device build's strided trainset
+    # (`IVF_TRAINSET_STRIDE`, ivf_flat_index.mojo): rows 0, s, 2s, ... train
+    # the quantizer, every row is assigned below. The device gathers them with
+    # `ivf_stride_rows_kernel`; this is the same copy.
+    var train_stride = 1
+    comptime if IVF_TRAINSET_STRIDE:
+        train_stride = ivf_trainset_stride(n_rows, n_lists)
+    var n_train = n_rows // train_stride
+    var xt = List[Float32]()
+    if train_stride > 1:
+        xt = List[Float32](length=n_train * dim, fill=Float32(0.0))
+        for j in range(n_train):
+            var src = j * train_stride * dim
+            var dst = j * dim
+            for c in range(dim):
+                xt[dst + c] = x[src + c]
+    var sum_scale: Float64
+    if train_stride > 1:
+        sum_scale = host_plan_sum_scale(xt, n_train, dim)
+    else:
+        sum_scale = host_plan_sum_scale(x, n_rows, dim)
+    var weight_scale = choose_scale(Float64(n_train), n_train)
+    var weights = List[Float32](length=n_train, fill=Float32(1.0))
     var centers = List[Float32](length=n_lists * dim, fill=Float32(0.0))
-    var labels = List[UInt32](length=n_rows, fill=UInt32(0))
+    var train_labels = List[UInt32](length=n_train, fill=UInt32(0))
     var trace = KMeansHostTrace()
-    _ = host_fit_main(
-        x, n_rows, dim, weights, n_lists, centers, labels,
-        INIT_KMEANS_PLUS_PLUS, seed, 1, kmeans_n_iters, DEFAULT_TOL, metric,
-        DEFAULT_OVERSAMPLING, Float32(sum_scale), Float32(weight_scale),
-        trace, String("ivf.quantizer."),
-    )
+    # lazy_shift=True: the device build's `kp.lazy_shift = True`
+    if train_stride > 1:
+        _ = host_fit_main(
+            xt, n_train, dim, weights, n_lists, centers, train_labels,
+            INIT_KMEANS_PLUS_PLUS, seed, 1, kmeans_n_iters, DEFAULT_TOL, metric,
+            DEFAULT_OVERSAMPLING, Float32(sum_scale), Float32(weight_scale),
+            trace, String("ivf.quantizer."), True,
+        )
+    else:
+        _ = host_fit_main(
+            x, n_rows, dim, weights, n_lists, centers, train_labels,
+            INIT_KMEANS_PLUS_PLUS, seed, 1, kmeans_n_iters, DEFAULT_TOL, metric,
+            DEFAULT_OVERSAMPLING, Float32(sum_scale), Float32(weight_scale),
+            trace, String("ivf.quantizer."), True,
+        )
+    _ = xt^
+    var labels = List[UInt32](length=n_rows, fill=UInt32(0))
     var center_norms = host_row_norms(centers, n_lists, dim, False)
     var x_norm = host_row_norms(x, n_rows, dim, False)
     var predict_c_norm = host_row_norms(centers, n_lists, dim, metric == METRIC_COSINE_EXPANDED)

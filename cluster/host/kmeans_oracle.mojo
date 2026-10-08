@@ -1478,10 +1478,12 @@ def host_kmeans_fit(
     init: Int,
     metric: Int,
     oversampling_factor: Float64 = DEFAULT_OVERSAMPLING,
+    lazy_shift: Bool = False,
 ) raises -> KMeansHostResult:
     """`kmeans_fit` then `fit_predict` (module docstring). `centroids` is
     `k x d`, read first on INIT_ARRAY; `labels` is `n`, the assignment
-    against the FINAL centroids."""
+    against the FINAL centroids. `lazy_shift`: the device caller's
+    `KMeansParams.lazy_shift` (`host_fit_main`)."""
     comptime assert NORM_TPB == lib_block_size_for[K_LIB_ROW_NORM, COLUMN_APPLE](), (
         "kmeans host: the row norm fold width differs from the Apple column's"
     )
@@ -1547,7 +1549,7 @@ def host_kmeans_fit(
     var result = host_fit_main(
         x, n, d, weights, k, centroids, labels, init, seed, n_init, max_iter,
         tol, metric, oversampling_factor, Float32(sum_scale),
-        Float32(weight_scale), trace, String(""),
+        Float32(weight_scale), trace, String(""), lazy_shift,
     )
 
     # `host_fit_main` ends EVERY restart with this exact assignment against
