@@ -1056,11 +1056,16 @@ def eigh_td_on(
     # EIGH_TD_IDN: the packed [V | W] / [W | V] operands (n x 2 TD_NB each),
     # the block-update scratch and the plain GEMM scratch (one float each
     # on the FAST route, never read)
-    var idn_ws = _td_idn_workspace(n) if EIGH_TD_IDN else (1, 1)
+    var ws_blk = 1
+    var ws_gemm = 1
+    comptime if EIGH_TD_IDN:
+        var sized = _td_idn_workspace(n)
+        ws_blk = sized[0]
+        ws_gemm = sized[1]
     var dP1 = ctx.enqueue_create_buffer[DType.float32](n * 2 * TD_NB if EIGH_TD_IDN else 1)
     var dP2 = ctx.enqueue_create_buffer[DType.float32](n * 2 * TD_NB if EIGH_TD_IDN else 1)
-    var dws = ctx.enqueue_create_buffer[DType.float32](idn_ws[0])
-    var dgw = ctx.enqueue_create_buffer[DType.float32](idn_ws[1])
+    var dws = ctx.enqueue_create_buffer[DType.float32](ws_blk)
+    var dgw = ctx.enqueue_create_buffer[DType.float32](ws_gemm)
     var ap = F32Ptr(unsafe_from_address=Int(da.unsafe_ptr()))
     # the GUARD=False block updates never read `info`; any Int32-typed pointer
     var no_info = I32Ptr(unsafe_from_address=Int(da.unsafe_ptr()))
