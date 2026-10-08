@@ -450,6 +450,38 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(receipt['status'], 'PASSED')
         self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
 
+    def test_local_path_runs_on_this_box_and_never_ssh(self):
+        """--local (tools/release.py --smoke-via lq, 2026-10-08): the box flow
+        runs on the held box itself; no ssh, no rental, the box directory
+        beside --out, the receipt in --out as --ssh brings it home."""
+        shims = self.dir / 'bin'
+        shims.mkdir()
+        for name, body in (('ssh', '#!/bin/sh\necho SSH-CALLED >&2\nexit 99\n'), ('sha256sum', SHA_SHIM),
+                           ('timeout', TIMEOUT_SHIM)):
+            (shims / name).write_text(body)
+            (shims / name).chmod(0o755)
+        (shims / 'STATUS').write_text('PASSED')
+        out = self.dir / 'local-out'
+        r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--local', '--out', str(out),
+                           env={'PATH': str(shims) + ':' + os.environ['PATH']})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('THIS BOX (--local, nothing rented)', r.stdout)
+        self.assertNotIn('SSH-CALLED', r.stdout + r.stderr)
+        self.assertEqual(json.loads((out / 'results.json').read_text())['status'], 'PASSED')
+        self.assertTrue((self.dir / 'local-out.run' / 'wheel-smoke' / 'box.done').is_file())
+        self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
+
+    def test_local_refusals(self):
+        r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--local')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('--local needs --out', r.stderr)
+        r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--local', '--rent',
+                           '--out', str(self.dir / 'o'))
+        self.assertIn('--local and --rent are exclusive', r.stderr)
+        r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--local', '--ssh', 'x@y',
+                           '--out', str(self.dir / 'o'))
+        self.assertIn('--local and --ssh are exclusive', r.stderr)
+
     def plugin(self, dist='mojolearn_nvidia', version='0.0.0'):
         path = self.dir / f'{dist}-{version}-py3-none-manylinux_2_35_x86_64.whl'
         with zipfile.ZipFile(path, 'w') as z:

@@ -5,6 +5,7 @@
 #   bash tools/release_wheel_smoke.sh <wheel> --expected-source-commit <40-hex> [options]          DRY RUN
 #   bash tools/release_wheel_smoke.sh <wheel> --expected-source-commit <40-hex> [options] --rent   rents
 #   bash tools/release_wheel_smoke.sh <wheel> --expected-source-commit <40-hex> --ssh '<target>'   an existing box
+#   bash tools/release_wheel_smoke.sh <wheel> --expected-source-commit <40-hex> --local --out DIR  ON a held box
 #   bash tools/release_wheel_smoke.sh --from-index testpypi|pypi --version V [options] [--rent]   THE USER'S INSTALL
 #
 # It runs tools/qualify_verifier_wheel.py --scope expanded (the checklist's
@@ -39,7 +40,14 @@
 #                        is rented or deleted. The final wheel is packed on the Mac
 #                        from all three legs, so no build box holds it; use this for
 #                        a box you already have up.
-#   --rent               create the box. Without it (and without --ssh): a dry run.
+#   --local              run ON THIS machine, a GPU box we already hold (2026-10-08:
+#                        releases rent nothing; tools/release.py --smoke-via lq copies
+#                        the wheels to the nv/amd box and queues this script there with
+#                        `lq add --front <box> CMD ...`). Nothing is rented, deleted or
+#                        reached over ssh; the box flow runs under <out>.run/wheel-smoke
+#                        and the results land in --out (required) exactly as --ssh
+#                        brings them home.
+#   --rent               create the box. Without it (and without --ssh/--local): a dry run.
 #   --vendor cuda|hip    the GPU family (default cuda). hip rents a RunPod AMD
 #                        Instinct MI300X (gfx942, the wheel's AMD set) on
 #                        rocm/dev-ubuntu-22.04:6.4.1-complete with the repo's ssh
@@ -165,7 +173,7 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLeve
 
 WHEEL=""; COMMIT=""; OUT=""; GPU="${MOJOLEARN_SMOKE_GPU:-NVIDIA GeForce RTX 4090}"
 IMAGE="${MOJOLEARN_SMOKE_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
-CUDA="13.0"; LEASE=45; SMOKE_SECONDS=1800; SSH_GIVEN=""; RENT=0
+CUDA="13.0"; LEASE=45; SMOKE_SECONDS=1800; SSH_GIVEN=""; RENT=0; LOCAL=0
 VENDOR=cuda; SELECTION=""; REFS=(); GPU_SET=0; IMAGE_SET=0; CUDA_SET=0
 PROVIDER=auto
 PLUGINS=(); PLUGIN=""; PLUGIN_SHA=""
@@ -221,6 +229,7 @@ while [ $# -gt 0 ]; do
         --lease) shift; LEASE="${1:-}" ;;
         --smoke-seconds) shift; SMOKE_SECONDS="${1:-}" ;;
         --ssh) shift; SSH_GIVEN="${1:-}" ;;
+        --local) LOCAL=1 ;;
         --rent) RENT=1 ;;
         -h|--help) sed -n '2,/^set -u$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
         -*) die "unknown option '$1' (see --help)" ;;
@@ -230,6 +239,26 @@ while [ $# -gt 0 ]; do
 done
 
 # ---------------------------------------------------------------- validation
+# --local: this machine is the box. SSH_GIVEN carries the sentinel "local" so
+# every rental gate below (`[ -z "$SSH_GIVEN" ]`) stays shut, and bx runs the
+# box commands here with bash instead of ssh. The box directory sits beside
+# --out, never inside it (the upload wipes it).
+if [ "$LOCAL" = 1 ]; then
+    [ "$RENT" = 0 ] || die "--local and --rent are exclusive"
+    [ -z "$SSH_GIVEN" ] || die "--local and --ssh are exclusive"
+    [ -n "$OUT" ] || die "--local needs --out"
+    mkdir -p "$OUT" || die "cannot make $OUT"
+    OUT=$(cd "$OUT" && pwd)
+    SSH_GIVEN=local
+    if [ -z "${MOJOLEARN_SMOKE_REMOTE_DIR:-}" ]; then
+        RDIR="$OUT.run/wheel-smoke"
+        printf '%s' "$RDIR" | grep -Eq '^/[A-Za-z0-9/_.-]*/wheel-smoke$' || die "--out $OUT has characters the box directory refuses"
+        GUARD="${RDIR}-guard"
+    fi
+    mkdir -p "$(dirname "$RDIR")" || die "cannot make $(dirname "$RDIR")"
+    # Linux boxes may lack perl's shasum; sha256sum prints the same line
+    command -v shasum > /dev/null 2>&1 || shasum() { shift 2; sha256sum "$@"; }
+fi
 case "$VENDOR" in
     cuda) ;;
     hip) [ "$GPU_SET" = 1 ] || GPU="AMD Instinct MI300X OAM"
@@ -645,7 +674,8 @@ do_destroy() {  # DROPLET_ID, or a sweep by tag and name; DO_GONE=1 only on a GE
     return 0
 }
 
-echo "== release_wheel_smoke: $([ -n "$SSH_GIVEN" ] && echo "EXISTING BOX $SSH_GIVEN" || { [ "$RENT" = 1 ] && echo RENT || echo 'DRY RUN'; }) =="
+if [ "$LOCAL" = 1 ]; then _mode="THIS BOX (--local, nothing rented)"; elif [ -n "$SSH_GIVEN" ]; then _mode="EXISTING BOX $SSH_GIVEN"; elif [ "$RENT" = 1 ]; then _mode=RENT; else _mode="DRY RUN"; fi
+echo "== release_wheel_smoke: $_mode =="
 if [ -n "$FROM_INDEX" ]; then
 echo "  index    $FROM_INDEX  version $VERSION  vendor $VENDOR  commit ${COMMIT:-not pinned, the installed package records its own}"
 echo "  install  pip install --report $RDIR/pip_report.json $INDEX_ARGS 'mojolearn==$VERSION' (fresh venv, no local wheel)"
@@ -1079,7 +1109,9 @@ fi
 # on Hot Aisle (whose login is the hotaisle user). stdin passes through.
 bx() {  # <seconds> <command>
     _bs=$1; shift
-    if [ "$BOX_SUDO" = 1 ]; then
+    if [ "$LOCAL" = 1 ]; then
+        with_timeout "$_bs" bash -c "$1"
+    elif [ "$BOX_SUDO" = 1 ]; then
         # shellcheck disable=SC2086
         with_timeout "$_bs" ssh $SSH_OPTS $SSH_TARGET "$(ha_root_cmd "$1")"
     else
