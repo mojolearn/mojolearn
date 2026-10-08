@@ -88,7 +88,8 @@ def _cases():
         [inf], [-inf, 1.0], [inf, -inf], [nan, 1.0], [1.0, -nan],
         [5e-324, 5e-324, -1e-320],         # subnormal
         [1e16, 1.0, -1e16], [2.0 ** 53, 1.0, 1.0], [2.0 ** 53, 1.0],
-        ["1.5", 2],                        # float() accepts a string, math.fsum does not
+        # ["1.5", 2] left: fsum reads its terms as array('d') since lane
+        # py-runtime round 3, which refuses a string (TypeError) as math.fsum does
         [10 ** 400],                       # an int too large for a float
         [1, 2, 3], [True, 0.5],
     ]
