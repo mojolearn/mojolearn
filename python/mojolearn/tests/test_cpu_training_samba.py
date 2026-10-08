@@ -114,7 +114,10 @@ def test_every_entry_samba_reaches_is_on_the_host():
             "mamba": {"mamba1_session_" + name for name in
                       ("create", "open", "step", "export_state", "load_state", "info", "close")}
                 | {f"mamba{v}_session_{name}" for v in (2, 3) for name in
-                   ("create", "open", "step", "export_state", "load_state", "close")},  # 769936f70, probed by `_has`
+                   ("create", "open", "step", "export_state", "load_state", "close")}  # 769936f70, probed by `_has`
+                # NI48's retained tape: the host's `mamba3_forward_tape_enabled`
+                # reads False, so `_forward_with_tape` never calls these there
+                | {"mamba3_forward_tape", "mamba3_backward_tape", "mamba3_close_tape"},
             "transformer": {"transformer_session_" + name for name in ("create", "forward", "close")}
                 | {"transformer_decode_session_" + name for name in
                    ("create", "open", "step", "forward", "export_state", "load_state", "close")}
@@ -122,7 +125,19 @@ def test_every_entry_samba_reaches_is_on_the_host():
                 # (lane/lowbit-blocks, lane/lowbit-default); the host route takes
                 # `transformer_forward_int15`, and a host session under the
                 # profile is refused by name
-                | {"transformer_session_forward_int15", "transformer_decode_session_open_int15"},
+                | {"transformer_session_forward_int15", "transformer_decode_session_open_int15"}
+                # the retained tape (`transformer_forward_tape_enabled`, absent on
+                # the host, disables it) and the session's fresh forward and
+                # backward, each taken only behind an `_exports` check
+                | {"transformer_forward_tape", "transformer_backward_tape", "transformer_close_tape",
+                   "transformer_session_forward_fresh", "transformer_session_backward"},
+            # The device-resident optimizer pair (`_resident_enabled` takes it
+            # only when the binding exports `_RESIDENT_ENTRIES`; every other
+            # `optimizer_resident_*` call runs on an open pair) and the
+            # training device arrays (`_dev_binding` refuses by name without
+            # `_DEV_ENTRIES`, "IDENTICAL GPU builds only").
+            "training": {name for name in gpu if name.startswith("optimizer_resident_")}
+                | set(__import__("mojolearn._training_impl", fromlist=["_DEV_ENTRIES"])._DEV_ENTRIES),
         }.get(fam, set())
         missing = [m for m in missing if not m.endswith("_available") and m not in resident]
         assert not missing, f"{fam}: SambaStack's modules call {missing}, absent from the host binding"
