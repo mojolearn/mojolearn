@@ -88,11 +88,10 @@ comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C1
 #   Ridge istella AMD 1020.6 -> 1027.2 ms (1.006x, neutral)
 #   OLS istella  NV 816.2 -> 1008.3 ms (1.235x)  AMD 468.9 -> 532.2 ms (1.135x)
 #                SLOWER: the one cell that reads slower. The route is
-#                trust-gated: when the Gram does not factor or a pivot fails
-#                the gate, linear_gram_fit returns status 1 and the caller
-#                runs the incumbent TSQR after the Gram attempt, so that cell
-#                pays both; the cost is the fallback-gated path, not the
-#                Gram kernels.
+#                fallback-gated: when the Gram does not factor or a pivot
+#                fails the trust gate, linear_gram_fit returns status 1 and
+#                the caller then runs the incumbent TSQR, paying both. Whether
+#                this cell took that fallback was not isolated in the run.
 #   Geometric mean over all measured cells 0.80x. Quality identical (r2 and
 #   rmse within 1e-6 in every cell); NV vs AMD output hashes MATCH.
 # `-D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF` restores the incumbent
