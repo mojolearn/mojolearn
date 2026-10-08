@@ -151,25 +151,6 @@
    "binding": "_mojolearn_x_decomp",
    "bits_change": true,
    "status": "kept (code unchanged); reach corrected: NOT pca (covariance_eigh) and NOT tsvd (gemm_tn Gram + eig); TSQR consumers only"
-  },
-  "C25_PROJECTION_REUSE": {
-   "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "kernel_methods/estimator.mojo:209",
-    "kernel_methods/estimator.mojo:2639",
-    "kernel_methods/estimator.mojo:2739"
-   ],
-   "binding": "_mojolearn_kernel_methods",
-   "bits_change": true,
-   "status": "kept (code unchanged); reach corrected: RBFSampler/Nystroem only, NOT more:tsvd / randomized-svd"
   }
  },
  "algorithms": {
@@ -282,18 +263,14 @@
   },
   "more:nystroem": {
    "binding": "_mojolearn_kernel_methods",
-   "route": "kernel_methods/estimator.mojo:2639 [C25]",
-   "controls": [
-    "C25_PROJECTION_REUSE"
-   ],
+   "route": "kernel_methods/estimator.mojo:2639 (no control; C25 deleted)",
+   "controls": [],
    "interaction_groups": []
   },
   "more:rbf-sampler": {
    "binding": "_mojolearn_kernel_methods",
-   "route": "kernel_methods/estimator.mojo:209 [C25]",
-   "controls": [
-    "C25_PROJECTION_REUSE"
-   ],
+   "route": "kernel_methods/estimator.mojo:209 (no control; C25 deleted)",
+   "controls": [],
    "interaction_groups": []
   }
  },
@@ -313,6 +290,11 @@
   {
    "define": "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS",
    "reason": "split: PCA use is MOJOLEARN_CLASSICAL_PCA_COV=23 (one-pass Chan rewrite), MCD use is MOJOLEARN_CLASSICAL_C23_MCD; no LDA/QDA code ever read it; per-cell serial kernel deleted"
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE",
+   "control": "C25_PROJECTION_REUSE",
+   "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 noise, a loser. on/off ms ratio NV/AMD: nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884; kernel_rel_error SAME. Code recoverable at main ad7ed2370; define refused in core/six_lane_experiment_guards.mojo."
   }
  ],
  "notes": [

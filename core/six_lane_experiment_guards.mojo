@@ -177,6 +177,8 @@ def _check_configuration() -> Bool:
     comptime assert get_defined_int["MOJOLEARN_NI14_COL2IM",0]() >= 0 and get_defined_int["MOJOLEARN_NI14_COL2IM",0]() <= 2, "MOJOLEARN_NI14_COL2IM arms: 1 bounded, 2 tiled"
     comptime assert not (is_defined["MOJOLEARN_TREES_T19"]() and is_defined["MOJOLEARN_TREES_T21"]()), "MOJOLEARN_TREES_T19 forces use_ridx, which makes MOJOLEARN_TREES_T21 inert (T19+T21 == T19)"
     comptime assert not (is_defined["MOJOLEARN_TREES_C50_GB_PACKED"]() and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()), "MOJOLEARN_TREES_C50_GB_PACKED returns before MOJOLEARN_IDN_GBDT_APPLY_WIDE (gbdt/resident_model.mojo): the pair == C50"
+    # Deleted 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 losers (docs/apple-fast/EXPERIMENTS.md). Recoverable at main ad7ed2370.
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE"](), "removed: MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE (grid ge123e6f9: noise on nystroem/rbf-sampler, NV 1.00-1.04x AMD 0.88-0.98x)"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True
