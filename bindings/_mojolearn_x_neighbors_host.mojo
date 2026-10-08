@@ -21,7 +21,7 @@ from x_neighbors.ocsvm_host import op_ocsvm
 from x_neighbors.ocsvm_host import ocsvm_alpha_init_binding
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
 from x_neighbors.ocsvm_host import unit_ff_binding
-from x_neighbors.graph_host import op_louvain
+from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
 from x_neighbors.kapprox_host import kpca_resident_binding
 from x_neighbors.iter_host import lp_fast_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
@@ -1168,6 +1168,47 @@ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     return PythonObject(None)
 
 
+def pr_csr_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_indptr = _a(a_, 0)
+    var v_indices = _a(a_, 1)
+    var v_vals = _a(a_, 2)
+    var v_x = _a(a_, 3)
+    var v_p = _a(a_, 4)
+    var v_dw = _a(a_, 5)
+    var v_info = _a(a_, 6)
+    var v_n = _n(i_, 0)
+    var v_nnz = _n(i_, 1)
+    var v_has_vals = _n(i_, 2)
+    var v_max_iter = _n(i_, 3)
+    var v_thr_hi = _n(i_, 4)
+    var v_thr_lo = _n(i_, 5)
+    var v_binary = _n(i_, 6)
+    var v_x_uniform = _n(i_, 7)
+    var v_p_uniform = _n(i_, 8)
+    var v_dw_uniform = _n(i_, 9)
+    var v_alpha = _f(f_, 0)
+    with GILReleased(Python()):
+        op_pr_csr(v_indptr, v_indices, v_vals, v_x, v_p, v_dw, v_info, v_n, v_nnz, v_has_vals, v_max_iter, v_thr_hi, v_thr_lo, v_binary, v_x_uniform, v_p_uniform, v_dw_uniform, v_alpha)
+    return PythonObject(None)
+
+
+def louvain_csr_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_indptr = _a(a_, 0)
+    var v_indices = _a(a_, 1)
+    var v_vals = _a(a_, 2)
+    var v_labels = _a(a_, 3)
+    var v_info = _a(a_, 4)
+    var v_n = _n(i_, 0)
+    var v_nnz = _n(i_, 1)
+    var v_has_vals = _n(i_, 2)
+    var v_max_level = _n(i_, 3)
+    var v_resolution = _f(f_, 0)
+    var v_threshold = _f(f_, 1)
+    with GILReleased(Python()):
+        op_louvain_csr(v_indptr, v_indices, v_vals, v_labels, v_info, v_n, v_nnz, v_has_vals, v_max_level, v_resolution, v_threshold)
+    return PythonObject(None)
+
+
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
@@ -1257,6 +1298,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[lp_iterate_knn_binding]("xn_lp_iterate_knn")
     m.def_function[ocsvm_binding]("xn_ocsvm")
     m.def_function[louvain_binding]("xn_louvain")
+    m.def_function[pr_csr_binding]("xn_pr_csr")
+    m.def_function[louvain_csr_binding]("xn_louvain_csr")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
     m.def_function[x_neighbors_py2mojo_off_binding]("x_neighbors_py2mojo_off")

@@ -18,7 +18,7 @@ from x_neighbors.proba64_nc import NC_PROBA64
 from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_class_counts, op_p2m_const_cols, op_p2m_lp_labels, op_p2m_fill, op_p2m_iota, op_p2m_negate, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
 from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_dev import op_ocsvm
-from x_neighbors.graph_dev import op_louvain
+from x_neighbors.graph_dev import op_louvain, op_pr_csr, op_louvain_csr
 from x_neighbors.kapprox_dev import kpca_resident_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
 from x_neighbors.nan_cells_device import nc_fit_lean_binding
@@ -1183,6 +1183,47 @@ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     return PythonObject(None)
 
 
+def pr_csr_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_indptr = _a(a_, 0)
+    var v_indices = _a(a_, 1)
+    var v_vals = _a(a_, 2)
+    var v_x = _a(a_, 3)
+    var v_p = _a(a_, 4)
+    var v_dw = _a(a_, 5)
+    var v_info = _a(a_, 6)
+    var v_n = _n(i_, 0)
+    var v_nnz = _n(i_, 1)
+    var v_has_vals = _n(i_, 2)
+    var v_max_iter = _n(i_, 3)
+    var v_thr_hi = _n(i_, 4)
+    var v_thr_lo = _n(i_, 5)
+    var v_binary = _n(i_, 6)
+    var v_x_uniform = _n(i_, 7)
+    var v_p_uniform = _n(i_, 8)
+    var v_dw_uniform = _n(i_, 9)
+    var v_alpha = _f(f_, 0)
+    with GILReleased(Python()):
+        op_pr_csr(v_indptr, v_indices, v_vals, v_x, v_p, v_dw, v_info, v_n, v_nnz, v_has_vals, v_max_iter, v_thr_hi, v_thr_lo, v_binary, v_x_uniform, v_p_uniform, v_dw_uniform, v_alpha)
+    return PythonObject(None)
+
+
+def louvain_csr_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_indptr = _a(a_, 0)
+    var v_indices = _a(a_, 1)
+    var v_vals = _a(a_, 2)
+    var v_labels = _a(a_, 3)
+    var v_info = _a(a_, 4)
+    var v_n = _n(i_, 0)
+    var v_nnz = _n(i_, 1)
+    var v_has_vals = _n(i_, 2)
+    var v_max_level = _n(i_, 3)
+    var v_resolution = _f(f_, 0)
+    var v_threshold = _f(f_, 1)
+    with GILReleased(Python()):
+        op_louvain_csr(v_indptr, v_indices, v_vals, v_labels, v_info, v_n, v_nnz, v_has_vals, v_max_level, v_resolution, v_threshold)
+    return PythonObject(None)
+
+
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
@@ -1272,6 +1313,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[lp_iterate_knn_binding]("xn_lp_iterate_knn")
     m.def_function[ocsvm_binding]("xn_ocsvm")
     m.def_function[louvain_binding]("xn_louvain")
+    m.def_function[pr_csr_binding]("xn_pr_csr")
+    m.def_function[louvain_csr_binding]("xn_louvain_csr")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
     m.def_function[x_neighbors_py2mojo_off_binding]("x_neighbors_py2mojo_off")
