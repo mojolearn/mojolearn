@@ -5397,16 +5397,7 @@ def race(args):
         timed = a["digests"][0 if external_warmup else 1:]
         a["digest_stable"] = (len(set(timed)) == 1) if ok and len(timed) >= 2 else None
         info = a.get("info") or {}
-        # A cuML/cuVS/cuGraph arm set up by ctd._cuml_setup carries no input_home but
-        # records the pre-clock upload: its inputs were on the device before its clock
-        # (board-two-clocks, 2026-10-08; the old `or "host"` labelled 58 NVIDIA cells host).
-        home = info.get("input_home") or ("device" if info.get("upload_ms_untimed") is not None
-                                          else "host")
-        a["span"] = {"input_home": home, "pre_clock_fit": bool(info.get("pre_clock_fit")),
-                     "upload_ms_untimed": info.get("upload_ms_untimed"),
-                     "inside_clock": fit_text(lane)}
-        if arm in OURS_ARMS:
-            a["span"].update(upload_span(a, ok))
+        a["span"] = arm_span(lane, arm, a, ok)
         if has_infer(lane):
             ist = a["status"] if a["status"] != "ok" or a["infer_ms"] else "error"
             infer["arms"][arm] = {"ms": list(a["infer_ms"]), "warmup_ms": a["infer_warmup_ms"],
@@ -5426,6 +5417,23 @@ def race(args):
     ran = [a for a in arms if result["arms"][a]["status"] != "skipped"]
     failed = [a for a in ran if result["arms"][a]["status"] != "ok"]
     return 1 if ran and len(failed) == len(ran) else 0
+
+
+def arm_span(lane, arm, a, ok):
+    """What was inside one arm's clock, from its ready record; OUR arm also carries the
+    separate upload clock (`upload_span`). No timing is affected."""
+    info = a.get("info") or {}
+    # A cuML/cuVS/cuGraph arm set up by ctd._cuml_setup carries no input_home but
+    # records the pre-clock upload: its inputs were on the device before its clock
+    # (board-two-clocks, 2026-10-08; the old `or "host"` labelled 58 NVIDIA cells host).
+    home = info.get("input_home") or ("device" if info.get("upload_ms_untimed") is not None
+                                      else "host")
+    span = {"input_home": home, "pre_clock_fit": bool(info.get("pre_clock_fit")),
+            "upload_ms_untimed": info.get("upload_ms_untimed"),
+            "inside_clock": fit_text(lane)}
+    if arm in OURS_ARMS:
+        span.update(upload_span(a, ok))
+    return span
 
 
 def upload_span(a, ok):
