@@ -1260,8 +1260,10 @@ comptime LG_EXACT_BATCH_WIDTH = 256 if AFT_N01 else (
     )
 )
 # T17 (trees-cleanup 2026-10-07): the IDENTICAL batch width is one int sweep,
-# `-D MOJOLEARN_TREES_T17_BATCH=32|64|128`; it wins over the older
-# `MOJOLEARN_GBDT_LG_EXACT_BATCH64` arm when both are given. Scheduling only:
+# `-D MOJOLEARN_TREES_T17_BATCH=32|64|128`, absent = 128 since
+# lane/grid-flips-1 (2026-10-08, grid ge123e6f9; numbers at the
+# declaration); it wins over the older `MOJOLEARN_GBDT_LG_EXACT_BATCH64`
+# arm, which IDENTICAL now reaches only with `-D MOJOLEARN_TREES_T17_BATCH=0`. Scheduling only:
 # the exact replay admits leaves in global best-first order at every width.
 
 #: FAST on Apple (trees-apple3): THE ESTIMATOR INHERITS THE SEARCHER'S
