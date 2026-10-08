@@ -106,12 +106,29 @@ def test_oracle_imports_no_gpu_and_no_device_module():
     # core.host_parallel pins the caller FP environment for each independent
     # task; checks.fixed_point supplies weighted-objective integer scaling.
     # Direct max.algorithm dispatch is no longer admitted.
+    #
+    # Admitted 2026-10-08 (lane rehearsal-suite-green), each a module with no
+    # GPU import (checked below):
+    # `ensemble.nan_refusal` (e54df7516) is the one RF_NAN_REFUSAL string the
+    # device scan and this oracle both raise; it holds no code.
+    # `core.abs_sum_blocked_host` (79d0a1fb7) is the host column of
+    # core/abs_sum_blocked.mojo, the blocked binary64 |v| sum in the device's
+    # order, so the oracle restates the fold rather than a serial chain.
+    # `checks.soft_f64` is that fold's integer binary64 (sf64_from_f32).
+    # `ensemble.tree_identical_ideas` and `ensemble.tree_moments` (bd4c36dbe)
+    # are the T14 switch and its shared moment arithmetic, default OFF; with
+    # the switch off the oracle's split arithmetic is unchanged.
     # A future import needs its own sentence here before it is added.
     assert sorted(set(imports)) == [
-        "checks.fixed_point", "checks.numerics", "core.host_parallel", "core.host_predict_threads", "ensemble.host_layout",
+        "checks.fixed_point", "checks.numerics", "checks.soft_f64", "core.abs_sum_blocked_host",
+        "core.host_parallel", "core.host_predict_threads", "ensemble.host_layout",
+        "ensemble.nan_refusal", "ensemble.tree_identical_ideas", "ensemble.tree_moments",
         "std.builtin.sort", "std.math", "std.memory",
         "std.sys.compile",
     ], imports
+    for rel in ("ensemble/nan_refusal.mojo", "core/abs_sum_blocked_host.mojo", "checks/soft_f64.mojo",
+                "ensemble/tree_identical_ideas.mojo", "ensemble/tree_moments.mojo"):
+        assert not GPU_IMPORTS.search(_read(rel)), f"{rel} imports a GPU module"
 
 
 def test_oracle_spells_the_bit_carrying_constructs():
