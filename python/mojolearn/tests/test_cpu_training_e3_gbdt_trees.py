@@ -86,8 +86,13 @@ def test_oracles_import_no_gpu_module():
         "gbdt.host.gbdt_oracle", "gbdt.host.gbdt_oracle_losses",
         "gbdt.host.gbdt_oracle_lossguide",
         "gbdt.methods.greedy_subsets_searcher.split_properties_helper",
+        "gbdt.methods.leaves_estimation.tree_t26_units", "gbdt.trees_identical_switches",
         "std.math", "std.memory",
     ], imports
+    # the two added modules are the shared IDENTICAL leaf units and the
+    # comptime switch table; both stay CPU-safe
+    for rel in ("gbdt/methods/leaves_estimation/tree_t26_units.mojo", "gbdt/trees_identical_switches.mojo"):
+        assert not GPU_IMPORTS.search(_read(rel)), f"{rel} imports a GPU module"
     lg_imports = sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", _read(LOSSGUIDE), re.M)))
     assert lg_imports == ["checks.numerics", "gbdt.host.gbdt_oracle"], lg_imports
     for rel in REUSED_HOST_MODULES:
@@ -117,7 +122,9 @@ def test_driver_spells_the_bit_carrying_constructs():
 
 def test_binding_dispatches_and_refuses_by_name():
     src = _read(host_surface.binding_source("gbdt"))
-    assert re.search(r"gbdt_host_fit_non_symmetric\(\s*x, y, n_rows, n_features, tp, ns_start\s*\)", src)
+    # the call carries the row weights since the class-weight CPU column
+    # (lane/fix-cpu-column2)
+    assert re.search(r"gbdt_host_fit_non_symmetric\(\s*x, y, n_rows, n_features, tp, ns_start, row_weights\s*\)", src)
     assert "gbdt_host_ns_model_text(ns_model)" in src
     for what in ('"min_split_gain="', '"min_child_hessian="', '"min_data_in_leaf="',
                  "under Lossguide (only NewtonL2 and NewtonCosine)", "(only Cosine)"):
