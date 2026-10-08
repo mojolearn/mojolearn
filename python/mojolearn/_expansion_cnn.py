@@ -1593,6 +1593,14 @@ class BatchNorm2d(_Layer):
     `backward` returns grad_x and sets grad_weight_ (gamma), grad_bias_ (beta).
     `BatchNorm1d` is the same over (N, C) or (N, C, L)."""
 
+    # lane gap-neural-io (2026-10-08, plan gaps-2026-10-08 Section 4): the
+    # forward and backward already take resident tensors (`_forward_dev`,
+    # `_backward_dev`, behind IDN_LAYER_DEV_IO); the flag tells callers (the
+    # board harness among them) to hand x and dy over as `DeviceTensor`s, so
+    # a fit no longer moves x, y, dy and dx over the bus. The same entries
+    # on the same words: no bit moves.
+    _device_io = True
+
     def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True,
                  input_shape=None, numeric_mode=None):
         np = _np()
@@ -1782,6 +1790,11 @@ class Dropout2d(_Layer):
     identity. The mask is Philox4x32-10 of (random_state, the call count)
     at the channel index, compared as an integer: the same mask on every
     column (not torch's stream). `mask_` holds the last scale per element."""
+
+    # lane gap-neural-io (2026-10-08): resident x, y and dy already run
+    # (`_forward_t`, `x_cnn_map2_m`); the flag lets callers pass them, as
+    # BatchNorm2d above. No bit moves.
+    _device_io = True
 
     def __init__(self, p=0.5, random_state=0, input_shape=None, numeric_mode=None):
         if not 0.0 <= float(p) <= 1.0:
