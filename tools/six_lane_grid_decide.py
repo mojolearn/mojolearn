@@ -58,7 +58,7 @@ FAST_OUT_DIR = ROOT / 'experiments/six_lane_integration/grid-fast'
 FAST_VOTERS = ('apple',)
 
 TIMING_RANK = {'SLOWER': 0, 'FASTER': 1, 'NO_VERDICT': 2, 'UNMEASURED': 3}
-QUALITY_BAD = {'WORSE', 'FAIL', 'REGRESSED'}
+QUALITY_BAD = {'WORSE', 'REGRESSED'}  # FAIL = the candidate race itself failed: the cell is unmeasured, not a quality loss
 QUALITY_OK = {'SAME', 'BETTER', 'IMPROVED', 'EQUAL'}
 
 
@@ -179,8 +179,8 @@ def algorithm_verdict(rows):
         return 'HOLD_IDENTITY'
     if any(q in QUALITY_BAD for q in qualities):
         return 'HOLD_QUALITY'
-    if any(t in ('UNMEASURED', 'INCOMPLETE') for t in timings):
-        return 'UNMEASURED'
+    if any(t in ('UNMEASURED', 'INCOMPLETE') for t in timings) or any(q == 'FAIL' for q in qualities):
+        return 'UNMEASURED'  # a failed candidate race leaves the cell unmeasured (it is counted in failed_cells)
     if any(i != 'MATCH' for i in identities):
         return 'IDENTITY_INCOMPLETE'
     if any('SLOWER' == t for t in timings):
@@ -342,6 +342,8 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
     totals = defaultdict(int)
     for cs in control_summary.values():
         totals[cs['recommendation']] += 1
+    failed_cells = sorted(dict(configuration=cfg['configuration'], workload_id=r['workload_id']) for cfg in evidence.values() for r in cfg['rows'] if r['quality'] == 'FAIL')
+    failed_cells = [dict(t) for t in {tuple(sorted(f.items())) for f in failed_cells}]
     rule = dict(cell='timing verdict + NVIDIA==AMD identity MATCH + quality not WORSE',
                 algorithm='SLOWER if any workload SLOWER; FASTER if any FASTER and none SLOWER; NEUTRAL otherwise',
                 arm='PROMOTE: every reached algorithm FASTER or NEUTRAL, at least one FASTER. SPLIT: FASTER and SLOWER both present '
@@ -364,7 +366,8 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
                           'phase-1 singles of the same algorithm')
     return dict(schema=SCHEMA, mode=mode, matrix_schema=matrix.get('schema'), base_main=matrix.get('base_main'), **extra,
                 counts=dict(controls=len(control_summary), arms=sum(len(c['arms']) for c in control_summary.values()),
-                            configurations=len(configs), by_recommendation=dict(sorted(totals.items()))),
+                            configurations=len(configs), by_recommendation=dict(sorted(totals.items())), failed_cells=len(failed_cells)),
+                failed_cells=sorted(failed_cells, key=lambda f: (f['configuration'], f['workload_id'])),
                 controls=dict(sorted(control_summary.items())), algorithms=algorithms,
                 configurations={k: dict(v, rows=v['rows']) for k, v in sorted(evidence.items())},
                 rule=rule)

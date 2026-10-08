@@ -226,5 +226,18 @@ class IncompleteAndPartialTests(unittest.TestCase):
         self.assertEqual(dec['controls']['x']['recommendation'], 'PARTIAL_PROMOTE')
         self.assertEqual(dec['controls']['y']['recommendation'], 'NOT_MEASURED')
 
+
+class FailedRaceTests(unittest.TestCase):
+    def test_failed_candidate_race_is_unmeasured_not_a_quality_hold(self):
+        A1 = 'classical:a1'
+        configs = [cfg(A1, {'x': 'on'}, 'single')]
+        wid = configs[0]['workloads'][0]
+        t = [tcase('G.classical:a1.x=on', wid, 'FASTER', 0.5, 0.5)]
+        ident = [icase('G.classical:a1.x=on', wid, 'MATCH')]
+        q = [dict(configuration='G.classical:a1.x=on', workload_id=wid, vendor='nvidia', candidate_vs_baseline=dict(verdict='FAIL'))]
+        dec = D.decide(dict(schema='m', configurations=configs), D.timing_index([dict(cases=t)]), D.identity_index([dict(cases=ident)]), D.quality_index([dict(rows=q)]))
+        self.assertEqual(dec['controls']['x']['recommendation'], 'NOT_MEASURED')
+        self.assertEqual(dec['counts']['failed_cells'], 1)
+
 if __name__ == '__main__':
     unittest.main()
