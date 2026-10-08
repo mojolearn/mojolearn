@@ -72,7 +72,12 @@ def test_explicit_unit_pairs_equal_the_generated_pairs():
     X, rel, g = _fixture()
     generated = np.asarray(_model().fit(X, rel, group_id=g).predict(X))
     explicit = np.asarray(_model().fit(X, rel, group_id=g, pairs=_generated_pairs(rel, g)).predict(X))
-    assert generated.tobytes() == explicit.tobytes()
+    # IDN_PAIRLOGIT_GROUP (5ef0b3e7d, default ON under IDENTICAL) enumerates
+    # generated pairs per query on the device, so a row's sum takes the
+    # group's document order while an explicit list keeps the list order:
+    # the same pairs, the same model to float32 rounding, not the same bits
+    # (measured: 1.2e-07 at most). The _OFF build keeps the bitwise equality.
+    np.testing.assert_allclose(generated, explicit, rtol=0, atol=1e-6)
 
 
 @reference_training()
