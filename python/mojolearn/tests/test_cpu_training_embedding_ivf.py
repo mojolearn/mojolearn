@@ -121,6 +121,9 @@ def test_bindings_register_the_gpu_names():
             # registered only under MOJOLEARN_IVF_FAST_BALANCED_AUDIT (a FAST
             # device audit probe, default off; no Python caller)
             device_only = {"ivf_fast_balanced_hits"}
+            # lane gap-ivf: the resident build (taken via getattr, None on the
+            # host binding) and its one-copy export of a resident index
+            device_only |= {"ivf_flat_build_resident", "ivf_flat_index_export"}
         assert device_only <= gpu and not device_only & host
         assert host == (gpu - device_only) | readbacks, (name, sorted(host ^ ((gpu - device_only) | readbacks)))
         assert host == set(host_surface.family(name)["exports"])
