@@ -156,7 +156,9 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert "pool = DevicePool(devices)" in gpc and "cooperative=True" not in gpc
     assert "columns = [1] if len(classes) == 2 else range(len(classes))" in gpc
     assert "requests = [('gpc_class_fit', _fresh(estimator)," in gpc
-    assert "requests.append(('gpc_class_predict', part, (fit, q, want_proba)))" in gpc
+    # args are (fit, q, want_proba) plus the binary out_kind when set
+    assert "requests.append(('gpc_class_predict', part, args))" in gpc
+    assert "args = (fit, q, want_proba, out_kind) if out_kind else (fit, q, want_proba)" in gpc
     assert "columns = [value.tolist() for value in _run(requests, devices)]" in gpc
     assert "MOJOLEARN_" not in gpc
     assert "    if operation == 'gpc_class_fit':\n" in worker
