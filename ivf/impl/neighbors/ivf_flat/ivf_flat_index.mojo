@@ -85,6 +85,7 @@ comptime IVF_DEFAULT_N_LISTS = 1024
 comptime IVF_DEFAULT_KMEANS_N_ITERS = 20
 comptime IVF_DEFAULT_KMEANS_TRAINSET_FRACTION = Float64(0.5)
 comptime IVF_DEFAULT_N_PROBES = 20
+"""`ivf_flat.hpp:30,32,34,78`, unchanged."""
 
 
 #: lane gap-ivf (2026-10-08, docs/plans/gaps-2026-10-08.md section 6 item 2):
@@ -135,7 +136,6 @@ def ivf_trainset_stride(n_rows: Int, n_lists: Int) -> Int:
     if target <= 0:
         return 1
     return max(1, n_rows // target)
-"""`ivf_flat.hpp:30,32,34,78`, unchanged."""
 
 
 @fieldwise_init
