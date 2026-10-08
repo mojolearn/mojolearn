@@ -111,6 +111,12 @@ def test_bindings_register_the_gpu_names():
         # the device-resident embedding table (`embedding.py` resolves both
         # with a None fallback and takes the per-call entries on the host)
         device_only = {"embedding_resident", "embedding_table_release"} if name == "embedding" else set()
+        if name == "embedding":
+            # device I/O (gap lanes, 2026-10-08): resident tensors and the
+            # forward/backward on them; `Embedding._dev_module` refuses by name
+            # without them and the host route takes host arrays
+            device_only |= {"embedding_forward_dev", "embedding_backward_dev"} | {
+                "seq_tensor_" + op for op in ("alloc", "free", "upload", "download", "copy")}
         if name == "ivf":
             # registered only under MOJOLEARN_IVF_FAST_BALANCED_AUDIT (a FAST
             # device audit probe, default off; no Python caller)
