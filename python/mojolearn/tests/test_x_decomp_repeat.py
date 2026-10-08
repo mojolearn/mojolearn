@@ -71,7 +71,9 @@ def _calls(k):
     rec("rand_gamma", k.rand_gamma(2, 5, 3, 1, 100.0))
     D = k.ew("sqrt", k.sqdist(A, A))
     rec("dijkstra_rows", k.dijkstra(D))
-    rec("barycenter_rows", k.barycenter(A, A, [[1, 2], [0, 2], [0, 1], [2, 4], [3, 5], [4, 6], [4, 5]], 1e-3))
+    # the neighbor indices cross as an n x k _M of exact float indices
+    nbr = _M.of([float(v) for row in [[1, 2], [0, 2], [0, 1], [2, 4], [3, 5], [4, 6], [4, 5]] for v in row], 7, 2)
+    rec("barycenter_rows", k.barycenter(A, A, nbr, 1e-3))
     C = _m(7, 6, 8, 0.0, 2.0)
     rec("als_rows", k.als(C, _m(6, 3, 9), 0.1))
     h, tau = k.geqrf(A)
