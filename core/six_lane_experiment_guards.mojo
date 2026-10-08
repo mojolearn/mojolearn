@@ -34,7 +34,9 @@ def _check_configuration() -> Bool:
     # Lane grid-prune (2026-10-07): c06_norms is ONE control with arms {rows2, rows4, small_d}; small_d returns before
     # norm_rows when d <= 32 (core/row_norms.mojo:220-232), so the pair is never a distinct configuration.
     comptime assert not (is_defined["MOJOLEARN_CLASSICAL_C06_NORM_ROWS"]() and is_defined["MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"]()), "c06_norms takes one arm: MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2|4 or MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD, not both"
-    comptime assert get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 0 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 1024 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 4096, "invalid MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS (1024|4096)"
+    # ENETCV_SCORE_BLOCKS promoted 2026-10-08 (lane/grid-act-2, grid ge123e6f9): absent = 4096; =1024 the smaller arm; _OFF the old unblocked path.
+    comptime assert get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",4096]() == 1024 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",4096]() == 4096, "invalid MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS (1024|4096; the unblocked path is -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF)"
+    comptime assert not (is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF"]() and is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS"]()), "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF (unblocked) and MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=N are exclusive arms"
     # Lane grid-fixups-1 (2026-10-08): C17_LS_TRIALS (2 trials) and the I12 loser IDN_QN_EXACT_TRIALS (4 trials) pick the
     # trial count of one line search (glm/impl/qn/qn_linesearch.mojo:236); together the first silently overrides the second.
     comptime assert not (is_defined["MOJOLEARN_CLASSICAL_C17_LS_TRIALS"]() and is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]()), "qn exact trials take one count: MOJOLEARN_CLASSICAL_C17_LS_TRIALS (2) or MOJOLEARN_IDN_QN_EXACT_TRIALS (4), not both"

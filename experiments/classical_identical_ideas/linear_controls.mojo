@@ -59,17 +59,36 @@ comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_G
 # unchanged; the thread count goes from (d+1)^2 / 2 to n / FOLD_BLOCK times
 # that, with each block's threads reading the same row tile. No shape rule.
 comptime RIDGECV_FF_BLOCKED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED"]()
-# lane/classical-cv-folds (2026-10-07), NEW, opt-in, NOT MEASURED: LassoCV /
-# ElasticNetCV held-out scoring as (path, alpha, row-block) partials. The
-# incumbent `ecv_score_staged_kernel` is ONE block per (fold, l1_ratio) path
-# walking every held-out row for every alpha. Here each block owns
-# ENETCV_SCORE_BLOCKS rows of the fold's span (the integer arm: rows per
-# block, legal 1024 | 4096, a fixed count, not a data shape), thread k folds
-# alpha k's squared errors over them from zero, and a thread per (path,
-# alpha) folds the block partials ascending (`fold_parts`, the kf_sq /
-# kf_score shape). Changes bits (the block fold order; host column and both
-# GPU vendors together). Absent (0) = the incumbent.
-comptime _ESB_RAW = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS", 0]()
+# lane/classical-cv-folds (2026-10-07); PROMOTED to the IDENTICAL default
+# 2026-10-08 (lane/grid-act-2, grid run ge123e6f9: NVIDIA L40S sm_89 + AMD
+# MI325X gfx942, full board data, one run per arm; r2 and rmse identical A vs
+# B on every cell; NV hash == AMD hash on every arm). LassoCV / ElasticNetCV
+# held-out scoring as (path, alpha, row-block) partials. The old
+# `ecv_score_staged_kernel` is ONE block per (fold, l1_ratio) path walking
+# every held-out row for every alpha. Here each block owns
+# ENETCV_SCORE_BLOCKS rows of the fold's span (rows per block, legal
+# 1024 | 4096, a fixed count, not a data shape), thread k folds alpha k's
+# squared errors over them from zero, and a thread per (path, alpha) folds
+# the block partials ascending (`fold_parts`, the kf_sq / kf_score shape).
+# Changes bits (the block fold order; host column and both GPU vendors
+# together). Grid ge123e6f9, NV / AMD ms, unblocked -> 4096:
+#   enet-cv  istella 1052.9 -> 555.2 / 3567.8 -> 818.1 (0.348x combined),
+#            taxi 122.4 -> 101.6 / 483.8 -> 359.2 (0.785x);
+#   lasso-cv istella 1041.8 -> 555.9 / 3530.4 -> 848.7 (0.358x),
+#            taxi 122.6 -> 97.9 / 513.2 -> 364.5 (0.753x).
+# 1024 is also faster (0.541x) but 4096 wins every cell. Cost reasoning: the
+# score is n_heldout * A * d multiply-adds per path; one block per path
+# serializes all of it on one SM, while span / ESB_ROWS blocks per path
+# spread it over the device. 4096 rows per block keeps each block's work
+# (4096 * A * d) large against its launch and staging cost and makes the
+# second-level fold short (span / 4096 partials per alpha), which is why it
+# beats 1024 (four times the partials to write and fold for the same work).
+# Absent = 4096 in IDENTICAL; -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024
+# is the smaller-block arm; -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF is
+# the old unblocked path (value 0; an explicit =0 is refused by the guard,
+# use _OFF). FAST keeps the unblocked path.
+comptime ENETCV_SCORE_BLOCKS_OFF = is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF"]()
+comptime _ESB_RAW = 0 if ENETCV_SCORE_BLOCKS_OFF else get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS", 4096]()
 comptime ENETCV_SCORE_BLOCKS = _ESB_RAW if CLASSICAL_IDN else 0
 comptime ENETCV_SCORE_BLOCKS_LEGAL = _ESB_RAW == 0 or _ESB_RAW == 1024 or _ESB_RAW == 4096
 comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
