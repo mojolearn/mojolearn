@@ -75,11 +75,29 @@ FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
   linux-builds, the first rental), linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
   plugins, 3b), linux-joint-diff, publish-core-linux (last, after both plugins).
-- **nvidia**: gpu-column-nvidia (the expanded smoke plus the column, one rented
-  RTX 4090, walking to the next GPU type on no stock), publish-nvidia.
-- **amd**: gpu-column-amd (RunPod MI300X, then Hot Aisle MI300X, then
-  DigitalOcean MI325X; the expanded smoke too), publish-amd.
-  Both columns run at once as detached `tools/release_wheel_smoke.sh` runs from
+- **nvidia**: gpu-column-nvidia (the expanded smoke plus the column, on the
+  nv box we hold, the RunPod L40S sm_89), gpu-column-nvidia-hopper (only with
+  `--hopper-box <ssh>`, a Hopper box we hold; otherwise SKIPPED), publish-nvidia.
+- **amd**: gpu-column-amd (on the amd box we hold, the DigitalOcean MI325X
+  gfx942; the expanded smoke too), publish-amd.
+
+  **RELEASES RENT NOTHING (2026-10-08).** The per-architecture rented smoke is
+  deprecated. `--smoke-via lq` (the default) runs each column through
+  `tools/release_lq_smoke.py`: it copies the final core, both plugins, the lane
+  selection and the reference columns to `/root/release-smoke/<version>/<column>/in`
+  on the box (sha256 checked there), queues
+  `lq add --front <nv|amd> CMD main rel-<version>-<column>-<stamp> bash tools/release_wheel_smoke.sh ... --local BUILDS=none`
+  (next in the box queue, after the running job and ahead of every grid line;
+  no binding build, no pixi env), polls `lq results <box> <tag>`, fetches the out
+  directory back and is judged exactly as the rented run was (same receipts,
+  same selection files, rediffed here). A relaunch while the job is queued polls
+  it again (`<commit12>/columns/<column>.lq.json`); it never queues twice.
+  Hopper (sm_90a) is unsmoked unless a Hopper box is held: publish-nvidia then
+  needs only the Ada column, the sm_90a payload publishes on its GitHub build
+  receipt, the alpha manifest carries `"smoke": {"sm_90a": "not run (no Hopper box held)"}`
+  and the vendor wheel's README says so. `--smoke-via rent` keeps the old
+  rented route (`--smoke-gpu`, `--amd-provider`) for an emergency only.
+  Both columns run at once as detached legs from
   the installed core and both plugins, each diffed against the Apple column;
   linux-joint-diff then diffs every PASSED column together
   (`<version>/<commit12>/diff-columns.txt`). Any DIVERGENT or MOVED cell stops

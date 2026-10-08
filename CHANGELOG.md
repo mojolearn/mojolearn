@@ -4,6 +4,13 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- Release (lane release-no-rented-smoke): releases rent nothing. `tools/release.py --smoke-via lq` (the default) runs
+  the NVIDIA and AMD wheel columns on the nv and amd boxes we already hold: `tools/release_lq_smoke.py` copies the final
+  wheels there, queues `tools/release_wheel_smoke.sh --local` with `lq add --front` (next after the running job, ahead of
+  the grid queue, no binding build) and brings the receipts home. The Hopper column runs only with `--hopper-box`;
+  without one publish-nvidia no longer waits for it, the sm_90a payload publishes on its GitHub build receipt and the
+  alpha manifest and vendor README say its smoke was not run. `--smoke-via rent` keeps the old rented smoke.
+
 - Board (lane shap-xvendor-identity): the kernel-shap and permutation-shap cells were the board's only two cross-vendor
   digest disagreements. The explainer kernels are integer soft-float64 units, the same words on NVIDIA and AMD; the model
   the harness handed them (a NumPy/LAPACK ridge: dgemm, dgesv, dgemv on each box's host CPU) and the `exact` reference
