@@ -1,9 +1,0 @@
-Traceback (most recent call last):
-  File "/root/mojolearn-priority-pass/tools/priority_pass_run.py", line 96, in <module>
-    run(['bash', 'bindings/build_%s.sh' % m], phase + '.log')
-  File "/root/mojolearn-priority-pass/tools/priority_pass_run.py", line 43, in run
-    return subprocess.run([str(x) for x in cmd], cwd=root, env=e, stdout=f, stderr=subprocess.STDOUT,
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/subprocess.py", line 571, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['bash', 'bindings/build_byte_lm.sh']' returned non-zero exit status 2.
