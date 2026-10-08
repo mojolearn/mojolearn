@@ -1262,3 +1262,18 @@ def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys):
     all, each refused by the message that names it."""
     mod = _lane_accounting()
     assert mod.self_test(verbose=True) is True, capsys.readouterr().out
+
+
+def test_every_binding_exports_its_pyinit():
+    """A function inserted between `@export` and `def PyInit_...` takes the
+    decorator: the build succeeds and the import fails with "dynamic module
+    does not define module export function" (_mojolearn_mamba_host,
+    bd4c36dbe). Every binding's PyInit must carry `@export` itself."""
+    bad = []
+    for path in sorted(BINDINGS.glob("_mojolearn*.mojo")):
+        text = path.read_text(encoding="utf-8")
+        for m in re.finditer(r"^def (PyInit_\w+)\(", text, re.M):
+            before = text[:m.start()].rstrip().split("\n")[-1].strip()
+            if before != "@export":
+                bad.append(f"{path.name}: {m.group(1)}")
+    assert not bad, bad

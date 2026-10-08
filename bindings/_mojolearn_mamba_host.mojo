@@ -591,13 +591,16 @@ def mamba3_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     return PythonObject(0)
 
 
-@export
 def mamba3_forward_tape_enabled_binding() raises -> PythonObject:
     # NI48 is scheduling-only. The host uses its unchanged forward/recompute
     # arithmetic; it must not advertise a native retained-stage API it lacks.
     return PythonObject(False)
 
 
+# The module's one C export. (The tape flag above was once inserted between
+# this decorator and PyInit, which left PyInit unexported: an import read
+# "dynamic module does not define module export function".)
+@export
 def PyInit__mojolearn_mamba_host() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba_host")
