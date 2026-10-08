@@ -137,9 +137,7 @@ from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale, enqueue_es_unscale_diag
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
 from x_decomp.rr import rr_block, rr_cs, rr_vrow
-from experiments.classical_identical_ideas.linear_controls import C25_PROJECTION_REUSE
 from kernel_methods.rbf_fused import (
-    classical_projection_kernel,
     RBF_FUSED_MAX_D,
     RBF_FUSED_TPB,
     rbf_fused_project_kernel,
@@ -205,20 +203,10 @@ def _rbf_idn_fused_launch(
 ) raises:
     """RBF_IDN_FUSED's launch: the whole transform (`whole`) or the
     projection alone, one thread per cell. ASYNCHRONOUS."""
+    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE, run ge123e6f9): four rows per thread reuse each projection weight;
+    # NV/AMD nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884;
+    # kernel_rel_error same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     var grid = (n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB
-    comptime if C25_PROJECTION_REUSE:
-        var groups = ((n_rows + 3) // 4) * dd
-        if whole:
-            ctx.enqueue_function[classical_projection_kernel[True]](
-                dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(n_rows), Int32(d), Int32(dd), scale,
-                grid_dim=(groups + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB, block_dim=RBF_FUSED_TPB,
-            )
-        else:
-            ctx.enqueue_function[classical_projection_kernel[False]](
-                dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(n_rows), Int32(d), Int32(dd), scale,
-                grid_dim=(groups + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB, block_dim=RBF_FUSED_TPB,
-            )
-        return
     if whole:
         ctx.enqueue_function[rbf_fused_transform_kernel](
             dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
@@ -2636,8 +2624,11 @@ def rbf_sampler_transform_host(
     # transform in that launch when no stage needs the projection alone)
     var chain = False
     var whole = False
-    comptime if RBF_IDN_FUSED or C25_PROJECTION_REUSE:
-        chain = (C25_PROJECTION_REUSE or d <= RBF_FUSED_MAX_D) and n_rows * dd > 0
+    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE, run ge123e6f9): four rows per thread reuse each projection weight;
+    # NV/AMD nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884;
+    # kernel_rel_error same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
+    comptime if RBF_IDN_FUSED:
+        chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
         whole = chain and sabotage == KMSAB_NONE and not trace.enabled
         if chain:
             _rbf_idn_fused_launch(ctx, dp, dx, dw, db, n_rows, d, dd, model.scale, whole)
@@ -2736,8 +2727,11 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
     # RBF_IDN_FUSED: the projection as the per-cell chain (and the whole
     # transform in that launch when no stage needs the projection alone)
     var chain = False
-    comptime if RBF_IDN_FUSED or C25_PROJECTION_REUSE:
-        chain = (C25_PROJECTION_REUSE or d <= RBF_FUSED_MAX_D) and n_rows * dd > 0
+    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE, run ge123e6f9): four rows per thread reuse each projection weight;
+    # NV/AMD nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884;
+    # kernel_rel_error same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
+    comptime if RBF_IDN_FUSED:
+        chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
         fused = chain and sabotage == KMSAB_NONE and not trace.enabled
         if chain:
             _rbf_idn_fused_launch(ctx, dp, dx, dw, db, n_rows, d, dd, model.scale, fused)

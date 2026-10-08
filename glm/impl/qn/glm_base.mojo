@@ -1211,14 +1211,9 @@ def qnt_fold_kernel(
 comptime QN_IDN_FUSED = QN_TILED and not (
     is_defined["MOJOLEARN_QN_IDN_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-#: lane fam2-linear, CANDIDATE ARM (default OFF, `-D MOJOLEARN_QN_IDN_DCONV`):
-#: IDENTICAL L-BFGS iterations whose step-1 Armijo decision and convergence
-#: test run on the device (`qn_dconv.mojo::dconv_idn_run`), the host reading
-#: one state block per QN_IDN_DCONV_POLL iterations. Needs QN_IDN_FUSED and
-#: QN_IDN_SLIM (their gated forms are the device iteration's evaluation).
-comptime QN_IDN_DCONV = (
-    QN_IDN_FUSED and QN_IDN_SLIM and is_defined["MOJOLEARN_QN_IDN_DCONV"]()
-)
+# Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
+# NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
+# linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
 #: the staged column window (`core/gemm.mojo` GEMV_TILE_K / GEMV_TILE_STRIDE)
 comptime QNIF_K = 32
 comptime QNIF_STRIDE = QNIF_K + 1
@@ -1441,92 +1436,9 @@ def qn_idn_fused_kernel(
     )
 
 
-def qn_idn_fused_gated_kernel(
-    gate: MutPointer[Float32, MutAnyOrigin],
-    need_word: Int32,
-    part: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    y: MutPointer[Float32, MutAnyOrigin],
-    w: MutPointer[Float32, MutAnyOrigin],
-    z: MutPointer[Float32, MutAnyOrigin],
-    loss_terms: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    d_in: Int32,
-    tiles_in: Int32,
-    loss_in: Int32,
-    fit_intercept: Int32,
-    normalization: Float32,
-    svr_eps: Float32,
-):
-    """QN_IDN_DCONV: `qn_idn_fused_kernel`, a no-op once the device solver
-    state `gate` says stop (`_dc_skip`; the test is uniform across the
-    grid, so every barrier is reached by all or none)."""
-    if _dc_skip(gate, need_word):
-        return
-    _qn_idn_fused_body(
-        part, x, y, w, z, loss_terms, n_in, d_in, tiles_in, loss_in,
-        fit_intercept, normalization, svr_eps,
-    )
-
-
-def qnt_fold_gated_kernel(
-    gate: MutPointer[Float32, MutAnyOrigin],
-    need_word: Int32,
-    g: MutPointer[Float32, MutAnyOrigin],
-    slots: MutPointer[Float32, MutAnyOrigin],
-    part: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    d_in: Int32,
-    tiles_in: Int32,
-    alpha: Float32,
-    beta_is_one: Int32,
-    fit_intercept: Int32,
-):
-    """QN_IDN_DCONV: `qnt_fold_kernel` character for character behind the
-    gate (`_dc_skip`)."""
-    if _dc_skip(gate, need_word):
-        return
-    var D = Int(d_in)
-    var tiles = Int(tiles_in)
-    var o = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var acc = strided_ftz_sum[STATS_TPB](part, 1, o * tiles, tiles, tid, Float32(0.0))
-    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
-    if tid == 0:
-        if o < D:
-            var sc = ftz(alpha * s0)
-            if beta_is_one != 0:
-                g.unsafe_store(o, ftz(sc + g.unsafe_load(o)))
-            else:
-                g.unsafe_store(o, sc)
-        elif o == D:
-            if fit_intercept != 0:
-                var ratio = Float32(1.0) / Float32(Int(n_in))
-                g.unsafe_store(D, ftz(s0 * ratio))
-        else:
-            slots.unsafe_store(0, s0)
-
-
-def qn_idn_epilogue_gated_kernel(
-    gate: MutPointer[Float32, MutAnyOrigin],
-    need_word: Int32,
-    slots: MutPointer[Float32, MutAnyOrigin],
-    g: MutPointer[Float32, MutAnyOrigin],
-    w: MutPointer[Float32, MutAnyOrigin],
-    n_weights_in: Int32,
-    n_param_in: Int32,
-    l2: Float32,
-    gnorm_kind: Int32,
-    pen_len_in: Int32,
-):
-    """QN_IDN_DCONV: `qn_idn_epilogue_kernel` behind the gate (`_dc_skip`)."""
-    if _dc_skip(gate, need_word):
-        return
-    _qn_idn_epilogue_body(
-        slots, g, w, n_weights_in, n_param_in, l2, gnorm_kind, pen_len_in,
-    )
-
-
+# Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
+# NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
+# linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
 # lane/apple-fast-purity2 (2026-10-03): the loss sum and the bias mean that
 # still ran as ONE block of STATS_TPB lanes over all n rows (`sum_terms_kernel`
 # / `mean_kernel`: softmax `C > 1` in IDENTICAL, `C == 1` in FAST off Apple
@@ -2523,54 +2435,9 @@ struct GLMWithData(Movable):
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
 
-    def idn_dconv_applies(self) -> Bool:
-        """QN_IDN_DCONV serves this objective: the tiled `C == 1` one."""
-        comptime if QN_IDN_DCONV:
-            return qn_tiled_applies(self.dims.D, self.dims.C)
-        return False
-
-    def enqueue_idn_dconv_eval(
-        mut self,
-        ctx: DeviceContext,
-        mut w: DeviceBuffer[DType.float32],
-        mut g: DeviceBuffer[DType.float32],
-        gate: MutPointer[Float32, MutAnyOrigin],
-    ) raises:
-        """QN_IDN_DCONV: `evaluate`'s three IDENTICAL launches (fused row
-        pass, tile fold with beta 0, the one-launch epilogue), each gated on
-        the device solver state, with NO synchronize: slots 0..2 stay on
-        the device for `qn_dconv.mojo`'s kernels. Not counted in `n_evals`
-        (nothing reads it)."""
-        comptime if not QN_IDN_DCONV:
-            raise Error("qn: enqueue_idn_dconv_eval is compiled under -D MOJOLEARN_QN_IDN_DCONV only")
-        else:
-            var n = self.n_rows
-            var d = self.dims.D
-            var tiles = qnt_tiles(n)
-            var fi = Int32(1) if self.dims.fit_intercept else Int32(0)
-            var nw = Int32(-1)
-            ctx.enqueue_function[qn_idn_fused_gated_kernel](
-                gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
-                self.y.unsafe_ptr(), w.unsafe_ptr(), self.z.unsafe_ptr(),
-                self.loss_terms.unsafe_ptr(),
-                Int32(n), Int32(d), Int32(tiles), Int32(self.loss), fi,
-                Float32(1.0 / Float64(n)), self.svr_eps,
-                grid_dim=(tiles, 1, 1), block_dim=(QNT_ROWS, 1, 1),
-            )
-            ctx.enqueue_function[qnt_fold_gated_kernel](
-                gate, nw, g.unsafe_ptr(), self.slots.unsafe_ptr(),
-                self.xtdz_ws.unsafe_ptr(),
-                Int32(n), Int32(d), Int32(tiles), Float32(1.0 / Float64(n)),
-                Int32(0), fi,
-                grid_dim=(d + 2, 1, 1), block_dim=(STATS_TPB, 1, 1),
-            )
-            ctx.enqueue_function[qn_idn_epilogue_gated_kernel](  # small-launch(n: parameter count n_param): the coefficient vector, never rows
-                gate, nw, self.slots.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
-                Int32(self.dims.C * self.dims.D), Int32(self.dims.n_param),
-                self.l2, Int32(self._gnorm_kind()), Int32(0),
-                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
-            )
-
+    # Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
+    # NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
+    # linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     def _fused_multi[G: Int](
         mut self, ctx: DeviceContext, mut w: DeviceBuffer[DType.float32], n: Int, d: Int, tiles: Int
     ) raises:

@@ -79,7 +79,7 @@ IEEE `/` (correctly rounded on every column measured, IDENTITY_PATHS row
     `hw_estimate_check.mojo` compares their bits.
 """
 
-from experiments.classical_identical_ideas.stats_controls import C58_SERIES4, C58_SHARED_PREP
+from experiments.classical_identical_ideas.stats_controls import C58_SERIES4
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -175,13 +175,8 @@ def _series_scale(
     return _pow2_scale(m)
 
 
-def hw_classical_scale_kernel(ts: MutPointer[Float32, MutAnyOrigin], scratch: MutPointer[Float32, MutAnyOrigin],
-                             n: Int32, batch: Int32, offset: Int32):
-    # C58: one immutable observation scan shared by all parameter starts.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var series = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if series < Int(batch):
-        scratch[Int(offset)+series] = _series_scale(series, ts, Int(n), Int(batch))
+# Tried 2026-10-08 (MOJOLEARN_C58_SHARED_PREP, run ge123e6f9): per-series scale computed once by its own kernel, not per start block;
+# NV/AMD ets synthetic 0.996/0.980; rmse same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
 
 
 # ---------------------------------------------------------------------------
@@ -943,11 +938,9 @@ def holtwinters_estimate_block_kernel[B: Int = HW_EST_BLOCK](
     var sw = base.unsafe_offset(d * d + f * d)
     var thp = sw.unsafe_offset(f)
 
-    var sc: Float32
-    comptime if C58_SHARED_PREP:
-        sc = scratch[batch_size*HW_EST_STARTS*hw_est_block_scratch_len(f)+s]
-    else:
-        sc = _series_scale(s, ts, n, batch_size)
+    # Tried 2026-10-08 (MOJOLEARN_C58_SHARED_PREP, run ge123e6f9): per-series scale computed once by its own kernel, not per start block;
+    # NV/AMD ets synthetic 0.996/0.980; rmse same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
+    var sc = _series_scale(s, ts, n, batch_size)
     var inv_sc = _inv_pow2(sc)
     var l0 = _f(_mad(Float32(-f), start_trend.unsafe_load(s), start_level.unsafe_load(s)) * sc)
     var b0 = _f(start_trend.unsafe_load(s) * sc)

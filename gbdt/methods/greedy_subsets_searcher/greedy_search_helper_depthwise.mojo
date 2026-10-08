@@ -63,7 +63,7 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T17_BATCH, T18, T19, T19_DEFER, T21, C45_GBDT, LG_LEVEL_ROUNDS
+from gbdt.trees_identical_switches import T17_BATCH, T18, T19_DEFER, T21, C45_GBDT, LG_LEVEL_ROUNDS
 
 from std.sys.info import has_apple_gpu_accelerator
 from std.builtin.sort import sort
@@ -271,9 +271,10 @@ comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
 #: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` turns it off (and with it
 #: DW_NO_LEVEL_SYNC, which stacks on it); the old
 #: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN` is harmless.
-# T19/C48: same stable integer partition, canonical IDENTICAL stats retained.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime DW_FUSED_CHAIN = T19 or (
+# Tried 2026-10-08 (MOJOLEARN_TREES_T19, run ge123e6f9): IDENTICAL depthwise on the fused partition chain, parent stats not propagated;
+# NV/AMD gbdt-depthwise taxi 0.470/0.692, istella 0.826/0.813; istella AUC -0.43%, logloss +20.7%, taxi AUC -0.31%
+# -> quality loss, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
+comptime DW_FUSED_CHAIN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
 # F12/depthwise M3 2026-10-06: 4 scored caller times; B/A
@@ -299,7 +300,7 @@ comptime DW_FUSED_CHAIN = T19 or (
 #: nothing to score keep the two-wait schedule.
 #: DEFAULT with DW_FUSED_CHAIN (numbers above). `-D
 #: MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF` turns it off; the old `-D MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC` is harmless.
-comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not T19 and not is_defined[
+comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not is_defined[
     "MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF"
 ]()
 
@@ -312,7 +313,7 @@ comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not T19 and not is_defined[
 #: depthwise taxi 12,711 -> 11,361 ms (-10.6%), istella 17,154 -> 16,539 ms
 #: (-3.6%), auc within spread. Off: `-D MOJOLEARN_GBDT_DW2_PART_VEC4_OFF`.
 #: The old opt-in define `-D MOJOLEARN_GBDT_DW2_PART_VEC4` is harmless.
-comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not T19 and not is_defined[
+comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not is_defined[
     "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
 ]()
 #: The histogram prefix scan over a shared-memory copy of 16 features'
@@ -485,7 +486,10 @@ def _launch_fused_split_chain[
         grid_dim=(chunk_grid, n_split, 1),
         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
     )
-    ctx.enqueue_function[fused_scan_update_kernel[GUARD, not SPLIT_COST_IDENTICAL]](
+    # Tried 2026-10-08 (MOJOLEARN_TREES_T19, run ge123e6f9): IDENTICAL depthwise on the fused partition chain, parent stats not propagated;
+    # NV/AMD gbdt-depthwise taxi 0.470/0.692, istella 0.826/0.813; istella AUC -0.43%, logloss +20.7%, taxi AUC -0.31%
+    # -> quality loss, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
+    ctx.enqueue_function[fused_scan_update_kernel[GUARD]](
         d_left.unsafe_ptr(),
         d_right.unsafe_ptr(),
         p_off.unsafe_ptr(),
@@ -1809,9 +1813,12 @@ def fit_non_symmetric_tree[
     # Istella 1.024); -D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF restores the cut.
     # FAST keeps it at every width. One decision per tree, so a tree never
     # mixes the two schedules.
-    var use_ridx = T19 or (RIDX_ONLY_SPLITS and (
+    # Tried 2026-10-08 (MOJOLEARN_TREES_T19, run ge123e6f9): IDENTICAL depthwise on the fused partition chain, parent stats not propagated;
+    # NV/AMD gbdt-depthwise taxi 0.470/0.692, istella 0.826/0.813; istella AUC -0.43%, logloss +20.7%, taxi AUC -0.31%
+    # -> quality loss, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
+    var use_ridx = RIDX_ONLY_SPLITS and (
         not SPLIT_COST_IDENTICAL or ridx_schedule_pays(len(fold_counts))
-    ))
+    )
     if options.policy != GROW_DEPTHWISE and options.policy != GROW_LOSSGUIDE:
         raise Error(
             "fit_non_symmetric_tree is EGrowPolicy::Depthwise or Lossguide;"

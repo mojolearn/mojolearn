@@ -175,8 +175,13 @@ def _check_configuration() -> Bool:
     comptime assert M1S == 3 or not (is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS"]()), "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH/_TOKENS are read only by MOJOLEARN_IDN_M1_SCAN=3 (persistent)"
     comptime assert not (is_defined["MOJOLEARN_NI14_BOUNDED_COL2IM"]() or is_defined["MOJOLEARN_NI14_TILED_COL2IM"]()), "merged: use -D MOJOLEARN_NI14_COL2IM=1 (bounded) | 2 (tiled)"
     comptime assert get_defined_int["MOJOLEARN_NI14_COL2IM",0]() >= 0 and get_defined_int["MOJOLEARN_NI14_COL2IM",0]() <= 2, "MOJOLEARN_NI14_COL2IM arms: 1 bounded, 2 tiled"
-    comptime assert not (is_defined["MOJOLEARN_TREES_T19"]() and is_defined["MOJOLEARN_TREES_T21"]()), "MOJOLEARN_TREES_T19 forces use_ridx, which makes MOJOLEARN_TREES_T21 inert (T19+T21 == T19)"
     comptime assert not (is_defined["MOJOLEARN_TREES_C50_GB_PACKED"]() and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()), "MOJOLEARN_TREES_C50_GB_PACKED returns before MOJOLEARN_IDN_GBDT_APPLY_WIDE (gbdt/resident_model.mojo): the pair == C50"
+    # Deleted 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 losers (docs/apple-fast/EXPERIMENTS.md). Recoverable at main ad7ed2370.
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE"](), "removed: MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE retired 2026-10-08: noise, NV 1.00-1.04x / AMD 0.88-0.98x on nystroem and rbf-sampler (grid ge123e6f9); see EXPERIMENTS.md"
+    comptime assert not is_defined["MOJOLEARN_C58_SHARED_PREP"](), "removed: MOJOLEARN_C58_SHARED_PREP retired 2026-10-08: noise, NV 0.996x / AMD 0.980x on ets (grid ge123e6f9); see EXPERIMENTS.md"
+    comptime assert not (is_defined["MOJOLEARN_QN_IDN_DCONV"]() or is_defined["MOJOLEARN_QN_IDN_DCONV_POLL_2"]() or is_defined["MOJOLEARN_QN_IDN_DCONV_POLL_8"]()), "removed: MOJOLEARN_QN_IDN_DCONV (and _POLL_2/_POLL_8) retired 2026-10-08: neutral/slower, NV 0.95-1.06x / AMD 0.98-1.08x on logreg, linearsvc, linearsvr (grid ge123e6f9); see EXPERIMENTS.md"
+    comptime assert not is_defined["MOJOLEARN_IDN_GMM_COV_SYM"](), "removed: MOJOLEARN_IDN_GMM_COV_SYM retired 2026-10-08: slower, NV 1.84x / AMD 1.45x on gmm taxi, and mean log-likelihood -0.78% (grid ge123e6f9); see EXPERIMENTS.md"
+    comptime assert not is_defined["MOJOLEARN_TREES_T19"](), "removed: MOJOLEARN_TREES_T19 retired 2026-10-08: quality loss, istella AUC -0.43% and logloss +20.7% despite NV 0.47x / AMD 0.69x on depthwise taxi (grid ge123e6f9); see EXPERIMENTS.md"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True

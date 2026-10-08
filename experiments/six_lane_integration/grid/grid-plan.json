@@ -1540,24 +1540,6 @@
   },
   {
    "B_builds": [
-    "7ae74817427d874e4bce"
-   ],
-   "algorithm": "more:ets",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
-   "workload_id": "more:ets@dataset=synthetic"
-  },
-  {
-   "B_builds": [
-    "4de7ad19fc2bdd67b918"
-   ],
-   "algorithm": "more:ets",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "more:ets@dataset=synthetic"
-  },
-  {
-   "B_builds": [
     "650495ba5def8541c9f9"
    ],
    "algorithm": "more:gmm",
@@ -1735,78 +1717,6 @@
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
    "workload_id": "more:logreg@dataset=taxi@input=classification-full-v1"
-  },
-  {
-   "B_builds": [
-    "b8c4fc76dd6e0e32d375"
-   ],
-   "algorithm": "more:nystroem",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
-   "workload_id": "more:nystroem@dataset=istella"
-  },
-  {
-   "B_builds": [
-    "f5e6a0c2c626aa5dad6b"
-   ],
-   "algorithm": "more:nystroem",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "more:nystroem@dataset=istella"
-  },
-  {
-   "B_builds": [
-    "b8c4fc76dd6e0e32d375"
-   ],
-   "algorithm": "more:nystroem",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
-   "workload_id": "more:nystroem@dataset=taxi"
-  },
-  {
-   "B_builds": [
-    "f5e6a0c2c626aa5dad6b"
-   ],
-   "algorithm": "more:nystroem",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "more:nystroem@dataset=taxi"
-  },
-  {
-   "B_builds": [
-    "b8c4fc76dd6e0e32d375"
-   ],
-   "algorithm": "more:rbf-sampler",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
-   "workload_id": "more:rbf-sampler@dataset=istella"
-  },
-  {
-   "B_builds": [
-    "f5e6a0c2c626aa5dad6b"
-   ],
-   "algorithm": "more:rbf-sampler",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "more:rbf-sampler@dataset=istella"
-  },
-  {
-   "B_builds": [
-    "b8c4fc76dd6e0e32d375"
-   ],
-   "algorithm": "more:rbf-sampler",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
-   "workload_id": "more:rbf-sampler@dataset=taxi"
-  },
-  {
-   "B_builds": [
-    "f5e6a0c2c626aa5dad6b"
-   ],
-   "algorithm": "more:rbf-sampler",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "more:rbf-sampler@dataset=taxi"
   },
   {
    "B_builds": [
@@ -2951,8 +2861,8 @@
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C01_MEAN=1",
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_KDE_DIRECT_DISTANCE=1",
-      "MOJOLEARN_QN_IDN_DCONV=1"
+      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
+      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
      ],
      "priority": 1,
      "queued": true,
@@ -3076,7 +2986,7 @@
      ],
      "global_reach": [],
      "id": "G.classical:hdbscan.graph_direct=on",
-     "pack": "P098",
+     "pack": "P096",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -3115,7 +3025,7 @@
      ],
      "global_reach": [],
      "id": "G.classical:hdbscan.c61_same_component_skip=on",
-     "pack": "P099",
+     "pack": "P097",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -3258,8 +3168,8 @@
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C01_MEAN=1",
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
-      "MOJOLEARN_QN_IDN_DCONV=1"
+      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
+      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1"
      ],
      "priority": 1,
      "queued": true,
@@ -3325,7 +3235,6 @@
      "id": "G.classical:kde.c52_pair_rows=128",
      "pack": "P050",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
       "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
       "MOJOLEARN_CLASSICAL_PCA_COV=4",
       "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
@@ -3350,10 +3259,8 @@
      "pack": "P051",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
       "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_PCA_COV=23",
-      "MOJOLEARN_QN_IDN_DCONV=1"
+      "MOJOLEARN_CLASSICAL_PCA_COV=23"
      ],
      "priority": 5,
      "queued": true,
@@ -4396,9 +4303,9 @@
      "pack": "P049",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
       "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
-      "MOJOLEARN_KDE_DIRECT_DISTANCE=1",
-      "MOJOLEARN_QN_IDN_DCONV=1"
+      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
      ],
      "priority": 1,
      "queued": true,
@@ -4420,7 +4327,6 @@
      "pack": "P050",
      "packed_extra_defines": [
       "MOJOLEARN_C52_PAIR_ROWS=128",
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
       "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
       "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
      ],
@@ -4445,9 +4351,7 @@
      "packed_extra_defines": [
       "MOJOLEARN_C52_PAIR_ROWS=512",
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-      "MOJOLEARN_QN_IDN_DCONV=1"
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
      ],
      "priority": 3,
      "queued": true,
@@ -4627,7 +4531,7 @@
      ],
      "global_reach": [],
      "id": "G.classical:svc.c20_pair_load=on",
-     "pack": "P202",
+     "pack": "P197",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_T40_ROWMAJOR=1"
      ],
@@ -4648,7 +4552,7 @@
      ],
      "global_reach": [],
      "id": "G.classical:svc.c21_extrema=on",
-     "pack": "P203",
+     "pack": "P198",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_C47_IF_LIVE_TASKS=1"
      ],
@@ -4669,7 +4573,7 @@
      ],
      "global_reach": [],
      "id": "G.classical:svc.c22_triangle=on",
-     "pack": "P204",
+     "pack": "P199",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_C48_IF_PARTITION=1"
      ],
@@ -4694,7 +4598,7 @@
      ],
      "global_reach": [],
      "id": "G.classical:svc.all_on",
-     "pack": "P205",
+     "pack": "P200",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_C50_IF_PACKED=1"
      ],
@@ -4717,7 +4621,7 @@
      ],
      "global_reach": [],
      "id": "G.classical:svc.c21_extrema=on+c22_triangle=on",
-     "pack": "P206",
+     "pack": "P201",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_IF_BUILD_TPB=256"
      ],
@@ -4740,7 +4644,7 @@
      ],
      "global_reach": [],
      "id": "G.classical:svc.c20_pair_load=on+c22_triangle=on",
-     "pack": "P207",
+     "pack": "P202",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_IF_BUILD_TPB=512"
      ],
@@ -4763,7 +4667,7 @@
      ],
      "global_reach": [],
      "id": "G.classical:svc.c20_pair_load=on+c21_extrema=on",
-     "pack": "P208",
+     "pack": "P203",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_C47_IF_LIVE_TASKS=1",
       "MOJOLEARN_TREES_C48_IF_PARTITION=1",
@@ -4854,7 +4758,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ard.c15_factor_solve=on",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
@@ -4919,7 +4823,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:auto-theta.c58_forecast4=on",
-     "pack": "P302",
+     "pack": "P297",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -4980,10 +4884,8 @@
      ],
      "global_reach": [],
      "id": "G.expanded:autoarima.c60_lag4=on",
-     "pack": "P242",
-     "packed_extra_defines": [
-      "MOJOLEARN_C58_SHARED_PREP=1"
-     ],
+     "pack": "P237",
+     "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
      "tier": "single",
@@ -5184,7 +5086,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:bisecting-kmeans.xcluster_row_assign=2",
-     "pack": "P243",
+     "pack": "P238",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -5203,7 +5105,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:bisecting-kmeans.xcluster_row_assign=4",
-     "pack": "P244",
+     "pack": "P239",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -5222,7 +5124,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:bisecting-kmeans.xcluster_kpp_distinct=on",
-     "pack": "P245",
+     "pack": "P240",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -5241,7 +5143,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:bisecting-kmeans.c39_retain_state=on",
-     "pack": "P246",
+     "pack": "P241",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -5264,7 +5166,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:bisecting-kmeans.all_on",
-     "pack": "P247",
+     "pack": "P242",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -5404,7 +5306,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:damped-ets.c58_forecast4=on",
-     "pack": "P302",
+     "pack": "P297",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -5465,7 +5367,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:dynamic-optimized-theta.c58_forecast4=on",
-     "pack": "P302",
+     "pack": "P297",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -5526,7 +5428,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:dynamic-theta.c58_forecast4=on",
-     "pack": "P302",
+     "pack": "P297",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -5587,7 +5489,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:elliptic-envelope.C23_MCD=on",
-     "pack": "P263",
+     "pack": "P258",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
@@ -5660,7 +5562,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=1024",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
@@ -5685,7 +5587,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=4096",
-     "pack": "P271",
+     "pack": "P266",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
      ],
@@ -5706,7 +5608,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_fold_blocks=16",
-     "pack": "P272",
+     "pack": "P267",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1"
      ],
@@ -5727,7 +5629,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_fold_blocks=32",
-     "pack": "P273",
+     "pack": "P268",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1"
      ],
@@ -5748,7 +5650,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_fold_blocks=64",
-     "pack": "P274",
+     "pack": "P269",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
@@ -5772,7 +5674,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.c18_residual_next=on",
-     "pack": "P275",
+     "pack": "P270",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
       "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
@@ -5798,7 +5700,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.all_on",
-     "pack": "P276",
+     "pack": "P271",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
@@ -5822,7 +5724,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16",
-     "pack": "P277",
+     "pack": "P272",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
       "MOJOLEARN_RIDGE_FF_ALWAYS=1"
@@ -5846,7 +5748,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32",
-     "pack": "P278",
+     "pack": "P273",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -5867,7 +5769,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64",
-     "pack": "P279",
+     "pack": "P274",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -5888,7 +5790,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16",
-     "pack": "P280",
+     "pack": "P275",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -5909,7 +5811,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32",
-     "pack": "P281",
+     "pack": "P276",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -5930,7 +5832,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64",
-     "pack": "P282",
+     "pack": "P277",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -5951,7 +5853,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=1024+c18_residual_next=on",
-     "pack": "P283",
+     "pack": "P278",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -5972,7 +5874,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_score_blocks=4096+c18_residual_next=on",
-     "pack": "P284",
+     "pack": "P279",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -6116,7 +6018,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:gamma.c16_glm_fused=on",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
@@ -6226,7 +6128,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:gaussian-nb.c61_nb=1",
-     "pack": "P287",
+     "pack": "P282",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
@@ -6249,7 +6151,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:gaussian-nb.c61_nb=2",
-     "pack": "P288",
+     "pack": "P283",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4"
@@ -6352,7 +6254,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=6",
-     "pack": "P287",
+     "pack": "P282",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -6375,7 +6277,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=4",
-     "pack": "P288",
+     "pack": "P283",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -6397,7 +6299,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_rows=1024",
-     "pack": "P289",
+     "pack": "P284",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -6418,7 +6320,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_rows=4096",
-     "pack": "P290",
+     "pack": "P285",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -6439,7 +6341,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.all_on",
-     "pack": "P291",
+     "pack": "P286",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
@@ -6465,7 +6367,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096",
-     "pack": "P292",
+     "pack": "P287",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -6486,7 +6388,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=1024",
-     "pack": "P293",
+     "pack": "P288",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -6507,7 +6409,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096",
-     "pack": "P294",
+     "pack": "P289",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -6585,7 +6487,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
@@ -6610,7 +6512,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096",
-     "pack": "P271",
+     "pack": "P266",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
      ],
@@ -6631,7 +6533,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_fold_blocks=16",
-     "pack": "P272",
+     "pack": "P267",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1"
      ],
@@ -6652,7 +6554,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_fold_blocks=32",
-     "pack": "P273",
+     "pack": "P268",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1"
      ],
@@ -6673,7 +6575,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_fold_blocks=64",
-     "pack": "P274",
+     "pack": "P269",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
@@ -6697,7 +6599,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.c18_residual_next=on",
-     "pack": "P275",
+     "pack": "P270",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
       "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
@@ -6723,7 +6625,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.all_on",
-     "pack": "P276",
+     "pack": "P271",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
@@ -6747,7 +6649,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16",
-     "pack": "P277",
+     "pack": "P272",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
       "MOJOLEARN_RIDGE_FF_ALWAYS=1"
@@ -6771,7 +6673,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32",
-     "pack": "P278",
+     "pack": "P273",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -6792,7 +6694,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64",
-     "pack": "P279",
+     "pack": "P274",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -6813,7 +6715,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16",
-     "pack": "P280",
+     "pack": "P275",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -6834,7 +6736,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32",
-     "pack": "P281",
+     "pack": "P276",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -6855,7 +6757,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64",
-     "pack": "P282",
+     "pack": "P277",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -6876,7 +6778,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024+c18_residual_next=on",
-     "pack": "P283",
+     "pack": "P278",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -6897,7 +6799,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096+c18_residual_next=on",
-     "pack": "P284",
+     "pack": "P279",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -7041,7 +6943,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lda-clf.c61_da=on",
-     "pack": "P287",
+     "pack": "P282",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
@@ -7165,7 +7067,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:logreg-cv.c13_logcv_weights=on",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
       "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
@@ -7230,7 +7132,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lu-solve.c14_group_rhs=on",
-     "pack": "P263",
+     "pack": "P258",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C23_MCD=1",
       "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
@@ -7293,7 +7195,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:min-cov-det.C23_MCD=on",
-     "pack": "P263",
+     "pack": "P258",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
@@ -7368,7 +7270,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:minibatch-kmeans.xcluster_row_assign=2",
-     "pack": "P243",
+     "pack": "P238",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -7387,7 +7289,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:minibatch-kmeans.xcluster_row_assign=4",
-     "pack": "P244",
+     "pack": "P239",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -7406,7 +7308,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:minibatch-kmeans.xcluster_kpp_distinct=on",
-     "pack": "P245",
+     "pack": "P240",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -7425,7 +7327,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:minibatch-kmeans.c39_retain_state=on",
-     "pack": "P246",
+     "pack": "P241",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -7448,7 +7350,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:minibatch-kmeans.all_on",
-     "pack": "P247",
+     "pack": "P242",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -7552,7 +7454,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=6",
-     "pack": "P287",
+     "pack": "P282",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -7575,7 +7477,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=4",
-     "pack": "P288",
+     "pack": "P283",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -7597,7 +7499,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_rows=1024",
-     "pack": "P289",
+     "pack": "P284",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -7618,7 +7520,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_rows=4096",
-     "pack": "P290",
+     "pack": "P285",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -7637,7 +7539,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c08_unique_scan=on",
-     "pack": "P295",
+     "pack": "P290",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -7656,7 +7558,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c08_grouped_output=on",
-     "pack": "P296",
+     "pack": "P291",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1"
      ],
@@ -7683,7 +7585,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.all_on",
-     "pack": "P291",
+     "pack": "P286",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
       "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1"
@@ -7707,7 +7609,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=1024",
-     "pack": "P297",
+     "pack": "P292",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -7728,7 +7630,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096",
-     "pack": "P292",
+     "pack": "P287",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -7749,7 +7651,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=1024",
-     "pack": "P293",
+     "pack": "P288",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -7770,7 +7672,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=4096",
-     "pack": "P294",
+     "pack": "P289",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -7854,7 +7756,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:optimized-theta.c58_forecast4=on",
-     "pack": "P302",
+     "pack": "P297",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -7915,7 +7817,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=6",
-     "pack": "P287",
+     "pack": "P282",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -7938,7 +7840,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=4",
-     "pack": "P288",
+     "pack": "P283",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -7960,7 +7862,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_rows=1024",
-     "pack": "P289",
+     "pack": "P284",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -7981,7 +7883,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_rows=4096",
-     "pack": "P290",
+     "pack": "P285",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -8000,7 +7902,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c08_unique_scan=on",
-     "pack": "P295",
+     "pack": "P290",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -8023,7 +7925,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.all_on",
-     "pack": "P291",
+     "pack": "P286",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
@@ -8048,7 +7950,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=1024",
-     "pack": "P297",
+     "pack": "P292",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -8069,7 +7971,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=4096",
-     "pack": "P292",
+     "pack": "P287",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -8090,7 +7992,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=1024",
-     "pack": "P293",
+     "pack": "P288",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -8111,7 +8013,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=4096",
-     "pack": "P294",
+     "pack": "P289",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -8192,7 +8094,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:poisson.c16_glm_fused=on",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
@@ -8302,7 +8204,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:qda.c56_qda_project=2",
-     "pack": "P287",
+     "pack": "P282",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -8325,7 +8227,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:qda.c56_qda_project=4",
-     "pack": "P288",
+     "pack": "P283",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -8347,7 +8249,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:qda.c56_qda_project=8",
-     "pack": "P289",
+     "pack": "P284",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"
      ],
@@ -8411,7 +8313,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=6",
-     "pack": "P287",
+     "pack": "P282",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -8434,7 +8336,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=4",
-     "pack": "P288",
+     "pack": "P283",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -8456,7 +8358,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_rows=1024",
-     "pack": "P289",
+     "pack": "P284",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -8477,7 +8379,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_rows=4096",
-     "pack": "P290",
+     "pack": "P285",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -8498,7 +8400,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.all_on",
-     "pack": "P291",
+     "pack": "P286",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
@@ -8524,7 +8426,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=6+c07_radix_rows=4096",
-     "pack": "P292",
+     "pack": "P287",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -8545,7 +8447,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=1024",
-     "pack": "P293",
+     "pack": "P288",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -8566,7 +8468,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=4096",
-     "pack": "P294",
+     "pack": "P289",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -8644,7 +8546,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:randomized-svd.C24_TSQR=panel8",
-     "pack": "P263",
+     "pack": "P258",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_C23_MCD=1"
@@ -8666,7 +8568,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:randomized-svd.C24_TSQR=rows2048",
-     "pack": "P264",
+     "pack": "P259",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -8685,7 +8587,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:randomized-svd.C24_TSQR=tree4",
-     "pack": "P265",
+     "pack": "P260",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -8704,7 +8606,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:randomized-svd.rsvd_tsqr_ortho=on",
-     "pack": "P266",
+     "pack": "P261",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -8725,7 +8627,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:randomized-svd.all_on",
-     "pack": "P267",
+     "pack": "P262",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -8746,7 +8648,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:randomized-svd.C24_TSQR=rows2048+rsvd_tsqr_ortho=on",
-     "pack": "P268",
+     "pack": "P263",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -8767,7 +8669,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:randomized-svd.C24_TSQR=tree4+rsvd_tsqr_ortho=on",
-     "pack": "P269",
+     "pack": "P264",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -8852,7 +8754,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-clf.ridge_ff_always=on",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
@@ -8920,7 +8822,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.ridgecv_ff_blocked=on",
-     "pack": "P271",
+     "pack": "P266",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
      ],
@@ -8941,7 +8843,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off",
-     "pack": "P272",
+     "pack": "P267",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
      ],
@@ -8962,7 +8864,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.c14_group_rhs=on",
-     "pack": "P273",
+     "pack": "P268",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
      ],
@@ -8983,7 +8885,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.ridge_ff_always=on",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
@@ -9014,7 +8916,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.all_on",
-     "pack": "P274",
+     "pack": "P269",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64"
      ],
@@ -9037,7 +8939,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c13_fold_stats_ridgecv=off",
-     "pack": "P275",
+     "pack": "P270",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
      ],
@@ -9060,7 +8962,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c14_group_rhs=on",
-     "pack": "P276",
+     "pack": "P271",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
       "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
@@ -9085,7 +8987,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off+ridge_ff_always=on",
-     "pack": "P277",
+     "pack": "P272",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
       "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
@@ -9202,7 +9104,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:sgd-clf.sgd_epoch_contiguous=on",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
@@ -9270,7 +9172,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:sgd-reg.sgd_epoch_contiguous=on",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
@@ -9335,7 +9237,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:sgd-reg@regression_report.C01_LEAF=64",
-     "pack": "P285",
+     "pack": "P280",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -9354,7 +9256,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:sgd-reg@regression_report.C01_LEAF=128",
-     "pack": "P286",
+     "pack": "P281",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -9413,7 +9315,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:standard-scaler.c02_stats_pair=on",
-     "pack": "P169",
+     "pack": "P164",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -9475,7 +9377,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c07_radix_bits=6",
-     "pack": "P287",
+     "pack": "P282",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -9498,7 +9400,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c07_radix_bits=4",
-     "pack": "P288",
+     "pack": "P283",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -9520,7 +9422,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c07_radix_rows=1024",
-     "pack": "P289",
+     "pack": "P284",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -9541,7 +9443,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c07_radix_rows=4096",
-     "pack": "P290",
+     "pack": "P285",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -9560,7 +9462,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_unique_scan=on",
-     "pack": "P295",
+     "pack": "P290",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -9579,7 +9481,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_target_codes=on",
-     "pack": "P296",
+     "pack": "P291",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1"
      ],
@@ -9600,7 +9502,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.te_blocked_fold=on",
-     "pack": "P298",
+     "pack": "P293",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -9627,7 +9529,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.all_on",
-     "pack": "P291",
+     "pack": "P286",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1"
      ],
@@ -9650,7 +9552,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_unique_scan=on+c08_target_codes=on",
-     "pack": "P299",
+     "pack": "P294",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -9671,7 +9573,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_unique_scan=on+te_blocked_fold=on",
-     "pack": "P300",
+     "pack": "P295",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -9694,7 +9596,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_unique_scan=on+c08_target_codes=on+te_blocked_fold=on",
-     "pack": "P301",
+     "pack": "P296",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -10086,7 +9988,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:theta.c58_forecast4=on",
-     "pack": "P302",
+     "pack": "P297",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -10147,7 +10049,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:tweedie.c16_glm_fused=on",
-     "pack": "P270",
+     "pack": "P265",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
@@ -10214,7 +10116,7 @@
       "note: \"NI08 contract leaf 256 for every GEMM caller in the build (gemm lane and classical too)\""
      ],
      "id": "G.gemm:gemm.gemm_contract_leaf=all256",
-     "pack": "P104",
+     "pack": "P101",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -10235,7 +10137,7 @@
       "note: \"stream_all (NI02) moves every GEMM caller (gemm lane, classical, neural)\""
      ],
      "id": "G.gemm:gemm.neural_gemm_schedule=stream_all",
-     "pack": "P105",
+     "pack": "P102",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -10254,7 +10156,7 @@
      ],
      "global_reach": [],
      "id": "G.gemm:gemm.gemm_one_page=on",
-     "pack": "P106",
+     "pack": "P103",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -10273,7 +10175,7 @@
      ],
      "global_reach": [],
      "id": "G.gemm:gemm.gemm_group_slack=slack2",
-     "pack": "P107",
+     "pack": "P104",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -10292,7 +10194,7 @@
      ],
      "global_reach": [],
      "id": "G.gemm:gemm.gemm_group_slack=slack8",
-     "pack": "P108",
+     "pack": "P105",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -10312,7 +10214,7 @@
      ],
      "global_reach": [],
      "id": "G.gemm:gemm.gemm_ozaki_linalg=4",
-     "pack": "P109",
+     "pack": "P106",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -10332,7 +10234,7 @@
      ],
      "global_reach": [],
      "id": "G.gemm:gemm.gemm_ozaki_linalg=5",
-     "pack": "P110",
+     "pack": "P107",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -10353,7 +10255,7 @@
       "note: \"Reaches classical callers\""
      ],
      "id": "G.gemm:gemm.gemm_kpack_rpt4=on",
-     "pack": "P111",
+     "pack": "P108",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -10384,7 +10286,7 @@
       "note: \"stream_all (NI02) moves every GEMM caller (gemm lane, classical, neural)\""
      ],
      "id": "G.gemm:gemm.all_on",
-     "pack": "P112",
+     "pack": "P109",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -10889,40 +10791,14 @@
   },
   "more:ets": {
    "all_on": null,
-   "configs": [
-    {
-     "assignment": {
-      "c58_shared_prep": "on"
-     },
-     "bindings": [
-      "_mojolearn_tsa"
-     ],
-     "defines": [
-      "MOJOLEARN_C58_SHARED_PREP=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:ets.c58_shared_prep=on",
-     "pack": "P242",
-     "packed_extra_defines": [
-      "MOJOLEARN_C60_LAG4=1"
-     ],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    }
-   ],
+   "configs": [],
    "cross_groups": [],
-   "declared_controls": [
-    "c58_shared_prep"
-   ],
+   "declared_controls": [],
    "deferred": [],
    "deferred_groups": [],
    "dropped_arms": {},
    "dropped_from_all_on": [],
-   "eligible_controls": [
-    "c58_shared_prep"
-   ],
+   "eligible_controls": [],
    "excluded": [],
    "files": [
     "classical-misc"
@@ -10937,9 +10813,7 @@
    "raw_ids": [
     "more:ets"
    ],
-   "representative_arms": {
-    "c58_shared_prep": "on"
-   },
+   "representative_arms": {},
    "unmapped_reason": null,
    "unresolved_interactions": [],
    "workload_bindings": [
@@ -10950,7 +10824,7 @@
    ]
   },
   "more:gmm": {
-   "all_on": "G.more:gmm.all_on",
+   "all_on": null,
    "configs": [
     {
      "assignment": {
@@ -10964,66 +10838,24 @@
      ],
      "global_reach": [],
      "id": "G.more:gmm.idn_kmeans_centroid_fold=on",
-     "pack": "P166",
+     "pack": "P163",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "gmm_cov_sym": "on"
-     },
-     "bindings": [
-      "_mojolearn_mixture"
-     ],
-     "defines": [
-      "MOJOLEARN_IDN_GMM_COV_SYM=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:gmm.gmm_cov_sym=on",
-     "pack": "P167",
-     "packed_extra_defines": [],
-     "priority": 2,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "gmm_cov_sym": "on",
-      "idn_kmeans_centroid_fold": "on"
-     },
-     "bindings": [
-      "_mojolearn_mixture"
-     ],
-     "defines": [
-      "MOJOLEARN_IDN_GMM_COV_SYM=1",
-      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:gmm.all_on",
-     "pack": "P168",
-     "packed_extra_defines": [],
-     "priority": 3,
-     "queued": true,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
     }
    ],
    "cross_groups": [],
    "declared_controls": [
-    "idn_kmeans_centroid_fold",
-    "gmm_cov_sym"
+    "idn_kmeans_centroid_fold"
    ],
    "deferred": [],
    "deferred_groups": [],
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [
-    "idn_kmeans_centroid_fold",
-    "gmm_cov_sym"
+    "idn_kmeans_centroid_fold"
    ],
    "excluded": [],
    "files": [
@@ -11043,7 +10875,6 @@
     "more:gmm"
    ],
    "representative_arms": {
-    "gmm_cov_sym": "on",
     "idn_kmeans_centroid_fold": "on"
    },
    "unmapped_reason": null,
@@ -11084,7 +10915,7 @@
      ],
      "global_reach": [],
      "id": "G.more:ivf.ivf_direct=on",
-     "pack": "P100",
+     "pack": "P098",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -11103,7 +10934,7 @@
      ],
      "global_reach": [],
      "id": "G.more:ivf.idn_kmeans_centroid_fold=on",
-     "pack": "P101",
+     "pack": "P099",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -11124,7 +10955,7 @@
      ],
      "global_reach": [],
      "id": "G.more:ivf.all_on",
-     "pack": "P102",
+     "pack": "P100",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -11256,32 +11087,8 @@
    ]
   },
   "more:linearsvc": {
-   "all_on": "G.more:linearsvc.all_on",
+   "all_on": null,
    "configs": [
-    {
-     "assignment": {
-      "qn_idn_dconv": "on"
-     },
-     "bindings": [
-      "_mojolearn_estimators"
-     ],
-     "defines": [
-      "MOJOLEARN_QN_IDN_DCONV=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:linearsvc.qn_idn_dconv=on",
-     "pack": "P049",
-     "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C01_MEAN=1",
-      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
-      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
-     ],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
     {
      "assignment": {
       "c17_ls_trials": "on"
@@ -11294,59 +11101,21 @@
      ],
      "global_reach": [],
      "id": "G.more:linearsvc.c17_ls_trials=on",
-     "pack": "P050",
+     "pack": "P049",
      "packed_extra_defines": [
-      "MOJOLEARN_C52_PAIR_ROWS=128",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_PCA_COV=4",
-      "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
+      "MOJOLEARN_CLASSICAL_C01_MEAN=1",
+      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
+      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
      ],
-     "priority": 2,
+     "priority": 1,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "c17_ls_trials": "on",
-      "qn_idn_dconv": "on"
-     },
-     "bindings": [
-      "_mojolearn_estimators"
-     ],
-     "defines": [
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
-      "MOJOLEARN_QN_IDN_DCONV=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:linearsvc.all_on",
-     "pack": "P051",
-     "packed_extra_defines": [
-      "MOJOLEARN_C52_PAIR_ROWS=512",
-      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_PCA_COV=23"
-     ],
-     "priority": 3,
-     "queued": true,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
     }
    ],
-   "cross_groups": [
-    {
-     "duplicates": 1,
-     "members": [
-      "qn_idn_dconv",
-      "c17_ls_trials"
-     ],
-     "new_configs": 0,
-     "note": null,
-     "product": 4
-    }
-   ],
+   "cross_groups": [],
    "declared_controls": [
-    "qn_idn_dconv",
     "c17_ls_trials"
    ],
    "deferred": [],
@@ -11354,7 +11123,6 @@
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [
-    "qn_idn_dconv",
     "c17_ls_trials"
    ],
    "excluded": [],
@@ -11362,12 +11130,7 @@
     "classical-fixes",
     "classical-misc"
    ],
-   "interaction_groups": [
-    [
-     "qn_idn_dconv",
-     "c17_ls_trials"
-    ]
-   ],
+   "interaction_groups": [],
    "invalid": [],
    "mapping_notes": [
     "more:linearsvc@dataset=istella is a capped original; full registered input classification-full-v1 used",
@@ -11379,8 +11142,7 @@
     "more:linearsvc"
    ],
    "representative_arms": {
-    "c17_ls_trials": "on",
-    "qn_idn_dconv": "on"
+    "c17_ls_trials": "on"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [],
@@ -11393,32 +11155,8 @@
    ]
   },
   "more:linearsvr": {
-   "all_on": "G.more:linearsvr.all_on",
+   "all_on": null,
    "configs": [
-    {
-     "assignment": {
-      "qn_idn_dconv": "on"
-     },
-     "bindings": [
-      "_mojolearn_estimators"
-     ],
-     "defines": [
-      "MOJOLEARN_QN_IDN_DCONV=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:linearsvr.qn_idn_dconv=on",
-     "pack": "P049",
-     "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C01_MEAN=1",
-      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
-      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
-     ],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
     {
      "assignment": {
       "c17_ls_trials": "on"
@@ -11431,59 +11169,21 @@
      ],
      "global_reach": [],
      "id": "G.more:linearsvr.c17_ls_trials=on",
-     "pack": "P050",
+     "pack": "P049",
      "packed_extra_defines": [
-      "MOJOLEARN_C52_PAIR_ROWS=128",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_PCA_COV=4",
-      "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
+      "MOJOLEARN_CLASSICAL_C01_MEAN=1",
+      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
+      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
      ],
-     "priority": 2,
+     "priority": 1,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "c17_ls_trials": "on",
-      "qn_idn_dconv": "on"
-     },
-     "bindings": [
-      "_mojolearn_estimators"
-     ],
-     "defines": [
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
-      "MOJOLEARN_QN_IDN_DCONV=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:linearsvr.all_on",
-     "pack": "P051",
-     "packed_extra_defines": [
-      "MOJOLEARN_C52_PAIR_ROWS=512",
-      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_PCA_COV=23"
-     ],
-     "priority": 3,
-     "queued": true,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
     }
    ],
-   "cross_groups": [
-    {
-     "duplicates": 1,
-     "members": [
-      "qn_idn_dconv",
-      "c17_ls_trials"
-     ],
-     "new_configs": 0,
-     "note": null,
-     "product": 4
-    }
-   ],
+   "cross_groups": [],
    "declared_controls": [
-    "qn_idn_dconv",
     "c17_ls_trials"
    ],
    "deferred": [],
@@ -11491,7 +11191,6 @@
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [
-    "qn_idn_dconv",
     "c17_ls_trials"
    ],
    "excluded": [],
@@ -11499,12 +11198,7 @@
     "classical-fixes",
     "classical-misc"
    ],
-   "interaction_groups": [
-    [
-     "qn_idn_dconv",
-     "c17_ls_trials"
-    ]
-   ],
+   "interaction_groups": [],
    "invalid": [],
    "mapping_notes": [],
    "notes": [],
@@ -11513,8 +11207,7 @@
     "more:linearsvr"
    ],
    "representative_arms": {
-    "c17_ls_trials": "on",
-    "qn_idn_dconv": "on"
+    "c17_ls_trials": "on"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [],
@@ -11527,32 +11220,8 @@
    ]
   },
   "more:logreg": {
-   "all_on": "G.more:logreg.all_on",
+   "all_on": null,
    "configs": [
-    {
-     "assignment": {
-      "qn_idn_dconv": "on"
-     },
-     "bindings": [
-      "_mojolearn_estimators"
-     ],
-     "defines": [
-      "MOJOLEARN_QN_IDN_DCONV=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:logreg.qn_idn_dconv=on",
-     "pack": "P049",
-     "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C01_MEAN=1",
-      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
-      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
-     ],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
     {
      "assignment": {
       "c17_ls_trials": "on"
@@ -11565,59 +11234,21 @@
      ],
      "global_reach": [],
      "id": "G.more:logreg.c17_ls_trials=on",
-     "pack": "P050",
+     "pack": "P049",
      "packed_extra_defines": [
-      "MOJOLEARN_C52_PAIR_ROWS=128",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_PCA_COV=4",
-      "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
+      "MOJOLEARN_CLASSICAL_C01_MEAN=1",
+      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
+      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
      ],
-     "priority": 2,
+     "priority": 1,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "c17_ls_trials": "on",
-      "qn_idn_dconv": "on"
-     },
-     "bindings": [
-      "_mojolearn_estimators"
-     ],
-     "defines": [
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
-      "MOJOLEARN_QN_IDN_DCONV=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:logreg.all_on",
-     "pack": "P051",
-     "packed_extra_defines": [
-      "MOJOLEARN_C52_PAIR_ROWS=512",
-      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_PCA_COV=23"
-     ],
-     "priority": 3,
-     "queued": true,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
     }
    ],
-   "cross_groups": [
-    {
-     "duplicates": 1,
-     "members": [
-      "qn_idn_dconv",
-      "c17_ls_trials"
-     ],
-     "new_configs": 0,
-     "note": null,
-     "product": 4
-    }
-   ],
+   "cross_groups": [],
    "declared_controls": [
-    "qn_idn_dconv",
     "c17_ls_trials"
    ],
    "deferred": [],
@@ -11625,7 +11256,6 @@
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [
-    "qn_idn_dconv",
     "c17_ls_trials"
    ],
    "excluded": [],
@@ -11633,12 +11263,7 @@
     "classical-fixes",
     "classical-misc"
    ],
-   "interaction_groups": [
-    [
-     "qn_idn_dconv",
-     "c17_ls_trials"
-    ]
-   ],
+   "interaction_groups": [],
    "invalid": [],
    "mapping_notes": [
     "more:logreg@dataset=istella is a capped original; full registered input classification-full-v1 used",
@@ -11650,8 +11275,7 @@
     "more:logreg"
    ],
    "representative_arms": {
-    "c17_ls_trials": "on",
-    "qn_idn_dconv": "on"
+    "c17_ls_trials": "on"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [],
@@ -11665,38 +11289,14 @@
   },
   "more:nystroem": {
    "all_on": null,
-   "configs": [
-    {
-     "assignment": {
-      "C25_PROJECTION_REUSE": "on"
-     },
-     "bindings": [
-      "_mojolearn_kernel_methods"
-     ],
-     "defines": [
-      "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:nystroem.C25_PROJECTION_REUSE=on",
-     "pack": "P103",
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    }
-   ],
+   "configs": [],
    "cross_groups": [],
-   "declared_controls": [
-    "C25_PROJECTION_REUSE"
-   ],
+   "declared_controls": [],
    "deferred": [],
    "deferred_groups": [],
    "dropped_arms": {},
    "dropped_from_all_on": [],
-   "eligible_controls": [
-    "C25_PROJECTION_REUSE"
-   ],
+   "eligible_controls": [],
    "excluded": [],
    "files": [
     "classical-decomp"
@@ -11709,9 +11309,7 @@
    "raw_ids": [
     "more:nystroem"
    ],
-   "representative_arms": {
-    "C25_PROJECTION_REUSE": "on"
-   },
+   "representative_arms": {},
    "unmapped_reason": null,
    "unresolved_interactions": [],
    "workload_bindings": [
@@ -11724,38 +11322,14 @@
   },
   "more:rbf-sampler": {
    "all_on": null,
-   "configs": [
-    {
-     "assignment": {
-      "C25_PROJECTION_REUSE": "on"
-     },
-     "bindings": [
-      "_mojolearn_kernel_methods"
-     ],
-     "defines": [
-      "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE=1"
-     ],
-     "global_reach": [],
-     "id": "G.more:rbf-sampler.C25_PROJECTION_REUSE=on",
-     "pack": "P103",
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    }
-   ],
+   "configs": [],
    "cross_groups": [],
-   "declared_controls": [
-    "C25_PROJECTION_REUSE"
-   ],
+   "declared_controls": [],
    "deferred": [],
    "deferred_groups": [],
    "dropped_arms": {},
    "dropped_from_all_on": [],
-   "eligible_controls": [
-    "C25_PROJECTION_REUSE"
-   ],
+   "eligible_controls": [],
    "excluded": [],
    "files": [
     "classical-decomp"
@@ -11768,9 +11342,7 @@
    "raw_ids": [
     "more:rbf-sampler"
    ],
-   "representative_arms": {
-    "C25_PROJECTION_REUSE": "on"
-   },
+   "representative_arms": {},
    "unmapped_reason": null,
    "unresolved_interactions": [],
    "workload_bindings": [
@@ -11799,9 +11371,9 @@
      "pack": "P049",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C01_MEAN=1",
+      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
       "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
-      "MOJOLEARN_KDE_DIRECT_DISTANCE=1",
-      "MOJOLEARN_QN_IDN_DCONV=1"
+      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
      ],
      "priority": 1,
      "queued": true,
@@ -11823,7 +11395,6 @@
      "pack": "P050",
      "packed_extra_defines": [
       "MOJOLEARN_C52_PAIR_ROWS=128",
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
       "MOJOLEARN_CLASSICAL_PCA_COV=4",
       "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
      ],
@@ -11849,9 +11420,7 @@
      "pack": "P051",
      "packed_extra_defines": [
       "MOJOLEARN_C52_PAIR_ROWS=512",
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
-      "MOJOLEARN_CLASSICAL_PCA_COV=23",
-      "MOJOLEARN_QN_IDN_DCONV=1"
+      "MOJOLEARN_CLASSICAL_PCA_COV=23"
      ],
      "priority": 3,
      "queued": true,
@@ -11932,7 +11501,7 @@
      ],
      "global_reach": [],
      "id": "G.more:svr.c20_pair_load=on",
-     "pack": "P202",
+     "pack": "P197",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_T40_ROWMAJOR=1"
      ],
@@ -11953,7 +11522,7 @@
      ],
      "global_reach": [],
      "id": "G.more:svr.c21_extrema=on",
-     "pack": "P203",
+     "pack": "P198",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_C47_IF_LIVE_TASKS=1"
      ],
@@ -11974,7 +11543,7 @@
      ],
      "global_reach": [],
      "id": "G.more:svr.c22_triangle=on",
-     "pack": "P204",
+     "pack": "P199",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_C48_IF_PARTITION=1"
      ],
@@ -11999,7 +11568,7 @@
      ],
      "global_reach": [],
      "id": "G.more:svr.all_on",
-     "pack": "P205",
+     "pack": "P200",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_C50_IF_PACKED=1"
      ],
@@ -12022,7 +11591,7 @@
      ],
      "global_reach": [],
      "id": "G.more:svr.c21_extrema=on+c22_triangle=on",
-     "pack": "P206",
+     "pack": "P201",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_IF_BUILD_TPB=256"
      ],
@@ -12045,7 +11614,7 @@
      ],
      "global_reach": [],
      "id": "G.more:svr.c20_pair_load=on+c22_triangle=on",
-     "pack": "P207",
+     "pack": "P202",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_IF_BUILD_TPB=512"
      ],
@@ -12068,7 +11637,7 @@
      ],
      "global_reach": [],
      "id": "G.more:svr.c20_pair_load=on+c21_extrema=on",
-     "pack": "P208",
+     "pack": "P203",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_C47_IF_LIVE_TASKS=1",
       "MOJOLEARN_TREES_C48_IF_PARTITION=1",
@@ -12162,9 +11731,9 @@
      "pack": "P049",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
       "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
-      "MOJOLEARN_KDE_DIRECT_DISTANCE=1",
-      "MOJOLEARN_QN_IDN_DCONV=1"
+      "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
      ],
      "priority": 1,
      "queued": true,
@@ -12186,7 +11755,6 @@
      "pack": "P050",
      "packed_extra_defines": [
       "MOJOLEARN_C52_PAIR_ROWS=128",
-      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
       "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
       "MOJOLEARN_CLASSICAL_PCA_COV=4"
      ],
@@ -12296,7 +11864,7 @@
       "other_reach: \"non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch\""
      ],
      "id": "G.neural:cnn-clf.neural_gemm_ozaki_slices=4",
-     "pack": "P248",
+     "pack": "P243",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -12317,7 +11885,7 @@
       "other_reach: \"non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch\""
      ],
      "id": "G.neural:cnn-clf.neural_gemm_ozaki_slices=5",
-     "pack": "P249",
+     "pack": "P244",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -12336,7 +11904,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:cnn-clf.ni12_implicit_conv=on",
-     "pack": "P250",
+     "pack": "P245",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -12355,7 +11923,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:cnn-clf.ni15_bias_no_ones=on",
-     "pack": "P251",
+     "pack": "P246",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -12374,7 +11942,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:cnn-clf.ni18_epoch_gather=on",
-     "pack": "P252",
+     "pack": "P247",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -12393,7 +11961,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:cnn-clf.nn46_gather_bounds=on",
-     "pack": "P253",
+     "pack": "P248",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -12414,7 +11982,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:cnn-clf.gemm_tile_min_blocks=192",
-     "pack": "P254",
+     "pack": "P249",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -12435,7 +12003,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:cnn-clf.gemm_tile_min_blocks=512",
-     "pack": "P255",
+     "pack": "P250",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -12456,7 +12024,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:cnn-clf.gemm_tile_min_blocks=1024",
-     "pack": "P256",
+     "pack": "P251",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -12477,7 +12045,7 @@
       "note: \"Reaches classical callers\""
      ],
      "id": "G.neural:cnn-clf.gemm_kpack_rpt4=on",
-     "pack": "P257",
+     "pack": "P252",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -12496,7 +12064,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:cnn-clf.ni14_col2im=bounded",
-     "pack": "P258",
+     "pack": "P253",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -12515,7 +12083,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:cnn-clf.ni14_col2im=tiled",
-     "pack": "P259",
+     "pack": "P254",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -12550,7 +12118,7 @@
       "other_reach: \"non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch\""
      ],
      "id": "G.neural:cnn-clf.all_on",
-     "pack": "P260",
+     "pack": "P255",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -12571,7 +12139,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:cnn-clf.nn46_gather_bounds=on+ni14_col2im=bounded",
-     "pack": "P261",
+     "pack": "P256",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -12592,7 +12160,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:cnn-clf.nn46_gather_bounds=on+ni14_col2im=tiled",
-     "pack": "P262",
+     "pack": "P257",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -17330,7 +16898,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.m1_persistent_scan_ch=2+m1_scan=persistent",
-     "pack": "P113",
+     "pack": "P110",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M2_YOFF_EXP=1",
       "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE=1"
@@ -17354,7 +16922,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.m1_persistent_scan_ch=8+m1_scan=persistent",
-     "pack": "P114",
+     "pack": "P111",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M2_YOFF_EXP=2"
      ],
@@ -17377,7 +16945,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.m1_persistent_scan_tokens=16+m1_scan=persistent",
-     "pack": "P115",
+     "pack": "P112",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M2_YD_ROWS=8"
      ],
@@ -17400,7 +16968,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.m1_persistent_scan_tokens=64+m1_scan=persistent",
-     "pack": "P116",
+     "pack": "P113",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M2_CS_PT=16"
      ],
@@ -17421,7 +16989,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.m1_scan=persistent",
-     "pack": "P117",
+     "pack": "P114",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M2_RETAIN_GL=1"
      ],
@@ -17442,7 +17010,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.m1_scan=state_window",
-     "pack": "P118",
+     "pack": "P115",
      "packed_extra_defines": [
       "MOJOLEARN_NN37_TRIANGLE_TASKS=1"
      ],
@@ -17463,7 +17031,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.m1_scan=affine_prefix",
-     "pack": "P119",
+     "pack": "P116",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -17482,7 +17050,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.m1_elementwise_fused=on",
-     "pack": "P120",
+     "pack": "P117",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -17501,7 +17069,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.nn35_conv_pair=on",
-     "pack": "P121",
+     "pack": "P118",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -17520,7 +17088,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.nn40_owned_weights=on",
-     "pack": "P122",
+     "pack": "P119",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -17539,7 +17107,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.nn40_ws_headroom=on",
-     "pack": "P123",
+     "pack": "P120",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -17558,7 +17126,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.neural_gemm_schedule=stream",
-     "pack": "P124",
+     "pack": "P121",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -17577,7 +17145,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.neural_gemm_schedule=pages",
-     "pack": "P125",
+     "pack": "P122",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -17596,7 +17164,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.neural_gemm_schedule=fold_exact",
-     "pack": "P126",
+     "pack": "P123",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -17615,7 +17183,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.neural_gemm_schedule=threadmap",
-     "pack": "P127",
+     "pack": "P124",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -17634,7 +17202,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba1-forward.gemm_leaf=neural128",
-     "pack": "P128",
+     "pack": "P125",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
@@ -18265,7 +17833,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.m2_yoff_exp=1",
-     "pack": "P113",
+     "pack": "P110",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=2",
       "MOJOLEARN_IDN_M1_SCAN=3",
@@ -18288,7 +17856,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.m2_yoff_exp=2",
-     "pack": "P114",
+     "pack": "P111",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=8",
       "MOJOLEARN_IDN_M1_SCAN=3"
@@ -18310,7 +17878,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.m2_yd_rows=8",
-     "pack": "P115",
+     "pack": "P112",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=16",
       "MOJOLEARN_IDN_M1_SCAN=3"
@@ -18332,7 +17900,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.m2_cs_pt=16",
-     "pack": "P116",
+     "pack": "P113",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=64",
       "MOJOLEARN_IDN_M1_SCAN=3"
@@ -18354,7 +17922,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.m2_retain_gl=on",
-     "pack": "P117",
+     "pack": "P114",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M1_SCAN=3"
      ],
@@ -18375,7 +17943,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.nn37_triangle_tasks=on",
-     "pack": "P118",
+     "pack": "P115",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M1_SCAN=2"
      ],
@@ -18396,7 +17964,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.nn35_conv_pair=on",
-     "pack": "P121",
+     "pack": "P118",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -18415,7 +17983,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.nn40_owned_weights=on",
-     "pack": "P122",
+     "pack": "P119",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -18434,7 +18002,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.nn40_ws_headroom=on",
-     "pack": "P123",
+     "pack": "P120",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -18453,7 +18021,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.neural_gemm_schedule=stream",
-     "pack": "P124",
+     "pack": "P121",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -18472,7 +18040,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.neural_gemm_schedule=pages",
-     "pack": "P125",
+     "pack": "P122",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -18491,7 +18059,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.neural_gemm_schedule=fold_exact",
-     "pack": "P126",
+     "pack": "P123",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -18510,7 +18078,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.neural_gemm_schedule=threadmap",
-     "pack": "P127",
+     "pack": "P124",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -18529,7 +18097,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.gemm_leaf=neural128",
-     "pack": "P128",
+     "pack": "P125",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -18548,7 +18116,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.gemm_leaf=neural256",
-     "pack": "P129",
+     "pack": "P126",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -18567,7 +18135,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba2-forward.neural_gemm_chains=2",
-     "pack": "P130",
+     "pack": "P127",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
@@ -19119,7 +18687,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.m3_yintra_tile=on",
-     "pack": "P113",
+     "pack": "P110",
      "packed_extra_defines": [
       "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=2",
       "MOJOLEARN_IDN_M1_SCAN=3",
@@ -19142,7 +18710,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.nn40_owned_weights=on",
-     "pack": "P122",
+     "pack": "P119",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -19161,7 +18729,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.nn40_ws_headroom=on",
-     "pack": "P123",
+     "pack": "P120",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -19180,7 +18748,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.neural_gemm_schedule=stream",
-     "pack": "P124",
+     "pack": "P121",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -19199,7 +18767,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.neural_gemm_schedule=pages",
-     "pack": "P125",
+     "pack": "P122",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -19218,7 +18786,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.neural_gemm_schedule=fold_exact",
-     "pack": "P126",
+     "pack": "P123",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -19237,7 +18805,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.neural_gemm_schedule=threadmap",
-     "pack": "P127",
+     "pack": "P124",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -19256,7 +18824,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.gemm_leaf=neural128",
-     "pack": "P128",
+     "pack": "P125",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -19275,7 +18843,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.gemm_leaf=neural256",
-     "pack": "P129",
+     "pack": "P126",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -19294,7 +18862,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.neural_gemm_chains=2",
-     "pack": "P130",
+     "pack": "P127",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -19313,7 +18881,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mamba3-forward.neural_gemm_chains=4",
-     "pack": "P131",
+     "pack": "P128",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -19335,7 +18903,7 @@
       "other_reach: \"non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch\""
      ],
      "id": "G.neural:mamba3-forward.neural_gemm_ozaki_slices=4",
-     "pack": "P164",
+     "pack": "P161",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -19357,7 +18925,7 @@
       "other_reach: \"non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch\""
      ],
      "id": "G.neural:mamba3-forward.neural_gemm_ozaki_slices=5",
-     "pack": "P165",
+     "pack": "P162",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -19378,7 +18946,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:mamba3-forward.gemm_tile_min_blocks=192",
-     "pack": "P132",
+     "pack": "P129",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -19399,7 +18967,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:mamba3-forward.gemm_tile_min_blocks=512",
-     "pack": "P133",
+     "pack": "P130",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -19420,7 +18988,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:mamba3-forward.gemm_tile_min_blocks=1024",
-     "pack": "P134",
+     "pack": "P131",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
@@ -19896,7 +19464,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream",
-     "pack": "P213",
+     "pack": "P208",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -19915,7 +19483,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages",
-     "pack": "P214",
+     "pack": "P209",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -19934,7 +19502,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.neural_gemm_schedule=fold_exact",
-     "pack": "P215",
+     "pack": "P210",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -19953,7 +19521,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.neural_gemm_schedule=threadmap",
-     "pack": "P216",
+     "pack": "P211",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -19972,7 +19540,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.gemm_leaf=neural128",
-     "pack": "P217",
+     "pack": "P212",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -19991,7 +19559,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.gemm_leaf=neural256",
-     "pack": "P218",
+     "pack": "P213",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -20010,7 +19578,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.neural_gemm_chains=2",
-     "pack": "P219",
+     "pack": "P214",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -20029,7 +19597,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.neural_gemm_chains=4",
-     "pack": "P220",
+     "pack": "P215",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -20048,7 +19616,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.neural_gemm_epilogue=mlp",
-     "pack": "P221",
+     "pack": "P216",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -20067,7 +19635,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.train_scratch=1",
-     "pack": "P222",
+     "pack": "P217",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -20089,7 +19657,7 @@
       "other_reach: \"non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch\""
      ],
      "id": "G.neural:mlp-train-step.neural_gemm_ozaki_slices=4",
-     "pack": "P224",
+     "pack": "P219",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -20111,7 +19679,7 @@
       "other_reach: \"non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch\""
      ],
      "id": "G.neural:mlp-train-step.neural_gemm_ozaki_slices=5",
-     "pack": "P225",
+     "pack": "P220",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -20138,7 +19706,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.all_on",
-     "pack": "P223",
+     "pack": "P218",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -20599,7 +20167,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=summary_tree",
-     "pack": "P135",
+     "pack": "P132",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -20620,7 +20188,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=online_tile32",
-     "pack": "P136",
+     "pack": "P133",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -20643,7 +20211,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on",
-     "pack": "P137",
+     "pack": "P134",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -20668,7 +20236,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2",
-     "pack": "P138",
+     "pack": "P135",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -20693,7 +20261,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8",
-     "pack": "P139",
+     "pack": "P136",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -20714,7 +20282,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_tile_order=asc",
-     "pack": "P140",
+     "pack": "P137",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -20735,7 +20303,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_fwd_tq_rule=on",
-     "pack": "P141",
+     "pack": "P138",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -20756,7 +20324,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.grouped_projections_v2=on",
-     "pack": "P142",
+     "pack": "P139",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -20777,7 +20345,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.m3_angle_parallel=on",
-     "pack": "P143",
+     "pack": "P140",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -20800,7 +20368,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32",
-     "pack": "P144",
+     "pack": "P141",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -20823,7 +20391,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128",
-     "pack": "P145",
+     "pack": "P142",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -20847,7 +20415,7 @@
       "other_reach: \"non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch\""
      ],
      "id": "G.neural:samba-forward.neural_gemm_ozaki_slices=4",
-     "pack": "P162",
+     "pack": "P159",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -20871,7 +20439,7 @@
       "other_reach: \"non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch\""
      ],
      "id": "G.neural:samba-forward.neural_gemm_ozaki_slices=5",
-     "pack": "P163",
+     "pack": "P160",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -20894,7 +20462,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:samba-forward.gemm_tile_min_blocks=192",
-     "pack": "P146",
+     "pack": "P143",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -20917,7 +20485,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:samba-forward.gemm_tile_min_blocks=512",
-     "pack": "P147",
+     "pack": "P144",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -20940,7 +20508,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:samba-forward.gemm_tile_min_blocks=1024",
-     "pack": "P148",
+     "pack": "P145",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
@@ -21807,7 +21375,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream",
-     "pack": "P149",
+     "pack": "P146",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -21828,7 +21396,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=pages",
-     "pack": "P150",
+     "pack": "P147",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -21849,7 +21417,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=fold_exact",
-     "pack": "P151",
+     "pack": "P148",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -21870,7 +21438,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=threadmap",
-     "pack": "P152",
+     "pack": "P149",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -21891,7 +21459,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.gemm_leaf=neural128",
-     "pack": "P153",
+     "pack": "P150",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -21912,7 +21480,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.gemm_leaf=neural256",
-     "pack": "P154",
+     "pack": "P151",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -21933,7 +21501,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_chains=2",
-     "pack": "P155",
+     "pack": "P152",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -21954,7 +21522,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_chains=4",
-     "pack": "P156",
+     "pack": "P153",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -21975,7 +21543,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.attn_softmax=summary_tree",
-     "pack": "P135",
+     "pack": "P132",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -21996,7 +21564,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.attn_softmax=online_tile32",
-     "pack": "P136",
+     "pack": "P133",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -22017,7 +21585,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.attn_stash=recompute",
-     "pack": "P157",
+     "pack": "P154",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -22038,7 +21606,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.attn_stash=packed",
-     "pack": "P158",
+     "pack": "P155",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -22059,7 +21627,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.attn_stash=alias_y",
-     "pack": "P159",
+     "pack": "P156",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -22080,7 +21648,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.norm=lanes8",
-     "pack": "P160",
+     "pack": "P157",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -22101,7 +21669,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.norm=split_scale",
-     "pack": "P161",
+     "pack": "P158",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
@@ -24451,7 +24019,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.attn_softmax=summary_tree",
-     "pack": "P226",
+     "pack": "P221",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -24470,7 +24038,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.attn_softmax=online_tile32",
-     "pack": "P227",
+     "pack": "P222",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -24491,7 +24059,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on",
-     "pack": "P228",
+     "pack": "P223",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -24514,7 +24082,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2",
-     "pack": "P229",
+     "pack": "P224",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -24537,7 +24105,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8",
-     "pack": "P230",
+     "pack": "P225",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -24556,7 +24124,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.neural_gemm_schedule=stream",
-     "pack": "P231",
+     "pack": "P226",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -24575,7 +24143,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.neural_gemm_schedule=pages",
-     "pack": "P232",
+     "pack": "P227",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -24594,7 +24162,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.neural_gemm_schedule=fold_exact",
-     "pack": "P233",
+     "pack": "P228",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -24613,7 +24181,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.neural_gemm_schedule=threadmap",
-     "pack": "P234",
+     "pack": "P229",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -24632,7 +24200,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.gemm_leaf=neural128",
-     "pack": "P235",
+     "pack": "P230",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -24651,7 +24219,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.gemm_leaf=neural256",
-     "pack": "P236",
+     "pack": "P231",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -24670,7 +24238,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.neural_gemm_chains=2",
-     "pack": "P237",
+     "pack": "P232",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -24689,7 +24257,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.neural_gemm_chains=4",
-     "pack": "P238",
+     "pack": "P233",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -24708,7 +24276,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.neural_gemm_pair=nn05",
-     "pack": "P239",
+     "pack": "P234",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -24727,7 +24295,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.neural_gemm_pair=nn07",
-     "pack": "P240",
+     "pack": "P235",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -24746,7 +24314,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:transformer-forward.attn_scale_mask=on",
-     "pack": "P241",
+     "pack": "P236",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
@@ -26229,7 +25797,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T02=on",
-     "pack": "P186",
+     "pack": "P181",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -26249,7 +25817,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T04=on",
-     "pack": "P187",
+     "pack": "P182",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -26269,7 +25837,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T05=on",
-     "pack": "P188",
+     "pack": "P183",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -26289,7 +25857,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T07=on",
-     "pack": "P189",
+     "pack": "P184",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -26309,7 +25877,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T11_LEVELS=8",
-     "pack": "P190",
+     "pack": "P185",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -26329,7 +25897,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T11_LEVELS=16",
-     "pack": "P191",
+     "pack": "P186",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -26350,7 +25918,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T12=64MiB",
-     "pack": "P192",
+     "pack": "P187",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -26371,7 +25939,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T12=256MiB",
-     "pack": "P193",
+     "pack": "P188",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -26392,7 +25960,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T13=4MiB",
-     "pack": "P194",
+     "pack": "P189",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -26413,7 +25981,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T13=16MiB",
-     "pack": "P195",
+     "pack": "P190",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -26434,7 +26002,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T13=64MiB",
-     "pack": "P196",
+     "pack": "P191",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -26454,7 +26022,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.T14=on",
-     "pack": "P197",
+     "pack": "P192",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -26474,7 +26042,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.C48=on",
-     "pack": "P198",
+     "pack": "P193",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -26494,7 +26062,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.FOREST_ROUTE=leaf_reuse",
-     "pack": "P199",
+     "pack": "P194",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -26514,7 +26082,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.FOREST_ROUTE=leaf_reuse_finite",
-     "pack": "P200",
+     "pack": "P195",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -26535,7 +26103,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:et.FOREST_ROUTE=leaf_reuse_finite_t33",
-     "pack": "P201",
+     "pack": "P196",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
@@ -27148,7 +26716,6 @@
      "pack": "P065",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_T19=1",
       "MOJOLEARN_TREES_T22=1",
       "MOJOLEARN_TREES_T29=1"
      ],
@@ -27950,30 +27517,6 @@
    "configs": [
     {
      "assignment": {
-      "T19": "on"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_T19=1"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-depthwise.T19=on",
-     "pack": "P065",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_T22=1",
-      "MOJOLEARN_TREES_T28=1",
-      "MOJOLEARN_TREES_T29=1"
-     ],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
       "T19_DEFER": "on"
      },
      "bindings": [
@@ -27986,7 +27529,7 @@
      "id": "G.trees:gbdt-depthwise.T19_DEFER=on",
      "pack": "P074",
      "packed_extra_defines": [],
-     "priority": 2,
+     "priority": 1,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28005,7 +27548,7 @@
      "id": "G.trees:gbdt-depthwise.T21=on",
      "pack": "P075",
      "packed_extra_defines": [],
-     "priority": 3,
+     "priority": 2,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28024,7 +27567,7 @@
      "id": "G.trees:gbdt-depthwise.T23=on",
      "pack": "P070",
      "packed_extra_defines": [],
-     "priority": 4,
+     "priority": 3,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28043,7 +27586,7 @@
      "id": "G.trees:gbdt-depthwise.C50_GB=on",
      "pack": "P071",
      "packed_extra_defines": [],
-     "priority": 5,
+     "priority": 4,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28062,7 +27605,7 @@
      "id": "G.trees:gbdt-depthwise.T21_STREAMS=2",
      "pack": "P076",
      "packed_extra_defines": [],
-     "priority": 6,
+     "priority": 5,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28081,7 +27624,7 @@
      "id": "G.trees:gbdt-depthwise.hist_packed_gh=on",
      "pack": "P077",
      "packed_extra_defines": [],
-     "priority": 7,
+     "priority": 6,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28100,7 +27643,7 @@
      "id": "G.trees:gbdt-depthwise.hist_warp_agg=on",
      "pack": "P078",
      "packed_extra_defines": [],
-     "priority": 8,
+     "priority": 7,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28119,7 +27662,7 @@
      "id": "G.trees:gbdt-depthwise.gbdt_ns_predict_bitvec=on",
      "pack": "P079",
      "packed_extra_defines": [],
-     "priority": 9,
+     "priority": 8,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28138,7 +27681,7 @@
      "id": "G.trees:gbdt-depthwise.HIST_REP_SM=64",
      "pack": "P080",
      "packed_extra_defines": [],
-     "priority": 10,
+     "priority": 9,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28157,7 +27700,7 @@
      "id": "G.trees:gbdt-depthwise.HIST_REP_SM=device",
      "pack": "P081",
      "packed_extra_defines": [],
-     "priority": 11,
+     "priority": 10,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28176,7 +27719,7 @@
      "id": "G.trees:gbdt-depthwise.HIST_REP_SM=device_bpsm4",
      "pack": "P082",
      "packed_extra_defines": [],
-     "priority": 12,
+     "priority": 11,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28185,8 +27728,8 @@
      "assignment": {
       "C50_GB": "on",
       "HIST_REP_SM": "64",
-      "T19": "on",
       "T19_DEFER": "on",
+      "T21": "on",
       "T21_STREAMS": "2",
       "T23": "on",
       "hist_packed_gh": "on",
@@ -28200,8 +27743,8 @@
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
       "MOJOLEARN_TREES_HIST_REP_SM=64",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-      "MOJOLEARN_TREES_T19=1",
       "MOJOLEARN_TREES_T19_DEFER=1",
+      "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
       "MOJOLEARN_TREES_T23=1"
      ],
@@ -28211,12 +27754,13 @@
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
       "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
+      "MOJOLEARN_TREES_T17_BATCH=64",
       "MOJOLEARN_TREES_T22=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
       "MOJOLEARN_TREES_T29=1"
      ],
-     "priority": 13,
+     "priority": 12,
      "queued": true,
      "tier": "all_on",
      "vendor_default_equivalent": []
@@ -28237,28 +27781,7 @@
      "id": "G.trees:gbdt-depthwise.T19_DEFER=on+T21=on",
      "pack": "P084",
      "packed_extra_defines": [],
-     "priority": 14,
-     "queued": true,
-     "tier": "cross",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "T19": "on",
-      "T19_DEFER": "on"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_T19=1",
-      "MOJOLEARN_TREES_T19_DEFER=1"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-depthwise.T19=on+T19_DEFER=on",
-     "pack": "P085",
-     "packed_extra_defines": [],
-     "priority": 15,
+     "priority": 13,
      "queued": true,
      "tier": "cross",
      "vendor_default_equivalent": []
@@ -28277,9 +27800,9 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-depthwise.hist_packed_gh=on+hist_warp_agg=on",
-     "pack": "P086",
+     "pack": "P085",
      "packed_extra_defines": [],
-     "priority": 16,
+     "priority": 14,
      "queued": true,
      "tier": "cross",
      "vendor_default_equivalent": []
@@ -28289,13 +27812,12 @@
     {
      "duplicates": 0,
      "members": [
-      "T19",
       "T19_DEFER",
       "T21"
      ],
-     "new_configs": 2,
+     "new_configs": 1,
      "note": null,
-     "product": 8
+     "product": 4
     },
     {
      "duplicates": 0,
@@ -28340,7 +27862,6 @@
     }
    ],
    "declared_controls": [
-    "T19",
     "T19_DEFER",
     "T21",
     "T26",
@@ -28551,19 +28072,11 @@
       "T21_STREAMS"
      ],
      "product": 32,
-     "reason": "group cross (24 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+     "reason": "group cross (24 configs) does not fit the remaining cap (2); generate after one-at-a-time results"
     }
    ],
    "dropped_arms": {},
    "dropped_from_all_on": [
-    {
-     "arm": "on",
-     "control": "T21",
-     "problems": [
-      "MOJOLEARN_TREES_T19 forces use_ridx, which makes MOJOLEARN_TREES_T21 inert (T19+T21 == T19)",
-      "source exclusion MOJOLEARN_TREES_T19 / MOJOLEARN_TREES_T21 (T19.exclusive_with)"
-     ]
-    },
     {
      "arm": "on",
      "control": "gbdt_ns_predict_bitvec",
@@ -28573,7 +28086,6 @@
     }
    ],
    "eligible_controls": [
-    "T19",
     "T19_DEFER",
     "T21",
     "T23",
@@ -28608,7 +28120,6 @@
    ],
    "interaction_groups": [
     [
-     "T19",
      "T19_DEFER",
      "T21",
      "C45_GBDT"
@@ -28634,17 +28145,6 @@
    ],
    "invalid": [
     {
-     "count": 2,
-     "examples": [
-      "T19=on+T21=on",
-      "T19=on+T19_DEFER=on+T21=on"
-     ],
-     "problem": "MOJOLEARN_TREES_T19 forces use_ridx, which makes MOJOLEARN_TREES_T21 inert (T19+T21 == T19)",
-     "tiers": [
-      "cross"
-     ]
-    },
-    {
      "count": 1,
      "examples": [
       "C50_GB=on+gbdt_ns_predict_bitvec=on"
@@ -28664,7 +28164,6 @@
    "representative_arms": {
     "C50_GB": "on",
     "HIST_REP_SM": "64",
-    "T19": "on",
     "T19_DEFER": "on",
     "T21": "on",
     "T21_STREAMS": "2",
@@ -28811,30 +28310,6 @@
     },
     {
      "assignment": {
-      "T19": "on"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_T19=1"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-lossguide.T19=on",
-     "pack": "P065",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_T22=1",
-      "MOJOLEARN_TREES_T28=1",
-      "MOJOLEARN_TREES_T29=1"
-     ],
-     "priority": 7,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
       "T21_STREAMS": "2"
      },
      "bindings": [
@@ -28847,7 +28322,7 @@
      "id": "G.trees:gbdt-lossguide.T21_STREAMS=2",
      "pack": "P076",
      "packed_extra_defines": [],
-     "priority": 8,
+     "priority": 7,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28866,7 +28341,7 @@
      "id": "G.trees:gbdt-lossguide.hist_packed_gh=on",
      "pack": "P077",
      "packed_extra_defines": [],
-     "priority": 9,
+     "priority": 8,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28885,7 +28360,7 @@
      "id": "G.trees:gbdt-lossguide.hist_warp_agg=on",
      "pack": "P078",
      "packed_extra_defines": [],
-     "priority": 10,
+     "priority": 9,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28904,7 +28379,7 @@
      "id": "G.trees:gbdt-lossguide.gbdt_ns_predict_bitvec=on",
      "pack": "P079",
      "packed_extra_defines": [],
-     "priority": 11,
+     "priority": 10,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28923,7 +28398,7 @@
      "id": "G.trees:gbdt-lossguide.HIST_REP_SM=64",
      "pack": "P080",
      "packed_extra_defines": [],
-     "priority": 12,
+     "priority": 11,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28942,7 +28417,7 @@
      "id": "G.trees:gbdt-lossguide.HIST_REP_SM=device",
      "pack": "P081",
      "packed_extra_defines": [],
-     "priority": 13,
+     "priority": 12,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28961,7 +28436,7 @@
      "id": "G.trees:gbdt-lossguide.HIST_REP_SM=device_bpsm4",
      "pack": "P082",
      "packed_extra_defines": [],
-     "priority": 14,
+     "priority": 13,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -28978,9 +28453,9 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-lossguide.LG_LEVEL_ROUNDS=on",
-     "pack": "P087",
+     "pack": "P086",
      "packed_extra_defines": [],
-     "priority": 15,
+     "priority": 14,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -29013,11 +28488,39 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-lossguide.all_on",
-     "pack": "P088",
+     "pack": "P083",
+     "packed_extra_defines": [
+      "MOJOLEARN_TREES_HIST_MULTISTAT=4",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
+      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T24=1",
+      "MOJOLEARN_TREES_T25=1",
+      "MOJOLEARN_TREES_T29=1"
+     ],
+     "priority": 15,
+     "queued": true,
+     "tier": "all_on",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "T19_DEFER": "on",
+      "T21": "on"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_T19_DEFER=1",
+      "MOJOLEARN_TREES_T21=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-lossguide.T19_DEFER=on+T21=on",
+     "pack": "P084",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
-     "tier": "all_on",
+     "tier": "cross",
      "vendor_default_equivalent": []
     }
    ],
@@ -29025,13 +28528,12 @@
     {
      "duplicates": 0,
      "members": [
-      "T19",
       "T19_DEFER",
       "T21"
      ],
-     "new_configs": 2,
+     "new_configs": 1,
      "note": null,
-     "product": 8
+     "product": 4
     },
     {
      "duplicates": 0,
@@ -29074,7 +28576,6 @@
     "T23",
     "C45_GBDT",
     "C50_GB",
-    "T19",
     "T21_STREAMS",
     "hist_packed_gh",
     "hist_warp_agg",
@@ -29084,33 +28585,6 @@
    ],
    "deferred": [],
    "deferred_groups": [
-    {
-     "configs": 2,
-     "listed": [
-      {
-       "assignment": {
-        "T19_DEFER": "on",
-        "T21": "on"
-       },
-       "id": "G.trees:gbdt-lossguide.T19_DEFER=on+T21=on"
-      },
-      {
-       "assignment": {
-        "T19": "on",
-        "T19_DEFER": "on"
-       },
-       "id": "G.trees:gbdt-lossguide.T19_DEFER=on+T19=on"
-      }
-     ],
-     "listed_truncated": false,
-     "members": [
-      "T19",
-      "T19_DEFER",
-      "T21"
-     ],
-     "product": 8,
-     "reason": "group cross (2 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
     {
      "configs": 1,
      "listed": [
@@ -29340,14 +28814,6 @@
    "dropped_from_all_on": [
     {
      "arm": "on",
-     "control": "T19",
-     "problems": [
-      "MOJOLEARN_TREES_T19 forces use_ridx, which makes MOJOLEARN_TREES_T21 inert (T19+T21 == T19)",
-      "source exclusion MOJOLEARN_TREES_T19 / MOJOLEARN_TREES_T21 (T19.exclusive_with)"
-     ]
-    },
-    {
-     "arm": "on",
      "control": "gbdt_ns_predict_bitvec",
      "problems": [
       "source exclusion MOJOLEARN_GBDT_NS_PREDICT_BITVEC / MOJOLEARN_TREES_C50_GB_PACKED (gbdt_ns_predict_bitvec.exclusive_with)"
@@ -29367,7 +28833,6 @@
     "T21",
     "T23",
     "C50_GB",
-    "T19",
     "T21_STREAMS",
     "hist_packed_gh",
     "hist_warp_agg",
@@ -29400,7 +28865,6 @@
    ],
    "interaction_groups": [
     [
-     "T19",
      "T19_DEFER",
      "T21"
     ],
@@ -29420,17 +28884,6 @@
     ]
    ],
    "invalid": [
-    {
-     "count": 2,
-     "examples": [
-      "T21=on+T19=on",
-      "T19_DEFER=on+T21=on+T19=on"
-     ],
-     "problem": "MOJOLEARN_TREES_T19 forces use_ridx, which makes MOJOLEARN_TREES_T21 inert (T19+T21 == T19)",
-     "tiers": [
-      "cross"
-     ]
-    },
     {
      "count": 1,
      "examples": [
@@ -29453,7 +28906,6 @@
     "HIST_REP_SM": "64",
     "LG_LEVEL_ROUNDS": "on",
     "T17_BATCH": "64",
-    "T19": "on",
     "T19_DEFER": "on",
     "T21": "on",
     "T21_STREAMS": "2",
@@ -29511,7 +28963,6 @@
      "id": "G.trees:gbdt-multiclass.hist_multistat=4",
      "pack": "P065",
      "packed_extra_defines": [
-      "MOJOLEARN_TREES_T19=1",
       "MOJOLEARN_TREES_T22=1",
       "MOJOLEARN_TREES_T28=1",
       "MOJOLEARN_TREES_T29=1"
@@ -29646,8 +29097,9 @@
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
       "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T19=1",
+      "MOJOLEARN_TREES_T17_BATCH=64",
       "MOJOLEARN_TREES_T19_DEFER=1",
+      "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
       "MOJOLEARN_TREES_T22=1",
       "MOJOLEARN_TREES_T23=1",
@@ -29674,7 +29126,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=64",
-     "pack": "P089",
+     "pack": "P087",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -29695,7 +29147,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=64",
-     "pack": "P090",
+     "pack": "P088",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -29716,7 +29168,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device",
-     "pack": "P091",
+     "pack": "P089",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -29737,7 +29189,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device",
-     "pack": "P092",
+     "pack": "P090",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -29758,7 +29210,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device_bpsm4",
-     "pack": "P093",
+     "pack": "P091",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -29779,7 +29231,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device_bpsm4",
-     "pack": "P094",
+     "pack": "P092",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -29925,7 +29377,6 @@
      "pack": "P065",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_T19=1",
       "MOJOLEARN_TREES_T28=1",
       "MOJOLEARN_TREES_T29=1"
      ],
@@ -30092,8 +29543,9 @@
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
       "MOJOLEARN_TREES_HIST_REP_SM=64",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-      "MOJOLEARN_TREES_T19=1",
+      "MOJOLEARN_TREES_T17_BATCH=64",
       "MOJOLEARN_TREES_T19_DEFER=1",
+      "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
       "MOJOLEARN_TREES_T29=1"
      ],
@@ -30298,7 +29750,6 @@
      "pack": "P065",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_T19=1",
       "MOJOLEARN_TREES_T22=1",
       "MOJOLEARN_TREES_T28=1"
      ],
@@ -30558,8 +30009,9 @@
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
       "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T19=1",
+      "MOJOLEARN_TREES_T17_BATCH=64",
       "MOJOLEARN_TREES_T19_DEFER=1",
+      "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T22=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1"
@@ -31275,8 +30727,9 @@
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
       "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T19=1",
+      "MOJOLEARN_TREES_T17_BATCH=64",
       "MOJOLEARN_TREES_T19_DEFER=1",
+      "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T22=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
@@ -31301,7 +30754,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on+hist_sym_feature_parallel=on",
-     "pack": "P095",
+     "pack": "P093",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -31322,7 +30775,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_sym_feature_parallel=on",
-     "pack": "P096",
+     "pack": "P094",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -31343,7 +30796,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_warp_agg=on",
-     "pack": "P086",
+     "pack": "P085",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -31366,7 +30819,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on",
-     "pack": "P097",
+     "pack": "P095",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -32034,8 +31487,9 @@
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
       "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T19=1",
+      "MOJOLEARN_TREES_T17_BATCH=64",
       "MOJOLEARN_TREES_T19_DEFER=1",
+      "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T22=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
@@ -32060,7 +31514,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric.hist_warp_agg=on+hist_sym_feature_parallel=on",
-     "pack": "P095",
+     "pack": "P093",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -32081,7 +31535,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_sym_feature_parallel=on",
-     "pack": "P096",
+     "pack": "P094",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -32102,7 +31556,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_warp_agg=on",
-     "pack": "P086",
+     "pack": "P085",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -32125,7 +31579,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on",
-     "pack": "P097",
+     "pack": "P095",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -32797,8 +32251,9 @@
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
       "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T19=1",
+      "MOJOLEARN_TREES_T17_BATCH=64",
       "MOJOLEARN_TREES_T19_DEFER=1",
+      "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T22=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
@@ -32823,7 +32278,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on+hist_sym_feature_parallel=on",
-     "pack": "P095",
+     "pack": "P093",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -32844,7 +32299,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+hist_sym_feature_parallel=on",
-     "pack": "P096",
+     "pack": "P094",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -32865,7 +32320,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+hist_warp_agg=on",
-     "pack": "P086",
+     "pack": "P085",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -32888,7 +32343,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on",
-     "pack": "P097",
+     "pack": "P095",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -33348,7 +32803,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.T40=on",
-     "pack": "P202",
+     "pack": "P197",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1"
      ],
@@ -33369,7 +32824,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.C47_IF=on",
-     "pack": "P203",
+     "pack": "P198",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C21_EXTREMA=1"
      ],
@@ -33390,7 +32845,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.C48_IF=on",
-     "pack": "P204",
+     "pack": "P199",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C22_TRIANGLE=1"
      ],
@@ -33411,7 +32866,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.C50_IF=on",
-     "pack": "P205",
+     "pack": "P200",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1",
       "MOJOLEARN_CLASSICAL_C21_EXTREMA=1",
@@ -33434,7 +32889,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.IF_BUILD_TPB=256",
-     "pack": "P206",
+     "pack": "P201",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C21_EXTREMA=1",
       "MOJOLEARN_CLASSICAL_C22_TRIANGLE=1"
@@ -33456,7 +32911,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.IF_BUILD_TPB=512",
-     "pack": "P207",
+     "pack": "P202",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1",
       "MOJOLEARN_CLASSICAL_C22_TRIANGLE=1"
@@ -33486,7 +32941,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.all_on",
-     "pack": "P208",
+     "pack": "P203",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1",
       "MOJOLEARN_CLASSICAL_C21_EXTREMA=1"
@@ -33510,7 +32965,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.C47_IF=on+C48_IF=on",
-     "pack": "P209",
+     "pack": "P204",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -33531,7 +32986,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.T40=on+C48_IF=on",
-     "pack": "P210",
+     "pack": "P205",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -33552,7 +33007,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.T40=on+C47_IF=on",
-     "pack": "P211",
+     "pack": "P206",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -33575,7 +33030,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:iforest.T40=on+C47_IF=on+C48_IF=on",
-     "pack": "P212",
+     "pack": "P207",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -33747,7 +33202,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T02=on",
-     "pack": "P170",
+     "pack": "P165",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -33766,7 +33221,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T04=on",
-     "pack": "P171",
+     "pack": "P166",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -33785,7 +33240,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T05=on",
-     "pack": "P172",
+     "pack": "P167",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -33806,7 +33261,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T05=on+T05_ROW_VISITS=8",
-     "pack": "P173",
+     "pack": "P168",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -33827,7 +33282,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T05=on+T05_ROW_VISITS=64",
-     "pack": "P174",
+     "pack": "P169",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -33846,7 +33301,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T07=on",
-     "pack": "P175",
+     "pack": "P170",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -33867,7 +33322,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T08=bits8_layout1",
-     "pack": "P176",
+     "pack": "P171",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -33888,7 +33343,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T08=bits8_layout3",
-     "pack": "P177",
+     "pack": "P172",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -33907,7 +33362,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.RF_SAMPLE=two_launch",
-     "pack": "P178",
+     "pack": "P173",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -33928,7 +33383,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.RF_SAMPLE=sorted",
-     "pack": "P179",
+     "pack": "P174",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -33947,7 +33402,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.RF_SAMPLE=fused",
-     "pack": "P180",
+     "pack": "P175",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -33968,7 +33423,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T11_LEVELS=16",
-     "pack": "P181",
+     "pack": "P176",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -33988,7 +33443,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T12=256MiB",
-     "pack": "P182",
+     "pack": "P177",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -34008,7 +33463,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T12=1024MiB",
-     "pack": "P183",
+     "pack": "P178",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -34028,7 +33483,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T13=4MiB",
-     "pack": "P184",
+     "pack": "P179",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -34048,7 +33503,7 @@
      ],
      "global_reach": [],
      "id": "G.trees:rf.T13=16MiB",
-     "pack": "P185",
+     "pack": "P180",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
@@ -34773,8 +34228,8 @@
  },
  "all_switches": "NOT MEASURED until each config has an A/A floor, scored A/B on NVIDIA and AMD, identity and quality evidence",
  "builds": {
-  "after_packing": 776,
-  "before_packing": 914,
+  "after_packing": 764,
+  "before_packing": 896,
   "packs": [
    {
     "algorithms": [
@@ -35649,9 +35104,9 @@
     "defines": [
      "MOJOLEARN_CLASSICAL_C01_MEAN=1",
      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+     "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE=1",
-     "MOJOLEARN_KDE_DIRECT_DISTANCE=1",
-     "MOJOLEARN_QN_IDN_DCONV=1"
+     "MOJOLEARN_KDE_DIRECT_DISTANCE=1"
     ],
     "global_reach": false,
     "id": "P049",
@@ -35659,9 +35114,9 @@
      "G.classical:dbscan.dbscan_direct=on",
      "G.classical:kde.kde_direct=on",
      "G.classical:pca.C01_MEAN=on",
-     "G.more:linearsvc.qn_idn_dconv=on",
-     "G.more:linearsvr.qn_idn_dconv=on",
-     "G.more:logreg.qn_idn_dconv=on",
+     "G.more:linearsvc.c17_ls_trials=on",
+     "G.more:linearsvr.c17_ls_trials=on",
+     "G.more:logreg.c17_ls_trials=on",
      "G.more:ridge.c02_linear_pair=on",
      "G.more:tsvd.C01_MEAN=on"
     ]
@@ -35670,9 +35125,6 @@
     "algorithms": [
      "classical:kde",
      "classical:pca",
-     "more:linearsvc",
-     "more:linearsvr",
-     "more:logreg",
      "more:ridge",
      "more:tsvd"
     ],
@@ -35681,7 +35133,6 @@
     ],
     "defines": [
      "MOJOLEARN_C52_PAIR_ROWS=128",
-     "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
      "MOJOLEARN_CLASSICAL_PCA_COV=4",
      "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
@@ -35691,9 +35142,6 @@
     "members": [
      "G.classical:kde.c52_pair_rows=128",
      "G.classical:pca.PCA_COV=c04",
-     "G.more:linearsvc.c17_ls_trials=on",
-     "G.more:linearsvr.c17_ls_trials=on",
-     "G.more:logreg.c17_ls_trials=on",
      "G.more:ridge.linear_gram_solve=on",
      "G.more:tsvd.TSVD_FUSED_STATS=on"
     ]
@@ -35702,9 +35150,6 @@
     "algorithms": [
      "classical:kde",
      "classical:pca",
-     "more:linearsvc",
-     "more:linearsvr",
-     "more:logreg",
      "more:ridge"
     ],
     "bindings": [
@@ -35713,19 +35158,14 @@
     "defines": [
      "MOJOLEARN_C52_PAIR_ROWS=512",
      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-     "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-     "MOJOLEARN_CLASSICAL_PCA_COV=23",
-     "MOJOLEARN_QN_IDN_DCONV=1"
+     "MOJOLEARN_CLASSICAL_PCA_COV=23"
     ],
     "global_reach": false,
     "id": "P051",
     "members": [
      "G.classical:kde.c52_pair_rows=512",
      "G.classical:pca.PCA_COV=c23",
-     "G.more:linearsvc.all_on",
-     "G.more:linearsvr.all_on",
-     "G.more:logreg.all_on",
      "G.more:ridge.all_on"
     ]
    },
@@ -35974,8 +35414,6 @@
    {
     "algorithms": [
      "trees:gbdt-categorical",
-     "trees:gbdt-depthwise",
-     "trees:gbdt-lossguide",
      "trees:gbdt-multiclass",
      "trees:gbdt-ordered",
      "trees:gbdt-rank-pairlogit"
@@ -35985,7 +35423,6 @@
     ],
     "defines": [
      "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-     "MOJOLEARN_TREES_T19=1",
      "MOJOLEARN_TREES_T22=1",
      "MOJOLEARN_TREES_T28=1",
      "MOJOLEARN_TREES_T29=1"
@@ -35994,8 +35431,6 @@
     "id": "P065",
     "members": [
      "G.trees:gbdt-categorical.T28=on",
-     "G.trees:gbdt-depthwise.T19=on",
-     "G.trees:gbdt-lossguide.T19=on",
      "G.trees:gbdt-multiclass.hist_multistat=4",
      "G.trees:gbdt-ordered.T22=on",
      "G.trees:gbdt-rank-pairlogit.T29=on"
@@ -36446,6 +35881,7 @@
    {
     "algorithms": [
      "trees:gbdt-depthwise",
+     "trees:gbdt-lossguide",
      "trees:gbdt-multiclass",
      "trees:gbdt-ordered",
      "trees:gbdt-rank-pairlogit",
@@ -36463,8 +35899,9 @@
      "MOJOLEARN_TREES_HIST_REP_SM=64",
      "MOJOLEARN_TREES_HIST_WARP_AGG=1",
      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-     "MOJOLEARN_TREES_T19=1",
+     "MOJOLEARN_TREES_T17_BATCH=64",
      "MOJOLEARN_TREES_T19_DEFER=1",
+     "MOJOLEARN_TREES_T21=1",
      "MOJOLEARN_TREES_T21_STREAMS=2",
      "MOJOLEARN_TREES_T22=1",
      "MOJOLEARN_TREES_T23=1",
@@ -36476,6 +35913,7 @@
     "id": "P083",
     "members": [
      "G.trees:gbdt-depthwise.all_on",
+     "G.trees:gbdt-lossguide.all_on",
      "G.trees:gbdt-multiclass.all_on",
      "G.trees:gbdt-ordered.all_on",
      "G.trees:gbdt-rank-pairlogit.all_on",
@@ -36486,7 +35924,8 @@
    },
    {
     "algorithms": [
-     "trees:gbdt-depthwise"
+     "trees:gbdt-depthwise",
+     "trees:gbdt-lossguide"
     ],
     "bindings": [
      "_mojolearn_gbdt"
@@ -36498,24 +35937,8 @@
     "global_reach": false,
     "id": "P084",
     "members": [
-     "G.trees:gbdt-depthwise.T19_DEFER=on+T21=on"
-    ]
-   },
-   {
-    "algorithms": [
-     "trees:gbdt-depthwise"
-    ],
-    "bindings": [
-     "_mojolearn_gbdt"
-    ],
-    "defines": [
-     "MOJOLEARN_TREES_T19=1",
-     "MOJOLEARN_TREES_T19_DEFER=1"
-    ],
-    "global_reach": false,
-    "id": "P085",
-    "members": [
-     "G.trees:gbdt-depthwise.T19=on+T19_DEFER=on"
+     "G.trees:gbdt-depthwise.T19_DEFER=on+T21=on",
+     "G.trees:gbdt-lossguide.T19_DEFER=on+T21=on"
     ]
    },
    {
@@ -36533,7 +35956,7 @@
      "MOJOLEARN_TREES_HIST_WARP_AGG=1"
     ],
     "global_reach": false,
-    "id": "P086",
+    "id": "P085",
     "members": [
      "G.trees:gbdt-depthwise.hist_packed_gh=on+hist_warp_agg=on",
      "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_warp_agg=on",
@@ -36552,33 +35975,9 @@
      "MOJOLEARN_TREES_LG_LEVEL_ROUNDS=1"
     ],
     "global_reach": false,
-    "id": "P087",
+    "id": "P086",
     "members": [
      "G.trees:gbdt-lossguide.LG_LEVEL_ROUNDS=on"
-    ]
-   },
-   {
-    "algorithms": [
-     "trees:gbdt-lossguide"
-    ],
-    "bindings": [
-     "_mojolearn_gbdt"
-    ],
-    "defines": [
-     "MOJOLEARN_TREES_C50_GB_PACKED=1",
-     "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-     "MOJOLEARN_TREES_HIST_REP_SM=64",
-     "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-     "MOJOLEARN_TREES_T17_BATCH=64",
-     "MOJOLEARN_TREES_T19_DEFER=1",
-     "MOJOLEARN_TREES_T21=1",
-     "MOJOLEARN_TREES_T21_STREAMS=2",
-     "MOJOLEARN_TREES_T23=1"
-    ],
-    "global_reach": false,
-    "id": "P088",
-    "members": [
-     "G.trees:gbdt-lossguide.all_on"
     ]
    },
    {
@@ -36593,7 +35992,7 @@
      "MOJOLEARN_TREES_HIST_REP_SM=64"
     ],
     "global_reach": false,
-    "id": "P089",
+    "id": "P087",
     "members": [
      "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=64"
     ]
@@ -36610,7 +36009,7 @@
      "MOJOLEARN_TREES_HIST_REP_SM=64"
     ],
     "global_reach": false,
-    "id": "P090",
+    "id": "P088",
     "members": [
      "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=64"
     ]
@@ -36627,7 +36026,7 @@
      "MOJOLEARN_TREES_HIST_REP_SM=0"
     ],
     "global_reach": false,
-    "id": "P091",
+    "id": "P089",
     "members": [
      "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device"
     ]
@@ -36644,7 +36043,7 @@
      "MOJOLEARN_TREES_HIST_REP_SM=0"
     ],
     "global_reach": false,
-    "id": "P092",
+    "id": "P090",
     "members": [
      "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device"
     ]
@@ -36661,7 +36060,7 @@
      "MOJOLEARN_TREES_HIST_REP_SM=1"
     ],
     "global_reach": false,
-    "id": "P093",
+    "id": "P091",
     "members": [
      "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device_bpsm4"
     ]
@@ -36678,7 +36077,7 @@
      "MOJOLEARN_TREES_HIST_REP_SM=1"
     ],
     "global_reach": false,
-    "id": "P094",
+    "id": "P092",
     "members": [
      "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device_bpsm4"
     ]
@@ -36697,7 +36096,7 @@
      "MOJOLEARN_TREES_HIST_WARP_AGG=1"
     ],
     "global_reach": false,
-    "id": "P095",
+    "id": "P093",
     "members": [
      "G.trees:gbdt-rank-yetirank.hist_warp_agg=on+hist_sym_feature_parallel=on",
      "G.trees:gbdt-symmetric.hist_warp_agg=on+hist_sym_feature_parallel=on",
@@ -36718,7 +36117,7 @@
      "MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL=1"
     ],
     "global_reach": false,
-    "id": "P096",
+    "id": "P094",
     "members": [
      "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_sym_feature_parallel=on",
      "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_sym_feature_parallel=on",
@@ -36740,7 +36139,7 @@
      "MOJOLEARN_TREES_HIST_WARP_AGG=1"
     ],
     "global_reach": false,
-    "id": "P097",
+    "id": "P095",
     "members": [
      "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on",
      "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on",
@@ -36758,7 +36157,7 @@
      "MOJOLEARN_GRAPH_DIRECT_DISTANCE=1"
     ],
     "global_reach": false,
-    "id": "P098",
+    "id": "P096",
     "members": [
      "G.classical:hdbscan.graph_direct=on"
     ]
@@ -36774,7 +36173,7 @@
      "MOJOLEARN_C62_SAME_COMPONENT_SKIP=1"
     ],
     "global_reach": false,
-    "id": "P099",
+    "id": "P097",
     "members": [
      "G.classical:hdbscan.c61_same_component_skip=on"
     ]
@@ -36790,7 +36189,7 @@
      "MOJOLEARN_IVF_DIRECT_DISTANCE=1"
     ],
     "global_reach": false,
-    "id": "P100",
+    "id": "P098",
     "members": [
      "G.more:ivf.ivf_direct=on"
     ]
@@ -36806,7 +36205,7 @@
      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
     ],
     "global_reach": false,
-    "id": "P101",
+    "id": "P099",
     "members": [
      "G.more:ivf.idn_kmeans_centroid_fold=on"
     ]
@@ -36823,27 +36222,9 @@
      "MOJOLEARN_IVF_DIRECT_DISTANCE=1"
     ],
     "global_reach": false,
-    "id": "P102",
+    "id": "P100",
     "members": [
      "G.more:ivf.all_on"
-    ]
-   },
-   {
-    "algorithms": [
-     "more:nystroem",
-     "more:rbf-sampler"
-    ],
-    "bindings": [
-     "_mojolearn_kernel_methods"
-    ],
-    "defines": [
-     "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE=1"
-    ],
-    "global_reach": false,
-    "id": "P103",
-    "members": [
-     "G.more:nystroem.C25_PROJECTION_REUSE=on",
-     "G.more:rbf-sampler.C25_PROJECTION_REUSE=on"
     ]
    },
    {
@@ -36857,7 +36238,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=3"
     ],
     "global_reach": true,
-    "id": "P104",
+    "id": "P101",
     "members": [
      "G.gemm:gemm.gemm_contract_leaf=all256"
     ]
@@ -36873,7 +36254,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3"
     ],
     "global_reach": true,
-    "id": "P105",
+    "id": "P102",
     "members": [
      "G.gemm:gemm.neural_gemm_schedule=stream_all"
     ]
@@ -36889,7 +36270,7 @@
      "MOJOLEARN_NI06_GEMM_ONE_PAGE=1"
     ],
     "global_reach": false,
-    "id": "P106",
+    "id": "P103",
     "members": [
      "G.gemm:gemm.gemm_one_page=on"
     ]
@@ -36905,7 +36286,7 @@
      "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1"
     ],
     "global_reach": false,
-    "id": "P107",
+    "id": "P104",
     "members": [
      "G.gemm:gemm.gemm_group_slack=slack2"
     ]
@@ -36921,7 +36302,7 @@
      "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8=1"
     ],
     "global_reach": false,
-    "id": "P108",
+    "id": "P105",
     "members": [
      "G.gemm:gemm.gemm_group_slack=slack8"
     ]
@@ -36938,7 +36319,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4"
     ],
     "global_reach": false,
-    "id": "P109",
+    "id": "P106",
     "members": [
      "G.gemm:gemm.gemm_ozaki_linalg=4"
     ]
@@ -36955,7 +36336,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
     ],
     "global_reach": false,
-    "id": "P110",
+    "id": "P107",
     "members": [
      "G.gemm:gemm.gemm_ozaki_linalg=5"
     ]
@@ -36971,7 +36352,7 @@
      "MOJOLEARN_GEMM_KPACK_RPT4=1"
     ],
     "global_reach": true,
-    "id": "P111",
+    "id": "P108",
     "members": [
      "G.gemm:gemm.gemm_kpack_rpt4=on"
     ]
@@ -36991,7 +36372,7 @@
      "MOJOLEARN_NI06_GEMM_ONE_PAGE=1"
     ],
     "global_reach": true,
-    "id": "P112",
+    "id": "P109",
     "members": [
      "G.gemm:gemm.all_on"
     ]
@@ -37012,7 +36393,7 @@
      "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE=1"
     ],
     "global_reach": false,
-    "id": "P113",
+    "id": "P110",
     "members": [
      "G.neural:mamba1-forward.m1_persistent_scan_ch=2+m1_scan=persistent",
      "G.neural:mamba2-forward.m2_yoff_exp=1",
@@ -37033,7 +36414,7 @@
      "MOJOLEARN_IDN_M2_YOFF_EXP=2"
     ],
     "global_reach": false,
-    "id": "P114",
+    "id": "P111",
     "members": [
      "G.neural:mamba1-forward.m1_persistent_scan_ch=8+m1_scan=persistent",
      "G.neural:mamba2-forward.m2_yoff_exp=2"
@@ -37053,7 +36434,7 @@
      "MOJOLEARN_IDN_M2_YD_ROWS=8"
     ],
     "global_reach": false,
-    "id": "P115",
+    "id": "P112",
     "members": [
      "G.neural:mamba1-forward.m1_persistent_scan_tokens=16+m1_scan=persistent",
      "G.neural:mamba2-forward.m2_yd_rows=8"
@@ -37073,7 +36454,7 @@
      "MOJOLEARN_IDN_M2_CS_PT=16"
     ],
     "global_reach": false,
-    "id": "P116",
+    "id": "P113",
     "members": [
      "G.neural:mamba1-forward.m1_persistent_scan_tokens=64+m1_scan=persistent",
      "G.neural:mamba2-forward.m2_cs_pt=16"
@@ -37092,7 +36473,7 @@
      "MOJOLEARN_IDN_M2_RETAIN_GL=1"
     ],
     "global_reach": false,
-    "id": "P117",
+    "id": "P114",
     "members": [
      "G.neural:mamba1-forward.m1_scan=persistent",
      "G.neural:mamba2-forward.m2_retain_gl=on"
@@ -37111,7 +36492,7 @@
      "MOJOLEARN_NN37_TRIANGLE_TASKS=1"
     ],
     "global_reach": false,
-    "id": "P118",
+    "id": "P115",
     "members": [
      "G.neural:mamba1-forward.m1_scan=state_window",
      "G.neural:mamba2-forward.nn37_triangle_tasks=on"
@@ -37128,7 +36509,7 @@
      "MOJOLEARN_IDN_M1_SCAN=1"
     ],
     "global_reach": false,
-    "id": "P119",
+    "id": "P116",
     "members": [
      "G.neural:mamba1-forward.m1_scan=affine_prefix"
     ]
@@ -37144,7 +36525,7 @@
      "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED=1"
     ],
     "global_reach": false,
-    "id": "P120",
+    "id": "P117",
     "members": [
      "G.neural:mamba1-forward.m1_elementwise_fused=on"
     ]
@@ -37161,7 +36542,7 @@
      "MOJOLEARN_NN35_CONV_PAIR=1"
     ],
     "global_reach": false,
-    "id": "P121",
+    "id": "P118",
     "members": [
      "G.neural:mamba1-forward.nn35_conv_pair=on",
      "G.neural:mamba2-forward.nn35_conv_pair=on"
@@ -37180,7 +36561,7 @@
      "MOJOLEARN_NN40_OWNED_WEIGHTS=1"
     ],
     "global_reach": false,
-    "id": "P122",
+    "id": "P119",
     "members": [
      "G.neural:mamba1-forward.nn40_owned_weights=on",
      "G.neural:mamba2-forward.nn40_owned_weights=on",
@@ -37200,7 +36581,7 @@
      "MOJOLEARN_NN40_WS_HEADROOM=1"
     ],
     "global_reach": false,
-    "id": "P123",
+    "id": "P120",
     "members": [
      "G.neural:mamba1-forward.nn40_ws_headroom=on",
      "G.neural:mamba2-forward.nn40_ws_headroom=on",
@@ -37220,7 +36601,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2"
     ],
     "global_reach": false,
-    "id": "P124",
+    "id": "P121",
     "members": [
      "G.neural:mamba1-forward.neural_gemm_schedule=stream",
      "G.neural:mamba2-forward.neural_gemm_schedule=stream",
@@ -37240,7 +36621,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=9"
     ],
     "global_reach": false,
-    "id": "P125",
+    "id": "P122",
     "members": [
      "G.neural:mamba1-forward.neural_gemm_schedule=pages",
      "G.neural:mamba2-forward.neural_gemm_schedule=pages",
@@ -37260,7 +36641,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=11"
     ],
     "global_reach": false,
-    "id": "P126",
+    "id": "P123",
     "members": [
      "G.neural:mamba1-forward.neural_gemm_schedule=fold_exact",
      "G.neural:mamba2-forward.neural_gemm_schedule=fold_exact",
@@ -37280,7 +36661,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=15"
     ],
     "global_reach": false,
-    "id": "P127",
+    "id": "P124",
     "members": [
      "G.neural:mamba1-forward.neural_gemm_schedule=threadmap",
      "G.neural:mamba2-forward.neural_gemm_schedule=threadmap",
@@ -37300,7 +36681,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=1"
     ],
     "global_reach": false,
-    "id": "P128",
+    "id": "P125",
     "members": [
      "G.neural:mamba1-forward.gemm_leaf=neural128",
      "G.neural:mamba2-forward.gemm_leaf=neural128",
@@ -37319,7 +36700,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=2"
     ],
     "global_reach": false,
-    "id": "P129",
+    "id": "P126",
     "members": [
      "G.neural:mamba2-forward.gemm_leaf=neural256",
      "G.neural:mamba3-forward.gemm_leaf=neural256"
@@ -37337,7 +36718,7 @@
      "MOJOLEARN_IDN_NEURAL_CHAINS=2"
     ],
     "global_reach": false,
-    "id": "P130",
+    "id": "P127",
     "members": [
      "G.neural:mamba2-forward.neural_gemm_chains=2",
      "G.neural:mamba3-forward.neural_gemm_chains=2"
@@ -37354,7 +36735,7 @@
      "MOJOLEARN_IDN_NEURAL_CHAINS=4"
     ],
     "global_reach": false,
-    "id": "P131",
+    "id": "P128",
     "members": [
      "G.neural:mamba3-forward.neural_gemm_chains=4"
     ]
@@ -37370,7 +36751,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"
     ],
     "global_reach": true,
-    "id": "P132",
+    "id": "P129",
     "members": [
      "G.neural:mamba3-forward.gemm_tile_min_blocks=192"
     ]
@@ -37386,7 +36767,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=512"
     ],
     "global_reach": true,
-    "id": "P133",
+    "id": "P130",
     "members": [
      "G.neural:mamba3-forward.gemm_tile_min_blocks=512"
     ]
@@ -37402,7 +36783,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=1024"
     ],
     "global_reach": true,
-    "id": "P134",
+    "id": "P131",
     "members": [
      "G.neural:mamba3-forward.gemm_tile_min_blocks=1024"
     ]
@@ -37421,7 +36802,7 @@
      "MOJOLEARN_IDN_ATTN_SOFTMAX=1"
     ],
     "global_reach": false,
-    "id": "P135",
+    "id": "P132",
     "members": [
      "G.neural:samba-forward.attn_softmax=summary_tree",
      "G.neural:samba-train-step.attn_softmax=summary_tree"
@@ -37441,7 +36822,7 @@
      "MOJOLEARN_IDN_ATTN_SOFTMAX=2"
     ],
     "global_reach": false,
-    "id": "P136",
+    "id": "P133",
     "members": [
      "G.neural:samba-forward.attn_softmax=online_tile32",
      "G.neural:samba-train-step.attn_softmax=online_tile32"
@@ -37461,7 +36842,7 @@
      "MOJOLEARN_IDN_NN20_SPLIT_KV=1"
     ],
     "global_reach": false,
-    "id": "P137",
+    "id": "P134",
     "members": [
      "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
     ]
@@ -37481,7 +36862,7 @@
      "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=2"
     ],
     "global_reach": false,
-    "id": "P138",
+    "id": "P135",
     "members": [
      "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
     ]
@@ -37501,7 +36882,7 @@
      "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8"
     ],
     "global_reach": false,
-    "id": "P139",
+    "id": "P136",
     "members": [
      "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
     ]
@@ -37519,7 +36900,7 @@
      "MOJOLEARN_IDN_ATTN_TILE_ORDER=1"
     ],
     "global_reach": false,
-    "id": "P140",
+    "id": "P137",
     "members": [
      "G.neural:samba-forward.attn_tile_order=asc"
     ]
@@ -37537,7 +36918,7 @@
      "MOJOLEARN_ATTN_FWD_TQ_RULE=1"
     ],
     "global_reach": false,
-    "id": "P141",
+    "id": "P138",
     "members": [
      "G.neural:samba-forward.attn_fwd_tq_rule=on"
     ]
@@ -37555,7 +36936,7 @@
      "MOJOLEARN_NI07_GROUPED_PROJECTIONS=1"
     ],
     "global_reach": false,
-    "id": "P142",
+    "id": "P139",
     "members": [
      "G.neural:samba-forward.grouped_projections_v2=on"
     ]
@@ -37573,7 +36954,7 @@
      "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
     ],
     "global_reach": false,
-    "id": "P143",
+    "id": "P140",
     "members": [
      "G.neural:samba-forward.m3_angle_parallel=on"
     ]
@@ -37592,7 +36973,7 @@
      "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
     ],
     "global_reach": false,
-    "id": "P144",
+    "id": "P141",
     "members": [
      "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
     ]
@@ -37611,7 +36992,7 @@
      "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
     ],
     "global_reach": false,
-    "id": "P145",
+    "id": "P142",
     "members": [
      "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
     ]
@@ -37629,7 +37010,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"
     ],
     "global_reach": true,
-    "id": "P146",
+    "id": "P143",
     "members": [
      "G.neural:samba-forward.gemm_tile_min_blocks=192"
     ]
@@ -37647,7 +37028,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=512"
     ],
     "global_reach": true,
-    "id": "P147",
+    "id": "P144",
     "members": [
      "G.neural:samba-forward.gemm_tile_min_blocks=512"
     ]
@@ -37665,7 +37046,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=1024"
     ],
     "global_reach": true,
-    "id": "P148",
+    "id": "P145",
     "members": [
      "G.neural:samba-forward.gemm_tile_min_blocks=1024"
     ]
@@ -37683,7 +37064,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2"
     ],
     "global_reach": false,
-    "id": "P149",
+    "id": "P146",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream"
     ]
@@ -37701,7 +37082,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=9"
     ],
     "global_reach": false,
-    "id": "P150",
+    "id": "P147",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=pages"
     ]
@@ -37719,7 +37100,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=11"
     ],
     "global_reach": false,
-    "id": "P151",
+    "id": "P148",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=fold_exact"
     ]
@@ -37737,7 +37118,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=15"
     ],
     "global_reach": false,
-    "id": "P152",
+    "id": "P149",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=threadmap"
     ]
@@ -37755,7 +37136,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=1"
     ],
     "global_reach": false,
-    "id": "P153",
+    "id": "P150",
     "members": [
      "G.neural:samba-train-step.gemm_leaf=neural128"
     ]
@@ -37773,7 +37154,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=2"
     ],
     "global_reach": false,
-    "id": "P154",
+    "id": "P151",
     "members": [
      "G.neural:samba-train-step.gemm_leaf=neural256"
     ]
@@ -37791,7 +37172,7 @@
      "MOJOLEARN_IDN_NEURAL_CHAINS=2"
     ],
     "global_reach": false,
-    "id": "P155",
+    "id": "P152",
     "members": [
      "G.neural:samba-train-step.neural_gemm_chains=2"
     ]
@@ -37809,7 +37190,7 @@
      "MOJOLEARN_IDN_NEURAL_CHAINS=4"
     ],
     "global_reach": false,
-    "id": "P156",
+    "id": "P153",
     "members": [
      "G.neural:samba-train-step.neural_gemm_chains=4"
     ]
@@ -37827,7 +37208,7 @@
      "MOJOLEARN_IDN_ATTN_STASH=1"
     ],
     "global_reach": false,
-    "id": "P157",
+    "id": "P154",
     "members": [
      "G.neural:samba-train-step.attn_stash=recompute"
     ]
@@ -37845,7 +37226,7 @@
      "MOJOLEARN_IDN_ATTN_STASH=2"
     ],
     "global_reach": false,
-    "id": "P158",
+    "id": "P155",
     "members": [
      "G.neural:samba-train-step.attn_stash=packed"
     ]
@@ -37863,7 +37244,7 @@
      "MOJOLEARN_IDN_ATTN_STASH=3"
     ],
     "global_reach": false,
-    "id": "P159",
+    "id": "P156",
     "members": [
      "G.neural:samba-train-step.attn_stash=alias_y"
     ]
@@ -37881,7 +37262,7 @@
      "MOJOLEARN_IDN_NORM=1"
     ],
     "global_reach": false,
-    "id": "P160",
+    "id": "P157",
     "members": [
      "G.neural:samba-train-step.norm=lanes8"
     ]
@@ -37899,7 +37280,7 @@
      "MOJOLEARN_IDN_NORM=2"
     ],
     "global_reach": false,
-    "id": "P161",
+    "id": "P158",
     "members": [
      "G.neural:samba-train-step.norm=split_scale"
     ]
@@ -37918,7 +37299,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4"
     ],
     "global_reach": true,
-    "id": "P162",
+    "id": "P159",
     "members": [
      "G.neural:samba-forward.neural_gemm_ozaki_slices=4"
     ]
@@ -37937,7 +37318,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
     ],
     "global_reach": true,
-    "id": "P163",
+    "id": "P160",
     "members": [
      "G.neural:samba-forward.neural_gemm_ozaki_slices=5"
     ]
@@ -37954,7 +37335,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4"
     ],
     "global_reach": true,
-    "id": "P164",
+    "id": "P161",
     "members": [
      "G.neural:mamba3-forward.neural_gemm_ozaki_slices=4"
     ]
@@ -37971,7 +37352,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
     ],
     "global_reach": true,
-    "id": "P165",
+    "id": "P162",
     "members": [
      "G.neural:mamba3-forward.neural_gemm_ozaki_slices=5"
     ]
@@ -37987,42 +37368,9 @@
      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
     ],
     "global_reach": false,
-    "id": "P166",
+    "id": "P163",
     "members": [
      "G.more:gmm.idn_kmeans_centroid_fold=on"
-    ]
-   },
-   {
-    "algorithms": [
-     "more:gmm"
-    ],
-    "bindings": [
-     "_mojolearn_mixture"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_GMM_COV_SYM=1"
-    ],
-    "global_reach": false,
-    "id": "P167",
-    "members": [
-     "G.more:gmm.gmm_cov_sym=on"
-    ]
-   },
-   {
-    "algorithms": [
-     "more:gmm"
-    ],
-    "bindings": [
-     "_mojolearn_mixture"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_GMM_COV_SYM=1",
-     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
-    ],
-    "global_reach": false,
-    "id": "P168",
-    "members": [
-     "G.more:gmm.all_on"
     ]
    },
    {
@@ -38036,7 +37384,7 @@
      "MOJOLEARN_CLASSICAL_C02_STATS_PAIR=1"
     ],
     "global_reach": false,
-    "id": "P169",
+    "id": "P164",
     "members": [
      "G.expanded:standard-scaler.c02_stats_pair=on"
     ]
@@ -38052,7 +37400,7 @@
      "MOJOLEARN_TREES_T02=1"
     ],
     "global_reach": false,
-    "id": "P170",
+    "id": "P165",
     "members": [
      "G.trees:rf.T02=on"
     ]
@@ -38068,7 +37416,7 @@
      "MOJOLEARN_TREES_T04=1"
     ],
     "global_reach": false,
-    "id": "P171",
+    "id": "P166",
     "members": [
      "G.trees:rf.T04=on"
     ]
@@ -38084,7 +37432,7 @@
      "MOJOLEARN_TREES_T05=1"
     ],
     "global_reach": false,
-    "id": "P172",
+    "id": "P167",
     "members": [
      "G.trees:rf.T05=on"
     ]
@@ -38101,7 +37449,7 @@
      "MOJOLEARN_TREES_T05_ROW_VISITS=8"
     ],
     "global_reach": false,
-    "id": "P173",
+    "id": "P168",
     "members": [
      "G.trees:rf.T05=on+T05_ROW_VISITS=8"
     ]
@@ -38118,7 +37466,7 @@
      "MOJOLEARN_TREES_T05_ROW_VISITS=64"
     ],
     "global_reach": false,
-    "id": "P174",
+    "id": "P169",
     "members": [
      "G.trees:rf.T05=on+T05_ROW_VISITS=64"
     ]
@@ -38134,7 +37482,7 @@
      "MOJOLEARN_TREES_T07=1"
     ],
     "global_reach": false,
-    "id": "P175",
+    "id": "P170",
     "members": [
      "G.trees:rf.T07=on"
     ]
@@ -38152,7 +37500,7 @@
      "MOJOLEARN_TREES_T08_LAYOUT=1"
     ],
     "global_reach": false,
-    "id": "P176",
+    "id": "P171",
     "members": [
      "G.trees:rf.T08=bits8_layout1"
     ]
@@ -38170,7 +37518,7 @@
      "MOJOLEARN_TREES_T08_LAYOUT=3"
     ],
     "global_reach": false,
-    "id": "P177",
+    "id": "P172",
     "members": [
      "G.trees:rf.T08=bits8_layout3"
     ]
@@ -38186,7 +37534,7 @@
      "MOJOLEARN_TREES_RF_SAMPLE=0"
     ],
     "global_reach": false,
-    "id": "P178",
+    "id": "P173",
     "members": [
      "G.trees:rf.RF_SAMPLE=two_launch"
     ]
@@ -38202,7 +37550,7 @@
      "MOJOLEARN_TREES_RF_SAMPLE=1"
     ],
     "global_reach": false,
-    "id": "P179",
+    "id": "P174",
     "members": [
      "G.trees:rf.RF_SAMPLE=sorted"
     ]
@@ -38218,7 +37566,7 @@
      "MOJOLEARN_TREES_RF_SAMPLE=2"
     ],
     "global_reach": false,
-    "id": "P180",
+    "id": "P175",
     "members": [
      "G.trees:rf.RF_SAMPLE=fused"
     ]
@@ -38234,7 +37582,7 @@
      "MOJOLEARN_TREES_T11_LEVELS=16"
     ],
     "global_reach": false,
-    "id": "P181",
+    "id": "P176",
     "members": [
      "G.trees:rf.T11_LEVELS=16"
     ]
@@ -38251,7 +37599,7 @@
      "MOJOLEARN_TREES_T12_BYTES=268435456"
     ],
     "global_reach": false,
-    "id": "P182",
+    "id": "P177",
     "members": [
      "G.trees:rf.T12=256MiB"
     ]
@@ -38268,7 +37616,7 @@
      "MOJOLEARN_TREES_T12_BYTES=1073741824"
     ],
     "global_reach": false,
-    "id": "P183",
+    "id": "P178",
     "members": [
      "G.trees:rf.T12=1024MiB"
     ]
@@ -38285,7 +37633,7 @@
      "MOJOLEARN_TREES_T13_BYTES=4194304"
     ],
     "global_reach": false,
-    "id": "P184",
+    "id": "P179",
     "members": [
      "G.trees:rf.T13=4MiB"
     ]
@@ -38302,7 +37650,7 @@
      "MOJOLEARN_TREES_T13_BYTES=16777216"
     ],
     "global_reach": false,
-    "id": "P185",
+    "id": "P180",
     "members": [
      "G.trees:rf.T13=16MiB"
     ]
@@ -38319,7 +37667,7 @@
      "MOJOLEARN_TREES_T02=1"
     ],
     "global_reach": false,
-    "id": "P186",
+    "id": "P181",
     "members": [
      "G.trees:et.T02=on"
     ]
@@ -38336,7 +37684,7 @@
      "MOJOLEARN_TREES_T04=1"
     ],
     "global_reach": false,
-    "id": "P187",
+    "id": "P182",
     "members": [
      "G.trees:et.T04=on"
     ]
@@ -38353,7 +37701,7 @@
      "MOJOLEARN_TREES_T05=1"
     ],
     "global_reach": false,
-    "id": "P188",
+    "id": "P183",
     "members": [
      "G.trees:et.T05=on"
     ]
@@ -38370,7 +37718,7 @@
      "MOJOLEARN_TREES_T07=1"
     ],
     "global_reach": false,
-    "id": "P189",
+    "id": "P184",
     "members": [
      "G.trees:et.T07=on"
     ]
@@ -38387,7 +37735,7 @@
      "MOJOLEARN_TREES_T11_LEVELS=8"
     ],
     "global_reach": false,
-    "id": "P190",
+    "id": "P185",
     "members": [
      "G.trees:et.T11_LEVELS=8"
     ]
@@ -38404,7 +37752,7 @@
      "MOJOLEARN_TREES_T11_LEVELS=16"
     ],
     "global_reach": false,
-    "id": "P191",
+    "id": "P186",
     "members": [
      "G.trees:et.T11_LEVELS=16"
     ]
@@ -38422,7 +37770,7 @@
      "MOJOLEARN_TREES_T12_BYTES=67108864"
     ],
     "global_reach": false,
-    "id": "P192",
+    "id": "P187",
     "members": [
      "G.trees:et.T12=64MiB"
     ]
@@ -38440,7 +37788,7 @@
      "MOJOLEARN_TREES_T12_BYTES=268435456"
     ],
     "global_reach": false,
-    "id": "P193",
+    "id": "P188",
     "members": [
      "G.trees:et.T12=256MiB"
     ]
@@ -38458,7 +37806,7 @@
      "MOJOLEARN_TREES_T13_BYTES=4194304"
     ],
     "global_reach": false,
-    "id": "P194",
+    "id": "P189",
     "members": [
      "G.trees:et.T13=4MiB"
     ]
@@ -38476,7 +37824,7 @@
      "MOJOLEARN_TREES_T13_BYTES=16777216"
     ],
     "global_reach": false,
-    "id": "P195",
+    "id": "P190",
     "members": [
      "G.trees:et.T13=16MiB"
     ]
@@ -38494,7 +37842,7 @@
      "MOJOLEARN_TREES_T13_BYTES=67108864"
     ],
     "global_reach": false,
-    "id": "P196",
+    "id": "P191",
     "members": [
      "G.trees:et.T13=64MiB"
     ]
@@ -38511,7 +37859,7 @@
      "MOJOLEARN_TREES_T14=1"
     ],
     "global_reach": false,
-    "id": "P197",
+    "id": "P192",
     "members": [
      "G.trees:et.T14=on"
     ]
@@ -38528,7 +37876,7 @@
      "MOJOLEARN_TREES_C48=1"
     ],
     "global_reach": false,
-    "id": "P198",
+    "id": "P193",
     "members": [
      "G.trees:et.C48=on"
     ]
@@ -38545,7 +37893,7 @@
      "MOJOLEARN_TREES_FOREST_ROUTE=1"
     ],
     "global_reach": false,
-    "id": "P199",
+    "id": "P194",
     "members": [
      "G.trees:et.FOREST_ROUTE=leaf_reuse"
     ]
@@ -38562,7 +37910,7 @@
      "MOJOLEARN_TREES_FOREST_ROUTE=2"
     ],
     "global_reach": false,
-    "id": "P200",
+    "id": "P195",
     "members": [
      "G.trees:et.FOREST_ROUTE=leaf_reuse_finite"
     ]
@@ -38580,7 +37928,7 @@
      "MOJOLEARN_TREES_T33_COST_SCHEDULE=1"
     ],
     "global_reach": false,
-    "id": "P201",
+    "id": "P196",
     "members": [
      "G.trees:et.FOREST_ROUTE=leaf_reuse_finite_t33"
     ]
@@ -38599,7 +37947,7 @@
      "MOJOLEARN_TREES_T40_ROWMAJOR=1"
     ],
     "global_reach": false,
-    "id": "P202",
+    "id": "P197",
     "members": [
      "G.classical:svc.c20_pair_load=on",
      "G.more:svr.c20_pair_load=on",
@@ -38620,7 +37968,7 @@
      "MOJOLEARN_TREES_C47_IF_LIVE_TASKS=1"
     ],
     "global_reach": false,
-    "id": "P203",
+    "id": "P198",
     "members": [
      "G.classical:svc.c21_extrema=on",
      "G.more:svr.c21_extrema=on",
@@ -38641,7 +37989,7 @@
      "MOJOLEARN_TREES_C48_IF_PARTITION=1"
     ],
     "global_reach": false,
-    "id": "P204",
+    "id": "P199",
     "members": [
      "G.classical:svc.c22_triangle=on",
      "G.more:svr.c22_triangle=on",
@@ -38664,7 +38012,7 @@
      "MOJOLEARN_TREES_C50_IF_PACKED=1"
     ],
     "global_reach": false,
-    "id": "P205",
+    "id": "P200",
     "members": [
      "G.classical:svc.all_on",
      "G.more:svr.all_on",
@@ -38686,7 +38034,7 @@
      "MOJOLEARN_TREES_IF_BUILD_TPB=256"
     ],
     "global_reach": false,
-    "id": "P206",
+    "id": "P201",
     "members": [
      "G.classical:svc.c21_extrema=on+c22_triangle=on",
      "G.more:svr.c21_extrema=on+c22_triangle=on",
@@ -38708,7 +38056,7 @@
      "MOJOLEARN_TREES_IF_BUILD_TPB=512"
     ],
     "global_reach": false,
-    "id": "P207",
+    "id": "P202",
     "members": [
      "G.classical:svc.c20_pair_load=on+c22_triangle=on",
      "G.more:svr.c20_pair_load=on+c22_triangle=on",
@@ -38734,7 +38082,7 @@
      "MOJOLEARN_TREES_T40_ROWMAJOR=1"
     ],
     "global_reach": false,
-    "id": "P208",
+    "id": "P203",
     "members": [
      "G.classical:svc.c20_pair_load=on+c21_extrema=on",
      "G.more:svr.c20_pair_load=on+c21_extrema=on",
@@ -38753,7 +38101,7 @@
      "MOJOLEARN_TREES_C48_IF_PARTITION=1"
     ],
     "global_reach": false,
-    "id": "P209",
+    "id": "P204",
     "members": [
      "G.trees:iforest.C47_IF=on+C48_IF=on"
     ]
@@ -38770,7 +38118,7 @@
      "MOJOLEARN_TREES_T40_ROWMAJOR=1"
     ],
     "global_reach": false,
-    "id": "P210",
+    "id": "P205",
     "members": [
      "G.trees:iforest.T40=on+C48_IF=on"
     ]
@@ -38787,7 +38135,7 @@
      "MOJOLEARN_TREES_T40_ROWMAJOR=1"
     ],
     "global_reach": false,
-    "id": "P211",
+    "id": "P206",
     "members": [
      "G.trees:iforest.T40=on+C47_IF=on"
     ]
@@ -38805,7 +38153,7 @@
      "MOJOLEARN_TREES_T40_ROWMAJOR=1"
     ],
     "global_reach": false,
-    "id": "P212",
+    "id": "P207",
     "members": [
      "G.trees:iforest.T40=on+C47_IF=on+C48_IF=on"
     ]
@@ -38821,7 +38169,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2"
     ],
     "global_reach": false,
-    "id": "P213",
+    "id": "P208",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_schedule=stream"
     ]
@@ -38837,7 +38185,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=9"
     ],
     "global_reach": false,
-    "id": "P214",
+    "id": "P209",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_schedule=pages"
     ]
@@ -38853,7 +38201,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=11"
     ],
     "global_reach": false,
-    "id": "P215",
+    "id": "P210",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_schedule=fold_exact"
     ]
@@ -38869,7 +38217,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=15"
     ],
     "global_reach": false,
-    "id": "P216",
+    "id": "P211",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_schedule=threadmap"
     ]
@@ -38885,7 +38233,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=1"
     ],
     "global_reach": false,
-    "id": "P217",
+    "id": "P212",
     "members": [
      "G.neural:mlp-train-step.gemm_leaf=neural128"
     ]
@@ -38901,7 +38249,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=2"
     ],
     "global_reach": false,
-    "id": "P218",
+    "id": "P213",
     "members": [
      "G.neural:mlp-train-step.gemm_leaf=neural256"
     ]
@@ -38917,7 +38265,7 @@
      "MOJOLEARN_IDN_NEURAL_CHAINS=2"
     ],
     "global_reach": false,
-    "id": "P219",
+    "id": "P214",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_chains=2"
     ]
@@ -38933,7 +38281,7 @@
      "MOJOLEARN_IDN_NEURAL_CHAINS=4"
     ],
     "global_reach": false,
-    "id": "P220",
+    "id": "P215",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_chains=4"
     ]
@@ -38949,7 +38297,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1"
     ],
     "global_reach": false,
-    "id": "P221",
+    "id": "P216",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_epilogue=mlp"
     ]
@@ -38965,7 +38313,7 @@
      "MOJOLEARN_IDN_TRAIN_SCRATCH=1"
     ],
     "global_reach": false,
-    "id": "P222",
+    "id": "P217",
     "members": [
      "G.neural:mlp-train-step.train_scratch=1"
     ]
@@ -38985,7 +38333,7 @@
      "MOJOLEARN_IDN_TRAIN_SCRATCH=1"
     ],
     "global_reach": false,
-    "id": "P223",
+    "id": "P218",
     "members": [
      "G.neural:mlp-train-step.all_on"
     ]
@@ -39002,7 +38350,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4"
     ],
     "global_reach": true,
-    "id": "P224",
+    "id": "P219",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_ozaki_slices=4"
     ]
@@ -39019,7 +38367,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
     ],
     "global_reach": true,
-    "id": "P225",
+    "id": "P220",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_ozaki_slices=5"
     ]
@@ -39035,7 +38383,7 @@
      "MOJOLEARN_IDN_ATTN_SOFTMAX=1"
     ],
     "global_reach": false,
-    "id": "P226",
+    "id": "P221",
     "members": [
      "G.neural:transformer-forward.attn_softmax=summary_tree"
     ]
@@ -39051,7 +38399,7 @@
      "MOJOLEARN_IDN_ATTN_SOFTMAX=2"
     ],
     "global_reach": false,
-    "id": "P227",
+    "id": "P222",
     "members": [
      "G.neural:transformer-forward.attn_softmax=online_tile32"
     ]
@@ -39068,7 +38416,7 @@
      "MOJOLEARN_IDN_NN20_SPLIT_KV=1"
     ],
     "global_reach": false,
-    "id": "P228",
+    "id": "P223",
     "members": [
      "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on"
     ]
@@ -39086,7 +38434,7 @@
      "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=2"
     ],
     "global_reach": false,
-    "id": "P229",
+    "id": "P224",
     "members": [
      "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
     ]
@@ -39104,7 +38452,7 @@
      "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8"
     ],
     "global_reach": false,
-    "id": "P230",
+    "id": "P225",
     "members": [
      "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
     ]
@@ -39120,7 +38468,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2"
     ],
     "global_reach": false,
-    "id": "P231",
+    "id": "P226",
     "members": [
      "G.neural:transformer-forward.neural_gemm_schedule=stream"
     ]
@@ -39136,7 +38484,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=9"
     ],
     "global_reach": false,
-    "id": "P232",
+    "id": "P227",
     "members": [
      "G.neural:transformer-forward.neural_gemm_schedule=pages"
     ]
@@ -39152,7 +38500,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=11"
     ],
     "global_reach": false,
-    "id": "P233",
+    "id": "P228",
     "members": [
      "G.neural:transformer-forward.neural_gemm_schedule=fold_exact"
     ]
@@ -39168,7 +38516,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=15"
     ],
     "global_reach": false,
-    "id": "P234",
+    "id": "P229",
     "members": [
      "G.neural:transformer-forward.neural_gemm_schedule=threadmap"
     ]
@@ -39184,7 +38532,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=1"
     ],
     "global_reach": false,
-    "id": "P235",
+    "id": "P230",
     "members": [
      "G.neural:transformer-forward.gemm_leaf=neural128"
     ]
@@ -39200,7 +38548,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=2"
     ],
     "global_reach": false,
-    "id": "P236",
+    "id": "P231",
     "members": [
      "G.neural:transformer-forward.gemm_leaf=neural256"
     ]
@@ -39216,7 +38564,7 @@
      "MOJOLEARN_IDN_NEURAL_CHAINS=2"
     ],
     "global_reach": false,
-    "id": "P237",
+    "id": "P232",
     "members": [
      "G.neural:transformer-forward.neural_gemm_chains=2"
     ]
@@ -39232,7 +38580,7 @@
      "MOJOLEARN_IDN_NEURAL_CHAINS=4"
     ],
     "global_reach": false,
-    "id": "P238",
+    "id": "P233",
     "members": [
      "G.neural:transformer-forward.neural_gemm_chains=4"
     ]
@@ -39248,7 +38596,7 @@
      "MOJOLEARN_IDN_NEURAL_NN05=1"
     ],
     "global_reach": false,
-    "id": "P239",
+    "id": "P234",
     "members": [
      "G.neural:transformer-forward.neural_gemm_pair=nn05"
     ]
@@ -39264,7 +38612,7 @@
      "MOJOLEARN_IDN_NEURAL_NN07=1"
     ],
     "global_reach": false,
-    "id": "P240",
+    "id": "P235",
     "members": [
      "G.neural:transformer-forward.neural_gemm_pair=nn07"
     ]
@@ -39280,28 +38628,25 @@
      "MOJOLEARN_NN21_SCALE_MASK=1"
     ],
     "global_reach": false,
-    "id": "P241",
+    "id": "P236",
     "members": [
      "G.neural:transformer-forward.attn_scale_mask=on"
     ]
    },
    {
     "algorithms": [
-     "expanded:autoarima",
-     "more:ets"
+     "expanded:autoarima"
     ],
     "bindings": [
      "_mojolearn_tsa"
     ],
     "defines": [
-     "MOJOLEARN_C58_SHARED_PREP=1",
      "MOJOLEARN_C60_LAG4=1"
     ],
     "global_reach": false,
-    "id": "P242",
+    "id": "P237",
     "members": [
-     "G.expanded:autoarima.c60_lag4=on",
-     "G.more:ets.c58_shared_prep=on"
+     "G.expanded:autoarima.c60_lag4=on"
     ]
    },
    {
@@ -39316,7 +38661,7 @@
      "MOJOLEARN_XCLUSTER_ROW_ASSIGN=2"
     ],
     "global_reach": false,
-    "id": "P243",
+    "id": "P238",
     "members": [
      "G.expanded:bisecting-kmeans.xcluster_row_assign=2",
      "G.expanded:minibatch-kmeans.xcluster_row_assign=2"
@@ -39334,7 +38679,7 @@
      "MOJOLEARN_XCLUSTER_ROW_ASSIGN=4"
     ],
     "global_reach": false,
-    "id": "P244",
+    "id": "P239",
     "members": [
      "G.expanded:bisecting-kmeans.xcluster_row_assign=4",
      "G.expanded:minibatch-kmeans.xcluster_row_assign=4"
@@ -39352,7 +38697,7 @@
      "MOJOLEARN_XCLUSTER_KPP_DISTINCT=1"
     ],
     "global_reach": false,
-    "id": "P245",
+    "id": "P240",
     "members": [
      "G.expanded:bisecting-kmeans.xcluster_kpp_distinct=on",
      "G.expanded:minibatch-kmeans.xcluster_kpp_distinct=on"
@@ -39370,7 +38715,7 @@
      "MOJOLEARN_C39_RETAIN_STATE=1"
     ],
     "global_reach": false,
-    "id": "P246",
+    "id": "P241",
     "members": [
      "G.expanded:bisecting-kmeans.c39_retain_state=on",
      "G.expanded:minibatch-kmeans.c39_retain_state=on"
@@ -39390,7 +38735,7 @@
      "MOJOLEARN_XCLUSTER_ROW_ASSIGN=2"
     ],
     "global_reach": false,
-    "id": "P247",
+    "id": "P242",
     "members": [
      "G.expanded:bisecting-kmeans.all_on",
      "G.expanded:minibatch-kmeans.all_on"
@@ -39407,7 +38752,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4"
     ],
     "global_reach": true,
-    "id": "P248",
+    "id": "P243",
     "members": [
      "G.neural:cnn-clf.neural_gemm_ozaki_slices=4"
     ]
@@ -39423,7 +38768,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
     ],
     "global_reach": true,
-    "id": "P249",
+    "id": "P244",
     "members": [
      "G.neural:cnn-clf.neural_gemm_ozaki_slices=5"
     ]
@@ -39439,7 +38784,7 @@
      "MOJOLEARN_NI12_IMPLICIT_CONV=1"
     ],
     "global_reach": false,
-    "id": "P250",
+    "id": "P245",
     "members": [
      "G.neural:cnn-clf.ni12_implicit_conv=on"
     ]
@@ -39455,7 +38800,7 @@
      "MOJOLEARN_NI15_BIAS_NO_ONES=1"
     ],
     "global_reach": false,
-    "id": "P251",
+    "id": "P246",
     "members": [
      "G.neural:cnn-clf.ni15_bias_no_ones=on"
     ]
@@ -39471,7 +38816,7 @@
      "MOJOLEARN_NI18_FUSED_EPOCH_GATHER=1"
     ],
     "global_reach": false,
-    "id": "P252",
+    "id": "P247",
     "members": [
      "G.neural:cnn-clf.ni18_epoch_gather=on"
     ]
@@ -39487,7 +38832,7 @@
      "MOJOLEARN_NN46_GATHER_BOUNDS=1"
     ],
     "global_reach": false,
-    "id": "P253",
+    "id": "P248",
     "members": [
      "G.neural:cnn-clf.nn46_gather_bounds=on"
     ]
@@ -39503,7 +38848,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"
     ],
     "global_reach": true,
-    "id": "P254",
+    "id": "P249",
     "members": [
      "G.neural:cnn-clf.gemm_tile_min_blocks=192"
     ]
@@ -39519,7 +38864,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=512"
     ],
     "global_reach": true,
-    "id": "P255",
+    "id": "P250",
     "members": [
      "G.neural:cnn-clf.gemm_tile_min_blocks=512"
     ]
@@ -39535,7 +38880,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=1024"
     ],
     "global_reach": true,
-    "id": "P256",
+    "id": "P251",
     "members": [
      "G.neural:cnn-clf.gemm_tile_min_blocks=1024"
     ]
@@ -39551,7 +38896,7 @@
      "MOJOLEARN_GEMM_KPACK_RPT4=1"
     ],
     "global_reach": true,
-    "id": "P257",
+    "id": "P252",
     "members": [
      "G.neural:cnn-clf.gemm_kpack_rpt4=on"
     ]
@@ -39567,7 +38912,7 @@
      "MOJOLEARN_NI14_COL2IM=1"
     ],
     "global_reach": false,
-    "id": "P258",
+    "id": "P253",
     "members": [
      "G.neural:cnn-clf.ni14_col2im=bounded"
     ]
@@ -39583,7 +38928,7 @@
      "MOJOLEARN_NI14_COL2IM=2"
     ],
     "global_reach": false,
-    "id": "P259",
+    "id": "P254",
     "members": [
      "G.neural:cnn-clf.ni14_col2im=tiled"
     ]
@@ -39605,7 +38950,7 @@
      "MOJOLEARN_NN46_GATHER_BOUNDS=1"
     ],
     "global_reach": true,
-    "id": "P260",
+    "id": "P255",
     "members": [
      "G.neural:cnn-clf.all_on"
     ]
@@ -39622,7 +38967,7 @@
      "MOJOLEARN_NN46_GATHER_BOUNDS=1"
     ],
     "global_reach": false,
-    "id": "P261",
+    "id": "P256",
     "members": [
      "G.neural:cnn-clf.nn46_gather_bounds=on+ni14_col2im=bounded"
     ]
@@ -39639,7 +38984,7 @@
      "MOJOLEARN_NN46_GATHER_BOUNDS=1"
     ],
     "global_reach": false,
-    "id": "P262",
+    "id": "P257",
     "members": [
      "G.neural:cnn-clf.nn46_gather_bounds=on+ni14_col2im=tiled"
     ]
@@ -39660,7 +39005,7 @@
      "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
     ],
     "global_reach": false,
-    "id": "P263",
+    "id": "P258",
     "members": [
      "G.expanded:elliptic-envelope.C23_MCD=on",
      "G.expanded:lu-solve.c14_group_rhs=on",
@@ -39679,7 +39024,7 @@
      "MOJOLEARN_CLASSICAL_C24_ROWS2048=1"
     ],
     "global_reach": false,
-    "id": "P264",
+    "id": "P259",
     "members": [
      "G.expanded:randomized-svd.C24_TSQR=rows2048"
     ]
@@ -39695,7 +39040,7 @@
      "MOJOLEARN_CLASSICAL_C24_TREE4=1"
     ],
     "global_reach": false,
-    "id": "P265",
+    "id": "P260",
     "members": [
      "G.expanded:randomized-svd.C24_TSQR=tree4"
     ]
@@ -39711,7 +39056,7 @@
      "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1"
     ],
     "global_reach": false,
-    "id": "P266",
+    "id": "P261",
     "members": [
      "G.expanded:randomized-svd.rsvd_tsqr_ortho=on"
     ]
@@ -39728,7 +39073,7 @@
      "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1"
     ],
     "global_reach": false,
-    "id": "P267",
+    "id": "P262",
     "members": [
      "G.expanded:randomized-svd.all_on"
     ]
@@ -39745,7 +39090,7 @@
      "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1"
     ],
     "global_reach": false,
-    "id": "P268",
+    "id": "P263",
     "members": [
      "G.expanded:randomized-svd.C24_TSQR=rows2048+rsvd_tsqr_ortho=on"
     ]
@@ -39762,7 +39107,7 @@
      "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1"
     ],
     "global_reach": false,
-    "id": "P269",
+    "id": "P264",
     "members": [
      "G.expanded:randomized-svd.C24_TSQR=tree4+rsvd_tsqr_ortho=on"
     ]
@@ -39793,7 +39138,7 @@
      "MOJOLEARN_RIDGE_FF_ALWAYS=1"
     ],
     "global_reach": false,
-    "id": "P270",
+    "id": "P265",
     "members": [
      "G.expanded:ard.c15_factor_solve=on",
      "G.expanded:enet-cv.enetcv_score_blocks=1024",
@@ -39822,7 +39167,7 @@
      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
     ],
     "global_reach": false,
-    "id": "P271",
+    "id": "P266",
     "members": [
      "G.expanded:enet-cv.enetcv_score_blocks=4096",
      "G.expanded:lasso-cv.enetcv_score_blocks=4096",
@@ -39843,7 +39188,7 @@
      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
     ],
     "global_reach": false,
-    "id": "P272",
+    "id": "P267",
     "members": [
      "G.expanded:enet-cv.enetcv_fold_blocks=16",
      "G.expanded:lasso-cv.enetcv_fold_blocks=16",
@@ -39864,7 +39209,7 @@
      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
     ],
     "global_reach": false,
-    "id": "P273",
+    "id": "P268",
     "members": [
      "G.expanded:enet-cv.enetcv_fold_blocks=32",
      "G.expanded:lasso-cv.enetcv_fold_blocks=32",
@@ -39888,7 +39233,7 @@
      "MOJOLEARN_RIDGE_FF_ALWAYS=1"
     ],
     "global_reach": false,
-    "id": "P274",
+    "id": "P269",
     "members": [
      "G.expanded:enet-cv.enetcv_fold_blocks=64",
      "G.expanded:lasso-cv.enetcv_fold_blocks=64",
@@ -39910,7 +39255,7 @@
      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
     ],
     "global_reach": false,
-    "id": "P275",
+    "id": "P270",
     "members": [
      "G.expanded:enet-cv.c18_residual_next=on",
      "G.expanded:lasso-cv.c18_residual_next=on",
@@ -39934,7 +39279,7 @@
      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
     ],
     "global_reach": false,
-    "id": "P276",
+    "id": "P271",
     "members": [
      "G.expanded:enet-cv.all_on",
      "G.expanded:lasso-cv.all_on",
@@ -39957,7 +39302,7 @@
      "MOJOLEARN_RIDGE_FF_ALWAYS=1"
     ],
     "global_reach": false,
-    "id": "P277",
+    "id": "P272",
     "members": [
      "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16",
      "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16",
@@ -39977,7 +39322,7 @@
      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
     ],
     "global_reach": false,
-    "id": "P278",
+    "id": "P273",
     "members": [
      "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32",
      "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
@@ -39996,7 +39341,7 @@
      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
     ],
     "global_reach": false,
-    "id": "P279",
+    "id": "P274",
     "members": [
      "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64",
      "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
@@ -40015,7 +39360,7 @@
      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
     ],
     "global_reach": false,
-    "id": "P280",
+    "id": "P275",
     "members": [
      "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16",
      "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
@@ -40034,7 +39379,7 @@
      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
     ],
     "global_reach": false,
-    "id": "P281",
+    "id": "P276",
     "members": [
      "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32",
      "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
@@ -40053,7 +39398,7 @@
      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
     ],
     "global_reach": false,
-    "id": "P282",
+    "id": "P277",
     "members": [
      "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64",
      "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
@@ -40072,7 +39417,7 @@
      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
     ],
     "global_reach": false,
-    "id": "P283",
+    "id": "P278",
     "members": [
      "G.expanded:enet-cv.enetcv_score_blocks=1024+c18_residual_next=on",
      "G.expanded:lasso-cv.enetcv_score_blocks=1024+c18_residual_next=on"
@@ -40091,7 +39436,7 @@
      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
     ],
     "global_reach": false,
-    "id": "P284",
+    "id": "P279",
     "members": [
      "G.expanded:enet-cv.enetcv_score_blocks=4096+c18_residual_next=on",
      "G.expanded:lasso-cv.enetcv_score_blocks=4096+c18_residual_next=on"
@@ -40108,7 +39453,7 @@
      "MOJOLEARN_CLASSICAL_C01_LEAF=64"
     ],
     "global_reach": false,
-    "id": "P285",
+    "id": "P280",
     "members": [
      "G.expanded:sgd-reg@regression_report.C01_LEAF=64"
     ]
@@ -40124,7 +39469,7 @@
      "MOJOLEARN_CLASSICAL_C01_LEAF=128"
     ],
     "global_reach": false,
-    "id": "P286",
+    "id": "P281",
     "members": [
      "G.expanded:sgd-reg@regression_report.C01_LEAF=128"
     ]
@@ -40150,7 +39495,7 @@
      "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1"
     ],
     "global_reach": false,
-    "id": "P287",
+    "id": "P282",
     "members": [
      "G.expanded:gaussian-nb.c61_nb=1",
      "G.expanded:kbins.c07_radix_bits=6",
@@ -40181,7 +39526,7 @@
      "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
     ],
     "global_reach": false,
-    "id": "P288",
+    "id": "P283",
     "members": [
      "G.expanded:gaussian-nb.c61_nb=2",
      "G.expanded:kbins.c07_radix_bits=4",
@@ -40209,7 +39554,7 @@
      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
     ],
     "global_reach": false,
-    "id": "P289",
+    "id": "P284",
     "members": [
      "G.expanded:kbins.c07_radix_rows=1024",
      "G.expanded:onehot.c07_radix_rows=1024",
@@ -40234,7 +39579,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
     ],
     "global_reach": false,
-    "id": "P290",
+    "id": "P285",
     "members": [
      "G.expanded:kbins.c07_radix_rows=4096",
      "G.expanded:onehot.c07_radix_rows=4096",
@@ -40263,7 +39608,7 @@
      "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1"
     ],
     "global_reach": false,
-    "id": "P291",
+    "id": "P286",
     "members": [
      "G.expanded:kbins.all_on",
      "G.expanded:onehot.all_on",
@@ -40287,7 +39632,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
     ],
     "global_reach": false,
-    "id": "P292",
+    "id": "P287",
     "members": [
      "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096",
      "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096",
@@ -40310,7 +39655,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"
     ],
     "global_reach": false,
-    "id": "P293",
+    "id": "P288",
     "members": [
      "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=1024",
      "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=1024",
@@ -40333,7 +39678,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
     ],
     "global_reach": false,
-    "id": "P294",
+    "id": "P289",
     "members": [
      "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096",
      "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=4096",
@@ -40354,7 +39699,7 @@
      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN=1"
     ],
     "global_reach": false,
-    "id": "P295",
+    "id": "P290",
     "members": [
      "G.expanded:onehot.c08_unique_scan=on",
      "G.expanded:ordinal.c08_unique_scan=on",
@@ -40374,7 +39719,7 @@
      "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1"
     ],
     "global_reach": false,
-    "id": "P296",
+    "id": "P291",
     "members": [
      "G.expanded:onehot.c08_grouped_output=on",
      "G.expanded:target-encoder.c08_target_codes=on"
@@ -40393,7 +39738,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"
     ],
     "global_reach": false,
-    "id": "P297",
+    "id": "P292",
     "members": [
      "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=1024",
      "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=1024"
@@ -40410,7 +39755,7 @@
      "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1"
     ],
     "global_reach": false,
-    "id": "P298",
+    "id": "P293",
     "members": [
      "G.expanded:target-encoder.te_blocked_fold=on"
     ]
@@ -40427,7 +39772,7 @@
      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN=1"
     ],
     "global_reach": false,
-    "id": "P299",
+    "id": "P294",
     "members": [
      "G.expanded:target-encoder.c08_unique_scan=on+c08_target_codes=on"
     ]
@@ -40444,7 +39789,7 @@
      "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1"
     ],
     "global_reach": false,
-    "id": "P300",
+    "id": "P295",
     "members": [
      "G.expanded:target-encoder.c08_unique_scan=on+te_blocked_fold=on"
     ]
@@ -40462,7 +39807,7 @@
      "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1"
     ],
     "global_reach": false,
-    "id": "P301",
+    "id": "P296",
     "members": [
      "G.expanded:target-encoder.c08_unique_scan=on+c08_target_codes=on+te_blocked_fold=on"
     ]
@@ -40483,7 +39828,7 @@
      "MOJOLEARN_C58_FORECAST4=1"
     ],
     "global_reach": false,
-    "id": "P302",
+    "id": "P297",
     "members": [
      "G.expanded:auto-theta.c58_forecast4=on",
      "G.expanded:damped-ets.c58_forecast4=on",
@@ -41418,7 +40763,7 @@
     "head": "f0bbeef91",
     "lane": "classical-decomp",
     "path": "experiments/six_lane_integration/grid_controls/classical-decomp.json",
-    "sha256": "75779913fd2feb446228e9c29516a09aad2bd34f4d316aafe9f6dcbb536534ae"
+    "sha256": "1c5c025fd25e36f46d5c1af119449f0f9185aab475c2fbecd8082750f1e4358c"
    },
    "classical-encoders": {
     "branch": "lane/classical-encoders",
@@ -41432,7 +40777,7 @@
     "head": "1ea312322",
     "lane": "classical-fixes",
     "path": "experiments/six_lane_integration/grid_controls/classical-fixes.json",
-    "sha256": "92a54026a01fb30d91df9e8b5211e0f0ffb3867e542489b84c383b73cc17bf43"
+    "sha256": "fb4af9fc04ce6e7c9cf4d5c61c4b33e85887b122396448355c129c20a0d83822"
    },
    "classical-kmeans": {
     "branch": "lane/classical-kmeans",
@@ -41446,7 +40791,7 @@
     "head": "a554ae5a2",
     "lane": "classical-misc",
     "path": "experiments/six_lane_integration/grid_controls/classical-misc.json",
-    "sha256": "ce6c226cd207157f6e23816572e27470c374467be6fc1ec6fdb480843236f0a5"
+    "sha256": "cdd058029857cb37c287ee440c0691a5c5a5fc6b22299ee750f3ddae230e805d"
    },
    "classical-nbda": {
     "branch": "lane/classical-nbda",
@@ -41467,7 +40812,7 @@
     "head": "b512ddf29",
     "lane": "classical-te-gmm",
     "path": "experiments/six_lane_integration/grid_controls/classical-te-gmm.json",
-    "sha256": "bc83f30f18c2b992feceecb29a301e88b72524fc73925888be4654a26f78e19a"
+    "sha256": "d36e092c2a2df9aa3427b6beb3d84bb42e39dde952a769f03314438f284cc9f5"
    },
    "neural-ce-denom": {
     "branch": "lane/neural-ce-denom",
@@ -41523,7 +40868,7 @@
     "head": "78c441468",
     "lane": "trees-cleanup",
     "path": "experiments/six_lane_integration/grid_controls/trees-cleanup.json",
-    "sha256": "46a0b2ecd82e185ea518f010b22fec626ec6302f89bd2bd6f3300ce7dcdbe67c"
+    "sha256": "19e5d9f05eafe1f3bab0581f51a32dd436a5640bb8c6001096cbebd5989cf388"
    },
    "trees-hist-ideas": {
     "branch": "lane/trees-hist-ideas",
@@ -41555,9 +40900,9 @@
    }
   },
   "guards": {
-   "asserts": 139,
+   "asserts": 143,
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "36925e028901880241009912d66b1402690805fc7cca36042b71fb7387003098"
+   "sha256": "2ffe06f9f4f1f810e6e853031dc163b070b8f721ed6db77a9f3e86e2df7cda60"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -41667,14 +41012,14 @@
   "attention-tiled-v2": 0,
   "classical-cv": 3,
   "classical-cv-folds": 0,
-  "classical-decomp": 4,
+  "classical-decomp": 5,
   "classical-encoders": 5,
-  "classical-fixes": 3,
+  "classical-fixes": 4,
   "classical-kmeans": 10,
-  "classical-misc": 11,
+  "classical-misc": 12,
   "classical-nbda": 3,
   "classical-structural": 0,
-  "classical-te-gmm": 0,
+  "classical-te-gmm": 1,
   "neural-ce-denom": 0,
   "neural-fusions": 1,
   "neural-gemm-attn-dedupe": 34,
@@ -41682,7 +41027,7 @@
   "neural-seq-train-dedupe": 34,
   "neural-small": 6,
   "samba-resident": 0,
-  "trees-cleanup": 18,
+  "trees-cleanup": 19,
   "trees-hist-ideas": 0,
   "trees-predict-ideas": 0,
   "trees-small": 8,
@@ -41691,12 +41036,12 @@
  "schema": "mojolearn.six-lane-grid-plan/1",
  "status": "PLANNED_NOT_RUN",
  "summary": {
-  "a_builds_after_packing": 726,
-  "a_builds_before_packing": 864,
-  "aa_pairs": 322,
+  "a_builds_after_packing": 716,
+  "a_builds_before_packing": 848,
+  "aa_pairs": 312,
   "algorithms": 88,
-  "algorithms_with_configs": 77,
-  "b_builds": 50,
+  "algorithms_with_configs": 74,
+  "b_builds": 48,
   "bindings": [
    "_mojolearn",
    "_mojolearn_arima",
@@ -41705,7 +41050,6 @@
    "_mojolearn_gbdt",
    "_mojolearn_hdbscan",
    "_mojolearn_ivf",
-   "_mojolearn_kernel_methods",
    "_mojolearn_linalg",
    "_mojolearn_mamba",
    "_mojolearn_mixture",
@@ -41724,23 +41068,23 @@
    "_mojolearn_x_prep",
    "_mojolearn_x_sequence"
   ],
-  "builds_after_packing": 776,
-  "builds_before_packing": 914,
+  "builds_after_packing": 764,
+  "builds_before_packing": 896,
   "cap": 16,
-  "cells": 2566,
-  "configs": 562,
-  "configs_per_vendor": 562,
-  "controls": 231,
+  "cells": 2504,
+  "configs": 549,
+  "configs_per_vendor": 549,
+  "controls": 226,
   "deferred_configs": 141,
-  "deferred_cross_configs": 3516,
-  "deferred_cross_groups": 80,
+  "deferred_cross_configs": 3514,
+  "deferred_cross_groups": 79,
   "excluded_controls": 73,
-  "guard_asserts": 139,
+  "guard_asserts": 143,
   "mapped_algorithms": 86,
-  "packed_multi_member": 106,
-  "packs": 302,
+  "packed_multi_member": 105,
+  "packs": 297,
   "unmapped_algorithms": 2,
-  "workloads": 161
+  "workloads": 156
  },
  "unmapped": [
   {

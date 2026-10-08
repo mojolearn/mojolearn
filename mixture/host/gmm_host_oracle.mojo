@@ -60,7 +60,6 @@ initialization.
 from std.memory import bitcast
 from mixture.meanll_order import gmm_meanll_host
 from mixture.nk_order import IDN_GMM_NK_LEVELS, gmm_nk_fold_levels
-from mixture.cov_sym import GMM_COV_SYM
 from mixture.chol_order import gmm_idn_chol_applies, gmm_idn_chol_host
 
 from checks.numerics import (
@@ -446,12 +445,10 @@ def gmmh_m_step(
         for idx in range(dd):
             var a = idx // d
             var b = idx % d
-            var v: Float32
-            comptime if GMM_COV_SYM:
-                # lane classical-te-gmm: the device keeps cell (min, max) and mirrors it (mixture/cov_sym.mojo)
-                v = ftz(rc[min(a, b) * d + max(a, b)])
-            else:
-                v = ftz(rc[idx])
+            # Tried 2026-10-08 (MOJOLEARN_IDN_GMM_COV_SYM, run ge123e6f9): covariance as a two-GEMM cover of the upper triangle, mirrored;
+            # NV/AMD gmm taxi 1.838/1.452, istella 0.966/0.978; taxi mean log-likelihood -0.78% -> slower and worse, deleted.
+            # Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
+            var v = ftz(rc[idx])
             v = ftz(identical_div(v, ftz(nk[kc])))
             if a == b:
                 v = ftz(v + reg_covar)

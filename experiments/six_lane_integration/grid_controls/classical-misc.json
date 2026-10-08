@@ -282,25 +282,6 @@
       "status": "split_from:C52_PAIR_128+C52_PAIR_512",
       "note": "leaf 256 -> 128|512 and pair_parts combine tree; host oracle follows the same define."
     },
-    "c58_shared_prep": {
-      "define": "MOJOLEARN_C58_SHARED_PREP",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C58_SHARED_PREP"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "holtwinters/impl/internal/hw_estimate.mojo:947",
-        "holtwinters/impl/internal/hw_estimate_launch.mojo:70"
-      ],
-      "binding": "_mojolearn_tsa",
-      "bits_change": false,
-      "status": "kept",
-      "note": "per-series scale computed once instead of by every thread of every start block; exact power-of-2 scale."
-    },
     "c58_series4": {
       "define": "MOJOLEARN_C58_SERIES4",
       "kind": "switch",
@@ -593,9 +574,7 @@
     "more:ets": {
       "binding": "_mojolearn_tsa",
       "route": "fit: ExponentialSmoothing -> holtwinters_fit -> runner.mojo:354 -> hw_estimate_launch.mojo:58 (parallel arm, d=29<=64)",
-      "controls": [
-        "c58_shared_prep"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:theta": {
@@ -743,6 +722,11 @@
     {
       "define": "MOJOLEARN_C29_TILE",
       "reason": "loop-blocking knob of the deleted C29 stream kernel only (C29_REFERENCE_TILE); guard rejects the define; recoverable at origin/integration/switches-20261007 608a7cf4a (lane serial-cleanup, 2026-10-07)"
+    },
+    {
+      "define": "MOJOLEARN_C58_SHARED_PREP",
+      "control": "c58_shared_prep",
+      "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 noise, a loser. on/off ms ratio NV/AMD: ets synthetic 0.996/0.980; forecast_rmse and insample_rmse SAME. Code recoverable at main ad7ed2370; define refused in core/six_lane_experiment_guards.mojo."
     }
   ],
   "owed_removal_ab": [
