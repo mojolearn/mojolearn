@@ -120,6 +120,53 @@ lq add nv CMD <branch> <run>.<pack>.bb MOJOLEARN_GRID_TAG=<run>.<pack>.bb MOJOLE
 - The taxi/Istella npz under bench_board's `--data-root` default (`$GBM_BENCH_DATA` or `~/datasets/gbm-bench`).
 - pip in the pixi env. The script bootstraps it with ensurepip, as overlay_race_job2.sh does.
 
+## Prebuilt bindings (build once on a CPU box, race on the GPU boxes)
+
+Each lq line makes the GPU box build `build` + its `BUILDS=` scripts (about 4 min per line; the builds, not the
+races, dominate GPU time). `tools/six_lane_grid_prebuild.py` builds every needed (binding, define set) once on a
+CPU-only Linux x86_64 box and ships the `.so` files to the boxes; `render --prebuilt /root/grid-prebuilt` adds
+`PREBUILT=/root/grid-prebuilt` to every line, and box_job.sh (tools/ops/box_job_prebuilt.patch) installs from the
+store instead of building, falling back to the build when the store cannot serve the line.
+
+```
+# 1. plan (Mac or build box; metadata only): the deduplicated artifacts for the rendered lines
+python3 tools/six_lane_grid_prebuild.py plan --plan-dir ~/mojolearn-evidence/grid-lq/plan --vendor nvidia --out <store>
+python3 tools/six_lane_grid_prebuild.py plan --lines ~/mojolearn-evidence/grid-lq/nv.txt --vendor nvidia --out <store>  # the exact queued lines
+# 2. build (CPU-only Linux box, in the frozen tree, `pixi install` done): parallel cross compiles, resumable
+python3 tools/six_lane_grid_prebuild.py build --vendor nvidia --out <store> --jobs 16           # sm_89
+python3 tools/six_lane_grid_prebuild.py build --vendor amd    --out <store> --jobs 16           # gfx942
+# 3. pack + ship: one tar per vendor; the credential stays on the Mac (presigned PUT), or push from the Mac with aws
+python3 tools/six_lane_grid_prebuild.py pack --out <store>                                       # <store>/grid-prebuilt-<vendor>-<sha12>.tar.gz + .json
+python3 tools/six_lane_grid_prebuild.py presign-put --key grid-prebuilt/<source_sha>/nvidia-<tarsha12>.tar.gz    # Mac
+python3 tools/six_lane_grid_prebuild.py push --sidecar <store>/grid-prebuilt-nvidia-<sha12>.tar.gz.json --put-url '<URL>'  # box
+# 4. the GPU box fetches, verifies and unpacks to /root/grid-prebuilt/<vendor>/ (script printed on the Mac, run via lq CMD or by the orchestrator)
+python3 tools/six_lane_grid_prebuild.py box-script nvidia <store>/grid-prebuilt-nvidia-<sha12>.tar.gz.json > nv-fetch.sh
+# 5. render with the token
+python3 tools/six_lane_grid_lq.py render ... --prebuilt /root/grid-prebuilt --out ~/mojolearn-evidence/grid-lq/nv.txt
+```
+
+- Dedup: a define changes a binding's bits only when its NAME is referenced by a file in that binding's Mojo import
+  closure (the hook's import graph, tools/hooks/no_host_routes.py Tree, the same one the box uses to pick rebuilds;
+  `core/six_lane_experiment_guards.mojo` names every define and is excluded). Each (binding, defines that reach it) is
+  compiled once and serves every full define set that narrows to it. At f5ea97003: 1388 lines x bindings = 3276 box
+  builds per vendor -> 2186 distinct (binding, full set) -> 1488 artifacts per vendor (24 bindings, 179 defines).
+- Fidelity: `build` runs the real `bindings/build_<x>.sh` with the box's environment (`MOJOLEARN_NUMERIC_MODE=identical`,
+  `MOJOLEARN_TARGET_COLUMN=<vendor>`, `MOJOLEARN_GPU_ARCHS=sm_89|gfx942`, `MOJOLEARN_BUILD_DEFINES=<effective set>`,
+  `MOJOLEARN_COMPILE_JOBS=1`) under a `pixi` shim that records the `mojo build` argv instead of compiling, then runs that
+  argv with the real compiler and `-o` at the artifact. Host bindings are not prebuilt (races never load them; ID lines
+  never carry `PREBUILT=`).
+- Store layout: `<store>/<vendor>/<binding>/<key>/_mojolearn_<x>.so` + `receipt.json` (defines, serves, argv, script
+  sha, closure sha, compiler version, source sha, host), `<vendor>/manifest.json`, `<vendor>/lookup.tsv`
+  (`binding  sha256(sorted full define set)  artifact  artifact_sha256  dest`). `plan.json` carries the counts and
+  `estimate_minutes_at_jobs` (60 s per compile).
+- Install (`tools/six_lane_grid_install_prebuilt.sh <tree> <vendor> <defines-csv|-> <bindings-csv> [store]`): exit 0
+  when every listed binding was copied to its `dest` and sha-verified; exit 2 when the store is missing, was built from
+  another commit than the tree's HEAD, a host binding is listed, the (binding, define set) is absent or a file is
+  corrupt: box_job.sh then builds everything as before. rc.txt shows `<build> rc=prebuilt` or `prebuilt rc=miss ...`.
+- A Mac can run `plan` and a `build` smoke (the dry run emulates Linux, so the recorded argv is the box's), but its
+  artifacts are Mach-O: `box_usable=false`, excluded from lookup.tsv and pack. Real artifacts come from Linux x86_64.
+- Tests: `cd tools && python3 test_six_lane_grid_prebuild.py` (synthetic tree, fake compiler, fake .so files).
+
 ## Collect outputs (`--out`)
 
 | file | schema | read by |
