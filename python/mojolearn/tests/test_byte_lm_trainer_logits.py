@@ -82,7 +82,30 @@ def resident_entry(fake):
             raise RuntimeError('injected byte-LM logits failure')
         return paint(addresses[1], batch, length, cfg.vocab_size) + fake.logits_extra
 
+    def next_bytes(session, addresses, dims, native, completed):
+        # `byte_lm_session_next_bytes` (bindings/_mojolearn_byte_lm.mojo):
+        # the same sentinel logits, kept on the "device" (a scratch array),
+        # and the per-row argmax of the last position, ties to the lowest
+        # byte. Writes only the `batch` int32 outputs.
+        assert session.open and session.usable and session not in closed
+        cfg = Shape(*native)
+        batch, length = dims
+        assert all(type(value) is int for value in dims) and type(completed) is int
+        calls.append(dict(session=session, addresses=len(addresses), dims=list(dims),
+                          shape=list(native), completed=completed, entry='next_bytes',
+                          ids=buffer(addresses[0], batch * length, True).copy()))
+        if fake.logits_fail == 'lost':
+            session.usable = False
+        if fake.logits_fail is not None:
+            raise RuntimeError('injected byte-LM logits failure')
+        scratch = np.empty(batch * length * cfg.vocab_size, np.float32)
+        paint(scratch.ctypes.data, batch, length, cfg.vocab_size)
+        last = scratch.reshape(batch, length, cfg.vocab_size)[:, -1, :]
+        buffer(addresses[1], batch, True)[:] = np.argmax(last, axis=1)
+        return batch + fake.logits_extra
+
     fake.byte_lm_session_logits = logits
+    fake.byte_lm_session_next_bytes = next_bytes
     return created, closed, calls
 
 
