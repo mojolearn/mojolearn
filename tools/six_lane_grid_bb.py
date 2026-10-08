@@ -71,6 +71,45 @@ def ensure_env(py_extra):
         print('GRIDBB-PIP %s rc=%d' % (','.join(missing), rc), flush=True)
 
 
+# The Mojo runtime libraries every compiled binding links (NEEDED libKGENCompilerRTShared.so, ...). A binding built
+# on the box finds them through the RUNPATH its build tree's pixi env wrote; a PREBUILT binding
+# (tools/six_lane_grid_install_prebuilt.sh) carries the build box's tree path instead, which does not exist here,
+# so its import failed: grid ge123e6f9, 150 of 150 PREBUILT jobs refused every race before racing ("our IDENTICAL GPU
+# set cannot load ... ImportError: libKGENCompilerRTShared.so: cannot open shared object file"), every built job ran.
+RUNTIME_LIBS = ('libKGENCompilerRTShared.so',)
+
+
+def runtime_lib_dirs():
+    """The interpreter env's lib directory (the tree's .pixi/envs/default/lib, the same frozen toolchain the
+    prebuild compiled with) when it holds the Mojo runtime libraries; [] otherwise."""
+    d = Path(sys.prefix) / 'lib'
+    return [str(d)] if all((d / n).exists() for n in RUNTIME_LIBS) else []
+
+
+def ensure_runtime_path():
+    """Prepend runtime_lib_dirs() to LD_LIBRARY_PATH for every bench_board child (child_env copies os.environ; the
+    loader searches LD_LIBRARY_PATH before a binding's RUNPATH, so a built binding resolves the same files)."""
+    dirs = runtime_lib_dirs()
+    have = [x for x in os.environ.get('LD_LIBRARY_PATH', '').split(os.pathsep) if x]
+    add = [d for d in dirs if d not in have]
+    if add:
+        os.environ['LD_LIBRARY_PATH'] = os.pathsep.join(add + have)
+    print('GRIDBB-LIBPATH %s' % (','.join(dirs) or 'none: %s/lib holds no %s' % (sys.prefix, ','.join(RUNTIME_LIBS))),
+          flush=True)
+
+
+def run_logged_stderr(cmd):
+    """subprocess.call with stderr also kept: (rc, last non-empty stderr line). bench_board's refusals
+    (SystemExit before any race, so no record) are on stderr; the GRIDBB-ERR line carries the reason home."""
+    p = subprocess.Popen(cmd, cwd=str(TREE), stderr=subprocess.PIPE, text=True, errors='replace')
+    last = ''
+    for line in p.stderr:
+        sys.stderr.write(line)
+        if line.strip():
+            last = line.strip()
+    return p.wait(), last
+
+
 def head():
     try:
         return subprocess.check_output(['git', '-C', str(TREE), 'rev-parse', '--short', 'HEAD'], text=True).strip()
@@ -130,10 +169,14 @@ def main(argv=None):
             print(' '.join(cmd))
         return 0
     ensure_env(extra)
+    ensure_runtime_path()
     rcs = []
-    for cmd in cmds:
+    for i, cmd in enumerate(cmds):
         print('GRIDBB-RUN ' + ' '.join(cmd[2:]), flush=True)
-        rcs.append(subprocess.call(cmd, cwd=str(TREE)))
+        rc, last = run_logged_stderr(cmd)
+        rcs.append(rc)
+        if rc:
+            print('GRIDBB-ERR tag=%s call=%d rc=%d last=%s' % (args.tag, i, rc, last[:300].replace(' ', '_')), flush=True)
     try:
         board = json.loads((out / 'board.json').read_text())
     except (OSError, ValueError):
