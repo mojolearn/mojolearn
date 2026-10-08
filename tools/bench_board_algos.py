@@ -1029,17 +1029,24 @@ _add("tree-shap", xlane="trees", ours="TreeExplainer", kind="shap", task="tree-s
             "shap package over the XGBoost model, xgboost-* its pred_contribs (GPUTreeShap on CUDA)"],
      mism=["ours explains its RandomForestRegressor (TreeExplainer takes RF, ExtraTrees, "
            "DecisionTree and DART models), the opponents their GBDT of the same size"])
+# lane shap-xvendor-identity (2026-10-08): ours explains this library's device ridge, the opponents the
+# NumPy closed form they were scored with (see _build_shap)
+_SHAP_RIDGE_MISM = ["ours explains this library's device ridge (mojolearn.RidgeCV(alphas=[1.0]), the x_linear "
+                    "binding, the same bits on NVIDIA and AMD), the opponents a NumPy/LAPACK ridge of the same "
+                    "objective whose bits are the host CPU's; each arm's error is against its own model's exact values"]
 _add("kernel-shap", xlane="trees", ours="KernelExplainer", kind="shap", task="kernel-shap",
      block="reg", sub={"X": SUB["mid"], "Xq": 100},
      params=dict(n_background=100, nsamples=2048, link="identity", l1_reg=False),
      other={"shap-cpu": "shap", "cuml-gpu": "cuml"},
-     notes=["the model is a ridge fit before the clock (its exact SHAP values are known: "
-            "w_j (x_j - E x_j)); background = 100 stride rows"])
+     notes=["the model is a ridge (alpha 1, centered) fit before the clock (its exact SHAP values are known: "
+            "w_j (x_j - E x_j)); background = 100 stride rows; ours explains mojolearn.RidgeCV(alphas=[1.0]) "
+            "on the device, the opponents the NumPy closed form"],
+     mism=_SHAP_RIDGE_MISM)
 _add("permutation-shap", xlane="trees", ours="PermutationExplainer", kind="shap",
      task="permutation-shap", block="reg", sub={"X": SUB["mid"], "Xq": 100},
      params=dict(n_background=100, npermutations=10),
      other={"shap-cpu": "shap", "cuml-gpu": "cuml"},
-     notes=["the ridge model as kernel-shap"])
+     notes=["the ridge model as kernel-shap"], mism=_SHAP_RIDGE_MISM)
 
 # ---- lane cnn -------------------------------------------------------------
 _CNN = "seeded N(0,1) tensors (no image set is in the R2 store)"
@@ -4452,28 +4459,48 @@ def _build_shap(lane, arm, D):
         if arm not in OURS_ARMS:
             rec["learning_rate"] = gb["learning_rate"]
         return Runner(info, fit, outputs, record=rec)
-    # kernel / permutation SHAP over a ridge fit before the clock (numpy closed form)
-    Xd, yd = X.astype(np.float64), y.astype(np.float64)
-    mu, ym = Xd.mean(0), yd.mean()
-    A = (Xd - mu).T @ (Xd - mu) + np.eye(Xd.shape[1])
-    w = np.linalg.solve(A, (Xd - mu).T @ (yd - ym))
-    b = ym - mu @ w
+    # kernel / permutation SHAP over a ridge (alpha 1, centered) fit before the clock
     bg = _stride(X, p["n_background"])
 
-    def predict(Z):
-        return np.asarray(_host(Z), dtype=np.float64) @ w + b
+    def numpy_ridge():
+        """The opponents' model: the ridge as a NumPy closed form (host BLAS/LAPACK, so its
+        bits are the box's), and its predict over host arrays."""
+        Xd, yd = X.astype(np.float64), y.astype(np.float64)
+        mu, ym = Xd.mean(0), yd.mean()
+        A = (Xd - mu).T @ (Xd - mu) + np.eye(Xd.shape[1])
+        w = np.linalg.solve(A, (Xd - mu).T @ (yd - ym))
+        b = ym - mu @ w
+
+        def predict(Z):
+            return np.asarray(_host(Z), dtype=np.float64) @ w + b
+        return w, b, predict
     if arm in OURS_ARMS:
+        # Lane shap-xvendor-identity (2026-10-08). OUR arm explains this library's own device
+        # ridge, mojolearn.RidgeCV(alphas=[1.0]) (the x_linear binding: the ridge-cv lane's fit
+        # and predict, the same bits on NVIDIA and AMD on every grid run), fit before the clock.
+        # Until then it explained the NumPy closed form of `numpy_ridge`: OpenBLAS dgemm/dgesv
+        # for w and dgemv for every model call round differently on the two boxes' host CPUs, so
+        # the model the explainer was handed and the `exact` reference the digest hashes differed
+        # between the vendors (the only two divergent lanes of the board) while every explainer
+        # word on the device is an integer soft-float64 unit (xtrees/agnostic.mojo). The
+        # opponents keep the NumPy ridge they were scored with (never re-run); see mism.
+        import mojolearn as ml
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
-        info["config"] = "mojolearn.%s(ridge.predict, background 100)" % name
+        ridge = ml.RidgeCV(alphas=[1.0], fit_intercept=True).fit(X, y)
+        w = _arr(ridge.coef_, np.float64).reshape(-1)
+        info["pre_clock_fit"] = True
+        info["model"] = "mojolearn.RidgeCV(alphas=[1.0]) fit on the device; its coef_ is the w of the exact values"
+        info["config"] = "mojolearn.%s(mojolearn.RidgeCV(alphas=[1.0]).predict, background 100)" % name
 
         def fit():
-            ex = (cls(predict, bg, link=p["link"], random_state=SEED) if t == "kernel-shap"
-                  else cls(predict, bg, random_state=SEED))
+            ex = (cls(ridge, bg, link=p["link"], random_state=SEED) if t == "kernel-shap"
+                  else cls(ridge, bg, random_state=SEED))
             S["phi"] = (ex.shap_values(Xq, nsamples=p["nsamples"]) if t == "kernel-shap"
                         else ex.shap_values(Xq, npermutations=p["npermutations"]))
     elif arm == "shap-cpu":
         import shap
+        w, b, predict = numpy_ridge()
         info = {"library": "shap", "version": shap.__version__, "device": "cpu",
                 "pre_clock_fit": True, "input_home": "host"}
         if t == "kernel-shap":
@@ -4492,6 +4519,7 @@ def _build_shap(lane, arm, D):
                 S["phi"] = ex(Xq, max_evals=2 * p["npermutations"] * (X.shape[1] + 1)).values
     else:
         from cuml.explainer import KernelExplainer, PermutationExplainer
+        w, b, predict = numpy_ridge()
         dev, info, sync = _cuml_up({"bg": bg, "Xq": Xq})
         info["pre_clock_fit"] = True
         import cupy as cp
@@ -4514,7 +4542,14 @@ def _build_shap(lane, arm, D):
                                                 is_gpu_model=True).shap_values(
                     dev["Xq"], npermutations=p["npermutations"])
                 cp.cuda.runtime.deviceSynchronize()
-    exact = (Xq.astype(np.float64) - bg.astype(np.float64).mean(0)) * w
+    # the linear model's exact SHAP values w_j (x_j - E x_j), E over the background rows: the
+    # background mean is one fixed-order fold of its rows (no BLAS, no pairwise sum), so the
+    # reference the digest hashes carries no host-CPU bits (harness reference, outside every clock)
+    bg64 = bg.astype(np.float64)
+    bgsum = np.zeros(bg64.shape[1], dtype=np.float64)
+    for row in range(bg64.shape[0]):
+        bgsum += bg64[row]
+    exact = (Xq.astype(np.float64) - bgsum / float(bg64.shape[0])) * w
 
     def outputs():
         return {"phi": _arr(S["phi"], np.float64).reshape(exact.shape), "exact": exact}
