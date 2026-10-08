@@ -7,7 +7,8 @@ python/mojolearn with every MOJOLEARN_* token of the line exported (so MOJOLEARN
 This script:
   1. points the interpreter at the tree's python/ package with a .pth file in its own site-packages
      (bench_board's child_env drops PYTHONPATH so nothing shadows an installed wheel; the .pth is the
-     installation here), and installs scikit-learn into it if missing (the pixi default env has none);
+     installation here), and installs scikit-learn into it if missing (the pixi default env has none), plus torch
+     (CPU wheels) when a Mamba lane is requested (its conductor's input tables import it; pip_extra);
   2. runs tools/bench_board.py --modes identical, ours only, full rows, --no-infer, into <job dir>/bb
      (<job dir> = the parent of the worktree, /root/lq/out/<id>/, which outlives the worktree), once per
      (family, dataset set) so it races exactly the requested (family, lane, dataset) cells;
@@ -54,6 +55,41 @@ def groups(races):
     return [(fam, sorted(lanes), list(board)) for (fam, board), lanes in sorted(out.items())]
 
 
+DEFAULT_PIP = 'sklearn=scikit-learn==1.7.2'
+# The Mamba lanes' conductor builds its inputs from mamba/corpus/gen_corpus.py's shape and range tables
+# (bench_board_neural.mamba_weight_spec), and gen_corpus imports torch at module top. The box's pixi default env has
+# no torch, so in grid ge123e6f9 every mamba1/2/3-forward race died in the conductor before writing its race JSON
+# (status UNKNOWN(no race json, rc 1), all vendors, arms A and B). torch only shapes the inputs here: ours runs alone.
+TORCH_MODELS = ('mamba1', 'mamba2', 'mamba3')
+TORCH_PIP = ('torch', 'torch')
+# torch from the CPU wheel index (no CUDA/ROCm runtime wheels: the conductor never runs torch on a device); PyPI
+# is the fallback when that index cannot serve the interpreter.
+PIP_INDEX = {'torch': 'https://download.pytorch.org/whl/cpu'}
+
+
+def neural_models():
+    """bench_board_neural.MODEL_OF ({lane: model}); its import is standard library only."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('gridbb_bench_board_neural', TREE / 'tools' / 'bench_board_neural.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return dict(mod.MODEL_OF)
+
+
+def pip_extra(races, models=None):
+    """[(module, spec)] the requested races need beyond DEFAULT_PIP (torch for a Mamba lane)."""
+    neural = [lane for fam, lane, _ in races if fam == 'neural']
+    if not neural:
+        return []
+    models = models if models is not None else neural_models()
+    return [TORCH_PIP] if any(models.get(lane) in TORCH_MODELS for lane in neural) else []
+
+
+def pip_arg(races, models=None):
+    """The --pip value for these races: DEFAULT_PIP plus pip_extra, comma form."""
+    return ','.join([DEFAULT_PIP] + ['%s=%s' % kv for kv in pip_extra(races, models)])
+
+
 def ensure_env(py_extra):
     site = Path(sysconfig.get_paths()['purelib'])
     site.mkdir(parents=True, exist_ok=True)
@@ -63,12 +99,20 @@ def ensure_env(py_extra):
         try:
             __import__(mod)
         except ImportError:
-            missing.append(spec)
+            missing.append((mod, spec))
     if missing:
         if subprocess.call([sys.executable, '-m', 'pip', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL):
             subprocess.call([sys.executable, '-m', 'ensurepip', '--upgrade'])
-        rc = subprocess.call([sys.executable, '-m', 'pip', 'install', '-q'] + missing)
-        print('GRIDBB-PIP %s rc=%d' % (','.join(missing), rc), flush=True)
+        plain = [spec for mod, spec in missing if mod not in PIP_INDEX]
+        if plain:
+            rc = subprocess.call([sys.executable, '-m', 'pip', 'install', '-q'] + plain)
+            print('GRIDBB-PIP %s rc=%d' % (','.join(plain), rc), flush=True)
+        for mod, spec in missing:
+            if mod in PIP_INDEX:
+                rc = subprocess.call([sys.executable, '-m', 'pip', 'install', '-q', '--index-url', PIP_INDEX[mod], spec])
+                if rc:
+                    rc = subprocess.call([sys.executable, '-m', 'pip', 'install', '-q', spec])
+                print('GRIDBB-PIP %s rc=%d' % (spec, rc), flush=True)
 
 
 # The Mojo runtime libraries every compiled binding links (NEEDED libKGENCompilerRTShared.so, ...). A binding built
@@ -150,11 +194,13 @@ def main(argv=None):
     p.add_argument('--out', help='bench_board --out (default <worktree parent>/bb)')
     p.add_argument('--cache', default='/root/board-0833/cache', help='bench_board --cache: the box\'s prepped blocks')
     p.add_argument('--data-root', help='bench_board --data-root (default: its own, GBM_BENCH_DATA or ~/datasets/gbm-bench)')
-    p.add_argument('--pip', default='sklearn=scikit-learn==1.7.2', help='module=spec,... installed when missing')
+    p.add_argument('--pip', default=DEFAULT_PIP, help='module=spec,... installed when missing (pip_extra adds torch for a '
+                   'Mamba lane whatever this says)')
     p.add_argument('--dry-run', action='store_true', help='print the bench_board commands only')
     args = p.parse_args(argv)
     out = Path(args.out or TREE.parent / 'bb')
     extra = [tuple(x.split('=', 1)) for x in args.pip.split(',') if x]
+    extra += [kv for kv in pip_extra(args.race) if kv[0] not in {m for m, _ in extra}]
     cmds = []
     for fam, lanes, dss in groups(args.race):
         cmd = [sys.executable, str(TREE / 'tools' / 'bench_board.py'), '--out', str(out), '--vendor', args.vendor,
