@@ -2976,17 +2976,18 @@ class _DiscreteNB(_Classifier):
         K = len(self.classes_)
         mode = _mode()
         fit_csr = _optional_prep_entry(_prep_binding(mode), "x_prep_nb_csr_fit")
-        fc = Array._from_flat([0.0] * (K * d), (K, d), "<f4")
-        cnt = Array._from_flat([0.0] * K, (K,), "<f4")
+        fc = empty((K, d), "<f4")
+        cnt = empty((K,), "<f4")
         flag = Array.from_list([0], "<i4")
         fit_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
                 addr_ro(codes, name="y"), [n, d, K, dv.size],
                 _addr_rw(fc, name="feature_count"), _addr_rw(cnt, name="class_count"), _addr_rw(flag, name="flag"))
         level = int(flag.tolist()[0])
         if mode == "identical":
-            # x_prep/fastnb_csr.mojo: 2 a negative value; 1 the counts are not
-            # exact integers below 2^24 (or the rows are not canonical), so
-            # the caller runs the dense program
+            # x_prep/fastnb_csr.mojo: 2 a negative value; 1 a value is not an
+            # integer in [0, 2^24) (or the rows are not canonical), so the
+            # caller runs the dense program; the 64-bit counts never fall
+            # back on a count's size (lane gap-shap-nb)
             if level == 1:
                 return None
             level = 1 if level == 2 else 0
@@ -2994,7 +2995,9 @@ class _DiscreteNB(_Classifier):
             raise ValueError(f"mojolearn: Negative values in data passed to {type(self).__name__} (input X)")
         pr = _Prog()
         st = pr.alloc(6 * d)
-        z = pr.put_list([0.0] * (K * d))
+        # lane gap-shap-nb: the zero addend is arena words (they arrive
+        # zeroed), not a K x d Python list
+        z = pr.alloc(K * d)
         cnt_o, fc_o, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
         pr.stage("add_arrays", K, pr.put(cnt), z, cnt_o)
         pr.stage("add_arrays", K * d, pr.put(fc), z, fc_o)
@@ -3016,7 +3019,7 @@ class _DiscreteNB(_Classifier):
                              f"{self.n_features_in_}")
         K = len(self.classes_)
         jll_csr = _optional_prep_entry(_prep_binding(self.numeric_mode_), "x_prep_nb_csr_jll")
-        jll_h = Array._from_flat([0.0] * (n * K), (n, K), "<f4")
+        jll_h = empty((n, K), "<f4")
         bias = self._csr_bias()
         args = (addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
                 addr_ro(self.feature_log_prob_, name="feature_log_prob_"),
@@ -3034,7 +3037,8 @@ class _DiscreteNB(_Classifier):
         else:
             jll_csr(*args)
         pr = _Prog()
-        z = pr.put_list([0.0] * (n * K))
+        # lane gap-shap-nb: zeroed arena words, not an n x K Python list
+        z = pr.alloc(n * K)
         jll = pr.alloc(n * K)
         pr.stage("add_arrays", n * K, pr.put(jll_h), z, jll)
         return self._score_tail(pr, n, d, K, jll, want, None)
