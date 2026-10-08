@@ -5,12 +5,11 @@
 that module holds only the kernels and the per-thread arithmetic they share
 with the host column; the launch sequence and its arguments are unchanged."""
 
-from experiments.classical_identical_ideas.stats_controls import C58_SERIES4, C58_SHARED_PREP
+from experiments.classical_identical_ideas.stats_controls import C58_SERIES4
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from holtwinters.impl.internal.hw_estimate import (
     HW_EST_BLOCK,
-    hw_classical_scale_kernel,
     HW_EST_STARTS,
     holtwinters_estimate_block_kernel,
     holtwinters_estimate_finish_kernel,
@@ -57,7 +56,7 @@ def holtwinters_estimate_gpu(
     if hw_est_parallel(frequency) and not force_serial:
         var d = frequency + 5
         var blocks = batch_size * HW_EST_STARTS
-        var scratch = ctx.enqueue_create_buffer[DType.float32](blocks * hw_est_block_scratch_len(frequency) + (batch_size if C58_SHARED_PREP else 0) + scratch_pad)
+        var scratch = ctx.enqueue_create_buffer[DType.float32](blocks * hw_est_block_scratch_len(frequency) + scratch_pad)
         var cand_theta = ctx.enqueue_create_buffer[DType.float32](blocks * d + scratch_pad)
         var cand_sse = ctx.enqueue_create_buffer[DType.float32](blocks + scratch_pad)
         var cand_ints = ctx.enqueue_create_buffer[DType.int32](2 * blocks)
@@ -67,11 +66,6 @@ def holtwinters_estimate_gpu(
         cand_sse.enqueue_fill(scratch_poison)
         sw_all.enqueue_fill(scratch_poison)
         ctx.synchronize()
-        comptime if C58_SHARED_PREP:
-            ctx.enqueue_function[hw_classical_scale_kernel](
-                ts.unsafe_ptr(), scratch.unsafe_ptr(), Int32(n), Int32(batch_size),
-                Int32(blocks*hw_est_block_scratch_len(frequency)),
-                grid_dim=((batch_size+tpb-1)//tpb,1,1), block_dim=(tpb,1,1))
         if d <= HW_EST_FAST_BLOCK:
             ctx.enqueue_function[holtwinters_estimate_block_kernel[HW_EST_FAST_BLOCK]](
                 ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),

@@ -179,6 +179,7 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_TREES_C50_GB_PACKED"]() and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()), "MOJOLEARN_TREES_C50_GB_PACKED returns before MOJOLEARN_IDN_GBDT_APPLY_WIDE (gbdt/resident_model.mojo): the pair == C50"
     # Deleted 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 losers (docs/apple-fast/EXPERIMENTS.md). Recoverable at main ad7ed2370.
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE"](), "removed: MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE (grid ge123e6f9: noise on nystroem/rbf-sampler, NV 1.00-1.04x AMD 0.88-0.98x)"
+    comptime assert not is_defined["MOJOLEARN_C58_SHARED_PREP"](), "removed: MOJOLEARN_C58_SHARED_PREP (grid ge123e6f9: noise on ets, NV 0.996x AMD 0.980x)"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True

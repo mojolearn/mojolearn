@@ -31,7 +31,6 @@ comptime C56_QDA_PROJECT = get_defined_int["MOJOLEARN_CLASSICAL_C56_QDA_PROJECT"
 # C57: retain each robust candidate's mean for its covariance computation.
 comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57_CANDIDATE_STATE"]()
 # C58/59: only independent classical series/trials, no neural sequence callers.
-comptime C58_SHARED_PREP = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SHARED_PREP"]()
 comptime C58_SERIES4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SERIES4"]()
 comptime C58_FORECAST4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_FORECAST4"]()
 # C58 team state budget in MiB: integer sweep -D MOJOLEARN_C58_TEAM_MIB=64|256
