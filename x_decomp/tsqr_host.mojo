@@ -266,7 +266,7 @@ def _ts_panel_host(blk: F32Ptr, mb: Int, n: Int, pan: Int, tst: F32Ptr) -> Inlin
             t[q * TS_NB + p] = ts_scale(ntau, s)
     for e in range(_TT):
         tst.unsafe_store(pan * _TT + e, t[e])
-    return t
+    return t^
 
 
 def ts_rtile_host(blk: F32Ptr, n: Int, tile: F32Ptr):
