@@ -1430,8 +1430,11 @@ LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/i
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
 # Campaign 7 carries the complete release sources and verifier assets, not
 # only a Mamba certificate. Keep that payload bounded separately.
+# 2026-10-08 (0.8.37 rehearsal): the campaign-7 archive measured 19.1 MB compressed against the 16 MB cap. No broad path was
+# added: the growth since 0.8.36 is spread over tools (+0.8 MB), gbdt, python, bindings and core (+0.1 to +0.2 MB each). The cap
+# exists to catch an accidental broad path (a jump of several MB at once), so it moves to 24 MB with ~5 MB of headroom.
 if [ "${MOJOLEARN_NVIDIA_CAMPAIGN:-}" = 7 ]; then
-    LEG_MAMBA_ARCHIVE_MAX_BYTES=16777216
+    LEG_MAMBA_ARCHIVE_MAX_BYTES=25165824
 fi
 if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
     _layout_paths="bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo tools/knn_layout_dispatch_price.sh"

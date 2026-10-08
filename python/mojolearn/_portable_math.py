@@ -14,7 +14,6 @@ import array
 import ctypes
 import decimal
 import functools
-import math as _cmath
 import operator
 from pathlib import Path
 import struct
