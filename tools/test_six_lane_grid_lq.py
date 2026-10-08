@@ -621,5 +621,150 @@ class BoardWrapperTests(unittest.TestCase):
             self.assertIn(flag, ' '.join(cmd))
 
 
+class NotReadyTests(unittest.TestCase):
+    """status=not_ready = infrastructure: dropped by collect (never FAIL/BROKEN); redo-not-ready re-tags the lines."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self.tmp.name)
+        write_plan(self.d)
+        self.rid = G.run_id_of(self.d)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_split_redo(self):
+        self.assertEqual(G.split_redo('P875n1'), ('P875', 1))
+        self.assertEqual(G.split_redo('B022r1n2'), ('B022r1', 2))
+        self.assertEqual(G.split_redo('C004r1'), ('C004r1', 0))
+        self.assertEqual(G.split_redo('P875'), ('P875', 0))
+        self.assertEqual(G.split_redo('P005.bb'), ('P005.bb', 0))
+
+    def write_results(self):
+        r, qb = self.rid, {'r2': 0.9, 'rmse': 1.0}
+        nv, amd = [], []
+        n = [0]
+
+        def add(lst, vendor, tag, lane, ds, ms, digest, status='ok', defines=None):
+            n[0] += 1
+            lst.append(algos_line('%s%04d' % (vendor[0], n[0]), vendor, 'abc1234', tag, lane, ds,
+                                  'None' if status != 'ok' else ms, {} if status != 'ok' else qb,
+                                  'none' if status != 'ok' else digest, defines, status=status))
+        for rep, (mn, ma) in enumerate(((100, 50), (102, 51), (104, 52))):
+            for lane, ds in (('ridge-cv', 'taxi'), ('ridge-cv', 'istella'), ('lasso-cv', 'taxi'), ('qda', 'taxi')):
+                tag = '%s.B001r%d' % (r, rep + 1)
+                if rep == 0 and lane == 'qda':  # incumbent repeat 1 not_ready on nv: the redo fills it
+                    add(nv, 'nvidia', tag, lane, ds, mn, 'b' * 16, status='not_ready')
+                    add(nv, 'nvidia', tag + 'n1', lane, ds, mn, 'b' * 16)
+                else:
+                    add(nv, 'nvidia', tag, lane, ds, mn, 'b' * 16)
+                add(amd, 'amd', tag, lane, ds, ma, 'b' * 16)
+        # P002 ridge-cv taxi: nv not_ready, the redo (n1) is ok -> used; amd ok first time, its redo is ignored
+        add(nv, 'nvidia', r + '.P002', 'ridge-cv', 'taxi', 0, '', status='not_ready', defines='MOJOLEARN_C=1')
+        add(nv, 'nvidia', r + '.P002n1', 'ridge-cv', 'taxi', 80, 'c' * 16, defines='MOJOLEARN_C=1')
+        add(amd, 'amd', r + '.P002', 'ridge-cv', 'taxi', 40, 'c' * 16, defines='MOJOLEARN_C=1')
+        add(amd, 'amd', r + '.P002n1', 'ridge-cv', 'taxi', 400, 'z' * 16, defines='MOJOLEARN_C=1')
+        # P003 qda: amd not_ready, never redone -> NOT_READY, not FAIL
+        add(nv, 'nvidia', r + '.P003', 'qda', 'taxi', 100, '1' * 16, defines='MOJOLEARN_D=1')
+        add(amd, 'amd', r + '.P003', 'qda', 'taxi', 0, '', status='not_ready', defines='MOJOLEARN_D=1')
+        # P001 lasso-cv: a real error on amd stays FAIL even when a redo ran ok
+        add(nv, 'nvidia', r + '.P001', 'lasso-cv', 'taxi', 100, 'f' * 16, defines='MOJOLEARN_A=1')
+        add(amd, 'amd', r + '.P001', 'lasso-cv', 'taxi', 0, '', status='error', defines='MOJOLEARN_A=1')
+        add(amd, 'amd', r + '.P001n1', 'lasso-cv', 'taxi', 50, 'f' * 16, defines='MOJOLEARN_A=1')
+        (self.d / 'nv-results.txt').write_text('\n'.join(nv) + '\n')
+        (self.d / 'amd-results.txt').write_text('\n'.join(amd) + '\n')
+        return [self.d / 'nv-results.txt', self.d / 'amd-results.txt']
+
+    def test_collect_not_ready_is_infrastructure(self):
+        out = self.d / 'collected'
+        rep = G.collect(self.write_results(), [], self.d, out, lanes=LANES, board=BOARD)
+        self.assertEqual(rep['ignored']['not_ready'], 3)
+        self.assertEqual(rep['ignored']['superseded_redo'], 2)  # amd P002n1 behind an ok original, P001n1 behind an error
+        self.assertEqual(rep['not_ready']['a_cells'], 1)
+        self.assertEqual(rep['not_ready']['a_cells_by_lane'], {'amd:qda': 1})
+        self.assertEqual(rep['coverage']['amd'].get('NOT_READY'), 1)
+        q = json.loads((out / 'quality.json').read_text())
+        rows = {(r['configuration'], r['vendor']): r['candidate_vs_baseline']['verdict'] for r in q['rows']}
+        self.assertNotIn(('G.expanded:qda.d=on', 'amd'), rows)
+        self.assertEqual(rows[('G.expanded:lasso-cv.b=on', 'amd')], 'FAIL')  # error is never superseded
+        self.assertEqual(rows[('G.expanded:ridge-cv.c=on', 'nvidia')], 'SAME')
+        v = json.loads((out / 'grid-verdicts.json').read_text())
+        c = {(x['configuration'], x['workload_id']): x for x in v['cases']}[('G.expanded:ridge-cv.c=on', 'expanded:ridge-cv@dataset=taxi')]
+        self.assertAlmostEqual(c['vendors']['nvidia']['candidate_over_baseline']['scored'], 80 / 102)
+        self.assertAlmostEqual(c['vendors']['amd']['candidate_over_baseline']['scored'], 40 / 51)
+        self.assertEqual(c['verdict'], 'FASTER')
+        floors = json.loads((out / 'floors.json').read_text())['floors']
+        self.assertEqual(floors['expanded:qda@dataset=taxi@input=classification-full-v1|nvidia']['samples'], 3)
+        dec_out = self.d / 'decide'
+        self.assertEqual(D.main(['--matrix', str(self.d / 'grid-matrix.json.gz'), '--verdicts', str(out / 'grid-verdicts.json'),
+                                 '--identity', str(out / 'summary.json'), '--quality', str(out / 'quality.json'),
+                                 '--out', str(dec_out)]), 0)
+        dec = json.loads((dec_out / 'grid-decisions.json').read_text())
+        self.assertNotEqual(dec['controls']['d']['recommendation'], 'HOLD_BROKEN')
+        self.assertEqual(dec['controls']['b']['recommendation'], 'HOLD_BROKEN')
+        failed = {(f['configuration'], f['workload_id']) for f in dec.get('failed_cells', [])}
+        self.assertNotIn('G.expanded:qda.d=on', {c for c, _ in failed})
+
+    def lines_file(self):
+        r = self.rid
+        pre = ' BUILDS=build,build_x_linear PREBUILT=/root/grid-prebuilt'
+        lines = [
+            'lq add nv RACE grid/f ridge-cv istella,taxi MOJOLEARN_GRID_TAG=%s.P002 MOJOLEARN_BUILD_DEFINES=MOJOLEARN_C=1%s' % (r, pre),
+            'lq add nv RACE grid/f qda taxi MOJOLEARN_GRID_TAG=%s.P003 MOJOLEARN_BUILD_DEFINES=MOJOLEARN_D=1%s' % (r, pre),
+            'lq add nv RACE grid/f lasso-cv,qda,ridge-cv istella,taxi MOJOLEARN_GRID_TAG=%s.B001r1%s' % (r, pre),
+            'lq add nv RACE grid/f lasso-cv,qda,ridge-cv istella,taxi MOJOLEARN_GRID_TAG=%s.B001r2%s' % (r, pre),
+            'lq add nv RACE grid/f ridge-cv taxi MOJOLEARN_GRID_TAG=gdeadbeef.P002%s' % pre,
+            'lq add amd RACE grid/f ridge-cv istella,taxi MOJOLEARN_GRID_TAG=%s.P002 MOJOLEARN_BUILD_DEFINES=MOJOLEARN_C=1%s' % (r, pre),
+            'lq add amd RACE grid/f qda taxi MOJOLEARN_GRID_TAG=%s.P003 MOJOLEARN_BUILD_DEFINES=MOJOLEARN_D=1%s' % (r, pre),
+            'lq add amd RACE grid/f lasso-cv taxi MOJOLEARN_GRID_TAG=%s.P001 MOJOLEARN_BUILD_DEFINES=MOJOLEARN_A=1%s' % (r, pre),
+        ]
+        f = self.d / 'race.pb.lines'
+        f.write_text('\n'.join(lines) + '\n')
+        return f, lines
+
+    def test_redo_lines(self):
+        f, src = self.lines_file()
+        r = self.rid
+        nv_res = self.d / 'nv-only.txt'
+        nv_res.write_text('\n'.join([
+            algos_line('n1', 'nvidia', 'abc1234', r + '.P002', 'ridge-cv', 'taxi', 'None', {}, 'none', status='not_ready'),
+            algos_line('n1', 'nvidia', 'abc1234', r + '.P002', 'ridge-cv', 'istella', 90, {}, 'c' * 16),
+            algos_line('n2', 'nvidia', 'abc1234', r + '.P003', 'qda', 'taxi', 90, {}, 'c' * 16),
+            algos_line('n3', 'nvidia', 'abc1234', r + '.B001r1', 'qda', 'taxi', 'None', {}, 'none', status='not_ready'),
+            algos_line('n4', 'nvidia', 'abc1234', r + '.B001r2', 'qda', 'taxi', 'None', {}, 'none', status='error'),
+            algos_line('n5', 'nvidia', 'abc1234', 'gdeadbeef.P002', 'ridge-cv', 'taxi', 'None', {}, 'none', status='not_ready'),
+            algos_line('a1', 'amd', 'abc1234', r + '.P003', 'qda', 'taxi', 'None', {}, 'none', status='not_ready'),
+        ]) + '\n')
+        lines, man = G.render_not_ready_redo([f], [nv_res], 'nvidia', r)
+        self.assertEqual(lines, [src[0].replace(r + '.P002', r + '.P002n1'), src[2].replace(r + '.B001r1', r + '.B001r1n1')])
+        self.assertEqual((man['lines'], man['a_lines'], man['b_lines'], man['not_ready_cells']), (2, 1, 1, 2))
+        self.assertEqual(man['not_ready_cells_by_lane'], {'qda': 1, 'ridge-cv': 1})
+        lines, man = G.render_not_ready_redo([f], [nv_res], 'amd', r)
+        self.assertEqual(lines, [src[6].replace(r + '.P003', r + '.P003n1')])
+        # a redo of a redo: P002n1 still not_ready -> rep 2; B001r1n1 ok -> done
+        nv_res.write_text(nv_res.read_text() + '\n'.join([
+            algos_line('n6', 'nvidia', 'abc1234', r + '.P002n1', 'ridge-cv', 'taxi', 'None', {}, 'none', status='not_ready'),
+            algos_line('n7', 'nvidia', 'abc1234', r + '.B001r1n1', 'qda', 'taxi', 70, {}, 'c' * 16),
+        ]) + '\n')
+        lines, man = G.render_not_ready_redo([f], [nv_res], 'nvidia', r, rep=2)
+        self.assertEqual(lines, [src[0].replace(r + '.P002', r + '.P002n2')])
+        for line in lines:
+            self.assertTrue(all(__import__('re').fullmatch(r'[A-Za-z0-9_.,=@:+/-]+', t) for t in line.split()))
+
+    def test_redo_cli(self):
+        f, src = self.lines_file()
+        r = self.rid
+        res = self.d / 'amd-res.txt'
+        res.write_text(algos_line('a1', 'amd', 'abc1234', r + '.P003', 'qda', 'taxi', 'None', {}, 'none', status='not_ready') + '\n')
+        out = self.d / 'amd.race.notready-redo.pb.lines'
+        import contextlib, io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = G.main(['redo-not-ready', '--vendor', 'amd', '--lines', str(f), '--results', str(res), '--run-id', r, '--out', str(out)])
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.read_text().splitlines(), [src[6].replace(r + '.P003', r + '.P003n1')])
+        self.assertEqual(json.loads(Path(str(out) + '.json').read_text())['lanes'], ['qda'])
+
+
 if __name__ == '__main__':
     unittest.main()
