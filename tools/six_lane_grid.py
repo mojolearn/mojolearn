@@ -75,7 +75,7 @@ ARM_EXCLUSIONS = [
     ('T11_LEVELS', '1', 'trees:rf', 'note: "RF K1/K2/K8 already showed no combined gain (forest-final-decisions 2026-10-05): RF grid needs only 16"'),
     ('T11_LEVELS', '2', 'trees:rf', 'note: "RF K1/K2/K8 already showed no combined gain (forest-final-decisions 2026-10-05): RF grid needs only 16"'),
     ('T11_LEVELS', '8', 'trees:rf', 'note: "RF K1/K2/K8 already showed no combined gain (forest-final-decisions 2026-10-05): RF grid needs only 16"'),
-    ('T17_BATCH', '32', None, 'note: "incumbent 32 (== arm 32)": identical to the shipped B arm'),
+    # T17_BATCH '32' was excluded as identical to the incumbent until lane/grid-flips-1 (2026-10-08) made 128 the default.
 ]
 # Arms whose notes declare reach beyond the declared algorithm lists. A config
 # carrying one is never packed with another algorithm's config.

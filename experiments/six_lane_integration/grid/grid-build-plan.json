@@ -50,7 +50,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:kmeans.idn_kmeans_centroid_fold=on"
+     "configuration": "G.classical:kmeans.idn_kmeans_centroid_fold=off"
     },
     {
      "arm": "B",
@@ -82,11 +82,11 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=on"
+     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=on"
+     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=off"
     },
     {
      "arm": "B",
@@ -227,28 +227,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
-    "MOJOLEARN_C37_FUSED_ROWS=1024",
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "30c718a769aca68b2671",
-   "mode": "identical",
-   "pack": "P016",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.classical:dbscan.knn_direct=on"
     },
     {
@@ -320,6 +298,28 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
+    "MOJOLEARN_C37_FUSED_ROWS=1024",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "44461155bacbf72f2857",
+   "mode": "identical",
+   "pack": "P016",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.classical:kmeans.kmeans_conv_chunk=1+c37_fused_accumulate=on"
     }
    ],
@@ -353,27 +353,6 @@
    "key": "627c2142074635127654",
    "mode": "identical",
    "pack": "P013",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "66dde29f68881a3ca19b",
-   "mode": "identical",
-   "pack": "P015",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -473,16 +452,40 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:kmeans.idn_kmeans_centroid_fold=on"
+     "configuration": "G.classical:kmeans.idn_kmeans_centroid_fold=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "90fdd5c03550952f37b2",
+   "key": "a43e78aaff832261bb4f",
    "mode": "identical",
    "pack": "P007",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:kmeans.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
+    "MOJOLEARN_C37_FUSED_ROWS=1024",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1",
+    "MOJOLEARN_KMEANS_ROW_ASSIGN=4",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "a595c08941a5dbb5a75d",
+   "mode": "identical",
+   "pack": "P008",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -567,6 +570,27 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "dca9e265bbb73dca59a9",
+   "mode": "identical",
+   "pack": "P015",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.classical:kmeans.kmeans_conv_chunk=32"
     },
     {
@@ -604,30 +628,6 @@
    "key": "f118eb64d4051e8b8f86",
    "mode": "identical",
    "pack": "P012",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:kmeans.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
-    "MOJOLEARN_C37_FUSED_ROWS=1024",
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1",
-    "MOJOLEARN_KMEANS_ROW_ASSIGN=4",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "f9c8bcbf9cb484365a89",
-   "mode": "identical",
-   "pack": "P008",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -1411,37 +1411,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:kde.c52_pair_rows=512"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.classical:pca.PCA_COV=c23"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.more:ridge.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_C52_PAIR_ROWS=512",
-    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_CLASSICAL_PCA_COV=23",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "3ace811a246b93158109",
-   "mode": "identical",
-   "pack": "P051",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_estimators.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.classical:dbscan.dbscan_direct=on"
     },
     {
@@ -1494,16 +1463,16 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
+     "configuration": "G.classical:ols.linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "46208ef74e9c45521a02",
+   "key": "55f47c22c92e24384702",
    "mode": "identical",
-   "pack": "P055",
+   "pack": "P059",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -1514,37 +1483,38 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "5dd0bf9f60083d61e703",
+   "mode": "identical",
+   "pack": "P063",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_estimators.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
     }
    ],
    "defines": [
     "MOJOLEARN_CLASSICAL_C24_TREE4=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "5c93e7ec68fcc3dc0b79",
+   "key": "604bf46916af60b43837",
    "mode": "identical",
    "pack": "P064",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_estimators.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "5df173154a3916c33915",
-   "mode": "identical",
-   "pack": "P059",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -1581,19 +1551,48 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.all_on"
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "6d08187faf7248730452",
+   "key": "6ade89266e746a7d28d1",
    "mode": "identical",
-   "pack": "P060",
+   "pack": "P061",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_estimators.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:kde.c52_pair_rows=512"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.classical:pca.PCA_COV=c23"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.more:ridge.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_C52_PAIR_ROWS=512",
+    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_CLASSICAL_PCA_COV=23",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "6dd256285814e2d6f27c",
+   "mode": "identical",
+   "pack": "P051",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -1624,17 +1623,16 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "9c921c7446785d50c8c8",
+   "key": "9ae8855ea32598b4ae63",
    "mode": "identical",
-   "pack": "P061",
+   "pack": "P054",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -1645,17 +1643,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "b157858e0b77dd134afa",
+   "key": "9ed4e8cb9a89a496788b",
    "mode": "identical",
-   "pack": "P063",
+   "pack": "P062",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -1674,7 +1672,7 @@
     },
     {
      "arm": "A",
-     "configuration": "G.more:ridge.linear_gram_solve=on"
+     "configuration": "G.more:ridge.linear_gram_solve=off"
     },
     {
      "arm": "A",
@@ -1683,14 +1681,37 @@
    ],
    "defines": [
     "MOJOLEARN_C52_PAIR_ROWS=128",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_CLASSICAL_PCA_COV=4",
     "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "be9615b1cfc9095d3ebb",
+   "key": "b38f48890597b080ec42",
    "mode": "identical",
    "pack": "P050",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_estimators.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "b42d427e4e6a357167a1",
+   "mode": "identical",
+   "pack": "P060",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -1711,27 +1732,6 @@
    "key": "c4f5e800040e5e177821",
    "mode": "identical",
    "pack": "P057",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_estimators.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "d50149244254491985c8",
-   "mode": "identical",
-   "pack": "P062",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -1773,7 +1773,7 @@
    ],
    "key": "e14a40163a271a29bc36",
    "mode": "identical",
-   "pack": "P054",
+   "pack": "P055",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -1865,7 +1865,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.more:ridge.linear_gram_solve=on"
+     "configuration": "G.more:ridge.linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -1897,11 +1897,11 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
+     "configuration": "G.classical:ols.C24_TSQR=panel8"
     },
     {
      "arm": "B",
@@ -1917,7 +1917,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
+     "configuration": "G.classical:ols.linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -1925,19 +1925,19 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
     }
    ],
    "defines": [
@@ -2028,6 +2028,41 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.trees:gbdt-categorical.T28=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-ordered.T22=off"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.T29=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
+    "MOJOLEARN_TREES_T22_OFF=1",
+    "MOJOLEARN_TREES_T28=1",
+    "MOJOLEARN_TREES_T29=1"
+   ],
+   "key": "021b50510ebdc57e63d3",
+   "mode": "identical",
+   "pack": "P065",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.trees:gbdt-depthwise.hist_packed_gh=on+hist_warp_agg=on"
     },
     {
@@ -2081,6 +2116,89 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=pinned32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
+    "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+   ],
+   "key": "4367997104e2a46b1b15",
+   "mode": "identical",
+   "pack": "P087",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-depthwise.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-lossguide.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-multiclass.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-ordered.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-yetirank.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric-1000.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_C50_GB_PACKED=1",
+    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
+    "MOJOLEARN_TREES_HIST_PACKED_GH=1",
+    "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
+    "MOJOLEARN_TREES_HIST_WARP_AGG=1",
+    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+    "MOJOLEARN_TREES_T17_BATCH=32",
+    "MOJOLEARN_TREES_T19_DEFER=1",
+    "MOJOLEARN_TREES_T21=1",
+    "MOJOLEARN_TREES_T21_STREAMS=2",
+    "MOJOLEARN_TREES_T22_OFF=1",
+    "MOJOLEARN_TREES_T23=1",
+    "MOJOLEARN_TREES_T24=1",
+    "MOJOLEARN_TREES_T25=1",
+    "MOJOLEARN_TREES_T29=1"
+   ],
+   "key": "48a0437eb7122863e1ef",
+   "mode": "identical",
+   "pack": "P083",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=64"
     }
    ],
@@ -2091,7 +2209,7 @@
    ],
    "key": "4ad45af07317c7ec2557",
    "mode": "identical",
-   "pack": "P087",
+   "pack": "P089",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2201,6 +2319,36 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.trees:gbdt-categorical.T17_BATCH=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+    "MOJOLEARN_TREES_T17_BATCH=64",
+    "MOJOLEARN_TREES_T24=1"
+   ],
+   "key": "53a81a320d5aecabcda0",
+   "mode": "identical",
+   "pack": "P073",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.trees:gbdt-categorical.T28=sort"
     },
     {
@@ -2228,36 +2376,6 @@
    "key": "5c8f729f82f542ed50b2",
    "mode": "identical",
    "pack": "P066",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.T17_BATCH=128"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=128"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-    "MOJOLEARN_TREES_T17_BATCH=128",
-    "MOJOLEARN_TREES_T24=1"
-   ],
-   "key": "5d6da1d540d63ad5b9cc",
-   "mode": "identical",
-   "pack": "P073",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2369,41 +2487,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.T28=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.T22=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.T29=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-    "MOJOLEARN_TREES_T22=1",
-    "MOJOLEARN_TREES_T28=1",
-    "MOJOLEARN_TREES_T29=1"
-   ],
-   "key": "6cc5c1d04b5a5d6c2efa",
-   "mode": "identical",
-   "pack": "P065",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device_bpsm4"
     }
    ],
@@ -2415,27 +2498,6 @@
    "key": "7179cf180835cdc0635c",
    "mode": "identical",
    "pack": "P091",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_HIST_MULTISTAT=8",
-    "MOJOLEARN_TREES_HIST_REP_SM=0"
-   ],
-   "key": "72bf5e937633c39e7ea2",
-   "mode": "identical",
-   "pack": "P090",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2474,58 +2536,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-depthwise.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-yetirank.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric-1000.all_on"
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=pinned32"
     }
    ],
    "defines": [
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_C50_GB_PACKED=1",
-    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-    "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-    "MOJOLEARN_TREES_HIST_REP_SM=64",
-    "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-    "MOJOLEARN_TREES_T17_BATCH=64",
-    "MOJOLEARN_TREES_T19_DEFER=1",
-    "MOJOLEARN_TREES_T21=1",
-    "MOJOLEARN_TREES_T21_STREAMS=2",
-    "MOJOLEARN_TREES_T22=1",
-    "MOJOLEARN_TREES_T23=1",
-    "MOJOLEARN_TREES_T24=1",
-    "MOJOLEARN_TREES_T25=1",
-    "MOJOLEARN_TREES_T29=1"
+    "MOJOLEARN_TREES_HIST_MULTISTAT=8",
+    "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
    ],
-   "key": "80561593f05ae0d0b6ec",
+   "key": "8087ade32e4beee9f09d",
    "mode": "identical",
-   "pack": "P083",
+   "pack": "P088",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2564,10 +2585,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.HIST_REP_SM=64"
-    },
-    {
-     "arm": "A",
      "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=64"
     },
     {
@@ -2601,7 +2618,7 @@
    ],
    "key": "9823474cfdf4be1bc8e5",
    "mode": "identical",
-   "pack": "P080",
+   "pack": "P081",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2684,31 +2701,6 @@
    "binding": "bindings/_mojolearn_gbdt.mojo",
    "configurations": [
     {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.T18=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-    "MOJOLEARN_TREES_T18=1"
-   ],
-   "key": "9cf349aea28c982508a5",
-   "mode": "identical",
-   "pack": "P069",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
      "arm": "B",
      "configuration": "G.trees:gbdt-categorical.T28=on"
     },
@@ -2718,7 +2710,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-ordered.T22=on"
+     "configuration": "G.trees:gbdt-ordered.T22=off"
     },
     {
      "arm": "B",
@@ -2798,7 +2790,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=on"
+     "configuration": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=off"
     },
     {
      "arm": "B",
@@ -2870,6 +2862,18 @@
     },
     {
      "arm": "B",
+     "configuration": "G.trees:gbdt-categorical.T17_BATCH=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-ordered.T22=off+T25=on"
+    },
+    {
+     "arm": "B",
      "configuration": "G.trees:gbdt-categorical.T17_BATCH=64"
     },
     {
@@ -2878,19 +2882,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-ordered.T22=on+T25=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-categorical.T17_BATCH=128"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=128"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=on"
+     "configuration": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=off"
     },
     {
      "arm": "B",
@@ -3014,7 +3006,35 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-categorical.HIST_REP_SM=64"
+     "configuration": "G.trees:gbdt-categorical.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-lossguide.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-multiclass.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-symmetric.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=pinned32"
     },
     {
      "arm": "B",
@@ -3043,34 +3063,6 @@
     {
      "arm": "B",
      "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=64"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-lossguide.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-multiclass.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-symmetric.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=device"
     },
     {
      "arm": "B",
@@ -3162,19 +3154,19 @@
     },
     {
      "arm": "B",
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
      "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=64"
     },
     {
      "arm": "B",
      "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=64"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device"
     },
     {
      "arm": "B",
@@ -3248,6 +3240,36 @@
    "key": "a68c029dbacaa447d70b",
    "mode": "identical",
    "pack": "P092",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-categorical.T17_BATCH=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-ordered.T22=off+T25=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_T17_BATCH=32",
+    "MOJOLEARN_TREES_T22_OFF=1",
+    "MOJOLEARN_TREES_T25=1"
+   ],
+   "key": "a6c9fa29478f4b42af20",
+   "mode": "identical",
+   "pack": "P072",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -3394,50 +3416,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=device"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_HIST_REP_SM=0"
-   ],
-   "key": "ce88bea5bc9c41f24637",
-   "mode": "identical",
-   "pack": "P081",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=64"
     }
    ],
@@ -3448,7 +3426,7 @@
    ],
    "key": "dd3fe55003b124415e51",
    "mode": "identical",
-   "pack": "P088",
+   "pack": "P090",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -3459,17 +3437,44 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device"
+     "configuration": "G.trees:gbdt-categorical.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-lossguide.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-multiclass.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=pinned32"
     }
    ],
    "defines": [
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-    "MOJOLEARN_TREES_HIST_REP_SM=0"
+    "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
    ],
-   "key": "f3382911fea8cf25f7b8",
+   "key": "edf57593fe2efd456911",
    "mode": "identical",
-   "pack": "P089",
+   "pack": "P080",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -3526,26 +3531,21 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.T17_BATCH=64"
+     "configuration": "G.trees:gbdt-categorical.T18=on"
     },
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=64"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.T22=on+T25=on"
+     "configuration": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=off"
     }
    ],
    "defines": [
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_T17_BATCH=64",
-    "MOJOLEARN_TREES_T22=1",
-    "MOJOLEARN_TREES_T25=1"
+    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+    "MOJOLEARN_TREES_T18=1"
    ],
-   "key": "fd053b80a3f78090f3c6",
+   "key": "fe2544c8e5aee13efe85",
    "mode": "identical",
-   "pack": "P072",
+   "pack": "P069",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -3694,11 +3694,11 @@
    "configurations": [
     {
      "arm": "B",
-     "configuration": "G.more:ivf.ivf_direct=on"
+     "configuration": "G.more:ivf.ivf_direct=off"
     },
     {
      "arm": "B",
-     "configuration": "G.more:ivf.idn_kmeans_centroid_fold=on"
+     "configuration": "G.more:ivf.idn_kmeans_centroid_fold=off"
     },
     {
      "arm": "B",
@@ -3721,14 +3721,34 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.more:ivf.ivf_direct=on"
+     "configuration": "G.more:ivf.idn_kmeans_centroid_fold=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_IVF_DIRECT_DISTANCE=1",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "68a440b44e0364a17710",
+   "key": "89b8038f15be049a498b",
+   "mode": "identical",
+   "pack": "P099",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_ivf.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.more:ivf.ivf_direct=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "bd79a6b5a44f22469cc7",
    "mode": "identical",
    "pack": "P098",
    "runtime_reach": "NOT_VERIFIED",
@@ -3745,33 +3765,13 @@
     }
    ],
    "defines": [
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_IVF_DIRECT_DISTANCE=1",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+    "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "c05b0267a7a45fee5d07",
+   "key": "eb733ad43478b28aee37",
    "mode": "identical",
    "pack": "P100",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_ivf.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.more:ivf.idn_kmeans_centroid_fold=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "de01d9cc003fbf8fcee4",
-   "mode": "identical",
-   "pack": "P099",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -3802,16 +3802,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "189a00b9847cdb48ba3c",
+   "key": "15a3ab621f92f03de73e",
    "mode": "identical",
-   "pack": "P055",
+   "pack": "P061",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -3852,7 +3853,27 @@
    ],
    "key": "199d2b1215ca629fefca",
    "mode": "identical",
-   "pack": "P054",
+   "pack": "P055",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_linalg.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "1e8de530c12d8415d40a",
+   "mode": "identical",
+   "pack": "P059",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -3883,61 +3904,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "373ccc2b325a74b112f2",
-   "mode": "identical",
-   "pack": "P064",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_linalg.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "4ee0c3e018c2bf169d17",
+   "key": "2d63adc5cbba88f065d1",
    "mode": "identical",
    "pack": "P063",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_linalg.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "5f8c239bec4c1a553f90",
-   "mode": "identical",
-   "pack": "P060",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -4032,26 +4009,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "89037037a765bbfb2bc1",
-   "mode": "identical",
-   "pack": "P059",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_linalg.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.classical:ols.ols_one_entry=off"
     }
    ],
@@ -4091,12 +4048,35 @@
    "binding": "bindings/_mojolearn_linalg.mojo",
    "configurations": [
     {
+     "arm": "A",
+     "configuration": "G.classical:ols.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "bbff205407e24441b58d",
+   "mode": "identical",
+   "pack": "P060",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_linalg.mojo",
+   "configurations": [
+    {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
+     "configuration": "G.classical:ols.C24_TSQR=panel8"
     },
     {
      "arm": "B",
@@ -4112,7 +4092,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
+     "configuration": "G.classical:ols.linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -4120,19 +4100,19 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -4207,27 +4187,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "cc06ee6aeeecda5057a4",
-   "mode": "identical",
-   "pack": "P062",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_linalg.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.gemm:gemm.gemm_ozaki_linalg=5"
     }
    ],
@@ -4239,6 +4198,27 @@
    "key": "ccc0ff0bf3bd8c4dc844",
    "mode": "identical",
    "pack": "P107",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_linalg.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "d30b30aedd874ee262c3",
+   "mode": "identical",
+   "pack": "P062",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -4269,17 +4249,37 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "e6175affa66d4c8ae93b",
+   "key": "d6c2e962bdc6df08b506",
    "mode": "identical",
-   "pack": "P061",
+   "pack": "P054",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_linalg.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "ed9386e3b70a0ce909d4",
+   "mode": "identical",
+   "pack": "P064",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5619,14 +5619,14 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.more:gmm.idn_kmeans_centroid_fold=on"
+     "configuration": "G.more:gmm.idn_kmeans_centroid_fold=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "27b4a3d8a2d59a33cce5",
+   "key": "383b9564624cf75a9c6d",
    "mode": "identical",
    "pack": "P163",
    "runtime_reach": "NOT_VERIFIED",
@@ -5639,7 +5639,7 @@
    "configurations": [
     {
      "arm": "B",
-     "configuration": "G.more:gmm.idn_kmeans_centroid_fold=on"
+     "configuration": "G.more:gmm.idn_kmeans_centroid_fold=off"
     }
    ],
    "defines": [
@@ -9776,17 +9776,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows2048+rsvd_tsqr_ortho=on"
+     "configuration": "G.expanded:randomized-svd.all_on"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
     "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "0691859962079624dc1c",
+   "key": "08e11d5bffa06ccb3a14",
    "mode": "identical",
-   "pack": "P263",
+   "pack": "P262",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9807,6 +9807,49 @@
    "key": "0c9a0d954479d77e32d0",
    "mode": "identical",
    "pack": "P261",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_decomp.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "1e00d0f7126b9b69149e",
+   "mode": "identical",
+   "pack": "P060",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_decomp.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "1feed31c919bc6756f3c",
+   "mode": "identical",
+   "pack": "P054",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9842,6 +9885,10 @@
     {
      "arm": "A",
      "configuration": "G.classical:ols.C24_TSQR=panel8"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8"
     }
    ],
    "defines": [
@@ -9850,7 +9897,7 @@
    ],
    "key": "2c27a0fefa3d221839ae",
    "mode": "identical",
-   "pack": "P054",
+   "pack": "P055",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9861,19 +9908,58 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.all_on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "4666081cf44798d7b0f6",
+   "mode": "identical",
+   "pack": "P062",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_decomp.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "487e5f43856c35d6acf8",
+   "mode": "identical",
+   "pack": "P059",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_decomp.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "360f2ba738741bc28e66",
+   "key": "589cee2054e28ca82860",
    "mode": "identical",
-   "pack": "P060",
+   "pack": "P061",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9884,11 +9970,11 @@
    "configurations": [
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
+     "configuration": "G.classical:ols.C24_TSQR=panel8"
     },
     {
      "arm": "B",
@@ -9904,7 +9990,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
+     "configuration": "G.classical:ols.linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -9912,19 +9998,19 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -9940,11 +10026,11 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows4096"
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows2048"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8"
     },
     {
      "arm": "B",
@@ -9960,7 +10046,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows2048+rsvd_tsqr_ortho=on"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8+rsvd_tsqr_ortho=on"
     },
     {
      "arm": "B",
@@ -9973,51 +10059,6 @@
    "key": "59f5dc2e97d2a6e6782f",
    "mode": "identical",
    "pack": "B",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_decomp.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows2048"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "5fd15e16becc7a16b827",
-   "mode": "identical",
-   "pack": "P055",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_decomp.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "6d0ee7648c9c205f5d1d",
-   "mode": "identical",
-   "pack": "P064",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -10048,48 +10089,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "a050eca8e6151ccb3c8c",
-   "mode": "identical",
-   "pack": "P062",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_decomp.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:randomized-svd.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "a7e77ac6d9e0b21d8b4f",
-   "mode": "identical",
-   "pack": "P262",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_decomp.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.expanded:elliptic-envelope.C23_MCD=on"
     },
     {
@@ -10102,18 +10101,60 @@
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows4096"
     }
    ],
    "defines": [
     "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
     "MOJOLEARN_CLASSICAL_C23_MCD=1",
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "ab121bfa332b1a881b20",
+   "key": "843feab294846f49a9c6",
    "mode": "identical",
    "pack": "P258",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_decomp.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8+rsvd_tsqr_ortho=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "a7e77ac6d9e0b21d8b4f",
+   "mode": "identical",
+   "pack": "P263",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_decomp.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "bd93813bbb093eab10cf",
+   "mode": "identical",
+   "pack": "P064",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -10144,57 +10185,15 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=tree4+rsvd_tsqr_ortho=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
-    "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1",
+    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "d975c48d334a2cdf651b",
-   "mode": "identical",
-   "pack": "P264",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_decomp.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "daf5f44a5e17d600bb4c",
-   "mode": "identical",
-   "pack": "P061",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_decomp.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "ddec5076541dd8b8bd06",
+   "key": "cb231b289cc03607b9a3",
    "mode": "identical",
    "pack": "P063",
    "runtime_reach": "NOT_VERIFIED",
@@ -10207,16 +10206,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=tree4+rsvd_tsqr_ortho=on"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
+    "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "f52999a5a1f5b08f41b0",
+   "key": "d975c48d334a2cdf651b",
    "mode": "identical",
-   "pack": "P059",
+   "pack": "P264",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -11908,6 +11908,93 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.classical:kmeans.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
+    "MOJOLEARN_C37_FUSED_ROWS=1024",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1",
+    "MOJOLEARN_KMEANS_ROW_ASSIGN=4",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "50966f7b3480fd75364b",
+   "mode": "identical",
+   "pack": "P008",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:kmeans.idn_kmeans_centroid_fold=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "5127f27b5475128e25e1",
+   "mode": "identical",
+   "pack": "P007",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "77499675416be5287da0",
+   "mode": "identical",
+   "pack": "P015",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
+    "MOJOLEARN_C37_FUSED_ROWS=1024",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "88f604b2fa1d6e35c3aa",
+   "mode": "identical",
+   "pack": "P016",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.classical:kmeans.kmeans_conv_chunk=32"
     },
     {
@@ -11969,93 +12056,6 @@
    "key": "a9246882c4c64053e64f",
    "mode": "identical",
    "pack": "P017",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "ad82089711d5ceb7834c",
-   "mode": "identical",
-   "pack": "P015",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:kmeans.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
-    "MOJOLEARN_C37_FUSED_ROWS=1024",
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1",
-    "MOJOLEARN_KMEANS_ROW_ASSIGN=4",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "ae133d4b26d799de5072",
-   "mode": "identical",
-   "pack": "P008",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:kmeans.idn_kmeans_centroid_fold=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "b34bdb695b3abe3345a5",
-   "mode": "identical",
-   "pack": "P007",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
-    "MOJOLEARN_C37_FUSED_ROWS=1024",
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "bd6356e1a9cf64abf6d0",
-   "mode": "identical",
-   "pack": "P016",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -12224,7 +12224,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:kmeans.idn_kmeans_centroid_fold=on"
+     "configuration": "G.classical:kmeans.idn_kmeans_centroid_fold=off"
     },
     {
      "arm": "B",
@@ -12256,11 +12256,11 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=on"
+     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=on"
+     "configuration": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=off"
     },
     {
      "arm": "B",
@@ -13081,90 +13081,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "091055b13b106cfc3fd3",
+   "key": "07830c0388b7bc3459c6",
    "mode": "identical",
-   "pack": "P059",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_estimators.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "14299af2b180f8fc3bb8",
-   "mode": "identical",
-   "pack": "P055",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_estimators.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:kde.c52_pair_rows=512"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.classical:pca.PCA_COV=c23"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.more:ridge.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_C52_PAIR_ROWS=512",
-    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_CLASSICAL_PCA_COV=23",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "1ad432e3638a1a82153a",
-   "mode": "identical",
-   "pack": "P051",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_estimators.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "1cccd9b0265f7e1e3d38",
-   "mode": "identical",
-   "pack": "P060",
+   "pack": "P062",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -13197,6 +13124,26 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "24242c40261a3f69728a",
+   "mode": "identical",
+   "pack": "P054",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_estimators.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.classical:ols.C24_TSQR=tree4"
     }
    ],
@@ -13217,48 +13164,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "2aaac1b03bd29de4f897",
-   "mode": "identical",
-   "pack": "P064",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_estimators.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "3d360e89aeab4677b834",
-   "mode": "identical",
-   "pack": "P063",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_estimators.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.classical:ols.C24_TSQR=panel8"
     }
    ],
@@ -13268,7 +13173,7 @@
    ],
    "key": "75ac7f34d7040b880b4a",
    "mode": "identical",
-   "pack": "P054",
+   "pack": "P055",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -13279,31 +13184,27 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:kde.c52_pair_rows=128"
+     "configuration": "G.classical:kde.c52_pair_rows=512"
     },
     {
      "arm": "A",
-     "configuration": "G.classical:pca.PCA_COV=c04"
+     "configuration": "G.classical:pca.PCA_COV=c23"
     },
     {
      "arm": "A",
-     "configuration": "G.more:ridge.linear_gram_solve=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.more:tsvd.TSVD_FUSED_STATS=on"
+     "configuration": "G.more:ridge.all_on"
     }
    ],
    "defines": [
-    "MOJOLEARN_C52_PAIR_ROWS=128",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_CLASSICAL_PCA_COV=4",
-    "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1",
+    "MOJOLEARN_C52_PAIR_ROWS=512",
+    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_CLASSICAL_PCA_COV=23",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "75b006185acc206d7699",
+   "key": "7711b2bd8e4f6ab47b11",
    "mode": "identical",
-   "pack": "P050",
+   "pack": "P051",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -13400,7 +13301,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.more:ridge.linear_gram_solve=on"
+     "configuration": "G.more:ridge.linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -13432,11 +13333,11 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
+     "configuration": "G.classical:ols.C24_TSQR=panel8"
     },
     {
      "arm": "B",
@@ -13452,7 +13353,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
+     "configuration": "G.classical:ols.linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -13460,19 +13361,19 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
     }
    ],
    "defines": [
@@ -13536,6 +13437,27 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "9652764a77b65a71503b",
+   "mode": "identical",
+   "pack": "P063",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_estimators.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.classical:dbscan.dbscan_direct=on"
     },
     {
@@ -13588,27 +13510,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "9ef389446c6e23126b3b",
-   "mode": "identical",
-   "pack": "P061",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_estimators.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.classical:ols.ols_one_entry=off"
     }
    ],
@@ -13650,17 +13551,96 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
+     "configuration": "G.classical:ols.all_on"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "c17ed1eead8ae8f93761",
+   "key": "b11eb895a1d10ca48461",
    "mode": "identical",
-   "pack": "P062",
+   "pack": "P060",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_estimators.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "b3c0647cf20377eb612e",
+   "mode": "identical",
+   "pack": "P061",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_estimators.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:kde.c52_pair_rows=128"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.classical:pca.PCA_COV=c04"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.more:ridge.linear_gram_solve=off"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.more:tsvd.TSVD_FUSED_STATS=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_C52_PAIR_ROWS=128",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_CLASSICAL_PCA_COV=4",
+    "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "c14ae4f81276ca6694e2",
+   "mode": "identical",
+   "pack": "P050",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_estimators.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "c3eb949f1a5859d0c5b3",
+   "mode": "identical",
+   "pack": "P064",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -13687,6 +13667,26 @@
    "key": "c835190abcf864f860e5",
    "mode": "identical",
    "pack": "P052",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_estimators.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "e8376fa677b9a5703f9a",
+   "mode": "identical",
+   "pack": "P059",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -13814,17 +13814,31 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device"
+     "configuration": "G.trees:gbdt-categorical.T28=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-ordered.T22=off"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.T29=on"
     }
    ],
    "defines": [
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
     "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-    "MOJOLEARN_TREES_HIST_REP_SM=0"
+    "MOJOLEARN_TREES_T22_OFF=1",
+    "MOJOLEARN_TREES_T28=1",
+    "MOJOLEARN_TREES_T29=1"
    ],
-   "key": "17b88aae646a78e57ca2",
+   "key": "2873b3a4a2087712064e",
    "mode": "identical",
-   "pack": "P089",
+   "pack": "P065",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -13871,36 +13885,6 @@
    "key": "2a37457ad6ef07f68407",
    "mode": "identical",
    "pack": "P067",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.T17_BATCH=64"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=64"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.T22=on+T25=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_T17_BATCH=64",
-    "MOJOLEARN_TREES_T22=1",
-    "MOJOLEARN_TREES_T25=1"
-   ],
-   "key": "2b03e3e0a645adb165d8",
-   "mode": "identical",
-   "pack": "P072",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -14003,36 +13987,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.T17_BATCH=128"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=128"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-    "MOJOLEARN_TREES_T17_BATCH=128",
-    "MOJOLEARN_TREES_T24=1"
-   ],
-   "key": "38d86a10b673317b4dab",
-   "mode": "identical",
-   "pack": "P073",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.trees:gbdt-depthwise.hist_packed_gh=on+hist_warp_agg=on"
     },
     {
@@ -14056,31 +14010,6 @@
    "key": "492a5c6ba8b4fef7e7d3",
    "mode": "identical",
    "pack": "P085",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.T18=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-    "MOJOLEARN_TREES_T18=1"
-   ],
-   "key": "4bd48dd8ab8528741e96",
-   "mode": "identical",
-   "pack": "P069",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -14129,7 +14058,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-ordered.T22=on"
+     "configuration": "G.trees:gbdt-ordered.T22=off"
     },
     {
      "arm": "B",
@@ -14209,7 +14138,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=on"
+     "configuration": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=off"
     },
     {
      "arm": "B",
@@ -14281,6 +14210,18 @@
     },
     {
      "arm": "B",
+     "configuration": "G.trees:gbdt-categorical.T17_BATCH=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-ordered.T22=off+T25=on"
+    },
+    {
+     "arm": "B",
      "configuration": "G.trees:gbdt-categorical.T17_BATCH=64"
     },
     {
@@ -14289,19 +14230,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-ordered.T22=on+T25=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-categorical.T17_BATCH=128"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=128"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=on"
+     "configuration": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=off"
     },
     {
      "arm": "B",
@@ -14425,7 +14354,35 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-categorical.HIST_REP_SM=64"
+     "configuration": "G.trees:gbdt-categorical.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-lossguide.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-multiclass.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-symmetric.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=pinned32"
     },
     {
      "arm": "B",
@@ -14454,34 +14411,6 @@
     {
      "arm": "B",
      "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=64"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-lossguide.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-multiclass.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-symmetric.HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=device"
     },
     {
      "arm": "B",
@@ -14573,19 +14502,19 @@
     },
     {
      "arm": "B",
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "B",
      "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=64"
     },
     {
      "arm": "B",
      "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=64"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device"
     },
     {
      "arm": "B",
@@ -14638,6 +14567,96 @@
    "key": "55a19d7e82720a5d332b",
    "mode": "identical",
    "pack": "B",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-categorical.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-lossguide.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-multiclass.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric.HIST_REP_SM=pinned32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=pinned32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+   ],
+   "key": "58b05dd38493865b9ecd",
+   "mode": "identical",
+   "pack": "P080",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=pinned32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_HIST_MULTISTAT=8",
+    "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+   ],
+   "key": "6563d360bb9794f77b8c",
+   "mode": "identical",
+   "pack": "P088",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=pinned32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
+    "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+   ],
+   "key": "6ca0377257357d23894e",
+   "mode": "identical",
+   "pack": "P087",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -14721,52 +14740,21 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device"
+     "configuration": "G.trees:gbdt-categorical.T18=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=off"
     }
    ],
    "defines": [
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_HIST_MULTISTAT=8",
-    "MOJOLEARN_TREES_HIST_REP_SM=0"
+    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+    "MOJOLEARN_TREES_T18=1"
    ],
-   "key": "86823d8be0d93014e01b",
+   "key": "946b7bd88834bde049a0",
    "mode": "identical",
-   "pack": "P090",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.T28=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.hist_multistat=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.T22=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.T29=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-    "MOJOLEARN_TREES_T22=1",
-    "MOJOLEARN_TREES_T28=1",
-    "MOJOLEARN_TREES_T29=1"
-   ],
-   "key": "9390cb806394c47f7eb7",
-   "mode": "identical",
-   "pack": "P065",
+   "pack": "P069",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -14815,7 +14803,7 @@
    ],
    "key": "a1e64280934ee7020b95",
    "mode": "identical",
-   "pack": "P088",
+   "pack": "P090",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -14899,6 +14887,36 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.trees:gbdt-categorical.T17_BATCH=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-ordered.T22=off+T25=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_T17_BATCH=32",
+    "MOJOLEARN_TREES_T22_OFF=1",
+    "MOJOLEARN_TREES_T25=1"
+   ],
+   "key": "b717dd7b70e07430205a",
+   "mode": "identical",
+   "pack": "P072",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device_bpsm4"
     }
    ],
@@ -14954,6 +14972,68 @@
    "key": "bfb779b905029c7e7b9c",
    "mode": "identical",
    "pack": "P078",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-depthwise.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-lossguide.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-multiclass.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-ordered.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-yetirank.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric-1000.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_C50_GB_PACKED=1",
+    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
+    "MOJOLEARN_TREES_HIST_PACKED_GH=1",
+    "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
+    "MOJOLEARN_TREES_HIST_WARP_AGG=1",
+    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+    "MOJOLEARN_TREES_T17_BATCH=32",
+    "MOJOLEARN_TREES_T19_DEFER=1",
+    "MOJOLEARN_TREES_T21=1",
+    "MOJOLEARN_TREES_T21_STREAMS=2",
+    "MOJOLEARN_TREES_T22_OFF=1",
+    "MOJOLEARN_TREES_T23=1",
+    "MOJOLEARN_TREES_T24=1",
+    "MOJOLEARN_TREES_T25=1",
+    "MOJOLEARN_TREES_T29=1"
+   ],
+   "key": "bff22d11152e347f70cb",
+   "mode": "identical",
+   "pack": "P083",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -15036,54 +15116,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric.HIST_REP_SM=device"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=device"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_HIST_REP_SM=0"
-   ],
-   "key": "c6b8edc7a4da98a0ab7d",
-   "mode": "identical",
-   "pack": "P081",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-categorical.HIST_REP_SM=64"
-    },
-    {
-     "arm": "A",
      "configuration": "G.trees:gbdt-depthwise.HIST_REP_SM=64"
     },
     {
@@ -15117,69 +15149,7 @@
    ],
    "key": "c84d17ec56eef12c6202",
    "mode": "identical",
-   "pack": "P080",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-depthwise.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-multiclass.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-ordered.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-yetirank.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric-1000.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_C50_GB_PACKED=1",
-    "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-    "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-    "MOJOLEARN_TREES_HIST_REP_SM=64",
-    "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-    "MOJOLEARN_TREES_T17_BATCH=64",
-    "MOJOLEARN_TREES_T19_DEFER=1",
-    "MOJOLEARN_TREES_T21=1",
-    "MOJOLEARN_TREES_T21_STREAMS=2",
-    "MOJOLEARN_TREES_T22=1",
-    "MOJOLEARN_TREES_T23=1",
-    "MOJOLEARN_TREES_T24=1",
-    "MOJOLEARN_TREES_T25=1",
-    "MOJOLEARN_TREES_T29=1"
-   ],
-   "key": "c948ffd0f51ecdd4e00d",
-   "mode": "identical",
-   "pack": "P083",
+   "pack": "P081",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -15200,7 +15170,37 @@
    ],
    "key": "c9e92bafb6825b99cf32",
    "mode": "identical",
-   "pack": "P087",
+   "pack": "P089",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-categorical.T17_BATCH=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-lossguide.T17_BATCH=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+    "MOJOLEARN_TREES_T17_BATCH=64",
+    "MOJOLEARN_TREES_T24=1"
+   ],
+   "key": "cf3ea1d2f7ac964d32a9",
+   "mode": "identical",
+   "pack": "P073",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -15415,35 +15415,14 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.more:ivf.all_on"
+     "configuration": "G.more:ivf.idn_kmeans_centroid_fold=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_IVF_DIRECT_DISTANCE=1",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "7f34951597a2ec60178b",
-   "mode": "identical",
-   "pack": "P100",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_ivf.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.more:ivf.idn_kmeans_centroid_fold=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "84412d52e05210ec062a",
+   "key": "470ec8849f906aaf868a",
    "mode": "identical",
    "pack": "P099",
    "runtime_reach": "NOT_VERIFIED",
@@ -15455,12 +15434,32 @@
    "binding": "bindings/_mojolearn_ivf.mojo",
    "configurations": [
     {
+     "arm": "A",
+     "configuration": "G.more:ivf.ivf_direct=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "50b4cdaea030b67f0844",
+   "mode": "identical",
+   "pack": "P098",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_ivf.mojo",
+   "configurations": [
+    {
      "arm": "B",
-     "configuration": "G.more:ivf.ivf_direct=on"
+     "configuration": "G.more:ivf.ivf_direct=off"
     },
     {
      "arm": "B",
-     "configuration": "G.more:ivf.idn_kmeans_centroid_fold=on"
+     "configuration": "G.more:ivf.idn_kmeans_centroid_fold=off"
     },
     {
      "arm": "B",
@@ -15483,16 +15482,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.more:ivf.ivf_direct=on"
+     "configuration": "G.more:ivf.all_on"
     }
    ],
    "defines": [
-    "MOJOLEARN_IVF_DIRECT_DISTANCE=1",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+    "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "f1bdd1eaa5ffedf81117",
+   "key": "b209e7c346e3ff5f742a",
    "mode": "identical",
-   "pack": "P098",
+   "pack": "P100",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -15523,16 +15523,19 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=panel8"
+     "configuration": "G.classical:ols.all_on"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "023fced6220a31863b88",
+   "key": "01d0802d97c6ba794e3f",
    "mode": "identical",
-   "pack": "P054",
+   "pack": "P060",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -15543,17 +15546,16 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
+    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "0d114d3246870bf85244",
+   "key": "023fced6220a31863b88",
    "mode": "identical",
-   "pack": "P061",
+   "pack": "P055",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -15604,29 +15606,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "29cdd5eb748bb959e613",
-   "mode": "identical",
-   "pack": "P060",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_linalg.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.classical:ols.C24_TSQR=tree4"
     }
    ],
@@ -15647,17 +15626,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "367257cc18b8f9a28d4e",
+   "key": "4001df3f05c542e4e0c7",
    "mode": "identical",
-   "pack": "P064",
+   "pack": "P062",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -15692,26 +15671,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "4e14b75e7ddba2eb8440",
-   "mode": "identical",
-   "pack": "P059",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_linalg.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.gemm:gemm.gemm_contract_leaf=all256"
     }
    ],
@@ -15732,16 +15691,16 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "54fbd5fdade3c0c5ceee",
+   "key": "5312a7f801bf8fad76f2",
    "mode": "identical",
-   "pack": "P055",
+   "pack": "P054",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -15752,11 +15711,11 @@
    "configurations": [
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
+     "configuration": "G.classical:ols.C24_TSQR=panel8"
     },
     {
      "arm": "B",
@@ -15772,7 +15731,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
+     "configuration": "G.classical:ols.linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -15780,19 +15739,19 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -15888,6 +15847,68 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.classical:ols.linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "6d60a3f8b69895c868e7",
+   "mode": "identical",
+   "pack": "P059",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_linalg.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "6d74bd75e8b3b70ab7b4",
+   "mode": "identical",
+   "pack": "P064",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_linalg.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "6ea0bd0596b44472870e",
+   "mode": "identical",
+   "pack": "P061",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_linalg.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.classical:ols.ols_one_entry=off"
     }
    ],
@@ -15898,6 +15919,27 @@
    "key": "6ed4ec3231724e1d40f7",
    "mode": "identical",
    "pack": "P057",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_linalg.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "87a210ca2469fa1848f7",
+   "mode": "identical",
+   "pack": "P063",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -15959,48 +16001,6 @@
    "key": "b84f632e7a6d6c38756f",
    "mode": "identical",
    "pack": "P105",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_linalg.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "ee3e932961063de873ce",
-   "mode": "identical",
-   "pack": "P062",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_linalg.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "f0cd899eea76e871509f",
-   "mode": "identical",
-   "pack": "P063",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17340,7 +17340,7 @@
    "configurations": [
     {
      "arm": "B",
-     "configuration": "G.more:gmm.idn_kmeans_centroid_fold=on"
+     "configuration": "G.more:gmm.idn_kmeans_centroid_fold=off"
     }
    ],
    "defines": [
@@ -17359,14 +17359,14 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.more:gmm.idn_kmeans_centroid_fold=on"
+     "configuration": "G.more:gmm.idn_kmeans_centroid_fold=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
+    "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "8573671da200764cc879",
+   "key": "d19d38d5b0e7b189af80",
    "mode": "identical",
    "pack": "P163",
    "runtime_reach": "NOT_VERIFIED",
@@ -21497,16 +21497,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.ols_one_entry=off"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
+    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "0b0e3ae65f578f1e8039",
+   "key": "07d2454dd3aa31dff906",
    "mode": "identical",
-   "pack": "P057",
+   "pack": "P063",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21517,16 +21518,16 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
+     "configuration": "G.classical:ols.ols_one_entry=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "25355ce12564558c0911",
+   "key": "0b0e3ae65f578f1e8039",
    "mode": "identical",
-   "pack": "P059",
+   "pack": "P057",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21557,20 +21558,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows2048"
+     "configuration": "G.expanded:randomized-svd.all_on"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "30d9b5843f3a99082080",
+   "key": "5724af16daeb26dc8ac9",
    "mode": "identical",
-   "pack": "P055",
+   "pack": "P262",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21581,30 +21579,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:elliptic-envelope.C23_MCD=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:lu-solve.c14_group_rhs=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:min-cov-det.C23_MCD=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8"
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
-    "MOJOLEARN_CLASSICAL_C23_MCD=1",
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "52ed50d1c7a774049f6c",
+   "key": "796472069c1b9f9a6140",
    "mode": "identical",
-   "pack": "P258",
+   "pack": "P061",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21615,17 +21600,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "7bb5cbcde039f3ca908d",
+   "key": "7a56f4e40416989b0b5d",
    "mode": "identical",
-   "pack": "P064",
+   "pack": "P062",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21641,14 +21626,54 @@
    ],
    "defines": [
     "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "921ad9c8c15e4ca0c133",
+   "key": "93ef4f25e8a2b39e0b41",
    "mode": "identical",
    "pack": "P060",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_decomp.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.linear_gram_solve=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "95ae08148916ef1963a0",
+   "mode": "identical",
+   "pack": "P059",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_decomp.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "96ee46496c3a9eac9458",
+   "mode": "identical",
+   "pack": "P054",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21683,28 +21708,11 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows2048+rsvd_tsqr_ortho=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-    "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "9d3c3bcc1e5b06ccdca8",
-   "mode": "identical",
-   "pack": "P263",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_decomp.mojo",
-   "configurations": [
+     "configuration": "G.classical:ols.C24_TSQR=panel8"
+    },
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=panel8"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8"
     }
    ],
    "defines": [
@@ -21713,7 +21721,7 @@
    ],
    "key": "aba34ad4ae975be1a8f2",
    "mode": "identical",
-   "pack": "P054",
+   "pack": "P055",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21744,17 +21752,17 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C24_TREE4=1",
+    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "ca3213e63811e5386d62",
+   "key": "c986cb0290ed99703a24",
    "mode": "identical",
-   "pack": "P062",
+   "pack": "P064",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21765,7 +21773,7 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:randomized-svd.all_on"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8+rsvd_tsqr_ortho=on"
     }
    ],
    "defines": [
@@ -21775,7 +21783,7 @@
    ],
    "key": "cdbad9f5ca3ca2568606",
    "mode": "identical",
-   "pack": "P262",
+   "pack": "P263",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21786,38 +21794,30 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
-    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "ef33aa430b20ca2eee8d",
-   "mode": "identical",
-   "pack": "P061",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_decomp.mojo",
-   "configurations": [
+     "configuration": "G.expanded:elliptic-envelope.C23_MCD=on"
+    },
     {
      "arm": "A",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
+     "configuration": "G.expanded:lu-solve.c14_group_rhs=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:min-cov-det.C23_MCD=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows4096"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-    "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+    "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+    "MOJOLEARN_CLASSICAL_C23_MCD=1",
+    "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "efab44a140f5e1a56ad0",
+   "key": "d54562e9bc60930f3ebc",
    "mode": "identical",
-   "pack": "P063",
+   "pack": "P258",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -21828,11 +21828,11 @@
    "configurations": [
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048"
+     "configuration": "G.classical:ols.C24_TSQR=panel8"
     },
     {
      "arm": "B",
@@ -21848,7 +21848,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.linear_gram_solve=on"
+     "configuration": "G.classical:ols.linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -21856,19 +21856,19 @@
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "configuration": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     },
     {
      "arm": "B",
-     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "configuration": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
     },
     {
      "arm": "B",
@@ -21884,11 +21884,11 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows4096"
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows2048"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8"
     },
     {
      "arm": "B",
@@ -21904,7 +21904,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:randomized-svd.C24_TSQR=rows2048+rsvd_tsqr_ortho=on"
+     "configuration": "G.expanded:randomized-svd.C24_TSQR=panel8+rsvd_tsqr_ortho=on"
     },
     {
      "arm": "B",
