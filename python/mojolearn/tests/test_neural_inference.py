@@ -91,7 +91,10 @@ def test_binding_exports_no_training_entry(binding):
                      "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
                      "embedding_forward", "rms_norm_forward", "linear_forward",
                      # numeric_profile="fixed15_v1" on the CPU route (lane/lowbit-blocks)
-                     "transformer_forward_int15"}, names
+                     "transformer_forward_int15",
+                     # the arithmetic profile a checkpoint is admitted against
+                     # (neural_inference.py; the IDENTICAL toggle suffix)
+                     "neural_arithmetic_profile"}, names
     # the decode cache is here (lane/stateful-cpu-decoding); training is not
     assert not [n for n in names if "backward" in n or "loss" in n or "optim" in n
                 or n.endswith("_fit") or "train" in n], names
