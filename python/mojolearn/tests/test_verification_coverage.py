@@ -333,14 +333,19 @@ def test_no_lane_reports_an_admission_the_table_cannot_support():
     table = vr.load_table()
     report = coverage.inventory(va.load_harness(), table, 'cpu')
     strict = dict(min_repeats=2, input_witness_required=True, property_protocol_required=True)
-    assert report['reference_admission_policy'] == strict
+    # The shipped table is now built under the two-witness policy
+    # (`vr.ADMISSION_POLICY`: every cell fitted once, a second device class
+    # or a second fit agreeing); the report must read exactly what the table
+    # carries, and the table carries one of the two policies this file knows.
+    assert report['reference_admission_policy'] == table['admission_policy']
+    assert table['admission_policy'] in (strict, vr.ADMISSION_POLICY)
     # the lanes the scoped path admitted onto the old legacy base, and one
     # (`ols`) that was legacy at the time: each reads exactly the policy the
     # table carries for it. Those without a lane entry came out of the strict
     # global build; ivf-euclidean was re-admitted on 2026-09-20 (292143f3a,
     # three-vendor agreement) under the two-witness policy.
     for lane in ('embedding', 'embedding-sort', 'ivf-euclidean', 'ols'):
-        carried = table.get('lane_admission', {}).get(lane, {}).get('policy', strict)
+        carried = table.get('lane_admission', {}).get(lane, {}).get('policy', table['admission_policy'])
         assert report['lanes'][lane]['reference_admission']['policy'] == carried, lane
         assert report['lanes'][lane]['status'] == 'available', lane
     # and nothing anywhere claims a policy the table does not carry
