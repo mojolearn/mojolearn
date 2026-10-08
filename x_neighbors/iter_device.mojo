@@ -47,7 +47,7 @@ from std.sys.compile import is_defined
 from std.python import PythonObject
 from x_neighbors.nan_cells_device import (
     nan_cells_device, nan_group_sum_kernel, nan_top_scan_kernel, nan_down_scan_kernel,
-    NC_TPB, NC_PER, NC_CHUNK, NC_SMEM_FITS,
+    NC_TPB, NC_PER, NC_CHUNK, NC_SMEM_FITS, nan_colmiss_kernel, NC_RB,
 )
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
@@ -1313,7 +1313,12 @@ def op_knn_impute_tiled(
     n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int,
 ) raises:
     """`knn_impute_cells` with the fit rows staged per block; d above
-    IMP_MAX_D takes the per-cell item kernel."""
+    IMP_MAX_D takes the per-cell item kernel. Default: the row pass
+    `_op_knn_impute_rows` (one distance pass per query row, any d)."""
+    comptime if IMR_ROWDIST:
+        if nc > 0:
+            _op_knn_impute_rows(cells, x, fx, res, n, m, d, k, weights, nc)
+        return
     if d > IMP_MAX_D:
         op_knn_impute_cells(cells, x, fx, res, n, m, d, k, weights, nc)
         return
@@ -1563,6 +1568,285 @@ def knn_impute_split_kernel(
                 bi.unsafe_store(s, best_j)
                 head[best_u] = head[best_u] + 1
         knn_impute_finish(t, fx, bd, bi, res, m, d, k, Int(weights_), total)
+
+
+# ============================================================================
+# KNNImputer: ONE DISTANCE PASS PER QUERY ROW (lane gap-small-members,
+# 2026-10-08, plan docs/plans/gaps-2026-10-08.md section 11). The cell
+# kernels above recompute the row-to-donor distance once per MISSING CELL:
+# a row with three missing cells scans the m fit rows x d features three
+# times, one thread at a time (one-thread-per-cell, 2,331 ms on the L40S
+# board against 23 ms). Here a block takes IMR_G query rows that have a
+# missing cell, computes the IMR_G x IMR_JT distance tile of those rows
+# against IMR_JT fit rows in registers (the knn_sq_tiled2_kernel layout:
+# features staged IMR_FC at a time, each thread IMR_R x IMR_R pairs), and
+# then every missing cell of those rows offers the tile's donors to its
+# list. Bits: each pair's distance is `knn_impute_item`'s statements (the
+# masked squared differences folded over f ascending by identical_mul_add,
+# the present count, the d / present scale, the sqrt) on the same values,
+# and each cell takes the donors j ascending through the item's strict-<
+# insertion, so the k smallest (distance, donor index) pairs, ties to the
+# lower index: the same list and the same result as the item and the host
+# column. The donor count of cell (r, c) is m minus the NaN count of fit
+# column c (an exact integer count). No fold depends on the launch
+# geometry, the SM count or the warp width. The row list is compacted by
+# an atomic counter, so its ORDER varies run to run and vendor to vendor;
+# each cell's output depends only on its own row and the fit data, never
+# on its slot, so the output bits do not. No dimension rule: any d (the
+# features are chunked), any k (the lists live in the cell's best_d /
+# best_i scratch, as in knn_sq_tiled2_kernel). Tile sizes come from the
+# threadgroup page (IMR_SMEM_BYTES under every column's limit; the fits gate
+# keeps the cell kernels where it does not fit).
+# -D MOJOLEARN_XN_IMPUTE_ROWDIST_OFF restores the per-cell kernels.
+# ============================================================================
+comptime IMR_G = 64
+comptime IMR_JT = 64
+comptime IMR_FC = 16
+comptime IMR_TPB = 256
+#: a thread's register block: IMR_R query rows by IMR_R fit rows (16 x 16 threads)
+comptime IMR_R = 4
+comptime IMR_XS = IMR_FC + 1  # padded rows (bank spread)
+comptime IMR_SMEM_BYTES = 4 * (IMR_G * IMR_XS + IMR_JT * IMR_XS + IMR_G * (IMR_JT + 1) + 4 * IMR_G)
+comptime IMR_ROWDIST = (not is_defined["MOJOLEARN_XN_IMPUTE_ROWDIST_OFF"]()
+                        and lib_smem_page_fits_for[TARGET_COLUMN, IMR_SMEM_BYTES]())
+
+
+def knn_impute_rows_head_kernel(cells: IP, rq: IP, rc: IP, counter: IP, d_: Int64, nc_: Int64):
+    """Thread per missing cell (cell ids ascending, so a row's cells are one
+    run): the first cell of each row takes a slot of the row list and
+    stores its run (first cell, count). Slot order is the atomic's."""
+    var d = Int(d_)
+    var nc = Int(nc_)
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if q >= nc:
+        return
+    var r = Int(cells.unsafe_load(q)) // d
+    if q > 0 and Int(cells.unsafe_load(q - 1)) // d == r:
+        return
+    var u = q + 1
+    while u < nc and Int(cells.unsafe_load(u)) // d == r:
+        u += 1
+    var slot = Int(Atomic[DType.int32].fetch_add(counter, Int32(1)))
+    rq.unsafe_store(slot, Int32(q))
+    rc.unsafe_store(slot, Int32(u - q))
+
+
+def knn_impute_rows_kernel(
+    cells: IP, rq: IP, rc: IP, counter: IP, colmiss: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    m_: Int64, d_: Int64, k_: Int64, weights_: Int64,
+):
+    """Block per IMR_G slots of the row list: the rows' distance tiles to
+    the fit rows, IMR_JT at a time, then each missing cell of the rows
+    (cell e of the block to thread e % IMR_TPB, fixed for the whole scan)
+    offers the tile's donors ascending; the tail is `knn_impute_finish`."""
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var tid = Int(thread_idx.x)
+    var s0 = Int(block_idx.x) * IMR_G
+    var nrows = Int(counter.unsafe_load(0))
+    if s0 >= nrows:
+        return
+    var G = min(IMR_G, nrows - s0)
+    var xs = stack_allocation[IMR_G * IMR_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var fs = stack_allocation[IMR_JT * IMR_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var dt = stack_allocation[IMR_G * (IMR_JT + 1), Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var rq_s = stack_allocation[IMR_G, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var rc_s = stack_allocation[IMR_G, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var rr_s = stack_allocation[IMR_G, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var ro_s = stack_allocation[IMR_G, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    if tid < G:
+        var q0 = Int(rq.unsafe_load(s0 + tid))
+        rq_s[tid] = Int32(q0)
+        rc_s[tid] = rc.unsafe_load(s0 + tid)
+        rr_s[tid] = Int32(Int(cells.unsafe_load(q0)) // d)
+    barrier()
+    if tid < G:
+        # the slot's first cell within the block: the counts of the slots before it
+        var o = 0
+        for u in range(tid):
+            o += Int(rc_s[u])
+        ro_s[tid] = Int32(o)
+    barrier()
+    var n_cells = Int(ro_s[G - 1]) + Int(rc_s[G - 1])
+    var inf = _bc[DType.float32](UInt32(0x7F800000))
+    var qnan = _bc[DType.float32](UInt32(0x7FC00000))
+    # seed this thread's cells' lists
+    var e = tid
+    while e < n_cells:
+        var lo = 0
+        var hi = G - 1
+        while lo < hi:
+            var mid = (lo + hi + 1) // 2
+            if Int(ro_s[mid]) <= e:
+                lo = mid
+            else:
+                hi = mid - 1
+        var t = Int(cells.unsafe_load(Int(rq_s[lo]) + e - Int(ro_s[lo])))
+        for s in range(k):
+            best_d.unsafe_store(t * k + s, inf)
+            best_i.unsafe_store(t * k + s, Int32(-1))
+        e += IMR_TPB
+    var ta = tid // 16
+    var tb = tid - ta * 16
+    var j0 = 0
+    while j0 < m:
+        var rows = min(IMR_JT, m - j0)
+        var acc = InlineArray[Float32, IMR_R * IMR_R](fill=Float32(0))
+        var pres = InlineArray[Int, IMR_R * IMR_R](fill=0)
+        var f0 = 0
+        while f0 < d:
+            var fc = min(IMR_FC, d - f0)
+            var q = tid
+            while q < IMR_G * IMR_FC:
+                var g = q // IMR_FC
+                var f = q - g * IMR_FC
+                xs[g * IMR_XS + f] = x.unsafe_load(Int(rr_s[g]) * d + f0 + f) if (g < G and f < fc) else Float32(0)
+                q += IMR_TPB
+            q = tid
+            while q < IMR_JT * IMR_FC:
+                var jr = q // IMR_FC
+                var f = q - jr * IMR_FC
+                fs[jr * IMR_XS + f] = fx.unsafe_load((j0 + jr) * d + f0 + f) if (jr < rows and f < fc) else Float32(0)
+                q += IMR_TPB
+            barrier()
+            for f in range(fc):
+                var xv = InlineArray[Float32, IMR_R](fill=Float32(0))
+                var yv = InlineArray[Float32, IMR_R](fill=Float32(0))
+                comptime for i in range(IMR_R):
+                    xv[i] = xs[(ta + 16 * i) * IMR_XS + f]
+                    yv[i] = fs[(tb + 16 * i) * IMR_XS + f]
+                comptime for i in range(IMR_R):
+                    comptime for jj in range(IMR_R):
+                        var a = xv[i]
+                        var b = yv[jj]
+                        # knn_impute_item: a NaN on either side skips the feature
+                        if a == a and b == b:
+                            pres[i * IMR_R + jj] += 1
+                            var df = _sub(a, b)
+                            acc[i * IMR_R + jj] = ftz(identical_mul_add(df, df, acc[i * IMR_R + jj]))
+            barrier()
+            f0 += IMR_FC
+        comptime for i in range(IMR_R):
+            comptime for jj in range(IMR_R):
+                var p = pres[i * IMR_R + jj]
+                # no feature present on both sides: no finite distance, never
+                # taken (NaN < worst is false), as the item's `continue`
+                var v = qnan
+                if p != 0:
+                    var sq = ftz(identical_mul(ftz(identical_div(acc[i * IMR_R + jj], Float32(p))), Float32(d)))
+                    v = ftz(identical_sqrt(sq))
+                dt[(ta + 16 * i) * (IMR_JT + 1) + tb + 16 * jj] = v
+        barrier()
+        e = tid
+        while e < n_cells:
+            var lo = 0
+            var hi = G - 1
+            while lo < hi:
+                var mid = (lo + hi + 1) // 2
+                if Int(ro_s[mid]) <= e:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            var t = Int(cells.unsafe_load(Int(rq_s[lo]) + e - Int(ro_s[lo])))
+            var c = t - Int(rr_s[lo]) * d
+            var bd = best_d + t * k
+            var bi = best_i + t * k
+            var worst = bd.unsafe_load(k - 1)
+            for bb in range(rows):
+                var j = j0 + bb
+                var dv = fx.unsafe_load(j * d + c)
+                if dv != dv:
+                    continue
+                var v = dt[lo * (IMR_JT + 1) + bb]
+                if not (v < worst):
+                    continue
+                var s = k - 1
+                while s > 0 and v < bd.unsafe_load(s - 1):
+                    bd.unsafe_store(s, bd.unsafe_load(s - 1))
+                    bi.unsafe_store(s, bi.unsafe_load(s - 1))
+                    s -= 1
+                bd.unsafe_store(s, v)
+                bi.unsafe_store(s, Int32(j))
+                worst = bd.unsafe_load(k - 1)
+            e += IMR_TPB
+        barrier()
+        j0 += rows
+    e = tid
+    while e < n_cells:
+        var lo = 0
+        var hi = G - 1
+        while lo < hi:
+            var mid = (lo + hi + 1) // 2
+            if Int(ro_s[mid]) <= e:
+                lo = mid
+            else:
+                hi = mid - 1
+        var t = Int(cells.unsafe_load(Int(rq_s[lo]) + e - Int(ro_s[lo])))
+        var c = t - Int(rr_s[lo]) * d
+        # the item's donor count: the fit rows with column c present
+        var n_donors = m - Int(colmiss.unsafe_load(c))
+        knn_impute_finish(t, fx, best_d + t * k, best_i + t * k, res, m, d, k, Int(weights_), n_donors)
+        e += IMR_TPB
+
+
+def _op_knn_impute_rows(
+    cells: Int, x: Int, fx: Int, res: Int,
+    n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int,
+) raises:
+    """`op_knn_impute_tiled` by the row pass above: x, the fit rows and the
+    cell list uploaded once, five launches, one download, one sync."""
+    var ctx = xn_ctx()
+    var d_cells = _buf_i(ctx, cells, nc, True)
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_fx = _buf(ctx, fx, m * d, True)
+    var d_bd = _buf(ctx, 0, n * d * k, False)
+    var d_bi = _buf_i(ctx, 0, n * d * k, False)
+    var d_res = _buf(ctx, res, n * d, True)
+    var d_cm = _buf_i(ctx, 0, d, False)
+    var d_rq = _buf_i(ctx, 0, nc, False)
+    var d_rc = _buf_i(ctx, 0, nc, False)
+    var d_cnt = _buf_i(ctx, 0, 1, False)
+    d_cm.enqueue_fill(Int32(0))
+    d_cnt.enqueue_fill(Int32(0))
+    if m > 0 and d > 0:
+        var nrb = (m + NC_RB - 1) // NC_RB
+        var threads = nrb * d
+        ctx.enqueue_function[nan_colmiss_kernel](d_fx.unsafe_ptr(), d_cm.unsafe_ptr(), Int64(m), Int64(d),
+                                                 grid_dim=(threads + NC_TPB - 1) // NC_TPB, block_dim=NC_TPB)
+    ctx.enqueue_function[knn_impute_rows_head_kernel](
+        d_cells.unsafe_ptr(), d_rq.unsafe_ptr(), d_rc.unsafe_ptr(), d_cnt.unsafe_ptr(), Int64(d), Int64(nc),
+        grid_dim=(nc + IMR_TPB - 1) // IMR_TPB, block_dim=IMR_TPB,
+    )
+    # at most min(n, nc) rows have a missing cell; blocks past the list's
+    # count (read on the device) return at once
+    var max_rows = min(n, nc)
+    ctx.enqueue_function[knn_impute_rows_kernel](
+        d_cells.unsafe_ptr(), d_rq.unsafe_ptr(), d_rc.unsafe_ptr(), d_cnt.unsafe_ptr(), d_cm.unsafe_ptr(),
+        d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(), d_res.unsafe_ptr(),
+        Int64(m), Int64(d), Int64(k), Int64(weights),
+        grid_dim=(max_rows + IMR_G - 1) // IMR_G, block_dim=IMR_TPB,
+    )
+    comptime if XN_IMPUTE_TIE_MEAN:
+        if weights == 0 and d <= IMP_MAX_D:
+            ctx.enqueue_function[knn_impute_tie_mean_kernel](
+                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+            )
+    _down(ctx, d_res, res, n * d)
+    ctx.synchronize()
+    _ = d_cells^
+    _ = d_x^
+    _ = d_fx^
+    _ = d_bd^
+    _ = d_bi^
+    _ = d_res^
+    _ = d_cm^
+    _ = d_rq^
+    _ = d_rc^
+    _ = d_cnt^
+    _ = ctx^
 
 
 # ============================================================================
