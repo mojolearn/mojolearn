@@ -198,6 +198,13 @@ class FakeByteLM:
     def byte_lm_profile(self):
         return self.profile
 
+    def byte_lm_arithmetic_suffix(self):
+        # The real binding exports this (bindings/_mojolearn_byte_lm.mojo,
+        # neural_arithmetic_suffix): the IDENTICAL toggle suffix that the
+        # Python layer appends to every expected profile. A default build
+        # (no toggle defines) has the empty suffix.
+        return ''
+
     def byte_lm_run(self, addresses, params):
         assert len(addresses) == 11
         assert len(params) == 12
@@ -258,7 +265,14 @@ def host(monkeypatch):
         monkeypatch.setitem(_buffer._NATIVE, key, finite)
     monkeypatch.setattr(impl._backend, 'default_mode', lambda: 'identical')
     monkeypatch.setattr(impl._backend, 'numeric_mode', lambda: 'identical')
-    def binding(name, mode):
+    real_binding = impl._backend.binding
+
+    def binding(name, mode='identical'):
+        # The base binding `_mojolearn` serves the host helpers every Array
+        # reduction calls (`reduce_stat`, `_buffer._native`, always the
+        # identical binary); only the byte-LM entries are faked.
+        if name == '_mojolearn':
+            return real_binding(name, mode=mode)
         assert name == '_mojolearn_byte_lm' and mode == 'identical'
         return fake
     monkeypatch.setattr(impl._backend, 'binding', binding)
