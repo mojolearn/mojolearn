@@ -12,7 +12,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   exact reference folds the background mean in one fixed order. The opponents keep the NumPy ridge they were scored with
   (no re-score); `tools/shap_xvendor_probe.py` prints both models' digests per box.
 
-## 0.8.37 (unreleased 2026-10-04)
+## 0.8.37 (published 2026-10-08)
 
 - IDENTICAL defaults flipped from the switch grid run ge123e6f9 (NVIDIA L40S and AMD MI325X, full board data, one run per arm;
   verdict = the average of the two vendors against the measured noise floor): Ridge and OLS solve the Gram system (Ridge taxi
