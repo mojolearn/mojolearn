@@ -76,6 +76,17 @@ def test_host_binding_registers_every_gpu_entry():
     resident |= {f"mamba{v}_session_" + name for v in (2, 3) for name in
                  ("create", "open", "step", "export_state", "load_state", "close")}
     assert resident <= gpu and not resident & host
+    # Device-retained Mamba-3 entries with a declared host absence: the tape
+    # (NI48, `mamba3_forward_tape_enabled` reads False on the host binding, so
+    # `_forward_with_tape` never calls these) and the weight-caching prefill
+    # session's per-call forward/backward (`_mamba_impl` resolves them with a
+    # None fallback and takes the plain entries; the host registers the owned
+    # session arm instead).
+    device_only = {"mamba3_forward_tape", "mamba3_backward_tape", "mamba3_close_tape",
+                   "mamba3_prefill_session_forward", "mamba3_prefill_session_backward"}
+    assert device_only <= gpu and not device_only & host
+    assert "mamba3_forward_tape_enabled" in host
+    resident |= device_only
     missing = sorted(gpu - resident - host)
     assert not missing, f"the host binding lacks {missing}"
     assert host == set(_family()["exports"]), sorted(host ^ set(_family()["exports"]))
@@ -103,9 +114,17 @@ def test_generated_passes_are_host_only():
 def test_shim_gemm_is_the_oracle_and_carries_the_sabotage():
     shim = _read("mamba/host/device_shim.mojo")
     assert "gemm_host_rows(" in shim
-    assert "from gemm.host.gemm_host_rows import gemm_host_rows" in shim
-    assert "MOJOLEARN_HOST_SABOTAGE" in _read("gemm/host/gemm_oracle.mojo")
-    assert "gemm/host/gemm_oracle.mojo" in _family()["host_modules"]
+    # gemm/host/neural_gemm.mojo's `gemm_host_rows` is the neural-profile
+    # door: the incumbent gemm/host/gemm_host_rows.mojo rows by default, the
+    # changed profile's oracle under its define.
+    assert "from gemm.host.neural_gemm import gemm_host_rows" in shim
+    assert "from gemm.host.gemm_host_rows import" in _read("gemm/host/neural_gemm.mojo")
+    # the host GEMM sabotage lives in the rows the shim computes with
+    # (390e1cbbf moved the device contract out of gemm_oracle.mojo)
+    assert "MOJOLEARN_HOST_SABOTAGE" in _read("gemm/host/gemm_host_rows.mojo")
+    for module in ("gemm/host/gemm_oracle.mojo", "gemm/host/neural_gemm.mojo",
+                   "gemm/host/gemm_host_rows.mojo"):
+        assert module in _family()["host_modules"], module
 
 
 def _cpu_only_with(basename):

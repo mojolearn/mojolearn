@@ -99,7 +99,13 @@ def test_oracle_imports_no_gpu_and_no_device_module():
     assert not GPU_IMPORTS.search(text), f"{ORACLE} imports a GPU module"
     assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M), f"{ORACLE} imports DeviceContext"
     imports = re.findall(r"^from\s+([\w.]+)\s+import", text, re.M)
-    assert sorted(set(imports)) == ["checks.numerics", "core.host_parallel", "core.host_predict_threads", "std.math", "std.memory", "std.sys.compile"], imports
+    # arima/impl/idn_ls_math.mojo is the IDENTICAL least-squares arithmetic
+    # the device and host share; it is itself CPU-safe (checked below).
+    assert sorted(set(imports)) == ["arima.impl.idn_ls_math", "checks.numerics", "core.host_parallel",
+                                    "core.host_predict_threads", "std.math", "std.memory", "std.sys.compile"], imports
+    shared = _read("arima/impl/idn_ls_math.mojo")
+    assert not GPU_IMPORTS.search(shared), "arima/impl/idn_ls_math.mojo imports a GPU module"
+    assert sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", shared, re.M))) == ["checks.numerics", "std.sys.compile"]
 
 
 def test_oracle_spells_the_bit_carrying_constructs():

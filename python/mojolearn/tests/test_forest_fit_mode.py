@@ -89,6 +89,11 @@ def test_score_captured_mode_and_equivalent_spelling(cls, monkeypatch, boundary)
         return 1.0
     monkeypatch.setattr(_metrics_impl, 'accuracy_score', metric)
     monkeypatch.setattr(_metrics_impl, 'r2_score', metric)
+    # a classifier scores through the x_metrics `accuracy_fraction`
+    from mojolearn import _expansion_metrics
+    monkeypatch.setattr(_expansion_metrics, 'accuracy_fraction',
+                        lambda yt, yp, sample_weight=None, numeric_mode=None:
+                        metric(yt, yp, numeric_mode=numeric_mode, sample_weight=sample_weight))
     assert model.score([[0], [1]], [0, 1]) == 1.0
     assert modes == ['identical']
 

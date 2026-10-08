@@ -173,8 +173,20 @@ def test_qr_modes_are_numpys(rows, cols):
     a64 = a.astype(np.float64)
     q, r = linalg.qr(a, mode="reduced")
     nq, nr = np.linalg.qr(a64)
-    _close(q, nq)
-    _close(r, nr)
+    if rows >= cols:
+        # 'reduced' of a tall matrix (N <= 512) is the blocked TSQR (lane
+        # neural-pass140, `_linalg_impl.qr`'s docstring): R's diagonal is
+        # non-negative, so Q's columns and R's rows match LAPACK's up to one
+        # sign each; Q R = a holds as is.
+        rd = np.diag(np.asarray(r, np.float64))
+        assert (rd >= 0).all(), rd
+        sign = np.where(np.sign(np.diag(nr)) < 0, -1.0, 1.0)
+        _close(np.asarray(q, np.float64) * sign[None, :], nq)
+        _close(np.asarray(r, np.float64) * sign[:, None], nr)
+        _close(np.asarray(q, np.float64) @ np.asarray(r, np.float64), a64)
+    else:
+        _close(q, nq)
+        _close(r, nr)
     qc, rc = linalg.qr(a, mode="complete")
     nqc, nrc = np.linalg.qr(a64, mode="complete")
     _close(rc, nrc)

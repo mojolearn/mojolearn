@@ -102,6 +102,15 @@ def test_pipeline_serial_search_and_score_mode(monkeypatch, cls):
         return float(1 - np.sum((yt-yp)**2)/np.sum((yt-yt.mean())**2))
     monkeypatch.setattr(_metrics_impl, 'accuracy_score', accuracy)
     monkeypatch.setattr(_metrics_impl, 'r2_score', r2)
+    # A classifier's score takes the x_metrics `accuracy_fraction` over labels
+    # of any kind (lane pyglue-sweep), not `accuracy_score` over int32 codes.
+    from mojolearn import _expansion_metrics
+
+    def fraction(yt, yp, sample_weight=None, numeric_mode=None):
+        modes.append(numeric_mode)
+        weights.append(sample_weight)
+        return float(np.mean(np.asarray(yt) == np.asarray(yp)))
+    monkeypatch.setattr(_expansion_metrics, 'accuracy_fraction', fraction)
     X = np.tile(np.array([[-2.], [2.]], np.float32), (12, 1))
     y = np.tile(np.array(['negative', 'positive']) if classifier else np.array([0., 1.]), 12)
     pipeline = Pipeline([('scale', StandardScaler()),
