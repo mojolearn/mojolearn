@@ -53,6 +53,7 @@ from bindings.ivf_index_arrays import (
 from ivf.estimator import (
     ivf_flat_build_and_search_host,
     ivf_flat_build_host,
+    ivf_flat_build_resident_host,
     ivf_flat_extend_host,
     ivf_flat_search_host,
 )
@@ -62,11 +63,15 @@ from x_ann.stage_timer import AnnStages
 from x_ann.switches import ANN3_PREPARE
 from ivf.resident import (
     ivf_resident_check,
+    ivf_resident_export_list_data,
     ivf_resident_n_rows,
     ivf_resident_prepare,
+    ivf_resident_register_built,
     ivf_resident_release,
     ivf_resident_search,
 )
+from bindings.ivf_index_arrays import ivf_arrays_check_cells, ivf_arrays_extent
+from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER, IvfFlatBuildDevice
 from bindings.ivf_index_arrays import ivf_read_resident_filter, ivf_write_resident_result
 from core.shard_merge_device import device_ivf_merge_shards, device_ivf_shard_plan, device_root_f32
 
@@ -414,6 +419,86 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
     return PythonObject(handle)
 
 
+# ===========================================================================
+# THE RESIDENT BUILD (lane gap-ivf, 2026-10-08, docs/plans/gaps-2026-10-08.md
+# section 6 item 1). `IVFIndex.fit` builds and KEEPS the index on the device:
+# the list vectors and the device CSR never cross to numpy inside the fit, and
+# the first search does not re-admit and re-upload them. The four small arrays
+# (centres, their norms, offsets, carried ids) are written for the Python
+# object; `list_data_` is made on first read by `ivf_flat_index_export`
+# (save, pickle, extend, clone, shard split: never inside fit or search).
+#
+# `ivf_flat_build_resident(addrs, params)` -> handle:
+#     addrs   0 x                n * dim float32, read
+#             1 centers_out      n_lists * dim float32, WRITTEN
+#             2 center_norms_out n_lists float32, WRITTEN (squared)
+#             3 offsets_out      n_lists + 1 int32, WRITTEN
+#             4 indices_out      n int32, WRITTEN (original row ids)
+#     params  0 n, 1 dim, 2 n_lists, 3 kmeans_n_iters, 4 metric, 5 seed
+# `ivf_flat_index_export(handle, addr, count)`: list_data (n * dim float32)
+#     WRITTEN at addr; count must be n * dim.
+# The bits are `ivf_flat_build`'s: the same build statements over the same
+# rows, the same layout kernels; only where the vectors live differs.
+# ===========================================================================
+
+
+def ivf_flat_build_resident_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    if len(addrs) != 5:
+        raise Error(
+            "ivf_flat_build_resident: addrs must contain 5 addresses (x, centers_out,"
+            " center_norms_out, offsets_out, indices_out), got " + String(len(addrs))
+        )
+    if len(params) != 6:
+        raise Error(
+            "ivf_flat_build_resident: params must contain 6 values (n, dim, n_lists,"
+            " kmeans_n_iters, metric, seed), got " + String(len(params))
+        )
+    var n = ivf_arrays_extent(params[0], String("n"))
+    var dim = ivf_arrays_extent(params[1], String("dim"))
+    var n_lists = ivf_arrays_extent(params[2], String("n_lists"))
+    ivf_arrays_check_cells(n, dim, String("n * dim"))
+    ivf_arrays_check_cells(n_lists, dim, String("n_lists * dim"))
+    var iters = Int(py=params[3])
+    var metric = Int(py=params[4])
+    var seed = UInt64(Int(py=params[5]))
+    var bst = AnnStages("ivf_flat_build_resident")
+    var x_addr = Int(py=addrs[0])
+    # IDENTICAL reads the rows straight from the caller's buffer (no host
+    # copy); every other build copies them in as `ivf_flat_build` does
+    var x = List[Float32]()
+    comptime if not IVF_BUILD_FROM_POINTER:
+        x = read_f32(x_addr, n * dim)
+    bst.host("copy_in")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dev = IvfFlatBuildDevice(ctx)
+    var index = ivf_flat_build_resident_host(ctx, x, x_addr, n, dim, n_lists, iters, metric, seed, dev)
+    ctx.synchronize()
+    _ = x^
+    bst.host("build")
+    # the four small arrays: one memcpy each (the ids cross as int32: below
+    # 2^31 by the extent check, so the uint32 words are the int32 words)
+    if len(index.centers) != n_lists * dim or len(index.center_norms) != n_lists:
+        raise Error("ivf_flat_build_resident: the built centres disagree with n_lists and dim")
+    if len(index.list_offsets) != n_lists + 1 or len(index.list_indices) != n:
+        raise Error("ivf_flat_build_resident: the built lists disagree with n and n_lists")
+    memcpy(dest=_f32_ptr(Int(py=addrs[1])), src=index.centers.unsafe_ptr(), count=n_lists * dim)
+    memcpy(dest=_f32_ptr(Int(py=addrs[2])), src=index.center_norms.unsafe_ptr(), count=n_lists)
+    memcpy(dest=_i32_ptr(Int(py=addrs[3])), src=index.list_offsets.unsafe_ptr(), count=n_lists + 1)
+    if n > 0:
+        memcpy(dest=_i32_ptr(Int(py=addrs[4])).bitcast[UInt32](), src=index.list_indices.unsafe_ptr(), count=n)
+    var handle = ivf_resident_register_built(ctx, index^, dev^)
+    bst.host("register")
+    _ = ctx^
+    return PythonObject(handle)
+
+
+def ivf_flat_index_export_binding(handle: PythonObject, address: PythonObject, count: PythonObject) raises -> PythonObject:
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    ivf_resident_export_list_data(ctx, Int(py=handle), Int(py=address), Int(py=count))
+    _ = ctx^
+    return PythonObject(0)
+
+
 def ivf_flat_index_search_binding(
     handle: PythonObject, addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -498,6 +583,8 @@ def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
         m.def_function[ivf_flat_index_prepare_binding]("ivf_flat_index_prepare")
         m.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
         m.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
+        m.def_function[ivf_flat_build_resident_binding]("ivf_flat_build_resident")
+        m.def_function[ivf_flat_index_export_binding]("ivf_flat_index_export")
         m.def_function[ivf_merge_shards_binding]("ivf_merge_shards")
         m.def_function[ivf_shard_plan_binding]("ivf_shard_plan")
         return m.finalize()
