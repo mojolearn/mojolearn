@@ -805,48 +805,52 @@ def _emb_unique_rows_fold(
     launched beyond the compaction) when U = min(T, V): the caller's launch
     then runs, the same work."""
     var nb = (cfg.vocab + EMB_UNIQ_TPB - 1) // EMB_UNIQ_TPB
-    # rows[0:V], the per-block counts [V, V + nb), the total at V + nb
-    var scratch = ctx.enqueue_create_buffer[DType.int32](cfg.vocab + nb + 1)
-    var base = scratch.unsafe_ptr()
+    # three separate buffers (rows, the per-block counts, the total): one
+    # launch never receives two mutable pointers into one buffer
+    var rows = ctx.enqueue_create_buffer[DType.int32](cfg.vocab)
+    var part = ctx.enqueue_create_buffer[DType.int32](nb)
+    var total = ctx.enqueue_create_buffer[DType.int32](1)
     step_count_launch()
     ctx.enqueue_function[emb_touched_count_kernel](
-        base + cfg.vocab, run_begin.unsafe_ptr(), Int32(cfg.vocab),
+        part.unsafe_ptr(), run_begin.unsafe_ptr(), Int32(cfg.vocab),
         grid_dim=(nb, 1, 1), block_dim=(EMB_UNIQ_TPB, 1, 1),
     )
     step_count_launch()
     ctx.enqueue_function[emb_touched_scan_kernel](
-        base + cfg.vocab, base + cfg.vocab + nb, Int32(nb),
+        part.unsafe_ptr(), total.unsafe_ptr(), Int32(nb),
         grid_dim=(1, 1, 1), block_dim=(EMB_UNIQ_TPB, 1, 1),
     )
     step_count_launch()
     ctx.enqueue_function[emb_touched_rows_kernel](
-        base, base + cfg.vocab, run_begin.unsafe_ptr(), Int32(cfg.vocab),
+        rows.unsafe_ptr(), part.unsafe_ptr(), run_begin.unsafe_ptr(), Int32(cfg.vocab),
         grid_dim=(nb, 1, 1), block_dim=(EMB_UNIQ_TPB, 1, 1),
     )
     step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.int32](1)
     step_count_d2h()
-    var tot = scratch.create_sub_buffer[DType.int32](cfg.vocab + nb, 1)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=tot)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=total)
     step_count_sync()
     ctx.synchronize()
     var u = Int(h.unsafe_ptr().unsafe_load(0))
-    _ = tot^
     _ = h^
     if u >= min(n_positions, cfg.vocab):
-        _ = scratch^
+        _ = rows^
+        _ = part^
+        _ = total^
         return False
     if u > 0:
         step_count_launch()
         ctx.enqueue_function[emb_backward_rows_kernel](
             dw.unsafe_ptr(), dy.unsafe_ptr(), perm.unsafe_ptr(), run_begin.unsafe_ptr(),
-            base, Int32(u), Int32(cfg.width),
+            rows.unsafe_ptr(), Int32(u), Int32(cfg.width),
             grid_dim=(_grid_for(u * cfg.width, block_threads), 1, 1),
             block_dim=(block_threads, 1, 1),
         )
         step_count_sync()
         ctx.synchronize()
-    _ = scratch^
+    _ = rows^
+    _ = part^
+    _ = total^
     return True
 
 
