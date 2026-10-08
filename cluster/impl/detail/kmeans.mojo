@@ -1216,7 +1216,13 @@ def init_scalable_kmeans_plus_plus(
             var grown = ctx.enqueue_create_buffer[DType.float32](
                 (cand_count + n_selected) * d
             )
-            ctx.synchronize()
+            # lane gap-ivf (2026-10-08): on NVIDIA and AMD the allocations are
+            # stream-ordered, so the launches below already follow them; the
+            # wait was one synchronize per k-means|| round (8 per IVF coarse
+            # fit). Ordering only: no value moves. Apple keeps it (its command
+            # buffers are split at waits).
+            comptime if not (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD):
+                ctx.synchronize()
             ctx.enqueue_function[select_scatter_kernel](
                 sel_index.unsafe_ptr(),
                 is_centroid.unsafe_ptr(),
