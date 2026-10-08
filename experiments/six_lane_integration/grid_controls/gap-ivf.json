@@ -1,0 +1,73 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "gap-ivf",
+ "branch": "lane/gap-ivf",
+ "head": "adce70f67",
+ "controls": {
+  "ivf_trainset_stride_off": {
+   "define": "MOJOLEARN_IVF_TRAINSET_STRIDE_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo:102",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo",
+    "ivf/host/ivf_host.mojo"
+   ],
+   "binding": [
+    "_mojolearn_ivf",
+    "_mojolearn_ivf_host",
+    "_mojolearn_x_ann"
+   ],
+   "bits_change": true,
+   "status": "new default (plan gaps-2026-10-08 section 6 item 2)",
+   "note": "Rollback arm: the coarse quantizer trains on every row again. Default trains on rows 0,s,2s,... with s = max(1, n // max(min(n//2, 256*n_lists), n_lists)), exact integers, every column (device + host). Moves IDENTICAL bits of ivf, ivf-euclidean, ivf-filter, par-ivf and the IVF-PQ coarse step; recall gate against cuVS required."
+  },
+  "kmeans_lazy_shift_idn_off": {
+   "define": "MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "cluster/impl/kmeans_params.mojo",
+    "cluster/impl/detail/kmeans.mojo:1451",
+    "cluster/host/kmeans_oracle.mojo"
+   ],
+   "binding": [
+    "_mojolearn_ivf",
+    "_mojolearn_ivf_host",
+    "_mojolearn_x_ann"
+   ],
+   "bits_change": "only for lazy_shift fits (IVF coarse quantizer + its k-means|| recluster, IVF-PQ codebooks) that converge before max_iter; device and host columns move together",
+   "status": "new default (plan gaps-2026-10-08 section 6 item 3)",
+   "note": "Rollback arm: IDENTICAL reads the Lloyd shift every iteration (one sync each). FAST on NVIDIA/AMD also takes the lazy read now; MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF turns it off in every mode."
+  }
+ },
+ "algorithms": {
+  "ann:ivf": {
+   "binding": "_mojolearn_ivf",
+   "route": "IVFIndex.fit -> ivf_flat_build_resident (strided trainset, k-means|| + lazy Lloyd, predict, device CSR kept) -> handle; search -> ivf_flat_index_search on the handle",
+   "controls": [
+    "ivf_trainset_stride_off",
+    "kmeans_lazy_shift_idn_off"
+   ],
+   "interaction_groups": [
+    [
+     "ivf_trainset_stride_off",
+     "kmeans_lazy_shift_idn_off"
+    ]
+   ]
+  }
+ },
+ "removed": []
+}
