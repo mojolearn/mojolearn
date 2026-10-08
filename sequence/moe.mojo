@@ -15,6 +15,8 @@ index_add_, a different order of the same k terms). act is SiLU (Mixtral's
 hidden_act) through the portable seam."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import ftz, identical_div, identical_exp, identical_silu
+# lane gap-gemm-layers (2026-10-08): the host twin of the grouped identical GEMM products
+from sequence.moe_grouped_fold import MOE_GROUPED_GEMM, moe_contract_cell
 
 
 @always_inline
@@ -83,10 +85,16 @@ def op_moe_hidden(t: Int, a: Args):
     var uw = a.p1 + (e * 2 * F + F + f) * D
     var g = Float32(0.0)
     var u = Float32(0.0)
-    for d in range(D):
-        var x = ld(a.p0, tok * D + d)
-        g = fma3(x, ld(gw, d), g)
-        u = fma3(x, ld(uw, d), u)
+    comptime if MOE_GROUPED_GEMM:
+        # lane gap-gemm-layers: the identical GEMM's cell (leaves + the
+        # balanced tree over d), the device's grouped products' words
+        g = moe_contract_cell(a.p0 + tok * D, gw, D)
+        u = moe_contract_cell(a.p0 + tok * D, uw, D)
+    else:
+        for d in range(D):
+            var x = ld(a.p0, tok * D + d)
+            g = fma3(x, ld(gw, d), g)
+            u = fma3(x, ld(uw, d), u)
     st(a.p3, t, mul(ftz(identical_silu(g)), u))
 
 
@@ -105,7 +113,11 @@ def op_moe_out(t: Int, a: Args):
         var dw = a.p1 + (e * D + d) * F
         var hj = a.p0 + (tok * k + j) * F
         var s = Float32(0.0)
-        for f in range(F):
-            s = fma3(ld(hj, f), ld(dw, f), s)
+        comptime if MOE_GROUPED_GEMM:
+            # lane gap-gemm-layers: the identical GEMM's cell over f
+            s = moe_contract_cell(hj, dw, F)
+        else:
+            for f in range(F):
+                s = fma3(ld(hj, f), ld(dw, f), s)
         y = fma3(ld(a.p3, tok * k + j), s, y)
     st(a.p4, t, y)

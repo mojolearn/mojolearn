@@ -30,6 +30,12 @@ from gemm.checks.gemm_identical import (
 from gemm.checks.gemm_identical import (
     GEMM_FOLD_SLOTS, _fold_drain, _fold_push, _rtf_leaf_partial, contract_partition, gemm_operand_strides,
 )
+# lane gap-gemm-layers (NI12 implicit conv): the tuned kernel's thread-local
+# fold stack and the split plans' fold launches, reused unchanged
+from gemm.checks.gemm_identical import (
+    TUNED_FOLD_SLOTS, _fold_push_local, _fold_drain_local, SPLIT_BLOCK_FOLD_MAX_CELLS, SPLITK_FOLD_TPB, FLAT_TPB,
+    identical_gemm_fold_kernel, identical_gemm_fold_stack_kernel,
+)
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN_NVIDIA
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.experiments.neural_tiled_v2 import NI09_TILED_BIAS, neural_bias_gemm
@@ -59,6 +65,7 @@ from x_cnn.ops import (
     conv_out_val, pool_relu_row_val, bn_mean_row, BN_MEAN, BN_VAR, BN_INVSTD, BN_SUMG, BN_SUMGX,
     relu_fwd_at, relu_bwd_at, relu_val, conv_relu_out_at, relu_rows_bwd_at, add_at, bias_rows_at, linear_bias_val, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
+    bn_apply_relu_at, bn_apply_add_val, bn_blk_red_relu_val, bn_bwd_dx_relu_val, bn_bwd_eval_dx_relu_val,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
     bn_blk_red_at, bn_blk_red_fin_at, DROPOUT2D_CH_MASK, dropout2d_chan_at, dropout2d_apply_at,
@@ -85,6 +92,15 @@ comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and NI14_COL2IM == NI14_COL2IM_BO
 comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
 comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and IDN_CNN_CONV_RELU_ARM == 2  # arm 2 of MOJOLEARN_IDN_CNN_CONV_RELU (x_cnn/ops.mojo)
 comptime NI18_FUSED_EPOCH_GATHER = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"]()
+# lane gap-gemm-layers (2026-10-08): the ResNet BasicBlock's BatchNorm
+# epilogues fused (x_cnn/ops.mojo "THE BATCHNORM EPILOGUES FUSED"): bn1's
+# apply + relu1 in one launch (the BN output never stored), bn2's apply + the
+# identity add + relu2 in one launch (the sum stored for relu2's backward,
+# the output written), relu1's backward folded into bn1's backward reads
+# (the masked gradient never stored). Same words; `x_cnn_idn_flags` bit 6
+# tells the glue (`_expansion_cnn.BasicBlock`) to take the fused entries.
+# Default off; speed A/B on nv and amd (resnet-block).
+comptime IDN_CNN_BN_FUSE = _NI_CNN_ENABLED and is_defined["MOJOLEARN_IDN_CNN_BN_FUSE"]()
 #: lane/cnn-apple2: the FAST tier on Apple measures its GEMM plans (the
 #: simdgroup matrix plans among them). `-D MOJOLEARN_XCNN_NO_FAST_TUNE` is
 #: the before arm (round 1's FAST: the 4090 split plans and the dispatcher).
@@ -374,76 +390,311 @@ def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_
             relu_out.unsafe_store(out_index, relu_val(ftz(value)))
 
 
-# NI12: 8 rows x 16 channels, with 16 input positions per staging page.
-# The shared footprint is (8+16)*16*4 = 1536 bytes. Fixed small operand
-# pages leave room for the exact software FMA seam on every GPU. Logical
-# leaves and balanced folds come exclusively from contract_partition(k).
-comptime NI12_TM = 8
-comptime NI12_TN = 16
+# NI12, THE IMPLICIT CONVOLUTION (lane gap-gemm-layers, 2026-10-08; plan
+# docs/plans/gaps-2026-10-08.md section 8). `y2 = cols . W^T` under profile
+# mojolearn.identical.gemm.fp32.v1 WITHOUT the cols matrix: the A tile is
+# gathered from x by the im2col index arithmetic (`im2col_val`'s word, the
+# same +0.0 for a padded tap, flushed as loaded), so the N*OH*OW x C*KH*KW
+# scratch (462 MB at the resnet-block shape) is never written or read.
+# Every output cell is the contract's cell: leaves of `contract_partition(k)`
+# over k = C*KH*KW in (c, kh, kw) order, `rtf_mul_add(ftz(a), ftz(b), acc)`
+# ascending inside a leaf from +0.0, the leaf partial `ftz(acc)` pushed on the
+# contract's balanced tree (`_fold_push_local`, the tuned kernel's stack in
+# thread-local memory), the root `ftz`'d and stored through `conv_out_val`.
+# So the words equal im2col + `identical_gemm_into` on every column: bits do
+# not move. The tile is the register tile of sequence/moe_reg.mojo: a block
+# 64 rows x 64 channels, 256 threads, 4 x 4 cells a thread, the operands
+# staged 16 taps at a time (two transposed, padded pages: 2 x 16 x 65 words,
+# 8.3 KB), so a slab step is 8 page reads for 16 fmas instead of 2 reads per
+# fma (the 8 x 16 one-cell-per-thread tile this replaces). Staging maps each
+# thread to ONE row of the tile for its whole life (the row's (n, oh, ow) and
+# the x base are decoded once) and to 4 taps per slab (one (c, kh, kw) decode
+# each); a warp's 32 threads read 32 consecutive rows of one tap, which are
+# consecutive x words along ow. A slab never straddles a leaf: the page loop
+# runs inside the leaf loop and the tail slab runs its `cnt` taps only.
+# Masked rows (past N*OH*OW) and channels (past OC) stage +0.0 and are never
+# stored; every thread reaches every barrier.
+# The backward's weight gradient `dW = g^T . cols` (k = the N*OH*OW rows) is
+# the same idea in split-k form (`implicit_wgrad_leaf_kernel`): one block per
+# (64 x 64 output tile, logical leaf) writes the leaf partial `ftz(acc)` to
+# the workspace at `ws[t * mn + cell]` (contract 7.2.2's leaf-major layout),
+# and the fold is the GEMM's own `identical_gemm_fold_kernel[True]` /
+# `identical_gemm_fold_stack_kernel`, exactly `_launch_split`'s two launches,
+# so dW's words equal `device_gemm(..., OP_TN)`'s on the materialized cols.
+# Under this switch the backward never builds cols either (the input
+# gradient keeps `dcols = g . W` + col2im, whose fold order is col2im's).
+# `-D MOJOLEARN_NI12_IMPLICIT_CONV` (default off; bits equal, speed A/B on nv
+# and amd: conv2d, resnet-block, cnn-clf).
+comptime NI12_TM = 64
+comptime NI12_TN = 64
 comptime NI12_KS = 16
-comptime NI12_THREADS = NI12_TM * NI12_TN
+comptime NI12_THREADS = 256
+#: threads along each tile axis (NI12_THREADS = NI12_RS * NI12_RS), cells a thread per axis
+comptime NI12_RS = 16
+comptime NI12_RC = 4
+#: padded page row stride (the pages are written transposed: no bank conflicts)
+comptime NI12_TMP = NI12_TM + 1
+comptime NI12_TNP = NI12_TN + 1
+comptime NI12_NCELL = NI12_RC * NI12_RC
+
+
+@always_inline
+def _ni12_udiv(a: Int, b: Int) -> Int:
+    """Unsigned 32-bit quotient (the indices are below 2^31)."""
+    return Int(UInt32(a) // UInt32(b))
 
 
 def implicit_conv_kernel(
     x: FP, w: FP, bias: FP, yconv: FP, p: IP, rows_in: Int32,
     leaf_in: Int32, count_in: Int32, relu_out: FP, fuse_relu: Int32,
 ):
-    """Canonical convolution with implicit columns, exact operands/steps.
-
-    All threads reach each barrier, including masked output cells. Padded
-    image taps are +0.0 products, whereas physical tile padding is never
-    reduced. The host retains im2col+its canonical GEMM, the same graph.
-    """
-    var atile = stack_allocation[NI12_TM * NI12_KS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var btile = stack_allocation[NI12_KS * NI12_TN, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    """yconv[n, oc, oh, ow] = conv_out_val(cell(row, oc)) with the cols
+    operand gathered from x; a block 64 rows x 64 channels of one leaf
+    sequence, 4 x 4 cells a thread. `leaf_in`, `count_in` are
+    `contract_partition(C*KH*KW)` and nothing else."""
+    var atile = stack_allocation[NI12_KS * NI12_TMP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var btile = stack_allocation[NI12_KS * NI12_TNP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
-    var local_row = tid // NI12_TN
-    var local_col = tid - local_row * NI12_TN
+    var tr = tid // NI12_RS
+    var tc = tid - tr * NI12_RS
     var row0 = Int(block_idx.x) * NI12_TM
     var col0 = Int(block_idx.y) * NI12_TN
-    var row = row0 + local_row; var oc = col0 + local_col
-    var OC = _gp(p, CP_OC)
-    var ckk = _gp(p, CP_C) * _gp(p, CP_KH) * _gp(p, CP_KW)
-    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+    var rows = Int(rows_in)
+    var C = _gp(p, CP_C); var H = _gp(p, CP_H); var W = _gp(p, CP_W)
+    var KH = _gp(p, CP_KH); var KW = _gp(p, CP_KW)
+    var OH = _gp(p, CP_OH); var OW = _gp(p, CP_OW); var OC = _gp(p, CP_OC)
+    var SH = _gp(p, CP_SH); var SW = _gp(p, CP_SW)
+    var PH = _gp(p, CP_PH); var PW = _gp(p, CP_PW)
+    var DH = _gp(p, CP_DH); var DW = _gp(p, CP_DW)
+    var KK = KH * KW
+    var ckk = C * KK
+    var S = OH * OW
+    # staging: this thread owns tile row `srow` (= tid % 64) for 4 taps
+    # `page + skk + 4 l` of every slab (q = tid + 256 l over the 16 x 64 page)
+    var srow = tid - (tid // NI12_TM) * NI12_TM
+    var skk = tid // NI12_TM
+    var grow = row0 + srow
+    var slive = grow < rows
+    var sxb = 0
+    var sh0 = 0
+    var sw0 = 0
+    if slive:
+        var n = _ni12_udiv(grow, S)
+        var rem = grow - n * S
+        var oh = _ni12_udiv(rem, OW)
+        var ow = rem - oh * OW
+        sxb = n * C * H * W
+        sh0 = oh * SH - PH
+        sw0 = ow * SW - PW
+    # B staging: this thread owns tap `page + sbk` of 4 channels `col0 + sboc
+    # + 16 l` (q = tid + 256 l over the 64 x 16 page, taps fastest: 16
+    # consecutive words of one W row per 16 threads)
+    var sboc = tid // NI12_KS
+    var sbk = tid - sboc * NI12_KS
+    var fl = stack_allocation[TUNED_FOLD_SLOTS * NI12_NCELL, Scalar[DType.float32]]()
     var occ = 0
-    for logical_leaf in range(Int(count_in)):
-        var lo = logical_leaf * Int(leaf_in)
-        var hi = min(lo + Int(leaf_in), ckk)
-        var acc = Float32(0)
+    var leaf = Int(leaf_in)
+    for t in range(Int(count_in)):
+        var lo = t * leaf
+        var hi = min(lo + leaf, ckk)
+        var acc = SIMD[DType.float32, NI12_NCELL](0.0)
         var page = lo
         while page < hi:
-            var ai = tid
-            while ai < NI12_TM * NI12_KS:
-                var ar = row0 + ai // NI12_KS
-                var ak = page + ai % NI12_KS
-                var av = Float32(0)
-                if ar < Int(rows_in) and ak < hi:
-                    av = im2col_val(ar * ckk + ak, x, p)
-                atile[ai] = av
-                ai += NI12_THREADS
-            var bi = tid
-            while bi < NI12_KS * NI12_TN:
-                var bk = page + bi // NI12_TN
-                var bc = col0 + bi % NI12_TN
-                var bv = Float32(0)
-                if bc < OC and bk < hi:
-                    bv = ftz(w.unsafe_load(bc * ckk + bk))
-                btile[bi] = bv
-                bi += NI12_THREADS
+            var cnt = min(NI12_KS, hi - page)
+            comptime for l in range(NI12_RC):
+                var k_a = skk + NI12_RC * l
+                var av = Float32(0.0)
+                if slive and k_a < cnt:
+                    var kk = page + k_a
+                    var c = _ni12_udiv(kk, KK)
+                    var t2 = kk - c * KK
+                    var kh = _ni12_udiv(t2, KW)
+                    var kw = t2 - kh * KW
+                    var h = sh0 + kh * DH
+                    var wv = sw0 + kw * DW
+                    if h >= 0 and h < H and wv >= 0 and wv < W:
+                        av = ftz(x.unsafe_load(sxb + (c * H + h) * W + wv))
+                atile[k_a * NI12_TMP + srow] = av
+            comptime for l in range(NI12_RC):
+                var boc = sboc + NI12_RS * l
+                var soc = col0 + boc
+                var bv = Float32(0.0)
+                if soc < OC and sbk < cnt:
+                    bv = ftz(w.unsafe_load(soc * ckk + page + sbk))
+                btile[sbk * NI12_TNP + boc] = bv
             barrier()
-            for kk in range(min(NI12_KS, hi - page)):
-                acc = rtf_mul_add(atile[local_row * NI12_KS + kk], btile[kk * NI12_TN + local_col], acc)
+            if cnt == NI12_KS:
+                comptime for i in range(NI12_KS):
+                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    comptime for c in range(NI12_RC):
+                        av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
+                        bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
+                    comptime for a in range(NI12_RC):
+                        comptime for b in range(NI12_RC):
+                            acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
+            else:
+                for i in range(cnt):
+                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    comptime for c in range(NI12_RC):
+                        av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
+                        bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
+                    comptime for a in range(NI12_RC):
+                        comptime for b in range(NI12_RC):
+                            acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
             barrier()
             page += NI12_KS
-        _ = _fold_push(stack, occ, ftz(acc))
-    if row < Int(rows_in) and oc < OC:
-        var S = _gp(p, CP_OH) * _gp(p, CP_OW)
-        var n = row // S; var rem = row - n * S
-        var out_index = (n * OC + oc) * S + rem
-        var value = conv_out_val(ftz(_fold_drain(stack, occ)), bias, oc, p)
-        yconv.unsafe_store(out_index, value)
-        if fuse_relu != 0:
-            relu_out.unsafe_store(out_index, relu_val(ftz(value)))
+        # 5d: the leaf partial as written, on the contract's tree.
+        var part = SIMD[DType.float32, NI12_NCELL](0.0)
+        comptime for e in range(NI12_NCELL):
+            part[e] = ftz(acc[e])
+        _ = _fold_push_local[NI12_NCELL, TUNED_FOLD_SLOTS](fl, occ, part)
+    var out = _fold_drain_local[NI12_NCELL, TUNED_FOLD_SLOTS](fl, occ)
+    comptime for a in range(NI12_RC):
+        var row = row0 + tr + NI12_RS * a
+        if row < rows:
+            var n = _ni12_udiv(row, S)
+            var rem = row - n * S
+            comptime for b in range(NI12_RC):
+                var oc = col0 + tc + NI12_RS * b
+                if oc < OC:
+                    var out_index = (n * OC + oc) * S + rem
+                    var value = conv_out_val(ftz(out[a * NI12_RC + b]), bias, oc, p)
+                    yconv.unsafe_store(out_index, value)
+                    if fuse_relu != 0:
+                        relu_out.unsafe_store(out_index, relu_val(ftz(value)))
+
+
+def implicit_wgrad_leaf_kernel(
+    g: FP, x: FP, wsp: FP, p: IP, rows_in: Int32, leaf_in: Int32,
+):
+    """Leaf `t = block_idx.z` of `dW[oc, kk] = sum over rows r of g[r, oc] *
+    cols[r, kk]` (the GEMM's OP_TN, A = g [rows x OC], B = cols gathered):
+    `ws[t * OC*ckk + oc*ckk + kk] = ftz(acc)`, the chain over the leaf's rows
+    ascending from +0.0. A block 64 channels x 64 taps, 4 x 4 cells a thread,
+    the rows staged 16 at a time."""
+    var atile = stack_allocation[NI12_KS * NI12_TMP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var btile = stack_allocation[NI12_KS * NI12_TNP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var tr = tid // NI12_RS
+    var tc = tid - tr * NI12_RS
+    var row0 = Int(block_idx.x) * NI12_TM  # output channels
+    var col0 = Int(block_idx.y) * NI12_TN  # taps
+    var t = Int(block_idx.z)
+    var rows = Int(rows_in)
+    var C = _gp(p, CP_C); var H = _gp(p, CP_H); var W = _gp(p, CP_W)
+    var KH = _gp(p, CP_KH); var KW = _gp(p, CP_KW)
+    var OH = _gp(p, CP_OH); var OW = _gp(p, CP_OW); var OC = _gp(p, CP_OC)
+    var SH = _gp(p, CP_SH); var SW = _gp(p, CP_SW)
+    var PH = _gp(p, CP_PH); var PW = _gp(p, CP_PW)
+    var DH = _gp(p, CP_DH); var DW = _gp(p, CP_DW)
+    var KK = KH * KW
+    var ckk = C * KK
+    var S = OH * OW
+    var mn = OC * ckk
+    # A staging (g^T): this thread owns channel `soc` for 4 rows `page + sr + 4 l`
+    # (q = tid + 256 l over the 16 x 64 page: 64 consecutive g words of one row)
+    var soc = row0 + tid - (tid // NI12_TM) * NI12_TM
+    var sr = tid // NI12_TM
+    var slive_a = soc < OC
+    # B staging (cols gathered): this thread owns tap `skk` for the same 4 rows;
+    # the tap's (c, kh, kw) is decoded once
+    var skk = col0 + tid - (tid // NI12_TN) * NI12_TN
+    var slive_b = skk < ckk
+    var sc = 0
+    var skh = 0
+    var skw = 0
+    if slive_b:
+        sc = _ni12_udiv(skk, KK)
+        var t2 = skk - sc * KK
+        skh = _ni12_udiv(t2, KW)
+        skw = t2 - skh * KW
+    var leaf = Int(leaf_in)
+    var lo = t * leaf
+    var hi = min(lo + leaf, rows)
+    var acc = SIMD[DType.float32, NI12_NCELL](0.0)
+    var page = lo
+    while page < hi:
+        var cnt = min(NI12_KS, hi - page)
+        comptime for l in range(NI12_RC):
+            var r_l = sr + NI12_RC * l
+            var r = page + r_l
+            var av = Float32(0.0)
+            if slive_a and r_l < cnt:
+                av = ftz(g.unsafe_load(r * OC + soc))
+            atile[r_l * NI12_TMP + soc - row0] = av
+            var bv = Float32(0.0)
+            if slive_b and r_l < cnt:
+                var n = _ni12_udiv(r, S)
+                var rem = r - n * S
+                var oh = _ni12_udiv(rem, OW)
+                var ow = rem - oh * OW
+                var h = oh * SH - PH + skh * DH
+                var wv = ow * SW - PW + skw * DW
+                if h >= 0 and h < H and wv >= 0 and wv < W:
+                    bv = ftz(x.unsafe_load(((n * C + sc) * H + h) * W + wv))
+            btile[r_l * NI12_TNP + skk - col0] = bv
+        barrier()
+        if cnt == NI12_KS:
+            comptime for i in range(NI12_KS):
+                var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                comptime for c in range(NI12_RC):
+                    av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
+                    bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
+                comptime for a in range(NI12_RC):
+                    comptime for b in range(NI12_RC):
+                        acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
+        else:
+            for i in range(cnt):
+                var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                comptime for c in range(NI12_RC):
+                    av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
+                    bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
+                comptime for a in range(NI12_RC):
+                    comptime for b in range(NI12_RC):
+                        acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
+        barrier()
+        page += NI12_KS
+    comptime for a in range(NI12_RC):
+        var oc = row0 + tr + NI12_RS * a
+        if oc < OC:
+            comptime for b in range(NI12_RC):
+                var kk = col0 + tc + NI12_RS * b
+                if kk < ckk:
+                    wsp.unsafe_store(t * mn + oc * ckk + kk, ftz(acc[a * NI12_RC + b]))
+
+
+def _implicit_wgrad(
+    ctx: DeviceContext, mut gw: DeviceBuffer[DType.float32], mut g: DeviceBuffer[DType.float32],
+    mut dx: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], slot: Int, rows: Int, OC: Int, ckk: Int,
+) raises:
+    """dW = g^T . im2col(x) through `implicit_wgrad_leaf_kernel` and the
+    GEMM's fold kernels (`_launch_split`'s two launches), the partials in
+    workspace slot `slot` (P * OC * ckk floats)."""
+    if rows <= 0 or OC <= 0 or ckk <= 0:
+        return
+    var lp = contract_partition(rows)
+    var mn = OC * ckk
+    var wsp = ws(ctx, slot, lp[1] * mn)
+    ctx.enqueue_function[implicit_wgrad_leaf_kernel](
+        fp(g), fp(dx), fp(wsp), ip(dp), Int32(rows), Int32(lp[0]),
+        grid_dim=((OC + NI12_TM - 1) // NI12_TM, (ckk + NI12_TN - 1) // NI12_TN, lp[1]),
+        block_dim=(NI12_THREADS, 1, 1),
+    )
+    if mn <= SPLIT_BLOCK_FOLD_MAX_CELLS:
+        ctx.enqueue_function[identical_gemm_fold_kernel[True]](
+            fp(gw), fp(wsp), Int32(mn), Int32(lp[1]), Int32(lp[1]),
+            grid_dim=(mn, 1, 1), block_dim=(SPLITK_FOLD_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[identical_gemm_fold_stack_kernel](
+            fp(gw), fp(wsp), Int32(mn), Int32(lp[1]),
+            grid_dim=((mn + FLAT_TPB - 1) // FLAT_TPB, 1, 1), block_dim=(FLAT_TPB, 1, 1),
+        )
+    _ = wsp^
 
 
 @always_inline
@@ -1208,14 +1459,14 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dw = m_in(ctx, 1, a[1], OC * ckk, isdev(dev, 1))
     var ddout = m_in(ctx, 2, a[2], rows * OC, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
-    var cols = ws(ctx, 4, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
+    var cols = ws(ctx, 4, 1 if (NN14_BOUNDED_IM2COL or NI12_IMPLICIT_CONV) else rows * ckk)
     var g = ws(ctx, 5, rows * OC)
     var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
     var gb = m_out(ctx, 8, a[5], OC, isdev(dev, 5))
     var dcols = ws(ctx, 9, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
     var gx = m_out(ctx, 10, a[3], nx, isdev(dev, 3))
-    comptime if not NN14_BOUNDED_IM2COL:
+    comptime if not NN14_BOUNDED_IM2COL and not NI12_IMPLICIT_CONV:
         _im2col(ctx, dxin, cols, dp, rows, ckk, C)
     comptime if TILED_LAYOUT:
         var tg = _tiled_grid(N, rows // N, OC)
@@ -1231,6 +1482,10 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
     comptime if NN14_BOUNDED_IM2COL:
         launch[nn14_wgrad_at](ctx, fp(dxin), fp(g), fp(gw), fp(gw), ip(dp), ip(dp), OC * ckk)
+    elif NI12_IMPLICIT_CONV:
+        # lane gap-gemm-layers: the cols operand gathered from x, the same
+        # leaf partials and fold launches as the GEMM's split plan
+        _implicit_wgrad(ctx, gw, g, dxin, dp, 18, rows, OC, ckk)
     else:
         device_gemm(ctx, gw, g, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, g, ones, OC, rows)
@@ -1938,6 +2193,162 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, prm: List[Int32], training: B
     batchnorm_backward_m([_a(x), _a(g), _a(aux), _a(dx_out)], 0, prm, training)
 
 
+# ---------------------------------------------------------------------------
+# lane gap-gemm-layers (2026-10-08): THE FUSED BATCHNORM ENTRIES
+# (IDN_CNN_BN_FUSE; x_cnn/ops.mojo "THE BATCHNORM EPILOGUES FUSED"). The
+# statistics launches are `batchnorm_forward_m`'s / `batchnorm_backward_m`'s
+# character for character; only the apply / dx launch changes its epilogue.
+# ---------------------------------------------------------------------------
+
+
+def bn_apply_add_relu_kernel(x: FP, aux: FP, addend: FP, s_out: FP, y_out: FP, p: IP, total: Int32):
+    """s = bn(x) + addend (`add_at`'s word, stored: relu's backward reads it);
+    y = relu(s) (`relu_fwd_at`'s word)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(total):
+        var s = bn_apply_add_val(i, x, aux, addend, p)
+        s_out.unsafe_store(i, s)
+        y_out.unsafe_store(i, relu_val(ftz(s)))
+
+
+def bn_bwd_red_relu_kernel(x: FP, g: FP, mask: FP, aux: FP, part: FP, p: IP, total: Int32):
+    """`bn_blk_red_at` on relu_bwd(mask, g), one thread per (channel, block)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(total):
+        bn_blk_red_relu_val(t, x, g, mask, aux, part, p)
+
+
+def bn_bwd_dx_relu_kernel(x: FP, g: FP, mask: FP, aux: FP, dst: FP, p: IP, total: Int32, training: Int32):
+    """`bn_bwd_dx_at` / `bn_bwd_eval_dx_at` on relu_bwd(mask, g)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(total):
+        if training != 0:
+            dst.unsafe_store(i, bn_bwd_dx_relu_val(i, x, g, mask, aux, p))
+        else:
+            dst.unsafe_store(i, bn_bwd_eval_dx_relu_val(i, g, mask, aux, p))
+
+
+def batchnorm_forward_fused_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool, fuse: Int) raises:
+    """a = [x, y, running (2C, in place), aux (2 + 7C, in place), addend,
+    relu_out] (the binding's order; `dev` bit i says a[i] is a device
+    address). fuse 1: y = relu(bn(x)) (addend, relu_out unused). fuse 2:
+    y = bn(x) + addend (stored), relu_out = relu(y)."""
+    var C = Int(prm[1])
+    var total = Int(prm[0]) * C * Int(prm[2])
+    var nr = 2 * C
+    var na = 2 + 7 * C
+    var ctx = cnn_ctx()
+    var dx = m_in(ctx, 0, a[0], total, isdev(dev, 0))
+    var dr = m_in(ctx, 1, a[2], nr, isdev(dev, 2))
+    var da = m_in(ctx, 2, a[3], na, isdev(dev, 3))
+    var dp = put_prm(ctx, 3, prm)
+    var dout = m_out(ctx, 4, a[1], total, isdev(dev, 1))
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var dpart = ws(ctx, 5, nblk)
+    # the statistics: batchnorm_forward_m's launches
+    if training:
+        comptime if BN_FOLD_BLOCK:
+            launch[bn_blk_sum_at](ctx, fp(dx), fp(dpart), fp(dpart), fp(dpart), ip(dp), ip(dp), nblk)
+            launch[bn_blk_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            launch[bn_blk_sq_at](ctx, fp(dx), fp(dpart), fp(da), fp(da), ip(dp), ip(dp), nblk)
+            launch[bn_blk_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+        else:
+            var blk = False
+            comptime if BN_BLOCK:
+                blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
+            if blk:
+                ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+            else:
+                launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+    else:
+        launch[bn_eval_stats_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+    # the apply with its epilogue
+    if fuse == 2:
+        var dadd = m_in(ctx, 6, a[4], total, isdev(dev, 4))
+        var drelu = m_out(ctx, 7, a[5], total, isdev(dev, 5))
+        if total > 0:
+            ctx.enqueue_function[bn_apply_add_relu_kernel](
+                fp(dx), fp(da), fp(dadd), fp(dout), fp(drelu), ip(dp), Int32(total),
+                grid_dim=((total + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+            )
+        m_fetch(ctx, drelu, a[5], total, isdev(dev, 5))
+        _ = dadd^
+        _ = drelu^
+    else:
+        launch[bn_apply_relu_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
+    if training:
+        launch[bn_running_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+    m_fetch(ctx, dout, a[1], total, isdev(dev, 1))
+    m_fetch(ctx, dr, a[2], nr, isdev(dev, 2))
+    m_fetch(ctx, da, a[3], na, isdev(dev, 3))
+    ctx.synchronize()
+    _ = dx^
+    _ = dr^
+    _ = dpart^
+    _ = da^
+    _ = dp^
+    _ = dout^
+    _ = ctx^
+
+
+def batchnorm_backward_relu_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool) raises:
+    """a = [x, g, dx, aux (in place), mask] (the binding's order; `dev` bit i
+    says a[i] is a device address): `batchnorm_backward_m` on
+    g' = relu_bwd(mask, g), g' never stored."""
+    var C = Int(prm[1])
+    var total = Int(prm[0]) * C * Int(prm[2])
+    var na = 2 + 7 * C
+    var ctx = cnn_ctx()
+    var dx = m_in(ctx, 0, a[0], total, isdev(dev, 0))
+    var dg = m_in(ctx, 1, a[1], total, isdev(dev, 1))
+    var da = m_in(ctx, 2, a[3], na, isdev(dev, 3))
+    var dp = put_prm(ctx, 3, prm)
+    var dout = m_out(ctx, 4, a[2], total, isdev(dev, 2))
+    var dmask = m_in(ctx, 6, a[4], total, isdev(dev, 4))
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var dpart = ws(ctx, 5, 2 * nblk)
+    comptime if BN_FOLD_BLOCK:
+        if nblk > 0:
+            ctx.enqueue_function[bn_bwd_red_relu_kernel](
+                fp(dx), fp(dg), fp(dmask), fp(da), fp(dpart), ip(dp), Int32(nblk),
+                grid_dim=((nblk + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+            )
+        launch[bn_blk_red_fin_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+        if total > 0:
+            ctx.enqueue_function[bn_bwd_dx_relu_kernel](
+                fp(dx), fp(dg), fp(dmask), fp(da), fp(dout), ip(dp), Int32(total), Int32(1 if training else 0),
+                grid_dim=((total + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+            )
+    else:
+        # the single-chain / threadgroup folds read a stored g: materialize
+        # relu's backward (the unfused launches) and run batchnorm_backward_m's body
+        var dge = ws(ctx, 7, total)
+        launch[relu_bwd_at](ctx, fp(dmask), fp(dg), fp(dge), fp(dge), ip(dp), ip(dp), total)
+        var blk = False
+        comptime if BN_BLOCK:
+            blk = _bn_use_block[False](ctx, dx, dge, da, dp, Int(prm[0]), C, Int(prm[2]))
+        if blk:
+            ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dge), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+        else:
+            launch[bn_bwd_red_at](ctx, fp(dx), fp(dge), fp(da), fp(da), ip(dp), ip(dp), C)
+        if training:
+            launch[bn_bwd_dx_at](ctx, fp(dx), fp(dge), fp(da), fp(dout), ip(dp), ip(dp), total)
+        else:
+            launch[bn_bwd_eval_dx_at](ctx, fp(dx), fp(dge), fp(da), fp(dout), ip(dp), ip(dp), total)
+        _ = dge^
+    m_fetch(ctx, dout, a[2], total, isdev(dev, 2))
+    m_fetch(ctx, da, a[3], na, isdev(dev, 3))
+    ctx.synchronize()
+    _ = dx^
+    _ = dg^
+    _ = dmask^
+    _ = dpart^
+    _ = da^
+    _ = dp^
+    _ = dout^
+    _ = ctx^
+
+
 def dropout2d_m(a: List[Int], dev: Int, n: Int, prm: List[Int32], hyper: List[Float32]) raises:
     """a = [x, y, mask]. lane gap-neural-overhead2: workspace slots, not
     five fresh device buffers per call."""
@@ -2287,6 +2698,8 @@ def idn_flags() -> Int:
         f |= 16
     comptime if IDN_PIN_WEIGHTS:
         f |= 32
+    comptime if IDN_CNN_BN_FUSE:
+        f |= 64
     return f
 
 
@@ -2816,10 +3229,8 @@ def _conv_relu_on_device(
     var fuse_relu = Int32(1 if relu_addr != 0 else 0)
     comptime if NI12_IMPLICIT_CONV:
         if rows > 0 and OC > 0:
-            if need_cols:
-                # Saved training tapes/dW still need the exact columns.
-                # Inference omits this allocation and launch entirely.
-                _im2col(ctx, dx, cols, dp, rows, ckk, C)
+            # lane gap-gemm-layers: the backward's dW gathers the columns
+            # too (`_implicit_wgrad`), so `need_cols` never builds them.
             var lp = contract_partition(ckk)
             ctx.enqueue_function[implicit_conv_kernel](
                 fp(dx), fp(dw), fp(dbias), fp(yconv), ip(dp), Int32(rows),
@@ -2967,7 +3378,7 @@ def conv_block_backward_into[resident: Bool = False](
     var dp = put_prm(ctx, 5, cprm)
     var saved = resident and save_y != 0 and (NN14_BOUNDED_IM2COL or save_cols != 0)
     var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
-    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved and not NN14_BOUNDED_IM2COL else ws(ctx, 7, tile_rows * ckk)
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved and not NN14_BOUNDED_IM2COL else ws(ctx, 7, 1 if NI12_IMPLICIT_CONV else tile_rows * ckk)
     var y2 = ws(ctx, 8, 1 if NI12_IMPLICIT_CONV else tile_rows * OC)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)
     var gy = ws(ctx, 11, ny)
@@ -3009,6 +3420,10 @@ def conv_block_backward_into[resident: Bool = False](
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
     comptime if NN14_BOUNDED_IM2COL:
         launch[nn14_wgrad_at](ctx, fp(dx), fp(grow), fp(gw), fp(gw), ip(dp), ip(dp), OC * ckk)
+    elif NI12_IMPLICIT_CONV:
+        # lane gap-gemm-layers: cols never materialized (the forward wrote
+        # none); the same words as the GEMM on the saved cols
+        _implicit_wgrad(ctx, gw, grow, dx, dp, 18, rows, OC, ckk)
     else:
         device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, grow, ones, OC, rows)
