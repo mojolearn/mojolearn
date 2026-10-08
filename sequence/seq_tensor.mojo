@@ -160,3 +160,11 @@ def seq_tensor_copy_py(dst: PythonObject, src: PythonObject, n_obj: PythonObject
     _ = vd^
     _ = vs^
     return PythonObject(n)
+
+
+def seq_tensor_view(handle: PythonObject, n: Int, what: String) raises -> DeviceBuffer[DType.float32]:
+    """A view of open handle `handle`'s n floats (exactly its size), for a
+    device-to-device copy."""
+    _ = seq_tensor_ptr(handle, n, what)
+    var pool = _SEQ_TENSORS.get_or_create_ptr()
+    return pool[].bufs[Int(py=handle) - 1].create_sub_buffer[DType.float32](0, n)
