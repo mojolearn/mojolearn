@@ -6,6 +6,22 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## 0.8.37 (unreleased 2026-10-04)
 
+- IDENTICAL defaults flipped from the switch grid run ge123e6f9 (NVIDIA L40S and AMD MI325X, full board data, one run per arm;
+  verdict = the average of the two vendors against the measured noise floor): Ridge and OLS solve the Gram system (Ridge taxi
+  50.0 -> 4.8 ms NVIDIA, 16.3 -> 3.0 ms AMD; OLS taxi 34.0 -> 17.5 / 14.5 -> 8.1 ms), TSQR leaves of 2048 rows for OLS and
+  randomized SVD, ordered GBDT T22 with the grid-fold standard (istella 54.4 -> 36.7 s NVIDIA), histogram replication by device
+  SM count for every GBDT lane, loss-guide batch 128, the KMeans centroid fold for KMeans, GMM and IVF initialization, and the IVF
+  direct distance. Each old path stays selectable with a `_OFF` define for the grid; the switch declarations cite the numbers.
+  Bits change for the Gram solve, the ordered grid-fold, the 2048-row TSQR leaves and the IVF direct distance (host column follows).
+- Five grid losers deleted with tombstone comments at every site, verdict and ratio in the guard refusals, and rows in
+  `docs/apple-fast/EXPERIMENTS.md`: C25 projection reuse, C58 shared prep, the QN IDN deconvolution, the GMM symmetric covariance
+  (1.84x / 1.45x slower, -0.78% log-likelihood) and T19 (quality loss).
+- Board: two clocks per cell (whole operation including the host-to-device copy, and kernel only) with the copy's source; ratios
+  against torch GPU arms use kernel/kernel, every other opponent whole/whole; `tools/board_clock_audit.py` reports which clock
+  each stored cell is. Our arm records its copy separately in both the classical and the algos drivers; no opponent is re-scored.
+- Tooling: the per-algorithm switch grid (`tools/six_lane_grid.py`, full factorial up to 128 configurations else pairwise),
+  the decision roll-up (`tools/six_lane_grid_decide.py`), the lq route with prebuilt binding stores, and the second-pass renderer.
+
 - Split Linux native GPU binaries into Ada, Hopper, and gfx942 payload packages, retaining `mojolearn-nvidia` and `mojolearn-amd` as vendor aggregates. Ordinary `pip install mojolearn` still installs all native payloads. New ownership paths protect upgrades from the old vendor wheels.
 - Publish payloads before vendor aggregates and core; require architecture-specific smoke receipts and one frozen source commit throughout the release. Oversized and mixed-architecture payloads are rejected.
 - Add an explicitly selected experimental sm80 PTX build/loader and witnessed baseline/native comparison tool. It is excluded from default dependencies and publication and makes no IDENTICAL qualification claim.
