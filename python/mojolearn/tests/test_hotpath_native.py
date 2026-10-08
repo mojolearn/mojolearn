@@ -523,15 +523,27 @@ def test_cluster_label_union_matches(name):
     y = _metric_label_inputs()[name]
     other = _RNG.integers(-2, 9, 3000)
     # lane apple-fast-py2mojo-core: the union is ONE `unique_inverse` of the
-    # two arrays laid end to end (no encoder, no gather), so the reference
-    # is the Python routine with the union seam declined
+    # two arrays laid end to end (no encoder, no gather), and lane
+    # pyglue-sweep removed the Python dict route, so declining the seam
+    # leaves no reference routine. The reference is computed here: NumPy's
+    # sorted union and its inverse, after the same int32 admission.
     call = lambda: M._prepare_cluster_labels(y, other[:len(y)])
-    real = M._native_union_codes
-    M._native_union_codes = lambda *args, **kwargs: None
-    try:
-        ref = _outcome(call)
-    finally:
-        M._native_union_codes = real
+
+    def reference():
+        yt = M._as_i32_1d(y, "labels_true")
+        yp = M._as_i32_1d(other[:len(y)], "labels_pred")
+        if yt.shape[0] != yp.shape[0]:
+            return call()  # the length refusal, raised by the routine itself
+        both = np.concatenate([np.asarray(yt), np.asarray(yp)]).astype(np.int32)
+        if both.size == 0:
+            return yt, yp, 0, 0, -1
+        classes, codes = np.unique(both, return_inverse=True)
+        codes = codes.astype(np.int32)
+        nt = int(yt.shape[0])
+        return (_arr(np.ascontiguousarray(codes[:nt])), _arr(np.ascontiguousarray(codes[nt:])),
+                nt, 0, int(classes.size) - 1)
+
+    ref = _outcome(reference)
     new = _outcome(call)
     if not _EXPECT_SABOTAGE:
         assert new == ref, f"metrics: new arm {new!r:.300} != reference {ref!r:.300}"
