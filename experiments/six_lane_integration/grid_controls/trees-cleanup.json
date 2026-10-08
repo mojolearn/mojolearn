@@ -400,28 +400,6 @@
    "status": "kept",
    "note": "real only for multi-permutation ordered/categorical fits"
   },
-  "T19": {
-   "define": "MOJOLEARN_TREES_T19",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T19"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:23",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:276"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept",
-   "note": "fused partition chain, depthwise",
-   "exclusive_with": [
-    "MOJOLEARN_TREES_T21"
-   ]
-  },
   "T19_DEFER": {
    "define": "MOJOLEARN_TREES_T19_DEFER",
    "kind": "switch",
@@ -1131,9 +1109,8 @@
   },
   "trees:gbdt-depthwise": {
    "binding": "_mojolearn_gbdt",
-   "route": "fit: greedy_search_helper_depthwise (T19 chain, T19_DEFER, T21 group width, T18, C45 root, T26 RMSE leaf); predict: C50_GB",
+   "route": "fit: greedy_search_helper_depthwise (T19_DEFER, T21 group width, T18, C45 root, T26 RMSE leaf); predict: C50_GB",
    "controls": [
-    "T19",
     "T19_DEFER",
     "T21",
     "T26",
@@ -1144,7 +1121,6 @@
    ],
    "interaction_groups": [
     [
-     "T19",
      "T19_DEFER",
      "T21",
      "C45_GBDT"
@@ -1166,7 +1142,6 @@
     "T23",
     "C45_GBDT",
     "C50_GB",
-    "T19",
     "T21_STREAMS"
    ],
    "interaction_groups": [
@@ -1174,7 +1149,6 @@
      "T17_BATCH"
     ],
     [
-     "T19",
      "T19_DEFER",
      "T21"
     ]
@@ -1370,6 +1344,11 @@
    "define": "MOJOLEARN_TREES_C47_GBDT",
    "control": "C47_GBDT",
    "reason": "DELETED by lane/grid-prune 2026-10-07: width cap subsumed by T17_BATCH; guards refuse it."
+  },
+  {
+   "define": "MOJOLEARN_TREES_T19",
+   "control": "T19",
+   "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 quality loss, a loser despite the speed. on/off ms ratio NV/AMD: gbdt-depthwise taxi 0.470/0.692 (1964 vs 4180 ms NV, 2708 vs 3912 ms AMD), istella 0.826/0.813 (7495 vs 9070 ms NV, 6123 vs 7530 ms AMD); quality: istella AUC 0.97908 vs 0.98330 (-0.43%), logloss 0.18838 vs 0.15607 (+20.7%), taxi AUC 0.63023 vs 0.63221 (-0.31%), logloss +0.16%; all WORSE. gbdt-lossguide unaffected (T19 does not reach Lossguide: lossguide AUC/logloss SAME, timing noise NV 1.100/0.910, AMD 1.041/1.074). Revisit only with a design that keeps the IDENTICAL partition stats (the fused chain ran with PROPAGATE_STATS off). T19_DEFER is independent and kept. Code recoverable at main ad7ed2370; define refused in core/six_lane_experiment_guards.mojo."
   }
  ],
  "stage0_build": {

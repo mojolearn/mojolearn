@@ -114,7 +114,7 @@ def fused_flags_count_kernel[GUARD: Bool = False](
         chunk += Int(grid_dim.x)
 
 
-def fused_scan_update_kernel[GUARD: Bool = False, PROPAGATE_STATS: Bool = True](
+def fused_scan_update_kernel[GUARD: Bool = False](
     left_leaves: MutPointer[UInt32, MutAnyOrigin],
     right_leaves: MutPointer[UInt32, MutAnyOrigin],
     part_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -150,32 +150,29 @@ def fused_scan_update_kernel[GUARD: Bool = False, PROPAGATE_STATS: Bool = True](
     var n_chunks = (size + FUSED_CHAIN_BLOCK - 1) // FUSED_CHAIN_BLOCK
     var tid = Int(thread_idx.x)
 
-    # T19/C48: IDENTICAL uses its unchanged canonical reduction next level.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    comptime if PROPAGATE_STATS:
-        # DEVIATION 1901's stats update, verbatim (one thread per stat; the
-        # parent's entry is read before either child's is written, in-thread)
-        var bin_feature_count = Int(bin_feature_count_in)
-        var stat_count = Int(stat_count_in)
-        var cell = Int(win_cells.unsafe_load(leaf_slot))
-        var one_hot = split_features[unsafe_offset=leaf_slot].one_hot_feature
-        var stat_id = tid
-        while stat_id < stat_count:
-            var parent = part_stats.unsafe_load(left_leaf * stat_count + stat_id)
-            var cell_sum = histograms.unsafe_load(
-                left_leaf * bin_feature_count * stat_count
-                + stat_id * bin_feature_count
-                + cell
-            )
-            var derived = parent - cell_sum
-            if stat_id == 0:
-                cell_sum = max(cell_sum, Float32(0.0))
-                derived = max(derived, Float32(0.0))
-            var left_sum = derived if one_hot else cell_sum
-            var right_sum = cell_sum if one_hot else derived
-            part_stats.unsafe_store(left_leaf * stat_count + stat_id, left_sum)
-            part_stats.unsafe_store(right_leaf * stat_count + stat_id, right_sum)
-            stat_id += Int(block_dim.x)
+    # DEVIATION 1901's stats update, verbatim (one thread per stat; the
+    # parent's entry is read before either child's is written, in-thread)
+    var bin_feature_count = Int(bin_feature_count_in)
+    var stat_count = Int(stat_count_in)
+    var cell = Int(win_cells.unsafe_load(leaf_slot))
+    var one_hot = split_features[unsafe_offset=leaf_slot].one_hot_feature
+    var stat_id = tid
+    while stat_id < stat_count:
+        var parent = part_stats.unsafe_load(left_leaf * stat_count + stat_id)
+        var cell_sum = histograms.unsafe_load(
+            left_leaf * bin_feature_count * stat_count
+            + stat_id * bin_feature_count
+            + cell
+        )
+        var derived = parent - cell_sum
+        if stat_id == 0:
+            cell_sum = max(cell_sum, Float32(0.0))
+            derived = max(derived, Float32(0.0))
+        var left_sum = derived if one_hot else cell_sum
+        var right_sum = cell_sum if one_hot else derived
+        part_stats.unsafe_store(left_leaf * stat_count + stat_id, left_sum)
+        part_stats.unsafe_store(right_leaf * stat_count + stat_id, right_sum)
+        stat_id += Int(block_dim.x)
 
     var carry = 0
     var c = 0
