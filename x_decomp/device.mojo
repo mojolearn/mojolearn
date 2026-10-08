@@ -188,7 +188,7 @@ from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
-from x_decomp.eigh_tridiag import EIGH_FAST_TRIDIAG, TD_MIN_N, eigh_td_on, td_copy_kernel
+from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, TD_MIN_N, eigh_td_on, td_copy_kernel
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
 
 
@@ -2995,8 +2995,10 @@ struct DevExec(Exec):
         # Householder tridiagonalization + df64 bisection + twisted
         # vectors (x_decomp/eigh_tridiag.mojo) from n = TD_MIN_N; a refusal
         # (clustered spectrum, nonfinite T) falls through to the Jacobi on
-        # the untouched `da`.
-        comptime if EIGH_FAST_TRIDIAG:
+        # the untouched `da`. lane gap-linalg (2026-10-08): also the
+        # IDENTICAL route on NVIDIA and AMD under -D MOJOLEARN_IDN_EIGH_TRIDIAG
+        # (`EIGH_TD_IDN`, pinned folds and the identical GEMM; CANDIDATE).
+        comptime if EIGH_TRIDIAG_ROUTE:
             if n >= TD_MIN_N:
                 if DevExec._eigh_td_try(ctx, da, w, v, n):
                     # The caller owns the matrix and context (including the

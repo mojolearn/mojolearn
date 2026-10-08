@@ -40,7 +40,7 @@ eigenvalues, where one-shot vectors are not orthogonal), a nonfinite or
 out-of-range T, or a nonfinite vector norm sets info[2]; the caller then runs
 main's round-robin Jacobi on the untouched input. One readback decides.
 """
-from std.math import fma, sqrt
+from std.math import fma
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
@@ -49,9 +49,20 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+    identical_div,
+    identical_mul,
+    identical_mul_add,
+    identical_sqrt,
+)
 from core.device_zero import enqueue_fill
-from x_decomp.cells import F32Ptr
+from gemm.block_update import BLK_TPB, blk_gemm_sub, blk_pack_kernel, blk_workspace_floats
+from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.contract import OP_NN, OP_NT, OP_TN
+from x_decomp.cells import F32Ptr, I32Ptr
 
 #: Promotion preparation, 2026-10-04; source e79a96e03d0331450a65544a7f55d06c7b140576.
 #: M3 w2-eigh-panels-q-20261004: original main-relative criterion PASS across
@@ -67,6 +78,42 @@ comptime EIGH_FAST_TRIDIAG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF"]()
 )
+#: lane gap-linalg (2026-10-08; docs/plans/gaps-2026-10-08.md section 3.1):
+#: the same algorithm promoted to IDENTICAL on NVIDIA and AMD. CANDIDATE,
+#: default off: `-D MOJOLEARN_IDN_EIGH_TRIDIAG`. What makes it identical:
+#:   1. every product that meets an add, every division and every sqrt in
+#:      this file is spelled through checks/numerics (`identical_mul_add`,
+#:      `identical_mul`, `identical_div`, `identical_sqrt`): one rounding
+#:      each, no contraction left to the backend (IDENTITY_PATHS rows 9, 10,
+#:      49). Under FAST those names are the plain operators, so the Apple
+#:      FAST route compiles the expressions it had.
+#:   2. every cross-thread fold is a fixed partition: the block folds of
+#:      `td_col_kernel`, `td_gemv_kernel`, `td_p_kernel`, `td_w_kernel` and
+#:      `td_gram_kernel` are shared-memory trees over TD_TPB = 256 slots
+#:      (a comptime count, not a wave width) whose per-thread partials cover
+#:      rows at a fixed stride of TD_TPB, and the partial arrays they fold
+#:      are indexed by block over a grid that is a function of (n, j) only.
+#:      The bisection and the twisted recurrences are per-thread serial.
+#:   3. the two n^3 products go through the identical GEMM
+#:      (gemm/block_update.mojo): the rank-2k trailing update
+#:      `A -= [V | W] [W | V]^T` as ONE OP_NT product at k = 2 TD_NB = 64
+#:      (one leaf: the chain runs the V W^T terms q = 0..31 then the W V^T
+#:      terms), and the back-transform `Z -= Y (T (Y^T Z))` as three
+#:      products (OP_TN at k = rows, the contract's fold tree; OP_NN at
+#:      k = 32 twice).
+#:   4. the refusal is decided by T's bits (identical on both vendors), so
+#:      both take the same branch; the fallback is the identical Jacobi.
+#: BITS CHANGE against the Jacobi (a different algorithm); NVIDIA and AMD
+#: move together, the host column keeps the Jacobi (its digest is recorded,
+#: not required). The FAST Apple route is untouched in structure
+#: (`td_syr2k_kernel`, `td_bt_*_kernel`).
+comptime EIGH_TD_IDN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_EIGH_TRIDIAG"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: Either route: `DevExec._eigh_on` reads this.
+comptime EIGH_TRIDIAG_ROUTE = EIGH_FAST_TRIDIAG or EIGH_TD_IDN
 #: FAST Apple candidate, default OFF: `-D MOJOLEARN_EIGH_FAST_PANEL_DF`
 #: (`_OFF` wins). Source lane/apple-fast-eigh-panel-df@21eeacf90 (ported
 #: 2026-10-04, lane apple-fast-rec-misc). Panel tridiagonalization with the
@@ -161,7 +208,9 @@ def df_sub(a: DF, b: DF) -> DF:
 
 @always_inline
 def df_mul(a: DF, b: DF) -> DF:
-    var p = a[0] * b[0]
+    # the product pinned so the two-product's error term is exact (a
+    # contracted `p + e` would fold the correction away)
+    var p = identical_mul(a[0], b[0])
     var e = fma(a[0], b[0], -p)
     e = fma(a[0], b[1], e)
     e = fma(a[1], b[0], e)
@@ -170,17 +219,17 @@ def df_mul(a: DF, b: DF) -> DF:
 
 @always_inline
 def df_div(a: DF, b: DF) -> DF:
-    var q1 = a[0] / b[0]
+    var q1 = identical_div(a[0], b[0])
     var r = df_sub(a, df_mul(b, DF(q1, Float32(0.0))))
-    var q2 = r[0] / b[0]
+    var q2 = identical_div(r[0], b[0])
     r = df_sub(r, df_mul(b, DF(q2, Float32(0.0))))
-    var q3 = r[0] / b[0]
+    var q3 = identical_div(r[0], b[0])
     return df_add(_quick(q1, q2), DF(q3, Float32(0.0)))
 
 
 @always_inline
 def df_sq(x: Float32) -> DF:
-    var p = x * x
+    var p = identical_mul(x, x)
     return DF(p, fma(x, x, -p))
 
 
@@ -230,7 +279,9 @@ def _td_cell_kern(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n: Int, i: Int, c: Int, jj:
     the panel's first jj reflectors (A is stale by exactly those)."""
     var x = a.unsafe_load(i * n + c)
     for p in range(jj):
-        x -= vp.unsafe_load(i * TD_NB + p) * wp.unsafe_load(c * TD_NB + p) + wp.unsafe_load(i * TD_NB + p) * vp.unsafe_load(c * TD_NB + p)
+        # the V W^T term, then the W V^T term, one fused multiply-add each
+        x = identical_mul_add(-vp.unsafe_load(i * TD_NB + p), wp.unsafe_load(c * TD_NB + p), x)
+        x = identical_mul_add(-wp.unsafe_load(i * TD_NB + p), vp.unsafe_load(c * TD_NB + p), x)
     return x
 
 
@@ -277,7 +328,7 @@ def td_col_kernel(
         var x = _td_cell_any(a, alo, vp, wp, n, i, j, jj)
         xcol.unsafe_store(i, x)
         if i >= j + 2:
-            s = x * x
+            s = identical_mul(x, x)
     red[tid] = s
     barrier()
     var w = TD_TPB // 2
@@ -302,10 +353,10 @@ def _td_house(alpha: Float32, xn2: Float32) -> SIMD[DType.float32, 4]:
     var beta = alpha
     var scale = Float32(0.0)
     if xn2 > Float32(0.0):
-        var nrm = sqrt(alpha * alpha + xn2)
+        var nrm = identical_sqrt(identical_mul_add(alpha, alpha, xn2))
         beta = -nrm if alpha >= Float32(0.0) else nrm
-        t = (beta - alpha) / beta
-        scale = Float32(1.0) / (alpha - beta)
+        t = identical_div(beta - alpha, beta)
+        scale = identical_div(Float32(1.0), alpha - beta)
     return SIMD[DType.float32, 4](beta, t, scale, Float32(0.0))
 
 
@@ -314,7 +365,7 @@ def _td_v(xcol: F32Ptr, j: Int, scale: Float32, c: Int) -> Float32:
     """v[c] for c > j: 1 at j + 1, xcol[c] scale below."""
     if c == j + 1:
         return Float32(1.0)
-    return xcol.unsafe_load(c) * scale
+    return identical_mul(xcol.unsafe_load(c), scale)
 
 
 def td_gemv_kernel(
@@ -399,19 +450,19 @@ def td_gemv_kernel(
         var row = (j + 1 + b) * n
         var c = j + 1 + tid
         while c < n:
-            s += a.unsafe_load(row + c) * _td_v(xcol, j, scale, c)
+            s = identical_mul_add(a.unsafe_load(row + c), _td_v(xcol, j, scale, c), s)
             c += TD_TPB
     else:
         var q = b - m
         var i = j + 1 + tid
         if q < jj:
             while i < n:
-                s += wp.unsafe_load(i * TD_NB + q) * _td_v(xcol, j, scale, i)
+                s = identical_mul_add(wp.unsafe_load(i * TD_NB + q), _td_v(xcol, j, scale, i), s)
                 i += TD_TPB
         else:
             var q2 = q - jj
             while i < n:
-                s += vp.unsafe_load(i * TD_NB + q2) * _td_v(xcol, j, scale, i)
+                s = identical_mul_add(vp.unsafe_load(i * TD_NB + q2), _td_v(xcol, j, scale, i), s)
                 i += TD_TPB
     red[tid] = s
     barrier()
@@ -449,10 +500,11 @@ def td_p_kernel(
     if i < n:
         var u = y.unsafe_load(i)
         for p in range(jj):
-            u -= vp.unsafe_load(i * TD_NB + p) * sh[p] + wp.unsafe_load(i * TD_NB + p) * sh[jj + p]
-        var pv = tau.unsafe_load(j) * u
+            u = identical_mul_add(-vp.unsafe_load(i * TD_NB + p), sh[p], u)
+            u = identical_mul_add(-wp.unsafe_load(i * TD_NB + p), sh[jj + p], u)
+        var pv = identical_mul(tau.unsafe_load(j), u)
         pb.unsafe_store(i, pv)
-        s = pv * vv.unsafe_load(i)
+        s = identical_mul(pv, vv.unsafe_load(i))
     red[tid] = s
     barrier()
     var w = TD_TPB // 2
@@ -490,10 +542,10 @@ def td_w_kernel(
             red[tid] = red[tid] + red[tid + w]
         barrier()
         w = w // 2
-    var alpha2 = Float32(-0.5) * tau.unsafe_load(j) * red[0]
+    var alpha2 = identical_mul(identical_mul(Float32(-0.5), tau.unsafe_load(j)), red[0])
     var i = j + 1 + b * TD_TPB + tid
     if i < n:
-        wp.unsafe_store(i * TD_NB + jj, pb.unsafe_load(i) + alpha2 * vv.unsafe_load(i))
+        wp.unsafe_store(i * TD_NB + jj, identical_mul_add(alpha2, vv.unsafe_load(i), pb.unsafe_load(i)))
 
 
 def td_syr2k_kernel(a: F32Ptr, alo: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int32, g_in: Int32):
@@ -639,12 +691,12 @@ def td_bisect_kernel(dd: F32Ptr, ee: F32Ptr, info: F32Ptr, wh: F32Ptr, wl: F32Pt
         var d = dd.unsafe_load(i) * sc
         glo = min(glo, d - r)
         ghi = max(ghi, d + r)
-    var pad = Float32(1.0e-4) * max(ghi - glo, max(abs(glo), abs(ghi))) + Float32(1.0e-20)
+    var pad = identical_mul_add(Float32(1.0e-4), max(ghi - glo, max(abs(glo), abs(ghi))), Float32(1.0e-20))
     var lo = DF(glo - pad, Float32(0.0))
     var hi = DF(ghi + pad, Float32(0.0))
     for _ in range(TD_BISECT_MAX):
         var wd = df_sub(hi, lo)
-        if wd[0] <= TD_EPS_DF * max(abs(lo[0]), abs(hi[0])) + TD_PIVMIN:
+        if wd[0] <= identical_mul_add(TD_EPS_DF, max(abs(lo[0]), abs(hi[0])), TD_PIVMIN):
             break
         var mid = df_add(lo, DF(wd[0] * Float32(0.5), wd[1] * Float32(0.5)))
         if td_sturm_kern(dd, ee, n, sc, mid) > k:
@@ -672,9 +724,9 @@ def td_gap_kernel(wh: F32Ptr, wl: F32Ptr, info: F32Ptr, w_out: F32Ptr, n_in: Int
     if k < n - 1:
         g = min(g, df_sub(DF(wh.unsafe_load(k + 1), wl.unsafe_load(k + 1)), wk)[0])
     var scale = max(abs(wh.unsafe_load(0)), abs(wh.unsafe_load(n - 1)))
-    if not (g >= TD_GAP_MIN_REL * scale) or not td_finite(wk[0]):
+    if not (g >= identical_mul(TD_GAP_MIN_REL, scale)) or not td_finite(wk[0]):
         info.unsafe_store(2, Float32(1.0))
-    w_out.unsafe_store(k, (wk[0] + wk[1]) / sc)
+    w_out.unsafe_store(k, identical_div(wk[0] + wk[1], sc))
 
 
 def td_vec_kernel(
@@ -738,7 +790,7 @@ def td_vec_kernel(
             zn = df_neg(df_mul(df_div(DF(e1, Float32(0.0)), DF(e, Float32(0.0))), zp))
         var zf = zn[0] + zn[1]
         z.unsafe_store(ii * n + k, zf)
-        nrm += zf * zf
+        nrm = identical_mul_add(zf, zf, nrm)
         zp = zc
         zc = zn
         ii -= 1
@@ -757,16 +809,16 @@ def td_vec_kernel(
             zn = df_neg(df_mul(df_div(DF(e1, Float32(0.0)), DF(e, Float32(0.0))), zp))
         var zf = zn[0] + zn[1]
         z.unsafe_store((ii + 1) * n + k, zf)
-        nrm += zf * zf
+        nrm = identical_mul_add(zf, zf, nrm)
         zp = zc
         zc = zn
         ii += 1
     if not td_finite(nrm) or not (nrm > Float32(0.0)):
         info.unsafe_store(2, Float32(1.0))
         return
-    var inv = Float32(1.0) / sqrt(nrm)
+    var inv = identical_div(Float32(1.0), identical_sqrt(nrm))
     for t in range(n):
-        z.unsafe_store(t * n + k, z.unsafe_load(t * n + k) * inv)
+        z.unsafe_store(t * n + k, identical_mul(z.unsafe_load(t * n + k), inv))
 
 
 # ===========================================================================
@@ -798,7 +850,7 @@ def td_gram_kernel(a: F32Ptr, gm: F32Ptr, n_in: Int32):
     if qa < cnt and qb < cnt:
         var i = k + 1 + tid
         while i < n:
-            s += _td_y(a, n, k, cnt, i, qa) * _td_y(a, n, k, cnt, i, qb)
+            s = identical_mul_add(_td_y(a, n, k, cnt, i, qa), _td_y(a, n, k, cnt, i, qb), s)
             i += TD_TPB
     red[tid] = s
     barrier()
@@ -830,8 +882,8 @@ def td_tfac_kernel(gm: F32Ptr, tau: F32Ptr, tf: F32Ptr, n_in: Int32):
             elif r < i:
                 var s = Float32(0.0)
                 for q in range(r, i):
-                    s += row[q] * gm.unsafe_load(offset + q * TD_NB + i)
-                row[i] = -ti * s
+                    s = identical_mul_add(row[q], gm.unsafe_load(offset + q * TD_NB + i), s)
+                row[i] = identical_mul(-ti, s)
     for i in range(TD_NB):
         tf.unsafe_store(offset + r * TD_NB + i, row[i])
 
@@ -867,7 +919,7 @@ def td_bt_s_kernel(
                 if i0 + r < ie:
                     var zv = z.unsafe_load((i0 + r) * n + c)
                     comptime for qq in range(TD_NB):
-                        acc[qq] += sy_t[r * TD_NB + qq] * zv
+                        acc[qq] = identical_mul_add(sy_t[r * TD_NB + qq], zv, acc[qq])
         barrier()
         i0 += 8
     if c < n:
@@ -892,7 +944,7 @@ def td_bt_t_kernel(sp: F32Ptr, tf: F32Ptr, s2: F32Ptr, n_in: Int32):
         comptime for ra in range(TD_NB):
             var acc = Float32(0.0)
             comptime for q in range(ra, TD_NB):
-                acc += tsh[ra * TD_NB + q] * sv[q]
+                acc = identical_mul_add(tsh[ra * TD_NB + q], sv[q], acc)
             s2.unsafe_store(ra * n + c, acc)
 
 
@@ -921,8 +973,44 @@ def td_bt_z_kernel(a: F32Ptr, z: F32Ptr, s2: F32Ptr, n_in: Int32, k_in: Int32, c
             if i < n:
                 var acc = Float32(0.0)
                 comptime for q in range(TD_NB):
-                    acc += sy_t[r * TD_NB + q] * sv[q]
+                    acc = identical_mul_add(sy_t[r * TD_NB + q], sv[q], acc)
                 z.unsafe_store(i * n + c, z.unsafe_load(i * n + c) - acc)
+
+
+def td_pack_y_kernel(a: F32Ptr, y: F32Ptr, n_in: Int32, k_in: Int32, cnt_in: Int32, rows_in: Int32):
+    """EIGH_TD_IDN: panel k's reflector block Y (rows k + 1 .. n - 1, TD_NB
+    columns, `_td_y`'s unit diagonal and zeros) packed contiguous, y[i TD_NB
+    + q]. A copy: no rounding."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var rows = Int(rows_in)
+    if t >= rows * TD_NB:
+        return
+    var i = t // TD_NB
+    var q = t - i * TD_NB
+    var k = Int(k_in)
+    y.unsafe_store(t, _td_y(a, Int(n_in), k, Int(cnt_in), k + 1 + i, q))
+
+
+def _td_idn_workspace(n: Int) -> Tuple[Int, Int]:
+    """EIGH_TD_IDN: (floats of the block-update scratch, floats of the plain
+    GEMM scratch) over every panel of an n x n solve: the rank-2k update
+    `blk_gemm_sub(mm, mm, 2 TD_NB)`, the back-transform's
+    `blk_gemm_sub(mrows, n, TD_NB)`, and the two plain products
+    (TD_NB x n at k = mrows and at k = TD_NB), each sized by its own
+    helper. Never below 1."""
+    var blk = 1
+    var gw = identical_gemm_workspace_max_floats(TD_NB, n, TD_NB)
+    var k = 0
+    while k < n - 1:
+        var cnt = min(TD_NB, n - 1 - k)
+        var mm = n - k - cnt
+        if mm > 0:
+            blk = max(blk, blk_workspace_floats(mm, mm, 2 * TD_NB))
+        var mrows = n - k - 1
+        blk = max(blk, blk_workspace_floats(mrows, n, TD_NB))
+        gw = max(gw, identical_gemm_workspace_max_floats(TD_NB, n, mrows))
+        k += cnt
+    return (blk, max(1, gw))
 
 
 # ===========================================================================
@@ -965,6 +1053,17 @@ def eigh_td_on(
     var dlo = ctx.enqueue_create_buffer[DType.float32](n * n if EIGH_FAST_PANEL_DF else 1)
     comptime if EIGH_FAST_PANEL_DF:
         enqueue_fill(ctx, dlo, Float32(0.0))
+    # EIGH_TD_IDN: the packed [V | W] / [W | V] operands (n x 2 TD_NB each),
+    # the block-update scratch and the plain GEMM scratch (one float each
+    # on the FAST route, never read)
+    var idn_ws = _td_idn_workspace(n) if EIGH_TD_IDN else (1, 1)
+    var dP1 = ctx.enqueue_create_buffer[DType.float32](n * 2 * TD_NB if EIGH_TD_IDN else 1)
+    var dP2 = ctx.enqueue_create_buffer[DType.float32](n * 2 * TD_NB if EIGH_TD_IDN else 1)
+    var dws = ctx.enqueue_create_buffer[DType.float32](idn_ws[0])
+    var dgw = ctx.enqueue_create_buffer[DType.float32](idn_ws[1])
+    var ap = F32Ptr(unsafe_from_address=Int(da.unsafe_ptr()))
+    # the GUARD=False block updates never read `info`; any Int32-typed pointer
+    var no_info = I32Ptr(unsafe_from_address=Int(da.unsafe_ptr()))
     # 1. tridiagonalize
     var k = 0
     var panel = 0
@@ -1000,11 +1099,45 @@ def eigh_td_on(
         var kend = k + cnt
         var mm = n - kend
         if mm > 0:
-            var g = (mm + 31) // 32
-            ctx.enqueue_function[td_syr2k_kernel](
-                da.unsafe_ptr(), dlo.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), Int32(n), Int32(kend), Int32(g),
-                grid_dim=g * g, block_dim=TD_TPB,
-            )
+            comptime if EIGH_TD_IDN:
+                # A[kend:, kend:] -= [V | W] [W | V]^T: the trailing rows of V
+                # and W side by side (unused panel columns are zero), ONE
+                # identical GEMM at k = 2 TD_NB (one leaf: V W^T's 32 terms,
+                # then W V^T's), one subtraction (gemm/block_update.mojo)
+                var vp = F32Ptr(unsafe_from_address=Int(dV.unsafe_ptr()))
+                var wp = F32Ptr(unsafe_from_address=Int(dW.unsafe_ptr()))
+                var p1 = F32Ptr(unsafe_from_address=Int(dP1.unsafe_ptr()))
+                var p2 = F32Ptr(unsafe_from_address=Int(dP2.unsafe_ptr()))
+                var pcells = mm * TD_NB
+                var pgrid = (pcells + BLK_TPB - 1) // BLK_TPB
+                ctx.enqueue_function[blk_pack_kernel](
+                    p1, vp, Int32(2 * TD_NB), Int32(0), Int32(TD_NB), Int32(kend), Int32(0),
+                    Int32(mm), Int32(TD_NB), vp, Int32(0), grid_dim=pgrid, block_dim=BLK_TPB,
+                )
+                ctx.enqueue_function[blk_pack_kernel](
+                    p1, wp, Int32(2 * TD_NB), Int32(TD_NB), Int32(TD_NB), Int32(kend), Int32(0),
+                    Int32(mm), Int32(TD_NB), wp, Int32(0), grid_dim=pgrid, block_dim=BLK_TPB,
+                )
+                ctx.enqueue_function[blk_pack_kernel](
+                    p2, wp, Int32(2 * TD_NB), Int32(0), Int32(TD_NB), Int32(kend), Int32(0),
+                    Int32(mm), Int32(TD_NB), wp, Int32(0), grid_dim=pgrid, block_dim=BLK_TPB,
+                )
+                ctx.enqueue_function[blk_pack_kernel](
+                    p2, vp, Int32(2 * TD_NB), Int32(TD_NB), Int32(TD_NB), Int32(kend), Int32(0),
+                    Int32(mm), Int32(TD_NB), vp, Int32(0), grid_dim=pgrid, block_dim=BLK_TPB,
+                )
+                blk_gemm_sub[False](
+                    ctx, ap, n, kend, kend,
+                    p1, 2 * TD_NB, 0, 0,
+                    p2, 2 * TD_NB, 0, 0,
+                    mm, mm, 2 * TD_NB, OP_NT, False, dws, no_info, ap, False,
+                )
+            else:
+                var g = (mm + 31) // 32
+                ctx.enqueue_function[td_syr2k_kernel](
+                    da.unsafe_ptr(), dlo.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), Int32(n), Int32(kend), Int32(g),
+                    grid_dim=g * g, block_dim=TD_TPB,
+                )
         k = kend
         panel += 1
         if panel % TD_SYNC_PANELS == 0:
@@ -1044,6 +1177,10 @@ def eigh_td_on(
     _ = dmh^
     _ = dml^
     if refused:
+        _ = dP1^
+        _ = dP2^
+        _ = dws^
+        _ = dgw^
         _ = dV^
         _ = dW^
         _ = dvv^
@@ -1062,8 +1199,11 @@ def eigh_td_on(
         _ = hinfo^
         return False
     # 4. V = Q Z
-    var dS = ctx.enqueue_create_buffer[DType.float32](TD_KSPLIT * TD_NB * n)
+    var dS = ctx.enqueue_create_buffer[DType.float32](1 if EIGH_TD_IDN else TD_KSPLIT * TD_NB * n)
     var dS2 = ctx.enqueue_create_buffer[DType.float32](TD_NB * n)
+    # EIGH_TD_IDN: the packed Y (n x TD_NB) and S = Y^T Z (TD_NB x n)
+    var dY = ctx.enqueue_create_buffer[DType.float32](n * TD_NB if EIGH_TD_IDN else 1)
+    var dS32 = ctx.enqueue_create_buffer[DType.float32](TD_NB * n if EIGH_TD_IDN else 1)
     var npan = (nref + TD_NB - 1) // TD_NB
     var dG = ctx.enqueue_create_buffer[DType.float32](npan * TD_NB * TD_NB)
     var dT = ctx.enqueue_create_buffer[DType.float32](npan * TD_NB * TD_NB)
@@ -1084,18 +1224,43 @@ def eigh_td_on(
         var kp = p * TD_NB
         var cnt = min(TD_NB, nref - kp)
         var mrows = n - kp - 1
-        var chunk = (mrows + TD_KSPLIT - 1) // TD_KSPLIT
-        ctx.enqueue_function[td_bt_s_kernel](
-            da.unsafe_ptr(), dz.unsafe_ptr(), dS.unsafe_ptr(), Int32(n), Int32(kp), Int32(cnt), Int32(chunk),
-            grid_dim=(gx, TD_KSPLIT, 1), block_dim=(TD_TPB, 1, 1),
-        )
-        ctx.enqueue_function[td_bt_t_kernel](
-            dS.unsafe_ptr(), dT.unsafe_ptr() + p * TD_NB * TD_NB, dS2.unsafe_ptr(), Int32(n), grid_dim=gx, block_dim=TD_TPB
-        )
-        ctx.enqueue_function[td_bt_z_kernel](
-            da.unsafe_ptr(), dz.unsafe_ptr(), dS2.unsafe_ptr(), Int32(n), Int32(kp), Int32(cnt),
-            grid_dim=(gx, _td_grid(mrows, 16), 1), block_dim=(TD_TPB, 1, 1),
-        )
+        comptime if EIGH_TD_IDN:
+            # Z[kp + 1:, :] -= Y (T_p (Y^T Z[kp + 1:, :])) as three identical
+            # GEMMs: S = Y^T Z (OP_TN, k = mrows, the contract's fold tree),
+            # S2 = T_p S (k = TD_NB), and the block update at k = TD_NB
+            var ycells = mrows * TD_NB
+            ctx.enqueue_function[td_pack_y_kernel](
+                da.unsafe_ptr(), dY.unsafe_ptr(), Int32(n), Int32(kp), Int32(cnt), Int32(mrows),
+                grid_dim=(ycells + BLK_TPB - 1) // BLK_TPB, block_dim=BLK_TPB,
+            )
+            var zrows = dz.create_sub_buffer[DType.float32]((kp + 1) * n, mrows * n)
+            identical_gemm_into(ctx, dS32, dY, zrows, dgw, TD_NB, n, mrows, OP_TN)
+            var tp = dT.create_sub_buffer[DType.float32](p * TD_NB * TD_NB, TD_NB * TD_NB)
+            identical_gemm_into(ctx, dS2, tp, dS32, dgw, TD_NB, n, TD_NB, OP_NN)
+            var zp = F32Ptr(unsafe_from_address=Int(dz.unsafe_ptr()))
+            var yp = F32Ptr(unsafe_from_address=Int(dY.unsafe_ptr()))
+            var s2p = F32Ptr(unsafe_from_address=Int(dS2.unsafe_ptr()))
+            blk_gemm_sub[False](
+                ctx, zp, n, kp + 1, 0,
+                yp, TD_NB, 0, 0,
+                s2p, n, 0, 0,
+                mrows, n, TD_NB, OP_NN, False, dws, no_info, zp, False,
+            )
+            _ = zrows^
+            _ = tp^
+        else:
+            var chunk = (mrows + TD_KSPLIT - 1) // TD_KSPLIT
+            ctx.enqueue_function[td_bt_s_kernel](
+                da.unsafe_ptr(), dz.unsafe_ptr(), dS.unsafe_ptr(), Int32(n), Int32(kp), Int32(cnt), Int32(chunk),
+                grid_dim=(gx, TD_KSPLIT, 1), block_dim=(TD_TPB, 1, 1),
+            )
+            ctx.enqueue_function[td_bt_t_kernel](
+                dS.unsafe_ptr(), dT.unsafe_ptr() + p * TD_NB * TD_NB, dS2.unsafe_ptr(), Int32(n), grid_dim=gx, block_dim=TD_TPB
+            )
+            ctx.enqueue_function[td_bt_z_kernel](
+                da.unsafe_ptr(), dz.unsafe_ptr(), dS2.unsafe_ptr(), Int32(n), Int32(kp), Int32(cnt),
+                grid_dim=(gx, _td_grid(mrows, 16), 1), block_dim=(TD_TPB, 1, 1),
+            )
         done += 1
         if done % TD_SYNC_PANELS == 0:
             ctx.synchronize()
@@ -1103,6 +1268,12 @@ def eigh_td_on(
     ctx.synchronize()
     _ = dS^
     _ = dS2^
+    _ = dY^
+    _ = dS32^
+    _ = dP1^
+    _ = dP2^
+    _ = dws^
+    _ = dgw^
     _ = dG^
     _ = dT^
     _ = dV^
