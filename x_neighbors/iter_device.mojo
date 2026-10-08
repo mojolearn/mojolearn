@@ -682,11 +682,6 @@ def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
                         changed.unsafe_store(0, Int32(1))
 
 
-def _c33_cc_dense(a: FP, lab: IP, n: Int32, changed: IP, state: IP):
-    if state.unsafe_load(0) == 0:
-        cc_hook_dense_kernel(a, lab, n, changed)
-
-
 def cc_label_init_kernel(lab: IP, n: Int32):
     var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if v < Int(n):
@@ -711,35 +706,18 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     var rounds = 0
     if n > 0:
         ctx.enqueue_function[cc_label_init_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
-    comptime if C33_FROZEN_CHUNKS:
-        var state=ctx.enqueue_create_buffer[DType.int32](2)
-        state.enqueue_fill(Int32(0))
-        var hstate=List[Int32](length=2,fill=Int32(0))
-        while n > 0:
-            for offset in range(C33_CHUNK):
-                d_c.enqueue_fill(Int32(0))
-                ctx.enqueue_function[_c33_cc_dense](d_a.unsafe_ptr(),d_l.unsafe_ptr(),Int32(n),d_c.unsafe_ptr(),state.unsafe_ptr(),grid_dim=blocks,block_dim=256)
-                ctx.enqueue_function[_c33_cc_jump](d_l.unsafe_ptr(),Int32(n),state.unsafe_ptr(),grid_dim=blocks,block_dim=256)
-                ctx.enqueue_function[_c33_cc_finish](d_c.unsafe_ptr(),state.unsafe_ptr(),Int32(rounds+offset+1),grid_dim=1,block_dim=1)
-            rounds += C33_CHUNK
-            ctx.enqueue_copy(dst_ptr=hstate.unsafe_ptr(),src_buf=state)
-            ctx.synchronize()
-            if hstate[0] != 0:
-                rounds=Int(hstate[1])
-                break
-        _ = state^
-        _ = hstate^
-    else:
-        while n > 0:
-            rounds += 1
-            d_c.enqueue_fill(Int32(0))
-            ctx.enqueue_function[cc_hook_dense_kernel](d_a.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n), d_c.unsafe_ptr(),
-                                                       grid_dim=blocks, block_dim=256)
-            ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
-            ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_c)
-            ctx.synchronize()
-            if hb.unsafe_ptr()[0] == 0:
-                break
+    # (the C33 dense CC chunking, never compiled, was deleted with the CSR
+    # path's by lane gap-graph, 2026-10-08; C33 stays in the LP iterate only)
+    while n > 0:
+        rounds += 1
+        d_c.enqueue_fill(Int32(0))
+        ctx.enqueue_function[cc_hook_dense_kernel](d_a.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n), d_c.unsafe_ptr(),
+                                                   grid_dim=blocks, block_dim=256)
+        ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+        ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_c)
+        ctx.synchronize()
+        if hb.unsafe_ptr()[0] == 0:
+            break
     if n > 0:
         ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_l)
         ctx.synchronize()
