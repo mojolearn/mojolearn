@@ -29,6 +29,13 @@ conductor) with two additions:
     "SKIPPED: not built yet", never an error; the opponents still race. A class
     that IS exported but lacks a method the board calls refuses by name
     ("CONTRACT: ...").
+  * OUR SEPARATE UPLOAD CLOCK (2026-10-08). After each round's clocks close,
+    OUR arm (ours, ours-fast) uploads the host arrays its timed call was handed
+    once more, timed on its own (`_ours_upload_probe`), and its span carries
+    `upload_ms_separate` (+ bytes, inputs, scope) and the derived
+    `fit_minus_upload_ms`: a kernel-only reading beside the whole-operation
+    one, for ratios against GPU arms whose inputs went up before their clock.
+    The scored clock is unchanged; opponent arms are never probed.
 
 OUR SIDE'S CONTRACT (what the board calls; the lanes' classes are
 scikit-learn shaped unless a line below says otherwise)
@@ -2259,8 +2266,12 @@ class Skipped(Exception):
 
 
 class Runner:
-    def __init__(self, info, fit, outputs, infer=None, sync=None, record=None, model_for_hash=None):
+    def __init__(self, info, fit, outputs, infer=None, sync=None, record=None, model_for_hash=None,
+                 upload_inputs=None):
         self.model_for_hash = model_for_hash
+        #: OUR arm only: the host arrays the timed call is handed, [(name, array)], for the
+        #: separate upload probe (`_ours_upload_probe`). None = the builder declared none.
+        self.upload_inputs = upload_inputs
         self.info, self._fit, self._out, self._infer, self._sync = info, fit, outputs, infer, sync
         #: what this arm was constructed with, for tools/bench_board_params.py:
         #: BP.arm_record(constructed object), or a declared {"__library__": ...}
@@ -2289,6 +2300,85 @@ class Runner:
 
 
 OURS_ARMS = ("ours", "ours-fast")
+
+
+def _with_upload(runner, inputs):
+    """Declare the host arrays OUR arm's timed call is handed (see `_ours_upload_probe`)."""
+    runner.upload_inputs = [(k, v) for k, v in inputs if v is not None]
+    return runner
+
+
+def _probe_words(np, name, a):
+    """The 4-byte words one handed host array goes up as, with no arithmetic on its values.
+    A floating array goes up as float32 (the words our public calls upload, as in
+    tools/classical_two_datasets.py `_ours_upload_probe`); any other dtype as its own bytes.
+    A scipy sparse matrix goes up as its CSR parts. Harness glue, outside every clock."""
+    if hasattr(a, "detach") and hasattr(a, "numpy"):          # a CPU torch tensor (the layer lanes)
+        a = a.detach().numpy()
+    if hasattr(a, "tocsr") and hasattr(a, "indptr"):          # scipy CSR / CSC
+        return [("%s.%s" % (name, part), np.ascontiguousarray(getattr(a, part), dtype=np.float32)
+                 if part == "data" else np.ascontiguousarray(getattr(a, part)))
+                for part in ("data", "indices", "indptr")]
+    a = np.asarray(a)
+    if a.dtype.kind == "f":
+        a = np.ascontiguousarray(a, dtype=np.float32)  # glue: the words the fit uploads
+    else:
+        a = np.ascontiguousarray(a)
+    return [(name, a)]
+
+
+def _ours_upload_probe(runner):
+    """A SEPARATE host-to-device upload of OUR arm's inputs, timed on its own and
+    OUTSIDE every clock (lane algos-upload-probe, 2026-10-08; the algos twin of
+    tools/classical_two_datasets.py `_ours_upload_probe`).
+
+    Ours uploads its host inputs inside its clock and the torch/cupy/gpytorch GPU
+    arms put theirs on the device before theirs, so our algos cells had only the
+    whole-operation clock (the MIXED ratios in tools/board_clock_audit.py). This
+    takes a kernel-only reading beside it: the host arrays the builder declared
+    the timed call is handed (`Runner.upload_inputs`) go up once more through the
+    resident-array binding (`x_cnn_res_upload`: an enqueue_copy and a device
+    synchronize per array), after the round's scored call, its outputs and every
+    clock of the round are done. NOTHING MOVES: the scored clock and the
+    whole-operation clock are exactly what they were; this is a second
+    measurement beside them. The device buffer is allocated and freed outside the
+    timed window. No arithmetic on data: a device copy call and a clock. When the
+    binding or the inputs are not available the record says why, never a guess."""
+    if (runner.info or {}).get("input_home") == "device":
+        return {"unavailable": "the inputs are on the device before the clock (input_home=device)"}
+    inputs = getattr(runner, "upload_inputs", None)
+    if not inputs:
+        return {"unavailable": "the builder declared no host inputs for this arm"}
+    np = _np()
+    try:
+        import mojolearn as ml
+        b = ml._backend.binding("_mojolearn_x_cnn", ml._backend.default_mode())
+    except Exception as exc:  # noqa: BLE001
+        return {"unavailable": "no resident-array binding: %r" % (exc,)}
+    parts = []
+    for name, a in inputs:
+        parts.extend(_probe_words(np, name, a))
+    sizes = [(name, a, int(a.nbytes) // 4) for name, a in parts]
+    sizes = [x for x in sizes if x[2] > 0]
+    if not sizes:
+        return {"unavailable": "empty inputs"}
+    try:
+        h = int(b.x_cnn_res_alloc(max(w for _, _, w in sizes)))
+    except Exception as exc:  # noqa: BLE001
+        return {"unavailable": "res_alloc failed: %r" % (exc,)}
+    try:
+        t0 = time.perf_counter()
+        for _, a, words in sizes:
+            b.x_cnn_res_upload(h, a.ctypes.data, words)
+        ms = (time.perf_counter() - t0) * 1000.0
+    finally:
+        try:
+            b.x_cnn_res_free(h)
+        except Exception:  # noqa: BLE001
+            pass
+    return {"ms": ms, "bytes": sum(w * 4 for _, _, w in sizes),
+            "inputs": [name for name, _, _ in sizes],
+            "scope": "host_to_device_upload_separate", "outside_scored_clock": True}
 
 
 def _ours_class(lane):
@@ -2718,8 +2808,20 @@ def _build_est(lane, arm, D):
             o["pred"] = o.pop("out")
         return o
 
-    return Runner(info, fit, outputs, infer if has_infer(lane) else None, sync,
-                  record=_BP().arm_record(make()), model_for_hash=lambda: S.get("est"))
+    runner = Runner(info, fit, outputs, infer if has_infer(lane) else None, sync,
+                    record=_BP().arm_record(make()), model_for_hash=lambda: S.get("est"))
+    if arm in OURS_ARMS:
+        # the host arrays fit() hands our call (the separate upload probe; never timed in the clock)
+        if t == "labels":
+            ups = [("lab", lab)]
+        elif t == "multilabel":
+            ups = []                                  # Python sets: no array goes up as handed
+        elif t in ("clf", "reg", "semi", "select", "multiclf", "multireg") or s.get("supervised"):
+            ups = [("X", X), ("y", y)]
+        else:
+            ups = [("X", X)]
+        _with_upload(runner, ups)
+    return runner
 
 
 # ---- LSTM / GRU / RNN estimators -------------------------------------------
@@ -3389,7 +3491,8 @@ def _build_ann(lane, arm, D):
         rec = dict(kw, __library__="mojolearn")
         if t == "ivf-refine":           # k results after a re-rank of k x refine_ratio candidates
             rec.update(n_neighbors=k, refine_ratio=p["refine_ratio"])
-        return Runner(info, fit, lambda: {"ind": _arr(S["ind"], np.int64)}, infer, record=rec)
+        return _with_upload(Runner(info, fit, lambda: {"ind": _arr(S["ind"], np.int64)}, infer,
+                                   record=rec), [("index", X)])
     if arm == "faiss-cpu":
         import faiss
         info = {"library": "faiss", "version": faiss.__version__, "device": "cpu",
@@ -3683,8 +3786,8 @@ def _build_layer(lane, arm, D):
 
             def infer():
                 S["y"] = cls(x, None, w_, b_, kw["eps"])
-            return Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
-                          record=dict(kw, __library__="mojolearn"))
+            return _with_upload(Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
+                                       record=dict(kw, __library__="mojolearn")), [("x", x)])
         if s["task"] == "embedding":          # ours takes the table (weight=), torch's seeded init
             ids = x_cpu.numpy()
             layer = cls(weight=state["weight"], **kw)
@@ -3700,8 +3803,8 @@ def _build_layer(lane, arm, D):
 
             def infer():
                 S["y"] = layer.forward(ids)
-            return Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
-                          record=dict(kw, __library__="mojolearn"))
+            return _with_upload(Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
+                                       record=dict(kw, __library__="mojolearn")), [("ids", ids)])
         if s["task"] in ("gcn", "sage"):
             kw["in_channels"] = x_cpu.shape[1]
         import inspect
@@ -3786,7 +3889,10 @@ def _build_layer(lane, arm, D):
         out = lambda: {output_key: _arr(
             S["y"].numpy() if getattr(S["y"], "_device_tensor", False) else S["y"], np.float32)}
         rec = dict(kw, __library__="mojolearn")
-        return Runner(info, fit, out, infer, record=rec)
+        # the host x and extra forward arrays (the probe reads input_home=device and stands down
+        # when x went to the device before the clock)
+        return _with_upload(Runner(info, fit, out, infer, record=rec),
+                            [("x", x_cpu)] + [("extra%d" % i, e) for i, e in enumerate(extra_cpu)])
     setting = arm[len("torch-"):]
     mode, prec = setting.split("-")
     dev = _torch_device(torch)
@@ -3871,7 +3977,9 @@ def _build_optim(lane, arm, D):
                 opt.step([gr])
             S["p"] = p
         rec = dict(hyper, __library__="mojolearn")
-        return Runner(info, fit, lambda: {"param": np.asarray(S["p"], dtype=np.float32)}, record=rec)
+        return _with_upload(Runner(info, fit, lambda: {"param": np.asarray(S["p"], dtype=np.float32)},
+                                   record=rec),
+                            [("p0", p0)] + [("grad%d" % i, gr) for i, gr in enumerate(grads)])
     import torch
     dev = _torch_device(torch)
     mode = arm.split("-")[1]
@@ -4069,7 +4177,10 @@ def _build_linalg(lane, arm, D):
             return {"S": _arr(r[1], np.float64), "Vh": _arr(r[2], np.float64),
                     "U_rows": _stride(U, 100_000)}
         return {"x": _arr(r, np.float64).reshape(-1)[:1 << 22]}
-    return Runner(info, fit, outputs, record=rec)
+    runner = Runner(info, fit, outputs, record=rec)
+    if arm in OURS_ARMS:                # the host arrays fit() hands our call (the upload probe)
+        _with_upload(runner, [("arg%d" % i, a) for i, a in enumerate(args)])
+    return runner
 
 
 # ---- function calls (resampling, cross-validation) -------------------------
@@ -4434,8 +4545,9 @@ def _build_svgp(lane, arm, D):
         def infer():
             S["pred"] = S["e"].predict(Xq)
         rec = dict(hyp, __library__="mojolearn", n_inducing=int(Z0.shape[0]))
-        return Runner(info, fit, lambda: {"pred": _arr(S["pred"], np.float64).reshape(-1)}, infer,
-                      record=rec)
+        return _with_upload(Runner(info, fit, lambda: {"pred": _arr(S["pred"], np.float64).reshape(-1)},
+                                   infer, record=rec),
+                            [("inducing_points", Z0), ("X", X), ("y", y)])
     import torch
     import gpytorch
     dev = _torch_device(torch) if arm == "gpytorch-gpu" else "cpu"
@@ -4651,13 +4763,18 @@ def worker(args):
                 aft_capture = None
                 if r > 0 and os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1":
                     aft_capture = _aft_capture_worker(args, B, D, rec, runner)
+                # the separate upload clock (OUR arm only), after every clock of this round
+                # has closed (ms, infer_ms, operation_ms, mem); see _ours_upload_probe
+                upload_sep = None
+                if args.arm in OURS_ARMS and (runner.info or {}).get("library") == "mojolearn":
+                    upload_sep = _ours_upload_probe(runner)
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "infer_ms": ims, "digest": digest, "mem": m, "state_receipt": state_receipt,
-                 "aft_capture": aft_capture,
+                 "aft_capture": aft_capture, "upload_separate": upload_sep,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -5241,6 +5358,9 @@ def race(args):
                 a.setdefault("state_receipts", []).append(msg["state_receipt"])
             if msg.get("aft_capture") is not None:
                 a.setdefault("aft_captures", []).append(msg["aft_capture"])
+            if msg.get("upload_separate") is not None:
+                a.setdefault("upload_separate", []).append(dict(msg["upload_separate"], round=r,
+                                                                 warmup=r == 0))
             a["mem"].append(msg.get("mem"))
             print("ALGOS-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f infer_ms=%s digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg.get("infer_ms"), msg["digest"]), flush=True)
@@ -5285,6 +5405,8 @@ def race(args):
         a["span"] = {"input_home": home, "pre_clock_fit": bool(info.get("pre_clock_fit")),
                      "upload_ms_untimed": info.get("upload_ms_untimed"),
                      "inside_clock": fit_text(lane)}
+        if arm in OURS_ARMS:
+            a["span"].update(upload_span(a, ok))
         if has_infer(lane):
             ist = a["status"] if a["status"] != "ok" or a["infer_ms"] else "error"
             infer["arms"][arm] = {"ms": list(a["infer_ms"]), "warmup_ms": a["infer_warmup_ms"],
@@ -5304,6 +5426,28 @@ def race(args):
     ran = [a for a in arms if result["arms"][a]["status"] != "skipped"]
     failed = [a for a in ran if result["arms"][a]["status"] != "ok"]
     return 1 if ran and len(failed) == len(ran) else 0
+
+
+def upload_span(a, ok):
+    """THE SEPARATE UPLOAD CLOCK in OUR arm's span (`_ours_upload_probe`): the median of the
+    scored rounds' separate uploads beside the scored median, and the DERIVED difference
+    (tools/board_clock_audit.py reads `upload_ms_separate` for our kernel clock). The scored
+    median is untouched. Opponent spans never carry these fields."""
+    recs = [u for u in a.get("upload_separate", []) if not u.get("warmup")]
+    ups = [u["ms"] for u in recs if "ms" in u]
+    up = statistics.median(ups) if ups else None
+    why = None
+    if up is None:
+        why = next((u["unavailable"] for u in recs if u.get("unavailable")), "no probe record")
+    return {"upload_ms_separate": up,
+            "upload_bytes_separate": next((u["bytes"] for u in recs if "bytes" in u), None),
+            "upload_inputs_separate": next((u["inputs"] for u in recs if "inputs" in u), None),
+            "upload_scope_separate": "host_to_device_upload_separate" if up is not None else None,
+            "upload_separate_unavailable": why,
+            "fit_minus_upload_ms": ((a["median_ms"] - up)
+                                    if (ok and up is not None and a.get("median_ms") is not None)
+                                    else None),
+            "fit_minus_upload_ms_source": "derived: scored median - separate upload median"}
 
 
 def build_parser():
