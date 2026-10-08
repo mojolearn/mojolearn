@@ -242,7 +242,14 @@ def test_astype_quiets_a_signaling_nan_as_the_item_setter_does():
     bits[::3] = 0xFFC12345
     bits[1::7] = 0x3F800000
     a = _arr(bits.view(np.float32).copy())
-    _same(lambda: a[0:900], ("cast_elements",), group="getitem")
+    # The reference: the item setter's widen-and-narrow sets the quiet bit
+    # of every NaN (exponent all ones, mantissa nonzero); since c149bd365 the
+    # declined-helper arm is a byte move, so the definition is stated here.
+    nan = ((bits & 0x7F800000) == 0x7F800000) & ((bits & 0x007FFFFF) != 0)
+    quiet = np.where(nan, bits | 0x00400000, bits).astype(np.uint32)
+    ref = lambda sel: (lambda: _arr(np.ascontiguousarray(quiet[sel]).view(np.float32)))
+    _same(lambda: a[0:900], ("cast_elements",), group="getitem", ref_fn=ref(slice(0, 900)))
+    _same(lambda: a[1:900:2], ("cast_elements",), group="getitem", ref_fn=ref(slice(1, 900, 2)))
     _same(lambda: a.astype("<f8"), ("cast_elements",), group="astype")
 
 
@@ -523,15 +530,27 @@ def test_cluster_label_union_matches(name):
     y = _metric_label_inputs()[name]
     other = _RNG.integers(-2, 9, 3000)
     # lane apple-fast-py2mojo-core: the union is ONE `unique_inverse` of the
-    # two arrays laid end to end (no encoder, no gather), so the reference
-    # is the Python routine with the union seam declined
+    # two arrays laid end to end (no encoder, no gather), and lane
+    # pyglue-sweep removed the Python dict route, so declining the seam
+    # leaves no reference routine. The reference is computed here: NumPy's
+    # sorted union and its inverse, after the same int32 admission.
     call = lambda: M._prepare_cluster_labels(y, other[:len(y)])
-    real = M._native_union_codes
-    M._native_union_codes = lambda *args, **kwargs: None
-    try:
-        ref = _outcome(call)
-    finally:
-        M._native_union_codes = real
+
+    def reference():
+        yt = M._as_i32_1d(y, "labels_true")
+        yp = M._as_i32_1d(other[:len(y)], "labels_pred")
+        if yt.shape[0] != yp.shape[0]:
+            return call()  # the length refusal, raised by the routine itself
+        both = np.concatenate([np.asarray(yt), np.asarray(yp)]).astype(np.int32)
+        if both.size == 0:
+            return yt, yp, 0, 0, -1
+        classes, codes = np.unique(both, return_inverse=True)
+        codes = codes.astype(np.int32)
+        nt = int(yt.shape[0])
+        return (_arr(np.ascontiguousarray(codes[:nt])), _arr(np.ascontiguousarray(codes[nt:])),
+                nt, 0, int(classes.size) - 1)
+
+    ref = _outcome(reference)
     new = _outcome(call)
     if not _EXPECT_SABOTAGE:
         assert new == ref, f"metrics: new arm {new!r:.300} != reference {ref!r:.300}"

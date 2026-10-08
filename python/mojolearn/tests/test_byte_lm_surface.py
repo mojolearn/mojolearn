@@ -169,8 +169,12 @@ class FakeByteLM:
             assert len(addresses) == 1 and session.open and session.usable
             if session.grad_step != session.completed:
                 raise RuntimeError('byte LM: no gradient to export; complete a step first')
-            if not fake.leave_gradient_unwritten:
-                buffer(addresses[0], 34944)[:] = session.grad
+            if fake.leave_gradient_unwritten:
+                # The binding never hands back an unwritten gradient: its
+                # device finite scan (`first_nonfinite`) refuses first, and
+                # Python no longer re-scans the export (cpu2-l11-neural).
+                raise RuntimeError('byte LM: nonfinite returned gradient')
+            buffer(addresses[0], 34944)[:] = session.grad
             return session.grad_step
 
         def info(session):
@@ -197,6 +201,13 @@ class FakeByteLM:
 
     def byte_lm_profile(self):
         return self.profile
+
+    def byte_lm_arithmetic_suffix(self):
+        # The real binding exports this (bindings/_mojolearn_byte_lm.mojo,
+        # neural_arithmetic_suffix): the IDENTICAL toggle suffix that the
+        # Python layer appends to every expected profile. A default build
+        # (no toggle defines) has the empty suffix.
+        return ''
 
     def byte_lm_run(self, addresses, params):
         assert len(addresses) == 11
@@ -237,6 +248,10 @@ class FakeByteLM:
         if self.modify_input:
             buffer(addresses[0], 34944)[0] = 77
             buffer(addresses[4], 66, True)[0] = 99
+            # The binding's `_require_inputs_unchanged` guard
+            # (bindings/_mojolearn_byte_lm.mojo, lane py-runtime round 2)
+            # refuses before it publishes any output.
+            raise RuntimeError('Byte-LM native call changed an input state/token buffer')
         if self.nonfinite_after_write:
             buffer(addresses[7], 34944)[0] = np.nan
         if self.fail_after_write:
@@ -258,7 +273,14 @@ def host(monkeypatch):
         monkeypatch.setitem(_buffer._NATIVE, key, finite)
     monkeypatch.setattr(impl._backend, 'default_mode', lambda: 'identical')
     monkeypatch.setattr(impl._backend, 'numeric_mode', lambda: 'identical')
-    def binding(name, mode):
+    real_binding = impl._backend.binding
+
+    def binding(name, mode='identical'):
+        # The base binding `_mojolearn` serves the host helpers every Array
+        # reduction calls (`reduce_stat`, `_buffer._native`, always the
+        # identical binary); only the byte-LM entries are faked.
+        if name == '_mojolearn':
+            return real_binding(name, mode=mode)
         assert name == '_mojolearn_byte_lm' and mode == 'identical'
         return fake
     monkeypatch.setattr(impl._backend, 'binding', binding)

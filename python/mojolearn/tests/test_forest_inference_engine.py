@@ -25,7 +25,7 @@ def test_auto_engine_is_fast_only(cls):
 def test_engine_routes_and_revalidates(cls, monkeypatch):
     old, new = object(), object()
     native = SimpleNamespace(predict=old, predict_gpu_parallel=new)
-    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    monkeypatch.setattr(_backend, 'binding', _faked(native))
     model = cls(inference_engine='parallel_groves', numeric_mode='identical')
     assert model.get_params()['inference_engine'] == 'parallel_groves'
     assert model._prediction_function('predict') is new
@@ -39,6 +39,21 @@ def test_engine_routes_and_revalidates(cls, monkeypatch):
     model.inference_engine = 'parallel_groves'
     with pytest.raises(RuntimeError, match='rebuild'):
         model._prediction_function('absent')
+
+
+_REAL_BINDING = _backend.binding
+
+
+def _faked(native):
+    """`_backend.binding` serving `native` for the forest entries. The base
+    binding `_mojolearn` stays real: the Array helpers (`cast_elements`,
+    `reduce_stat`, ...) resolve through it once per process, so faking it
+    made a test pass or fail on whether an earlier test had cached them."""
+    def binding(name, *args, **kwargs):
+        if name == '_mojolearn':
+            return _REAL_BINDING(name, *args, **kwargs)
+        return native
+    return binding
 
 
 def fitted(cls, engine):
@@ -103,7 +118,7 @@ def test_resident_model_reuse_invalidation_and_lifetime(cls, monkeypatch):
                              forest_predict_resident_into_gpu=predict,
                              forest_predict_resident_reuse_gpu=predict,
                              forest_release_gpu=released.append)
-    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    monkeypatch.setattr(_backend, 'binding', _faked(native))
     model = fitted(cls, 'parallel_groves')
     X = np.ones((3, 1), dtype=np.float32)
     original = model._leaves
@@ -142,7 +157,7 @@ def test_resident_refuses_bad_arrays_before_pointer_handoff(monkeypatch):
                              forest_predict_resident_into_gpu=fail,
                              forest_predict_resident_reuse_gpu=fail,
                              forest_release_gpu=fail)
-    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    monkeypatch.setattr(_backend, 'binding', _faked(native))
     model = fitted(RandomForestRegressor, 'parallel_groves')
     model._leaves = np.array([], dtype=np.float32)
     with pytest.raises(ValueError, match='shapes'):
@@ -154,7 +169,7 @@ def test_resident_default_requires_reuse_binding(monkeypatch):
                              forest_predict_resident_into_gpu=lambda *args: 0,
                              forest_predict_resident_gpu=lambda *args: 0,
                              forest_release_gpu=lambda handle: None)
-    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    monkeypatch.setattr(_backend, 'binding', _faked(native))
     model = fitted(RandomForestRegressor, 'parallel_groves')
     with pytest.raises(RuntimeError, match='rebuild'):
         model.predict(np.ones((2, 1), dtype=np.float32))
@@ -184,7 +199,7 @@ def test_wp3_public_default_borrows_input_and_output(cls, mode, monkeypatch):
                              forest_predict_resident_into_gpu=forbidden,
                              forest_predict_resident_reuse_gpu=predict,
                              forest_release_gpu=lambda handle: None)
-    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    monkeypatch.setattr(_backend, 'binding', _faked(native))
     model = fitted(cls, 'parallel_groves')
     model.numeric_mode = model._fit_numeric_mode = mode
     source, _ = as_f32_c(np.array([[2.], [7.], [-3.]], np.float32), name='X')
@@ -260,7 +275,7 @@ def test_fast_classifier_predict_uses_resident_device_argmax(cls, monkeypatch):
         forest_predict_resident_labels_gpu=labels,
         forest_release_gpu=lambda handle: None,
     )
-    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    monkeypatch.setattr(_backend, 'binding', _faked(native))
     model = fitted(cls, 'parallel_groves')
     model.numeric_mode = model._fit_numeric_mode = 'fast'
     model.classes_ = [10, 20]
@@ -278,7 +293,7 @@ def test_classifier_device_argmax_is_fast_only_and_optional(cls, monkeypatch):
     def forbidden(*args):
         pytest.fail('non-FAST or sequential dispatch reached device argmax')
     native = SimpleNamespace(forest_predict_resident_labels_gpu=forbidden)
-    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    monkeypatch.setattr(_backend, 'binding', _faked(native))
     # Explicit parallel_groves does not weaken the reproducibility tier.
     assert model._predict_forest_labels(X) is None
     model.numeric_mode = model._fit_numeric_mode = 'fast'
@@ -320,7 +335,7 @@ def test_identical_auto_ordered_resident_keeps_sequential_bits_and_archive(cls, 
                              forest_release_gpu=lambda handle: None,
                              rf_predict_proba=sequential, rf_predict_reg=sequential,
                              et_predict=sequential, et_predict_proba=sequential)
-    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    monkeypatch.setattr(_backend, 'binding', _faked(native))
     X = np.ones((3, 1), dtype=np.float32)
 
     auto = fitted(cls, 'auto')
@@ -338,8 +353,12 @@ def test_identical_auto_ordered_resident_keeps_sequential_bits_and_archive(cls, 
     (groves.predict_proba if groves._num_outputs > 1 else groves.predict)(X)
     assert prepared[-1][-1] == 0
 
+    # e54df7516 (t-forest, 2026-10-02): an explicit 'sequential' engine on a
+    # GPU binding runs the same ordered device kernel; no host tree walk.
     explicit = fitted(cls, 'sequential')
-    assert not explicit._ordered_resident_auto()
+    assert explicit._ordered_resident_auto()
+    (explicit.predict_proba if explicit._num_outputs > 1 else explicit.predict)(X)
+    assert prepared[-1][-1] == 1
 
 
 def test_identical_auto_on_a_host_binding_is_sequential(monkeypatch):

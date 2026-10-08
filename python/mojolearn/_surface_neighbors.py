@@ -125,6 +125,10 @@ FAMILIES = (
             "x_neighbors_vendor",
             "x_neighbors_kpca_resident",
             "x_neighbors_purity_flags",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "xn_softmax64", "x_neighbors_classical_graph_normalization", "x_neighbors_lp_fast_resident",
+            "x_neighbors_ocsvm_alpha_init", "x_neighbors_unit_ff", "x_neighbors_kfeat_schi2_fit_idn",
+            "x_neighbors_kfeat_pcs_draw_idn",
             # END GENERATED EXPORTS
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",

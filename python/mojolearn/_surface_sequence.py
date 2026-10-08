@@ -50,6 +50,9 @@ FAMILIES = (
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
             "rnn_fit", "rnn_predict", "rnn_n_params", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "adafactor_step", "lamb_step", "layer_norm", "theta", "croston", "croston_forecast", "ets", "garch", "prophet_fit", "prophet_predict", "moe_forward",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "epoch_schedule", "prophet_days", "prophet_features",
+            "prophet_changepoints",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(

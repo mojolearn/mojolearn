@@ -784,6 +784,17 @@ class Array:
             if total:
                 _strided_copy(a._addr, store.buffer_info()[0], a.itemsize, out_shape,
                               sel_strides, _c_strides(out_shape, 1), base_off, 0)
+                if a.dtype == "<f4":
+                    # The contiguous block above (`_buffer._same_dtype_store`)
+                    # quiets a float32 signaling NaN, as the item setter does;
+                    # a strided selection gets the same in-place
+                    # `cast_elements` float32 -> float32 so a copy's bits do
+                    # not depend on the selection's layout.
+                    from . import _buffer
+                    fn = _buffer._native_optional("cast_elements")
+                    if fn is not None:
+                        at = store.buffer_info()[0]
+                        fn(at, 0, at, 0, total)  # in place: slot i reads and writes slot i only
         return Array._owned(store, out_shape, a.dtype, "C")
 
     def __eq__(self, other):

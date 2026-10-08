@@ -389,8 +389,8 @@ def test_block_kwargs_follow_the_live_signature():
 def test_greedy_argmax_ties_go_to_the_lowest_index():
     logits = Array.from_list([[[0.0, 1.0, 1.0, -1.0], [2.0, 2.0, 2.0, 2.0]],
                               [[5.0, 5.0, 6.0, 6.0], [-1.0, -3.0, -1.0, -2.0]]], "<f4")
-    assert _cl._argmax_last(logits, 2, 2, 4) == [0, 0]
-    assert _cl._argmax_last(logits.reshape((4, 1, 4)), 4, 1, 4) == [1, 0, 2, 0]
+    assert _cl._argmax_last(logits, 2, 2, 4).tolist() == [0, 0]
+    assert _cl._argmax_last(logits.reshape((4, 1, 4)), 4, 1, 4).tolist() == [1, 0, 2, 0]
 
 
 # ------------------------------------------------------------- loading
@@ -420,11 +420,11 @@ def test_load_llama_checkpoint_shapes_names_and_greedy_generate_is_deterministic
         # and it is the stateful path token by token
         state = lm.allocate_state(2, 9)
         lg = lm.forward(ids, state)
-        nxt = _cl._argmax_last(lg, 2, 5, 64)
+        nxt = _cl._argmax_last(lg, 2, 5, 64).tolist()  # an int32 (b,) Array since cpu4-python
         assert nxt == [row[5] for row in a.tolist()]
         step = lm.step(Array.from_list([[v] for v in nxt], "<i4"), state)
         assert step.shape == (2, 64) and state.positions == 6
-        assert _cl._argmax_last(step.reshape((2, 1, 64)), 2, 1, 64) == [row[6] for row in a.tolist()]
+        assert _cl._argmax_last(step.reshape((2, 1, 64)), 2, 1, 64).tolist() == [row[6] for row in a.tolist()]
         with pytest.raises(ValueError, match="max_positions"):
             lm.generate(ids, 200)
         with pytest.raises(ValueError, match=r"\[0, 64\)"):

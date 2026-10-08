@@ -58,6 +58,21 @@ class FakeTraining:
         pointer(out, rows * cols)[:] = .125
         return rows * cols
 
+    def neural_arithmetic_profile(self):
+        # bindings/_mojolearn_training.mojo: neural_training_profile(), the
+        # base profile plus the IDENTICAL toggle suffix (empty by default).
+        return 'mojolearn.neural-training.fp32.v1'
+
+    def neural_gemm(self, a, b, out, params):
+        # IDENTICAL `SmallMLPTrainer._matmul` calls the training binding's
+        # `neural_gemm` (bindings/_mojolearn_training.mojo) directly:
+        # params = [m, n, k, layout] (0 NN, 1 NT, 2 TN).
+        m, n, k, layout = params
+        assert layout in (0, 1, 2)
+        self.calls.append(('gemm', m, n, k))
+        pointer(out, m * n)[:] = .125
+        return m * n
+
     def mlp_sum_rows(self, values, out, params):
         rows, cols = params
         self.calls.append(('sum', rows, cols))
