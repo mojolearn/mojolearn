@@ -175,6 +175,9 @@ def _series_scale(
     return _pow2_scale(m)
 
 
+# Tried 2026-10-08 (MOJOLEARN_C58_SHARED_PREP, run ge123e6f9): per-series scale computed once by its own kernel, not per start block;
+# NV/AMD ets synthetic 0.996/0.980; rmse same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
+
 
 # ---------------------------------------------------------------------------
 # The per-element arithmetic every arm shares
@@ -935,6 +938,8 @@ def holtwinters_estimate_block_kernel[B: Int = HW_EST_BLOCK](
     var sw = base.unsafe_offset(d * d + f * d)
     var thp = sw.unsafe_offset(f)
 
+    # Tried 2026-10-08 (MOJOLEARN_C58_SHARED_PREP, run ge123e6f9): per-series scale computed once by its own kernel, not per start block;
+    # NV/AMD ets synthetic 0.996/0.980; rmse same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     var sc = _series_scale(s, ts, n, batch_size)
     var inv_sc = _inv_pow2(sc)
     var l0 = _f(_mad(Float32(-f), start_trend.unsafe_load(s), start_level.unsafe_load(s)) * sc)

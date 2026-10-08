@@ -271,6 +271,9 @@ comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
 #: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` turns it off (and with it
 #: DW_NO_LEVEL_SYNC, which stacks on it); the old
 #: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN` is harmless.
+# Tried 2026-10-08 (MOJOLEARN_TREES_T19, run ge123e6f9): IDENTICAL depthwise on the fused partition chain, parent stats not propagated;
+# NV/AMD gbdt-depthwise taxi 0.470/0.692, istella 0.826/0.813; istella AUC -0.43%, logloss +20.7%, taxi AUC -0.31%
+# -> quality loss, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
 comptime DW_FUSED_CHAIN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
@@ -483,6 +486,9 @@ def _launch_fused_split_chain[
         grid_dim=(chunk_grid, n_split, 1),
         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
     )
+    # Tried 2026-10-08 (MOJOLEARN_TREES_T19, run ge123e6f9): IDENTICAL depthwise on the fused partition chain, parent stats not propagated;
+    # NV/AMD gbdt-depthwise taxi 0.470/0.692, istella 0.826/0.813; istella AUC -0.43%, logloss +20.7%, taxi AUC -0.31%
+    # -> quality loss, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     ctx.enqueue_function[fused_scan_update_kernel[GUARD]](
         d_left.unsafe_ptr(),
         d_right.unsafe_ptr(),
@@ -1807,6 +1813,9 @@ def fit_non_symmetric_tree[
     # Istella 1.024); -D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF restores the cut.
     # FAST keeps it at every width. One decision per tree, so a tree never
     # mixes the two schedules.
+    # Tried 2026-10-08 (MOJOLEARN_TREES_T19, run ge123e6f9): IDENTICAL depthwise on the fused partition chain, parent stats not propagated;
+    # NV/AMD gbdt-depthwise taxi 0.470/0.692, istella 0.826/0.813; istella AUC -0.43%, logloss +20.7%, taxi AUC -0.31%
+    # -> quality loss, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     var use_ridx = RIDX_ONLY_SPLITS and (
         not SPLIT_COST_IDENTICAL or ridx_schedule_pays(len(fold_counts))
     )

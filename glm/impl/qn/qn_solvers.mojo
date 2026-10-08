@@ -274,6 +274,9 @@ def min_lbfgs(
                 dir_pending = False
                 step = Float32(1.0)
                 continue
+        # Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
+        # NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
+        # linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
         # Update s and y: s_{k+1} = x_{k+1} - x_k, y_{k+1} = g_{k+1} - g_k
         # S[end] = x - xp, Y[end] = grad - gradp, the next xp / gradp saves
         # (and, L-BFGS, dg_init) are inside the direction's one launch.

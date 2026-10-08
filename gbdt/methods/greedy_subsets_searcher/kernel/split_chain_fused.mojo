@@ -150,6 +150,9 @@ def fused_scan_update_kernel[GUARD: Bool = False](
     var n_chunks = (size + FUSED_CHAIN_BLOCK - 1) // FUSED_CHAIN_BLOCK
     var tid = Int(thread_idx.x)
 
+    # Tried 2026-10-08 (MOJOLEARN_TREES_T19, run ge123e6f9): IDENTICAL depthwise on the fused partition chain, parent stats not propagated;
+    # NV/AMD gbdt-depthwise taxi 0.470/0.692, istella 0.826/0.813; istella AUC -0.43%, logloss +20.7%, taxi AUC -0.31%
+    # -> quality loss, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     # DEVIATION 1901's stats update, verbatim (one thread per stat; the
     # parent's entry is read before either child's is written, in-thread)
     var bin_feature_count = Int(bin_feature_count_in)

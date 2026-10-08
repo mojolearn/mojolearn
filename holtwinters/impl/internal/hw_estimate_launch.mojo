@@ -66,6 +66,8 @@ def holtwinters_estimate_gpu(
         cand_sse.enqueue_fill(scratch_poison)
         sw_all.enqueue_fill(scratch_poison)
         ctx.synchronize()
+        # Tried 2026-10-08 (MOJOLEARN_C58_SHARED_PREP, run ge123e6f9): per-series scale computed once by its own kernel, not per start block;
+        # NV/AMD ets synthetic 0.996/0.980; rmse same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
         if d <= HW_EST_FAST_BLOCK:
             ctx.enqueue_function[holtwinters_estimate_block_kernel[HW_EST_FAST_BLOCK]](
                 ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),

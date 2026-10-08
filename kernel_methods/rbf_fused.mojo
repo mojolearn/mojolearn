@@ -65,3 +65,8 @@ def rbf_fused_project_kernel(
     for f in range(d):
         acc = ftz(identical_mul_add(ftz(x.unsafe_load(i * d + f)), ftz(w.unsafe_load(f * dd + j)), acc))
     dst.unsafe_store(t, acc)
+
+
+# Tried 2026-10-08 (MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE, run ge123e6f9): four rows per thread reuse each projection weight;
+# NV/AMD nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884;
+# kernel_rel_error same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.

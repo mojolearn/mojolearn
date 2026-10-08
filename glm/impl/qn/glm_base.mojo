@@ -1211,6 +1211,9 @@ def qnt_fold_kernel(
 comptime QN_IDN_FUSED = QN_TILED and not (
     is_defined["MOJOLEARN_QN_IDN_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+# Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
+# NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
+# linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
 #: the staged column window (`core/gemm.mojo` GEMV_TILE_K / GEMV_TILE_STRIDE)
 comptime QNIF_K = 32
 comptime QNIF_STRIDE = QNIF_K + 1
@@ -1433,6 +1436,9 @@ def qn_idn_fused_kernel(
     )
 
 
+# Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
+# NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
+# linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
 # lane/apple-fast-purity2 (2026-10-03): the loss sum and the bias mean that
 # still ran as ONE block of STATS_TPB lanes over all n rows (`sum_terms_kernel`
 # / `mean_kernel`: softmax `C > 1` in IDENTICAL, `C == 1` in FAST off Apple
@@ -2429,6 +2435,9 @@ struct GLMWithData(Movable):
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
 
+    # Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
+    # NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
+    # linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     def _fused_multi[G: Int](
         mut self, ctx: DeviceContext, mut w: DeviceBuffer[DType.float32], n: Int, d: Int, tiles: Int
     ) raises:

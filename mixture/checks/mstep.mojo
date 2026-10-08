@@ -1378,6 +1378,9 @@ def cov_finish_kernel(
     cov.unsafe_store(kc * d * d + idx, v)
 
 
+# Tried 2026-10-08 (MOJOLEARN_IDN_GMM_COV_SYM, run ge123e6f9): covariance as a two-GEMM cover of the upper triangle, mirrored;
+# NV/AMD gmm taxi 1.838/1.452, istella 0.966/0.978; taxi mean log-likelihood -0.78% -> slower and worse, deleted.
+# Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
 def cov_reset_identity_kernel(
     cov: MutPointer[Float32, MutAnyOrigin],
     d_in: Int32,
@@ -1411,6 +1414,9 @@ def cov_reset_identity_kernel(
 # ===========================================================================
 
 
+# Tried 2026-10-08 (MOJOLEARN_IDN_GMM_COV_SYM, run ge123e6f9): covariance as a two-GEMM cover of the upper triangle, mirrored;
+# NV/AMD gmm taxi 1.838/1.452, istella 0.966/0.978; taxi mean log-likelihood -0.78% -> slower and worse, deleted.
+# Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
 def gmm_mstep_scratch_floats(n: Int, d: Int, ncomp: Int) -> Int:
     """Floats the M-step needs beside its named buffers.
 
@@ -2091,6 +2097,9 @@ def gmm_m_step(
         if paired:
             pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](GMM_CENTER_GROUP*n*d))
             pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](GMM_CENTER_GROUP*n*d))
+    # Tried 2026-10-08 (MOJOLEARN_IDN_GMM_COV_SYM, run ge123e6f9): covariance as a two-GEMM cover of the upper triangle, mirrored;
+    # NV/AMD gmm taxi 1.838/1.452, istella 0.966/0.978; taxi mean log-likelihood -0.78% -> slower and worse, deleted.
+    # Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     for kc in range(ncomp_loop):
         if fast_gram:
             ctx.enqueue_function[center_sqrt_scale_kernel](

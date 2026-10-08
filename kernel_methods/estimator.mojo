@@ -203,6 +203,9 @@ def _rbf_idn_fused_launch(
 ) raises:
     """RBF_IDN_FUSED's launch: the whole transform (`whole`) or the
     projection alone, one thread per cell. ASYNCHRONOUS."""
+    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE, run ge123e6f9): four rows per thread reuse each projection weight;
+    # NV/AMD nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884;
+    # kernel_rel_error same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     var grid = (n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB
     if whole:
         ctx.enqueue_function[rbf_fused_transform_kernel](
@@ -2621,6 +2624,9 @@ def rbf_sampler_transform_host(
     # transform in that launch when no stage needs the projection alone)
     var chain = False
     var whole = False
+    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE, run ge123e6f9): four rows per thread reuse each projection weight;
+    # NV/AMD nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884;
+    # kernel_rel_error same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     comptime if RBF_IDN_FUSED:
         chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
         whole = chain and sabotage == KMSAB_NONE and not trace.enabled
@@ -2721,6 +2727,9 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
     # RBF_IDN_FUSED: the projection as the per-cell chain (and the whole
     # transform in that launch when no stage needs the projection alone)
     var chain = False
+    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE, run ge123e6f9): four rows per thread reuse each projection weight;
+    # NV/AMD nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884;
+    # kernel_rel_error same -> noise, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
     comptime if RBF_IDN_FUSED:
         chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
         fused = chain and sabotage == KMSAB_NONE and not trace.enabled
