@@ -1,0 +1,101 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "gap-gemm-layers",
+ "branch": "lane/gap-gemm-layers",
+ "head": "02f7aed95",
+ "controls": {
+  "moe_grouped_gemm": {
+   "define": "MOJOLEARN_IDN_MOE_GROUPED_GEMM",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_MOE_GROUPED_GEMM=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "sequence/moe_grouped_fold.mojo:31",
+    "sequence/moe_grouped.mojo:1",
+    "sequence/exec_device.mojo:756",
+    "sequence/exec_device.mojo:793",
+    "sequence/moe.mojo:88",
+    "sequence/moe.mojo:116"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "host_binding": "_mojolearn_x_sequence_host",
+   "bits_change": true,
+   "status": "new",
+   "board": "neural:moe (synthetic)",
+   "note": "Plan gaps-2026-10-08 section 8: each expert's gate|up and down products through identical_gemm_into (OP_NT on the slot-ordered pairs, one launch per expert), replacing moe_reg's one-chain tile; the combine reads s through slot_of in the same pick order. Bits: the contract's leaves + balanced tree over d and f instead of one chain (NV, AMD and the host twin sequence/moe.mojo together; build the host twin with the same define). One download of the E+1 pair offsets per forward (launch sizing). IDENTICAL only; FAST and Apple keep moe_reg / moe_mma.",
+   "reach": "neural:moe: sequence/pyapi.mojo moe_forward_run -> _moe_devgroup_rest (MOE_DEVGROUP, E <= 127) -> DeviceExec.launch[OP_MOE_HIDDEN|OP_MOE_OUT] a.i6 == 1"
+  },
+  "cnn_bn_fuse": {
+   "define": "MOJOLEARN_IDN_CNN_BN_FUSE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_CNN_BN_FUSE=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/device.mojo:103",
+    "x_cnn/ops.mojo:1224",
+    "bindings/_mojolearn_x_cnn.mojo:988",
+    "python/mojolearn/_expansion_cnn.py:1687"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "new",
+   "board": "neural:resnet-block (synthetic)",
+   "note": "The BasicBlock's BatchNorm epilogues fused: bn1 apply + relu1 (one launch, the BN output never stored), bn2 apply + identity add + relu2 (one launch), relu1 backward inside bn1's backward reads (the masked gradient never stored). Same words through the same element functions; x_cnn_idn_flags bit 6 routes the glue to x_cnn_batchnorm_forward_fused_m / x_cnn_batchnorm_backward_relu_m. The fused backward fold needs BN_FOLD_BLOCK (the IDENTICAL default); with it off the entry materializes relu's backward and runs the unfused folds.",
+   "reach": "neural:resnet-block: python/mojolearn/_expansion_cnn.py BasicBlock._forward_chain / _backward_chain (mixed binding only)"
+  }
+ },
+ "modified_controls": {
+  "ni12_implicit_conv": {
+   "define": "MOJOLEARN_NI12_IMPLICIT_CONV",
+   "owner_file": "experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json",
+   "source": [
+    "x_cnn/device.mojo:393"
+   ],
+   "bits_change": false,
+   "note": "Kernel rewritten (lane gap-gemm-layers): 64x64 register tile, 4x4 cells a thread, the A tile gathered from x (no cols scratch), the contract's leaves + fold through _fold_push_local; the backward's dW now also gathers cols (implicit_wgrad_leaf_kernel + the GEMM's fold kernels) so no entry builds im2col under the switch. Same words as im2col + identical_gemm_into. Boards it reaches now: neural:conv2d, neural:resnet-block, neural:cnn-clf."
+  }
+ },
+ "algorithms": {
+  "neural:moe": {
+   "binding": "_mojolearn_x_sequence",
+   "route": "python/mojolearn/_x_sequence_moe.py -> bindings/_mojolearn_x_sequence.mojo moe_forward -> sequence/pyapi.mojo moe_forward_run -> _moe_devgroup_rest -> sequence/exec_device.mojo DeviceExec.launch[OP_MOE_HIDDEN|OP_MOE_OUT] -> sequence/moe_grouped.mojo when on, else sequence/moe_reg.mojo",
+   "controls": [
+    "moe_grouped_gemm"
+   ],
+   "interaction_groups": []
+  },
+  "neural:resnet-block": {
+   "binding": "_mojolearn_x_cnn",
+   "route": "python/mojolearn/_expansion_cnn.py BasicBlock -> x_cnn_conv2d_forward_m/_backward_m (x_cnn/device.mojo _conv_relu_on_device: NI12 implicit_conv_kernel when on) + x_cnn_batchnorm_*_m (fused entries when cnn_bn_fuse on)",
+   "controls": [
+    "cnn_bn_fuse",
+    "ni12_implicit_conv"
+   ],
+   "interaction_groups": [
+    [
+     "cnn_bn_fuse",
+     "ni12_implicit_conv"
+    ]
+   ]
+  },
+  "neural:conv2d": {
+   "binding": "_mojolearn_x_cnn",
+   "route": "x_cnn_conv2d_forward_m/_backward_m -> x_cnn/device.mojo conv2d_forward_m / conv2d_backward_m",
+   "controls": [
+    "ni12_implicit_conv"
+   ],
+   "interaction_groups": []
+  }
+ },
+ "removed": []
+}

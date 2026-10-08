@@ -29,6 +29,9 @@ from sequence.moe_reg import (
     moe_route_tail_kernel,
 )
 from sequence.moe_mma import MM_BNH, MM_BNO, MM_NT, MOE_MMA, moe_hidden_mma_kernel, moe_mma_blocks, moe_out_mma_kernel
+# lane gap-gemm-layers (2026-10-08): the expert products as grouped identical GEMMs
+from sequence.moe_grouped_fold import MOE_GROUPED_GEMM
+from sequence.moe_grouped import moe_grouped_offsets, moe_grouped_workspace, moe_grouped_hidden, moe_grouped_out
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -446,6 +449,9 @@ struct DeviceExec(Exec):
     var pipe_dst: List[Int]
     var pipe_src: List[Int]
     var pipe_n: List[Int]
+    #: lane gap-gemm-layers: the pair offsets of the MoE grouping, on the host
+    #: (MOE_GROUPED_GEMM: the hidden op downloads them, the out op reuses them)
+    var moe_poff: List[Int]
     #: SEQ_FAST_VAR_NODRAIN: the caller ended on a sync and queued nothing after
     var drained: Bool
 
@@ -465,6 +471,7 @@ struct DeviceExec(Exec):
         self.pipe_dst = List[Int]()
         self.pipe_src = List[Int]()
         self.pipe_n = List[Int]()
+        self.moe_poff = List[Int]()
         self.drained = False
 
     def mark_drained(mut self):
@@ -746,6 +753,23 @@ struct DeviceExec(Exec):
                                 a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
                                 grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                             )
+                comptime if MOE_GROUPED_GEMM:
+                    # lane gap-gemm-layers: each expert's gate|up product on
+                    # identical_gemm_into (sequence/moe_grouped.mojo); h in
+                    # slot order, read by the out op's grouped path below
+                    if a.i6 == 1:
+                        self.moe_poff = moe_grouped_offsets(self.ctx, a.p5, a.i3)
+                        var xg = self._alloc(npairs * a.i0, False)
+                        var gu = self._alloc(npairs * 2 * a.i1, False)
+                        var wsb = self.ctx.enqueue_create_buffer[DType.float32](
+                            moe_grouped_workspace(self.moe_poff, a.i3, a.i0, a.i1)
+                        )
+                        moe_grouped_hidden(
+                            self.ctx, a.p0, a.p1, a.p4, xg, gu, a.p3, wsb, self.moe_poff,
+                            a.i0, a.i1, a.i2, a.i3, npairs,
+                        )
+                        self.bufs.append(wsb^)
+                        return
                 comptime if MOE_MMA:
                     # lane apple-fast-gap-misc: simdgroup matrix products
                     # (sequence/moe_mma.mojo), MOJOLEARN_MOE_FAST_MMA*
@@ -766,6 +790,22 @@ struct DeviceExec(Exec):
             if a.i4 > 0:
                 var npairs = (n // a.i0) * a.i2
                 var mma_done = False
+                comptime if MOE_GROUPED_GEMM:
+                    # lane gap-gemm-layers: each expert's down product on
+                    # identical_gemm_into, the combine through slot_of
+                    if a.i6 == 1:
+                        if len(self.moe_poff) != a.i3 + 1:
+                            raise Error("moe grouped out: the hidden op's pair offsets are missing")
+                        var slot_of = self._alloc(npairs, False)
+                        var wsb = self.ctx.enqueue_create_buffer[DType.float32](
+                            moe_grouped_workspace(self.moe_poff, a.i3, a.i0, a.i1)
+                        )
+                        moe_grouped_out(
+                            self.ctx, a.p0, a.p1, a.p3, a.p6, slot_of, a.p5, a.p4, wsb, self.moe_poff,
+                            a.i0, a.i1, a.i2, a.i3, npairs, n // a.i0,
+                        )
+                        self.bufs.append(wsb^)
+                        return
                 comptime if MOE_MMA:
                     if a.i6 == 1:
                         self.ctx.enqueue_function[moe_out_mma_kernel](
