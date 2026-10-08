@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MLPClassifier / MLPRegressor against scikit-learn's own (shuffle=False,
-the same random_state, so the same initial weights and sample order): the
-loss curves and predictions agree to float32 tolerance. Skipped without
+the reference started from our initial weights, the same sample order): the
+loss curves agree to float32 tolerance. Skipped without
 scikit-learn; on the lane's pod it held to 3e-6 over Adam, SGD invscaling and
 SGD adaptive."""
 import numpy as np
@@ -28,7 +28,22 @@ def test_against_sklearn():
             (ml.MLPRegressor, sk.MLPRegressor, yr, dict(hidden_layer_sizes=(8, 4), activation="tanh", max_iter=15)),
             (ml.MLPClassifier, sk.MLPClassifier, y3, dict(hidden_layer_sizes=(6,), solver="sgd", max_iter=15))):
         a = ours(shuffle=False, random_state=0, batch_size=50, **kw).fit(X, y)
-        b = theirs(shuffle=False, random_state=0, batch_size=50, **kw).fit(X, y)
+        # Our Glorot draws come from the seeded Mojo stream (`_buffer.InitStream`,
+        # 86b2bc254), not numpy's RandomState, so the reference starts from the
+        # SAME initial weights: the curves then compare the optimisation alone.
+        from mojolearn._buffer import InitStream
+        n_out = 1 if y.ndim == 1 and ours is ml.MLPRegressor else len(np.unique(y))
+        sizes = [X.shape[1]] + list(kw["hidden_layer_sizes"]) + [n_out]
+        coefs, intercepts = ours(**kw)._init(sizes, InitStream(0))
+        b = theirs(shuffle=False, random_state=0, batch_size=50, **kw)
+        layers = iter(zip(coefs, intercepts))
+
+        def init_coef(fan_in, fan_out, dtype, layers=layers):
+            w, c = next(layers)
+            assert w.shape == (fan_in, fan_out)
+            return w.astype(dtype), c.astype(dtype)
+        b._init_coef = init_coef
+        b.fit(X, y)
         np.testing.assert_allclose(a.loss_curve_, b.loss_curve_, rtol=1e-4, atol=1e-5)
 
 

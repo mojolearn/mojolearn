@@ -3,8 +3,10 @@
 """MLPClassifier and MLPRegressor, scikit-learn's
 (`sklearn/neural_network/_multilayer_perceptron.py`), trained on the GPU by
 the sequence lane's binding (`sequence/mlp.mojo`, `sequence/mlp_fit.mojo`):
-the same parameters, attributes, initialisation (Glorot uniform from
-`random_state`, as the reference draws it), losses, Adam and SGD updates,
+the same parameters, attributes, initialisation (Glorot uniform with the
+reference's bounds, drawn from `random_state` by the seeded Mojo stream
+`_buffer.InitStream`, so not the reference's RandomState values), losses,
+Adam and SGD updates,
 learning-rate schedules and stopping rule. Shuffling uses the lane's own
 host generator seeded from `random_state`, so a shuffled fit is not the
 reference's sample order.
