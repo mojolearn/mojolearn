@@ -5277,7 +5277,11 @@ def race(args):
         timed = a["digests"][0 if external_warmup else 1:]
         a["digest_stable"] = (len(set(timed)) == 1) if ok and len(timed) >= 2 else None
         info = a.get("info") or {}
-        home = info.get("input_home") or "host"
+        # A cuML/cuVS/cuGraph arm set up by ctd._cuml_setup carries no input_home but
+        # records the pre-clock upload: its inputs were on the device before its clock
+        # (board-two-clocks, 2026-10-08; the old `or "host"` labelled 58 NVIDIA cells host).
+        home = info.get("input_home") or ("device" if info.get("upload_ms_untimed") is not None
+                                          else "host")
         a["span"] = {"input_home": home, "pre_clock_fit": bool(info.get("pre_clock_fit")),
                      "upload_ms_untimed": info.get("upload_ms_untimed"),
                      "inside_clock": fit_text(lane)}

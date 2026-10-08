@@ -30,8 +30,11 @@ TWO CLOCKS PER CELL, NEVER INVENTED
       `span.upload_ms_untimed` (cuML/cuVS/cuGraph `_cuml_setup`, torch
       `_torch_setup`): whole_ms = median + copy. That upload covers every array
       the arm's worker put on the device before the clock (it can include the
-      predict rows), so whole_ms is an upper bound of the fit's own copy, and
-      it is never used for an inference cell (the fit inputs are in it too).
+      predict rows), so whole_ms is an upper bound of the fit's own copy. An
+      inference cell uses its own predict-row upload (the classical racer's
+      infer_runner records it in the infer arm's info, the cell's
+      `comparability.upload_ms_untimed`); the algos driver re-sends the fit
+      info there, so an algos inference copy is not separable.
     * an arm on the CPU: no host-to-device copy exists, so both clocks are the
       stored median (copy 0, source `cpu-arm`).
   A clock the stored fields cannot give stays None and says why.
@@ -147,11 +150,20 @@ def cell_clock(cell):
                                    "kernel clock withheld" % up)
     elif stored == KERNEL:
         out["kernel_ms"] = m
-        up = _num(span.get("upload_ms_untimed"))
-        if up is not None and not infer and up >= 0:
-            out.update(whole_ms=m + up, copy_ms=up, copy_source="upload_ms_untimed")
-        elif up is not None and infer:
-            out["note"] = "upload_ms_untimed covers the fit inputs too; the predict copy is not separable"
+        if not infer:
+            up, src = _num(span.get("upload_ms_untimed")), "upload_ms_untimed"
+        elif cell.get("family") == "classical":
+            # classical_two_datasets.infer_runner uploads Xq on its own before the
+            # inference clock and records that upload in the infer arm's info
+            up, src = _num((cell.get("comparability") or {}).get("upload_ms_untimed")), \
+                "upload_ms_untimed (the predict rows' own upload)"
+        else:
+            up, src = None, None
+            if _num(span.get("upload_ms_untimed")) is not None:
+                out["note"] = ("the recorded upload_ms_untimed covers the fit inputs too; "
+                               "the predict copy is not separable")
+        if up is not None and up >= 0:
+            out.update(whole_ms=m + up, copy_ms=up, copy_source=src)
     if out["copy_ms"] is not None:
         out["copy_share"] = out["copy_ms"] / m
     have = (out["whole_ms"] is not None, out["kernel_ms"] is not None)

@@ -456,6 +456,13 @@ WATCHDOG = _load_tool("bench_board_watchdog")
 #: Per-arm memory and the our-CPU refusal (standard library only at import).
 PROBE = _load_tool("bench_board_probe")
 
+#: The two clocks (tools/board_clock_audit.py, standard library only): per cell
+#: the whole-operation clock (incl. the host-to-device copy) and the kernel-only
+#: clock where stored fields give them, and each opponent ratio on its clock
+#: (kernel for a torch GPU arm, whole otherwise; AGENTS.md measurement item 6).
+#: Derived at render time only; the stored cells and ratios are untouched.
+CLOCKS = _load_tool("board_clock_audit")
+
 
 def _bb():
     """This module's helpers, for bench_board_infer (it imports nothing from here)."""
@@ -2696,11 +2703,39 @@ QUALITY_NOTE = {
 }
 
 
+#: The clock columns beside the stored ratios (tools/board_clock_audit.py).
+CLOCK_HEADER = ("whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | "
+                "ours FAST / arm (clock)")
+CLOCK_COLUMNS = 5
+
+
+def _clock_ratio(r):
+    if not r or r.get("value") is None:
+        return "-"
+    return "%s (%s)" % (_f(r["value"], 3), clean(r["label"]))
+
+
+def clock_cells(c):
+    """The five clock cells of one board row, joined with ` | ` (the caller's
+    format string supplies the outer bars). Derived by CLOCKS.annotate_cells;
+    a cell rendered without it shows dashes."""
+    k = c.get("clock") or {}
+    copy_txt = "-"
+    if k.get("copy_ms") is not None:
+        copy_txt = "%s (%s)" % (_f(k["copy_ms"], 2), clean(k.get("copy_source")))
+    elif k.get("stored") in ("whole", "kernel") and k.get("median_ms") is not None:
+        copy_txt = "- (stored %s)" % k["stored"]
+    return " | ".join((_f(k.get("whole_ms")), _f(k.get("kernel_ms")), copy_txt,
+                       _clock_ratio(c.get("ratio_ours_identical_clock")),
+                       _clock_ratio(c.get("ratio_ours_fast_clock"))))
+
+
 def render_board(result):
     result = copy.deepcopy(result)
     # Historical page-only races are measurements too; include them in the main board.
     result.setdefault("races", {}).update(result.get("extra_races") or {})
     result = strip_our_cpu(result)
+    CLOCKS.annotate_result(result)      # derived `clock` + ratio-clock fields, this copy only
     box = result.get("box") or {}
     cfg = result.get("config") or {}
     gpu = box.get("gpu") or {}
@@ -2760,6 +2795,15 @@ def render_board(result):
              "`ours FAST / arm` likewise. Below 1.0 our median time is the lower one, above 1.0 "
              "the higher one. A ratio is shown only when both arms completed every round in this run, "
              "and only against an opponent: our two modes are never divided by each other here.")
+    L.append("- Two clocks (AGENTS.md measurement item 6): `whole ms` is the operation including the "
+             "host-to-device copy of its inputs, `kernel ms` the same with the inputs already on the "
+             "device; `copy ms` comes only from a stored field, named beside it (`upload_ms_separate`: "
+             "our separate upload probe, kernel = median - copy; `upload_ms_untimed`: an opponent's "
+             "pre-clock upload, whole = median + copy; `cpu-arm`: no device copy exists). A clock the "
+             "stored fields cannot give is `-`, never estimated. `ours IDENTICAL / arm (clock)` reads "
+             "a torch GPU arm on kernel/kernel and every other arm on whole/whole; when that clock is "
+             "missing on a side it falls back to the other common clock (labelled), and with no "
+             "common clock it is the two stored medians labelled MIXED with each side's clock.")
     L.append("- Quality comes from the drivers: FSPEED-ACC for trees (held-out rows), one float64 "
              "NumPy function per lane for classical.")
     L.append("- Comparability: trees carry FSPEED-FIT-VERDICT (total leaves within 10% across "
@@ -2868,12 +2912,13 @@ def render_board(result):
                 " (pod %s)" % rh["pod_id"] if rh.get("pod_id") else ""))
             L.append("")
             L.append("| arm | library | device | mode | median ms | min..max ms | rounds | "
-                     "ours IDENTICAL / arm | ours FAST / arm | peak host MB | "
+                     "ours IDENTICAL / arm | ours FAST / arm | " + CLOCK_HEADER + " | peak host MB | "
                      "peak GPU MB | quality | hash stable | comparability | installed_wheel | "
                      "status |")
-            L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+            L.append("|---|---|---|---|---|---|---|---|---|" + "---|" * CLOCK_COLUMNS
+                     + "---|---|---|---|---|---|---|")
             for c in rc:
-                L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | "
+                L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | "
                          "%s | %s | %s |" % (
                              _arm_label(c), c["library"], c["device"], c["mode"],
                              _f(c["median_ms"]),
@@ -2882,6 +2927,7 @@ def render_board(result):
                              c["rounds"],
                              _f(c.get("ratio_ours_identical_over"), 3),
                              _f(c.get("ratio_ours_fast_over"), 3),
+                             clock_cells(c),
                              _f(c.get("peak_host_mb")), _f(c.get("peak_gpu_mb")),
                              _q(c.get("quality")), _f(c.get("hash_stable")),
                              clean(c.get("verdict")), clean(c.get("installed_wheel", "-")),
