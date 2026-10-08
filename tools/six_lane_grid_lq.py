@@ -578,6 +578,7 @@ def merge_observations(jobs, obs, logs):
 
 # ------------------------------------------------------------------ collect: judge
 
+TIMEOUT_RATIO = 4.0  # a candidate race the racer refused for timeout counts as at least this many times the incumbent
 LOWER = re.compile(r'rmse|logloss|log_loss|inertia|error|residual|distortion|perplexity|stress|diff|shift|l1_vs')
 HIGHER = re.compile(r'^(accuracy|auc|roc_auc|r2|mean_r2|silhouette|modularity|explained_variance_fraction|'
                     r'mean_canonical_corr|mean_log_likelihood|mean_llf|precision|f1)$|trustworthiness|recall|jaccard|'
@@ -721,8 +722,22 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
         good = [s for s in samples if ok(s)]
         a = good[-1] if good else samples[-1]
         bs, head_differs = b_ref(wid, vendor, a['head'])
+        timed_out = not good and any('timeout' in str(s.get('status') or '').lower() for s in samples)
         case = cases.setdefault((cid, wid), dict(configuration=cid, workload_id=wid, mode=c.get('mode', 'identical'), vendors={}))
-        if good and bs:
+        if timed_out and bs:
+            # The candidate did not finish inside the racer's cap while the incumbent did: that is a loss, not a hole.
+            # Recorded as TIMEOUT_RATIO x the incumbent (beyond any floor) with timed_out=True, so the verdict is SLOWER
+            # on this vendor; the true ratio is unknown and at least this large.
+            b_ms = _median([s['median_ms'] for s in bs])
+            r = math.log(TIMEOUT_RATIO)
+            fl = floors.get(wid + '|' + vendor) or {}
+            case['vendors'][vendor] = dict(
+                evidence='%s:%s' % (a['evidence'], a['id']), a_ms=None, b_ms=b_ms, b_samples=len(bs), timed_out=True,
+                a_status=a['status'], log_ratio={p: (r if p == 'scored' else None) for p in T.PHASES},
+                candidate_over_baseline={p: (TIMEOUT_RATIO if p == 'scored' else None) for p in T.PHASES},
+                timing_source=TIMING_SOURCE + ' (candidate timed out: ratio is a lower bound)', floor=fl.get('floor'),
+                floor_evidence=fl.get('evidence'), a_head=a['head'], b_head_differs=head_differs)
+        elif good and bs:
             a_ms = _median([s['median_ms'] for s in good])
             b_ms = _median([s['median_ms'] for s in bs])
             r = math.log(a_ms / b_ms)
@@ -734,7 +749,9 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                 timing_source=TIMING_SOURCE, floor=fl.get('floor'), floor_evidence=fl.get('evidence'),
                 a_head=a['head'], b_head_differs=head_differs)
         # quality: A vs the incumbent sample of the same head (first in queue order)
-        if not good:
+        if timed_out and bs:
+            verdict, detail, unjudged = 'TIMEOUT', {}, []  # judged by timing (SLOWER), not by quality
+        elif not good:
             verdict, detail, unjudged = 'FAIL', {}, []
         elif not bs:
             verdict, detail, unjudged = 'PENDING', {}, []
