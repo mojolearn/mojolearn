@@ -583,6 +583,7 @@ def merge_observations(jobs, obs, logs):
 
 # ------------------------------------------------------------------ collect: judge
 
+FLOOR_MIN = math.log(1.05)  # the smallest credible same-build spread: Oct 6 receipts put the median at 1.07x, p90 1.25x
 TIMEOUT_RATIO = 4.0  # a candidate race the racer refused for timeout counts as at least this many times the incumbent
 LOWER = re.compile(r'rmse|logloss|log_loss|inertia|error|residual|distortion|perplexity|stress|diff|shift|l1_vs')
 HIGHER = re.compile(r'^(accuracy|auc|roc_auc|r2|mean_r2|silhouette|modularity|explained_variance_fraction|'
@@ -704,6 +705,8 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
         head, best = max(by_head.items(), key=lambda kv: len(kv[1]))
         ms = [s['median_ms'] / 1000.0 for s in best]
         f = T._spread(ms) if len(ms) >= min_samples else None
+        if f is not None:
+            f = max(f, FLOOR_MIN)  # two or three repeats that happen to agree are not a 0.1% floor
         floors[wid + '|' + vendor] = dict(workload_id=wid, vendor=vendor, samples=len(ms), builds_seen=len(by_head),
                                           b_head=head, timing_source=TIMING_SOURCE,
                                           evidence=sorted({'%s:%s' % (s['evidence'], s['id']) for s in best}),
