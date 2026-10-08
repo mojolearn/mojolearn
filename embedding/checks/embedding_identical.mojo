@@ -629,6 +629,227 @@ def emb_backward_touched_kernel(
     dw.unsafe_store(out, ftz(acc))
 
 
+# lane gap-neural-io (2026-10-08, plan docs/plans/gaps-2026-10-08.md Section
+# 4): THE UNIQUE-ROWS FOLD. The touched-rows launch above fires only when
+# T < V (it launches T * d threads); with T >= V (the board's T = V =
+# 32,768) the fold is `emb_backward_kernel` over all V * d cells, though a
+# random batch touches only ~63% of the rows and a skewed (text) one far
+# fewer. Here the runs `run_begin` already holds name the touched rows: a
+# row v is touched iff run_begin[v + 1] > run_begin[v]. Three integer
+# launches compact them, ascending v, into `rows[0:U]` (per-block flag
+# counts, one block's exclusive scan of those counts, per-block scatter);
+# U is read back (one wait) and the fold runs over exactly U * d threads,
+# thread (k, j) folding row rows[k] column j with the clean statements of
+# `emb_backward_kernel` (the seeded cell, ascending t, ftz per add). Every
+# touched cell gets the same bits, every untouched cell keeps its seed: NO
+# BIT MOVES, on any column (the host twin keeps its own launch order). The
+# rule is cost, not shape: the compaction reads V + 1 run words (1/d of the
+# seed fill's V * d writes, which every fresh gradient pays anyway) and
+# saves (min(T, V) - U) * d fold threads; when U = min(T, V) the old launch
+# runs. Integer counts are exactly associative: the compaction is the same
+# list on every vendor. Opt-in per caller (`unique_rows`, the embedding
+# binding's entries; the training loops keep their launch and their wait
+# count); off with -D MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF (or
+# MOJOLEARN_IDN_ALL_OFF) and under every sabotage arm (EMB_TOUCHED_ROWS).
+comptime EMB_UNIQUE_ROWS = EMB_TOUCHED_ROWS and not (
+    is_defined["MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: threads per block of the compaction (a power of two: the tree folds halve it)
+comptime EMB_UNIQ_TPB = 256
+
+
+def emb_touched_count_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    run_begin: MutPointer[Int32, MutAnyOrigin],
+    vocab_in: Int32,
+):
+    """part[b] = the touched rows among block b's EMB_UNIQ_TPB rows (an
+    integer tree sum: exact, any order)."""
+    comptime NT = EMB_UNIQ_TPB
+    var sh = stack_allocation[NT, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var t = Int(thread_idx.x)
+    var v = Int(block_idx.x) * NT + t
+    var flag = Int32(0)
+    if v < Int(vocab_in) and run_begin.unsafe_load(v + 1) > run_begin.unsafe_load(v):
+        flag = Int32(1)
+    sh.unsafe_store(t, flag)
+    barrier()
+    var stride = NT // 2
+    while stride > 0:
+        if t < stride:
+            sh.unsafe_store(t, sh.unsafe_load(t) + sh.unsafe_load(t + stride))
+        barrier()
+        stride //= 2
+    if t == 0:
+        part.unsafe_store(Int(block_idx.x), sh.unsafe_load(0))
+
+
+def emb_touched_scan_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    total: MutPointer[Int32, MutAnyOrigin],
+    nparts_in: Int32,
+):
+    """The exclusive prefix sum of part[0:nparts] in place and the total in
+    total[0], by ONE block of EMB_UNIQ_TPB threads over the per-block counts
+    (V / EMB_UNIQ_TPB words: `emb_run_begin_block_kernel`'s chunked form)."""
+    comptime NT = EMB_UNIQ_TPB
+    var sums = stack_allocation[NT, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var n = Int(nparts_in)
+    var t = Int(thread_idx.x)
+    var chunk = (n + NT - 1) // NT
+    var lo = t * chunk
+    var hi = min(lo + chunk, n)
+    var sum = Int32(0)
+    for i in range(lo, hi):
+        sum = sum + part.unsafe_load(i)
+    sums.unsafe_store(t, sum)
+    barrier()
+    if t == 0:
+        var acc = Int32(0)
+        for i in range(NT):
+            var x = sums.unsafe_load(i)
+            sums.unsafe_store(i, acc)
+            acc = acc + x
+        total.unsafe_store(0, acc)
+    barrier()
+    var run = sums.unsafe_load(t)
+    for i in range(lo, hi):
+        var x = part.unsafe_load(i)
+        part.unsafe_store(i, run)
+        run = run + x
+
+
+def emb_touched_rows_kernel(
+    rows: MutPointer[Int32, MutAnyOrigin],
+    part: MutPointer[Int32, MutAnyOrigin],
+    run_begin: MutPointer[Int32, MutAnyOrigin],
+    vocab_in: Int32,
+):
+    """rows[part[b] + (touched rows of block b before v)] = v for every
+    touched v of block b: the touched rows, ascending. The in-block rank is
+    a Hillis-Steele inclusive scan of the flags over two shared buffers."""
+    comptime NT = EMB_UNIQ_TPB
+    var a = stack_allocation[NT, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var c = stack_allocation[NT, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var t = Int(thread_idx.x)
+    var v = Int(block_idx.x) * NT + t
+    var flag = Int32(0)
+    if v < Int(vocab_in) and run_begin.unsafe_load(v + 1) > run_begin.unsafe_load(v):
+        flag = Int32(1)
+    a.unsafe_store(t, flag)
+    barrier()
+    var off = 1
+    var src_is_a = True
+    while off < NT:
+        if src_is_a:
+            var x = a.unsafe_load(t)
+            if t >= off:
+                x = x + a.unsafe_load(t - off)
+            c.unsafe_store(t, x)
+        else:
+            var y = c.unsafe_load(t)
+            if t >= off:
+                y = y + c.unsafe_load(t - off)
+            a.unsafe_store(t, y)
+        barrier()
+        src_is_a = not src_is_a
+        off *= 2
+    var incl = a.unsafe_load(t) if src_is_a else c.unsafe_load(t)
+    if flag != Int32(0):
+        rows.unsafe_store(Int(part.unsafe_load(Int(block_idx.x)) + incl - Int32(1)), Int32(v))
+
+
+def emb_backward_rows_kernel(
+    dw: MutPointer[Float32, MutAnyOrigin],
+    dy: MutPointer[Float32, MutAnyOrigin],
+    perm: MutPointer[Int32, MutAnyOrigin],
+    run_begin: MutPointer[Int32, MutAnyOrigin],
+    rows: MutPointer[Int32, MutAnyOrigin],
+    n_rows_in: Int32,
+    width_in: Int32,
+):
+    """`emb_backward_kernel`'s clean fold, one thread per (touched row
+    rows[k], column j)."""
+    var width = Int(width_in)
+    if width < 1:
+        return
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= Int(n_rows_in) * width:
+        return
+    var k = cell // width
+    var j = cell - k * width
+    var v = Int(rows.unsafe_load(k))
+    var lo = Int(run_begin.unsafe_load(v))
+    var hi = Int(run_begin.unsafe_load(v + 1))
+    var out = v * width + j
+    var acc = dw.unsafe_load(out)
+    for r in range(lo, hi):
+        var t = Int(perm.unsafe_load(r))
+        acc = ftz(ftz(acc) + ftz(dy.unsafe_load(t * width + j)))
+    dw.unsafe_store(out, ftz(acc))
+
+
+def _emb_unique_rows_fold(
+    ctx: DeviceContext,
+    mut dw: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut run_begin: DeviceBuffer[DType.int32],
+    mut perm: DeviceBuffer[DType.int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+    block_threads: Int,
+) raises -> Bool:
+    """EMB_UNIQUE_ROWS: compacts the touched rows, reads their count U back
+    and, when U < min(T, V), launches the fold over U * d threads and waits
+    for it (the scratch lives to that wait). Returns False (nothing
+    launched beyond the compaction) when U = min(T, V): the caller's launch
+    then runs, the same work."""
+    var nb = (cfg.vocab + EMB_UNIQ_TPB - 1) // EMB_UNIQ_TPB
+    # rows[0:V], the per-block counts [V, V + nb), the total at V + nb
+    var scratch = ctx.enqueue_create_buffer[DType.int32](cfg.vocab + nb + 1)
+    var base = scratch.unsafe_ptr()
+    step_count_launch()
+    ctx.enqueue_function[emb_touched_count_kernel](
+        base + cfg.vocab, run_begin.unsafe_ptr(), Int32(cfg.vocab),
+        grid_dim=(nb, 1, 1), block_dim=(EMB_UNIQ_TPB, 1, 1),
+    )
+    step_count_launch()
+    ctx.enqueue_function[emb_touched_scan_kernel](
+        base + cfg.vocab, base + cfg.vocab + nb, Int32(nb),
+        grid_dim=(1, 1, 1), block_dim=(EMB_UNIQ_TPB, 1, 1),
+    )
+    step_count_launch()
+    ctx.enqueue_function[emb_touched_rows_kernel](
+        base, base + cfg.vocab, run_begin.unsafe_ptr(), Int32(cfg.vocab),
+        grid_dim=(nb, 1, 1), block_dim=(EMB_UNIQ_TPB, 1, 1),
+    )
+    step_count_host_alloc()
+    var h = ctx.enqueue_create_host_buffer[DType.int32](1)
+    step_count_d2h()
+    var tot = scratch.create_sub_buffer[DType.int32](cfg.vocab + nb, 1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=tot)
+    step_count_sync()
+    ctx.synchronize()
+    var u = Int(h.unsafe_ptr().unsafe_load(0))
+    _ = tot^
+    _ = h^
+    if u >= min(n_positions, cfg.vocab):
+        _ = scratch^
+        return False
+    if u > 0:
+        step_count_launch()
+        ctx.enqueue_function[emb_backward_rows_kernel](
+            dw.unsafe_ptr(), dy.unsafe_ptr(), perm.unsafe_ptr(), run_begin.unsafe_ptr(),
+            base, Int32(u), Int32(cfg.width),
+            grid_dim=(_grid_for(u * cfg.width, block_threads), 1, 1),
+            block_dim=(block_threads, 1, 1),
+        )
+        step_count_sync()
+        ctx.synchronize()
+    _ = scratch^
+    return True
+
+
 def emb_onehot_kernel(
     onehot: MutPointer[Float32, MutAnyOrigin],
     ids: MutPointer[Int32, MutAnyOrigin],
@@ -884,14 +1105,17 @@ def identical_embedding_backward_prerefused_into(
     cfg: EmbConfig,
     plan: Int = PLAN_SCAN,
     block_threads: Int = EMB_TPB,
+    unique_rows: Bool = False,
 ) raises:
     """Seams E0 through E4 for an owning caller that already refused the
     exact immutable ids by host-list admission or an owned device token scan;
     `identical_embedding_backward_into` without the
     device id read-back. `counts`, `run_begin` and `perm` need no initial
-    value: both plans write every cell the fold reads."""
+    value: both plans write every cell the fold reads. `unique_rows` opts
+    into EMB_UNIQUE_ROWS (one extra wait; the same bits)."""
     _emb_backward_refuse_launch(ctx, plan, block_threads)
-    _emb_backward_launch(ctx, dw, dy, ids, counts, run_begin, perm, n_positions, cfg, plan, block_threads)
+    _emb_backward_launch(ctx, dw, dy, ids, counts, run_begin, perm, n_positions, cfg, plan, block_threads,
+                         unique_rows=unique_rows)
 
 
 def identical_embedding_forward_refusing_into(
@@ -996,6 +1220,7 @@ def _emb_backward_launch(
     plan: Int,
     block_threads: Int,
     runs_ready: Bool = False,
+    unique_rows: Bool = False,
 ) raises:
     """Seams E0 through E4, launched. Every refusal is the caller's.
 
@@ -1082,10 +1307,16 @@ def _emb_backward_launch(
     var touched = False
     comptime if EMB_TOUCHED_ROWS:
         touched = n_positions < cfg.vocab
+    var folded = False
+    comptime if EMB_UNIQUE_ROWS:
+        if unique_rows:
+            folded = _emb_unique_rows_fold(ctx, dw, dy, run_begin, perm, n_positions, cfg, block_threads)
     comptime if SAB_FOLD_VIA_GEMM_ONEHOT:
         _emb_fold_via_gemm_onehot(ctx, dw, dy, ids, n_positions, cfg, block_threads)
     else:
-        if touched:
+        if folded:
+            pass
+        elif touched:
             step_count_launch()
             comptime if NN49_EMB_VECTOR4:
                 ctx.enqueue_function[emb_backward_touched_vector4_kernel](

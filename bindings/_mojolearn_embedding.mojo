@@ -543,7 +543,7 @@ def _backward_run(
         var r_begin = _pool_i32(ctx, cfg.vocab + 1)
         var r_perm = _pool_i32(ctx, n_positions)
         identical_embedding_backward_prerefused_into(
-            ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan
+            ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
         )
         _download_out(ctx, r_dw, dwp, cells)
         _give_f32(r_dw^, cells)
@@ -937,7 +937,7 @@ def _backward_dev_run(
     var r_begin = _pool_i32(ctx, cfg.vocab + 1)
     var r_perm = _pool_i32(ctx, n_positions)
     identical_embedding_backward_prerefused_into(
-        ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan
+        ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
     )
     ctx.synchronize()
     _give_i32(r_ids^, n_positions)
