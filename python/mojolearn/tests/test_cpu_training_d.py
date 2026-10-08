@@ -94,11 +94,13 @@ STATEMENTS = {
     "hdbscan": (
         ("hierarchy/impl/sparse/solver/detail/mst_kernels.mojo", "if vertex_color > dst_color:",
          "if j_is_min and cu > cj:"),
+        # the host column calls the kernel's fold restated in the CPU-safe
+        # stability_fold.mojo (test_hdbscan_stability_fold_is_the_kernels below)
         ("hdbscan/impl/detail/stabilities.mojo", "var term = ftz(lambdas.unsafe_load(i) - birth)",
-         "var term = ftz(tree.lambdas[i] - birth)"),
-        ("hdbscan/impl/detail/select.mojo", "or cluster_sizes[node] > max_cluster_size",
+         "stability_fold_host(tree.lambdas, tree.sizes, lo, hi, birth)"),
+        ("hdbscan/impl/detail/select.mojo", "if subtree > node_stability or Int(csize[q]) > Int(max_cluster_size):",
          "or cluster_sizes[node] > max_cluster_size"),
-        ("hdbscan/impl/detail/condense.mojo", "lambda_value = identical_div(Float32(1.0), distance)",
+        ("hdbscan/impl/detail/tree_device.mojo", "lv = identical_div(Float32(1.0), distance)",
          "lambda_value = identical_div(Float32(1.0), distance)"),
     ),
 }
@@ -270,3 +272,15 @@ if __name__ == "__main__":
         print("ok", name)
     print(f"{len(names)} passed")
     sys.exit(0)
+
+
+def test_hdbscan_stability_fold_is_the_kernels():
+    """The host's stability sum lives in hdbscan/impl/detail/stability_fold.mojo
+    (moved out of the device file so the host imports no GPU module): the
+    kernel's term, its fused accumulate and its fold width, with no GPU import."""
+    fold = _read("hdbscan/impl/detail/stability_fold.mojo")
+    assert not re.search(r"^\s*from\s+(max\.gpu|std\.gpu)", fold, re.M)
+    assert "var term = ftz(lambdas[i] - birth)" in fold
+    assert "acc = ftz(identical_mul_add(term, size_f, acc))" in fold
+    assert "acc = ftz(identical_mul_add(term, size_f, acc))" in _read("hdbscan/impl/detail/stabilities.mojo")
+    assert "comptime STAB_FOLD = 256" in fold

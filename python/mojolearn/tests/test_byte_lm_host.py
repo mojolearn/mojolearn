@@ -34,8 +34,8 @@ def fake_host(monkeypatch, tmp_path):
     # bindings/_mojolearn_byte_lm_host.mojo: the IDENTICAL toggle suffix the
     # wrapper appends to the expected profile (empty for a default build).
     m.byte_lm_host_arithmetic_suffix = lambda: ''
-    m.byte_lm_host_profile = (
-        lambda native: shape.profile if list(native) == host_mod._native_shape(shape) else 'other')
+    # the real binding answers the profile of whatever shape it is handed
+    m.byte_lm_host_profile = lambda native: ByteLanguageModelConfig(*native).profile
 
     def logits(addresses, dims, native, threaded, threads):
         m.calls.append(('logits', list(dims), threaded, threads))

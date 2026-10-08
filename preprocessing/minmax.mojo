@@ -173,7 +173,9 @@ def minmax_transform_kernel(
         else:
             # Explicit rounded multiplication keeps sklearn's two operations.
             value = ftz(ftz(identical_mul(value,ftz(scale.unsafe_load(c))))+ftz(offset.unsafe_load(c)))
-            if clip != 0:
+            if clip != 0 and value == value:
+                # numpy's clip keeps a NaN (sklearn's transform propagates
+                # missing values); max/min would replace it with `lower`
                 value = min(max(value,lower),upper)
         output.unsafe_store(i,value)
 

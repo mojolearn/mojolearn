@@ -86,7 +86,7 @@ from hdbscan.impl.detail.sparse_mr import (
     triple_less_i,
 )
 from cluster.host.host_cells import ftz_v, mul_add_v
-from hdbscan.impl.detail.stabilities import (
+from hdbscan.impl.detail.stability_fold import (
     stability_fold_host,
     stability_order_key_bits,
     stability_order_unkey_bits,

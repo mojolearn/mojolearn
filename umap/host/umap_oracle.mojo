@@ -101,7 +101,7 @@ from spectral.impl.sparse.coo import CooGraph
 from umap.curve import fit_umap_curve
 from umap.graph import canonicalize_self_neighbors
 from umap.params import UMAPParams
-from umap.sparse_graph import SparseFuzzySimplicialGraph
+from umap.sparse_graph_cells import SparseFuzzySimplicialGraph
 from umap.host.sparse_graph_host import (
     host_categorical_intersection,
     host_general_intersection,

@@ -27,7 +27,7 @@ from core.host_predict_threads import (
 )
 from core.host_parallel import host_parallelize
 from umap.graph import _finite
-from umap.sparse_graph import (
+from umap.sparse_graph_cells import (
     SparseFuzzySimplicialGraph,
     UG_F32P,
     ug_categorical_constants,

@@ -101,10 +101,16 @@ def test_oracle_imports_no_gpu_and_not_the_host_loop():
     assert modules == [
         "checks.kernel_matrix", "checks.numerics", "core.knn_host_predict",
         "spectral.host.spectral_oracle", "spectral.impl.sparse.coo", "std.math",
-        "std.memory", "std.sys.compile", "umap.curve", "umap.graph", "umap.params",
-        "umap.sparse_graph",
+        "std.memory", "std.sys.compile", "umap.curve", "umap.graph",
+        "umap.host.sparse_graph_host", "umap.host.spectral_post_pass_host", "umap.params",
+        "umap.sparse_graph_cells", "umap.transform_rows",
     ], modules
-    for rel in ("umap/sparse_graph.mojo", "umap/graph.mojo", "umap/curve.mojo", "umap/params.mojo"):
+    # umap/sparse_graph.mojo builds the graph on the device (b4e1f2f9c); the
+    # struct and the per-row/per-cell arithmetic the host shares with it live
+    # in umap/sparse_graph_cells.mojo, which the host imports instead.
+    for rel in ("umap/sparse_graph_cells.mojo", "umap/host/sparse_graph_host.mojo",
+                "umap/host/spectral_post_pass_host.mojo", "umap/transform_rows.mojo",
+                "umap/graph.mojo", "umap/curve.mojo", "umap/params.mojo"):
         assert not GPU_IMPORTS.search(_read(rel)), f"{rel} imports a GPU module"
         assert "DeviceContext" not in _read(rel), f"{rel} names DeviceContext"
 
@@ -115,7 +121,13 @@ def test_oracle_spells_the_device_kernel():
     for statement in KERNEL_STATEMENTS:
         assert statement in device, f"the device kernel no longer spells {statement!r}; restate the oracle"
         assert statement in oracle, f"the oracle does not spell {statement!r}"
-    assert oracle.count("acc[c] = ftz(acc[c] + g)") == device.count("acc[c] = ftz(acc[c] + g)")
+    # `_c44_epoch_kernel` is the C44_SAMPLING_DESCRIPTORS experiment's copy of
+    # the epoch kernel (same edge/draw visit order, default off); the host
+    # restates the two shipped kernels.
+    start = device.index("def _c44_epoch_kernel(")
+    end = device.index("\ndef ", start + 1)
+    shipped = device[:start] + device[end:]
+    assert oracle.count("acc[c] = ftz(acc[c] + g)") == shipped.count("acc[c] = ftz(acc[c] + g)")
     assert "ftz(Float32(Float64(weight) / Float64(max_weight)))" in oracle
     assert "first.append(ftz(initial[i]))" in oracle, "the initial upload is flushed"
     assert "oracle_embedding[DType.float32](\n        coo, n_components + 1, True, True, Float32(1e-5), seed" in oracle

@@ -47,6 +47,8 @@ REUSED_HOST_MODULES = (
     "gbdt/data/permutation.mojo",
     "gbdt/data/quantization.mojo",
     "gbdt/grid_creator/binarization.mojo",
+    "gbdt/grid_creator/border_types_cells.mojo",
+    "gbdt/grid_creator/gls_borders_cells.mojo",
     "gbdt/gpu_data/compressed_index_builder.mojo",
     "gbdt/gpu_data/feature_blocks.mojo",
     "gbdt/gpu_data/grid_policy.mojo",
@@ -140,7 +142,8 @@ def test_oracle_imports_no_gpu_module():
         "checks.numerics", "core.host_parallel", "gbdt.data.permutation", "gbdt.data.quantization",
         "gbdt.gpu_data.compressed_index_builder", "gbdt.gpu_data.feature_blocks",
         "gbdt.gpu_data.grid_policy", "gbdt.gpu_util.kernel.random_gen",
-        "gbdt.grid_creator.binarization", "gbdt.host.gbdt_oracle_eval",
+        "gbdt.grid_creator.binarization", "gbdt.grid_creator.border_types_cells",
+        "gbdt.grid_creator.gls_borders_cells", "gbdt.host.gbdt_oracle_eval",
         "gbdt.options.data_processing_options",
         "std.math", "std.memory", "std.sys.compile",
     ], imports
@@ -163,21 +166,29 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "est_p_leaves[leaf], lr, cursors[p][row]" in text
     assert "if function_value <= next_value:" in text, "AnyImprovement"
     assert "if left_sz < right_sz:" in text, "the sibling tie computes the right child"
-    assert "clean.append(ftz(values[i]))" in text, "the phase B border search input flush"
-    assert "borders.append(ftz(half_below + half_above))" in text, "the phase B border midpoint flush"
-    assert "var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)" in text, (
-        "the grid must take the phase B border search, not the imported calc_quantization"
+    # Since 121a82d3b the grid takes the device's own per-column border search
+    # (gls_borders_cells.gls_column for GreedyLogSum, border_types_cells.
+    # border_type_column for the other six), one shared function per column,
+    # instead of the host-only phase B restatement.
+    assert "nb = gls_column(" in text and "nb = border_type_column(" in text, (
+        "the grid must take the shared per-column border search"
     )
-    assert "host_parallelize_pool_env(_grid_column, n_features)" in text
-    assert "obp.unsafe_store(f * out_cap + b, q[0][b])" in text, (
+    cells = _read("gbdt/grid_creator/gls_borders_cells.mojo") + _read("gbdt/grid_creator/border_types_cells.mojo")
+    assert "def gls_column(" in cells and "def border_type_column(" in cells
+    assert "host_parallelize_pool_env(_col, n_features)" in text
+    assert "fp + f * out_cap," in text and "cp[f] = nb" in text, (
         "parallel feature searches must publish into disjoint flat slots"
     )
-    assert "_ = sample_idx^" in text, "the sampled-index owner must outlive the worker join"
+    assert "_ = len(idx)" in text, "the sampled-index owner must outlive the worker join"
     refusal = "There are nan factors and nan values for float features are"
-    precheck = text.index("if nan_mode == NAN_MODE_FORBIDDEN:", text.index("def gbdt_host_grid"))
-    launch = text.index("host_parallelize_pool_env(_grid_column, n_features)", precheck)
-    assert precheck < launch and refusal in text[precheck:launch], (
-        "Forbidden NaNs must retain their exact serial public refusal before workers launch"
+    # The workers mark a Forbidden-NaN column (`mp[f] = -1`) and return; after
+    # the join the first such column in feature order raises the public
+    # refusal, so the sentence and the column it names are the serial ones.
+    launch = text.index("host_parallelize_pool_env(_col, n_features)")
+    mark = text.rindex("mp[f] = -1", 0, launch)
+    after = text[launch:text.index("\ndef ", launch)]
+    assert mark < launch and refusal in after and "if modes[f] < 0:" in after, (
+        "Forbidden NaNs must keep their exact serial public refusal, in feature order"
     )
 
 

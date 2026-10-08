@@ -27,10 +27,10 @@ from gbdt.grid_creator.binarization import (
 from gbdt.grid_creator.border_types import (
     border_table_kernel,
     border_types_columns_kernel,
-    exact_i32_words,
 )
+from gbdt.grid_creator.border_types_cells import exact_i32_words
+from gbdt.grid_creator.gls_borders_cells import GLS_BLOCK
 from gbdt.grid_creator.gls_borders import (
-    GLS_BLOCK,
     GLS_MODE_REFUSED,
     border_keys_kernel,
     border_sample_kernel,

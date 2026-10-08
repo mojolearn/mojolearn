@@ -846,8 +846,21 @@ def pinned_report(case, profile):
     return report
 
 
+#: A lane-level exclusion stands in for the judge's `EXCLUDED_LANE` arm: the
+#: shipped list has none since gemm-int15 gained table cells (2026-10-08), and
+#: the arm must still deny every misreading. The static pin test below holds
+#: the real list to the table; the synthetic lane never reaches it.
+SYNTH_LANE = "zz-synthetic-lane-without-record"
+
+
 class PinnedExclusions(Install):
     """Step 5: the reference gaps the shipped table has on every device."""
+
+    def _with_lane_exclusion(self):
+        A = self.A
+        saved = A.LOCAL_EXCLUSIONS
+        A.LOCAL_EXCLUSIONS = tuple(sorted(saved + ((SYNTH_LANE, "*", "*", A.EXCLUDED_LANE),)))
+        self.addCleanup(setattr, A, "LOCAL_EXCLUSIONS", saved)
 
     def judge(self, report, profile="routine"):
         return self.A.judge_report(report, profile=profile, reference=self.reference,
@@ -858,18 +871,19 @@ class PinnedExclusions(Install):
         return next(c for c in report["cells"] if (c["lane"], c["fixture"], c["part"]) == (lane, fixture, part))
 
     def test_every_pinned_exclusion_reading_as_pinned_qualifies_and_is_never_a_match(self):
+        self._with_lane_exclusion()
         A = self.A
         results = [self.judge(pinned_report(self, profile), profile) for profile in A.QUALIFY_PROFILES]
         for result in results:
             self.assertEqual((result["differing"], result["missing"], result["incomplete"]), ([], [], []))
             summary = result["summary"]
             self.assertEqual(len(summary["exclusions"]), len(A.LOCAL_EXCLUSIONS))
-            self.assertEqual(summary["lanes_excluded"], ["gemm-int15"])
+            self.assertEqual(summary["lanes_excluded"], [SYNTH_LANE])
             self.assertEqual(summary["lanes_with_exclusions"],
                              sorted({k[0] for k in A.LOCAL_EXCLUSIONS if k[3] == A.EXCLUDED_CONFLICT}))
             # compared = the IDENTICAL cells only: no excluded part is in the count
             self.assertEqual(summary["parts_compared"], summary["counts"]["IDENTICAL"])
-            self.assertNotIn("gemm-int15", summary["lanes_compared"])
+            self.assertNotIn(SYNTH_LANE, summary["lanes_compared"])
             self.assertEqual(summary["lanes_verified"] + len(summary["lanes_with_exclusions"])
                              + len(summary["lanes_excluded"]) + len(summary["lanes_not_applicable"]),
                              summary["lanes_in_scope"])
@@ -896,6 +910,7 @@ class PinnedExclusions(Install):
                               exclusions=len(A.LOCAL_EXCLUSIONS)))
 
     def test_a_pinned_exclusion_that_reads_any_other_way_denies(self):
+        self._with_lane_exclusion()
         A = self.A
         def conflict(report):
             return self.cell(report, "x-prep-score-edges", "base", "train")
@@ -913,11 +928,11 @@ class PinnedExclusions(Install):
              lambda r: undeclared(r).update(state="OWED", value="e" * 16, detail="no committed record carries this cell part yet")),
             ("incomplete", "did not read as pinned", lambda r: undeclared(r).update(value="n/a:no-batch")),
             ("incomplete", "pinned as having no record",
-             lambda r: r["lane_accounting"]["lanes"]["gemm-int15"].update(state="VERIFIED", reason=None)),
+             lambda r: r["lane_accounting"]["lanes"][SYNTH_LANE].update(state="VERIFIED", reason=None)),
             ("incomplete", "pinned as having no record",
-             lambda r: r["lane_accounting"]["lanes"]["gemm-int15"].update(reason="its fixture moved")),
+             lambda r: r["lane_accounting"]["lanes"][SYNTH_LANE].update(reason="its fixture moved")),
             ("incomplete", "yet this run compared it",
-             lambda r: r["cells"].append(dict(lane="gemm-int15", fixture="base", part="train", state="IDENTICAL",
+             lambda r: r["cells"].append(dict(lane=SYNTH_LANE, fixture="base", part="train", state="IDENTICAL",
                                               detail="", value="f" * 16))),
         ]
         for bucket, expect, mutate in cases:
@@ -964,6 +979,7 @@ class PinnedExclusions(Install):
         self.assertTrue(any("x-prep-select-kbest: lane OWED" in row for row in self.judge(report)["missing"]))
 
     def test_an_admission_cannot_misstate_its_coverage(self):
+        self._with_lane_exclusion()
         A = self.A
         summaries = [self.judge(pinned_report(self, profile), profile)["summary"] for profile in A.QUALIFY_PROFILES]
         def build(mutate=None):
@@ -991,7 +1007,7 @@ class PinnedExclusions(Install):
             lambda d: first(d).update(parts_compared=first(d)["parts_compared"] + 1),
             lambda d: first(d)["lanes_with_exclusions"].append("ols"),
             lambda d: first(d).update(lanes_excluded=[]),
-            lambda d: first(d)["lanes_compared"].append("gemm-int15"),
+            lambda d: first(d)["lanes_compared"].append(SYNTH_LANE),
             lambda d: next(e for e in first(d)["exclusions"] if e["kind"] == A.EXCLUDED_CONFLICT).update(agrees=[]),
             lambda d: next(e for e in first(d)["exclusions"] if e["kind"] == A.EXCLUDED_UNDECLARED).update(agrees=["nvidia"]),
             lambda d: d.update(schema="mojolearn.ptx-local-identity-admission.v1"),

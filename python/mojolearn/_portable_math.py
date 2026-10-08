@@ -221,6 +221,8 @@ def fsum(values):
     src = array.array("d", values)
     out = array.array("d", [0.0])
     if int(_native("fsum_f64")(src.buffer_info()[0], len(src), out.buffer_info()[0])):
+        if out[0]:  # glue: the binding's out-of-range marker (+-inf); -inf + inf leaves 0.0
+            raise OverflowError("math range error")
         raise ValueError("-inf + inf in fsum")
     return out[0]
 

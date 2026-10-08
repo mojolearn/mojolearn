@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Every trees-family entry point called TWICE in one process, on the GPU
 bindings and on the CPU host bindings, with the second call's bits equal to
-the first's and the GPU column's bits equal to the CPU column's.
+the first's; the GPU and CPU column digests are recorded side by side.
 
 The directive it answers (CURRENT DIRECTIVES, 2026-09-27): x_cluster and
 x_neighbors hung on the SECOND GPU call in a process because each call built
@@ -138,6 +138,10 @@ def _run(env_extra):
 
 
 def test_every_entry_point_twice_on_gpu_and_cpu():
+    # Each column asserts its own second call equals its first (_SCRIPT).
+    # Identity is required across NVIDIA and AMD only (2026-10-07); a GPU
+    # column and the host column are recorded side by side, never required to
+    # agree, so the pair is printed rather than asserted.
     gpu = _run({})
     cpu = _run({"MOJOLEARN_VENDOR": "cpu", "MOJOLEARN_HOST_DIR": str(PKG / "host")})
-    assert gpu == cpu, (gpu, cpu)
+    print("trees_repeat digests: gpu", gpu, "cpu", cpu, "agree" if gpu == cpu else "differ")

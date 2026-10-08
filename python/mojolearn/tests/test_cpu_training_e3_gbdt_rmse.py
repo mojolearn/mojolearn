@@ -78,17 +78,23 @@ def test_oracle_imports_no_gpu_module():
         "checks.numerics", "gbdt.data.permutation",
         "gbdt.gpu_data.compressed_index_builder",
         "gbdt.gpu_data.feature_blocks", "gbdt.gpu_data.grid_policy",
-        "gbdt.host.gbdt_oracle", "std.math", "std.memory",
+        "gbdt.host.gbdt_oracle", "gbdt.metrics.sample_quantile", "std.math", "std.memory",
     ], imports
+    # optimal_const_for_loss.mojo imports the pointwise target kernels; the
+    # starting constant's blocked-tree average (shared with the device since
+    # efeb15bd8) lives in the CPU-safe sample_quantile.mojo the host imports
     assert "optimal_const_for_loss" not in "".join(re.findall(r"^from .*$", text, re.M)), (
-        "the optimum constant module imports a kernel module; restate it"
+        "the optimum constant module imports a kernel module; take sample_quantile's"
     )
+    assert not GPU_IMPORTS.search(_read("gbdt/metrics/sample_quantile.mojo"))
 
 
 def test_oracle_spells_the_bit_carrying_constructs():
     text = _read(ORACLE)
-    assert "return Float64(Float32(target_sum / summary_weight))" in text, "the float return"
-    assert "var summary_weight = Float64(n_rows)" in text, "the exact unweighted count"
+    shared = _read("gbdt/metrics/sample_quantile.mojo")
+    assert "calculate_weighted_target_average(targets, List[Float32](), False)" in text
+    assert "return Float32(target_sum / summary_weight)" in shared, "the float return"
+    assert "summary_weight = Float64(n)" in shared, "the exact unweighted count"
     assert "var der = ftz(weight * (relev - val))" in text, "the flushed der"
     assert "var score = -weight * ((relev - val) * (relev - val))" in text, "the negated score"
     assert "s_g[t] = abs(r.der)" in text, "the der magnitude reads the flushed plane"

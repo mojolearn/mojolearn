@@ -105,7 +105,10 @@ def test_sabotage_define_reaches_the_family():
     fam = host_surface.family("transformer")
     assert fam["sabotage_define"] == "MOJOLEARN_HOST_SABOTAGE"
     assert "gemm/host/gemm_oracle.mojo" in fam["host_modules"]
-    assert 'is_defined["MOJOLEARN_HOST_SABOTAGE"]()' in _read("gemm/host/gemm_oracle.mojo")
+    # 390e1cbbf: the define is read once in gemm/contract.mojo (the profile
+    # contract the device GEMMs and the host oracles both import)
+    assert 'GEMM_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()' in _read("gemm/contract.mojo")
+    assert "from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE" in _read(GLUE)
     assert "TRANSFORMER_HOST_SABOTAGE = GEMM_ORACLE_HOST_SABOTAGE" in _read(GLUE)
 
 

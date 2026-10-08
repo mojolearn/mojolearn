@@ -228,7 +228,10 @@ def test_extend_uses_the_build_assignment_and_one_layout_rule():
     gpu = _read("ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo")
     body = gpu[gpu.index("def ivf_flat_extend("):]
     assert "predict(ctx, dx, x_norm, centroids, labels, min_dist, kp, n_new, dim)" in body
-    assert "extend_list_layout(" in body
+    # 8a1a79513: the device builds the extended layout itself
+    # (`ivf_extend_layout_device`, the same offsets, ids and rows the host
+    # column's `extend_list_layout` builds)
+    assert "ivf_extend_layout_device(" in body
     host = _read("ivf/host/ivf_host.mojo")
     hbody = host[host.index("def host_ivf_extend("):]
     assert "host_assign(" in hbody and "extend_list_layout(" in hbody

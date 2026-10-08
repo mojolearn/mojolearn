@@ -56,6 +56,7 @@ from gbdt.targets.kernel.pointwise_targets import (
 )
 from gbdt.metrics.sample_quantile import (
     bfa_tree_sum,
+    calculate_weighted_target_average,
     calculate_optimal_const_approx_for_mape,
     calculate_weighted_target_quantile,
 )
@@ -63,53 +64,6 @@ from gbdt.metrics.sample_quantile import (
 #: their Quantile / MAE `delta` loss parameter's default
 #: (`optimal_const_for_loss.h:198`), which this surface does not expose
 comptime QUANTILE_CONST_DELTA = 1e-6
-
-
-def calculate_weighted_target_average(
-    target: List[Float32],
-    weights: List[Float32],
-    has_weights: Bool,
-) raises -> Float32:
-    """`NCB::CalculateWeightedTargetAverage`, including the float return.
-
-    Their `weights.empty()` is `has_weights == False` here: the fit carries
-    a ones buffer for the unweighted case, and their empty-weights branch
-    is the same arithmetic with weight 1 -- but the BRANCH is kept, because
-    `summaryWeight` is `target.size()` (an exact integer sum) on their
-    empty branch and an accumulated float sum on the other, and those can
-    differ in the last bit at scale.
-
-    THE SUMS ARE `bfa_tree_sum`'s fixed blocked tree (cpu-gpu-cleanup
-    t-gbdt, 2026-10-02; their serial chain before), the order
-    `optimal_const_device.mojo` folds on the device; the weighted target
-    terms are exact products, so the fused `fma` chain they replace has
-    no counterpart left to contract.
-    """
-    var n = len(target)
-    if n == 0:
-        raise Error("optimal const approx: empty target")
-    var summary_weight: Float64
-    var vals = List[Float64](capacity=n)
-    if not has_weights:
-        summary_weight = Float64(n)
-        for i in range(n):
-            vals.append(Float64(target[i]))
-    else:
-        if len(weights) != n:
-            raise Error(
-                "optimal const approx: " + String(len(weights))
-                + " weights for " + String(n) + " targets"
-            )
-        for i in range(n):
-            vals.append(Float64(weights[i]))
-        summary_weight = bfa_tree_sum(vals)
-        for i in range(n):
-            # a float32 times a float32 is exact in double: no rounding
-            # here, whatever the build contracts
-            vals[i] = Float64(target[i]) * Float64(weights[i])
-    var target_sum = bfa_tree_sum(vals)
-    # their `return targetSum / summaryWeight;` through `inline float`
-    return Float32(target_sum / summary_weight)
 
 
 def calc_one_dimensional_optimum_const_approx(

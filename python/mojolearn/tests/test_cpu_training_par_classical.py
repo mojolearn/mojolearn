@@ -156,13 +156,18 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert "pool = DevicePool(devices)" in gpc and "cooperative=True" not in gpc
     assert "columns = [1] if len(classes) == 2 else range(len(classes))" in gpc
     assert "requests = [('gpc_class_fit', _fresh(estimator)," in gpc
-    assert "requests.append(('gpc_class_predict', part, (fit, q, want_proba)))" in gpc
-    assert "columns = [value.tolist() for value in _run(requests, devices)]" in gpc
+    # args are (fit, q, want_proba) plus the binary out_kind when set
+    assert "requests.append(('gpc_class_predict', part, args))" in gpc
+    assert "args = (fit, q, want_proba, out_kind) if out_kind else (fit, q, want_proba)" in gpc
+    # the class columns stay Arrays and the one-vs-rest combine is the
+    # binding's (`_gpc_impl._ovr_combine`, cpu-gpu-cleanup c-gp-kernel)
+    assert "arrays = list(_run(requests, devices))" in gpc
+    assert "proba, codes32 = _ovr_combine(estimator._extension(), arrays, int(q.shape[0]))" in gpc
     assert "MOJOLEARN_" not in gpc
     assert "    if operation == 'gpc_class_fit':\n" in worker
     assert "        return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))\n" in worker
     assert "    if operation == 'gpc_class_predict':\n" in worker
-    assert "        mean, _, probability = state._latent(state._extension(), fit, q, want_proba)\n" in worker
+    assert "        mean, _, probability = state._latent(ext, fit, q, want_proba)\n" in worker
     wanted.update(("gpc_class_fit", "gpc_class_predict"))
     # ParallelCausalLM's one operation and cross_val_score's two
     # (lane/cpu-routes-gpu-only-four, 2026-09-20). `causal_lm_layer` is the

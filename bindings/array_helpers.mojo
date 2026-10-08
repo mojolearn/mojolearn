@@ -238,6 +238,46 @@ def row_means_f64_binding(
     return PythonObject(bad)
 
 
+comptime _FSUM_DOWN = Float64(1.0) / Float64(18446744073709551616.0)  # 2^-64, exact
+comptime _FSUM_UP = Float64(18446744073709551616.0)  # 2^64, exact
+
+
+def _exact_sum_wide(terms: List[Float64]) -> Float64:
+    """`_exact_sum` without Shewchuk's intermediate overflow: a sum whose
+    partials pass the binary64 range (1e308 + 1e308 - 1e308) is redone with
+    every term scaled by 2^-64, which is exact for each term kept there (its
+    scaled value round-trips), and the rounded sum scaled back. Terms that
+    would lose bits under the scaling (below about 2^-1010) are added
+    unscaled to the scaled-back sum and its exact remainder. Returns +-inf
+    when the exact sum itself is outside the binary64 range (fsum's
+    OverflowError). Off the overflow path this is `_exact_sum`, the same
+    bits."""
+    var s = _exact_sum(terms)
+    if not isinf(s) and not isnan(s):
+        return s
+    var big = List[Float64](capacity=len(terms))
+    var small = List[Float64]()
+    for i in range(len(terms)):  # small-loop(terms: terms of one fsum): every caller sums a k-sized list
+        var w = terms[i] * _FSUM_DOWN
+        if w * _FSUM_UP == terms[i]:
+            big.append(w)
+        else:
+            small.append(terms[i])
+    var b = _exact_sum(big)
+    var up = b * _FSUM_UP
+    if isinf(up) or len(small) == 0:
+        return up
+    # the scaled sum's remainder B - b, then everything at the unscaled scale
+    var rest = big.copy()
+    rest.append(-b)
+    var tail = List[Float64](capacity=len(small) + 2)
+    tail.append(up)
+    tail.append(_exact_sum(rest) * _FSUM_UP)
+    for i in range(len(small)):  # small-loop(small: terms below the scaling range): a subset of one k-sized fsum
+        tail.append(small[i])
+    return _exact_sum(tail)
+
+
 def _fsum_terms(vals: List[Float64], count: Int, mut bad: Bool) -> Float64:
     """`_portable_math.fsum` of count float64 terms: the last NaN if any,
     else one kind of infinity, else Shewchuk's exact partials rounded once
@@ -267,14 +307,16 @@ def _fsum_terms(vals: List[Float64], count: Int, mut bad: Bool) -> Float64:
         return inf[DType.float64]()
     if ninf:
         return -inf[DType.float64]()
-    return _exact_sum(terms)
+    return _exact_sum_wide(terms)
 
 
 def fsum_f64_binding(src_addr: PythonObject, n: PythonObject, out_addr: PythonObject) raises -> PythonObject:
     """`_portable_math.fsum` (lane py-runtime round 3: it was `math.fsum`
     plus a Python big-integer fold): out[0] = the exact sum of n float64
     terms (see `_fsum_terms`). Returns 1 for +inf with -inf (the caller
-    raises fsum's ValueError), else 0."""
+    raises fsum's ValueError), also 1 with out[0] = +-inf when the exact sum
+    of finite terms is outside the binary64 range (fsum's OverflowError),
+    else 0."""
     var count = Int(py=n)
     var op = _addr_ptr[DType.float64](Int(py=out_addr))
     if count <= 0:
@@ -288,6 +330,18 @@ def fsum_f64_binding(src_addr: PythonObject, n: PythonObject, out_addr: PythonOb
     var t = _fsum_terms(vals, count, bad)
     if bad:
         return PythonObject(1)
+    if isinf(t):
+        # an infinite result from finite terms is the exact sum outside the
+        # binary64 range: fsum's OverflowError (the caller raises it)
+        var any_inf = False
+        for i in range(count):  # small-loop(count: terms of one fsum): every caller sums a k-sized list
+            if isinf(vals[i]):
+                any_inf = True
+        if not any_inf:
+            # flagged as status 1 with +inf in out[0] (a -inf + inf leaves
+            # out[0] at the caller's 0.0): the caller raises OverflowError
+            op.unsafe_store(0, t)
+            return PythonObject(1)
     op.unsafe_store(0, t)
     return PythonObject(0)
 

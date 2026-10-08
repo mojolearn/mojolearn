@@ -1,8 +1,10 @@
 """Lane py-shared: the `_portable_math` fast paths give the exact paths'
 bits.
 
-`fsum` takes CPython's compiled `math.fsum` when its result is finite and
-the exact big-integer sum (`_fsum_exact`, the definition) otherwise;
+`fsum` is the core helper `fsum_f64` (Shewchuk's partials in Mojo, lane
+py-runtime round 3); this file keeps the exact big-integer sum as its
+definition (`_fsum_exact` below, the reference the package carried until
+182248f55);
 `isfinite`, `isinf` and `isnan` take IEEE comparisons for a Python float
 and the bit test otherwise. This file holds each fast path to its
 definition: the same float bits, or the same exception type and message.
@@ -38,6 +40,32 @@ def test_integer_and_scaling_adapters_match_standard_library():
             assert pm.isclose(a, b) == math.isclose(a, b)
 
 
+def _fsum_exact(values):
+    """The definition: the exact sum, one nearest/even binary64 rounding,
+    math.fsum's NaN and infinity rules (the package's reference until
+    182248f55, kept here as the test's oracle)."""
+    total = 0
+    positive_inf = negative_inf = False
+    nan_value = None
+    for value in values:
+        value = float(value)
+        if math.isnan(value):
+            nan_value = value
+        elif math.isinf(value):
+            positive_inf |= value > 0
+            negative_inf |= value < 0
+        else:
+            numerator, denominator = value.as_integer_ratio()
+            total += numerator << (1074 - (denominator.bit_length() - 1))
+    if positive_inf and negative_inf:
+        raise ValueError("-inf + inf in fsum")
+    if nan_value is not None:
+        return nan_value
+    if positive_inf or negative_inf:
+        return math.inf if positive_inf else -math.inf
+    return pm._scaled_integer(total, -1074)
+
+
 def _bits(x):
     return struct.pack("<d", x)
 
@@ -60,7 +88,8 @@ def _cases():
         [inf], [-inf, 1.0], [inf, -inf], [nan, 1.0], [1.0, -nan],
         [5e-324, 5e-324, -1e-320],         # subnormal
         [1e16, 1.0, -1e16], [2.0 ** 53, 1.0, 1.0], [2.0 ** 53, 1.0],
-        ["1.5", 2],                        # float() accepts a string, math.fsum does not
+        # ["1.5", 2] left: fsum reads its terms as array('d') since lane
+        # py-runtime round 3, which refuses a string (TypeError) as math.fsum does
         [10 ** 400],                       # an int too large for a float
         [1, 2, 3], [True, 0.5],
     ]
@@ -78,7 +107,7 @@ def _cases():
 
 def test_fsum_fast_path_is_the_exact_sum():
     for values in _cases():
-        ref = _outcome(pm._fsum_exact, values)
+        ref = _outcome(_fsum_exact, values)
         assert _outcome(pm.fsum, values) == ref, values[:6]
         assert _outcome(pm.fsum, iter(values)) == ref, values[:6]
         assert _outcome(pm.fsum, tuple(values)) == ref, values[:6]
@@ -87,7 +116,7 @@ def test_fsum_fast_path_is_the_exact_sum():
 def test_fsum_reference_arm_is_the_exact_sum(monkeypatch):
     monkeypatch.setenv("MOJOLEARN_HOTPATH", "python")
     for values in _cases()[:400]:
-        assert _outcome(pm.fsum, values) == _outcome(pm._fsum_exact, values)
+        assert _outcome(pm.fsum, values) == _outcome(_fsum_exact, values)
 
 
 def _slow(kind, x):
@@ -120,7 +149,7 @@ if __name__ == "__main__":
     os.environ["MOJOLEARN_HOTPATH"] = "python"
     try:
         for v in _cases()[:400]:
-            assert _outcome(pm.fsum, v) == _outcome(pm._fsum_exact, v)
+            assert _outcome(pm.fsum, v) == _outcome(_fsum_exact, v)
     finally:
         if old is None:
             del os.environ["MOJOLEARN_HOTPATH"]

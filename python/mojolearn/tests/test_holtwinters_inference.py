@@ -59,12 +59,17 @@ def test_forecast_family_serves_holtwinters():
 
 
 def test_three_bindings_register_predict_from_one_source():
-    for src in (host_surface.binding_source("tsa"), host_surface.binding_source("forecast"),
-                "bindings/_mojolearn_tsa.mojo"):
+    for src in (host_surface.binding_source("tsa"), host_surface.binding_source("forecast")):
         code = _code(_read(src))
         assert "from bindings.holtwinters_host_predict import" in code, src
         assert 'def_function[holtwinters_predict_binding]("holtwinters_predict")' in code, src
         assert "def holtwinters_predict_binding" not in code, f"{src} defines its own predict"
+    # The GPU binding predicts on the device (holtwinters/estimator.mojo::
+    # holtwinters_predict_ptr): a GPU route takes no host step.
+    gpu = _code(_read("bindings/_mojolearn_tsa.mojo"))
+    assert 'def_function[holtwinters_predict_binding]("holtwinters_predict")' in gpu
+    assert "holtwinters_predict_ptr(" in gpu
+    assert "from bindings.holtwinters_host_predict import" not in gpu
     for src in (host_surface.binding_source("tsa"), host_surface.binding_source("forecast")):
         code = _code(_read(src))
         assert 'def_function[holtwinters_forecast_binding]("holtwinters_forecast")' in code, src

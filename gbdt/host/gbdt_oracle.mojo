@@ -156,14 +156,14 @@ from gbdt.data.quantization import (
     nan_substitution,
     nan_value_treatment,
 )
-from gbdt.grid_creator.gls_borders import (
+from gbdt.grid_creator.gls_borders_cells import (
     GLS_NAN_KEY,
     border_key,
     border_sample_row,
     gls_column,
     gls_log_table_entry,
 )
-from gbdt.grid_creator.border_types import (
+from gbdt.grid_creator.border_types_cells import (
     border_table_entry,
     border_type_column,
     exact_i32_words,

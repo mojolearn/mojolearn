@@ -126,8 +126,10 @@ def test_feature_freq_oracle_spells_the_bit_carrying_constructs():
     assert "var fixed_scale = Float32(choose_scale(magnitude, n_rows))" in text
     assert "tensor_columns.append(column)" in text
     assert "tensor_borders.append(level_borders[level].copy())" in text
-    assert "leaves.append(learning_rate * total / (total_weight + l2))" in text
-    assert "if blocks[b].policy == POLICY_BINARY:" in text
+    # the leaf through the pinned IDENTICAL seams (one product, one quotient,
+    # as the device's `learning_rate * total / (total_weight + l2_leaf_reg)`)
+    assert "identical_div(identical_mul(learning_rate, total), total_weight + l2)" in text
+    assert "if blk.policy == POLICY_BINARY:" in text
 
 
 def test_pointwise_oracle_spells_the_bit_carrying_constructs():
@@ -136,7 +138,10 @@ def test_pointwise_oracle_spells_the_bit_carrying_constructs():
     assert "bw = identical_pow(tmp, bagging_temperature)" in text
     assert "i += boot_blocks * GBDT_PW_BOOT_BLOCK" in text, "the bootstrap stride"
     assert "var starting_approx = -portable_log64(1.0 / best_probability - 1.0)" in text
-    assert "var best_probability = Float64(Float32(target_sum / summary_weight))" in text
+    # boost from average through the shared blocked-tree average
+    # (gbdt/metrics/sample_quantile.mojo, the device's fold order)
+    assert "calculate_weighted_target_average(y, w, True)" in text
+    assert "return Float32(target_sum / summary_weight)" in _read("gbdt/metrics/sample_quantile.mojo")
     assert "1, 0, scale, l2_leaf_reg, feat_offset, feat_shift, feat_mask,\n            True," in text, (
         "the single-task arm with the plain L2 scorer")
     assert "cursor[row] = identical_mul_add(estimated[leaf], learning_rate, cursor[row])" in text
