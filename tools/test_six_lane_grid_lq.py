@@ -621,8 +621,6 @@ class BoardWrapperTests(unittest.TestCase):
             self.assertIn(flag, ' '.join(cmd))
 
 
-class NotReadyTests(unittest.TestCase):
-    """status=not_ready = infrastructure: dropped by collect (never FAIL/BROKEN); redo-not-ready re-tags the lines."""
 
 NEURAL_BOARD = dict(races={('neural', 'mamba1-forward', 'gaussian'), ('neural', 'mlp-train-step', 'gaussian'),
                            ('neural', 'lm-train-step', 'bytes'), ('classical', 'kmeans', 'taxi')},
@@ -650,16 +648,13 @@ def write_neural_plan(d):
         json.dump(dict(configurations=configs, cells=cells), f)
 
 
-class NeuralWorkloadTests(unittest.TestCase):
-    """Grid ge123e6f9: the neural CMD races (mamba*, mlp-train-step, gemm leaf arms) failed on the box for tooling
-    reasons; render --only-workloads neural: writes a redo under its own run id, and collect --repair-runs lets it
-    replace the failed first pass."""
+class NotReadyTests(unittest.TestCase):
+    """status=not_ready = infrastructure: dropped by collect (never FAIL/BROKEN); redo-not-ready re-tags the lines."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.d = Path(self.tmp.name)
         write_plan(self.d)
-        write_neural_plan(self.d)
         self.rid = G.run_id_of(self.d)
 
     def tearDown(self):
@@ -796,6 +791,23 @@ class NeuralWorkloadTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(out.read_text().splitlines(), [src[6].replace(r + '.P003', r + '.P003n1')])
         self.assertEqual(json.loads(Path(str(out) + '.json').read_text())['lanes'], ['qda'])
+
+
+class NeuralWorkloadTests(unittest.TestCase):
+    """Grid ge123e6f9: the neural CMD races (mamba*, mlp-train-step, gemm leaf arms) failed on the box for tooling
+    reasons; render --only-workloads neural: writes a redo under its own run id, and collect --repair-runs lets it
+    replace the failed first pass."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self.tmp.name)
+        write_plan(self.d)
+        write_neural_plan(self.d)
+        self.rid = G.run_id_of(self.d)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
     def test_neural_line(self):
         lines, man = G.render(self.d, 'nvidia', 'grid/freeze-x', 3, lanes=LANES, board=NEURAL_BOARD, run_id='gtestr1n',
                               prebuilt='/root/grid-prebuilt', only_workloads=['neural:'])
