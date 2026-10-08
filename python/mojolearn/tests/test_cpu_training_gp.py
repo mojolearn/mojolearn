@@ -116,7 +116,10 @@ def test_oracles_import_no_gpu_and_no_device_module():
 
 def test_oracles_spell_the_bit_carrying_constructs():
     chol = _read(CHOL_ORACLE)
-    assert "comptime CHOL_HOST_NB_PINNED = 32" in chol
+    # 32 by default; 128 under MOJOLEARN_IDN_CHOL_NB128 with the device
+    # (lane gap-linalg, 153a626f9)
+    assert "comptime CHOL_HOST_NB_PINNED = 128 if (" in chol
+    assert 'and is_defined["MOJOLEARN_IDN_CHOL_NB128"]()' in chol and ") else 32" in chol
     assert "comptime CHOL_HOST_JITTER_BITS: UInt32 = 0x35800000" in chol
     assert "if not (s > Float32(0.0)):" in chol, "the pivot is spelled not (s > 0)"
     assert "a[jc * n + jc] = ftz(identical_sqrt(s))" in chol, "the root goes through the IDENTICAL sqrt seam"
