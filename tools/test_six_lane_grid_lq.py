@@ -265,7 +265,7 @@ class CollectTests(unittest.TestCase):
         c = cases[('G.expanded:ridge-cv.c=on', 'expanded:ridge-cv@dataset=taxi')]
         self.assertEqual(c['verdict'], 'FASTER')
         self.assertAlmostEqual(c['vendors']['nvidia']['candidate_over_baseline']['scored'], 80 / 102)
-        self.assertAlmostEqual(c['vendors']['nvidia']['floor']['scored'], __import__('math').log(104 / 100))
+        self.assertAlmostEqual(c['vendors']['nvidia']['floor']['scored'], max(__import__('math').log(104 / 100), G.FLOOR_MIN))  # the 4% spread is clamped to the 5% minimum
         self.assertEqual(cases[('G.expanded:ridge-cv.c=on', 'expanded:ridge-cv@dataset=istella')]['verdict'], 'NO_VERDICT')
         s = json.loads((out / 'summary.json').read_text())
         self.assertEqual(s['schema'], 'mojolearn.six-lane-comparison/1')
