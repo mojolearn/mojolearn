@@ -582,6 +582,12 @@ def plugin_project(proj, vendor, version, arches):
               f"{row['label']} {row['role']} for mojolearn {version}. "
               "The default Linux install includes both vendor packages and all released native targets. "
               "Each vendor wheel contains its native architecture sets; the loader selects the matching set.\n")
+    # tools/release.py sets this when a native set of the release had no installed smoke (2026-10-08: releases rent
+    # nothing, so sm_90a is smoked only when a Hopper box is held); the wheel says so instead of implying a test
+    unsmoked = sorted(a for a in os.environ.get("MOJOLEARN_RELEASE_UNSMOKED_ARCHES", "").split(",") if a in arches)
+    if unsmoked:
+        readme += (f"\nInstalled smoke: not run for {', '.join(unsmoked)} in this release (no box of that architecture "
+                   "was held); those sets ship on their build receipt. The other sets passed the installed smoke.\n")
     return out, readme
 
 

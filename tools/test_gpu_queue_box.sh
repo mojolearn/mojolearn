@@ -103,6 +103,15 @@ pkill -f "nvq daemon"; pkill -9 -f "nvq runner $j9"; pkill -f 'sleep 100'; sleep
 $Q ensure > /dev/null; sleep 2
 check "j9 cut short twice: interrupted" "[ \"\$(stof $j9)\" = interrupted ]"
 
+echo "== a FRONT job (GQ_FRONT=1, lq add --front) starts before plain queued jobs, never before the running one"
+ja=$($Q submit lane-a 4 20 "$(job fa 'sleep 3')")
+jb=$($Q submit lane-b 1 20 "$(job fb 'sleep 1')")
+jc=$(GQ_FRONT=1 $Q submit lane-a 1 20 "$(job fc 'sleep 1')")
+jd=$(GQ_FRONT=1 $Q submit lane-b 1 20 "$(job fd 'sleep 1')")
+check "the front jobs carry the mark, the plain one does not" "[ -e $T/q/$jc/front ] && [ -e $T/q/$jd/front ] && [ ! -e $T/q/$jb/front ]"
+waitst $jb done 40 || true
+check "running job first, then the front jobs in submission order, then the plain job" "grep 'start f' $EV/trace | awk -F'start ' '{print \$2}' | cut -c1-2 | tr '\n' ' ' | grep -q '^fa fc fd fb'"
+
 echo "== the lease: busy pushes the deadline; hold counts; idle closes and deletes"
 sleep 3
 dl1=$(cat $T/q/lease.deadline)

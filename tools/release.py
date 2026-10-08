@@ -787,10 +787,20 @@ if set(NATIVE_COLUMNS) != {r["profile"] for r in GPU_PACKAGES["distribution_rows
     raise RuntimeError("every released vendor requires hardware qualification columns")
 STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gpu-column-amd")),
                   ("gpu-column-nvidia-hopper", "nvidia", ["linux-pack", "release-check"], None))
-STEP_TABLE = [(step, pipeline, needs + (["gpu-column-nvidia-hopper"] if step == "publish-nvidia" else []), resource)
-              for step, pipeline, needs, resource in STEP_TABLE]
+# RELEASES RENT NOTHING (2026-10-08, Andrew: "let's deprecate the per-architecture
+# rented smoke"). The Ada and AMD columns run on the nv and amd boxes we hold
+# (--smoke-via lq); the Hopper column runs only on a held Hopper box
+# (--hopper-box), so publish-nvidia no longer NEEDS it: it waits for it to
+# settle (AFTER) and requires its PASS only when a Hopper box was held
+# (Release.hopper_required). Without one the sm_90a payload publishes on its
+# GitHub build receipt and the alpha manifest says "smoke: not run".
 PIPELINES["nvidia"]["checks"].append("gpu-column-nvidia-hopper")
 AFTER["linux-joint-diff"].append("gpu-column-nvidia-hopper")
+AFTER["publish-nvidia"] = ["gpu-column-nvidia-hopper"]
+#: where --smoke-via lq runs each column: the lq box and the column's tag stem
+LQ_COLUMN_BOX = {"nvidia": "nv", "amd": "amd"}
+#: the sm_90a set's line when no Hopper box is held
+HOPPER_NOT_RUN = "not run (no Hopper box held)"
 PUBLISH_STEPS = tuple(pipeline["publish"] for pipeline in PIPELINES.values())
 AFTER["finish-line"] = list(PUBLISH_STEPS)
 
@@ -872,6 +882,9 @@ class Release:
                              "longer builds; --redo linux-pack to repack it as the split packages")
         (self.STEPS, self.PIPELINE_OF, self.NEEDS, self.RESOURCE, self.AFTER, self.PIPELINES) = (
             [t[0] for t in STEP_TABLE], PIPELINE_OF, NEEDS, RESOURCE, AFTER, PIPELINES)
+        if self.hopper_required():
+            # a held Hopper box (or the rented route): its column gates publish-nvidia as before
+            self.NEEDS = dict(NEEDS, **{"publish-nvidia": NEEDS["publish-nvidia"] + ["gpu-column-nvidia-hopper"]})
         self.runner = runner
         self.dry = args.dry_run
         self.readonly = bool(getattr(args, "status", False))
@@ -1822,7 +1835,10 @@ class Release:
         for p_ in proofs:
             args += ["--build-proof", p_]
         args += ["--out", dist]
-        self.must(args, log=self.rel / "linux-pack.log", what="pack_wheel.py", cwd=src)
+        # the vendor wheel's README says which native set ships unsmoked (no Hopper box held)
+        unsmoked = sorted(self.smoke_notes("nvidia"))
+        self.must(args, env=dict(MOJOLEARN_RELEASE_UNSMOKED_ARCHES=",".join(unsmoked)) if unsmoked else None,
+                  log=self.rel / "linux-pack.log", what="pack_wheel.py", cwd=src)
         final_dir = dist / "final"
         if not self.dry:
             final_dir.mkdir(parents=True, exist_ok=True)
@@ -1989,7 +2005,16 @@ class Release:
             sel_digest = selection_digest(sel)
             if not self.dry and self.reuse_column(name, vendor, out, sel_digest) and ok():
                 continue
-            if vendor == "cuda":
+            if self.smoke_via() == "lq" and name in LQ_COLUMN_BOX:
+                leg = ColumnLeg(name, vendor, self.lq_smoke_command(name, vendor, final, out, work, sel, refs),
+                                work, out, ok)
+            elif self.smoke_via() == "lq" and name == "nvidia-hopper":
+                # a Hopper box we hold, reached by ssh; nothing is rented
+                leg = ColumnLeg(name, "cuda",
+                                ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit", self.commit,
+                                 "--out", str(out), "--ssh", self.args.hopper_box, "--column", str(sel), *refs,
+                                 *self.plugin_args("nvidia")], work, out, ok)
+            elif vendor == "cuda":
                 arch = "sm_90a" if name == "nvidia-hopper" else "sm_89"
                 requested = [g for g in self.args.smoke_gpu.split("|") if g]
                 walk = [g for g in requested if g in NVIDIA_WALK[arch]] or NVIDIA_WALK[arch]
@@ -2018,6 +2043,28 @@ class Release:
             leg.provenance["core_sha256"] = sha256(final_path) if final_path and not self.dry else None
             legs.append(leg)
         return legs
+
+    def smoke_via(self):
+        """lq (the default: the boxes we hold, through the lane queue) or rent
+        (the old per-architecture rented smoke)."""
+        return getattr(self.args, "smoke_via", None) or "lq"
+
+    def hopper_required(self):
+        """The Hopper column gates publish-nvidia only when it can run: a held
+        Hopper box (--hopper-box), or the old rented route."""
+        return self.smoke_via() == "rent" or bool(getattr(self.args, "hopper_box", ""))
+
+    def lq_smoke_command(self, name, vendor, final, out, work, sel, refs):
+        """tools/release_lq_smoke.py for one column: the wheels, selection and
+        reference columns copied to the box, `lq add --front <box> CMD` of the
+        smoke with --local, the result polled, the out directory fetched."""
+        box = LQ_COLUMN_BOX[name]
+        return [PY, "tools/release_lq_smoke.py", "--box", box, "--tag", f"rel-{self.version}-{name}",
+                "--remote-dir", f"/root/release-smoke/{self.version}/{name}", "--out", str(out),
+                "--state", str(work / f"{name}.lq.json"),
+                "--branch", getattr(self.args, "smoke_branch", None) or "main", "--",
+                final, "--expected-source-commit", self.commit, "--vendor", vendor, "--column", str(sel), *refs,
+                *self.plugin_args("nvidia" if vendor == "cuda" else "amd")]
 
     def plugin_args(self, package):
         """`--plugin <final plugin>` for the column's smoke, the column's own
@@ -2050,6 +2097,10 @@ class Release:
         return "NVIDIA column PASSED: no DIVERGENT cell against " + self.ref_names()
 
     def step_gpu_column_nvidia_hopper(self):
+        if not self.hopper_required():
+            self.say("  nvidia-hopper: no Hopper box held (--hopper-box <ssh> runs it); nothing is rented")
+            return ("SKIPPED: no Hopper box held; the sm_90a payload publishes on its GitHub build receipt, "
+                    "smoke " + HOPPER_NOT_RUN)
         self.run_columns(("nvidia-hopper",))
         return "NVIDIA Hopper column PASSED"
 
@@ -2203,10 +2254,21 @@ class Release:
         day = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
         tag = f"alpha-api-{self.version}-{platform}-{day}"
         work = self.rel / f"publish-{platform}"
+        env = dict(MOJOLEARN_ARTIFACT_SOURCE_COMMIT=self.commit)
+        notes = self.smoke_notes(platform)
+        if notes:
+            env["MOJOLEARN_ALPHA_SMOKE_NOTES"] = json.dumps(notes, sort_keys=True)
         self.must(["bash", "tools/release_linux_publish.sh", wheel or f"<{platform} wheel>", tag, target, work,
-                   "--light-smoke", smoke], env=dict(MOJOLEARN_ARTIFACT_SOURCE_COMMIT=self.commit),
+                   "--light-smoke", smoke], env=env,
                   log=self.rel / f"publish-{platform}.log", what=f"publish {platform}")
         return f"{target} via {tag} (source {self.commit[:12]}, tooling {self.tooling_commit[:12]})"
+
+    def smoke_notes(self, platform):
+        """{native set: smoke line} for the alpha manifest of a vendor wheel
+        whose set had no installed smoke (sm_90a without a held Hopper box)."""
+        if platform == "nvidia" and not self.hopper_required():
+            return {"sm_90a": HOPPER_NOT_RUN}
+        return {}
 
     def core_receipt(self):
         """The receipt the split core publishes on, NVIDIA's. The core
@@ -2214,7 +2276,9 @@ class Release:
         columns PASSED (and after both plugins published, STEP_TABLE)."""
         if self.dry:
             return self.rel / "smoke-linux" / "results.json"
-        failed = [label for label, ok in (("NVIDIA Ada", self.nvidia_column_ok()), ("NVIDIA Hopper", self.hopper_column_ok()), ("AMD", self.amd_column_ok()))
+        failed = [label for label, ok in (("NVIDIA Ada", self.nvidia_column_ok()),
+                                          ("NVIDIA Hopper", self.hopper_column_ok() or not self.hopper_required()),
+                                          ("AMD", self.amd_column_ok()))
                   if not ok]
         if failed:
             raise StepFailed("the core requires both GPU plugins and publishes only when both columns PASSED; "
@@ -2226,8 +2290,10 @@ class Release:
         return self.publish("linux", self.split_final("linux"), smoke), dict(smoke=str(smoke))
 
     def step_publish_nvidia(self):
-        if not self.dry and not (self.nvidia_column_ok() and self.hopper_column_ok()):
-            raise StepFailed("NVIDIA vendor wheel requires both Ada and Hopper columns")
+        if not self.dry and not self.nvidia_column_ok():
+            raise StepFailed("NVIDIA vendor wheel requires the Ada column")
+        if not self.dry and self.hopper_required() and not self.hopper_column_ok():
+            raise StepFailed("NVIDIA vendor wheel requires the Hopper column (a Hopper box was held)")
         smoke = self.rel / "smoke-linux" / "results.json"
         return self.publish("nvidia", self.split_final("nvidia"), smoke), dict(smoke=str(smoke))
 
@@ -2825,6 +2891,14 @@ def main(argv=None):
                     help="also run release-check's CPU pass (opt-in) and diff the GPU columns against it too")
     ap.add_argument("--amd-expect-from", default="",
                     help="an NVIDIA release-build dir: run the AMD core-host probe against its STAGED copy")
+    ap.add_argument("--smoke-via", default="lq", choices=["lq", "rent"],
+                    help="lq (default): the NVIDIA and AMD columns run on the nv and amd boxes we hold, queued next "
+                         "with `lq add --front` (tools/release_lq_smoke.py); rent: the old per-architecture rented smoke")
+    ap.add_argument("--hopper-box", default="",
+                    help="ssh target of a Hopper (sm_90a) box we hold; without it the Hopper column is SKIPPED and "
+                         "the sm_90a payload publishes unsmoked on its GitHub build receipt (--smoke-via lq)")
+    ap.add_argument("--smoke-branch", default="main",
+                    help="the branch whose tree runs the smoke on the lq box (default main)")
     ap.add_argument("--smoke-gpu", default="", help="RunPod GPU(s) for the Linux smoke, |-separated, walked on no stock (default the 4090, L40S, L40, RTX 6000 Ada)")
     _amd_env = os.environ.get("MOJOLEARN_AMD_PROVIDER") or "auto"
     ap.add_argument("--amd-provider", default=_amd_env if _amd_env in ("auto", "runpod", "hotaisle", "do") else "auto",

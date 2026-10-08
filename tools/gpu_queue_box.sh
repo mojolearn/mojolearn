@@ -12,6 +12,10 @@
 # tools/nvidia_central.sh submit/queue/status/log/cancel.
 #
 #   q submit <lane> <gpus> <cap-min> <script> [note]   enqueue; prints the job id
+#                                                      (GQ_FRONT=1: a FRONT job, started before every
+#                                                      plain queued job, after the running ones; front
+#                                                      jobs keep submission order among themselves.
+#                                                      lq add --front, the release smoke, 2026-10-08)
 #   q queue                                            every unfinished job + the last finished ones
 #   q status <id>                                      one job: its record, state, exit, log tail
 #   q cancel <lane> <id>                               cancel a job the lane itself submitted
@@ -156,6 +160,7 @@ submit)
         printf 'ID=%q\nLANE=%q\nGPUS=%q\nCAP_MIN=%q\nSCRIPT=%q\nTREE=%q\n' "$id" "$lane" "$gpus" "$cap" "$script" "$tree"
         printf 'SCRIPT_SHA256=%q\nSUBMITTED=%q\nNOTE=%q\nRESTARTS=0\n' "$(sha256sum "$script" | cut -c1-64)" "$(now)" "$note"
     } > "$d/job.env"
+    [ "${GQ_FRONT:-0}" != 1 ] || : > "$d/front"
     : > "$d/log"; setst $id queued
     ! leased || date +%s > $Q/lease.last_busy
     qunlock
@@ -341,11 +346,12 @@ daemon)
     starting_since=0
     while :; do
         qlock
-        head=''; npend=0; busy=0; active=0
+        head=''; fhead=''; npend=0; busy=0; active=0
         for id in $(ids); do
             s=$(st $id)
             case "$s" in
-            queued) npend=$((npend + 1)); [ -n "$head" ] || head=$id ;;
+            queued) npend=$((npend + 1)); [ -n "$head" ] || head=$id
+                [ -n "$fhead" ] || [ ! -e $Q/$id/front ] || fhead=$id ;;
             starting) busy=1; active=1
                 if ! unit_active $id && [ $(( $(date +%s) - starting_since )) -gt 60 ]; then
                     setst $id queued; echo "gpuq: runner for $id never came up; requeued $(now)" >> $Q/$id/log
@@ -357,6 +363,7 @@ daemon)
             esac
         done
         echo $npend > $Q/pending
+        [ -z "$fhead" ] || head=$fhead   # a front job (GQ_FRONT=1 at submit) goes first
         if [ -n "$head" ] && [ $busy = 0 ]; then
             need=$(field $head GPUS); free=0
             for g in $(seq 0 $((SLOTS - 1))); do slot_free $g && free=$((free + 1)); done
