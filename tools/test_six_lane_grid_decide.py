@@ -228,7 +228,7 @@ class IncompleteAndPartialTests(unittest.TestCase):
 
 
 class FailedRaceTests(unittest.TestCase):
-    def test_failed_candidate_race_is_unmeasured_not_a_quality_hold(self):
+    def test_failed_candidate_race_is_a_broken_hold_not_a_quality_hold(self):
         A1 = 'classical:a1'
         configs = [cfg(A1, {'x': 'on'}, 'single')]
         wid = configs[0]['workloads'][0]
@@ -236,7 +236,7 @@ class FailedRaceTests(unittest.TestCase):
         ident = [icase('G.classical:a1.x=on', wid, 'MATCH')]
         q = [dict(configuration='G.classical:a1.x=on', workload_id=wid, vendor='nvidia', candidate_vs_baseline=dict(verdict='FAIL'))]
         dec = D.decide(dict(schema='m', configurations=configs), D.timing_index([dict(cases=t)]), D.identity_index([dict(cases=ident)]), D.quality_index([dict(rows=q)]))
-        self.assertEqual(dec['controls']['x']['recommendation'], 'NOT_MEASURED')
+        self.assertEqual(dec['controls']['x']['recommendation'], 'HOLD_BROKEN')
         self.assertEqual(dec['counts']['failed_cells'], 1)
 
 

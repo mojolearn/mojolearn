@@ -186,8 +186,10 @@ def algorithm_verdict(rows):
         return 'HOLD_IDENTITY'
     if any(q in QUALITY_BAD for q in qualities):
         return 'HOLD_QUALITY'
-    if any(t in ('UNMEASURED', 'INCOMPLETE') for t in timings) or any(q == 'FAIL' for q in qualities):
-        return 'UNMEASURED'  # a failed candidate race leaves the cell unmeasured (it is counted in failed_cells)
+    if any(q == 'FAIL' for q in qualities):
+        return 'BROKEN'  # the candidate race itself failed (error, OOM, no record): a measured outcome, not a hole
+    if any(t in ('UNMEASURED', 'INCOMPLETE') for t in timings):
+        return 'UNMEASURED'
     if any(i != 'MATCH' for i in identities):
         return 'IDENTITY_INCOMPLETE'
     if any('SLOWER' == t for t in timings):
@@ -206,6 +208,8 @@ def arm_recommendation(per_algorithm):
         return 'HOLD_IDENTITY'
     if 'HOLD_QUALITY' in verdicts:
         return 'HOLD_QUALITY'
+    if 'BROKEN' in verdicts:
+        return 'HOLD_BROKEN'  # the arm cannot run on some reached algorithm: fix the switch or refuse the combination
     if 'UNMEASURED' in verdicts or 'IDENTITY_INCOMPLETE' in verdicts:
         return 'NOT_MEASURED'
     if 'SLOWER' in verdicts and 'FASTER' in verdicts:
@@ -304,6 +308,8 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
             overall = 'HOLD_IDENTITY'
         elif 'HOLD_QUALITY' in recs:
             overall = 'HOLD_QUALITY'
+        elif 'HOLD_BROKEN' in recs:
+            overall = 'HOLD_BROKEN'
         else:
             overall = 'NOT_MEASURED'
         control_summary[ctrl] = dict(control=ctrl, recommendation=overall, best_arm=best, arms=arms,
@@ -354,7 +360,7 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
                 algorithm='SLOWER if any workload SLOWER; FASTER if any FASTER and none SLOWER; NEUTRAL otherwise',
                 arm='PROMOTE: every reached algorithm FASTER or NEUTRAL, at least one FASTER. SPLIT: FASTER and SLOWER both present '
                     '(flip per algorithm). DELETE: SLOWER or NEUTRAL everywhere (noise is a loser). HOLD_*: identity MISMATCH or quality WORSE. '
-                    'NOT_MEASURED: any reached algorithm without evidence. PARTIAL_<rec>: the arm points that way but a reached algorithm still has unmeasured configurations (nothing is flipped or deleted before that algorithm grid is complete). A NO_VERDICT with a missing pair, floor or phase is INCOMPLETE, not neutral.',
+                    'HOLD_BROKEN: the candidate race failed (error, OOM, no record) on a reached algorithm. NOT_MEASURED: any reached algorithm without evidence. PARTIAL_<rec>: the arm points that way but a reached algorithm still has unmeasured configurations (nothing is flipped or deleted before that algorithm grid is complete). A NO_VERDICT with a missing pair, floor or phase is INCOMPLETE, not neutral.',
                 best_arm='PROMOTE/SPLIT arm with the smallest combined candidate/incumbent ratio',
                 interaction='cross or all-on verdict that the member singles do not predict',
                 recommended_configuration='per algorithm: FASTER configuration with the smallest combined ratio')
