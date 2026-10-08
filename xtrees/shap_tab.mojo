@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """TreeSHAP's leaf-table row unit with one decision word per (row, tree)
-(FAST + Apple only, the default since 2026-10-04 (rollback
+(wherever the leaf table is on: FAST + Apple and IDENTICAL on every
+vendor; the default since 2026-10-04 (rollback
 `-D MOJOLEARN_SHAP_TREE_TAB_OFF`), on top of the default
 leaf table MOJOLEARN_TREESHAP_FAST_TABLE of xtrees/shap.mojo).
 
@@ -28,6 +29,7 @@ at depth D costs L x D reads and compares per row. Here:
 A tree with more than SHAP_TAB_WORD internal nodes (the word's width: a
 kernel limit, not a data-shape window) takes `shap_table_row_unit` in the
 same unit, so there is no host wait and no refusal path."""
+from max.gpu.memory import AddressSpace
 from checks.numerics import ftz
 from xtrees.shap import F32P, I32P, SHAP_META_BAD, _a, _m, _tree_of, shap_table_row_unit
 
@@ -151,3 +153,66 @@ def shap_tab_row_unit[ACC: Int](
         for s in range(slots):
             for j in range(k):
                 buf[unsafe_offset=((t * slots + s) * k + j) * rows + r] = acc[s * k + j]
+
+
+comptime SHF32 = UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
+
+
+@always_inline
+def shap_tab_row_unit_sh[ACC: Int](
+    u: Int, rows: Int, d: Int, k: Int, slots: Int, M: Int, NM: Int,
+    offsets: I32P, colid: I32P, quesval: F32P, left: I32P, leaves: F32P, parent: I32P, slot: I32P,
+    leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, nint: I32P, needl: U64P, needr: U64P,
+    x: F32P, buf: F32P, meta: I32P, sh: SHF32, lane: Int, lanes: Int,
+):
+    """`shap_tab_row_unit[ACC]` (ACC > 0) with the accumulator in the block's
+    threadgroup memory instead of a dynamically indexed per-thread array
+    (lane gap-shap-nb, -D MOJOLEARN_TREESHAP_ACC_SHARED, default off: the
+    plan's per-block tile; a per-thread InlineArray indexed by a runtime slot
+    is likely spilled to local memory on NVIDIA, unverified). Cell o of this
+    thread is sh[o * lanes + lane]: each thread owns a column, so adjacent
+    lanes touch adjacent words (no bank conflict) and no barrier is needed.
+    The same cells, the same adds in the same order: the same bits."""
+    var t = u // rows
+    var r = u - t * rows
+    if Int(nint[unsafe_offset=t]) > SHAP_TAB_WORD:
+        shap_table_row_unit[ACC](u, rows, d, k, slots, M, NM, offsets, colid, quesval, left, leaves, parent, slot,
+                                 leaf_mf, leaf_n, table, dead, x, buf, meta)
+        return
+    var lo = Int(offsets[unsafe_offset=t])
+    var hi = Int(offsets[unsafe_offset=t + 1])
+    var xr = r * d
+    var dec = UInt64(0)
+    var rk = 0
+    for g in range(lo, hi):
+        if left[unsafe_offset=g] != -1:
+            if ftz(x[unsafe_offset=xr + Int(colid[unsafe_offset=g])]) <= ftz(quesval[unsafe_offset=g]):
+                dec = dec | (UInt64(1) << UInt64(rk))
+            rk += 1
+    for o in range(slots * k):
+        sh[o * lanes + lane] = Float32(0.0)
+    for g in range(lo, hi):
+        var n = Int(leaf_n[unsafe_offset=g])
+        if n < 0:
+            continue
+        var mask = 0
+        for e in range(n):
+            var nl = needl[unsafe_offset=g * NM + e]
+            var nr = needr[unsafe_offset=g * NM + e]
+            if (dec & nl) == nl and (dec & nr) == UInt64(0):
+                mask |= 1 << e
+        if dead[unsafe_offset=g * M + mask] != 0:
+            continue
+        var base = (g * M + mask) * NM
+        for i in range(1, n + 1):
+            var s = table[unsafe_offset=base + i - 1]
+            var sl = Int(slot[unsafe_offset=t * d + Int(leaf_mf[unsafe_offset=g * NM + n - i])])
+            if sl < 0 or sl >= slots:
+                meta[unsafe_offset=SHAP_META_BAD] = 6
+                return
+            for j in range(k):
+                var o = (sl * k + j) * lanes + lane
+                sh[o] = _a(sh[o], _m(s, ftz(leaves[unsafe_offset=g * k + j])))
+    for s in range(slots):
+        for j in range(k):
+            buf[unsafe_offset=((t * slots + s) * k + j) * rows + r] = sh[(s * k + j) * lanes + lane]

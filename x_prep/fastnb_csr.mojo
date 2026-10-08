@@ -53,15 +53,24 @@ comptime NB_TEXT_CSR = (
 )
 #: lane idn-int-prep (2026-10-04): the CSR text path in IDENTICAL on every
 #: vendor, ON by default (-D MOJOLEARN_IDN_NB_CSR_OFF: no export, the dense
-#: program). The fit counts in INT32 atomics (`nb_csr_count_int_kernel`): it
-#: is taken only when every stored value is a nonnegative integer, every
-#: row's columns ascend strictly and every (class, feature) count is below
-#: 2^24; then the dense program's float sums are exact too, so the table is
-#: the dense program's words (and the host column's, which has no CSR entry
-#: and takes the dense block). Anything else raises the fallback flag and
-#: the caller runs the dense program. Scoring (`nb_csr_jll_chk_kernel`) is
-#: `matmul_unit`'s ascending chain without the zero terms (a zero term adds
-#: nothing to a chain that starts at +0), under the same column-order flag.
+#: program). The fit counts in 64-bit integers held as two UInt32 words per
+#: (class, feature) (`nb_csr_count_int_kernel`, lane gap-shap-nb 2026-10-08:
+#: Metal has no 64-bit atomic add, so the low word takes a UInt32 atomic add
+#: and a wrap carries 1 into the high word; the final pair is the exact sum
+#: whatever the order). It is taken when every stored value is a nonnegative
+#: integer in [0, 2^24) and every row's columns ascend strictly; any count
+#: size is exact (the old Int32 form fell back to the dense program at 2^24,
+#: and a text class of ~40k docs x ~2k bigrams can cross that in one bin).
+#: The table goes out as Float32(count), one round to nearest: below 2^24
+#: that is the dense program's word (the dense float fold is exact there,
+#: so the host column, which has no CSR entry, agrees); from 2^24 it is the
+#: correctly rounded count on every device vendor, where the dense float
+#: fold rounded per add (the host column's digest may then differ: host
+#: digests are recorded, not required). Anything else raises the fallback
+#: flag and the caller runs the dense program. Scoring
+#: (`nb_csr_jll_chk_kernel`) is `matmul_unit`'s ascending chain without the
+#: zero terms (a zero term adds nothing to a chain that starts at +0), under
+#: the same column-order flag.
 comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_NB_CSR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 #: out_flag levels of the IDENTICAL entries (the largest raised wins: a
 #: negative value is refused whatever else the input holds, as the dense fit)
@@ -146,17 +155,32 @@ def nb_csr_jll_kernel(
     dst.unsafe_store(t, acc)
 
 
+comptime UP = MutPointer[UInt32, MutAnyOrigin]
+
+
+@always_inline
+def _wide_add(tab: UP, cell: Int, cells: Int, v: UInt32):
+    """tab[cell] (low word) + 2^32 * tab[cells + cell] (high word) += v,
+    exactly and in any order: each low-word add that wraps (its result below
+    the word it read) carries 1 into the high word, so after every add
+    lo + 2^32 * hi is the exact sum (the wraps telescope)."""
+    var old = Atomic.fetch_add(tab.unsafe_offset(cell), v)
+    if old + v < old:
+        _ = Atomic.fetch_add(tab.unsafe_offset(cells + cell), UInt32(1))
+
+
 def nb_csr_count_int_kernel(
-    indptr: IP, indices: IP, data: FP, y: IP, tab: IP, cnt: IP, flag: IP, n: Int32, d: Int32, K: Int32,
+    indptr: IP, indices: IP, data: FP, y: IP, tab: UP, cnt: IP, flag: IP, n: Int32, d: Int32, K: Int32,
     vmax: Int32
 ):
-    """`nb_csr_count_kernel` with integer counts (IDENTICAL): tab[y[i] * d +
-    col] += Int(val) and cnt[y[i]] += 1 as Int32 atomics (order-free, exact).
-    flag[0] = max(flag[0], level): CSR_FLAG_NEG for a negative value,
-    CSR_FLAG_FALLBACK for a value that is not an integer in [0, vmax] (NaN
-    included), a column outside [0, d) or not above the row's previous
-    column, or a class code outside [0, K). vmax * n < 2^31, so no count can
-    wrap."""
+    """`nb_csr_count_kernel` with integer counts (IDENTICAL): tab's 64-bit
+    (class, feature) count (`_wide_add`: low words [0, K*d), high words
+    [K*d, 2*K*d)) += Int(val) and cnt[y[i]] += 1 as Int32 atomics
+    (order-free, exact; a class count is at most n < 2^31). flag[0] =
+    max(flag[0], level): CSR_FLAG_NEG for a negative value, CSR_FLAG_FALLBACK
+    for a value that is not an integer in [0, vmax] (NaN included), a column
+    outside [0, d) or not above the row's previous column, or a class code
+    outside [0, K). vmax < 2^32 and nnz < 2^31, so no 64-bit count can wrap."""
     var r0 = Int(block_idx.x) * CSR_ROWS
     var tid = Int(thread_idx.x)
     var nn = Int(n)
@@ -180,6 +204,7 @@ def nb_csr_count_int_kernel(
     var hi = Int(sp[rows])
     var dd = Int(d)
     var kk = Int(K)
+    var cells = kk * dd
     var j = lo + tid
     while j < hi:
         # the row of nonzero j: the last r in [0, rows) with sp[r] <= j
@@ -209,7 +234,7 @@ def nb_csr_count_int_kernel(
             # above vmax, or NaN
             ok = False
         if ok:
-            _ = Atomic.fetch_add(tab.unsafe_offset(cls * dd + c), Int32(iv))
+            _wide_add(tab, cls * dd + c, cells, UInt32(iv))
         elif bits == 0:
             bits = Int32(CSR_FLAG_FALLBACK)
         j += CSR_TPB
@@ -217,10 +242,22 @@ def nb_csr_count_int_kernel(
         _ = Atomic.max(flag.unsafe_offset(0), bits)
 
 
+def nb_csr_wide_out_kernel(tab: UP, dst: FP, total: Int32):
+    """dst[t] = Float32(lo + 2^32 * hi) of `nb_csr_count_int_kernel`'s pair
+    t (one thread per word): one round to nearest even of the exact count,
+    the same word on every vendor (exact below 2^24)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var lo = Int(tab.unsafe_load(t))
+    var hi = Int(tab.unsafe_load(Int(total) + t))
+    dst.unsafe_store(t, Float32(hi * 4294967296 + lo))
+
+
 def nb_csr_int_out_kernel(tab: IP, dst: FP, flag: IP, total: Int32, limit: Int32):
     """dst[t] = Float32(tab[t]) (one thread per word). limit > 0: a count of
-    at least `limit` (2^24: past it the dense float fold is not exact) raises
-    CSR_FLAG_FALLBACK."""
+    at least `limit` raises CSR_FLAG_FALLBACK (the class counts pass 0: a
+    class count is at most n, exact as an Int32)."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t >= Int(total):
         return
@@ -316,25 +353,26 @@ def _nb_csr_fit_int(
     var di = _up_i32(ctx, ia, nnz)
     var dv = _up_f32(ctx, da, nnz)
     var dy = _up_i32(ctx, ya, n)
-    var dt = ctx.enqueue_create_buffer[DType.int32](K * d)
+    # the 64-bit (class, feature) counts: low words then high words
+    var dt = ctx.enqueue_create_buffer[DType.uint32](2 * K * d)
     var dc = ctx.enqueue_create_buffer[DType.int32](K)
     var dg = ctx.enqueue_create_buffer[DType.int32](1)
     var ot = ctx.enqueue_create_buffer[DType.float32](K * d)
     var oc = ctx.enqueue_create_buffer[DType.float32](K)
-    ctx.enqueue_memset(dt, Int32(0))
+    ctx.enqueue_memset(dt, UInt32(0))
     ctx.enqueue_memset(dc, Int32(0))
     ctx.enqueue_memset(dg, Int32(0))
-    # a value above vmax falls back, so no Int32 count can wrap (vmax * n < 2^31)
-    var vmax = 2147483647 // n
-    if vmax > 16777215:
-        vmax = 16777215
+    # integers below 2^24 are exact in the float32 data; a larger value
+    # falls back. No 64-bit count can wrap (vmax * nnz < 2^24 * 2^31).
+    # Not a function of n any more: the old Int32 table needed vmax * n < 2^31.
+    var vmax = 16777215
     ctx.enqueue_function[nb_csr_count_int_kernel](
         dp.unsafe_ptr(), di.unsafe_ptr(), dv.unsafe_ptr(), dy.unsafe_ptr(), dt.unsafe_ptr(), dc.unsafe_ptr(),
         dg.unsafe_ptr(), Int32(n), Int32(d), Int32(K), Int32(vmax),
         grid_dim=(n + CSR_ROWS - 1) // CSR_ROWS, block_dim=CSR_TPB,
     )
-    ctx.enqueue_function[nb_csr_int_out_kernel](
-        dt.unsafe_ptr(), ot.unsafe_ptr(), dg.unsafe_ptr(), Int32(K * d), Int32(16777216),
+    ctx.enqueue_function[nb_csr_wide_out_kernel](
+        dt.unsafe_ptr(), ot.unsafe_ptr(), Int32(K * d),
         grid_dim=(K * d + CSR_TPB - 1) // CSR_TPB, block_dim=CSR_TPB,
     )
     ctx.enqueue_function[nb_csr_int_out_kernel](
@@ -379,7 +417,7 @@ def nb_csr_fit_int_py(
         raise Error("x_prep: invalid CSR fit buffers")
     if nnz > 0 and (ia == 0 or da == 0):
         raise Error("x_prep: invalid CSR fit buffers")
-    if K * d > 2147483647 or nnz > 2147483647 or n > 2147483646:
+    if 2 * K * d > 2147483647 or nnz > 2147483647 or n > 2147483646:
         raise Error("x_prep: CSR fit exceeds the Int32 index bound")
     with GILReleased(Python()):
         _nb_csr_fit_int(pa, ia, da, ya, n, d, K, nnz, fa, ca, ga)

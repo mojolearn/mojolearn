@@ -3041,10 +3041,24 @@ class TreeExplainer(_TreesEnsembleBase):
         ev = Array.from_list(init, "<f4") if isinstance(init, list) else full((k,), init, "<f4")
         cover = zeros((n_nodes,), "<i4")
         meta = zeros((3,), "<i4")
-        self._bind().x_trees_tree_shap_prepare([addr_ro(a, name="forest") for a in arrays],  # glue: forest array addresses for the binding
-                                               addr_ro(tscale, name="tscale"), addr_ro(bg, name="data"),
-                                               addr(cover, name="cover"), addr(ev, name="ev"), addr(meta, name="meta"),
-                                               [bg.shape[0], bg.shape[1], n_trees, k, n_nodes])
+        native = self._bind()
+        prep_args = ([addr_ro(a, name="forest") for a in arrays],  # glue: forest array addresses for the binding
+                     addr_ro(tscale, name="tscale"), addr_ro(bg, name="data"),
+                     addr(cover, name="cover"), addr(ev, name="ev"), addr(meta, name="meta"),
+                     [bg.shape[0], bg.shape[1], n_trees, k, n_nodes])
+        # lane gap-shap-nb: the device binding's retained prepare uploads the
+        # forest once, keeps the device cover and builds the leaf table here;
+        # `shap_values` then uploads X only (xtrees/shap_device.mojo). The
+        # same outputs and the same bits as the plain prepare + shap call.
+        retain = getattr(native, "x_trees_tree_shap_prepare_retain", None)
+        self._shap_cache = None
+        self._shap_closed = False
+        if callable(retain):
+            self._shap_cache = retain(*prep_args)
+            self._shap_cache_finalizer = weakref.finalize(
+                self, native.x_trees_tree_shap_cache_release, self._shap_cache)
+        else:
+            native.x_trees_tree_shap_prepare(*prep_args)
         slots, depth, _ = meta.tolist()
         need = min(depth, slots) + 1
         width = 8
@@ -3059,14 +3073,13 @@ class TreeExplainer(_TreesEnsembleBase):
         self._shape = (n_trees, k, n_nodes, int(slots), width)
         self.expected_value = ev.tolist()[0] if k == 1 else ev
         self.n_features_in_ = bg.shape[1]
-        # T44/C51 owns an immutable native snapshot for this explainer. A
-        # model refit cannot leave pointers into mutable/released model arrays.
+        # T44/C51 (the host binding's opt-in snapshot; the device binding's
+        # retained prepare above replaces it there) owns an immutable native
+        # snapshot for this explainer. A model refit cannot leave pointers
+        # into mutable/released model arrays.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        native = self._bind()
         enabled = getattr(native, "x_trees_tree_shap_cache_enabled", None)
-        self._shap_cache = None
-        self._shap_closed = False
-        if callable(enabled) and enabled():
+        if self._shap_cache is None and callable(enabled) and enabled():
             self._shap_cache = native.x_trees_tree_shap_cache_create(
                 [addr_ro(a, name="forest") for a in self._forest],  # glue: five model addresses
                 addr_ro(self._tscale, name="tscale"), addr_ro(self._cover, name="cover"),

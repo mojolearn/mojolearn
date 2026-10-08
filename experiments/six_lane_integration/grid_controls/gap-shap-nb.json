@@ -1,0 +1,43 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "gap-shap-nb",
+ "branch": "lane/gap-shap-nb",
+ "head": "ccde2b940",
+ "controls": {
+  "TREESHAP_ACC_SHARED": {
+   "define": "MOJOLEARN_TREESHAP_ACC_SHARED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREESHAP_ACC_SHARED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "xtrees/shap_device.mojo:119",
+    "xtrees/shap_device.mojo:269",
+    "xtrees/shap_tab.mojo:161"
+   ],
+   "binding": "_mojolearn_x_trees",
+   "bits_change": false,
+   "status": "new",
+   "note": "tab_row_kernel[TABLE_ACC] accumulator in a TABLE_ACC x QUERY_TPB threadgroup tile (one column per thread, 32 KiB per 128-lane block) instead of a dynamically indexed per-thread InlineArray[Float32, 64]; same cells, same adds, same order. Off on Apple (Metal 32 KiB threadgroup limit). A/B on NVIDIA + AMD: tree-shap taxi, istella and one non-board forest."
+  }
+ },
+ "algorithms": {
+  "algos:tree-shap": {
+   "binding": "_mojolearn_x_trees",
+   "route": "TreeExplainer.__init__ -> x_trees_tree_shap_prepare_retain -> shap_prepare_retain (_Forest once, _prepare_on, _ensure_tables); shap_values -> x_trees_tree_shap_cache_values -> _tree_shap_values_on -> tab_row_kernel[TABLE_ACC] (TREESHAP_ACC_SHARED) -> fold_kernel",
+   "controls": [
+    "TREESHAP_ACC_SHARED"
+   ],
+   "interaction_groups": [
+    [
+     "TREESHAP_ACC_SHARED"
+    ]
+   ]
+  }
+ },
+ "removed": []
+}
