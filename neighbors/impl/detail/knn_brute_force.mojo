@@ -574,10 +574,17 @@ def tiled_distance_tile_cells(
             or metric == DIST_L2_SQRT_EXPANDED
         ) and fast_mma_knn_applies(n_features, k):
             return 1
-    if fused_select_applies(n_index, n_features, k, metric, False):
-        return 1
-    if block_topk_applies(n_index, n_features, k, metric, False):
-        return 1
+    # KNN_DIRECT_DISTANCE closes the transposed layout (tiled_brute_force_knn,
+    # `not KNN_DIRECT_DISTANCE` gate), so neither matrix-free launch can serve
+    # the request: it writes the full query_tile x index_tile matrix. Lane
+    # grid-fixups-1 (2026-10-08): the one-cell answer here made every
+    # knn_direct HDBSCAN cell of grid ge123e6f9 raise "the distance tile holds
+    # 1 cells". The sizing now follows the route for every shape.
+    comptime if not KNN_DIRECT_DISTANCE:
+        if fused_select_applies(n_index, n_features, k, metric, False):
+            return 1
+        if block_topk_applies(n_index, n_features, k, metric, False):
+            return 1
     return query_tile * identical_index_tile(n_index)
 
 
