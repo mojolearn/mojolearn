@@ -192,6 +192,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-flips-1): TSQR 2048-row leaves is the IDENTICAL default; drop -D MOJOLEARN_CLASSICAL_C24_ROWS2048, use -D MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF for the old path"
     comptime assert not is_defined["MOJOLEARN_IDN_KMEANS_CENTROID_FOLD"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-flips-1): two-level centroid fold is the IDENTICAL default; drop -D MOJOLEARN_IDN_KMEANS_CENTROID_FOLD, use -D MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF for the old path"
     comptime assert not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-flips-1): IVF direct distance is the IDENTICAL default; drop -D MOJOLEARN_IVF_DIRECT_DISTANCE, use -D MOJOLEARN_IVF_DIRECT_DISTANCE_OFF for the old path"
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-act-2): GEMM group slack 8 is the IDENTICAL default (gemm NV 0.743x / AMD 0.99x); drop -D MOJOLEARN_IDN_GEMM_GROUP_SLACK_8, use -D MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF for the old slack 4"
+    comptime assert not (is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF"]() and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]()), "MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF (slack 4) and MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 are exclusive arms"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True
