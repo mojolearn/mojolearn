@@ -102,6 +102,26 @@ python3 tools/six_lane_grid_decide.py --matrix $G/plan/grid-matrix.json.gz --ver
   --identity $G/collected2/summary.json --quality $G/collected2/quality.json --out $G/decide2
 ```
 
+## Repair pass for cells that failed on tooling (`--only-workloads`, `--repair-runs`)
+
+A race that failed for a tooling reason (a missing pip package or binding on the box, a missing runtime env) is not a
+measurement. Render only the affected workloads under a new run id (new tags, so the fed-tags ledger skips none), then
+collect with that run as a repair pass: where it measured a cell, the earlier passes' FAIL verdicts for the cell are
+superseded (kept in `pass_verdicts` and `superseded_fail_passes`); a FAIL in the repair pass, or any WORSE, still stands.
+
+```bash
+# grid ge123e6f9 neural redo: torch for the Mamba conductors, _mojolearn_linalg for mlp-train-step, the expected
+# GEMM profile env for MOJOLEARN_IDN_GEMM_LEAF=3 (all three are on the line, so the frozen branch's runner serves them)
+for v in nvidia amd; do python3 tools/six_lane_grid_lq.py render --plan-dir $G/plan --vendor $v --branch grid/freeze-20261007 \
+  --run-id ge123e6f9r1n --only-workloads neural:mamba1-forward,neural:mamba2-forward,neural:mamba3-forward,neural:mlp-train-step,neural:gemm \
+  --prebuilt /root/grid-prebuilt --out $G/$v.cmd.neural-redo.pb.lines; done
+python3 tools/six_lane_grid_lq.py collect --plan-dir $G/plan --run-id ge123e6f9 --repair-runs ge123e6f9r1n \
+  --results $G/nv-results.txt $G/amd-results.txt --logs $G/nv-grid-logs.txt $G/amd-grid-logs.txt --out $G/collected
+```
+`--only-workloads` takes workload ids or family prefixes ending in `:` (`neural:` = every neural workload). A neural
+workload carries no dataset in the plan: the line races the dataset bench_board plans for the lane
+(bench_board_neural DATA_OF: `bytes` for lm-*/samba-*, `gaussian` for the rest).
+
 ## Two routes, one line per build
 
 Every line carries `MOJOLEARN_GRID_TAG=<run>.<...>`. The run id is a hash of the plan files, so collect ignores

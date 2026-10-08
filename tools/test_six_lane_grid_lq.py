@@ -624,10 +624,42 @@ class BoardWrapperTests(unittest.TestCase):
 class NotReadyTests(unittest.TestCase):
     """status=not_ready = infrastructure: dropped by collect (never FAIL/BROKEN); redo-not-ready re-tags the lines."""
 
+NEURAL_BOARD = dict(races={('neural', 'mamba1-forward', 'gaussian'), ('neural', 'mlp-train-step', 'gaussian'),
+                           ('neural', 'lm-train-step', 'bytes'), ('classical', 'kmeans', 'taxi')},
+                    neural_data={'mamba1-forward': 'gaussian', 'mlp-train-step': 'gaussian', 'lm-train-step': 'bytes'},
+                    tree_task={}, tree_lanes=[], board_datasets=['taxi', 'istella'])
+GEMM_ENV = 'MOJOLEARN_EXPERIMENT_GEMM_PROFILE=mojolearn.identical.gemm.fp32.ni08-leaf256'
+
+
+def write_neural_plan(d):
+    """A plan whose neural workloads carry no dataset (the board decides it), one per lane, plus a classical one."""
+    rows = [('G.neural:mamba1-forward.m1=on', 'neural:mamba1-forward', 'P010', ['MOJOLEARN_IDN_M1_SCAN=3'], ['_mojolearn_mamba']),
+            ('G.neural:mlp-train-step.leaf=all256', 'neural:mlp-train-step', 'P011', ['MOJOLEARN_IDN_GEMM_LEAF=3'], ['_mojolearn_training']),
+            ('G.classical:kmeans.f=on', 'classical:kmeans', 'P012', ['MOJOLEARN_F=1'], ['_mojolearn_x_linear'])]
+    configs, packs, algos = [], [], {}
+    for cid, algo, pack, defines, binds in rows:
+        wid = algo if algo.startswith('neural:') else algo + '@dataset=taxi'
+        c = config(cid, algo, pack, defines, [wid], assignment={cid.split('.')[-1].split('=')[0]: 'on'})
+        c['grid']['bindings'] = binds
+        configs.append(c)
+        packs.append(dict(id=pack, members=[cid], defines=defines, bindings=binds, algorithms=[algo], global_reach=False))
+        algos[algo] = dict(regime='factorial', workload_bindings=binds)
+    cells = [dict(configuration=c['id'], workload_id=w, vendor=v) for c in configs for w in c['workloads'] for v in ('nvidia', 'amd')]
+    (d / 'grid-plan.json').write_text(json.dumps(dict(builds=dict(packs=packs), algorithms=algos)))
+    with gzip.open(d / 'grid-matrix.json.gz', 'wt') as f:
+        json.dump(dict(configurations=configs, cells=cells), f)
+
+
+class NeuralWorkloadTests(unittest.TestCase):
+    """Grid ge123e6f9: the neural CMD races (mamba*, mlp-train-step, gemm leaf arms) failed on the box for tooling
+    reasons; render --only-workloads neural: writes a redo under its own run id, and collect --repair-runs lets it
+    replace the failed first pass."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.d = Path(self.tmp.name)
         write_plan(self.d)
+        write_neural_plan(self.d)
         self.rid = G.run_id_of(self.d)
 
     def tearDown(self):
@@ -764,6 +796,102 @@ class NotReadyTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(out.read_text().splitlines(), [src[6].replace(r + '.P003', r + '.P003n1')])
         self.assertEqual(json.loads(Path(str(out) + '.json').read_text())['lanes'], ['qda'])
+    def test_neural_line(self):
+        lines, man = G.render(self.d, 'nvidia', 'grid/freeze-x', 3, lanes=LANES, board=NEURAL_BOARD, run_id='gtestr1n',
+                              prebuilt='/root/grid-prebuilt', only_workloads=['neural:'])
+        self.assertTrue(lines and all('kmeans' not in l for l in lines))  # only the neural workloads
+        self.assertEqual(man['totals']['only_workloads'], ['neural:'])
+        m1 = [l for l in lines if ' gtestr1n.P010.bb ' in l][0]
+        # the dataset is the board's (bench_board_neural DATA_OF), never one the plan or the runner invents
+        self.assertIn('--race neural:mamba1-forward:gaussian', m1)
+        self.assertIn('--pip sklearn=scikit-learn==1.7.2,torch=torch', m1)  # the Mamba conductor imports torch
+        self.assertIn('BUILDS=build,build_mamba', m1)
+        self.assertTrue(m1.endswith('PREBUILT=/root/grid-prebuilt'))
+        self.assertNotIn(GEMM_ENV, m1)
+        mlp = [l for l in lines if ' gtestr1n.P011.bb ' in l][0]
+        self.assertIn('--race neural:mlp-train-step:gaussian', mlp)
+        self.assertIn('BUILDS=build,build_linalg,build_training', mlp)  # SmallMLPTrainer requires the linalg binding
+        self.assertIn(' ' + GEMM_ENV + ' ', mlp)  # the all256 leaf binary refuses without its expected profile
+        self.assertNotIn('--pip', mlp)
+        b = [l for l in lines if '.C00' in l]
+        self.assertEqual(len(b), 6)  # two incumbent groups (binding sets mamba / training+linalg) x 3 repeats
+        self.assertTrue(any('build_linalg' in l and '--race neural:mlp-train-step:gaussian' in l for l in b))
+        self.assertTrue(all(GEMM_ENV not in l and 'MOJOLEARN_BUILD_DEFINES' not in l for l in b))
+        self.assertTrue(all(l.split()[5].startswith('gtestr1n.') for l in lines))  # new tags: the fed ledger skips none
+        self.assertEqual(G.define_envs(['MOJOLEARN_IDN_GEMM_LEAF=3', 'MOJOLEARN_IDN_ALL_OFF']), [])
+        self.assertTrue(G.workload_selected('neural:gemm', ['neural:gemm']))
+        self.assertFalse(G.workload_selected('expanded:cnn-clf@dataset=synthetic', ['neural:']))
+
+    def test_cli_only_workloads(self):
+        bj = self.d / 'board.json'
+        bj.write_text(json.dumps(dict(NEURAL_BOARD, races=sorted(NEURAL_BOARD['races']))))
+        lj = self.d / 'lanes.json'
+        lj.write_text(json.dumps(LANES))
+        out = self.d / 'amd.cmd.neural-redo.pb.lines'
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = G.main(['render', '--plan-dir', str(self.d), '--vendor', 'amd', '--branch', 'grid/freeze-x', '--run-id',
+                         self.rid + 'r1n', '--only-workloads', 'neural:', '--prebuilt', '/root/grid-prebuilt',
+                         '--lanes-json', str(lj), '--board-json', str(bj), '--out', str(out)])
+        self.assertEqual(rc, 0)
+        lines = out.read_text().splitlines()
+        self.assertTrue(lines and all(l.startswith('lq add amd CMD grid/freeze-x %sr1n.' % self.rid) for l in lines))
+        self.assertTrue(all('--vendor amd' in l for l in lines))
+
+    def gridbb(self, jid, vendor, tag, lane, status, ms, h):
+        return ('/root/lq/out/%s/%s.log:GRIDBB tag=%s vendor=%s head=abc1234 family=neural lane=%s dataset=gaussian '
+                'status=%s median_ms=%s hash=%s quality=%s' % (jid, tag, tag, vendor, lane, status, ms, h,
+                                                              json.dumps({'rmse': 0.5} if status == 'ok' else {})))
+
+    def test_collect_maps_back_and_repairs(self):
+        first, redo = self.rid, self.rid + 'r1n'
+        logs = []
+        n = 0
+        for vendor, scale in (('nvidia', 1.0), ('amd', 0.5)):
+            for lane in ('mamba1-forward', 'mlp-train-step'):
+                pack = 'P010' if lane.startswith('mamba') else 'P011'
+                n += 1
+                logs.append(self.gridbb('x%03d' % n, vendor, '%s.%s.bb' % (first, pack), lane, 'NO-RECORD', 'None', 'none'))
+                n += 1
+                logs.append(self.gridbb('x%03d' % n, vendor, '%s.%s.bb' % (redo, pack), lane, 'ok', 80 * scale, 'a' * 16))
+                for r in (1, 2, 3):
+                    n += 1
+                    logs.append(self.gridbb('x%03d' % n, vendor, '%s.C001r%d' % (first, r), lane, 'NO-RECORD', 'None', 'none'))
+                    n += 1
+                    logs.append(self.gridbb('x%03d' % n, vendor, '%s.C001r%d' % (redo, r), lane, 'ok', (100 + r) * scale, 'b' * 16))
+        dump = self.d / 'logs.txt'
+        dump.write_text('\n'.join(logs) + '\n')
+        res = self.d / 'results.txt'
+        res.write_text('')
+        rep = G.collect([res], [dump], self.d, self.d / 'c1', lanes=LANES, board=NEURAL_BOARD, run_id=[first],
+                        repair_runs=[redo])
+        self.assertEqual(rep['run_ids'], [first, redo])
+        self.assertEqual(rep['ignored']['unknown_cell'], 0)
+        v = {(c['configuration'], c['workload_id']): c for c in json.loads((self.d / 'c1' / 'grid-verdicts.json').read_text())['cases']}
+        m1 = v[('G.neural:mamba1-forward.m1=on', 'neural:mamba1-forward')]  # the GRIDBB row maps back to the plan's id
+        self.assertEqual(m1['verdict'], 'FASTER')
+        self.assertAlmostEqual(m1['vendors']['nvidia']['candidate_over_baseline']['scored'], 80 / 102)
+        q = {(r['workload_id'], r['vendor']): r for r in json.loads((self.d / 'c1' / 'quality.json').read_text())['rows']}
+        row = q[('neural:mlp-train-step', 'amd')]
+        self.assertEqual(row['candidate_vs_baseline']['verdict'], 'SAME')
+        self.assertEqual(row['superseded_fail_passes'], [first])
+        self.assertEqual(row['pass_verdicts'][first], 'FAIL')  # the failure stays as evidence
+        ids = {(c['configuration_id'], c['workload_id']): c for c in json.loads((self.d / 'c1' / 'summary.json').read_text())['cases']}
+        self.assertEqual(ids[('G.neural:mamba1-forward.m1=on', 'neural:mamba1-forward')]['arms']['A']['status'], 'MATCH')
+        # without --repair-runs the failed first pass wins the merge
+        G.collect([res], [dump], self.d, self.d / 'c2', lanes=LANES, board=NEURAL_BOARD, run_id=[first, redo])
+        q2 = {(r['workload_id'], r['vendor']): r for r in json.loads((self.d / 'c2' / 'quality.json').read_text())['rows']}
+        self.assertEqual(q2[('neural:mlp-train-step', 'amd')]['candidate_vs_baseline']['verdict'], 'FAIL')
+
+    def test_runner_installs_torch_for_mamba(self):
+        models = BBW.neural_models()
+        self.assertEqual(models['mamba1-forward'], 'mamba1')
+        self.assertEqual(BBW.pip_extra([('neural', 'mamba2-forward', 'gaussian')], models), [('torch', 'torch')])
+        self.assertEqual(BBW.pip_extra([('neural', 'mlp-train-step', 'gaussian'), ('trees', 'rf', 'taxi')], models), [])
+        self.assertEqual(BBW.pip_arg([('neural', 'transformer-forward', 'gaussian')], models), BBW.DEFAULT_PIP)
+        self.assertIn(('neural', ['mamba1-forward'], ['taxi']), BBW.groups([('neural', 'mamba1-forward', 'gaussian')]))
+        self.assertEqual(BBW.race_ids('neural', 'mamba1-forward', 'gaussian'), ['neural/mamba1-forward/gaussian/shape=full'])
 
 
 if __name__ == '__main__':
