@@ -753,7 +753,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                 a_status=a['status'], log_ratio={p: (r if p == 'scored' else None) for p in T.PHASES},
                 candidate_over_baseline={p: (TIMEOUT_RATIO if p == 'scored' else None) for p in T.PHASES},
                 timing_source=TIMING_SOURCE + ' (candidate timed out: ratio is a lower bound)', floor=fl.get('floor'),
-                floor_evidence=fl.get('evidence'), a_head=a['head'], b_head_differs=head_differs)
+                floor_evidence=fl.get('evidence'), floor_source=fl.get('floor_source'), a_head=a['head'], b_head_differs=head_differs)
         elif good and bs:
             a_ms = _median([s['median_ms'] for s in good])
             b_ms = _median([s['median_ms'] for s in bs])
@@ -764,7 +764,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                 log_ratio={p: (r if p == 'scored' else None) for p in T.PHASES},
                 candidate_over_baseline={p: (math.exp(r) if p == 'scored' else None) for p in T.PHASES},
                 timing_source=TIMING_SOURCE, floor=fl.get('floor'), floor_evidence=fl.get('evidence'),
-                a_head=a['head'], b_head_differs=head_differs)
+                floor_source=fl.get('floor_source'), a_head=a['head'], b_head_differs=head_differs)
         # quality: A vs the incumbent sample of the same head (first in queue order)
         if timed_out and bs:
             verdict, detail, unjudged = 'TIMEOUT', {}, []  # judged by timing (SLOWER), not by quality

@@ -239,5 +239,17 @@ class FailedRaceTests(unittest.TestCase):
         self.assertEqual(dec['controls']['x']['recommendation'], 'NOT_MEASURED')
         self.assertEqual(dec['counts']['failed_cells'], 1)
 
+
+class ProvisionalFloorTests(unittest.TestCase):
+    def test_small_effect_under_a_provisional_floor_is_incomplete(self):
+        wid = 'classical:a1@dataset=taxi'
+        case = dict(configuration='G.classical:a1.x=on', workload_id=wid, verdict='NO_VERDICT',
+                    phases=dict(scored=dict(verdict='NO_VERDICT', reasons=['nvidia: |log ratio| 0.02 within floor 0.22', 'amd: |log ratio| 0.01 within floor 0.22'])),
+                    vendors={v: dict(candidate_over_baseline=dict(scored=1.02), log_ratio=dict(scored=0.02), floor_source='provisional (log 1.25 default)') for v in ('nvidia', 'amd')})
+        self.assertEqual(D.timing_index([dict(cases=[case])])[('G.classical:a1.x=on', wid)]['verdict'], 'INCOMPLETE')
+        big = dict(case, verdict='SLOWER', phases=dict(scored=dict(verdict='SLOWER', reasons=[])),
+                   vendors={v: dict(candidate_over_baseline=dict(scored=3.0), log_ratio=dict(scored=1.0986), floor_source='provisional (log 1.25 default)') for v in ('nvidia', 'amd')})
+        self.assertEqual(D.timing_index([dict(cases=[big])])[('G.classical:a1.x=on', wid)]['verdict'], 'SLOWER')
+
 if __name__ == '__main__':
     unittest.main()

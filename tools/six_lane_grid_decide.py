@@ -99,6 +99,13 @@ def timing_index(verdict_docs, voters=None):
             reasons = ((case.get('phases') or {}).get('scored') or {}).get('reasons') or []
             if verdict == 'NO_VERDICT' and any('within floor' not in r for r in reasons):
                 verdict = 'INCOMPLETE'  # a voter has no pair, no floor or no phase: not a neutral result
+            # A provisional floor (fewer than 2 incumbent repeats yet) decides only large effects: a neutral or
+            # modest result under it is INCOMPLETE until the real floor arrives (no DELETE-as-noise on a guess).
+            provisional = any(str((row.get('floor_source') or '')).startswith('provisional') for row in vendors.values())
+            if provisional and verdict in ('NO_VERDICT', 'FASTER', 'SLOWER'):
+                effects = [abs((row.get('log_ratio') or {}).get('scored') or 0.0) for row in vendors.values()]
+                if not effects or min(effects) < math.log(2.0):
+                    verdict = 'INCOMPLETE'
             out[(case['configuration'], case['workload_id'])] = dict(verdict=verdict, reasons=reasons,
                                                                        ratios=ratios, evidence=[v.get('evidence') for v in vendors.values()])
     return out
