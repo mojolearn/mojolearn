@@ -57,6 +57,7 @@ from gbdt.methods.leaves_estimation.pointwise_oracle import (
     OracleHostScratch,
     _oracle_dims,
     make_oracle_device_scratch_in,
+    make_oracle_device_scratch_sharing_rows_in,
     OracleScratchPool,
     make_bin_optimized_oracle,
     merge_stage_times,
@@ -2032,6 +2033,7 @@ def _estimate_prepare(
     one_step_device: Bool = False,
     var natural_bins: Optional[DeviceBuffer[DType.uint32]] = None,
     var bk_partials: Optional[DeviceBuffer[DType.float32]] = None,
+    leaves_cap: Int = 0,
 ) raises -> PendingEstimation:
     """`_estimate_and_apply` for an `estimate_can_batch` task (approx_dim 1,
     no grouping), up to its walker's evaluation readback, WITHOUT the drain
@@ -2063,7 +2065,47 @@ def _estimate_prepare(
         # (`estimate_workspace`); a rebuild here would drop it
         if len(est_ws) == 0 or est_ws[0].n_rows_key != n_rows:
             raise Error("_estimate_prepare(staged=True) needs the staged workspace")
-    estimate_workspace(ctx, est_ws, arena, n_rows, n_leaves)
+    # ======== lane gbdt-categorical-oom: THE ARENA NEVER FREES ========
+    # Everything below is carved from `arena`, which only grows (a new
+    # parent is at least twice everything handed out so far) and is never
+    # reset for the fit. Two misses used to re-carve n_rows-sized memory:
+    #   (1) `estimate_workspace` rebuilt the workspace (g_target, g_weights,
+    #       g_cursor: 12 B a row) every time a tree had more leaves than the
+    #       capacity so far, dropping its scratch list with it;
+    #   (2) every new leaf count carved a WHOLE oracle scratch, row half
+    #       included (d_identity 4 + d_bins 4 + d_eval_stats 8 + d_multi_der
+    #       4 = 20 B a row).
+    # A non-symmetric (Depthwise/Lossguide) fit with CTR columns runs this
+    # once per permutation per tree (default 4 permutations), and its trees
+    # take many distinct leaf counts. PEAK BEFORE, per row:
+    #   perms x (20 x K + 12 x G) bytes, K distinct leaf counts and G
+    #   capacity growths per permutation, then up to 2x for the arena's
+    #   doubling parent: at 4 permutations and K ~ 100 that is ~8 KB a row,
+    #   tens of GB on a few million rows (the 48 GB L40S refused such a fit
+    #   with CUDA_ERROR_OUT_OF_MEMORY at warm-up; a 256 GB MI325X fit it).
+    # PEAK AFTER, per row: perms x (12 + 20) = 128 B at 4 permutations (x2
+    # doubling slack), plus per (permutation, leaf count) one bin half of
+    # O(leaves x SM chunks) floats, KiB to a few hundred KiB, independent
+    # of the row count. The two repairs:
+    #   (1) the caller passes `leaves_cap`, the policy's leaf bound, so the
+    #       workspace is built once at that capacity. `n_leaves_cap` is a
+    #       capacity (TEstimationWorkspace's DEVIATION 1890 note: every
+    #       consumer walks exactly `n_leaves` entries, a wider buffer is
+    #       bit-inert, which is also what a shrinking tree already used);
+    #   (2) a new leaf count carves only the bin half and shares the row
+    #       half of the first entry, as `OracleScratchPool` already does on
+    #       the one-call path (DEVIATION 3041: every row cell is written
+    #       before it is read inside the task).
+    # No rule reads a data shape: the capacity is the max_leaves option and
+    # the sharing is by key. Bits: unchanged on every column (same kernels,
+    # same launches, same sizes for every whole-buffer copy endpoint, same
+    # fold order); the host column has no arena and is untouched.
+    # NOT COMPILED -- NOT TESTED -- NOT MEASURED.
+    # ===================================================================
+    var ws_leaves = n_leaves
+    if leaves_cap > ws_leaves:
+        ws_leaves = leaves_cap
+    estimate_workspace(ctx, est_ws, arena, n_rows, ws_leaves)
     var dims = _oracle_dims(objective, 0)
     var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var sm = est_sm
@@ -2077,11 +2119,29 @@ def _estimate_prepare(
             ds = i
     var fresh_scratch = ds < 0
     if ds < 0:
-        est_ws[0].arena_scratch.append(
-            make_oracle_device_scratch_in(
-                ctx, arena, n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
+        # lane gbdt-categorical-oom (2): share the row half of the first
+        # entry with the same row key; carve the whole scratch only when
+        # there is none (see the peak note above)
+        var share = -1
+        for i in range(len(est_ws[0].arena_scratch)):  # small-loop(arena_scratch: pooled scratch keys, one per leaf count): row-key lookup, no data
+            if share < 0 and est_ws[0].arena_scratch[i].row_matches(
+                n_rows, dims[1], fv_blocks
+            ):
+                share = i
+        if share >= 0:
+            est_ws[0].arena_scratch.append(
+                make_oracle_device_scratch_sharing_rows_in(
+                    ctx, arena, est_ws[0].arena_scratch[share], n_leaves,
+                    dims[0], sm,
+                )
             )
-        )
+        else:
+            est_ws[0].arena_scratch.append(
+                make_oracle_device_scratch_in(
+                    ctx, arena, n_rows, n_leaves, dims[0], dims[1],
+                    fv_blocks, sm,
+                )
+            )
         ds = len(est_ws[0].arena_scratch) - 1
     var hsi = -1
     for i in range(len(est_ws[0].arena_host)):  # small-loop(arena_host: pooled host scratch keys, a few shapes): cache lookup by shape only
@@ -3784,6 +3844,10 @@ def fit_with_test(
                                 iterations=leaf_estimation_iterations,
                                 natural_bins=nb_opt^,
                                 bk_partials=bkp_opt^,
+                                # lane gbdt-categorical-oom (1): the policy's
+                                # leaf bound, the same capacity the
+                                # partitioners above take
+                                leaves_cap=cap,
                             )
                         )
                     var walking = True
