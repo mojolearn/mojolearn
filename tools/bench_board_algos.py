@@ -412,8 +412,9 @@ _add("knn-imputer", xlane="neighbors", ours="KNNImputer", task="impute", block="
      sub={"X": SUB["mid"], "Xq": SUB["small"]}, sk="sklearn.impute:KNNImputer",
      params=dict(n_neighbors=5, weights="uniform"),
      notes=["10% of the cells of X and Xq set to NaN by a seed-7 mask; quality on those cells"])
-_GRAPH_MISM = ("ours takes a dense adjacency matrix (its class's contract), built from the CSR "
-               "graph before the clock; networkx and cuGraph take the graph itself")
+_GRAPH_MISM = ("ours takes the CSR graph as an (indptr, indices, n) tuple and uploads it inside the "
+               "clock (the 2026-10-08 CSR entries; before, a dense n x n adjacency built before the clock); "
+               "networkx and cuGraph take the graph itself")
 _add("pagerank", xlane="neighbors", ours=("PageRank",), kind="graph", task="pagerank",
      block="graphs", params=dict(alpha=0.85, tol=1e-6, max_iter=100),
      other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"}, mism=[_GRAPH_MISM],
@@ -3355,21 +3356,22 @@ def _build_graph(lane, arm, D):
     if arm in OURS_ARMS:
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
-        A = np.zeros((n, n), dtype=np.float32)            # before the clock (named mismatch)
-        A[np.repeat(np.arange(n), np.diff(ip)), ix] = 1.0
+        # lane/neural-pass69 (2026-10-01) for components, lane gap-graph
+        # (2026-10-08, docs/plans/gaps-2026-10-08.md 5.1/5.2) for pagerank
+        # and louvain: the sparse graph, as the opponents receive it (scipy's
+        # csgraph, networkx and cuGraph read the CSR); the (indptr, indices,
+        # n) tuple is PageRank's and Louvain's CSR entry too (`knn_graph`
+        # writes each row's columns ascending, which the device checks). No
+        # dense adjacency anywhere.
+        csr = (np.ascontiguousarray(ip, dtype=np.int32), np.ascontiguousarray(ix, dtype=np.int32), n)
         info["pre_clock_fit"] = False
-        info["config"] = "mojolearn.%s(%s) on the dense adjacency (%d x %d)" % (name, p, n, n)
-        if t == "components":
-            # lane/neural-pass69 (2026-10-01): the sparse graph, as the opponents
-            # receive it (scipy's csgraph and networkx read the CSR)
-            csr = (np.ascontiguousarray(ip, dtype=np.int32), np.ascontiguousarray(ix, dtype=np.int32), n)
-            info["config"] = "mojolearn.%s(%s) on the CSR adjacency (%d nodes, %d edges)" % (name, p, n, ix.shape[0])
+        info["config"] = "mojolearn.%s(%s) on the CSR adjacency (%d nodes, %d edges)" % (name, p, n, ix.shape[0])
 
         def fit():
             if t == "components":
                 S["lab"] = cls(csr, directed=False)[1]
             else:
-                S["e"] = cls(**p).fit(A)
+                S["e"] = cls(**p).fit(csr)
 
         def outputs():
             if t == "components":

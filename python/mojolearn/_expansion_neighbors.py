@@ -1692,8 +1692,11 @@ def _adjacency(A):
 
 
 class PageRank(_XNeighbors):
-    """PageRank by power iteration on a dense weighted adjacency matrix
-    (A[i, j] = weight of the edge i -> j).
+    """PageRank by power iteration on a weighted adjacency matrix
+    (A[i, j] = weight of the edge i -> j): dense, a scipy.sparse matrix
+    (any format, read as CSR with sorted indices: the device checks the
+    column order and raises) or an (indptr, indices, n) tuple (every edge
+    weighs 1.0).
 
     References: networkx `pagerank` (`_pagerank_scipy`: row-stochastic
     transition matrix, dangling nodes redistributed by the personalization,
@@ -1745,9 +1748,19 @@ class PageRank(_XNeighbors):
         return out
 
     def fit(self, A, y=None):
-        A = _adjacency(A)
-        n = A.shape[0]
         binary = self.weight is None or self.weight is False
+        csr = _csr_graph_of(A)
+        if csr is not None:
+            # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.2):
+            # a scipy.sparse matrix or an (indptr, indices, n) tuple goes to
+            # the device as it is (`xn_pr_csr`): the column lists are built
+            # by one sort on the device, the vectors the caller left to the
+            # default are filled there, no dense matrix and no separate
+            # fill calls. Glue only: pointer handoff and flags.
+            indptr, indices, vals, n = csr
+        else:
+            A = _adjacency(A)
+            n = A.shape[0]
         # the iteration over the column lists of the adjacency, built
         # and iterated on the device (lane hr-graph,
         # x_neighbors/graph_par.mojo): the dense chains with their zero
@@ -1761,18 +1774,34 @@ class PageRank(_XNeighbors):
                 self._op("p2m_fill", [(u, 1)], (n,), (1.0 / n,))
             return u
 
-        if self.personalization is None:
-            p = uniform()
-        else:
-            p = self._unit(self.personalization, n, "personalization")
-        dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
-        x = uniform() if self.nstart is None else self._unit(self.nstart, n, "nstart")
-        x = x.copy()
         info = empty((2,), "<i4")
         thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
-        self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
-                 (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF, 1 if binary else 0),
-                 (_f32_scalar(self.alpha),))
+        if csr is not None:
+            p_uniform = self.personalization is None
+            p = empty((n,), "<f4") if p_uniform else self._unit(self.personalization, n, "personalization")
+            dw_uniform = self.dangling is None and p_uniform
+            dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
+            x_uniform = self.nstart is None
+            x = empty((n,), "<f4") if x_uniform else self._unit(self.nstart, n, "nstart").copy()
+            has_vals = vals is not None
+            if not has_vals:
+                vals = empty((1,), "<f4")
+            self._op("pr_csr", [(indptr, 0), (indices, 0), (vals, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
+                     (n, indices.shape[0], 1 if has_vals else 0, int(self.max_iter), thr >> 32,
+                      thr & 0xFFFFFFFF, 1 if binary else 0, 1 if x_uniform else 0, 1 if p_uniform else 0,
+                      1 if dw_uniform else 0),
+                     (_f32_scalar(self.alpha),))
+        else:
+            if self.personalization is None:
+                p = uniform()
+            else:
+                p = self._unit(self.personalization, n, "personalization")
+            dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
+            x = uniform() if self.nstart is None else self._unit(self.nstart, n, "nstart")
+            x = x.copy()
+            self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
+                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF, 1 if binary else 0),
+                     (_f32_scalar(self.alpha),))
         it, ok = info.tolist()
         if ok:
             self.pagerank_ = x
@@ -1804,22 +1833,18 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         # and labels as the dense matrix's, without building or scanning it
         indptr, indices, n = csr
         lab = _p2m_iota(est, n)
-        if _cc_fast_tier(est):
-            # lane/apple-fast-graph (2026-10-02), FAST on Apple only: two
-            # info words. Under CC_FAST (default; `-D MOJOLEARN_CC_FAST_OFF` rolls back) the device compacts the
-            # labels itself in order of first appearance (`_cc_relabel`'s
-            # integers) and puts n_components + 1 in info[1]; info[1] == 0
-            # means the binding's main path ran and `lab` still needs
-            # `_cc_relabel` (zeros, not empty: the main path never writes
-            # info[1]).
-            info = zeros((2,), "<i4")
-            est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
-            k1 = int(info.tolist()[1])
-            if k1 > 0:
-                return (k1 - 1, lab) if return_labels else k1 - 1
-            return _cc_relabel(lab, return_labels, est)
-        info = empty((1,), "<i4")
+        # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.3): the
+        # GPU binding on every vendor and tier runs the batched rounds and
+        # compacts the labels itself in order of first appearance
+        # (`_cc_relabel`'s integers; lane/apple-fast-graph's CC_FAST
+        # promoted) and puts n_components + 1 in info[1]; info[1] == 0
+        # means the host binding ran (it never writes info[1]) and `lab`
+        # still needs `_cc_relabel` (zeros, not empty, for that reason).
+        info = zeros((2,), "<i4")
         est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
+        k1 = int(info.tolist()[1])
+        if k1 > 0:
+            return (k1 - 1, lab) if return_labels else k1 - 1
         return _cc_relabel(lab, return_labels, est)
     A = _adjacency(A)
     n = A.shape[0]
@@ -1836,14 +1861,6 @@ def _p2m_iota(est, n):
     if n > 0:
         est._op("p2m_iota", [(lab, 1)], (n,))
     return lab
-
-
-def _cc_fast_tier(est):
-    """True on the FAST tier on Apple (lane/apple-fast-graph): the x_neighbors
-    binding may compact connected_components' labels on the device
-    (CC_FAST, default; rollback `-D MOJOLEARN_CC_FAST_OFF`). IDENTICAL and the other vendors never come
-    through the branch this gates."""
-    return est.numeric_mode_used() == "fast" and est.vendor_used() == "metal"
 
 
 def _cc_relabel(lab, return_labels, est):
@@ -1878,9 +1895,42 @@ def _csr_of(A):
     return ip, ix, n
 
 
+def _csr_graph_of(A):
+    """(indptr, indices, vals, n) for PageRank and Louvain (lane gap-graph):
+    `_csr_of`'s lists plus the weights as a float32 Array (a scipy matrix's
+    `data`), or None for the weights when the caller gave an (indptr,
+    indices, n) tuple (every edge then weighs 1.0 on the device); None for
+    a dense input. Glue only: the device checks the column order and the
+    symmetry, never Python."""
+    if isinstance(A, tuple) and len(A) == 3:
+        indptr, indices, n = A
+        n = int(n)
+        vals = None
+    elif hasattr(A, "tocsr") and hasattr(A, "shape"):
+        if len(A.shape) != 2 or A.shape[0] != A.shape[1]:
+            raise ValueError("the adjacency matrix must be square")
+        M = A.tocsr()
+        indptr, indices, n = M.indptr, M.indices, int(M.shape[0])
+        vals = _f32_1d(M.data, "data")
+    else:
+        return None
+    ip = _i32(indptr, "indptr")
+    ix = _i32(indices, "indices")
+    if ip.shape[0] != n + 1:
+        raise ValueError("the CSR adjacency's indptr must hold n + 1 entries")
+    if int(ip[n]) != ix.shape[0]:  # argument check: one scalar, the entry count
+        raise ValueError("the CSR adjacency's indices must hold indptr[n] entries")
+    if vals is not None and vals.shape[0] != ix.shape[0]:
+        raise ValueError("the CSR adjacency's data must hold one weight per entry")
+    return ip, ix, vals, n
+
+
 # ====================================================================== Louvain
 class Louvain(_XNeighbors):
-    """Louvain community detection on a dense symmetric weighted adjacency.
+    """Louvain community detection on a symmetric weighted adjacency: dense,
+    a scipy.sparse matrix (read as CSR with sorted indices; the device
+    checks the column order and the symmetry and raises) or an (indptr,
+    indices, n) tuple (every edge weighs 1.0).
 
     References: networkx `louvain_communities` / `louvain_partitions`
     (`_one_level`, `_gen_graph`, `modularity`) and cuGraph
@@ -1901,25 +1951,49 @@ class Louvain(_XNeighbors):
         self.seed = seed
 
     def fit(self, A, y=None):
-        A = _adjacency(A)
-        n = A.shape[0]
-        # The symmetry and no-edge checks run natively (`xn_graph_symmetry`,
-        # lane neural-pass14): over `A.tolist()` they were a 400-million-cell
-        # Python scan at the board's 20,000 nodes, most of the race's minute.
-        flags = _empty_out((2,), "<i4")
-        self._op("graph_symmetry", [(A, 0), (flags, 1)], (n,))
-        flags = flags.tolist()
-        if flags[0]:
-            raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
-        if not flags[1]:
-            raise ValueError("Louvain: the graph has no edges")
-        labels = empty((n,), "<i4")
-        info = _empty_out((2,), "<f4")
         ml = 0 if self.max_level is None else int(self.max_level)
         if self.max_level is not None and ml < 1:
             raise ValueError("max_level must be a positive integer or None")
-        self._op("louvain", [(A, 0), (labels, 1), (info, 1)], (n, ml),
-                 (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
+        csr = _csr_graph_of(A)
+        if csr is not None:
+            # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.1):
+            # a scipy.sparse matrix or an (indptr, indices, n) tuple goes to
+            # the device as it is (`xn_louvain_csr`): the graph slot is
+            # filled from the lists, the symmetry, column-order and no-edge
+            # checks run on the device (the op raises their ValueError
+            # text), no dense matrix. Glue only: pointer handoff.
+            indptr, indices, vals, n = csr
+            has_vals = vals is not None
+            if not has_vals:
+                vals = empty((1,), "<f4")
+            labels = empty((n,), "<i4")
+            info = _empty_out((2,), "<f4")
+            try:
+                self._op("louvain_csr", [(indptr, 0), (indices, 0), (vals, 0), (labels, 1), (info, 1)],
+                         (n, indices.shape[0], 1 if has_vals else 0, ml),
+                         (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
+            except Exception as e:  # the device checks' messages as ValueErrors
+                msg = str(e)
+                if "Louvain:" in msg:
+                    raise ValueError(msg[msg.index("Louvain:"):]) from None
+                raise
+        else:
+            A = _adjacency(A)
+            n = A.shape[0]
+            # The symmetry and no-edge checks run natively (`xn_graph_symmetry`,
+            # lane neural-pass14): over `A.tolist()` they were a 400-million-cell
+            # Python scan at the board's 20,000 nodes, most of the race's minute.
+            flags = _empty_out((2,), "<i4")
+            self._op("graph_symmetry", [(A, 0), (flags, 1)], (n,))
+            flags = flags.tolist()
+            if flags[0]:
+                raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
+            if not flags[1]:
+                raise ValueError("Louvain: the graph has no edges")
+            labels = empty((n,), "<i4")
+            info = _empty_out((2,), "<f4")
+            self._op("louvain", [(A, 0), (labels, 1), (info, 1)], (n, ml),
+                     (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
         got = _p2m_relabel(self, labels)
         if got is None:
             raise RuntimeError("Louvain: a community label fell outside [0, n)")
