@@ -18,6 +18,7 @@ import os
 
 from . import _backend
 from ._x_sequence_rnn import OPTIMIZERS, optimizer_arguments
+from ._x_sequence_device import SequenceDeviceTensor, is_seq_tensor, resident_binding
 
 #: lane gap-optimizers (2026-10-02): the state slots live on the device
 #: binding's context across steps (`sequence/opt_resident.mojo`), so a step
@@ -41,6 +42,59 @@ _AF_RESIDENT = ("adafactor_resident_open", "optimizer_resident_close", "optimize
                 "adafactor_resident_step")
 _LAMB_RESIDENT = ("lamb_resident_open", "optimizer_resident_close", "optimizer_resident_move",
                   "lamb_resident_step")
+
+#: lane gap-neural-io (2026-10-08, plan docs/plans/gaps-2026-10-08.md Section
+#: 4): params given as `SequenceDeviceTensor`s (`_x_sequence_device.to_device`)
+#: are updated where they live by the `_dev` steps (`sequence/opt_resident.mojo`):
+#: no upload of P and G and no download of P per step (3 x 67 MB at the
+#: board's 16,777,216 floats), the same launches on the same values, the same
+#: bits. The state stays resident as above; grads may be device tensors or
+#: host arrays (uploaded once per step, here).
+_SEQ_DEV = _SEQ_RESIDENT + ("optimizer_resident_step_dev",)
+_AF_DEV = _AF_RESIDENT + ("adafactor_resident_step_dev",)
+_LAMB_DEV = _LAMB_RESIDENT + ("lamb_resident_step_dev",)
+
+
+def _device_params(params, who, entries):
+    """None when no param is a `SequenceDeviceTensor`; their binding when
+    every one is (on one binding that has `entries`); refused otherwise."""
+    dev = [is_seq_tensor(p) for p in params]  # glue: per parameter tensor, not elements
+    if not any(dev):
+        return None
+    if not all(dev):
+        raise TypeError(f"{who}: params are all device tensors or all NumPy arrays, not a mix")
+    b = params[0].b
+    if any(p.b is not b for p in params):  # glue: per parameter tensor, not elements
+        raise TypeError(f"{who}: every device param must live on one binding")
+    if not (resident_binding(b) and all(callable(getattr(b, n, None)) for n in entries)):  # glue: the named binding entry points
+        raise RuntimeError(f"{who}: this binding has no device-parameter step; pass NumPy arrays")
+    if os.environ.get(_RESIDENT_ENV, "1") == "0":
+        raise RuntimeError(f"{who}: device params need the resident state ({_RESIDENT_ENV}=0 is set)")
+    return b
+
+
+def _device_grads(b, grads, params, who):
+    """The grads as device tensors of the params' shapes on binding `b`; a
+    host float32 array is uploaded once (here)."""
+    if isinstance(grads, (np.ndarray, SequenceDeviceTensor)):
+        grads = [grads]
+    if len(grads) != len(params):
+        raise ValueError(f"{who}: {len(grads)} grads, {len(params)} params")
+    out = []
+    for g, p in zip(grads, params):  # glue: per parameter tensor, not elements
+        if is_seq_tensor(g):
+            if g.b is not b or tuple(g.shape) != tuple(p.shape):
+                raise ValueError(f"{who}: a device grad of shape {g.shape} for a param {p.shape} "
+                                 "(or on another binding)")
+            out.append(g)
+            continue
+        a = np.asarray(g)
+        if a.shape != tuple(p.shape):
+            raise ValueError(f"{who}: a grads of shape {a.shape} for a param {p.shape}")
+        if a.dtype != np.float32:
+            raise TypeError(f"{who}: grads must be float32 (got {a.dtype})")
+        out.append(SequenceDeviceTensor._wrap(b, a))
+    return out
 
 
 class _ResidentState:
@@ -140,10 +194,12 @@ class _SeqOptimizer(_ResidentState):
         if isinstance(params, np.ndarray):
             params = [params]
         self.params = list(params)
+        self._dev_b = _device_params(self.params, type(self).__name__, _SEQ_DEV)
         for k, p in enumerate(self.params):  # glue: per parameter tensor, not elements
-            if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous:
+            if self._dev_b is None and (not isinstance(p, np.ndarray) or p.dtype != np.float32
+                                        or not p.flags.c_contiguous):
                 raise TypeError(f"{type(self).__name__}: params[{k}] must be a C-contiguous float32 "
-                                "NumPy array (it is updated in place)")
+                                "NumPy array or a SequenceDeviceTensor (it is updated in place)")
         self.lr = float(lr)
         self.options = dict(options)
         self.numeric_mode = numeric_mode
@@ -207,8 +263,39 @@ class _SeqOptimizer(_ResidentState):
                                   + [int(p.size) for p in ps], fp)  # glue: sizes per parameter tensor, not elements
         del gs
 
+    def _step_device(self, b, grads):
+        """The step on device params (`optimizer_resident_step_dev`)."""
+        if sum(p.size for p in self.params) != self.n_total:  # glue: sizes per parameter tensor, not elements
+            raise ValueError(f"{type(self).__name__}: the params were resized under the optimizer")
+        gs = _device_grads(b, grads, self.params, type(self).__name__)
+        fp = [self.lr] + [float(v) for v in self._fp[:5]]  # glue: the five optimizer float arguments
+        if self._res is None:
+            self._res_opened(b, b.optimizer_resident_open([self.n_total, self._kind, self._flags], fp),
+                             init_zero=not self._fp[5])
+        self._res_upload()
+        keep = [k for k, p in enumerate(self.params) if p.size > 0]  # glue: per parameter tensor, not elements
+        b.optimizer_resident_step_dev(self._res, [self.params[k].h for k in keep] + [gs[k].h for k in keep]  # glue: handles per parameter tensor, not elements
+                                      + [self._sc.ctypes.data],
+                                      [len(keep), self._kind, self._flags, self.t, self._sc_t]
+                                      + [int(self.params[k].size) for k in keep], fp)  # glue: sizes per parameter tensor, not elements
+        del gs
+
     def step(self, grads):
         """One update of every param from `grads` (same shapes, same order)."""
+        if self._dev_b is not None:
+            self.t += 1
+            if getattr(self, "lr_schedule", None) is not None:
+                self.lr = float(self.lr_schedule.lr_at(self.t))
+            if self._sc_t >= self.t:
+                self._sc[:] = 1.0
+                self._sc_t = 0
+            try:
+                self._step_device(self._dev_b, grads)
+            except BaseException:
+                self.t -= 1
+                raise
+            self._sc_t = self.t
+            return self
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
         if self._res is not None or _resident_binding(b, _SEQ_RESIDENT):
             self.t += 1
@@ -355,9 +442,12 @@ class Adafactor:
         if isinstance(params, np.ndarray):
             params = [params]
         self.params = list(params)
+        self._dev_b = _device_params(self.params, "Adafactor", _AF_DEV)
         for k, p in enumerate(self.params):  # glue: per parameter tensor, not elements
-            if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous:
-                raise TypeError(f"Adafactor: params[{k}] must be a C-contiguous float32 NumPy array")
+            if self._dev_b is None and (not isinstance(p, np.ndarray) or p.dtype != np.float32
+                                        or not p.flags.c_contiguous):
+                raise TypeError(f"Adafactor: params[{k}] must be a C-contiguous float32 NumPy array "
+                                "or a SequenceDeviceTensor")
             if p.ndim not in (1, 2):
                 raise NotImplementedError("Adafactor: tensors of more than 2 dimensions are not implemented")
         if beta2_decay > 0:
@@ -440,7 +530,10 @@ class Adafactor:
         fp = [self.lr, self.beta2_decay, self.eps[0], self.eps[1], self.d, self.weight_decay]
         for h, p, g in zip(self._af_res, self.params, grads):  # glue: per parameter tensor, not elements
             R, C = (p.shape[0], p.shape[1]) if p.ndim == 2 else (p.shape[0], 0)
-            b.adafactor_resident_step(h, [p.ctypes.data, g.ctypes.data], [R, C, self.t], fp)
+            if self._dev_b is not None:
+                b.adafactor_resident_step_dev(h, [p.h, g.h], [R, C, self.t], fp)
+            else:
+                b.adafactor_resident_step(h, [p.ctypes.data, g.ctypes.data], [R, C, self.t], fp)
 
     def step(self, grads):
         if isinstance(grads, np.ndarray):
@@ -450,6 +543,14 @@ class Adafactor:
         self.t += 1
         if getattr(self, "lr_schedule", None) is not None:
             self.lr = float(self.lr_schedule.lr_at(self.t))
+        if self._dev_b is not None:
+            # device params (lane gap-neural-io): updated where they live
+            try:
+                self._step_resident(self._dev_b, _device_grads(self._dev_b, grads, self.params, "Adafactor"))
+            except BaseException:
+                self.t -= 1
+                raise
+            return self
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
         if self._af_res is not None or _resident_binding(b, _AF_RESIDENT):
             gs = []
@@ -495,9 +596,12 @@ class LAMB(_SeqOptimizer):
         if isinstance(params, np.ndarray):
             params = [params]
         self.params = list(params)
+        self._dev_b = _device_params(self.params, "LAMB", _LAMB_DEV)
         for k, p in enumerate(self.params):  # glue: per parameter tensor, not elements
-            if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous or p.size == 0:
-                raise TypeError(f"LAMB: params[{k}] must be a non-empty C-contiguous float32 NumPy array")
+            if p.size == 0 or (self._dev_b is None and (not isinstance(p, np.ndarray) or p.dtype != np.float32
+                                                         or not p.flags.c_contiguous)):
+                raise TypeError(f"LAMB: params[{k}] must be a non-empty C-contiguous float32 NumPy array "
+                                "or SequenceDeviceTensor")
         b1, b2 = betas
         if not (0.0 <= b1 < 1.0 and 0.0 <= b2 < 1.0):
             raise ValueError("LAMB: betas must lie in [0, 1)")
@@ -513,9 +617,13 @@ class LAMB(_SeqOptimizer):
         self._sc_t = 0
 
     def step(self, grads):
-        b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        resident = self._res is not None or _resident_binding(b, _LAMB_RESIDENT)
-        if resident:
+        dev = self._dev_b is not None
+        b = self._dev_b if dev else _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
+        resident = dev or self._res is not None or _resident_binding(b, _LAMB_RESIDENT)
+        if dev:
+            # device params (lane gap-neural-io): updated where they live
+            gs = _device_grads(b, grads, self.params, "LAMB")
+        elif resident:
             self._check_params()
             gs = self._grad_list(grads)
         else:
@@ -540,8 +648,12 @@ class LAMB(_SeqOptimizer):
                 if self._res is None:
                     self._res_opened(b, b.lamb_resident_open([len(self.params)] + offs))
                 self._res_upload()
-                b.lamb_resident_step(self._res, [p.ctypes.data for p in self.params] + [x.ctypes.data for x in gs]  # glue: addresses per parameter tensor, not elements
-                                     + [self._sc.ctypes.data], [len(self.params), self.t, self.flags], fp)
+                if dev:
+                    b.lamb_resident_step_dev(self._res, [p.h for p in self.params] + [x.h for x in gs]  # glue: handles per parameter tensor, not elements
+                                             + [self._sc.ctypes.data], [len(self.params), self.t, self.flags], fp)
+                else:
+                    b.lamb_resident_step(self._res, [p.ctypes.data for p in self.params] + [x.ctypes.data for x in gs]  # glue: addresses per parameter tensor, not elements
+                                         + [self._sc.ctypes.data], [len(self.params), self.t, self.flags], fp)
             except BaseException:
                 self.t -= 1
                 raise
