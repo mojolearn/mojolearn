@@ -4,6 +4,8 @@
   render   grid plan -> one `lq add <nv|amd> RACE ...` line per build pack (arm A, the pack's define set
            through MOJOLEARN_BUILD_DEFINES) with the incumbent (arm B, no defines) interleaved so every
            workload's B is repeated --b-repeats times spread through the file (the noise floor).
+  redo-not-ready  RACE lines whose job came back status=not_ready (infrastructure) -> the same lines under the
+           redo tag <run>.<base>n<k>; collect maps it to <base> where earlier reps were not_ready or absent.
   collect  lq results.txt lines (+ the race logs for lines lq cut at 600 characters) -> grid-verdicts.json
            (six_lane_timing verdicts schema), summary.json (six_lane_compare_results schema: NVIDIA vs AMD
            output digests per arm) and quality.json (quality-review rows), which
@@ -515,6 +517,150 @@ def render_rerun(plan_dir, vendor, decide_dir, branch='main', b_repeats=1, rerun
     return lines, manifest
 
 
+# ------------------------------------------------------------------ redo-not-ready (infrastructure failures)
+# status=not_ready is INFRASTRUCTURE: the racer refused before the race (ALGOS-REFUSED stage=ready, e.g. the binding's
+# ImportError when the box job ran without LD_LIBRARY_PATH=<tree>/.pixi/envs/default/lib, Oct 7 20:10Z). It says nothing
+# about the switch: the collector drops such samples (never FAIL, never BROKEN), and `redo-not-ready` writes the RACE
+# lines again under a redo tag.
+#
+# Tag rule: <run>.<base>n<k>, k = 1, 2, ... (base = the original pack id P875 or incumbent tag B022r1/C004r1), e.g.
+# ge123e6f9.P875n1, ge123e6f9.B022r1n1. The collector maps <base>n<k> to the same configuration (or incumbent repeat)
+# as <base>. Per cell, vendor and pass, the earliest rep (original = 0) with any non-not_ready sample is used: a later
+# rep supersedes only a not_ready or absent cell, never an ok (or error) one.
+INFRA_STATUS = ('not_ready',)
+REDO_TAG_RE = re.compile(r'^(?P<base>.*\d)n(?P<rep>\d+)$')
+LINE_TAG_RE = re.compile(r'(?<=\s)' + TAG_ENV + r'=(?P<run>[A-Za-z0-9_-]+)\.(?P<rest>[A-Za-z0-9_.-]+)(?=\s|$)')
+INCUMBENT_TAG_RE = re.compile(r'^[BC]\d+r\d+$')
+
+
+def is_infra(o):
+    return str(o.get('status') or '') in INFRA_STATUS
+
+
+def split_redo(rest):
+    """Tag tail after '<run>.' -> (base, rep): 'P875n1' -> ('P875', 1); 'B022r1n2' -> ('B022r1', 2); 'P875' -> ('P875', 0)."""
+    m = REDO_TAG_RE.match(rest or '')
+    if m:
+        return m.group('base'), int(m.group('rep'))
+    return rest, 0
+
+
+def settle_infra(groups):
+    """groups {key: [obs with redo_rep, pass, tag_base]} -> mutate in place: drop not_ready samples, keep per (pass,
+    tag_base) only the earliest rep that has a sample left, delete keys left empty. -> (infra_keys, dropped, superseded):
+    infra_keys = keys that had samples but none past the infra filter."""
+    infra_keys, dropped, superseded = [], 0, 0
+    for key in list(groups):
+        samples = groups[key]
+        real = [o for o in samples if not is_infra(o)]
+        dropped += len(samples) - len(real)
+        first = {}
+        for o in real:
+            g = (o.get('pass'), o.get('tag_base'))
+            first[g] = min(first.get(g, o.get('redo_rep', 0)), o.get('redo_rep', 0))
+        keep = [o for o in real if o.get('redo_rep', 0) == first[(o.get('pass'), o.get('tag_base'))]]
+        superseded += len(real) - len(keep)
+        if keep:
+            groups[key] = keep
+        else:
+            del groups[key]
+            infra_keys.append(key)
+    return infra_keys, dropped, superseded
+
+
+def not_ready_cells(results, vendor, run_id):
+    """results.txt copies -> {base: {(lane, dataset): set(statuses)}} over every rep of run_id on vendor."""
+    jobs, obs, _ = parse_results(results)
+    cells = {}
+    for o in obs:
+        if o['vendor'] != vendor or o['arm'] != 'ours':
+            continue
+        tag = (jobs.get((o['vendor'], o['id'])) or {}).get('tag') or ''
+        rid, _, rest = tag.partition('.')
+        if rid != run_id or rest.endswith('.bb'):
+            continue
+        base, _ = split_redo(rest)
+        cells.setdefault(base, {}).setdefault((o['lane'], o['dataset']), set()).add(str(o['status']))
+    return cells
+
+
+def render_not_ready_redo(lines_paths, results, vendor, run_id, rep=1):
+    """RACE lines of run_id whose job left a lane x dataset with only not_ready samples (over every rep so far) ->
+    (the same lines with tag <base>n<rep>, manifest). The line is copied token for token (same branch, lanes,
+    datasets, defines, BUILDS and PREBUILT): only the tag changes."""
+    if rep < 1:
+        raise ValueError('redo rep must be 1 or more')
+    box = BOX[vendor]
+    cells = not_ready_cells(results, vendor, run_id)
+    need = {}
+    for base, per in cells.items():
+        bad = sorted(k for k, st in per.items() if st and all(x in INFRA_STATUS for x in st))
+        if bad:
+            need[base] = bad
+    out, seen, by_lane = [], set(), {}
+    skipped = dict(other_box=0, other_run=0, not_race=0, duplicate=0, no_not_ready=0)
+    for path in lines_paths:
+        for raw in Path(path).read_text().splitlines():
+            line = raw.strip()
+            toks = line.split()
+            if len(toks) < 4 or toks[:2] != ['lq', 'add']:
+                continue
+            if toks[2] != box:
+                skipped['other_box'] += 1
+                continue
+            if toks[3] != 'RACE':
+                skipped['not_race'] += 1
+                continue
+            m = LINE_TAG_RE.search(line)
+            if not m or m.group('run') != run_id:
+                skipped['other_run'] += 1
+                continue
+            base, _ = split_redo(m.group('rest'))
+            if base in seen:
+                skipped['duplicate'] += 1
+                continue
+            seen.add(base)
+            if base not in need:
+                skipped['no_not_ready'] += 1
+                continue
+            new = '%s=%s.%sn%d' % (TAG_ENV, run_id, base, rep)
+            out.append(line[:m.start()] + new + line[m.end():])
+            for lane, ds in need[base]:
+                by_lane[lane] = by_lane.get(lane, 0) + 1
+    done = [b for b in need if b in seen]
+    manifest = dict(schema='mojolearn.six-lane-grid-lq-redo/1', vendor=vendor, box=box, run_id=run_id, rep=rep,
+                    lines=len(out), a_lines=sum(1 for b in done if not INCUMBENT_TAG_RE.match(b)),
+                    b_lines=sum(1 for b in done if INCUMBENT_TAG_RE.match(b)),
+                    not_ready_cells=sum(len(need[b]) for b in done), not_ready_cells_by_lane=dict(sorted(by_lane.items())),
+                    lanes=sorted(by_lane), tags_without_line=sorted(set(need) - seen), skipped=skipped,
+                    lines_files=[str(x) for x in lines_paths], results=[str(x) for x in results],
+                    rule='tag <run>.<base>n<rep>; collect maps it to <base> and uses it only where every earlier rep of '
+                         'the cell was not_ready or absent')
+    return out, manifest
+
+
+def add_redo_parser(s):
+    d = s.add_parser('redo-not-ready', help='RACE lines whose job came back status=not_ready -> the same lines, redo tag')
+    d.add_argument('--vendor', choices=sorted(BOX), required=True)
+    d.add_argument('--lines', nargs='+', type=Path, required=True,
+                   help='rendered RACE lines files of the run (e.g. <vendor>.race.pb.lines); the first line per tag is used')
+    d.add_argument('--results', nargs='+', type=Path, required=True, help="the box's results.txt copy (with any earlier redo results)")
+    d.add_argument('--run-id', required=True, help='the run whose tags are redone (e.g. ge123e6f9)')
+    d.add_argument('--rep', type=int, default=1, help='redo rep k in the tag <base>n<k> (default 1; 2 for a redo of a redo)')
+    d.add_argument('--out', type=Path, required=True, help='lines file; <out>.json gets the manifest')
+    return d
+
+
+def redo_main(args):
+    lines, manifest = render_not_ready_redo(args.lines, args.results, args.vendor, args.run_id, args.rep)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(''.join(line + '\n' for line in lines))
+    Path(str(args.out) + '.json').write_text(json.dumps(manifest, indent=1, sort_keys=True) + '\n')
+    print(json.dumps({k: manifest[k] for k in ('vendor', 'run_id', 'rep', 'lines', 'a_lines', 'b_lines', 'not_ready_cells',
+                                                'not_ready_cells_by_lane', 'tags_without_line')}))
+    return 0
+
+
 def _by_reason(refused):
     out = {}
     for r in refused:
@@ -816,6 +962,8 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             ignored['other_campaign'] += 1
             continue
         o['pass'] = rid
+        rest, o['redo_rep'] = split_redo(rest)  # <base>n<k> redo tags map to <base> (redo-not-ready)
+        o['tag_base'] = rest
         if re.match(r'^[BC]\d+r\d+$', rest):
             for wid in lane_to_wids.get(o['key'], ()):
                 B.setdefault((wid, o['vendor']), []).append(o)
@@ -830,6 +978,12 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             ignored['unknown_cell'] += 1
             continue
         A.setdefault(hit + (o['vendor'],), []).append(o)
+
+    # not_ready = infrastructure (redo-not-ready): dropped before judging, the earliest real rep wins per cell
+    a_infra, a_dropped, a_superseded = settle_infra(A)
+    b_infra, b_dropped, b_superseded = settle_infra(B)
+    ignored.update(not_ready=a_dropped + b_dropped, superseded_redo=a_superseded + b_superseded)
+    a_infra_set = set(a_infra)
 
     def ok(o):
         return o['status'] == 'ok' and o['median_ms'] is not None and o['median_ms'] > 0
@@ -1056,7 +1210,8 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
         key = (cell['configuration'], cell['workload_id'], v)
         try:
             route(cell['workload_id'], lanes, board)
-            state = 'MEASURED' if key in A and any(ok(s) for s in A[key]) else 'FAILED' if key in A else 'MISSING'
+            state = 'MEASURED' if key in A and any(ok(s) for s in A[key]) else 'FAILED' if key in A else \
+                'NOT_READY' if key in a_infra_set else 'MISSING'
         except ValueError:
             state = 'REFUSED'
         coverage.setdefault(v, {}).setdefault(state, 0)
@@ -1070,7 +1225,11 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                   passes_per_cell=dict(sorted(passes_hist.items())), mismatch_run=mismatch_run,
                   results=[str(p) for p in results], logs=[str(p) for p in (logs or [])],
                   observations=len(obs), a_cells=len(A), b_workload_vendor=len(B), ignored=ignored,
-                  no_result=nores, coverage=coverage, verdict_counts=_count(verdict_cases, 'verdict'),
+                  no_result=nores, coverage=coverage,
+                  not_ready=dict(a_cells=len(a_infra), b_workload_vendor=len(b_infra), samples=a_dropped + b_dropped,
+                                 superseded_redo_samples=a_superseded + b_superseded,
+                                 a_cells_by_lane=_infra_by_lane(a_infra),
+                                 rule='status=not_ready is infrastructure: never FAIL/BROKEN; redo with redo-not-ready'), verdict_counts=_count(verdict_cases, 'verdict'),
                   identity_counts=counts, quality_counts=_count(quality_rows, None),
                   truncated_without_log=sum(1 for o in obs if o.get('truncated') and not o.get('log_evidence')),
                   cmd_jobs_without_gridbb=sorted('%s:%s' % k for k, j in jobs.items()
@@ -1085,6 +1244,14 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                       ('quality.json', quality), ('collect-report.json', report)):
         (out_dir / name).write_text(json.dumps(doc, indent=1, sort_keys=True) + '\n')
     return report
+
+
+def _infra_by_lane(keys):
+    out = {}
+    for _cid, wid, vendor in keys:
+        k = '%s:%s' % (vendor, wid.split('@', 1)[0].split(':', 1)[-1])
+        out[k] = out.get(k, 0) + 1
+    return dict(sorted(out.items()))
 
 
 def _count(rows, key):
@@ -1123,6 +1290,7 @@ def main(argv=None):
                    help='first-pass collect output (grid-verdicts.json): measured medians for the projected hours')
     r.add_argument('--skip-controls', help='comma list of controls already flipped by hand (final controls are skipped anyway)')
     r.add_argument('--skip-broken-controls', action='store_true', help='also skip every configuration of a HOLD_BROKEN control')
+    add_redo_parser(s)
     c = s.add_parser('collect', help='lq results + race logs -> verdicts, identity summary, quality rows')
     c.add_argument('--results', nargs='+', required=True, help='results.txt copies (one per box)')
     c.add_argument('--logs', nargs='*', default=[], help='lq out dirs (race-*.log under <id>/) or `grep -H` dumps of them')
@@ -1134,6 +1302,8 @@ def main(argv=None):
     c.add_argument('--board-json')
     c.add_argument('--out', type=Path, required=True)
     args = p.parse_args(argv)
+    if args.cmd == 'redo-not-ready':
+        return redo_main(args)
     lanes = load_lanes(args.lanes_json)
     board = None
     if args.board_json:
