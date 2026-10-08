@@ -132,6 +132,8 @@ from cluster.impl.kmeans_params import (
     INIT_ARRAY,
     INIT_KMEANS_PLUS_PLUS,
     INIT_RANDOM,
+    KMEANS_LAZY_EVERY,
+    KMEANS_LAZY_SHIFT_IDN,
     KMeansParams,
     get_centroids_batch_size,
     get_data_batch_size,
@@ -1441,8 +1443,21 @@ def kmeans_fit_main(
 
 
 comptime KMEANS_LAZY_SHIFT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    (
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        # lane gap-ivf (2026-10-08): FAST on NVIDIA and AMD too (FAST is judged on
+        # speed and quality only; a fit to max_iter is unchanged), and IDENTICAL
+        # on every column with the host restatement following
+        # (`KMEANS_LAZY_SHIFT_IDN`, cluster/impl/kmeans_params.mojo). Off Apple the
+        # read was one synchronize per Lloyd iteration: 20 per IVF coarse fit on
+        # the L40S stage log (bench/results/ivf-stages-l40s-20261001.log), 20 per
+        # k-means|| recluster and per IVF-PQ codebook.
+        or (
+            GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+            and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+        )
+        or KMEANS_LAZY_SHIFT_IDN
+    )
     and not is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF"]()
 )
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
@@ -1471,7 +1486,7 @@ fits without the inertia check, with `params.lazy_shift` set, only."""
 #: per arm, 2026-10-04: kmeans istella 1451.5 -> 1527.7 ms (slower), taxi
 #: 977.6 -> 974.8 ms (flat); inertia equal.
 comptime KMEANS_FAST_LAZY_SHIFT = is_defined["MOJOLEARN_KMEANS_FAST_LAZY_SHIFT"]()
-comptime KMEANS_LAZY_SHIFT_EVERY = 4
+comptime KMEANS_LAZY_SHIFT_EVERY = KMEANS_LAZY_EVERY  # shared with the host restatement
 
 
 def kmeans_fit_main_traced(

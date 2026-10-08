@@ -25,6 +25,31 @@ reading before changing:
 """
 
 
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE as _KP_MODE, NUMERIC_IDENTICAL as _KP_IDENTICAL
+
+#: lane gap-ivf (2026-10-08, plan docs/plans/gaps-2026-10-08.md section 6 item 3):
+#: the lazy convergence read (`KMEANS_LAZY_SHIFT`, cluster/impl/detail/kmeans.mojo)
+#: in IDENTICAL on EVERY column, the device columns (NVIDIA, AMD, Apple) and the
+#: host restatement (`cluster/host/kmeans_oracle.mojo::host_fit_main`) together,
+#: so the four columns still stop on the same iteration. Honored only by fits
+#: whose caller sets `KMeansParams.lazy_shift` (IVF-Flat's coarse quantizer, its
+#: k-means|| recluster, IVF-PQ's codebooks), untraced, without the inertia check.
+#: The shift is tested every `KMEANS_LAZY_EVERY` iterations and at max_iter: a
+#: fit that runs to max_iter is bit for bit the eager fit; one that converged at
+#: iteration i now stops at the next multiple of KMEANS_LAZY_EVERY (at most 3
+#: more Lloyd steps, which never raise the objective), so IDENTICAL bits move
+#: only for fits that converge early, on every column at once.
+#: -D MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF (or MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF)
+#: restores the per-iteration read in IDENTICAL.
+comptime KMEANS_LAZY_SHIFT_IDN = _KP_MODE == _KP_IDENTICAL and not (
+    is_defined["MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF"]()
+    or is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF"]()
+)
+#: The lazy read's period, shared by the device loop and the host restatement.
+comptime KMEANS_LAZY_EVERY = 4
+
+
 # `params::InitMethod` (`kmeans.hpp:44-60`). Mojo has no scoped enum, so
 # these are the codes, in their declaration order.
 comptime INIT_KMEANS_PLUS_PLUS = 0
@@ -116,8 +141,9 @@ struct KMeansParams(Copyable, ImplicitlyCopyable, Movable):
     var batch_centroids: Int
     var inertia_check: Bool
     # Not a cuVS field. The caller's request for the lazy convergence read
-    # (`KMEANS_LAZY_SHIFT`, cluster/impl/detail/kmeans.mojo): honored only in
-    # FAST on Apple. IVF's coarse quantizer and IVF-PQ's codebooks set it; the
+    # (`KMEANS_LAZY_SHIFT`, cluster/impl/detail/kmeans.mojo): honored in
+    # FAST on Apple and FAST on NVIDIA/AMD, and in IDENTICAL on every column
+    # (`KMEANS_LAZY_SHIFT_IDN`, lane gap-ivf 2026-10-08). IVF's coarse quantizer and IVF-PQ's codebooks set it; the
     # KMeans estimator leaves it False unless built with
     # `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` (2026-10-04).
     var lazy_shift: Bool

@@ -175,7 +175,7 @@ from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from core.classical_host_predict import host_gemm_nt
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_list_ptr_u32
 from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
-from cluster.impl.kmeans_params import weighted_sum_scale_cap
+from cluster.impl.kmeans_params import KMEANS_LAZY_EVERY, KMEANS_LAZY_SHIFT_IDN, weighted_sum_scale_cap
 from cluster.impl.sum_scale_plan import (
     SUM_SCALE_CHUNK,
     SUM_SCALE_TPB,
@@ -1003,8 +1003,11 @@ def host_init_scalable(
     mut rng: HostRngReplay,
     mut trace: KMeansHostTrace,
     tag_prefix: String,
+    lazy_shift: Bool = False,
 ) raises:
-    """`init_scalable_kmeans_plus_plus` (module docstring)."""
+    """`init_scalable_kmeans_plus_plus` (module docstring). `lazy_shift` is
+    the caller's `KMeansParams.lazy_shift`, handed to the recluster as the
+    device's `inner.lazy_shift = params.lazy_shift` does."""
     if n >= SCALABLE_ROW_LIMIT:
         raise Error(
             "scalable k-means++ selection scan counts in Float32 and is"
@@ -1120,6 +1123,7 @@ def host_init_scalable(
             inner_weight_scale,
             trace,
             tag_prefix + "init.par.",
+            lazy_shift,
         )
     elif cand_count < k:
         var n_random = k - cand_count
@@ -1244,9 +1248,16 @@ def host_fit_main[with_init: Bool = True](
     weight_scale: Float32,
     mut trace: KMeansHostTrace,
     tag_prefix: String,
+    lazy_shift: Bool = False,
 ) raises -> KMeansHostFit:
     """`kmeans_fit_main_traced` (module docstring). `centroids` is in-out:
-    read as the start on INIT_ARRAY, the best restart on return."""
+    read as the start on INIT_ARRAY, the best restart on return.
+
+    `lazy_shift` is the caller's `KMeansParams.lazy_shift`: under
+    `KMEANS_LAZY_SHIFT_IDN` (lane gap-ivf, 2026-10-08) an untraced fit tests
+    the shift only every `KMEANS_LAZY_EVERY` iterations and at max_iter, the
+    device loop's `lazy_skip` (cluster/impl/detail/kmeans.mojo), so the host
+    column stops on the iteration the device columns stop on."""
     host_validate_params(metric, k, tol, oversampling_factor)
     if trace.enabled and tag_prefix == "":
         trace.header(
@@ -1286,7 +1297,7 @@ def host_fit_main[with_init: Bool = True](
                 elif init == INIT_KMEANS_PLUS_PLUS and oversampling_factor != 0.0:
                     host_init_scalable(
                         x, x_norm, n, d, k, metric, oversampling_factor, cur, rng,
-                        trace, restart_tag,
+                        trace, restart_tag, lazy_shift,
                     )
                 else:
                     host_kmeans_plus_plus(x, x_norm, n, d, k, is_sqrt, cur, rng)
@@ -1319,6 +1330,17 @@ def host_fit_main[with_init: Bool = True](
             trace.record_i32(it_tag + "sums_i32", sums_i32)
             trace.record_i32(it_tag + "weight_i32", weight_i32)
             trace.record_f32(it_tag + "new_centroids", new_c)
+            # the device's `lazy_skip`: no shift reduction and no test on
+            # the skipped iterations (an untraced fit only, as there)
+            var lazy_skip = (
+                KMEANS_LAZY_SHIFT_IDN and lazy_shift and (not trace.enabled)
+                and it % KMEANS_LAZY_EVERY != 0 and it != max_iter
+            )
+            if lazy_skip:
+                for j in range(cd):
+                    cur[j] = new_c[j]
+                it += 1
+                continue
             var shift = host_sum_device(cur, new_c, cd, SUM_MODE_SQDIFF)
             for j in range(cd):
                 cur[j] = new_c[j]
