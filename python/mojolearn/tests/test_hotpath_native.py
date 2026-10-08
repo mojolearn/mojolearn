@@ -242,7 +242,14 @@ def test_astype_quiets_a_signaling_nan_as_the_item_setter_does():
     bits[::3] = 0xFFC12345
     bits[1::7] = 0x3F800000
     a = _arr(bits.view(np.float32).copy())
-    _same(lambda: a[0:900], ("cast_elements",), group="getitem")
+    # The reference: the item setter's widen-and-narrow sets the quiet bit
+    # of every NaN (exponent all ones, mantissa nonzero); since c149bd365 the
+    # declined-helper arm is a byte move, so the definition is stated here.
+    nan = ((bits & 0x7F800000) == 0x7F800000) & ((bits & 0x007FFFFF) != 0)
+    quiet = np.where(nan, bits | 0x00400000, bits).astype(np.uint32)
+    ref = lambda sel: (lambda: _arr(np.ascontiguousarray(quiet[sel]).view(np.float32)))
+    _same(lambda: a[0:900], ("cast_elements",), group="getitem", ref_fn=ref(slice(0, 900)))
+    _same(lambda: a[1:900:2], ("cast_elements",), group="getitem", ref_fn=ref(slice(1, 900, 2)))
     _same(lambda: a.astype("<f8"), ("cast_elements",), group="astype")
 
 
