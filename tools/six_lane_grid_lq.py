@@ -708,10 +708,22 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                                           b_head=head, timing_source=TIMING_SOURCE,
                                           evidence=sorted({'%s:%s' % (s['evidence'], s['id']) for s in best}),
                                           floor={p: (f if p == 'scored' else None) for p in T.PHASES} if f is not None else None)
+    # Provisional floor for workloads with fewer than min_samples incumbent repeats: the median of the measured floors
+    # of this run (5+ of them), else log(1.25) = the Oct 6 same-build p90 spread. Marked floor_source=provisional so
+    # the decision stays PARTIAL until the real floor replaces it (six_lane_grid_decide gates flips on completeness).
+    measured_floors = sorted(v['floor']['scored'] for v in floors.values() if v['floor'] and v['floor'].get('scored') is not None)
+    provisional = measured_floors[len(measured_floors) // 2] if len(measured_floors) >= 5 else math.log(1.25)
+    for k, v in floors.items():
+        if v['floor'] is None:
+            v['floor'] = {p: (provisional if p == 'scored' else None) for p in T.PHASES}
+            v['floor_source'] = 'provisional (%s)' % ('run median of %d floors' % len(measured_floors) if len(measured_floors) >= 5 else 'log 1.25 default')
+        else:
+            v['floor_source'] = 'incumbent repeats'
     floor_doc = dict(schema='mojolearn.six-lane-aa-floors/1',
                      floors={k: v for k, v in floors.items() if v['floor'] is not None},
-                     rejected=[dict(key=k, samples=v['samples'], reason='fewer than %d incumbent repeats' % min_samples)
-                               for k, v in floors.items() if v['floor'] is None],
+                     rejected=[dict(key=k, samples=v['samples'], reason='fewer than %d incumbent repeats: provisional floor used' % min_samples)
+                               for k, v in floors.items() if v.get('floor_source', '').startswith('provisional')],
+                     provisional_floor=provisional,
                      policy='Floor from the incumbent arm B repeated through the lq grid file (same head): '
                             'log(p90/p10) of median_ms with 4+ samples, log(max/min) below that (six_lane_timing._spread).')
 
