@@ -49,7 +49,58 @@ python3 tools/six_lane_grid_decide.py --matrix ~/mojolearn-evidence/grid-lq/plan
 `--budget-hours H` keeps A lines in order while their races plus the new workloads' B repeats fit in H hours.
 Each race is costed at half the plan's pair time: nvidia 38 s, amd 24 s per pair.
 
-`collect` options: `--min-samples` (default 2 incumbent repeats for a floor) and `--run-id`.
+`collect` options: `--min-samples` (default 2 incumbent repeats for a floor) and `--run-id` (one run, or several passes: `--run-id R1 R2` or `--runs R1,R2`).
+
+## Second pass over the undecided configurations
+
+Most first-pass cells sit inside the noise floor. `render --rerun-undecided <decide dir>` gives those a second data
+point without re-running what is decided:
+
+- **Selected:** configurations whose measured cells are all NO_VERDICT/INCOMPLETE in `grid-decisions.json`
+  (`configurations[*].rows[*].timing` is the case verdict over both vendors, so NO_VERDICT/INCOMPLETE means undecided
+  on at least one vendor). Only those NO_VERDICT/INCOMPLETE cells are re-run. An UNMEASURED cell is first-pass work
+  still owed (or a refused route), so it is not re-run.
+- **Skipped:** any configuration with a FASTER/SLOWER cell (timeouts count as SLOWER), a BROKEN cell (the candidate
+  race failed), a quality WORSE cell or an identity MISMATCH cell. Also skipped: any configuration whose assignment
+  touches a final control (PROMOTE, SPLIT, DELETE, HOLD_IDENTITY, HOLD_QUALITY, meaning already flipped or acted on)
+  or a control named in `--skip-controls`. HOLD_BROKEN waits for a fix, so it is not final. `--skip-broken-controls`
+  skips those configurations too.
+- **Lines:** same format and pack ids. The run id is new (default `<plan run id>r2`, or `--rerun-id`), so the
+  collector keeps the passes apart. Each workload group the selection touches gets `--b-repeats` incumbent lines
+  (default 1 here).
+- **Totals:** configurations, lines and races per box. `projected_race_hours` uses the plan default per race.
+  `measured_race_hours` (`--first-pass <collect dir>`) uses the first pass' timed medians where they exist. Those
+  medians are the timed fit only, so this figure is a lower bound on box time.
+
+`collect` over several passes:
+
+- **Ratio:** each pass' A is divided by the median of the same pass' B. The cell's log ratio is the mean over its
+  passes. `passes`, `pass_runs` and `pass_log_ratios` are recorded per vendor. If a pass has no incumbent of its own,
+  it falls back to the other passes and is listed in `b_from_other_pass`.
+- **Floors:** the incumbent repeats of every pass are pooled at one head.
+- **Quality:** each pass is judged against its own incumbent. A pass that is WORSE outranks FAIL, which outranks
+  TIMEOUT, then SAME, then BETTER. `pass_verdicts` is recorded.
+- **Identity:** NVIDIA vs AMD, judged as before on the last pass. If the candidate digest changes between passes on
+  one vendor at one head, arm A is `MISMATCH_RUN`: a run-to-run bits bug, like the RidgeCV warm/cold one. It is
+  listed in `collect-report.json` `mismatch_run` and printed as a `MISMATCH-RUN` line. Decide counts it as
+  identity not established (not MATCH). An incumbent digest that changes run to run stays MISMATCH, as before, and
+  is also listed in `mismatch_run`.
+
+```
+G=~/mojolearn-evidence/grid-lq
+# once pass one is complete (collect + decide as above): render pass two per box
+for v in nvidia amd; do
+  python3 tools/six_lane_grid_lq.py render --plan-dir $G/plan --vendor $v --branch <frozen branch> \
+    --prebuilt /root/grid-prebuilt --rerun-undecided $G/decide --first-pass $G/collected --out $G/$v.rerun.lines
+done
+bash tools/six_lane_grid_lq_feed.sh nv  $G/nvidia.rerun.lines 4 300 > $G/feed_nv_rerun.log 2>&1 &
+bash tools/six_lane_grid_lq_feed.sh amd $G/amd.rerun.lines    4 300 > $G/feed_amd_rerun.log 2>&1 &
+# collect both passes into a new dir, then decide from it
+python3 tools/six_lane_grid_lq.py collect --plan-dir $G/plan --run-id <run> <run>r2 \
+  --results $G/nv-results.txt $G/amd-results.txt --logs $G/nv-grid-logs.txt $G/amd-grid-logs.txt --out $G/collected2
+python3 tools/six_lane_grid_decide.py --matrix $G/plan/grid-matrix.json.gz --verdicts $G/collected2/grid-verdicts.json \
+  --identity $G/collected2/summary.json --quality $G/collected2/quality.json --out $G/decide2
+```
 
 ## Two routes, one line per build
 

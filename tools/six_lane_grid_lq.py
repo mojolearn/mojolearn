@@ -419,14 +419,16 @@ def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=
 
 # ------------------------------------------------------------------ render --rerun-undecided (second pass)
 
-# A control whose roll-up is final has been acted on (flipped on, deleted or held): its configurations are not re-run.
-FINAL_CONTROL = ('PROMOTE', 'SPLIT', 'DELETE', 'HOLD_IDENTITY', 'HOLD_QUALITY', 'HOLD_BROKEN')
+# A control whose roll-up is final has been acted on (flipped on, deleted, held for identity or quality): its
+# configurations are not re-run. HOLD_BROKEN is not final: the arm awaits a fix, and its configurations that ran without
+# a failure are still undecided (their own BROKEN cells are skipped cell by cell); --skip-broken-controls skips them too.
+FINAL_CONTROL = ('PROMOTE', 'SPLIT', 'DELETE', 'HOLD_IDENTITY', 'HOLD_QUALITY')
 DECIDED_TIMING = ('FASTER', 'SLOWER')  # a cell beyond the floor on both voting vendors (timeouts count as SLOWER)
 UNDECIDED_TIMING = ('NO_VERDICT', 'INCOMPLETE')
 RERUN_SUFFIX = 'r2'
 
 
-def undecided_cells(decisions, skip_controls=()):
+def undecided_cells(decisions, skip_controls=(), skip_broken_controls=False):
     """grid-decisions.json -> (set of (configuration, workload_id) to re-run, report).
 
     A decision row's `timing` is the case verdict over both voting vendors: FASTER/SLOWER only when the cell is
@@ -436,7 +438,8 @@ def undecided_cells(decisions, skip_controls=()):
     touches a control that is already final (flipped, deleted or held) or named in skip_controls. Only the
     configuration's NO_VERDICT/INCOMPLETE cells are re-run: an UNMEASURED cell is first-pass work still owed (or a
     refused route), not a second data point."""
-    flipped = {k for k, c in (decisions.get('controls') or {}).items() if c.get('recommendation') in FINAL_CONTROL}
+    final = FINAL_CONTROL + (('HOLD_BROKEN',) if skip_broken_controls else ())
+    flipped = {k for k, c in (decisions.get('controls') or {}).items() if c.get('recommendation') in final}
     flipped |= set(skip_controls or ())
     keep, skipped, unmeasured_cells = set(), {}, 0
     selected = []
@@ -467,7 +470,7 @@ def undecided_cells(decisions, skip_controls=()):
     report = dict(configurations=len(selected), cells=len(keep), skipped_configurations=dict(sorted(skipped.items())),
                   unmeasured_cells_not_rerun=unmeasured_cells, final_controls=sorted(flipped),
                   rule='re-run the NO_VERDICT/INCOMPLETE cells of configurations with no decided cell (FASTER/SLOWER, '
-                       'BROKEN, WORSE, MISMATCH) and no final control (%s) in their assignment' % '/'.join(FINAL_CONTROL))
+                       'BROKEN, WORSE, MISMATCH) and no final control (%s) in their assignment' % '/'.join(final))
     return keep, sorted(selected), report
 
 
@@ -489,13 +492,13 @@ def first_pass_seconds(collect_dir, vendor):
 
 
 def render_rerun(plan_dir, vendor, decide_dir, branch='main', b_repeats=1, rerun_id=None, first_pass=None,
-                 skip_controls=(), **kw):
+                 skip_controls=(), skip_broken_controls=False, **kw):
     """Second pass over the undecided configurations: render() restricted to their undecided cells, under a new run
     id (same pack ids in the tags), with b_repeats incumbent lines per workload group they touch."""
     dec_path = Path(decide_dir)
     dec_path = dec_path / 'grid-decisions.json' if dec_path.is_dir() else dec_path
     decisions = json.loads(dec_path.read_text())
-    cells, selected, sel = undecided_cells(decisions, skip_controls)
+    cells, selected, sel = undecided_cells(decisions, skip_controls, skip_broken_controls)
     rerun_id = rerun_id or (kw.pop('run_id', None) or run_id_of(plan_dir)) + RERUN_SUFFIX
     kw.pop('run_id', None)
     if '.' in rerun_id or not re.fullmatch(r'[A-Za-z0-9_-]+', rerun_id):
@@ -925,7 +928,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             ref = timed[-1]
             r = sum(pp['r'] for pp in timed) / len(timed)
             a_ok = [pp['a_ms'] for pp in timed if pp['a_ms']]
-            gm = (lambda xs: math.exp(sum(math.log(x) for x in xs) / len(xs)) if xs else None)
+            gm = (lambda xs: None if not xs else xs[0] if len(xs) == 1 else math.exp(sum(math.log(x) for x in xs) / len(xs)))
             fl = floors.get(wid + '|' + vendor) or {}
             any_timeout = any(pp['timed_out'] for pp in timed)
             row = dict(
@@ -1119,6 +1122,7 @@ def main(argv=None):
     r.add_argument('--first-pass', metavar='COLLECT_DIR', type=Path,
                    help='first-pass collect output (grid-verdicts.json): measured medians for the projected hours')
     r.add_argument('--skip-controls', help='comma list of controls already flipped by hand (final controls are skipped anyway)')
+    r.add_argument('--skip-broken-controls', action='store_true', help='also skip every configuration of a HOLD_BROKEN control')
     c = s.add_parser('collect', help='lq results + race logs -> verdicts, identity summary, quality rows')
     c.add_argument('--results', nargs='+', required=True, help='results.txt copies (one per box)')
     c.add_argument('--logs', nargs='*', default=[], help='lq out dirs (race-*.log under <id>/) or `grep -H` dumps of them')
@@ -1144,12 +1148,13 @@ def main(argv=None):
         if args.rerun_undecided:
             lines, manifest = render_rerun(args.plan_dir, args.vendor, args.rerun_undecided, args.branch,
                                            1 if args.b_repeats is None else args.b_repeats, args.rerun_id, args.first_pass,
-                                           [x for x in (args.skip_controls or '').split(',') if x], only_lanes=only,
+                                           [x for x in (args.skip_controls or '').split(',') if x], args.skip_broken_controls,
+                                           only_lanes=only,
                                            phase=args.phase, budget_hours=args.budget_hours, lanes=lanes,
                                            b_group_size=args.b_group_size, run_id=args.run_id, board=board, prebuilt=args.prebuilt)
         else:
-            if args.rerun_id or args.first_pass or args.skip_controls:
-                p.error('--rerun-id, --first-pass and --skip-controls need --rerun-undecided')
+            if args.rerun_id or args.first_pass or args.skip_controls or args.skip_broken_controls:
+                p.error('--rerun-id, --first-pass, --skip-controls and --skip-broken-controls need --rerun-undecided')
             lines, manifest = render(args.plan_dir, args.vendor, args.branch, 3 if args.b_repeats is None else args.b_repeats,
                                      only, args.phase, args.budget_hours, lanes, args.b_group_size, args.run_id, board, args.prebuilt)
         args.out.parent.mkdir(parents=True, exist_ok=True)

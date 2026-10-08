@@ -327,6 +327,232 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(G.quality_verdict({'n_clusters': 3}, {'n_clusters': 4})[0], 'PENDING')
 
 
+def decisions_doc():
+    """grid-decisions.json shape for the synthetic plan (six_lane_grid_decide.decide output, the fields rerun reads)."""
+    def row(wid, timing, quality='SAME', identity='MATCH', ratios=None):
+        return dict(workload_id=wid, timing=timing, quality=quality, identity=identity, ratios=ratios or {})
+    cfg = {
+        'G.expanded:ridge-cv.a=on': ({'a': 'on'}, [row(wl('expanded:ridge-cv', 'istella'), 'NO_VERDICT'),
+                                                   row(wl('expanded:ridge-cv', 'taxi'), 'INCOMPLETE', 'PENDING', 'INCOMPLETE')]),
+        'G.expanded:lasso-cv.b=on': ({'b': 'on'}, [row(wl('expanded:lasso-cv', 'taxi'), 'NO_VERDICT', 'WORSE')]),
+        'G.expanded:ridge-cv.c=on': ({'c': 'on'}, [row(wl('expanded:ridge-cv', 'istella'), 'NO_VERDICT'),
+                                                   row(wl('expanded:ridge-cv', 'taxi'), 'FASTER')]),
+        'G.expanded:qda.d=on': ({'d': 'on'}, [row(wl('expanded:qda', 'taxi', '@input=classification-full-v1'), 'INCOMPLETE', 'FAIL')]),
+        'G.expanded:theta.e=on': ({'e': 'on'}, [row(wl('expanded:theta', 'taxi'), 'UNMEASURED', 'PENDING', 'UNMEASURED')]),
+        'G.classical:kmeans.f=on': ({'f': 'on'}, [row(wl('classical:kmeans', 'taxi'), 'NO_VERDICT')]),
+        'G.expanded:sgd-reg@rr.g=on': ({'g': 'on'}, [row(wl('expanded:sgd-reg@regression_report', 'taxi'), 'UNMEASURED', 'PENDING')]),
+        'G.rf.h=on': ({'h': 'on'}, [row('rf:taxi', 'NO_VERDICT'), row('rf:year', 'UNMEASURED', 'PENDING', 'UNMEASURED')]),
+    }
+    controls = {'a': 'NOT_MEASURED', 'b': 'HOLD_QUALITY', 'c': 'PARTIAL_PROMOTE', 'd': 'HOLD_BROKEN', 'e': 'NOT_MEASURED',
+                'f': 'DELETE', 'g': 'NOT_MEASURED', 'h': 'HOLD_BROKEN'}
+    return dict(schema=D.SCHEMA, controls={k: dict(control=k, recommendation=v) for k, v in controls.items()},
+                configurations={cid: dict(configuration=cid, assignment=a, rows=rows) for cid, (a, rows) in cfg.items()})
+
+
+class RerunRenderTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self.tmp.name)
+        write_plan(self.d)
+        self.dec = self.d / 'decide'
+        self.dec.mkdir()
+        (self.dec / 'grid-decisions.json').write_text(json.dumps(decisions_doc()))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_selection_reasons(self):
+        cells, selected, rep = G.undecided_cells(decisions_doc())
+        self.assertEqual(selected, ['G.expanded:ridge-cv.a=on', 'G.rf.h=on'])
+        self.assertEqual(cells, {('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'istella')),
+                                 ('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'taxi')), ('G.rf.h=on', 'rf:taxi')})
+        self.assertEqual(rep['skipped_configurations'], {'broken_cell': 1, 'decided_cell': 1, 'flipped_switch': 2, 'unmeasured': 2})
+        self.assertEqual(rep['unmeasured_cells_not_rerun'], 1)  # rf:year is first-pass work, not a second point
+        self.assertEqual(rep['final_controls'], ['b', 'f'])  # HOLD_BROKEN (d, h) awaits a fix: not final
+        _, selected, rep = G.undecided_cells(decisions_doc(), skip_controls=['a'], skip_broken_controls=True)
+        self.assertEqual(selected, [])
+        self.assertEqual(rep['final_controls'], ['a', 'b', 'd', 'f', 'h'])
+
+    def test_render_rerun_lines(self):
+        lines, m = G.render_rerun(self.d, 'nvidia', self.dec, lanes=LANES, board=BOARD)
+        rid = G.run_id_of(self.d) + 'r2'
+        a = [x for x in m['lines'] if x['arm'] == 'A']
+        self.assertEqual([(x['pack'], x['kind']) for x in a], [('P001', 'race'), ('P007', 'cmd')])
+        self.assertEqual({(c['configuration'], c['workload_id']) for x in a for c in x['cells']},
+                         {('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'istella')),
+                          ('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'taxi')), ('G.rf.h=on', 'rf:taxi')})
+        p1 = [l for l in lines if ('.P001 ') in l][0]
+        self.assertIn('RACE main ridge-cv istella,taxi MOJOLEARN_GRID_TAG=%s.P001 ' % rid, p1)
+        self.assertIn('MOJOLEARN_BUILD_DEFINES=MOJOLEARN_A=1,MOJOLEARN_B=2', p1)  # the pack's define set is unchanged
+        b = [x for x in m['lines'] if x['arm'] == 'B']
+        seen = {}
+        for x in b:
+            self.assertTrue(x['tag'].startswith(rid + '.'))
+            for w in x['workloads']:
+                seen[w] = seen.get(w, 0) + 1
+        self.assertEqual(seen, {wl('expanded:ridge-cv', 'istella'): 1, wl('expanded:ridge-cv', 'taxi'): 1, 'rf:taxi': 1})
+        t = m['totals']
+        self.assertEqual((t['run_id'], t['b_repeats'], t['a_races'], t['b_races']), (rid, 1, 3, 3))
+        self.assertEqual(t['rerun']['configurations'], 2)
+        self.assertIn('plan default', t['measured_note'])
+        with self.assertRaises(ValueError):
+            G.render_rerun(self.d, 'nvidia', self.dec, rerun_id='x.y', lanes=LANES, board=BOARD)
+
+    def test_measured_hours_from_first_pass(self):
+        fp = self.d / 'first'
+        fp.mkdir()
+        cases = [dict(configuration='G.expanded:ridge-cv.a=on', workload_id=wl('expanded:ridge-cv', 'istella'),
+                      vendors=dict(nvidia=dict(a_ms=3600e3, b_ms=7200e3)))]
+        (fp / 'grid-verdicts.json').write_text(json.dumps(dict(cases=cases)))
+        _, m = G.render_rerun(self.d, 'nvidia', self.dec, first_pass=fp, lanes=LANES, board=BOARD)
+        t = m['totals']
+        # A istella 1 h + B istella 2 h + four races at the 19 s plan default
+        self.assertEqual(t['measured_races'], 2)
+        self.assertAlmostEqual(t['measured_race_hours'], round(3 + 4 * 19 / 3600.0, 3))
+
+    def test_cli(self):
+        lanes = self.d / 'lanes.json'
+        lanes.write_text(json.dumps(LANES))
+        board = self.d / 'board.json'
+        board.write_text(json.dumps(dict(BOARD, races=sorted(BOARD['races']))))
+        out = self.d / 'out' / 'nv.rerun.lines'
+        rc = G.main(['render', '--plan-dir', str(self.d), '--vendor', 'nvidia', '--out', str(out), '--lanes-json', str(lanes),
+                     '--board-json', str(board), '--rerun-undecided', str(self.dec), '--rerun-id', 'gpass2'])
+        self.assertEqual(rc, 0)
+        text = out.read_text().splitlines()
+        self.assertEqual(len(text), 4)  # 2 A lines + 2 incumbent groups (RACE, CMD) x 1 repeat
+        self.assertTrue(all('MOJOLEARN_GRID_TAG=gpass2.' in l for l in text))
+        with self.assertRaises(SystemExit):
+            G.main(['render', '--plan-dir', str(self.d), '--vendor', 'nvidia', '--out', str(out), '--lanes-json', str(lanes),
+                    '--board-json', str(board), '--rerun-id', 'gpass2'])
+
+
+class MultiPassCollectTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self.tmp.name)
+        write_plan(self.d)
+        self.rid = G.run_id_of(self.d)
+        self.r2 = self.rid + 'r2'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self):
+        qb = {'r2': 0.9, 'rmse': 1.0}
+        nv, amd = [], []
+        n = [0]
+
+        def b(run, rep, lane, ds, ms_nv, ms_amd, dig_nv='b' * 16):
+            n[0] += 1
+            nv.append(algos_line('n%04d' % n[0], 'nvidia', 'abc1234', '%s.B001r%d' % (run, rep), lane, ds, ms_nv, qb, dig_nv))
+            amd.append(algos_line('a%04d' % n[0], 'amd', 'abc1234', '%s.B001r%d' % (run, rep), lane, ds, ms_amd, qb, 'b' * 16))
+
+        def a(run, pack, lane, ds, ms_nv, ms_amd, dig_nv, dig_amd, defines='MOJOLEARN_A=1,MOJOLEARN_B=2', q_nv=qb):
+            n[0] += 1
+            nv.append(algos_line('n%04d' % n[0], 'nvidia', 'abc1234', '%s.%s' % (run, pack), lane, ds, ms_nv, q_nv, dig_nv, defines))
+            amd.append(algos_line('a%04d' % n[0], 'amd', 'abc1234', '%s.%s' % (run, pack), lane, ds, ms_amd, qb, dig_amd, defines))
+        # pass 1: 3 incumbent repeats (nv 100..104, amd 50..52); pass 2: one repeat, the box ran 10% slower (110 / 55)
+        for rep, (mn, ma) in enumerate(((100, 50), (102, 51), (104, 52))):
+            for lane, ds in (('ridge-cv', 'istella'), ('ridge-cv', 'taxi')):
+                b(self.rid, rep + 1, lane, ds, mn, ma)
+        b(self.r2, 1, 'ridge-cv', 'istella', 110, 55)
+        b(self.r2, 1, 'ridge-cv', 'taxi', 110, 55, dig_nv='9' * 16)  # incumbent bits changed run to run on nv
+        # ridge-cv.a istella: pass 1 0.96x (nv) 0.98x (amd), pass 2 0.92x / 0.94x, digests stable
+        a(self.rid, 'P001', 'ridge-cv', 'istella', 0.96 * 102, 0.98 * 51, 'c' * 16, 'c' * 16)
+        a(self.r2, 'P001', 'ridge-cv', 'istella', 0.92 * 110, 0.94 * 55, 'c' * 16, 'c' * 16)
+        # ridge-cv.a taxi: the nv candidate digest changes between passes -> MISMATCH-RUN; pass 2 quality WORSE on nv
+        a(self.rid, 'P001', 'ridge-cv', 'taxi', 102, 51, 'd' * 16, 'd' * 16)
+        a(self.r2, 'P001', 'ridge-cv', 'taxi', 110, 55, 'e' * 16, 'd' * 16, q_nv={'r2': 0.8, 'rmse': 1.0})
+        (self.d / 'nv.txt').write_text('\n'.join(nv) + '\n')
+        (self.d / 'amd.txt').write_text('\n'.join(amd) + '\n')
+        return [self.d / 'nv.txt', self.d / 'amd.txt']
+
+    def test_two_passes(self):
+        import math
+        results = self.write()
+        out = self.d / 'c'
+        rep = G.collect(results, [], self.d, out, lanes=LANES, board=BOARD, run_id=[self.rid, self.r2])
+        self.assertEqual(rep['run_ids'], [self.rid, self.r2])
+        self.assertEqual(rep['ignored']['other_campaign'], 0)
+        v = json.loads((out / 'grid-verdicts.json').read_text())
+        cases = {(c['configuration'], c['workload_id']): c for c in v['cases']}
+        c = cases[('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'istella'))]
+        row = c['vendors']['nvidia']
+        self.assertEqual((row['passes'], row['pass_runs']), (2, [self.rid, self.r2]))
+        # each pass over its own incumbent median: log ratios averaged, not pooled medians
+        self.assertAlmostEqual(row['log_ratio']['scored'], (math.log(0.96) + math.log(0.92)) / 2)
+        self.assertAlmostEqual(row['b_ms'], math.sqrt(102 * 110))
+        self.assertEqual(row['b_samples'], 4)
+        f = json.loads((out / 'floors.json').read_text())['floors']
+        fl = f[wl('expanded:ridge-cv', 'istella') + '|nvidia']
+        self.assertEqual((fl['samples'], fl['passes']), (4, [self.rid, self.r2]))  # pooled across passes, one head
+        self.assertAlmostEqual(fl['floor']['scored'], math.log(110 / 100))
+        self.assertEqual(rep['passes_per_cell'], {'amd:2': 2, 'nvidia:2': 2})
+        s = json.loads((out / 'summary.json').read_text())
+        ids = {(x['configuration_id'], x['workload_id']): x for x in s['cases']}
+        taxi = ids[('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'taxi'))]
+        self.assertEqual(taxi['arms']['A']['status'], 'MISMATCH_RUN')
+        self.assertEqual(taxi['arms']['B']['status'], 'MISMATCH')  # incumbent digest unstable on nv (pooled passes)
+        self.assertEqual(taxi['status'], 'MISMATCH')
+        self.assertEqual(ids[('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'istella'))]['status'], 'MATCH')
+        self.assertEqual(s['counts']['MISMATCH_RUN'], 0)
+        mr = {(x['workload_id'], x['arm'], x['vendor']): x for x in rep['mismatch_run']}
+        self.assertEqual(mr[(wl('expanded:ridge-cv', 'taxi'), 'A', 'nvidia')]['digests'], {self.rid: 'd' * 16, self.r2: 'e' * 16})
+        self.assertIn((wl('expanded:ridge-cv', 'taxi'), 'B', 'nvidia'), mr)
+        q = json.loads((out / 'quality.json').read_text())
+        rows = {(r['configuration'], r['workload_id'], r['vendor']): r for r in q['rows']}
+        qt = rows[('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'taxi'), 'nvidia')]
+        self.assertEqual((qt['candidate_vs_baseline']['verdict'], qt['passes']), ('WORSE', 2))
+        self.assertEqual(qt['pass_verdicts'], {self.rid: 'SAME', self.r2: 'WORSE'})
+        # one pass only: the second pass is another campaign, and the first pass alone is what collect always gave
+        rep1 = G.collect(results, [], self.d, self.d / 'c1', lanes=LANES, board=BOARD, run_id=self.rid)
+        self.assertEqual(rep1['ignored']['other_campaign'], 8)  # 2 A + 2 B lines x 2 vendors
+        v1 = {(c['configuration'], c['workload_id']): c for c in json.loads((self.d / 'c1' / 'grid-verdicts.json').read_text())['cases']}
+        r1 = v1[('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'istella'))]['vendors']['nvidia']
+        self.assertAlmostEqual(r1['candidate_over_baseline']['scored'], 0.96)
+        self.assertEqual(r1['passes'], 1)
+        s1 = {(x['configuration_id'], x['workload_id']): x for x in json.loads((self.d / 'c1' / 'summary.json').read_text())['cases']}
+        self.assertEqual(s1[('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'taxi'))]['status'], 'MATCH')
+        # CLI: --runs comma list == several --run-id values
+        rc = G.main(['collect', '--results'] + [str(x) for x in results] + ['--plan-dir', str(self.d), '--runs',
+                     '%s,%s' % (self.rid, self.r2), '--out', str(self.d / 'c2'), '--lanes-json', str(self._lanes()),
+                     '--board-json', str(self._board())])
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads((self.d / 'c2' / 'grid-verdicts.json').read_text()), v)
+
+    def test_pass_without_its_own_incumbent(self):
+        import math
+        results = self.write()
+        # drop the pass-2 incumbent lines: the pass falls back to the pooled incumbent and says so
+        for p in results:
+            p.write_text('\n'.join(l for l in p.read_text().splitlines() if '%s.B001' % self.r2 not in l) + '\n')
+        G.collect(results, [], self.d, self.d / 'c', lanes=LANES, board=BOARD, run_id=[self.rid, self.r2])
+        v = {(c['configuration'], c['workload_id']): c for c in json.loads((self.d / 'c' / 'grid-verdicts.json').read_text())['cases']}
+        row = v[('G.expanded:ridge-cv.a=on', wl('expanded:ridge-cv', 'istella'))]['vendors']['nvidia']
+        self.assertEqual(row['b_from_other_pass'], [self.r2])
+        self.assertAlmostEqual(row['pass_log_ratios'][1], math.log(0.92 * 110 / 102))
+
+    def test_merge_quality(self):
+        self.assertEqual(G.merge_quality(['SAME', 'WORSE']), 'WORSE')
+        self.assertEqual(G.merge_quality(['SAME', 'FAIL']), 'FAIL')
+        self.assertEqual(G.merge_quality(['PENDING', 'SAME']), 'SAME')
+        self.assertEqual(G.merge_quality(['BETTER', 'SAME']), 'SAME')
+        self.assertEqual(G.merge_quality(['PENDING']), 'PENDING')
+        self.assertEqual(G.run_ids_of('a,b', self.d), ['a', 'b'])
+        self.assertEqual(G.run_ids_of(None, self.d), [self.rid])
+
+    def _lanes(self):
+        p = self.d / 'lanes.json'
+        p.write_text(json.dumps(LANES))
+        return p
+
+    def _board(self):
+        p = self.d / 'board.json'
+        p.write_text(json.dumps(dict(BOARD, races=sorted(BOARD['races']))))
+        return p
+
+
 class FeedTests(unittest.TestCase):
     def test_feed_resumes_and_waits(self):
         with tempfile.TemporaryDirectory() as tmp:
