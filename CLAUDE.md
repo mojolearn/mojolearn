@@ -100,7 +100,7 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
    board tools only. A full-board run is IDENTICAL on the three; FAST is not rerun.
 4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
 5. Read logs with grep and short tails; never paste whole logs. Tell every subagent the same.
-6. OPPONENT CLOCKS (Andrew, 2026-10-07/08): our board fit clock includes the host-to-device copy of X; the torch-gpu columns (kmeans, pca, ols, knn, the neural torch twins) exclude it (tensors already on the device); cuML/sklearn columns take NumPy and compare as is. NO opponent re-score: our runs record the copy as its own field (lane classical-structural), the board shows our whole-operation and kernel-only clocks, and torch ratios use the kernel-only clock. Re-score only if the copy proves inseparable.
+6. OPPONENT CLOCKS (Andrew, 2026-10-07/08; audit tools/board_clock_audit.py): every stored opponent cell carries a comparability span (input_home, inside_clock, upload_ms_untimed). Our board fit clock includes the host-to-device copy of X. The neural torch twins move inputs inside their clock too (whole/whole, comparable as is). The classical torch-gpu columns and the algos torch/cupy/gpytorch GPU arms time with inputs already on the device (kernel-only); cuML/cuVS/cuGraph record their copy separately. The board shows both clocks per cell where derivable (whole = kernel + copy): torch-GPU ratios kernel/kernel, every other opponent whole/whole, never an invented copy time. NO opponent re-score. Our arm records its copy separately (upload_ms_separate; classical since freeze-20261007; algos driver owes the probe), then only OUR cells on the MIXED lanes are re-raced.
 
 ## No Python in the runtime
 
