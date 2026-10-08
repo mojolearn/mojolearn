@@ -23,6 +23,13 @@ n=0
 while IFS= read -r line; do
   case $line in "lq add $box "*) ;; *) continue;; esac
   n=$((n+1)); [ $n -le "$done_n" ] && continue
+  # tag ledger (per box, shared by every feeder of that box): a line whose grid tag was already queued by another
+  # feeder (e.g. an incumbent line fed early for the noise floor) is skipped, not queued twice
+  ledger=$(dirname "$lines")/fed-tags-$box.txt; touch "$ledger"
+  tag=$(printf '%s' "$line" | grep -o 'MOJOLEARN_GRID_TAG=[^ ]*' | head -1)
+  if [ -n "$tag" ] && grep -qxF "$tag" "$ledger"; then
+    echo "$(date -u +%FT%TZ) line $n/$total already queued ($tag); skipping"; done_n=$n; echo "$done_n" > "$state"; continue
+  fi
   while :; do
     d=$(depth)
     if [ "$d" -ge 0 ] 2>/dev/null && [ "$d" -lt "$max" ]; then break; fi
@@ -33,6 +40,7 @@ while IFS= read -r line; do
   echo "$(date -u +%FT%TZ) line $n/$total rc=$rc $(echo "$out" | tail -1 | cut -c1-160)"
   case "$out" in *queued*) ;; *) echo "lq did not queue line $n; stopping (state $state = $done_n)" >&2; exit 1;; esac
   [ $rc -eq 0 ] || { echo "lq rc=$rc on line $n; stopping" >&2; exit 1; }
+  [ -n "$tag" ] && echo "$tag" >> "$ledger"
   done_n=$n; echo "$done_n" > "$state"
 done < "$lines"
 echo "fed $done_n/$total lines to $box"
