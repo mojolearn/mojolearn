@@ -202,22 +202,22 @@
    "note": "hdbscan sparse_mr_mst + host oracle, hierarchy connectivities/multi_gpu tile + linkage_oracle (Agglomerative shares it)"
   },
   "ivf_direct": {
-   "define": "MOJOLEARN_IVF_DIRECT_DISTANCE",
+   "define": "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IVF_DIRECT_DISTANCE"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:30"
+    "experiments/classical_identical_ideas/graph_controls.mojo:44"
    ],
    "binding": "_mojolearn_ivf",
    "bits_change": true,
-   "status": "split_from:C30_DIRECT_DISTANCE",
-   "note": "ivf identical_ivf_scan, ivf_balanced_tasks, ivf_flat_search tile, ivf_host twin"
+   "status": "promoted:ge123e6f9",
+   "note": "ivf identical_ivf_scan, ivf_balanced_tasks, ivf_flat_search tile, ivf_host twin Default ON in IDENTICAL; `_OFF` is the norm-expansion distance. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
   },
   "c06_norms": {
    "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS / MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD",

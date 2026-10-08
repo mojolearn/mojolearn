@@ -814,7 +814,7 @@ def linear_gram_fit_binding(
     [n_features] and ymean float64 [1]) written, or 1 with nothing written
     when the Gram is not trusted: the caller then runs its incumbent route."""
     comptime if not LINEAR_GRAM_SOLVE:
-        raise Error("linear_gram_fit: only a build with -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE has this route")
+        raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
     if len(params) != 4:
         raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
     var xp = _f32_ptr(Int(py=x_addr))

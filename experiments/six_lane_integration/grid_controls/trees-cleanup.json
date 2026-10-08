@@ -360,26 +360,23 @@
    "define": "MOJOLEARN_TREES_T17_BATCH",
    "kind": "int_sweep",
    "arms": {
-    "incumbent": [],
+    "128": [],
     "32": [
      "MOJOLEARN_TREES_T17_BATCH=32"
     ],
     "64": [
      "MOJOLEARN_TREES_T17_BATCH=64"
-    ],
-    "128": [
-     "MOJOLEARN_TREES_T17_BATCH=128"
     ]
    },
-   "default": "incumbent",
+   "default": "128",
    "source": [
-    "gbdt/trees_identical_switches.mojo:17",
+    "gbdt/trees_identical_switches.mojo:27",
     "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:1254"
    ],
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
-   "status": "rewritten",
-   "note": "Lossguide exact best-first batch width; incumbent 32 (== arm 32)"
+   "status": "promoted:ge123e6f9",
+   "note": "Lossguide exact best-first batch width; absent = 128 in IDENTICAL; arm 32 is the pre-flip width. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
   },
   "T18": {
    "define": "MOJOLEARN_TREES_T18",
@@ -461,22 +458,23 @@
    ]
   },
   "T22": {
-   "define": "MOJOLEARN_TREES_T22",
+   "define": "MOJOLEARN_TREES_T22_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T22"
+    "on": [],
+    "off": [
+     "MOJOLEARN_TREES_T22_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "gbdt/trees_identical_switches.mojo:37",
+    "gbdt/trees_identical_switches.mojo:59",
     "gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:507"
    ],
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
-   "status": "kept"
+   "status": "promoted:ge123e6f9",
+   "note": "Default ON in IDENTICAL; `_OFF` is the incumbent storage. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
   },
   "T23": {
    "define": "MOJOLEARN_TREES_T23",
@@ -1360,7 +1358,10 @@
    "_mojolearn_gbdt",
    "_mojolearn_svm"
   ],
-  "all_off": [],
+  "all_off": [
+   "MOJOLEARN_TREES_T22_OFF",
+   "MOJOLEARN_TREES_T17_BATCH=32"
+  ],
   "all_on": [
    "MOJOLEARN_TREES_C45_GBDT",
    "MOJOLEARN_TREES_C47_GBDT",
@@ -1387,13 +1388,11 @@
    "MOJOLEARN_TREES_T14",
    "MOJOLEARN_TREES_T14_EXACT",
    "MOJOLEARN_TREES_T15",
-   "MOJOLEARN_TREES_T17_BATCH=128",
    "MOJOLEARN_TREES_T18",
    "MOJOLEARN_TREES_T19",
    "MOJOLEARN_TREES_T19_DEFER",
    "MOJOLEARN_TREES_T21",
    "MOJOLEARN_TREES_T21_STREAMS=4",
-   "MOJOLEARN_TREES_T22",
    "MOJOLEARN_TREES_T23",
    "MOJOLEARN_TREES_T24",
    "MOJOLEARN_TREES_T25",
