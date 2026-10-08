@@ -185,8 +185,9 @@ LOCAL_EXCLUSIONS = tuple(sorted(
        ('x-prep-select-kbest', 'dupes', 'train', _C)]
     + [('x-prep-inverse-transforms', fixture, 'train', _C)  # glue: spell the pinned list
        for fixture in ('ties', 'hashed', 'wide', 'denormal', 'denormal_ftz', 'dupes', 'negative')]
-    + [('x-prep-score-edges', fixture, 'train', _C) for fixture in NVIDIA_FIXTURES]  # glue: spell the pinned list
-    + [('gemm-int15', '*', '*', EXCLUDED_LANE)]))
+    + [('x-prep-score-edges', fixture, 'train', _C) for fixture in NVIDIA_FIXTURES]))  # glue: spell the pinned list
+# gemm-int15 left the list on 2026-10-08: the shipped table carries its cells
+# and host_surface no longer holds it (lane rehearsal-suite-green).
 
 
 def pinned_exclusions_sha256():
