@@ -2003,7 +2003,7 @@ FAMILIES = (
             "cluster/host/kmeans_oracle.mojo",
             "core/knn_host_predict.mojo",
             "umap/host/umap_oracle.mojo",
-            "umap/sparse_graph.mojo",
+            "umap/sparse_graph_cells.mojo",
             "umap/graph.mojo",
             "umap/curve.mojo",
             "umap/params.mojo",
