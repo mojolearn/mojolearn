@@ -194,6 +194,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-flips-1): IVF direct distance is the IDENTICAL default; drop -D MOJOLEARN_IVF_DIRECT_DISTANCE, use -D MOJOLEARN_IVF_DIRECT_DISTANCE_OFF for the old path"
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-act-2): GEMM group slack 8 is the IDENTICAL default (gemm NV 0.743x / AMD 0.99x); drop -D MOJOLEARN_IDN_GEMM_GROUP_SLACK_8, use -D MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF for the old slack 4"
     comptime assert not (is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF"]() and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]()), "MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF (slack 4) and MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 are exclusive arms"
+    # Deleted 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 losers (docs/apple-fast/EXPERIMENTS.md). Recoverable at main 42d1e42c6.
+    comptime assert not (is_defined["MOJOLEARN_C37_FUSED_ACCUMULATE"]() or is_defined["MOJOLEARN_C37_FUSED_ROWS"]()), "removed: MOJOLEARN_C37_FUSED_ACCUMULATE (and _FUSED_ROWS) retired 2026-10-08: slower, kmeans NV 104.8x / AMD 0.84x istella, NV 68.6x / AMD 0.90x taxi (vendor split; combined 9.4x / 7.8x), inertia SAME (grid ge123e6f9); see EXPERIMENTS.md"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True

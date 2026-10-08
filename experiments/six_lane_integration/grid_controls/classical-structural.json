@@ -160,18 +160,12 @@
   },
   "classical:kmeans": {
    "binding": "_mojolearn (host twin _mojolearn_core_host)",
-   "route": "fit: cluster.estimator kmeans_fit -> Lloyd loop -> (C37 fused assign+accumulate | min_cluster_and_distance_compute[_gated] + launch_accumulate_*_blocked[_gated]) -> launch_block_table_fold [idn_kmeans_centroid_fold: centroid_fold_part/final kernels | fold_block_table_kernel] -> finalize_centroids_kernel",
+   "route": "fit: cluster.estimator kmeans_fit -> Lloyd loop -> min_cluster_and_distance_compute[_gated] + launch_accumulate_*_blocked[_gated] -> launch_block_table_fold [idn_kmeans_centroid_fold: centroid_fold_part/final kernels | fold_block_table_kernel] -> finalize_centroids_kernel",
    "controls": [
     "idn_kmeans_centroid_fold"
    ],
-   "interaction_groups": [
-    [
-     "idn_kmeans_centroid_fold",
-     "c37_fused_accumulate",
-     "c37_fused_rows"
-    ]
-   ],
-   "note": "the fold runs inside both the blocked and the C37 fused paths; c37_fused_rows changes n_blocks and so the fold's group count"
+   "interaction_groups": [],
+   "note": "the fold runs inside the blocked path (the C37 fused path was deleted 2026-10-08, grid ge123e6f9)"
   },
   "more:gmm": {
    "binding": "_mojolearn_mixture",
@@ -179,13 +173,7 @@
    "controls": [
     "idn_kmeans_centroid_fold"
    ],
-   "interaction_groups": [
-    [
-     "idn_kmeans_centroid_fold",
-     "c37_fused_accumulate",
-     "c37_fused_rows"
-    ]
-   ]
+   "interaction_groups": []
   },
   "more:ivf": {
    "binding": "_mojolearn_ivf",
@@ -193,12 +181,7 @@
    "controls": [
     "idn_kmeans_centroid_fold"
    ],
-   "interaction_groups": [
-    [
-     "idn_kmeans_centroid_fold",
-     "c37_fused_accumulate"
-    ]
-   ]
+   "interaction_groups": []
   }
  },
  "removed": [],

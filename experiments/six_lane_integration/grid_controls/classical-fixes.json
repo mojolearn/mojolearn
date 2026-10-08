@@ -76,12 +76,7 @@
    "controls": [
     "kmeans_conv_chunk"
    ],
-   "interaction_groups": [
-    [
-     "kmeans_conv_chunk",
-     "c37_fused_accumulate"
-    ]
-   ]
+   "interaction_groups": []
   },
   "classical:ols": {
    "binding": "_mojolearn_x_decomp (host twin _mojolearn_x_decomp_host)",

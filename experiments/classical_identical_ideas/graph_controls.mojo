@@ -77,18 +77,10 @@ comptime C35_TASK_ROWS = 128 if is_defined["MOJOLEARN_C35_ROWS_128"]() else 256
 # row-register kernel, R rows per thread. Arms off|2|4 (one define, int value).
 comptime XCLUSTER_ROW_ASSIGN_ROWS = get_defined_int["MOJOLEARN_XCLUSTER_ROW_ASSIGN", 0]()
 comptime XCLUSTER_ROW_ASSIGN = GRAPH_IDENTICAL and XCLUSTER_ROW_ASSIGN_ROWS > 0
-# C37 REWRITTEN (lane classical-kmeans, 2026-10-07). The old C37 summed every
-# (cluster, feature) cell over all n rows in one thread (88 threads at taxi,
-# 25x/43x slower) and is deleted. The new C37 FUSES the Lloyd assignment with
-# the row-block centroid accumulation: one GPU block per row block assigns its
-# rows and adds their quantized Int32 addends into a shared-memory table, then
-# stores its table row; the existing fold kernel sums the blocks. X is read
-# once per iteration. Int32 sums are associative, so the totals, labels and
-# min distances are the incumbent's bits (no host change).
-comptime C37_FUSED_ACCUMULATE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C37_FUSED_ACCUMULATE"]()
-# Rows per fused GPU block (int sweep, legal set 256|512|1024; default 256).
-# No bit depends on it.
-comptime C37_FUSED_ROWS = get_defined_int["MOJOLEARN_C37_FUSED_ROWS", 256]()
+# Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): the C37 rewrite fused the
+# Lloyd assignment with the Int32 row-block centroid accumulation in shared memory (cluster/impl/detail/kmeans_fused_accumulate.mojo).
+# NV/AMD kmeans istella 104.8x/0.841x, taxi 68.6x/0.895x (vendor split: AMD faster, NVIDIA collapses); combined 9.4x/7.8x
+# SLOWER; inertia SAME -> deleted with its file. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 # C38 split: its KMeans half was a no-op on NVIDIA/AMD (OR-ed into flags the
 # incumbent already sets) and is deleted. Its x_cluster half (k-means++ trial
 # distances computed once per distinct candidate) is real and keeps its

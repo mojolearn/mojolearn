@@ -52,13 +52,12 @@ about restarts is inherently serial, and they are the most obviously
 parallel thing in k-means, so this is the first place to look when the
 control plane becomes the cost. Copied as-is because it is theirs.
 """
-from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE, C37_FUSED_ACCUMULATE
+from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
 from core.classical_distance import direct_squared_distance
-from cluster.impl.detail.kmeans_fused_accumulate import (
-    kmeans_fused_fits,
-    kmeans_fused_table_cells,
-    launch_kmeans_fused_accumulate,
-)
+# Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
+# row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
+# taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
+# row in docs/apple-fast/EXPERIMENTS.md.
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -1556,25 +1555,10 @@ def kmeans_fit_main_traced(
             n_samples, n_features, n_clusters
         )
         acc_table_w_cells = blocked_acc_table_cells(n_samples, 1, n_clusters)
-    # C37 (rewritten): the fused assignment + accumulation pass, one device,
-    # while its shared tables fit (kmeans_fused_accumulate.mojo). Same bits as
-    # the incumbent kernels, so it may take any iteration it fits.
-    var fused = False
-    comptime if C37_FUSED_ACCUMULATE:
-        fused = (
-            kmeans_fused_fits(n_clusters, n_features)
-            and assignment_device_count() == 1
-        )
-        if fused:
-            acc_table_cells = max(
-                acc_table_cells,
-                kmeans_fused_table_cells(n_samples, n_features, n_clusters),
-            )
-            acc_table_w_cells = max(
-                acc_table_w_cells,
-                kmeans_fused_table_cells(n_samples, 1, n_clusters),
-            )
-    var is_sqrt_metric = metric_is_sqrt(params.metric)
+    # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
+    # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
+    # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
+    # row in docs/apple-fast/EXPERIMENTS.md.
     var acc_table = ctx.enqueue_create_buffer[DType.int32](acc_table_cells)
     var acc_table_w = ctx.enqueue_create_buffer[DType.int32](acc_table_w_cells)
     var cur_centroids = ctx.enqueue_create_buffer[DType.float32](cd)
@@ -1731,33 +1715,28 @@ def kmeans_fit_main_traced(
                             ctx, cur_centroids, centroid_norm, n_clusters,
                             n_features, params.metric,
                         )
-                        if fused:
-                            launch_kmeans_fused_accumulate[True, IDN_KMEANS_FOLD_STORE](
-                                ctx, d_conv, labels, min_dist, sums_i32,
-                                weight_i32, acc_table, acc_table_w, x,
-                                cur_centroids, x_norm, centroid_norm, weights,
-                                n_samples, n_features, n_clusters,
-                                is_sqrt_metric, sum_scale, weight_scale,
-                            )
-                        else:
-                            min_cluster_and_distance_compute_gated(
-                                ctx, d_conv, x, x_norm, cur_centroids,
-                                centroid_norm, labels, min_dist, n_samples,
-                                n_features, n_clusters, params.metric,
-                            )
-                            launch_accumulate_centroid_sums_blocked_gated[
-                                KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
-                            ](
-                                ctx, d_conv, sums_i32, acc_table, x, labels,
-                                weights, n_samples, n_features, n_clusters,
-                                sum_scale,
-                            )
-                            launch_accumulate_weight_per_cluster_blocked_gated[
-                                IDN_KMEANS_FOLD_STORE
-                            ](
-                                ctx, d_conv, weight_i32, acc_table_w, labels,
-                                weights, n_samples, n_clusters, weight_scale,
-                            )
+                        # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
+                        # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
+                        # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
+                        # row in docs/apple-fast/EXPERIMENTS.md.
+                        min_cluster_and_distance_compute_gated(
+                            ctx, d_conv, x, x_norm, cur_centroids,
+                            centroid_norm, labels, min_dist, n_samples,
+                            n_features, n_clusters, params.metric,
+                        )
+                        launch_accumulate_centroid_sums_blocked_gated[
+                            KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
+                        ](
+                            ctx, d_conv, sums_i32, acc_table, x, labels,
+                            weights, n_samples, n_features, n_clusters,
+                            sum_scale,
+                        )
+                        launch_accumulate_weight_per_cluster_blocked_gated[
+                            IDN_KMEANS_FOLD_STORE
+                        ](
+                            ctx, d_conv, weight_i32, acc_table_w, labels,
+                            weights, n_samples, n_clusters, weight_scale,
+                        )
                         ctx.enqueue_function[finalize_centroids_kernel](
                             new_centroids.unsafe_ptr(),
                             cur_centroids.unsafe_ptr(),
@@ -1828,32 +1807,26 @@ def kmeans_fit_main_traced(
                 n_features,
                 params.metric,
             )
-            if fused:
-                # Assignment AND the row-block tables plus their folds; the
-                # accumulation below is skipped for this iteration.
-                launch_kmeans_fused_accumulate[False, IDN_KMEANS_FOLD_STORE](
-                    ctx, d_conv, labels, min_dist, sums_i32, weight_i32,
-                    acc_table, acc_table_w, x, cur_centroids, x_norm,
-                    centroid_norm, weights, n_samples, n_features,
-                    n_clusters, is_sqrt_metric, sum_scale, weight_scale,
-                )
-            else:
-                min_cluster_and_distance_compute(
-                    ctx,
-                    x,
-                    x_norm,
-                    cur_centroids,
-                    centroid_norm,
-                    dist_buf,
-                    labels,
-                    min_dist,
-                    n_samples,
-                    n_features,
-                    n_clusters,
-                    params.metric,
-                    params.batch_samples,
-                    params.batch_centroids,
-                )
+            # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
+            # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
+            # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
+            # row in docs/apple-fast/EXPERIMENTS.md.
+            min_cluster_and_distance_compute(
+                ctx,
+                x,
+                x_norm,
+                cur_centroids,
+                centroid_norm,
+                dist_buf,
+                labels,
+                min_dist,
+                n_samples,
+                n_features,
+                n_clusters,
+                params.metric,
+                params.batch_samples,
+                params.batch_centroids,
+            )
 
             if trace.enabled:
                 var it_tag = restart_tag + "iter" + _pad2(it) + "."
@@ -1871,44 +1844,47 @@ def kmeans_fit_main_traced(
             # grids (from the hardware matrix, replacing a magic 1024-block
             # cap that lived here) and the bit-identity argument between the
             # arms all live in `cluster/checks/reduce_by_key.mojo`.
-            if not fused:
-                comptime if KMEANS_BLOCK_ACC:
-                    # DEVIATION 3080: row-block tables, no atomics. The Int32
-                    # totals are the atomic arms' totals (associative adds of
-                    # the same addends, bounded inside Int32 by `choose_scale`).
-                    launch_accumulate_centroid_sums_blocked[
-                        KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
-                    ](
-                        ctx, sums_i32, acc_table, x, labels, weights,
-                        n_samples, n_features, n_clusters, sum_scale,
-                    )
-                    launch_accumulate_weight_per_cluster_blocked[
-                        IDN_KMEANS_FOLD_STORE
-                    ](
-                        ctx, weight_i32, acc_table_w, labels, weights,
-                        n_samples, n_clusters, weight_scale,
-                    )
-                else:
-                    launch_accumulate_centroid_sums(
-                        ctx,
-                        sums_i32,
-                        x,
-                        labels,
-                        weights,
-                        n_samples,
-                        n_features,
-                        n_clusters,
-                        sum_scale,
-                    )
-                    launch_accumulate_weight_per_cluster(
-                        ctx,
-                        weight_i32,
-                        labels,
-                        weights,
-                        n_samples,
-                        n_clusters,
-                        weight_scale,
-                    )
+            # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
+            # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
+            # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
+            # row in docs/apple-fast/EXPERIMENTS.md.
+            comptime if KMEANS_BLOCK_ACC:
+                # DEVIATION 3080: row-block tables, no atomics. The Int32
+                # totals are the atomic arms' totals (associative adds of
+                # the same addends, bounded inside Int32 by `choose_scale`).
+                launch_accumulate_centroid_sums_blocked[
+                    KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
+                ](
+                    ctx, sums_i32, acc_table, x, labels, weights,
+                    n_samples, n_features, n_clusters, sum_scale,
+                )
+                launch_accumulate_weight_per_cluster_blocked[
+                    IDN_KMEANS_FOLD_STORE
+                ](
+                    ctx, weight_i32, acc_table_w, labels, weights,
+                    n_samples, n_clusters, weight_scale,
+                )
+            else:
+                launch_accumulate_centroid_sums(
+                    ctx,
+                    sums_i32,
+                    x,
+                    labels,
+                    weights,
+                    n_samples,
+                    n_features,
+                    n_clusters,
+                    sum_scale,
+                )
+                launch_accumulate_weight_per_cluster(
+                    ctx,
+                    weight_i32,
+                    labels,
+                    weights,
+                    n_samples,
+                    n_clusters,
+                    weight_scale,
+                )
 
             ctx.enqueue_function[finalize_centroids_kernel](
                 new_centroids.unsafe_ptr(),

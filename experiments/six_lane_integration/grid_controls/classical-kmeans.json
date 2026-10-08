@@ -32,44 +32,6 @@
    "note": "expanded row arms only while k*d <= 512 (cost rule), else the tiled kernel; direct arms at every size and also in k-means++, k-means|| and transform, and skip the X/candidate norms they never read. MOJOLEARN_KMEANS_DIRECT_DISTANCE alone is a compile error.",
    "prune_note": "R=4 reuses each centroid load 4x vs 2x; at millions of rows both R saturate the GPU (classical_assignment.mojo:14-49). direct4 is the probable istella loser (ungated row kernel at k*d=1760, min_cluster_distance_compute.mojo:104)."
   },
-  "c37_fused_accumulate": {
-   "define": "MOJOLEARN_C37_FUSED_ACCUMULATE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_C37_FUSED_ACCUMULATE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:74",
-    "cluster/impl/detail/kmeans_fused_accumulate.mojo:84",
-    "cluster/impl/detail/kmeans.mojo:1550,1721,1818"
-   ],
-   "binding": "_mojolearn",
-   "bits_change": false,
-   "status": "rewritten",
-   "note": "fused Lloyd assignment + Int32 row-block centroid/weight accumulation in shared memory, then the incumbent folds; X read once per iteration; takes the iteration while k*d+k fits a sixteenth of the column shared budget, single device"
-  },
-  "c37_fused_rows": {
-   "define": "MOJOLEARN_C37_FUSED_ROWS",
-   "kind": "int_sweep",
-   "arms": {
-    "256": [],
-    "1024": [
-     "MOJOLEARN_C37_FUSED_ROWS=1024"
-    ]
-   },
-   "default": "256",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:77"
-   ],
-   "binding": "_mojolearn",
-   "bits_change": false,
-   "status": "split_from:C37_PANEL_128",
-   "note": "only meaningful with c37_fused_accumulate on"
-  },
   "xcluster_row_assign": {
    "define": "MOJOLEARN_XCLUSTER_ROW_ASSIGN",
    "kind": "arms",
@@ -256,26 +218,18 @@
  "algorithms": {
   "classical:kmeans": {
    "binding": "_mojolearn (host twin _mojolearn_core_host)",
-   "route": "fit: cluster.estimator kmeans_fit -> k-means|| / k-means++ (min_cluster_and_distance_compute, gemm_nt or direct trial) -> Lloyd loop (fused C37 pass, or min_cluster_and_distance_compute[_gated] + launch_accumulate_*_blocked + fold) -> finalize; predict: min_cluster_and_distance_compute",
+   "route": "fit: cluster.estimator kmeans_fit -> k-means|| / k-means++ (min_cluster_and_distance_compute, gemm_nt or direct trial) -> Lloyd loop (min_cluster_and_distance_compute[_gated] + launch_accumulate_*_blocked + fold) -> finalize; predict: min_cluster_and_distance_compute",
    "controls": [
-    "kmeans_assign",
-    "c37_fused_accumulate",
-    "c37_fused_rows"
+    "kmeans_assign"
    ],
-   "interaction_groups": [
-    [
-     "kmeans_assign",
-     "c37_fused_accumulate",
-     "c37_fused_rows"
-    ]
-   ]
+   "interaction_groups": []
   },
   "more:gmm": {
    "binding": "_mojolearn_mixture",
    "route": "fit: mixture/estimator.mojo:80 init_params=kmeans -> cluster.estimator.kmeans_fit (same as classical:kmeans)",
    "controls": [],
    "interaction_groups": [],
-   "notes": "kmeans_conv_chunk, kmeans_assign, c37_fused_accumulate and c37_fused_rows are decided on classical:kmeans only (GMM runs kmeans_fit only as init, mixture/estimator.mojo:711); phase 2 adds one confirm config here with the kmeans winner."
+   "notes": "kmeans_conv_chunk and kmeans_assign are decided on classical:kmeans only (GMM runs kmeans_fit only as init, mixture/estimator.mojo:711); phase 2 adds one confirm config here with the kmeans winner."
   },
   "expanded:minibatch-kmeans": {
    "binding": "_mojolearn_x_cluster",
@@ -304,7 +258,7 @@
     "ivf_direct"
    ],
    "interaction_groups": [],
-   "notes": "kmeans_conv_chunk, kmeans_assign and c37_fused_accumulate are decided on classical:kmeans only (ivf/estimator.mojo:93 runs kmeans_fit); phase 2 adds one confirm config here with the kmeans winner."
+   "notes": "kmeans_conv_chunk and kmeans_assign are decided on classical:kmeans only (ivf/estimator.mojo:93 runs kmeans_fit); phase 2 adds one confirm config here with the kmeans winner."
   },
   "classical:knn": {
    "binding": "_mojolearn",
@@ -394,6 +348,16 @@
   {
    "define": "MOJOLEARN_CLASSICAL_C06_ROWS4",
    "reason": "now MOJOLEARN_CLASSICAL_C06_NORM_ROWS=4"
+  },
+  {
+   "define": "MOJOLEARN_C37_FUSED_ACCUMULATE",
+   "control": "c37_fused_accumulate",
+   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: kmeans istella 104.781/0.841 (64986 vs 620 ms NV), taxi 68.558/0.895; vendor split (AMD faster), combined 9.4x/7.8x SLOWER; inertia SAME. Code (cluster/impl/detail/kmeans_fused_accumulate.mojo and the Lloyd-loop hooks) recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_C37_FUSED_ROWS",
+   "control": "c37_fused_rows",
+   "reason": "DELETED 2026-10-08 (lane grid-act-2) with c37_fused_accumulate (rows per fused block; only read by the deleted fused pass). DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: kmeans istella 104.781/0.841 (64986 vs 620 ms NV), taxi 68.558/0.895; vendor split (AMD faster), combined 9.4x/7.8x SLOWER; inertia SAME. Code (cluster/impl/detail/kmeans_fused_accumulate.mojo and the Lloyd-loop hooks) recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
   }
  ]
 }
