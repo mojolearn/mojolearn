@@ -107,6 +107,10 @@ comptime IVF_TRAINSET_STRIDE = (
 #: past ~256 rows per centroid Lloyd's centroids stop moving measurably, so more
 #: rows only cost time. A cost rule over every shape, not a board size.
 comptime IVF_TRAIN_ROWS_PER_LIST = 256
+#: The floor per list. FAISS warns below 39 training points per centroid (its
+#: `min_points_per_centroid`): fewer rows than that leave centroids poorly
+#: placed, so a dataset with at most 39 rows per list trains on every row.
+comptime IVF_TRAIN_MIN_ROWS_PER_LIST = 39
 
 
 def ivf_trainset_stride(n_rows: Int, n_lists: Int) -> Int:
@@ -115,14 +119,17 @@ def ivf_trainset_stride(n_rows: Int, n_lists: Int) -> Int:
 
     The target row count is cuVS's default fraction 1/2 of the rows (as the
     integer `n_rows // 2`), capped at `IVF_TRAIN_ROWS_PER_LIST * n_lists`
-    (FAISS's rule) and never below `n_lists` (cuVS's floor, so k-means always
-    has a row per centroid): `s = max(1, n_rows // target)`. The count
-    `n_rows // s` is at least `target`, so at least `n_lists`. Integers only:
-    a function of `(n_rows, n_lists)` alone, the same on every vendor and the
-    host column."""
+    (FAISS's rule), and never below `min(n_rows, IVF_TRAIN_MIN_ROWS_PER_LIST
+    * n_lists)` (FAISS's floor; also at least `n_lists`, cuVS's, so k-means
+    always has a row per centroid): `s = max(1, n_rows // target)`. The count
+    `n_rows // s` is at least `target`. Integers only: a function of
+    `(n_rows, n_lists)` alone, the same on every vendor and the host column."""
     if n_rows <= 1 or n_lists < 1:
         return 1
     var target = min(n_rows // 2, IVF_TRAIN_ROWS_PER_LIST * n_lists)
+    var floor = min(n_rows, IVF_TRAIN_MIN_ROWS_PER_LIST * n_lists)
+    if target < floor:
+        target = floor
     if target < n_lists:
         target = n_lists
     if target <= 0:
