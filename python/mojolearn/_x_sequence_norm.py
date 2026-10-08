@@ -6,11 +6,19 @@ dimensions (biased variance, eps inside the rsqrt, optional elementwise
 affine), forward and backward, on the GPU (`sequence/layernorm.mojo`).
 `layer_norm_forward` / `layer_norm_backward` are the functional pair beside
 `rms_norm_forward` / `rms_norm_backward`; `LayerNorm` holds the weight and
-bias and keeps their gradients after `backward`."""
+bias and keeps their gradients after `backward`.
+
+Device I/O (lane gap-neural-io, 2026-10-08, plan docs/plans/gaps-2026-10-08.md
+Section 4): an x made by `mojolearn._x_sequence_device.to_device` stays on
+the device: the forward returns y as a `SequenceDeviceTensor`, the backward
+reads dy there (a host dy is uploaded once) and returns dx as one; only the
+D-float weight, bias and their gradients cross the bus
+(`sequence/layernorm_dev.mojo`, the same launches on the same values)."""
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_norm')
 
 from . import _backend
+from ._x_sequence_device import SequenceDeviceTensor, is_seq_tensor
 
 
 def _f32(a, name):
@@ -20,7 +28,46 @@ def _f32(a, name):
     return np.ascontiguousarray(a, dtype=np.float32)
 
 
+def _run_dev(x, D, weight, bias, eps, dy):
+    """`_run` on a resident x (and dy): y (forward) or dx (backward) as a
+    `SequenceDeviceTensor`, dweight / dbias as host arrays."""
+    b = x.b
+    if not callable(getattr(b, "layer_norm_dev", None)):
+        raise RuntimeError("layer_norm: this binding has no device LayerNorm; pass a NumPy x")
+    if x.size % D or x.shape[-1] == 0:
+        raise ValueError("layer_norm: the trailing dimensions must match normalized_shape")
+    M = x.size // D
+    w = None if weight is None else _f32(weight, "weight").reshape(-1)
+    bb = None if bias is None else _f32(bias, "bias").reshape(-1)
+    for name, v in (("weight", w), ("bias", bb)):  # glue: the two named parameter arrays
+        if v is not None and v.size != D:
+            raise ValueError(f"layer_norm: {name} must hold {D} values")
+    addr = lambda a: 0 if a is None else a.ctypes.data   # noqa: E731
+    flags = [M, D, int(w is not None), int(bb is not None)]
+    if dy is None:
+        y = SequenceDeviceTensor._new(b, x.shape)
+        b.layer_norm_dev([x.h, y.h, 0, 0], [addr(w), addr(bb), 0, 0], flags + [0], [float(eps)])
+        return y, None, None, None
+    if is_seq_tensor(dy):
+        if dy.b is not b or tuple(dy.shape) != tuple(x.shape):
+            raise ValueError("layer_norm_backward: dy must have x's shape (on x's binding)")
+        dyt = dy
+    else:
+        dyv = _f32(dy, "dy")
+        if dyv.shape != tuple(x.shape):
+            raise ValueError("layer_norm_backward: dy must have x's shape")
+        dyt = SequenceDeviceTensor._wrap(b, dyv)
+    dx = SequenceDeviceTensor._new(b, x.shape)
+    dw = np.empty(D, dtype=np.float32)   # written by the binding when weight is given
+    db = np.empty(D, dtype=np.float32)   # written by the binding when bias is given
+    b.layer_norm_dev([x.h, 0, dyt.h, dx.h], [addr(w), addr(bb), dw.ctypes.data, db.ctypes.data],
+                     flags + [1], [float(eps)])
+    return None, dx, dw, db
+
+
 def _run(x, D, weight, bias, eps, dy, numeric_mode):
+    if is_seq_tensor(x):
+        return _run_dev(x, D, weight, bias, eps, dy)
     x = _f32(x, "x")
     if x.size % D or x.shape[-1] == 0:
         raise ValueError("layer_norm: the trailing dimensions must match normalized_shape")
@@ -56,7 +103,7 @@ def _D(normalized_shape):
 def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-5, numeric_mode=None):
     """`F.layer_norm(x, normalized_shape, weight, bias, eps)`; normalized_shape
     defaults to x's last dimension."""
-    x = _f32(x, "x")
+    x = x if is_seq_tensor(x) else _f32(x, "x")
     _, D = _D(x.shape[-1] if normalized_shape is None else normalized_shape)
     return _run(x, D, weight, bias, eps, None, numeric_mode)[0]
 
@@ -64,7 +111,7 @@ def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-
 def layer_norm_backward(dy, x, normalized_shape=None, weight=None, bias=None, eps=1e-5, numeric_mode=None):
     """(dx, dweight, dbias) of `layer_norm_forward`; dweight / dbias are None
     when there is no weight / bias."""
-    x = _f32(x, "x")
+    x = x if is_seq_tensor(x) else _f32(x, "x")
     _, D = _D(x.shape[-1] if normalized_shape is None else normalized_shape)
     _, dx, dw, db = _run(x, D, weight, bias, eps, dy, numeric_mode)
     return dx, (None if weight is None else dw), (None if bias is None else db)
@@ -86,7 +133,7 @@ class LayerNorm:
         self._x = None
 
     def forward(self, x):
-        x = _f32(x, "x")
+        x = x if is_seq_tensor(x) else _f32(x, "x")
         if tuple(x.shape[x.ndim - len(self.normalized_shape):]) != self.normalized_shape:
             raise ValueError(f"LayerNorm: trailing shape {x.shape} does not end in {self.normalized_shape}")
         self._x = x
