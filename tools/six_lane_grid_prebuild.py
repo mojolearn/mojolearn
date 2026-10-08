@@ -436,10 +436,10 @@ def write_manifest(out, vendor, receipts, ctx_info):
     return man
 
 
-def host_info(emulate_linux):
+def host_info(emulate_linux, force_usable=False):
     system, machine = platform.system(), platform.machine()
     return dict(system=system, machine=machine, node=platform.node(), emulated_linux=bool(emulate_linux),
-                box_usable=(system == 'Linux' and machine == 'x86_64'))
+                box_usable=(system == 'Linux' and machine == 'x86_64') or bool(force_usable), box_usable_forced=bool(force_usable))
 
 
 def cmd_build(args):
@@ -461,7 +461,7 @@ def cmd_build(args):
         raise SystemExit('compiler probe failed: %s' % (vp.stderr or vp.stdout).strip()[:300])
     version = ' '.join((vp.stdout or vp.stderr).split())
     emulate = args.emulate_linux if args.emulate_linux is not None else platform.system() != 'Linux'
-    host = host_info(emulate)
+    host = host_info(emulate, args.force_box_usable)
     shimdir = make_shims(out / '.shim', emulate)
     arts = plan['artifacts']
     if args.binding:
@@ -648,6 +648,7 @@ def main(argv=None):
                    help='uname shim for the dry run (default on a non-Linux host)')
     b.add_argument('--no-emulate-linux', dest='emulate_linux', action='store_false')
     b.add_argument('--no-closure', action='store_true', help='skip the closure digest (tests)')
+    b.add_argument('--force-box-usable', action='store_true', help='tests/fake compiler only: list non-Linux artifacts in lookup.tsv')
     b.add_argument('--root')
     c = s.add_parser('pack', help='tar per vendor + sidecar json')
     c.add_argument('--out', type=Path, required=True)

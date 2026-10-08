@@ -1,0 +1,91 @@
+# tools/ops/box_job_prebuilt.patch (lane/prebuilt-grid, 2026-10-07) -- NOT applied by the lane; the orchestrator applies it.
+#
+# Targets the orchestrator-owned ~/mojolearn-evidence/lq/box_job.sh and overlay_race_job2.sh (installed on the boxes as
+# /root/lq/box_job.sh and /root/overlay_race_job2.sh). Apply on the Mac from ~/mojolearn-evidence/lq, then redeploy both
+# files to nv and amd (the same way stage_lq_box.sh / nv_setup.sh put them there):
+#   cd ~/mojolearn-evidence/lq && cp box_job.sh box_job.sh.bak-prebuilt && cp overlay_race_job2.sh overlay_race_job2.sh.bak-prebuilt
+#   patch -p1 --dry-run < <repo>/tools/ops/box_job_prebuilt.patch && patch -p1 < <repo>/tools/ops/box_job_prebuilt.patch
+#
+# What it changes:
+#   * a line token PREBUILT=<store> (rendered by `six_lane_grid_lq.py render --prebuilt /root/grid-prebuilt`) is parsed in
+#     box_job.sh, exported as LQ_PREBUILT, and stripped from the RACE env tokens, the CMD command arguments and the ID env.
+#   * RACE (in overlay_race_job2.sh) and CMD (in box_job.sh): before the binding build loop, run the branch tree's
+#     tools/six_lane_grid_install_prebuilt.sh <tree> <vendor> "$MOJOLEARN_BUILD_DEFINES" "$builds" "$LQ_PREBUILT".
+#     exit 0: every listed binding was copied into the tree and sha256-verified -> rc.txt gets "<build> rc=prebuilt" per
+#     binding and the build loop runs over nothing. exit 2 (store missing, store from another commit, a host binding,
+#     an unknown define set, a corrupt artifact): rc.txt gets "prebuilt rc=miss ..." and every binding is built as before.
+#   * the RACE retry loop is untouched: a binding a race still reports missing is built (rc=prebuilt is not rc=0).
+#   * ID lines never carry PREBUILT= (they need host bindings, which are not prebuilt); nothing else in ID changes.
+# The store is filled by the box-script `tools/six_lane_grid_prebuild.py box-script <vendor> <sidecar>` prints
+# (fetch from R2 with a presigned URL, sha check, unpack to /root/grid-prebuilt/<vendor>/).
+--- a/box_job.sh
++++ b/box_job.sh
+@@ -13,7 +13,9 @@
+ git -C $R fetch -q origin main
+ H=$(git -C $R rev-parse --short origin/$BR)
+ builds=""; want=""
+-for a in "$@"; do case $a in BUILDS=*) builds=${a#BUILDS=};; esac; done
++# PREBUILT=<store> (2026-10-07, lane/prebuilt-grid): the store of bindings tools/six_lane_grid_prebuild.py built elsewhere.
++# RACE and CMD install from it (tools/six_lane_grid_install_prebuilt.sh in the branch tree) and build only when it exits 2.
++for a in "$@"; do case $a in BUILDS=*) builds=${a#BUILDS=};; PREBUILT=*) export LQ_PREBUILT=${a#PREBUILT=};; esac; done
+ if [ -z "$builds" ]; then   # every binding whose import graph reaches a changed file (affected_builds.py), else the dir map
+   git -C $R fetch -q origin main 2>/dev/null
+   builds=$(cd $R && python3 /root/lq/affected_builds.py origin/main origin/$BR 2>/dev/null)
+@@ -38,7 +40,7 @@
+ show() { [ $# -gt 0 ] || return 0; if [ "$(uniqn "$@")" = 1 ]; then echo "$1"; else echo "ROUNDS-DIFFER($(echo "$@" | tr ' ' ','))"; fi; }
+ if [ $KIND = ID ]; then
+   L=$1 D=$2; shift 2; specs=""; IDENV=""
+-  for a in "$@"; do case $a in BUILDS=*) ;; *=*) IDENV="$IDENV $a";; esac; done
++  for a in "$@"; do case $a in BUILDS=*|PREBUILT=*) ;; *=*) IDENV="$IDENV $a";; esac; done
+   [ -n "$IDENV" ] && export $IDENV   # ENV=VAL applies to both the device and the host run
+   pairs() { if [ "$D" = PAIRS ]; then echo ${L//,/ } | tr ' ' '\n' | tr '@' ' '; else for l in ${L//,/ }; do for d in ${D//,/ }; do echo "$l $d"; done; done; fi; }   # D=PAIRS: L is lane@ds,lane@ds
+   while read -r l d; do specs="$specs $l:$d:ours MOJOLEARN_VENDOR=cpu@$l:$d:ours"; done < <(pairs)
+@@ -55,7 +57,7 @@
+   done < <(pairs)
+ elif [ $KIND = RACE ]; then
+   L=$1 D=$2; shift 2; ARMS=ours; ENVS=""
+-  for a in "$@"; do case $a in ARMS=*) ARMS=${a#ARMS=};; BUILDS=*) ;; *) ENVS="$ENVS $a";; esac; done
++  for a in "$@"; do case $a in ARMS=*) ARMS=${a#ARMS=};; BUILDS=*|PREBUILT=*) ;; *) ENVS="$ENVS $a";; esac; done
+   pip=scikit-learn==1.7.2
+   # lane and dataset may be comma lists: one build, every (lane, dataset) raced
+   # 2026-10-07: every MOJOLEARN_*=... token (one or many) is exported into the job environment BEFORE the builds and the
+@@ -79,13 +81,20 @@
+   # BUILDS= is for the build step, not the command; LQ_CMD_TIMEOUT= caps the command; every MOJOLEARN_*= token is exported into the
+   # job environment BEFORE the binding builds and the command (so MOJOLEARN_BUILD_DEFINES=... reaches the build scripts) and stripped
+   # from the command arguments (2026-10-07, as the RACE branch does)
+-  a=(); CMDENV=""; for x in "$@"; do case $x in BUILDS=*) ;; LQ_CMD_TIMEOUT=*) LQ_CMD_TIMEOUT=${x#LQ_CMD_TIMEOUT=};; MOJOLEARN_*=*) export "$x"; CMDENV="$CMDENV $x";; *) a+=("$x");; esac; done; set -- "${a[@]}"
++  a=(); CMDENV=""; for x in "$@"; do case $x in BUILDS=*|PREBUILT=*) ;; LQ_CMD_TIMEOUT=*) LQ_CMD_TIMEOUT=${x#LQ_CMD_TIMEOUT=};; MOJOLEARN_*=*) export "$x"; CMDENV="$CMDENV $x";; *) a+=("$x");; esac; done; set -- "${a[@]}"
+   git -C $R worktree prune; git -C $R worktree add -q -f --detach $T origin/$BR
+   [ "$builds" = all ] && builds=$(cd $T && ls bindings/build.sh bindings/build_*.sh 2>/dev/null | grep -v build_host_family | xargs -n1 basename | sed 's/\.sh$//' | paste -sd, -)
+   if [ $V = nvidia ]; then AR=sm_89; else AR=gfx942; fi
+   export PATH=/root/.pixi/bin:/opt/rocm/bin:$PATH MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMPILE_JOBS=4 MOJOLEARN_TARGET_COLUMN=$V MOJOLEARN_GPU_ARCHS=$AR PYTHONUNBUFFERED=1
+   cd $T && pixi install > $O/pixi.log 2>&1
+   mkdir -p python/mojolearn/.libs; PYTHONPATH=$T/packaging/portable_math pixi run python -c "import pathlib, stage; stage.build(pathlib.Path('$T/python/mojolearn/.libs/libMojolearnMath.so'))" > $O/math.log 2>&1; echo "libMojolearnMath rc=$?" >> $O/rc.txt
++  # prebuilt store (LQ_PREBUILT): install this define set's bindings instead of building; exit 2 = the store cannot serve the
++  # line (other commit, host binding, unknown set, corrupt file) and every binding is built as before
++  if [ -n "${LQ_PREBUILT:-}" ] && [ -f tools/six_lane_grid_install_prebuilt.sh ]; then
++    if bash tools/six_lane_grid_install_prebuilt.sh "$T" "$V" "${MOJOLEARN_BUILD_DEFINES:-}" "$builds" "$LQ_PREBUILT" > $O/prebuilt.log 2>&1; then
++      for b in $(echo $builds | tr , ' '); do echo "$b rc=prebuilt" >> $O/rc.txt; done; builds=""
++    else echo "prebuilt rc=miss $(tail -1 $O/prebuilt.log | cut -c1-120)" >> $O/rc.txt; fi
++  fi
+   P=8; [ $V = amd ] && P=3; export MOJOLEARN_BUILD_LOCK_HELD=1   # parallel binding builds; one job per box, so the global build lock is not needed
+   for b in $(echo $builds | tr , ' '); do
+     while [ $(jobs -rp | wc -l) -ge $P ]; do sleep 2; done
+--- a/overlay_race_job2.sh
++++ b/overlay_race_job2.sh
+@@ -37,6 +37,15 @@
+     *) bash "bindings/$b.sh" > "$O/$b.log" 2>&1 ;;
+   esac; local rc=$?; echo "$b rc=$rc" >> "$O/rc.txt"; return $rc
+ }
++# LQ_PREBUILT=<store> (box_job.sh PREBUILT= token, 2026-10-07): install the prebuilt bindings for this MOJOLEARN_BUILD_DEFINES
++# set (tools/six_lane_grid_prebuild.py) instead of building; exit 2 = the store cannot serve the line: build as before.
++# A binding the race still reports missing is built by the retry loop below (rc=prebuilt is not rc=0, so it is not skipped).
++if [ -n "${LQ_PREBUILT:-}" ] && [ -f tools/six_lane_grid_install_prebuilt.sh ]; then
++  if bash tools/six_lane_grid_install_prebuilt.sh "$T" "$V" "${MOJOLEARN_BUILD_DEFINES:-}" "$builds" "$LQ_PREBUILT" > "$O/prebuilt.log" 2>&1; then
++    for b in $(echo "$builds" | tr , ' '); do echo "$b rc=prebuilt" >> "$O/rc.txt"; done
++    say "prebuilt: $(tail -1 "$O/prebuilt.log")"; builds=""
++  else say "prebuilt miss: $(tail -1 "$O/prebuilt.log"); building"; echo "prebuilt rc=miss" >> "$O/rc.txt"; fi
++fi
+ P=8; [ "$V" = amd ] && P=3   # parallel binding builds; one job per box
+ for b in $(echo "$builds" | tr , ' '); do
+   while [ "$(jobs -rp | wc -l)" -ge $P ]; do sleep 2; done
