@@ -392,7 +392,15 @@ def build_one(a, ctx):
                    seconds=round(time.time() - t0, 1))
         write_json(receipt, rec)
         return rec
+    subs = []
+    if ctx['host_cpu_substitute'] and '--target-cpu' in argv:
+        # smoke on a non-Linux host: its mojo has no x86-64-v3 target ("unknown target CPU"); the box's argv stays in
+        # argv_recorded, the run drops the pair, and the artifact is not box-usable anyway (Mach-O)
+        i = argv.index('--target-cpu')
+        subs.append('dropped --target-cpu %s (smoke host %s)' % (argv[i + 1], ctx['host']['system']))
+        del argv[i:i + 2]
     rec['argv'] = argv
+    rec['argv_substitutions'] = subs
     env = {k: v for k, v in os.environ.items() if not k.startswith('MOJOLEARN_') and k != 'MACOSX_DEPLOYMENT_TARGET'}
     with (d / 'build.log').open('w') as f:
         f.write('+ ' + ' '.join(shlex.quote(x) for x in argv) + '\n')
@@ -472,7 +480,8 @@ def cmd_build(args):
     closures = import_closures(root, bindings) if not args.no_closure else {}
     ctx = dict(root=root, out=out, vendor=args.vendor, source_sha=head, dirty=dirty, compiler=compiler,
                compiler_version=version, host=host, shimdir=shimdir, compile_jobs=args.compile_jobs,
-               timeout=args.timeout, dry_lock=threading.Lock(), closures=closures)
+               timeout=args.timeout, dry_lock=threading.Lock(), closures=closures,
+               host_cpu_substitute=(args.smoke_host_cpu if args.smoke_host_cpu is not None else host['system'] != 'Linux'))
     info = dict(source_sha=head, source_dirty=dirty, compiler=' '.join(compiler), compiler_version=version, host=host,
                 plan_counts=plan['counts'], root=str(root), built_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
     receipts = []
@@ -648,6 +657,9 @@ def main(argv=None):
                    help='uname shim for the dry run (default on a non-Linux host)')
     b.add_argument('--no-emulate-linux', dest='emulate_linux', action='store_false')
     b.add_argument('--no-closure', action='store_true', help='skip the closure digest (tests)')
+    b.add_argument('--smoke-host-cpu', dest='smoke_host_cpu', action='store_true', default=None,
+                   help='drop --target-cpu from the RUN argv (recorded argv keeps it); default on a non-Linux host')
+    b.add_argument('--no-smoke-host-cpu', dest='smoke_host_cpu', action='store_false')
     b.add_argument('--force-box-usable', action='store_true', help='tests/fake compiler only: list non-Linux artifacts in lookup.tsv')
     b.add_argument('--root')
     c = s.add_parser('pack', help='tar per vendor + sidecar json')
