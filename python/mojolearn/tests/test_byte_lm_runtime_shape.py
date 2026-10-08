@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host plumbing checks only; fake arithmetic is not a model qualification."""
+import ctypes
 import numpy as np
 import pytest
 from mojolearn import ByteLanguageModelConfig as Shape, SmallByteLanguageModelTrainer as Trainer
@@ -22,6 +23,13 @@ def configured(host):
     host.byte_lm_config_profile = lambda dimensions: Shape(*dimensions).profile
     def run(addresses, params, dimensions):
         cfg = Shape(*dimensions)
+        # The native `byte_validate_tokens` admission (training/byte_lm.mojo),
+        # which refuses before any device work: Python no longer pre-scans
+        # the ids (cpu2-l11-neural).
+        n_ids = cfg.batch * (cfg.length + 1)
+        tokens = np.ctypeslib.as_array((ctypes.c_int32 * n_ids).from_address(addresses[4]))
+        if tokens.min() < 0 or tokens.max() >= cfg.vocab_size:
+            raise Exception('byte LM: token ID outside configured vocabulary')
         host.calls.append((list(addresses), list(params), list(dimensions)))
         for source, dest in zip(addresses[:3], addresses[5:8]):
             buffer(dest, cfg.n_total)[:] = buffer(source, cfg.n_total)

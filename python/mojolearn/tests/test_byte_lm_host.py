@@ -31,6 +31,9 @@ def fake_host(monkeypatch, tmp_path):
     m.byte_lm_host_numeric_mode = lambda: 1
     m.byte_lm_host_vendor = lambda: 'cpu'
     m.byte_lm_host_sabotage = lambda: False
+    # bindings/_mojolearn_byte_lm_host.mojo: the IDENTICAL toggle suffix the
+    # wrapper appends to the expected profile (empty for a default build).
+    m.byte_lm_host_arithmetic_suffix = lambda: ''
     m.byte_lm_host_profile = (
         lambda native: shape.profile if list(native) == host_mod._native_shape(shape) else 'other')
 

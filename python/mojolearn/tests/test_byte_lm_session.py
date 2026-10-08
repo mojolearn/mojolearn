@@ -141,7 +141,9 @@ def test_export_gradients_is_refused_before_any_step_and_on_the_stateless_path(h
     trainer.evaluate(ids())
     with pytest.raises(RuntimeError, match='no gradient'):
         trainer.export_gradients()
-    stateless = Trainer(initial(), data_schedule={'dataset': 'session-test'})
+    # resident=None is AUTO (resident when the binding has sessions, as this
+    # fake does); the stateless path is the explicit resident=False opt-out.
+    stateless = Trainer(initial(), data_schedule={'dataset': 'session-test'}, resident=False)
     stateless.train_step(ids())
     with pytest.raises(RuntimeError, match='open resident session'):
         stateless.export_gradients()

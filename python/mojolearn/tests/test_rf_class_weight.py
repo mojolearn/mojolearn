@@ -43,7 +43,10 @@ def test_fit_dispatch(monkeypatch):
     def weighted(x, y, params, criterion, address):
         seen.append(np.ctypeslib.as_array((ctypes.c_float * 4).from_address(address)).copy())
     binding = SimpleNamespace(rf_classifier_fit=plain, rf_classifier_fit_weighted=weighted)
-    monkeypatch.setattr(RandomForestClassifier, '_bind', lambda *args: binding)
+    # The x_trees binding (`x_trees_class_rows`) is absent here, so the
+    # per-row weights take the core helper gather (`_class_weight_rows`).
+    monkeypatch.setattr(RandomForestClassifier, '_bind',
+                        lambda self, name=None, *args: None if name == '_mojolearn_x_trees' else binding)
     def arrays(self, x, y, nclasses, fit_fn, rowmajor_fit_fn=None):
         # The double must track `RandomForestClassifier._fit_arrays`, which
         # grew `rowmajor_fit_fn` (the row-major borrow path). Without it this

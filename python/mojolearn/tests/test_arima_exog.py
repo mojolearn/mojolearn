@@ -93,7 +93,13 @@ def test_the_host_oracle_restates_them():
     assert "ARIMA_ORACLE_EXOG_SABOTAGE" in text, "the exog arithmetic has no negative control"
     # The oracle stays host only: the same import set the CPU training lane pins.
     imports = re.findall(r"^from\s+([\w.]+)\s+import", text, re.M)
-    assert sorted(set(imports)) == ["checks.numerics", "core.host_parallel", "core.host_predict_threads", "std.math", "std.memory", "std.sys.compile"], imports
+    # arima/impl/idn_ls_math.mojo is the IDENTICAL least-squares arithmetic
+    # the device and host share; it is itself CPU-safe (checked below).
+    assert sorted(set(imports)) == ["arima.impl.idn_ls_math", "checks.numerics", "core.host_parallel",
+                                    "core.host_predict_threads", "std.math", "std.memory", "std.sys.compile"], imports
+    shared = _read("arima/impl/idn_ls_math.mojo")
+    assert not re.search(r"^\s*from\s+(max\.gpu|std\.gpu)", shared, re.M), "arima/impl/idn_ls_math.mojo imports a GPU module"
+    assert sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", shared, re.M))) == ["checks.numerics", "std.sys.compile"]
 
 
 def test_the_manifest_declares_the_lanes():

@@ -142,6 +142,23 @@ DECLARED_LANELESS = {
         "fixtures, a CPU column with the training family's sabotage define "
         "seen to move it, and one GPU column (any vendor) agreeing with it"
     ),
+    # Training binding entries the manifest declares since 2026-10-08 (lane
+    # rehearsal-suite-green synced it to the binding source); none has a lane.
+    "training.mlp_inference_sessions": (
+        "owed: an identity lane over the packed multi-session MLP logits on all "
+        "nine fixtures, a CPU column with the training family's sabotage define "
+        "seen to move it, and one GPU column (any vendor) agreeing with it"
+    ),
+    "training.residual_dropout": (
+        "owed: an identity lane over the residual dropout forward and its mask on "
+        "all nine fixtures, a CPU column with the training family's sabotage "
+        "define seen to move it, and one GPU column (any vendor) agreeing with it"
+    ),
+    "training.residual_dropout_backward": (
+        "owed: an identity lane over the residual dropout gradient on all nine "
+        "fixtures, a CPU column with the training family's sabotage define seen "
+        "to move it, and one GPU column (any vendor) agreeing with it"
+    ),
 }
 
 #: A reason has to say something. The shortest real one in the vocabulary is

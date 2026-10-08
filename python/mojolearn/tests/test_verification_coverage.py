@@ -131,22 +131,31 @@ def test_extended_probes_reuse_fit_and_detect_drift(flags):
 
 
 def test_select_d_cpu_chooses_first_stationary_order_and_preserves_input(monkeypatch):
+    """`select_d` is ONE native entry since lane py-runtime-b (the host
+    binding's `select_d`, bindings/kpss_host_test.mojo), no longer a Python
+    loop over `kpss_test`, so a faked `kpss_test` cannot steer it. The
+    reference is the rule itself stated over the real `kpss_test`: the first
+    order `d < d_max` at which a series tests stationary, else `d_max`."""
     from mojolearn import _tsa_impl as tsa, _backend
-    from mojolearn import Array
-    calls = []
-    def kpss(y, **kw):
-        calls.append(kw)
-        return Array.from_list([1, 0, 0] if kw['d'] == 0 else [0, 1, 0], '<u1')
     monkeypatch.setattr(_backend, 'vendor', lambda: 'cpu')
-    monkeypatch.setattr(tsa, 'kpss_test', kpss)
-    data = np.arange(90, dtype=np.float32).reshape(30, 3)
+    rng = np.random.default_rng(7)
+    walk = np.cumsum(rng.standard_normal((60, 3)), axis=0)
+    data = np.stack([rng.standard_normal(60), walk[:, 1], np.cumsum(walk[:, 2])], axis=1).astype(np.float32)
     before = data.tobytes()
-    assert tsa.select_d(data, d_max=2).tolist() == [0, 1, 2]
-    assert [c['d'] for c in calls] == [0, 1]
+
+    def reference(D=0, s=0, d_max=None):
+        d_max = 2 - D if d_max is None else d_max
+        out = [d_max] * data.shape[1]
+        for d in range(d_max):
+            stationary = tsa.kpss_test(data, d=d, D=D, s=s).tolist()
+            for k, ok in enumerate(stationary):
+                if ok and out[k] == d_max:
+                    out[k] = min(out[k], d)
+        return out
+
+    assert tsa.select_d(data, d_max=2).tolist() == reference(d_max=2)
     assert data.tobytes() == before
-    calls.clear()
-    assert tsa.select_d(data, D=1, s=12).tolist() == [0, 1, 1]
-    assert len(calls) == 1 and calls[0]['D'] == 1
+    assert tsa.select_d(data, D=1, s=12).tolist() == reference(D=1, s=12)
     with pytest.raises(ValueError, match='d_max must satisfy'):
         tsa.select_d(data, D=1, s=12, d_max=2)
 
@@ -324,14 +333,19 @@ def test_no_lane_reports_an_admission_the_table_cannot_support():
     table = vr.load_table()
     report = coverage.inventory(va.load_harness(), table, 'cpu')
     strict = dict(min_repeats=2, input_witness_required=True, property_protocol_required=True)
-    assert report['reference_admission_policy'] == strict
+    # The shipped table is now built under the two-witness policy
+    # (`vr.ADMISSION_POLICY`: every cell fitted once, a second device class
+    # or a second fit agreeing); the report must read exactly what the table
+    # carries, and the table carries one of the two policies this file knows.
+    assert report['reference_admission_policy'] == table['admission_policy']
+    assert table['admission_policy'] in (strict, vr.ADMISSION_POLICY)
     # the lanes the scoped path admitted onto the old legacy base, and one
     # (`ols`) that was legacy at the time: each reads exactly the policy the
     # table carries for it. Those without a lane entry came out of the strict
     # global build; ivf-euclidean was re-admitted on 2026-09-20 (292143f3a,
     # three-vendor agreement) under the two-witness policy.
     for lane in ('embedding', 'embedding-sort', 'ivf-euclidean', 'ols'):
-        carried = table.get('lane_admission', {}).get(lane, {}).get('policy', strict)
+        carried = table.get('lane_admission', {}).get(lane, {}).get('policy', table['admission_policy'])
         assert report['lanes'][lane]['reference_admission']['policy'] == carried, lane
         assert report['lanes'][lane]['status'] == 'available', lane
     # and nothing anywhere claims a policy the table does not carry

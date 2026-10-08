@@ -71,7 +71,7 @@ def _harness_text():
 #: GPU binding calls too (bindings/_mojolearn_x_trees_host.mojo calls
 #: xtrees/api.mojo::register, so the two lists cannot drift). The
 #: registrations it exports are that module's.
-REGISTER_IMPORT = re.compile(r"^from\s+([A-Za-z0-9_.]+)\s+import\s+register\s*$", re.M)
+REGISTER_IMPORT = re.compile(r"^from\s+([A-Za-z0-9_.]+)\s+import\s+(?:[A-Za-z0-9_]+\s*,\s*)*register\s*(?:,[^\n]*)?$", re.M)
 REGISTER_CALL = re.compile(r"^\s+register\(\s*(?:module|m)\s*\)", re.M)
 
 

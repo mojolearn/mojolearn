@@ -272,8 +272,20 @@ def decode_npy(data):
         items = [items[i] for i in tmp._as_c()._values()]
     if n == 1:
         return items[0]
-    from ._array import _nest
-    return _nest(items, shape) if shape else items[0]
+    return _nest_text(items, shape) if shape else items[0]
+
+
+def _nest_text(items, shape):
+    """Nested lists of a C-order block of decoded text/bytes `items`.
+    `_array._nest` nests a numeric Array (memoryview.tolist); a text block
+    has no buffer code, so its list structure is built here. String
+    metadata only, never a numeric tensor."""
+    if len(shape) == 1:
+        return list(items)  # glue: list structure of a text metadata block
+    step = 1
+    for dim in shape[1:]:  # glue: row stride of a text metadata block
+        step *= dim
+    return [_nest_text(items[i * step:(i + 1) * step], shape[1:]) for i in range(shape[0])]  # glue: list structure of a text metadata block
 
 
 def read_npy(fp):

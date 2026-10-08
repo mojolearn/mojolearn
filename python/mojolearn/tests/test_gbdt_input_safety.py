@@ -6,9 +6,21 @@ import pytest
 from mojolearn.ensemble import GradientBoosting
 
 
+class _Guard:
+    """A binding that admits only the input-free layout probe
+    (`gbdt_fit_row_major_available`, which `fit` reads before staging X,
+    a82b3f89d) and fails the test on any other entry."""
+
+    def gbdt_fit_row_major_available(self):
+        return 0
+
+    def __getattr__(self, name):
+        pytest.fail("invalid input reached native binding")
+
+
 def guarded(loss="RMSE", **kwargs):
     model = GradientBoosting(loss=loss, **kwargs)
-    model._bind = lambda name: pytest.fail("invalid input reached native binding")
+    model._bind = lambda name: _Guard()
     return model
 
 

@@ -57,7 +57,8 @@ def test_host_only_replay_matches_and_both_fault_controls_diverge(lane):
             _assert_columns_match_record_class(table, part_entry)
             if part != "train":
                 assert part_entry["ref"].startswith("n/a:")
-    assert table["lane_admission"][lane]["policy"] == dict(
+    # the table-wide two-witness policy, or a per-lane entry that overrides it
+    assert table.get("lane_admission", {}).get(lane, {}).get("policy", table["admission_policy"]) == dict(
         min_repeats=1, min_witnesses=2, input_witness_required=True,
         property_protocol_required=True)
 

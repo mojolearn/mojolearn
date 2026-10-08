@@ -374,7 +374,14 @@ def main():
             bad += 1
         else:
             print(f"  OK        {path} {var} ({len(got)}) == _backend._TIERED")
-    classical_literal = set(_backend_classical_fast())
+    # The byte LM joined `_backend._CLASSICAL_FAST` on 2026-10-03 (afn-lm),
+    # but no FAST_CLASSICAL list may name it: every build file carries it
+    # through its own MOJOLEARN_PACKAGE_BYTE_LM path (build_release_wheel.sh
+    # builds it per MODES entry; build_sets.sh and pack_wheel.tier_names()
+    # carry FAST only on Metal), so naming it here would build it twice or
+    # require a Linux FAST byte LM that no release builds. It is held to the
+    # backend by `profile_only` above, as in the full list.
+    classical_literal = set(_backend_classical_fast()) - profile_only
     classical = classical_literal | set(hs_manifest.expansion_gpu_bindings("classical"))
     for path, var in CLASSICAL_MIRRORS:
         vs = importlib.util.spec_from_file_location("check_ext_lists_classical", ROOT / path)

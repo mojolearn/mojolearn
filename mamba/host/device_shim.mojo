@@ -27,6 +27,7 @@ from std.sys import size_of
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
 from gemm.contract import OP_TN
+from gemm.experiments.neural_switches import ROLE_PROJECTION
 from gemm.host.neural_gemm import gemm_oracle
 from gemm.host.neural_gemm import gemm_host_rows
 # the device GEMM file's host-safe fold helpers, lifted verbatim
@@ -165,7 +166,7 @@ def _read(buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
     return out^
 
 
-def identical_gemm_into[allow_vendor: Bool = True](
+def identical_gemm_into[allow_vendor: Bool = True, ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
@@ -177,7 +178,10 @@ def identical_gemm_into[allow_vendor: Bool = True](
     op: Int,
 ) raises:
     """`C[m x n] = op(A) . op(B)`: A holds m*k values (k*m under OP_TN), B
-    n*k, both row-major, exactly as `gemm_oracle` reads them."""
+    n*k, both row-major, exactly as `gemm_oracle` reads them. `ROLE` mirrors
+    gemm/neural_dispatch.mojo's caller class (projection, head, wgrad), which
+    selects a device schedule arm only; the host oracle's arithmetic does not
+    depend on it, so it is accepted and unused here."""
     var out = gemm_host_rows(_read(a, m * k), _read(b, n * k), op, m, n, k)
     if len(c) < m * n:
         raise Error("mamba host: a GEMM output buffer shorter than m * n")

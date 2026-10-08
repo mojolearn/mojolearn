@@ -694,7 +694,13 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
             else:
                 ent["cols"][cls] = [renum[idx], value]
         if ent.get("conflict"):
+            # A conflict cell has no reference, so a bare record index (which
+            # means "carries `ref`") would read as carrying None: every column
+            # that agreed with the newest one spells its value too.
             ent["ref"] = None
+            for cls, col in list(ent["cols"].items()):  # glue: one entry per device class
+                if isinstance(col, int):
+                    ent["cols"][cls] = [col, ref]
             ent["cols"][newest_cls] = [renum[by_cls[newest_cls][1]], ref]
         cells.setdefault(cell_key, {})[part] = ent
     for part in sorted(uncorroborated):

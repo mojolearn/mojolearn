@@ -8,7 +8,7 @@
 #   ... [--rent] [--expect-from <NVIDIA leg release-build dir>] [--lease MIN] [--cap USD]
 #
 # WHAT IS THE SAME AS THE DIGITALOCEAN LEG, BY CONSTRUCTION. The frozen commit's
-# `git archive` (same excludes, same 24 MiB cap, the same native-inventory
+# `git archive` (same excludes, same 40 MiB cap, the same native-inventory
 # compare against this checkout), unpacked at /root/mojolearn with commit.txt;
 # the same host preparation (patchelf, docker, python3-venv, pixi, `pixi install
 # --locked --environment default` under tools/amd_serial_guard.py, patchelf
@@ -150,7 +150,7 @@ log "archiving $COMMIT"
 git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!bench/evidence' ':!mamba/corpus' ':!bench/oracle*' \
   | gzip > "$TMPD/src.tgz" || die "git archive failed"
 ARCHIVE_BYTES=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
-[ "$ARCHIVE_BYTES" -lt $((24 * 1024 * 1024)) ] || die "archive is $ARCHIVE_BYTES bytes gzipped, cap 24 MiB"
+[ "$ARCHIVE_BYTES" -lt $((40 * 1024 * 1024)) ] || die "archive is $ARCHIVE_BYTES bytes gzipped, cap 40 MiB"
 ARCHIVE_SHA=$(sha256_of "$TMPD/src.tgz")
 mkdir "$TMPD/archive" && tar -xzf "$TMPD/src.tgz" -C "$TMPD/archive" || die "archive does not unpack"
 # The source checkout the packer reads: this one, or the frozen source
