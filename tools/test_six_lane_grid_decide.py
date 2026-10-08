@@ -251,5 +251,26 @@ class ProvisionalFloorTests(unittest.TestCase):
                    vendors={v: dict(candidate_over_baseline=dict(scored=3.0), log_ratio=dict(scored=1.0986), floor_source='provisional (log 1.25 default)') for v in ('nvidia', 'amd')})
         self.assertEqual(D.timing_index([dict(cases=[big])])[('G.classical:a1.x=on', wid)]['verdict'], 'SLOWER')
 
+
+class ConsistentSmallWinTests(unittest.TestCase):
+    def _dec(self, ratios_a1, ratios_a2):
+        A1, A2 = 'classical:a1', 'classical:a2'
+        configs = [cfg(A1, {'s': 'on'}, 'single'), cfg(A2, {'s': 'on'}, 'single')]
+        t, ident = [], []
+        for c, rs in ((configs[0], ratios_a1), (configs[1], ratios_a2)):
+            for wid, (nv, amd) in zip(c['workloads'], rs):
+                t.append(tcase(c['id'], wid, 'NO_VERDICT', nv, amd)); t[-1]['phases'] = dict(scored=dict(verdict='NO_VERDICT', reasons=['nvidia: |log ratio| 0.02 within floor 0.05', 'amd: |log ratio| 0.02 within floor 0.05']))
+                ident.append(icase(c['id'], wid, 'MATCH'))
+        return D.decide(dict(schema='m', configurations=configs), D.timing_index([dict(cases=t)]), D.identity_index([dict(cases=ident)]), {})
+
+    def test_every_cell_slightly_faster_promotes(self):
+        dec = self._dec([(0.97, 0.98), (0.96, 0.95)], [(0.98, 0.97), (0.95, 0.96)])
+        self.assertEqual(dec['controls']['s']['recommendation'], 'PROMOTE')
+        self.assertIsNotNone(dec['controls']['s']['arms']['on']['consistent_small_win'])
+
+    def test_mixed_direction_within_noise_is_deleted(self):
+        dec = self._dec([(0.97, 1.02), (0.96, 0.95)], [(0.98, 0.97), (1.01, 0.96)])
+        self.assertEqual(dec['controls']['s']['recommendation'], 'DELETE')
+
 if __name__ == '__main__':
     unittest.main()

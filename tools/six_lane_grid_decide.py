@@ -57,6 +57,8 @@ FAST_MATRIX = ROOT / 'experiments/six_lane_integration/grid-fast/grid-matrix.jso
 FAST_OUT_DIR = ROOT / 'experiments/six_lane_integration/grid-fast'
 FAST_VOTERS = ('apple',)
 
+SMALL_WIN_CELLS = 4      # consistent small win: at least this many measured cells (vendor x workload) ...
+SMALL_WIN_GM = 0.97      # ... every one at or below 1.0x, geometric mean at or below this
 TIMING_RANK = {'SLOWER': 0, 'FASTER': 1, 'NO_VERDICT': 2, 'UNMEASURED': 3}
 QUALITY_BAD = {'WORSE', 'REGRESSED'}  # FAIL = the candidate race itself failed: the cell is unmeasured, not a quality loss
 QUALITY_OK = {'SAME', 'BETTER', 'IMPROVED', 'EQUAL'}
@@ -283,9 +285,19 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
     for (ctrl, arm), algos in sorted(single_by_arm.items()):
         per_algo = {a: e['verdict'] for a, e in algos.items()}
         rec = arm_recommendation(per_algo)
+        # Consistent small win (Andrew, 2026-10-08: "an improvement is an improvement"): one run per arm cannot clear
+        # the noise floor cell by cell for a 2-3% gain, but an arm that is at or below 1.0x on EVERY measured cell on
+        # both vendors, over at least SMALL_WIN_CELLS cells, with a geometric mean at or below SMALL_WIN_GM, is evidence
+        # of a real gain; it promotes (identity and quality permitting) instead of being deleted as noise.
+        small_win = None
+        if rec in ('DELETE', 'PROMOTE') and all(v in ('NEUTRAL', 'FASTER') for v in per_algo.values()):
+            ratios = [r for e in algos.values() for row in e['rows'] for r in row['ratios'].values() if r]
+            if len(ratios) >= SMALL_WIN_CELLS and max(ratios) <= 1.0 and geo_mean(ratios) <= SMALL_WIN_GM:
+                small_win = dict(cells=len(ratios), geo_mean=geo_mean(ratios), worst=max(ratios))
+                rec = 'PROMOTE'
         if rec in ('PROMOTE', 'DELETE', 'SPLIT') and not all(complete.get(a, False) for a in per_algo):
             rec = 'PARTIAL_' + rec  # points this way so far; a reached algorithm still has unmeasured configurations
-        controls[ctrl][arm] = dict(recommendation=rec, per_algorithm=per_algo,
+        controls[ctrl][arm] = dict(recommendation=rec, per_algorithm=per_algo, consistent_small_win=small_win,
                                    algorithms_complete={a: complete.get(a, False) for a in per_algo},
                                    combined_ratio=geo_mean([e['combined_ratio'] for e in algos.values()]),
                                    configurations=sorted(e['configuration'] for e in algos.values()),
