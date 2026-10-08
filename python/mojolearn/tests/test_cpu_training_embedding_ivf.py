@@ -108,7 +108,15 @@ def test_bindings_register_the_gpu_names():
         host = _registered(host_surface.binding_source(name))
         gpu = _registered(f"bindings/_mojolearn_{name}.mojo")
         readbacks = {f"{name}_host_{r}" for r in host_surface.READBACK}
-        assert host == gpu | readbacks, (name, sorted(host ^ (gpu | readbacks)))
+        # the device-resident embedding table (`embedding.py` resolves both
+        # with a None fallback and takes the per-call entries on the host)
+        device_only = {"embedding_resident", "embedding_table_release"} if name == "embedding" else set()
+        if name == "ivf":
+            # registered only under MOJOLEARN_IVF_FAST_BALANCED_AUDIT (a FAST
+            # device audit probe, default off; no Python caller)
+            device_only = {"ivf_fast_balanced_hits"}
+        assert device_only <= gpu and not device_only & host
+        assert host == (gpu - device_only) | readbacks, (name, sorted(host ^ ((gpu - device_only) | readbacks)))
         assert host == set(host_surface.family(name)["exports"])
 
 
@@ -267,7 +275,11 @@ def test_adapter_holds_no_arithmetic_and_calls_the_host_entries():
         assert f"self._host.{entry}(" in text, entry
     assert "_backend.load_host_module(HOST_BASENAME)" in text
     impl = _read("python/mojolearn/_byte_lm_impl.py")
-    assert "is_cpu_trainer_binding(binding)" in impl
+    # cpu-gpu-cleanup n-pyneural: the install decides the vendor set, so the
+    # GPU trainer never imports the CPU trainer adapter (`_backend.binding`
+    # serves the CPU binding on a CPU-only install)
+    assert "_byte_lm_trainer_host" not in "".join(re.findall(r"^\s*(?:from|import) .*$", impl, re.M))
+    assert "vendors = ('cpu',) if _backend._CPU_ONLY is not None" in impl
     src = _read(host_surface.binding_source("byte_lm"))
     assert "from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE" in src
     assert "or ANY_BWD_SABOTAGE or GEMM_ORACLE_HOST_SABOTAGE)" in src
