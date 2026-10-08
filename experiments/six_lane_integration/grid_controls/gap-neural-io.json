@@ -26,5 +26,19 @@
    "status": "new",
    "note": "Lane gap-neural-io (plan gaps-2026-10-08 Section 4). Default ON (IDENTICAL, not under sabotage arms): the embedding binding's backward compacts the touched rows from run_begin (3 integer launches), reads U back (one wait) and folds U*d cells instead of V*d (T >= V) or T*d (T < V) when U < min(T, V). Same per-cell fold statements: no bit moves on any column; training loops keep their launch (opt-in parameter). The OFF arm is the old launch rule. Unmeasured: A/B owed on the embedding cell plus a neighboring shape (e.g. V=50,257, T=65,536) and one skewed-id batch."
   }
+ },
+ "algorithms": {
+  "expanded:embedding": {
+   "binding": "_mojolearn_embedding",
+   "route": "Embedding.forward(ids, device=True) -> embedding_forward_dev; backward(dy on device) -> embedding_backward_dev -> identical_embedding_backward_prerefused_into(unique_rows gate) [emb_unique_rows_off]",
+   "controls": [
+    "emb_unique_rows_off"
+   ],
+   "interaction_groups": [
+    [
+     "emb_unique_rows_off"
+    ]
+   ]
+  }
  }
 }

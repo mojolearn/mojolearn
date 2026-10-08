@@ -1,47 +1,73 @@
 {
-  "schema": "mojolearn.grid-controls/1",
-  "lane": "gap-small-members",
-  "branch": "lane/gap-small-members",
-  "head": "2c9e87bb2",
-  "head_note": "head = last code commit before this file; the file is committed on top of it.",
-  "controls": {
-    "xn_impute_rowdist": {
-      "define": "MOJOLEARN_XN_IMPUTE_ROWDIST_OFF",
-      "kind": "switch",
-      "arms": {
-        "on": [],
-        "off": [
-          "MOJOLEARN_XN_IMPUTE_ROWDIST_OFF"
-        ]
-      },
-      "default": "on",
-      "source": [
-        "x_neighbors/iter_device.mojo:1610",
-        "x_neighbors/iter_device.mojo:1318"
-      ],
-      "binding": "_mojolearn_x_neighbors",
-      "bits_change": false,
-      "status": "new",
-      "note": "KNNImputer transform: one distance pass per query row (64 rows x 64 fit rows register tile, features chunked, any d and k) instead of one per missing cell; same per-pair statements and the item's strict-< donor insertion, so the same bits as the per-cell kernels and the host column. Gap plan section 11. A/B owed: knn-imputer taxi, istella on nv and amd; ID check owed (expected MATCH with main)."
-    },
-    "ann_coarse_tiled": {
-      "define": "MOJOLEARN_ANN_COARSE_TILED_OFF",
-      "kind": "switch",
-      "arms": {
-        "on": [],
-        "off": [
-          "MOJOLEARN_ANN_COARSE_TILED_OFF"
-        ]
-      },
-      "default": "on",
-      "source": [
-        "x_ann/ivf_scan_device.mojo:97",
-        "x_ann/ivf_scan_device.mojo:1153"
-      ],
-      "binding": "_mojolearn_x_ann",
-      "bits_change": false,
-      "status": "new",
-      "note": "IVF-PQ / IVF-SQ / IVF-RaBitQ search coarse step: 64 queries x 64 lists per block, features staged 16 at a time, 4 x 4 pairs per thread, pq_coarse_dist's statements (same bits). Replaces one thread per (query, list) reading both rows from device memory. Gap plan section 11. A/B owed: ivf-pq taxi, istella on nv and amd; ID check owed (expected MATCH)."
-    }
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "gap-small-members",
+ "branch": "lane/gap-small-members",
+ "head": "2c9e87bb2",
+ "head_note": "head = last code commit before this file; the file is committed on top of it.",
+ "controls": {
+  "xn_impute_rowdist": {
+   "define": "MOJOLEARN_XN_IMPUTE_ROWDIST_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_XN_IMPUTE_ROWDIST_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "x_neighbors/iter_device.mojo:1610",
+    "x_neighbors/iter_device.mojo:1318"
+   ],
+   "binding": "_mojolearn_x_neighbors",
+   "bits_change": false,
+   "status": "new",
+   "note": "KNNImputer transform: one distance pass per query row (64 rows x 64 fit rows register tile, features chunked, any d and k) instead of one per missing cell; same per-pair statements and the item's strict-< donor insertion, so the same bits as the per-cell kernels and the host column. Gap plan section 11. A/B owed: knn-imputer taxi, istella on nv and amd; ID check owed (expected MATCH with main)."
+  },
+  "ann_coarse_tiled": {
+   "define": "MOJOLEARN_ANN_COARSE_TILED_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_ANN_COARSE_TILED_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "x_ann/ivf_scan_device.mojo:97",
+    "x_ann/ivf_scan_device.mojo:1153"
+   ],
+   "binding": "_mojolearn_x_ann",
+   "bits_change": false,
+   "status": "new",
+   "note": "IVF-PQ / IVF-SQ / IVF-RaBitQ search coarse step: 64 queries x 64 lists per block, features staged 16 at a time, 4 x 4 pairs per thread, pq_coarse_dist's statements (same bits). Replaces one thread per (query, list) reading both rows from device memory. Gap plan section 11. A/B owed: ivf-pq taxi, istella on nv and amd; ID check owed (expected MATCH)."
   }
+ },
+ "algorithms": {
+  "expanded:knn-imputer": {
+   "binding": "_mojolearn_x_neighbors",
+   "route": "KNNImputer.transform -> iter_device knn_impute (one 64x64 distance tile per block of query rows) [xn_impute_rowdist]",
+   "controls": [
+    "xn_impute_rowdist"
+   ],
+   "interaction_groups": [
+    [
+     "xn_impute_rowdist"
+    ]
+   ]
+  },
+  "expanded:ivf-pq": {
+   "binding": "_mojolearn_x_ann",
+   "route": "IVFPQ.search -> ivf_scan_device enqueue_coarse (coarse_tiled_kernel 64 queries x 64 lists) [ann_coarse_tiled]",
+   "controls": [
+    "ann_coarse_tiled"
+   ],
+   "interaction_groups": [
+    [
+     "ann_coarse_tiled"
+    ]
+   ]
+  }
+ }
 }

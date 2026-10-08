@@ -70,19 +70,61 @@
  "algorithms": {
   "linalg:qr": {
    "binding": "_mojolearn_x_decomp",
-   "route": "_linalg_impl.py _qr_tsqr -> x_decomp_tsqr_r (ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> x_decomp_r_signs -> x_decomp_tsqr_q (_ts_apply_dcb [tsqr_wy_pair, tsqr_tree_par])"
+   "route": "_linalg_impl.py _qr_tsqr -> x_decomp_tsqr_r (ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> x_decomp_r_signs -> x_decomp_tsqr_q (_ts_apply_dcb [tsqr_wy_pair, tsqr_tree_par])",
+   "controls": [
+    "tsqr_wy_pair",
+    "tsqr_tree_par"
+   ],
+   "interaction_groups": [
+    [
+     "tsqr_wy_pair",
+     "tsqr_tree_par"
+    ]
+   ]
   },
   "linalg:svd": {
    "binding": "_mojolearn_x_decomp",
-   "route": "_linalg_impl.py _svd_tsqr -> x_decomp_tsqr_r [tsqr_wy_pair, tsqr_tree_par] -> _svd_tall(R) -> DevExec.svd _svd_on [xd_svd_group] -> x_decomp_tsqr_q [tsqr_wy_pair, tsqr_tree_par]"
+   "route": "_linalg_impl.py _svd_tsqr -> x_decomp_tsqr_r [tsqr_wy_pair, tsqr_tree_par] -> _svd_tall(R) -> DevExec.svd _svd_on [xd_svd_group] -> x_decomp_tsqr_q [tsqr_wy_pair, tsqr_tree_par]",
+   "controls": [
+    "tsqr_wy_pair",
+    "tsqr_tree_par",
+    "xd_svd_group"
+   ],
+   "interaction_groups": [
+    [
+     "tsqr_wy_pair",
+     "tsqr_tree_par",
+     "xd_svd_group"
+    ]
+   ]
   },
   "linalg:lstsq": {
    "binding": "_mojolearn_x_decomp",
-   "route": "_expansion_decomp.py _tsqr_lstsq_core -> x_decomp_tsqr_r (nrhs > 0, ts_pack_device + ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> SVD of the small R [xd_svd_group]"
+   "route": "_expansion_decomp.py _tsqr_lstsq_core -> x_decomp_tsqr_r (nrhs > 0, ts_pack_device + ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> SVD of the small R [xd_svd_group]",
+   "controls": [
+    "tsqr_wy_pair",
+    "tsqr_tree_par"
+   ],
+   "interaction_groups": [
+    [
+     "tsqr_wy_pair",
+     "tsqr_tree_par"
+    ]
+   ]
   },
   "linear_model:linear-regression": {
    "binding": "_mojolearn_x_decomp",
-   "route": "ols_tsqr_r_py -> DevExec.ols_tsqr_factor -> ts_factor_device [tsqr_wy_pair, tsqr_tree_par]"
+   "route": "ols_tsqr_r_py -> DevExec.ols_tsqr_factor -> ts_factor_device [tsqr_wy_pair, tsqr_tree_par]",
+   "controls": [
+    "tsqr_wy_pair",
+    "tsqr_tree_par"
+   ],
+   "interaction_groups": [
+    [
+     "tsqr_wy_pair",
+     "tsqr_tree_par"
+    ]
+   ]
   }
  }
 }
