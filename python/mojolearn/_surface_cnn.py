@@ -48,6 +48,9 @@ FAMILIES = (
             "x_cnn_conv_block_forward_r", "x_cnn_conv_block_backward_r", "x_cnn_linear_forward_r",
             "x_cnn_linear_backward_r", "x_cnn_softmax_xent_r", "x_cnn_sgd_r", "x_cnn_adam_r", "x_cnn_fit_epoch_r",
             "x_cnn_idn2_flags", "x_cnn_epoch_rows", "x_cnn_adam_hyper_d", "x_cnn_fit_epoch_d",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "x_cnn_csr_build", "x_cnn_gcn_loops", "x_cnn_bounded_im2col",
+            "x_cnn_neural_tape_budget_bytes", "x_cnn_numerical_profile",
         ),
         gate="tools/identity_break.py (tools/algos_lane_check.sh)",
         wheel_note="Ships: the CNN lane's CPU route (convolution, pooling, normalization, the CNN trainer, graph convolution).",

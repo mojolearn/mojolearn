@@ -100,6 +100,9 @@ FAMILIES = (
             "x_prep_ii_rows", "x_prep_ii_gather", "x_prep_ii_scatter", "x_prep_ii_conv",
             "x_prep_strat_folds", "x_prep_kfold_folds", "x_prep_py2mojo",
             "x_prep_label_present", "x_prep_idn_int",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "x_prep_idn_fam", "x_prep_classical_shared", "x_prep_c08_routes",
+            "x_prep_idn_fam2", "x_prep_proba64",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the prep lane's CPU route (preprocessing additions, naive Bayes, discriminant analysis).",

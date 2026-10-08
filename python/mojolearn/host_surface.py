@@ -778,6 +778,8 @@ TRAINING_LANE_NAMES = {
     "gbdt-lossguide-newtoncosine": "gradient boosting on lossguide trees with the NewtonCosine score and the searcher options",
     "gbdt-multiclass": "multiclass gradient boosting",
     "gbdt-multiclass-defaults": "multiclass gradient boosting with public stochastic defaults",
+    "gbdt-class-weights": "binary gradient boosting with class weights off the fixed-point grid",
+    "gbdt-multiclass-offgrid": "multiclass gradient boosting with class weights off the fixed-point grid",
     "gbdt-onevsall": "one-vs-all gradient boosting",
     # lane/cpu-training-gbdt-ordered (2026-09-15): OrderedRMSE trains
     # through gbdt/host/gbdt_oracle_ordered.mojo (the pointwise searcher's
@@ -1450,6 +1452,8 @@ FAMILIES = (
             # test_binding_exports_exactly_the_manifest exists to catch:
             # a function a user can call that the surface does not declare.
             "byte_lm_host_next",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "byte_lm_host_arithmetic_suffix",
         ),
         gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -1671,6 +1675,8 @@ FAMILIES = (
             "mamba2_forward_fresh", "mamba2_forward", "mamba2_decode_step",
             "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
             "embedding_forward", "rms_norm_forward", "linear_forward",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "neural_arithmetic_profile",
         ),
         gate="python/mojolearn/tests/test_neural_inference.py, tools/step_vs_full_check.py and tools/identity_break.py (mlp, transformer, transformer-window, transformer-decode, mamba1, mamba2, mamba3, mamba1-decode, mamba2-decode, mamba3-decode, mamba2-dtlimit, samba, samba-decode, samba-untied-dropout-accum)",
         wheel_note=(
@@ -1750,6 +1756,25 @@ FAMILIES = (
             "msel_put", "msel_alloc", "msel_read", "msel_free", "msel_live",
             "msel_take_rows", "msel_scatter_rows", "msel_proba_column",
             "msel_rebase_offsets_i32", "msel_split_table_i32", "msel_group_fold_perm_i32",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "unique_inverse", "arange_i64", "leave_range_i64",
+            "mask_from_indices_u8", "select_mask_u8_i64", "count_mask_u8",
+            "next_combination_i64", "ic_running_min_f64", "ic_running_min_f32",
+            "fold_pair_f32", "threshold_labels_i64", "scale_shift_ftz_f32",
+            "bincount_i64", "compact_notnan_f32", "gather_keep_neg_i32",
+            "dot_rows_f32", "assign_fold_i64", "count_fold_hits_i64",
+            "split_table_i32", "scatter_rows_bytes", "uniform_init_f32",
+            "normal_init_f32", "epoch_order_i32", "adam_hyper_f64",
+            "mean_std_f32", "first_seen_i32", "strat_fold_assign_i32",
+            "strat_alloc_i64", "ocsvm_alpha_init_f32", "weighted_pick_i32",
+            "draw_rows_without_replacement_i32", "weighted_draw_rows_i32", "group_fold_assign_i32",
+            "strat_group_assign_i32", "strided_copy_bytes", "check_lengths_i64",
+            "ragged_rows_bytes", "nsum_f64", "row_means_f64",
+            "truncnorm_draws", "fsum_f64", "row_stds_f64",
+            "lr_schedule_values", "lr_onecycle_fill", "lr_decide",
+            "lr_schedule_exact", "lr_onecycle_exact", "lr_pow_values",
+            "lr_schedule_exact_block", "lr_onecycle_exact_block", "class_ratio_f64",
+            "shard_topk_merge_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -1815,6 +1840,8 @@ FAMILIES = (
             "int15_profile_version", "gemm_int15", "quantize_int15", "dequantize_int15",
             # lane/linalg-public (2026-09-19)
             "qr_r", "eigh", "svdvals",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "linalg_numerical_profile", "from_f16",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -1911,6 +1938,10 @@ FAMILIES = (
             "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax",
             "standard_transform", "minmax_transform", "cd_predict",
             "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "py2mojo_rows", "py2mojo_linear_flags", "lm_classical_stats",
+            "lm_col_sums_pair", "lm_means_finish", "lm_intercept",
+            "pca_rank_finish", "linear_gram_fit", "linear_gram_solve_default",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2055,6 +2086,8 @@ FAMILIES = (
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
             "tsa_host_sabotage", "tsa_vendor", "holtwinters_fit",
             "holtwinters_forecast", "holtwinters_predict", "kpss_test",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "select_d",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2118,6 +2151,9 @@ FAMILIES = (
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
             "svc_predict", "svr_fit", "svr_predict", "iforest_run",
             "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm", "svc_portable_math",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "scale_gamma_limbs", "py2mojo_linear_flags", "svc_ovo_layout",
+            "svc_dual_gemv",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2200,6 +2236,9 @@ FAMILIES = (
             "rf_data_session_open", "rf_data_session_close",
             "rf_regressor_fit_session_export", "rf_regressor_fit_session_rows_export",
             "rf_classifier_fit_weighted_session_export",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "rf_classifier_fit_aux_export", "rf_regressor_fit_aux_export", "rf_classifier_fit_oob_export",
+            "rf_regressor_fit_oob_export", "rf_regressor_fit_dart_export",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2258,6 +2297,8 @@ FAMILIES = (
             "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_log64", "gp_theta_params", "gpr_predict_cov",
             "gp_restart_uniforms", "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve", "gpr_optimize", "gp_py2mojo",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "gpc_ovr_combine",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2302,6 +2343,8 @@ FAMILIES = (
             "kernel_methods_vendor", "kernel_methods_numeric_mode",
             "kernel_ridge_fit", "kernel_ridge_predict", "nystroem_fit",
             "nystroem_transform", "rbf_sampler_fit", "rbf_sampler_transform",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "scale_gamma_limbs", "py2mojo_linear_flags",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2462,6 +2505,8 @@ FAMILIES = (
             "gp_infer_host_numeric_mode", "gp_infer_host_vendor",
             "gp_infer_host_column", "gp_infer_host_sabotage",
             "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict", "gp_py2mojo",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "gpc_ovr_combine",
         ),
         gate="tools/classical_host_gate.py",
         wheel_note=(
@@ -2538,6 +2583,9 @@ FAMILIES = (
             "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
             "gbdt-parametric-losses", "gbdt-exact-mae",
             "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall", "gbdt-multiclass-defaults",
+            # lane/fix-cpu-column2 (2026-10-03): the CPU column trains the
+            # off-grid class weights (WeightsCpu, gbdt_oracle_multiclass.mojo)
+            "gbdt-class-weights", "gbdt-multiclass-offgrid",
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
@@ -2671,6 +2719,10 @@ FAMILIES = (
             "embedding_forward", "embedding_backward", "rms_norm_forward",
             "rms_norm_backward", "linear_forward", "linear_backward",
             "neural_rng", "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "neural_arithmetic_profile", "neural_gemm", "mlp_sessions",
+            "residual_dropout", "residual_dropout_backward", "training_chunked_lm_head_enabled",
+            "training_experiment_profile",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2771,6 +2823,11 @@ FAMILIES = (
             "mamba2_forward", "mamba2_decode_step", "mamba2_backward",
             "mamba3_forward", "mamba3_forward_fresh", "mamba3_decode_step",
             "mamba3_backward",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "mamba1_profile", "mamba3_owned_weights_enabled", "mamba3_prefill_session_create",
+            "mamba3_prefill_session_reports_optional", "mamba3_prefill_session_info", "mamba3_prefill_session_close",
+            "mamba3_prefill_session_install_weights", "mamba3_prefill_session_forward_owned", "mamba3_prefill_session_backward_owned",
+            "mamba3_prefill_session_export_weights", "mamba3_forward_tape_enabled",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise
@@ -2807,6 +2864,8 @@ FAMILIES = (
             "arima_host_numeric_mode", "arima_host_vendor", "arima_host_column",
             "arima_host_sabotage", "arima_vendor", "arima_numeric_mode",
             "arima_fit", "arima_predict", "arima_forecast",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "arima_order_caps",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2917,6 +2976,8 @@ FAMILIES = (
             "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
             "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
             "ivf_merge_shards",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "ivf_shard_plan",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3001,6 +3062,8 @@ FAMILIES = (
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
             "arima_predict", "arima_forecast", "tsa_vendor", "holtwinters_forecast",
             "holtwinters_predict", "kpss_test",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "select_d",
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         wheel_note=(
@@ -3045,6 +3108,10 @@ FAMILIES = (
             "transformer_vendor", "transformer_numeric_mode",
             "transformer_forward", "transformer_forward_fresh",
             "transformer_decode_step", "transformer_backward",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+            "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
+            "transformer_session_close", "transformer_session_discard_tape", "transformer_session_invalidate_tape",
+            "transformer_session_forward_tape", "transformer_session_backward_tape", "transformer_attention_profile",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise
@@ -3616,10 +3683,13 @@ PUBLIC_PENDING_LANES = {
     # lane/prep (merged by lane/merged, 2026-09-28): covered resample option
     # lanes; CPU and NVIDIA agree (lane/apple-merged), no release record yet.
     }
-# lane/lowbit-int15 (2026-09-29): the lane is new, so no committed column and
-# no shipped table cell describes it yet. It leaves this table the day a
-# release record carries it.
-PUBLIC_PENDING_LANES["gemm-int15"] = "no reference"
+# lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
+# carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped
+# table carries its cells now, so test_public_reference_lanes_are_derived_and_
+# every_pending_reason_is_true refused the hold as untrue.
+# gbdt-class-weights and gbdt-multiclass-offgrid have CPU columns (lane/
+# fix-cpu-column2) and shipped table cells, so they are covered GBDT lanes
+# (the gbdt family's training_lanes), not holds.
 # The expansion lanes' pending lanes (`_surface_<lane>.py`; see EXPANSION_LANES).
 PUBLIC_PENDING_LANES = _merge_expansion("PUBLIC_PENDING_LANES", PUBLIC_PENDING_LANES)
 
