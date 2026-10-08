@@ -47,26 +47,6 @@
    "status": "kept",
    "note": "This is the brief's MOJOLEARN_CLASSICAL_OLS_CENTER_RESIDENT idea, which is ALREADY the IDENTICAL default: idn_flags bit 0 (IDN_OLS_ONE_ENTRY, on in every IDENTICAL build) routes LinearRegression.fit (fit_intercept=True, no weights, tall design: the board's call) through _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> DevExec.ols_tsqr_factor, which uploads X and y once and does column sums, means, centering and the blocked TSQR on resident buffers. The host round trip the report read at linear_model.py:715-726 is the fallback taken only when the flag is clear. No new define was added (it would duplicate this one). The grid control is the existing _OFF arm, so the A/B measures the resident route against the old four-crossing route. Same words both arms (docstring); host column (_mojolearn_x_decomp_host) follows the same flag."
   },
-  "qn_idn_dconv": {
-   "define": "MOJOLEARN_QN_IDN_DCONV",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_QN_IDN_DCONV"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "glm/impl/qn/glm_base.mojo:1219",
-    "glm/impl/qn/qn_solvers.mojo:281",
-    "glm/impl/qn/qn_dconv.mojo:577"
-   ],
-   "binding": "_mojolearn_estimators",
-   "bits_change": false,
-   "status": "kept",
-   "note": "Existing candidate, now registered. Device step-1 Armijo + convergence test for IDENTICAL L-BFGS (min_lbfgs, qn_solvers.mojo:281), host reads one state block per QN_IDN_DCONV_POLL iterations; non-clean iterations are handed back to the host line search, so the iterates are the host loop's (no bit moves). Engages when dconv_idn_applies: tiled C == 1 objective (binary logreg, linearsvc, linearsvr), Armijo line search (the cuML default, qn_util.mojo:112), no trace. Requires the on-by-default QN_IDN_FUSED and QN_IDN_SLIM. Crossed with c17_ls_trials (same line-search handover)."
-  },
   "ridge_ff_always": {
    "define": "MOJOLEARN_RIDGE_FF_ALWAYS",
    "kind": "switch",
@@ -113,42 +93,21 @@
   },
   "more:logreg": {
    "binding": "_mojolearn_estimators",
-   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (qn_solvers.mojo:281 dconv_idn_run, else ls_backtrack)",
-   "controls": [
-    "qn_idn_dconv"
-   ],
-   "interaction_groups": [
-    [
-     "qn_idn_dconv",
-     "c17_ls_trials"
-    ]
-   ]
+   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (ls_backtrack; qn_idn_dconv deleted)",
+   "controls": [],
+   "interaction_groups": []
   },
   "more:linearsvc": {
    "binding": "_mojolearn_estimators",
-   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (qn_solvers.mojo:281 dconv_idn_run, else ls_backtrack)",
-   "controls": [
-    "qn_idn_dconv"
-   ],
-   "interaction_groups": [
-    [
-     "qn_idn_dconv",
-     "c17_ls_trials"
-    ]
-   ]
+   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (ls_backtrack; qn_idn_dconv deleted)",
+   "controls": [],
+   "interaction_groups": []
   },
   "more:linearsvr": {
    "binding": "_mojolearn_estimators",
-   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (qn_solvers.mojo:281 dconv_idn_run, else ls_backtrack)",
-   "controls": [
-    "qn_idn_dconv"
-   ],
-   "interaction_groups": [
-    [
-     "qn_idn_dconv",
-     "c17_ls_trials"
-    ]
-   ]
+   "route": "fit: qn_fit -> qn_minimize -> min_lbfgs (ls_backtrack; qn_idn_dconv deleted)",
+   "controls": [],
+   "interaction_groups": []
   },
   "expanded:ridge-clf": {
    "binding": "_mojolearn_x_linear",
@@ -184,6 +143,11 @@
   {
    "define": "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS",
    "reason": "not registered: no board effect. The board HDBSCAN input is 100,000 rows (tools/classical_two_datasets.py:211 HDBSCAN_ROWS), above PAIRWISE_MAX_ROWS = 46340, so graph=auto already takes the sparse arm (single_linkage.mojo:201-205), and the define's legal range is 2..46340 (single_linkage.mojo:197-200): every value gives the same route on the board. It only moves designs with fewer than 46,341 rows."
+  },
+  {
+   "define": "MOJOLEARN_QN_IDN_DCONV",
+   "control": "qn_idn_dconv",
+   "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 neutral/slower (1.030x combined), a loser. on/off ms ratio NV/AMD: logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983; linearsvr istella 1.045/1.025, taxi 1.058/1.075 (SLOWER); accuracy/logloss/r2/rmse SAME. Code recoverable at main ad7ed2370; MOJOLEARN_QN_IDN_DCONV and its _POLL_2/_POLL_8 refused in core/six_lane_experiment_guards.mojo."
   }
  ]
 }

@@ -180,6 +180,7 @@ def _check_configuration() -> Bool:
     # Deleted 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 losers (docs/apple-fast/EXPERIMENTS.md). Recoverable at main ad7ed2370.
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE"](), "removed: MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE (grid ge123e6f9: noise on nystroem/rbf-sampler, NV 1.00-1.04x AMD 0.88-0.98x)"
     comptime assert not is_defined["MOJOLEARN_C58_SHARED_PREP"](), "removed: MOJOLEARN_C58_SHARED_PREP (grid ge123e6f9: noise on ets, NV 0.996x AMD 0.980x)"
+    comptime assert not (is_defined["MOJOLEARN_QN_IDN_DCONV"]() or is_defined["MOJOLEARN_QN_IDN_DCONV_POLL_2"]() or is_defined["MOJOLEARN_QN_IDN_DCONV_POLL_8"]()), "removed: MOJOLEARN_QN_IDN_DCONV (and its _POLL_2/_POLL_8) (grid ge123e6f9: neutral/slower on logreg/linearsvc/linearsvr, linearsvr taxi NV 1.058x AMD 1.075x)"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True
