@@ -87,6 +87,26 @@ class DistributedIVFIndex:
         if offs.shape[0] != n_lists + 1:
             raise ValueError('invalid global IVF list offsets')
         devices = tuple(devices)
+        # Validation and the row split in one native pass (bindings/
+        # ivf_index_arrays.mojo `ivf_shard_plan`): the ids must be a
+        # permutation and the offsets 0 .. n nondecreasing BEFORE clipping
+        # (otherwise a corrupted saved index is silently repaired differently
+        # from the ordinary native search, which rejects its layout); then each
+        # shard's clipped offsets, local ids and ascending id map. It runs
+        # BEFORE any device worker starts: an invalid layout never reaches a
+        # GPU (test_corrupt_global_offsets_are_not_repaired_by_partition_clipping).
+        native = index._extension()
+        P = len(devices[:n])
+        soff = empty((P, n_lists + 1), '<i4')
+        local_all, map_all = empty((n,), '<i4'), empty((n,), '<i4')
+        status = int(native.ivf_shard_plan(
+            [addr_ro(ind, name='list_indices_'), addr_ro(offs, name='list_offsets_'),
+             addr(soff, name='shard offsets'), addr(local_all, name='local ids'),
+             addr(map_all, name='id map')], [n, n_lists, P]))
+        if status == 1:
+            raise ValueError('IVF original IDs must be a permutation of stored row IDs')
+        if status != 0:
+            raise ValueError('invalid global IVF list offsets')
         pool = DevicePool(devices)  # validates every requested device before slicing
         pool.close()
         devices = devices[:index.n_rows_]
@@ -97,26 +117,7 @@ class DistributedIVFIndex:
         obj.metric_code_, obj.devices = index.metric_code_, devices
         obj.n_candidates_ = None
         obj._id_maps = []
-        obj._native = index._extension()
-        # Validation and the row split in one native pass (bindings/
-        # ivf_index_arrays.mojo `ivf_shard_plan`): the ids must be a
-        # permutation and the offsets 0 .. n nondecreasing BEFORE clipping
-        # (otherwise a corrupted saved index is silently repaired differently
-        # from the ordinary native search, which rejects its layout); then each
-        # shard's clipped offsets, local ids and ascending id map.
-        P = len(devices)
-        soff = empty((P, n_lists + 1), '<i4')
-        local_all, map_all = empty((n,), '<i4'), empty((n,), '<i4')
-        status = int(obj._native.ivf_shard_plan(
-            [addr_ro(ind, name='list_indices_'), addr_ro(offs, name='list_offsets_'),
-             addr(soff, name='shard offsets'), addr(local_all, name='local ids'),
-             addr(map_all, name='id map')], [n, n_lists, P]))
-        if status == 1:
-            obj.close()
-            raise ValueError('IVF original IDs must be a permutation of stored row IDs')
-        if status != 0:
-            obj.close()
-            raise ValueError('invalid global IVF list offsets')
+        obj._native = native
         requests = []
         for part in range(P):  # glue: one shard request per device
             lo = part * n // P
