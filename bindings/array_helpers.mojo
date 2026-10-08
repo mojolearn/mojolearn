@@ -273,7 +273,7 @@ def _exact_sum_wide(terms: List[Float64]) -> Float64:
     var tail = List[Float64](capacity=len(small) + 2)
     tail.append(up)
     tail.append(_exact_sum(rest) * _FSUM_UP)
-    for i in range(len(small)):  # small-loop(small: the few terms below the scaling's exact range)
+    for i in range(len(small)):  # small-loop(small: terms below the scaling range): a subset of one k-sized fsum
         tail.append(small[i])
     return _exact_sum(tail)
 
@@ -314,8 +314,9 @@ def fsum_f64_binding(src_addr: PythonObject, n: PythonObject, out_addr: PythonOb
     """`_portable_math.fsum` (lane py-runtime round 3: it was `math.fsum`
     plus a Python big-integer fold): out[0] = the exact sum of n float64
     terms (see `_fsum_terms`). Returns 1 for +inf with -inf (the caller
-    raises fsum's ValueError), 2 when the exact sum of finite terms is
-    outside the binary64 range (fsum's OverflowError), else 0."""
+    raises fsum's ValueError), also 1 with out[0] = +-inf when the exact sum
+    of finite terms is outside the binary64 range (fsum's OverflowError),
+    else 0."""
     var count = Int(py=n)
     var op = _addr_ptr[DType.float64](Int(py=out_addr))
     if count <= 0:
@@ -333,11 +334,14 @@ def fsum_f64_binding(src_addr: PythonObject, n: PythonObject, out_addr: PythonOb
         # an infinite result from finite terms is the exact sum outside the
         # binary64 range: fsum's OverflowError (the caller raises it)
         var any_inf = False
-        for i in range(count):  # small-loop(count: terms of one fsum)
+        for i in range(count):  # small-loop(count: terms of one fsum): every caller sums a k-sized list
             if isinf(vals[i]):
                 any_inf = True
         if not any_inf:
-            return PythonObject(2)
+            # flagged as status 1 with +inf in out[0] (a -inf + inf leaves
+            # out[0] at the caller's 0.0): the caller raises OverflowError
+            op.unsafe_store(0, t)
+            return PythonObject(1)
     op.unsafe_store(0, t)
     return PythonObject(0)
 
