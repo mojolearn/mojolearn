@@ -151,7 +151,7 @@ class BuildAndInstallTests(unittest.TestCase):
 
     def build(self, *extra):
         return P.main(['build', '--vendor', 'nvidia', '--out', str(self.out), '--root', str(self.root), '--compiler', str(self.mojo),
-                       '--jobs', '2', '--no-closure', '--emulate-linux', '--force-box-usable', *extra])
+                       '--jobs', '2', '--no-closure', '--emulate-linux', '--force-box-usable', '--no-smoke-host-cpu', *extra])
 
     def test_build_receipts_manifest_lookup_and_resume(self):
         plan = json.loads((self.out / 'nvidia' / 'plan.json').read_text())
@@ -171,6 +171,8 @@ class BuildAndInstallTests(unittest.TestCase):
         for tok in ('--target-accelerator', 'sm_89', '--target-cpu', 'x86-64-v3', 'MOJOLEARN_NUMERIC_IDENTICAL=1', 'MOJOLEARN_COLUMN_NVIDIA',
                     'MOJOLEARN_A=1', '--emit', 'shared-lib'):
             self.assertIn(tok, rec['argv'], tok)
+            self.assertIn(tok, rec['argv_recorded'], tok)
+        self.assertEqual(rec['argv_substitutions'], [])
         self.assertNotIn('MOJOLEARN_B=2', rec['argv'])  # B does not reach x_a
         self.assertEqual(rec['argv'][rec['argv'].index('-j') + 1], '1')
         self.assertEqual(rec['dest'], 'python/mojolearn/identical/_mojolearn_x_a.so')

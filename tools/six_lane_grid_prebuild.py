@@ -327,6 +327,20 @@ def dry_run(root, script, binding, vendor, defines, compile_jobs, shimdir, log):
     return argv, dest, rc
 
 
+def compiler_env(compiler, base=None):
+    """The compile environment: no MOJOLEARN_* (the dry run already folded them into the argv); for a mojo binary given
+    by path, its bin dir on PATH and MODULAR_HOME (what `pixi run` activation exports; tools/six_lane_ab.py does the same)."""
+    env = {k: v for k, v in (base if base is not None else os.environ).items()
+           if not k.startswith('MOJOLEARN_') and k != 'MACOSX_DEPLOYMENT_TARGET'}
+    exe = Path(compiler[0])
+    if exe.is_file():
+        env['PATH'] = str(exe.resolve().parent) + os.pathsep + env.get('PATH', '')
+        home = exe.resolve().parent.parent / 'share' / 'max'
+        if (home / 'modular.cfg').exists():
+            env['MODULAR_HOME'] = str(home)
+    return env
+
+
 def compile_argv(recorded, compiler, out_path):
     """`pixi run mojo build ... -o X` as the shim saw it (without `pixi`) -> `<compiler> build ... -o out_path`."""
     toks = list(recorded)
@@ -401,7 +415,7 @@ def build_one(a, ctx):
         del argv[i:i + 2]
     rec['argv'] = argv
     rec['argv_substitutions'] = subs
-    env = {k: v for k, v in os.environ.items() if not k.startswith('MOJOLEARN_') and k != 'MACOSX_DEPLOYMENT_TARGET'}
+    env = compiler_env(ctx['compiler'])
     with (d / 'build.log').open('w') as f:
         f.write('+ ' + ' '.join(shlex.quote(x) for x in argv) + '\n')
         f.flush()
@@ -464,7 +478,7 @@ def cmd_build(args):
     if dirty and not args.allow_dirty:
         raise SystemExit('tree has uncommitted changes; the box builds origin/<branch>. Commit, or --allow-dirty for a smoke')
     compiler = shlex.split(args.compiler)
-    vp = subprocess.run(compiler + ['--version'], cwd=root, capture_output=True, text=True)
+    vp = subprocess.run(compiler + ['--version'], cwd=root, env=compiler_env(compiler), capture_output=True, text=True)
     if vp.returncode != 0:
         raise SystemExit('compiler probe failed: %s' % (vp.stderr or vp.stdout).strip()[:300])
     version = ' '.join((vp.stdout or vp.stderr).split())
