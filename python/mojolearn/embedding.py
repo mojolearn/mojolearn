@@ -49,6 +49,14 @@ position order reproduce the unsplit gradient bit for bit.
 There is no autograd here. The class holds the table and runs the two
 calls; `weight` is never updated by this module.
 
+DEVICE I/O (lane gap-neural-io, 2026-10-08): `forward(ids, device=True)`
+returns y as a `SequenceDeviceTensor` resident on this binding (nothing comes
+back over the bus until `.numpy()`); `backward(ids, dy)` with dy such a
+tensor (`layer.to_device(array)` makes one) folds it where it lives and
+returns the (V, d) gradient as one too (a `grad` carry is copied on the
+device). The same kernels on the same values: the same bits. A binding
+without the resident entries refuses `device=True` by name.
+
 NO SPEED CLAIM.
 """
 import itertools
@@ -237,10 +245,44 @@ class Embedding(NumericModeMixin):
         a, _ = as_i32_c(raw, ndim=None, name="ids")
         return a.reshape((int(a.size),)), tuple(a.shape)
 
-    def forward(self, ids):
-        """`weight[ids]`, shape `ids.shape + (embedding_dim,)`, float32."""
+    # -- device I/O (lane gap-neural-io) ------------------------------------
+
+    _device_io = True
+
+    def _dev_module(self):
+        mod = self._extension()
+        if not all(callable(getattr(mod, n, None)) for n in  # glue: the named binding entry points
+                   ("seq_tensor_alloc", "embedding_forward_dev", "embedding_backward_dev")):
+            raise RuntimeError(f"mojolearn Embedding: {mod.__name__} has no device I/O entries; "
+                               "use host arrays (device=False)")
+        return mod
+
+    def to_device(self, a):
+        """float32 array `a` as a tensor resident on this layer's binding
+        (uploaded once, here): a `dy` for `backward`."""
+        from ._x_sequence_device import SequenceDeviceTensor
+        return SequenceDeviceTensor._wrap(self._dev_module(), a)
+
+    def _is_dev(self, x):
+        from ._x_sequence_device import is_seq_tensor
+        return is_seq_tensor(x)
+
+    def forward(self, ids, device=False):
+        """`weight[ids]`, shape `ids.shape + (embedding_dim,)`, float32
+        (resident on the device with `device=True`)."""
         flat, shape = self._ids(ids)
         t, d = int(flat.size), self.embedding_dim
+        if device:
+            from ._x_sequence_device import SequenceDeviceTensor
+            mod = self._dev_module()
+            y = SequenceDeviceTensor._new(mod, shape + (d,))
+            tok = self._table_token(mod)
+            mod.embedding_forward_dev(
+                # ORDER MATCHES bindings/_mojolearn_embedding.mojo::embedding_forward_dev_binding.
+                [addr_ro(self.weight, name="weight"), addr_ro(flat, name="ids")], [y.h],
+                [self.num_embeddings, d, t, 0 if tok is None else tok],
+            )
+            return y
         y = empty((t * d,), "<f4")
         mod = self._extension()
         tok = self._table_token(mod)
@@ -269,6 +311,8 @@ class Embedding(NumericModeMixin):
         require_training(self)
         flat, shape = self._ids(ids)
         t, d, v = int(flat.size), self.embedding_dim, self.num_embeddings
+        if self._is_dev(dy):
+            return self._backward_dev(flat, shape, dy, grad)
         g, _ = as_f32_c(dy, ndim=None, name="dy")
         if tuple(g.shape) != shape + (d,):
             raise ValueError(f"mojolearn Embedding: dy has shape {tuple(g.shape)}, want {shape + (d,)}")
@@ -295,6 +339,36 @@ class Embedding(NumericModeMixin):
             [v, d, t, pad, accumulate, plan],
         )
         return dw.reshape((v, d))
+
+    def _backward_dev(self, flat, shape, dy, grad):
+        """`backward` on a resident dy: the gradient as a resident tensor."""
+        from ._x_sequence_device import SequenceDeviceTensor
+        mod = self._dev_module()
+        t, d, v = int(flat.size), self.embedding_dim, self.num_embeddings
+        if dy.b is not mod or tuple(dy.shape) != shape + (d,):
+            raise ValueError(f"mojolearn Embedding: dy has shape {tuple(dy.shape)}, want {shape + (d,)} "
+                             "(on this layer's binding)")
+        accumulate = 0
+        if grad is None:
+            dw = SequenceDeviceTensor._new(mod, (v, d))
+        else:
+            if self._is_dev(grad):
+                if grad.b is not mod or tuple(grad.shape) != (v, d):
+                    raise ValueError(f"mojolearn Embedding: grad has shape {tuple(grad.shape)}, want ({v}, {d})")
+                dw = grad.copy()          # the carry's bits; `grad` itself is not modified
+            else:
+                prev, _ = as_f32_c(grad, ndim=2, name="grad")
+                if tuple(prev.shape) != (v, d):
+                    raise ValueError(f"mojolearn Embedding: grad has shape {tuple(prev.shape)}, want ({v}, {d})")
+                dw = SequenceDeviceTensor._wrap(mod, prev)
+            accumulate = 1
+        pad = _NO_PADDING if self.padding_idx is None else int(self.padding_idx)
+        mod.embedding_backward_dev(
+            # ORDER MATCHES bindings/_mojolearn_embedding.mojo::embedding_backward_dev_binding.
+            [addr_ro(flat, name="ids")], [dy.h, dw.h],
+            [v, d, t, pad, accumulate, _PLAN_CODE[self.plan]],
+        )
+        return dw
 
     # -- saved tables (lane/inference-embedding-ivf-cholesky, 2026-09-15) ---
 
