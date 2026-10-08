@@ -8,20 +8,20 @@
    "define": "MOJOLEARN_TREES_HIST_REP_SM",
    "kind": "arms",
    "arms": {
-    "pinned32": [],
+    "device": [],
+    "pinned32": [
+     "MOJOLEARN_TREES_HIST_REP_SM_OFF"
+    ],
     "64": [
      "MOJOLEARN_TREES_HIST_REP_SM=64"
-    ],
-    "device": [
-     "MOJOLEARN_TREES_HIST_REP_SM=0"
     ],
     "device_bpsm4": [
      "MOJOLEARN_TREES_HIST_REP_SM=1"
     ]
    },
-   "default": "pinned32",
+   "default": "device",
    "source": [
-    "gbdt/trees_small_switches.mojo:38",
+    "gbdt/trees_small_switches.mojo:68",
     "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:3088",
     "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2278",
     "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2309",
@@ -33,8 +33,8 @@
    ],
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
-   "status": "merged",
-   "note": "SM count of the IDENTICAL histogram replication target, Int32 families only (fused two-stat 8-bit, shared-Int32 one-byte ladder, wide 8-bit, launch_one_byte/launch_hist2_one_byte in HIST_SMEM_SHARED2_I32). Float binary/half-byte families, level quantize and multi-GPU shards keep the pinned 32. Per-row Int32 quantize + associative atomics: no bit moves; host unchanged.",
+   "status": "promoted:ge123e6f9",
+   "note": "SM count of the IDENTICAL histogram replication target, Int32 families only (fused two-stat 8-bit, shared-Int32 one-byte ladder, wide 8-bit, launch_one_byte/launch_hist2_one_byte in HIST_SMEM_SHARED2_I32). Float binary/half-byte families, level quantize and multi-GPU shards keep the pinned 32. Per-row Int32 quantize + associative atomics: no bit moves; host unchanged. Default device (0, device SMs x 2) in IDENTICAL; arm pinned32 (`MOJOLEARN_TREES_HIST_REP_SM_OFF`) is the old pinned replication_for. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md.",
    "merged_from": [
     "HIST_REP_BPSM",
     "MOJOLEARN_TREES_HIST_REP_BPSM"

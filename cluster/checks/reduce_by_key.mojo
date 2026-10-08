@@ -824,8 +824,7 @@ def blocked_acc_table_cells(n_samples: Int, n_features: Int, n_clusters: Int) ->
     return blocks * n_clusters * n_features + centroid_fold_scratch_cells(blocks, n_clusters * n_features)
 
 
-# lane/classical-structural (2026-10-07), IDENTICAL only, default off:
-# `-D MOJOLEARN_IDN_KMEANS_CENTROID_FOLD`. `fold_block_table_kernel` gives one
+# lane/classical-structural (2026-10-07), IDENTICAL only. `fold_block_table_kernel` gives one
 # thread per output cell a serial chain over EVERY row block: k*d threads (a
 # single block on one SM at small k*d) each walk n/BLOCK_ACC_ROWS dependent
 # loads, twice per iteration (sums, weights), and on a multi-die part those
@@ -845,8 +844,21 @@ def blocked_acc_table_cells(n_samples: Int, n_features: Int, n_clusters: Int) ->
 # 256-row blocks and matches today). No bit moves; the host column is
 # unchanged. The table is never modified (the gated arms refold an untouched
 # table past convergence), only its scratch tail is written.
+# PROMOTED to the IDENTICAL default (lane/grid-flips-1, 2026-10-08, Andrew
+# 13:00Z "flip all of these"). Grid run ge123e6f9 (NVIDIA L40S sm_89 + AMD
+# MI325X gfx942, full board data, one scored run per arm), serial -> parallel fold:
+#   ivf taxi      NV 225.5 -> 204.1 ms (0.905x)  AMD 243.3 -> 226.8 ms (0.932x)
+#   ivf istella   NV 2259 -> 2138 ms (0.947x)    AMD 1562 -> 1514 ms (0.969x)
+#   gmm taxi      NV 35.18 -> 32.46 ms (0.922x)  AMD 63.30 -> 54.50 ms (0.861x)
+#   gmm istella   NV 578.2 -> 573.2 ms (0.991x)  AMD 543.0 -> 538.4 ms (0.992x)
+#   kmeans taxi   AMD 705.2 -> 209.2 ms (0.297x); kmeans istella AMD 541.0 ->
+#                 412.9 ms (0.763x); the NV kmeans cells were not measured.
+#   Geometric mean 0.939x. Quality SAME; no bits change (Int32 sums).
+# `-D MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF` restores the serial
+# per-cell chain (the grid's "off" arm). The old opt-in define is refused in
+# core/six_lane_experiment_guards.mojo.
 comptime IDN_KMEANS_CENTROID_FOLD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_KMEANS_CENTROID_FOLD"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF"]()
 )
 comptime CF_COLS = 32  # cells per level-1 tile: one coalesced 128-byte row of the table
 comptime CF_LANES = 8  # row-block lanes per tile (CF_COLS * CF_LANES = 256 threads)

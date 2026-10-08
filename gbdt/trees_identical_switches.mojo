@@ -10,11 +10,21 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # T16 (resident Lossguide frontier, = I17) removed 2026-10-07: lost on NVIDIA and AMD.
 
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # T17 Lossguide exact best-first batch width, an int sweep {32, 64, 128}.
-# 0 (absent) keeps the incumbent width 32 (or 64 under the older
+# 0 keeps the pre-T17 width 32 (or 64 under the older
 # MOJOLEARN_GBDT_LG_EXACT_BATCH64 arm).
-comptime T17_BATCH = get_defined_int["MOJOLEARN_TREES_T17_BATCH", 0]() if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
+# PROMOTED: absent now means 128, the IDENTICAL default (lane/grid-flips-1,
+# 2026-10-08, Andrew 13:00Z "flip all of these"). Grid run ge123e6f9
+# (NVIDIA L40S sm_89 + AMD MI325X gfx942, full board data, one scored run per
+# arm), width 32 -> 128:
+#   gbdt-lossguide taxi    NV 4674 -> 4243 ms (0.908x)  AMD 4241 -> 3942 ms (0.929x)
+#   gbdt-lossguide istella NV 10082 -> 9421 ms (0.935x) AMD 8324 -> 7638 ms (0.918x)
+#   gbdt-categorical taxicat AMD 10988 -> 10558 ms (0.961x); NV cell not
+#   measured, quality FAIL on that cell's second check (open, both arms).
+#   Geometric mean 0.922x; quality SAME on the lossguide cells; no bits change.
+# `-D MOJOLEARN_TREES_T17_BATCH=32` measures the old width (the grid's
+# "32" arm); 64 stays a sweep arm; `=0` still selects the pre-T17 rule.
+comptime T17_BATCH = get_defined_int["MOJOLEARN_TREES_T17_BATCH", 128]() if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime T18 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T18"]()
@@ -33,8 +43,20 @@ comptime T21 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEAR
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime T21_STREAMS = get_defined_int["MOJOLEARN_TREES_T21_STREAMS", 1]() if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 1
 
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime T22 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T22"]()
+# T22 document-keyed ordered storage: fold-position compressed storage, the
+# original document ids passed to the dither (no bits change).
+# PROMOTED to the IDENTICAL default (lane/grid-flips-1, 2026-10-08, Andrew
+# 13:00Z "flip all of these"). Grid run ge123e6f9 (NVIDIA L40S sm_89 + AMD
+# MI325X gfx942, full board data, one scored run per arm), off -> on:
+#   gbdt-ordered istella NV 54409 -> 37059 ms (0.681x)  AMD 39277 -> 37263 ms (0.949x)
+#   gbdt-ordered taxi    NV 22296 -> 22069 ms (0.990x)  AMD 24991 -> 24159 ms (0.967x)
+#   With ORD_STD_GRIDFOLD also on, istella NV reads 0.675x. Quality SAME,
+#   NV vs AMD output hashes MATCH. Geometric mean 0.887x. Ordered fits of
+#   gbdt-categorical reach this storage too; not measured there.
+# `-D MOJOLEARN_TREES_T22_OFF` restores the incumbent storage (the grid's
+# "off" arm). The old opt-in define is refused in
+# core/six_lane_experiment_guards.mojo.
+comptime T22 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TREES_T22_OFF"]()
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime T25 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T25"]()
@@ -84,13 +106,21 @@ comptime C45_GBDT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJ
 
 # ---- Lane S3 trees-structural (2026-10-07), all default OFF ----
 
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # ORD_STD_GRIDFOLD (gbdt-ordered): the score-noise / scale-magnitude sums over
 # the full grid (ORD_STD_GRID_BLOCKS x ORD_STD_GRID_TPB lanes, a fixed lane
 # count independent of device and shape) instead of 256 serial lane chains.
 # BITS CHANGE (new fold order, same on every vendor); the host column
-# (`gbdt_oracle_ordered`) follows the same order under the same define.
-comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_ORD_STD_GRIDFOLD"]()
+# (`gbdt_oracle_ordered`) follows the same order under the same flag.
+# PROMOTED to the IDENTICAL default (lane/grid-flips-1, 2026-10-08, Andrew
+# 13:00Z "flip all of these"). Grid run ge123e6f9 (NVIDIA L40S sm_89 + AMD
+# MI325X gfx942, full board data, one scored run per arm), off -> on:
+#   gbdt-ordered taxi    NV 22296 -> 21538 ms (0.966x)  AMD 24991 -> 23004 ms (0.921x)
+#   gbdt-ordered istella NV 54409 -> 54239 ms (0.997x)  AMD 39277 -> 38241 ms (0.974x)
+#   Geometric mean 0.964x. Quality SAME; NV vs AMD output hashes MATCH.
+# `-D MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF` restores the 256 lane chains on
+# the device and in the host column together (the grid's "off" arm). The old
+# opt-in define is refused in core/six_lane_experiment_guards.mojo.
+comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF"]()
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # LG_LEVEL_ROUNDS (gbdt-lossguide): when the leaf budget cannot bind

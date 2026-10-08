@@ -3235,7 +3235,7 @@
      "id": "G.classical:kde.c52_pair_rows=128",
      "pack": "P050",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
       "MOJOLEARN_CLASSICAL_PCA_COV=4",
       "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
      ],
@@ -3259,7 +3259,7 @@
      "pack": "P051",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
       "MOJOLEARN_CLASSICAL_PCA_COV=23"
      ],
      "priority": 5,
@@ -3477,16 +3477,16 @@
     },
     {
      "assignment": {
-      "idn_kmeans_centroid_fold": "on"
+      "idn_kmeans_centroid_fold": "off"
      },
      "bindings": [
       "_mojolearn"
      ],
      "defines": [
-      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.classical:kmeans.idn_kmeans_centroid_fold=on",
+     "id": "G.classical:kmeans.idn_kmeans_centroid_fold=off",
      "pack": "P007",
      "packed_extra_defines": [],
      "priority": 7,
@@ -3498,7 +3498,7 @@
      "assignment": {
       "c37_fused_accumulate": "on",
       "c37_fused_rows": "1024",
-      "idn_kmeans_centroid_fold": "on",
+      "idn_kmeans_centroid_fold": "off",
       "kmeans_assign": "rows4",
       "kmeans_conv_chunk": "1"
      },
@@ -3508,7 +3508,7 @@
      "defines": [
       "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
       "MOJOLEARN_C37_FUSED_ROWS=1024",
-      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
+      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
       "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1",
       "MOJOLEARN_KMEANS_ROW_ASSIGN=4"
      ],
@@ -3656,17 +3656,17 @@
     {
      "assignment": {
       "c37_fused_accumulate": "on",
-      "idn_kmeans_centroid_fold": "on"
+      "idn_kmeans_centroid_fold": "off"
      },
      "bindings": [
       "_mojolearn"
      ],
      "defines": [
       "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
-      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=on",
+     "id": "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=off",
      "pack": "P015",
      "packed_extra_defines": [],
      "priority": 15,
@@ -3678,7 +3678,7 @@
      "assignment": {
       "c37_fused_accumulate": "on",
       "c37_fused_rows": "1024",
-      "idn_kmeans_centroid_fold": "on"
+      "idn_kmeans_centroid_fold": "off"
      },
      "bindings": [
       "_mojolearn"
@@ -3686,10 +3686,10 @@
      "defines": [
       "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
       "MOJOLEARN_C37_FUSED_ROWS=1024",
-      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=on",
+     "id": "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=off",
      "pack": "P016",
      "packed_extra_defines": [],
      "priority": 16,
@@ -3786,7 +3786,7 @@
    "representative_arms": {
     "c37_fused_accumulate": "on",
     "c37_fused_rows": "1024",
-    "idn_kmeans_centroid_fold": "on",
+    "idn_kmeans_centroid_fold": "off",
     "kmeans_assign": "rows4",
     "kmeans_conv_chunk": "1"
    },
@@ -3959,6 +3959,27 @@
    "configs": [
     {
      "assignment": {
+      "C24_TSQR": "rows4096"
+     },
+     "bindings": [
+      "_mojolearn_estimators",
+      "_mojolearn_linalg",
+      "_mojolearn_x_decomp"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.classical:ols.C24_TSQR=rows4096",
+     "pack": "P054",
+     "packed_extra_defines": [],
+     "priority": 1,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "C24_TSQR": "panel8"
      },
      "bindings": [
@@ -3971,27 +3992,6 @@
      ],
      "global_reach": [],
      "id": "G.classical:ols.C24_TSQR=panel8",
-     "pack": "P054",
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "C24_TSQR": "rows2048"
-     },
-     "bindings": [
-      "_mojolearn_estimators",
-      "_mojolearn_linalg",
-      "_mojolearn_x_decomp"
-     ],
-     "defines": [
-      "MOJOLEARN_CLASSICAL_C24_ROWS2048=1"
-     ],
-     "global_reach": [],
-     "id": "G.classical:ols.C24_TSQR=rows2048",
      "pack": "P055",
      "packed_extra_defines": [],
      "priority": 2,
@@ -4064,7 +4064,7 @@
     },
     {
      "assignment": {
-      "linear_gram_solve": "on"
+      "linear_gram_solve": "off"
      },
      "bindings": [
       "_mojolearn_estimators",
@@ -4072,10 +4072,10 @@
       "_mojolearn_x_decomp"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.classical:ols.linear_gram_solve=on",
+     "id": "G.classical:ols.linear_gram_solve=off",
      "pack": "P059",
      "packed_extra_defines": [],
      "priority": 6,
@@ -4085,9 +4085,9 @@
     },
     {
      "assignment": {
-      "C24_TSQR": "panel8",
+      "C24_TSQR": "rows4096",
       "c02_linear_pair": "on",
-      "linear_gram_solve": "on",
+      "linear_gram_solve": "off",
       "ols_one_entry": "off"
      },
      "bindings": [
@@ -4097,8 +4097,8 @@
      ],
      "defines": [
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+      "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
       "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1"
      ],
      "global_reach": [],
@@ -4112,7 +4112,7 @@
     },
     {
      "assignment": {
-      "linear_gram_solve": "on",
+      "linear_gram_solve": "off",
       "ols_one_entry": "off"
      },
      "bindings": [
@@ -4121,11 +4121,11 @@
       "_mojolearn_x_decomp"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
       "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.classical:ols.ols_one_entry=off+linear_gram_solve=on",
+     "id": "G.classical:ols.ols_one_entry=off+linear_gram_solve=off",
      "pack": "P061",
      "packed_extra_defines": [],
      "priority": 8,
@@ -4135,8 +4135,8 @@
     },
     {
      "assignment": {
-      "C24_TSQR": "panel8",
-      "linear_gram_solve": "on"
+      "C24_TSQR": "rows4096",
+      "linear_gram_solve": "off"
      },
      "bindings": [
       "_mojolearn_estimators",
@@ -4144,11 +4144,11 @@
       "_mojolearn_x_decomp"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+      "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on",
+     "id": "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off",
      "pack": "P062",
      "packed_extra_defines": [],
      "priority": 9,
@@ -4158,8 +4158,8 @@
     },
     {
      "assignment": {
-      "C24_TSQR": "rows2048",
-      "linear_gram_solve": "on"
+      "C24_TSQR": "panel8",
+      "linear_gram_solve": "off"
      },
      "bindings": [
       "_mojolearn_estimators",
@@ -4167,11 +4167,11 @@
       "_mojolearn_x_decomp"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+      "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on",
+     "id": "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off",
      "pack": "P063",
      "packed_extra_defines": [],
      "priority": 10,
@@ -4182,7 +4182,7 @@
     {
      "assignment": {
       "C24_TSQR": "tree4",
-      "linear_gram_solve": "on"
+      "linear_gram_solve": "off"
      },
      "bindings": [
       "_mojolearn_estimators",
@@ -4191,10 +4191,10 @@
      ],
      "defines": [
       "MOJOLEARN_CLASSICAL_C24_TREE4=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on",
+     "id": "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off",
      "pack": "P064",
      "packed_extra_defines": [],
      "priority": 11,
@@ -4268,9 +4268,9 @@
     "classical:ols"
    ],
    "representative_arms": {
-    "C24_TSQR": "panel8",
+    "C24_TSQR": "rows4096",
     "c02_linear_pair": "on",
-    "linear_gram_solve": "on",
+    "linear_gram_solve": "off",
     "ols_one_entry": "off"
    },
    "unmapped_reason": null,
@@ -4327,7 +4327,7 @@
      "pack": "P050",
      "packed_extra_defines": [
       "MOJOLEARN_C52_PAIR_ROWS=128",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
       "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
      ],
      "priority": 2,
@@ -4351,7 +4351,7 @@
      "packed_extra_defines": [
       "MOJOLEARN_C52_PAIR_ROWS=512",
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
      ],
      "priority": 3,
      "queued": true,
@@ -5492,7 +5492,7 @@
      "pack": "P258",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
-      "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
+      "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1"
      ],
      "priority": 1,
      "queued": true,
@@ -7135,7 +7135,7 @@
      "pack": "P258",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C23_MCD=1",
-      "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
+      "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1"
      ],
      "priority": 1,
      "queued": true,
@@ -7198,7 +7198,7 @@
      "pack": "P258",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
-      "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
+      "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1"
      ],
      "priority": 1,
      "queued": true,
@@ -8536,16 +8536,16 @@
    "configs": [
     {
      "assignment": {
-      "C24_TSQR": "panel8"
+      "C24_TSQR": "rows4096"
      },
      "bindings": [
       "_mojolearn_x_decomp"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
+      "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.expanded:randomized-svd.C24_TSQR=panel8",
+     "id": "G.expanded:randomized-svd.C24_TSQR=rows4096",
      "pack": "P258",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
@@ -8558,16 +8558,16 @@
     },
     {
      "assignment": {
-      "C24_TSQR": "rows2048"
+      "C24_TSQR": "panel8"
      },
      "bindings": [
       "_mojolearn_x_decomp"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_C24_ROWS2048=1"
+      "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
      ],
      "global_reach": [],
-     "id": "G.expanded:randomized-svd.C24_TSQR=rows2048",
+     "id": "G.expanded:randomized-svd.C24_TSQR=panel8",
      "pack": "P259",
      "packed_extra_defines": [],
      "priority": 2,
@@ -8615,14 +8615,14 @@
     },
     {
      "assignment": {
-      "C24_TSQR": "panel8",
+      "C24_TSQR": "rows4096",
       "rsvd_tsqr_ortho": "on"
      },
      "bindings": [
       "_mojolearn_x_decomp"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+      "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
       "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1"
      ],
      "global_reach": [],
@@ -8636,18 +8636,18 @@
     },
     {
      "assignment": {
-      "C24_TSQR": "rows2048",
+      "C24_TSQR": "panel8",
       "rsvd_tsqr_ortho": "on"
      },
      "bindings": [
       "_mojolearn_x_decomp"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
+      "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
       "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1"
      ],
      "global_reach": [],
-     "id": "G.expanded:randomized-svd.C24_TSQR=rows2048+rsvd_tsqr_ortho=on",
+     "id": "G.expanded:randomized-svd.C24_TSQR=panel8+rsvd_tsqr_ortho=on",
      "pack": "P263",
      "packed_extra_defines": [],
      "priority": 6,
@@ -8726,7 +8726,7 @@
     "expanded:randomized-svd"
    ],
    "representative_arms": {
-    "C24_TSQR": "panel8",
+    "C24_TSQR": "rows4096",
     "rsvd_tsqr_ortho": "on"
    },
    "unmapped_reason": null,
@@ -10828,16 +10828,16 @@
    "configs": [
     {
      "assignment": {
-      "idn_kmeans_centroid_fold": "on"
+      "idn_kmeans_centroid_fold": "off"
      },
      "bindings": [
       "_mojolearn_mixture"
      ],
      "defines": [
-      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.more:gmm.idn_kmeans_centroid_fold=on",
+     "id": "G.more:gmm.idn_kmeans_centroid_fold=off",
      "pack": "P163",
      "packed_extra_defines": [],
      "priority": 1,
@@ -10875,7 +10875,7 @@
     "more:gmm"
    ],
    "representative_arms": {
-    "idn_kmeans_centroid_fold": "on"
+    "idn_kmeans_centroid_fold": "off"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [
@@ -10905,16 +10905,16 @@
    "configs": [
     {
      "assignment": {
-      "ivf_direct": "on"
+      "ivf_direct": "off"
      },
      "bindings": [
       "_mojolearn_ivf"
      ],
      "defines": [
-      "MOJOLEARN_IVF_DIRECT_DISTANCE=1"
+      "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.more:ivf.ivf_direct=on",
+     "id": "G.more:ivf.ivf_direct=off",
      "pack": "P098",
      "packed_extra_defines": [],
      "priority": 1,
@@ -10924,16 +10924,16 @@
     },
     {
      "assignment": {
-      "idn_kmeans_centroid_fold": "on"
+      "idn_kmeans_centroid_fold": "off"
      },
      "bindings": [
       "_mojolearn_ivf"
      ],
      "defines": [
-      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.more:ivf.idn_kmeans_centroid_fold=on",
+     "id": "G.more:ivf.idn_kmeans_centroid_fold=off",
      "pack": "P099",
      "packed_extra_defines": [],
      "priority": 2,
@@ -10943,15 +10943,15 @@
     },
     {
      "assignment": {
-      "idn_kmeans_centroid_fold": "on",
-      "ivf_direct": "on"
+      "idn_kmeans_centroid_fold": "off",
+      "ivf_direct": "off"
      },
      "bindings": [
       "_mojolearn_ivf"
      ],
      "defines": [
-      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-      "MOJOLEARN_IVF_DIRECT_DISTANCE=1"
+      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+      "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF=1"
      ],
      "global_reach": [],
      "id": "G.more:ivf.all_on",
@@ -10992,8 +10992,8 @@
     "more:ivf"
    ],
    "representative_arms": {
-    "idn_kmeans_centroid_fold": "on",
-    "ivf_direct": "on"
+    "idn_kmeans_centroid_fold": "off",
+    "ivf_direct": "off"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [
@@ -11382,16 +11382,16 @@
     },
     {
      "assignment": {
-      "linear_gram_solve": "on"
+      "linear_gram_solve": "off"
      },
      "bindings": [
       "_mojolearn_estimators"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.more:ridge.linear_gram_solve=on",
+     "id": "G.more:ridge.linear_gram_solve=off",
      "pack": "P050",
      "packed_extra_defines": [
       "MOJOLEARN_C52_PAIR_ROWS=128",
@@ -11406,14 +11406,14 @@
     {
      "assignment": {
       "c02_linear_pair": "on",
-      "linear_gram_solve": "on"
+      "linear_gram_solve": "off"
      },
      "bindings": [
       "_mojolearn_estimators"
      ],
      "defines": [
       "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
      ],
      "global_reach": [],
      "id": "G.more:ridge.all_on",
@@ -11474,7 +11474,7 @@
    ],
    "representative_arms": {
     "c02_linear_pair": "on",
-    "linear_gram_solve": "on"
+    "linear_gram_solve": "off"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [],
@@ -11755,7 +11755,7 @@
      "pack": "P050",
      "packed_extra_defines": [
       "MOJOLEARN_C52_PAIR_ROWS=128",
-      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
       "MOJOLEARN_CLASSICAL_PCA_COV=4"
      ],
      "priority": 2,
@@ -26716,7 +26716,7 @@
      "pack": "P065",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T29=1"
      ],
      "priority": 1,
@@ -26809,7 +26809,7 @@
      "id": "G.trees:gbdt-categorical.T18=on",
      "pack": "P069",
      "packed_extra_defines": [
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1"
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1"
      ],
      "priority": 5,
      "queued": true,
@@ -26856,6 +26856,28 @@
     },
     {
      "assignment": {
+      "T17_BATCH": "32"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_T17_BATCH=32"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-categorical.T17_BATCH=32",
+     "pack": "P072",
+     "packed_extra_defines": [
+      "MOJOLEARN_TREES_T22_OFF=1",
+      "MOJOLEARN_TREES_T25=1"
+     ],
+     "priority": 8,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "T17_BATCH": "64"
      },
      "bindings": [
@@ -26866,31 +26888,9 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-categorical.T17_BATCH=64",
-     "pack": "P072",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_T22=1",
-      "MOJOLEARN_TREES_T25=1"
-     ],
-     "priority": 8,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "T17_BATCH": "128"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_T17_BATCH=128"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-categorical.T17_BATCH=128",
      "pack": "P073",
      "packed_extra_defines": [
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
       "MOJOLEARN_TREES_T24=1"
      ],
      "priority": 9,
@@ -27014,16 +27014,16 @@
     },
     {
      "assignment": {
-      "HIST_REP_SM": "64"
+      "HIST_REP_SM": "pinned32"
      },
      "bindings": [
       "_mojolearn_gbdt"
      ],
      "defines": [
-      "MOJOLEARN_TREES_HIST_REP_SM=64"
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.trees:gbdt-categorical.HIST_REP_SM=64",
+     "id": "G.trees:gbdt-categorical.HIST_REP_SM=pinned32",
      "pack": "P080",
      "packed_extra_defines": [],
      "priority": 16,
@@ -27096,9 +27096,9 @@
    "deferred": [
     {
      "assignment": {
-      "HIST_REP_SM": "device"
+      "HIST_REP_SM": "64"
      },
-     "id": "G.trees:gbdt-categorical.HIST_REP_SM=device",
+     "id": "G.trees:gbdt-categorical.HIST_REP_SM=64",
      "reason": "cap 16 reached in priority order",
      "tier": "single"
     },
@@ -27129,8 +27129,8 @@
     {
      "assignment": {
       "C50_GB": "on",
-      "HIST_REP_SM": "64",
-      "T17_BATCH": "64",
+      "HIST_REP_SM": "pinned32",
+      "T17_BATCH": "32",
       "T18": "on",
       "T19_DEFER": "on",
       "T21": "on",
@@ -27211,6 +27211,60 @@
       },
       {
        "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2"
+       },
+       "id": "G.trees:gbdt-categorical.T21_STREAMS=2+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-categorical.hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-categorical.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-categorical.hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-categorical.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-categorical.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-categorical.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
         "HIST_REP_SM": "64",
         "T21_STREAMS": "2"
        },
@@ -27262,60 +27316,6 @@
         "hist_warp_agg": "on"
        },
        "id": "G.trees:gbdt-categorical.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=64"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2"
-       },
-       "id": "G.trees:gbdt-categorical.T21_STREAMS=2+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-categorical.hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-categorical.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-categorical.hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-categorical.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-categorical.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-categorical.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
       },
       {
        "assignment": {
@@ -27383,14 +27383,7 @@
      "reason": "group cross (24 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     }
    ],
-   "dropped_arms": {
-    "T17_BATCH": [
-     {
-      "arm": "32",
-      "reason": "note: \"incumbent 32 (== arm 32)\": identical to the shipped B arm"
-     }
-    ]
-   },
+   "dropped_arms": {},
    "dropped_from_all_on": [
     {
      "arm": "on",
@@ -27489,9 +27482,9 @@
    "representative_arms": {
     "C50_GB": "on",
     "CTR_SORTFREE_SUMS": "on",
-    "HIST_REP_SM": "64",
+    "HIST_REP_SM": "pinned32",
     "LG_LEVEL_ROUNDS": "on",
-    "T17_BATCH": "64",
+    "T17_BATCH": "32",
     "T18": "on",
     "T19_DEFER": "on",
     "T21": "on",
@@ -27669,6 +27662,25 @@
     },
     {
      "assignment": {
+      "HIST_REP_SM": "pinned32"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-depthwise.HIST_REP_SM=pinned32",
+     "pack": "P080",
+     "packed_extra_defines": [],
+     "priority": 9,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "HIST_REP_SM": "64"
      },
      "bindings": [
@@ -27679,25 +27691,6 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-depthwise.HIST_REP_SM=64",
-     "pack": "P080",
-     "packed_extra_defines": [],
-     "priority": 9,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "HIST_REP_SM": "device"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_HIST_REP_SM=0"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-depthwise.HIST_REP_SM=device",
      "pack": "P081",
      "packed_extra_defines": [],
      "priority": 10,
@@ -27727,7 +27720,7 @@
     {
      "assignment": {
       "C50_GB": "on",
-      "HIST_REP_SM": "64",
+      "HIST_REP_SM": "pinned32",
       "T19_DEFER": "on",
       "T21": "on",
       "T21_STREAMS": "2",
@@ -27741,7 +27734,7 @@
      "defines": [
       "MOJOLEARN_TREES_C50_GB_PACKED=1",
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-      "MOJOLEARN_TREES_HIST_REP_SM=64",
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
       "MOJOLEARN_TREES_T19_DEFER=1",
       "MOJOLEARN_TREES_T21=1",
@@ -27753,9 +27746,9 @@
      "pack": "P083",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T17_BATCH=64",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+      "MOJOLEARN_TREES_T17_BATCH=32",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
       "MOJOLEARN_TREES_T29=1"
@@ -27903,6 +27896,60 @@
       },
       {
        "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2"
+       },
+       "id": "G.trees:gbdt-depthwise.T21_STREAMS=2+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-depthwise.hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-depthwise.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-depthwise.hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-depthwise.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-depthwise.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-depthwise.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
         "HIST_REP_SM": "64",
         "T21_STREAMS": "2"
        },
@@ -27954,60 +28001,6 @@
         "hist_warp_agg": "on"
        },
        "id": "G.trees:gbdt-depthwise.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=64"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2"
-       },
-       "id": "G.trees:gbdt-depthwise.T21_STREAMS=2+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-depthwise.hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-depthwise.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-depthwise.hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-depthwise.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-depthwise.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-depthwise.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
       },
       {
        "assignment": {
@@ -28163,7 +28156,7 @@
    ],
    "representative_arms": {
     "C50_GB": "on",
-    "HIST_REP_SM": "64",
+    "HIST_REP_SM": "pinned32",
     "T19_DEFER": "on",
     "T21": "on",
     "T21_STREAMS": "2",
@@ -28190,6 +28183,28 @@
    "configs": [
     {
      "assignment": {
+      "T17_BATCH": "32"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_T17_BATCH=32"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-lossguide.T17_BATCH=32",
+     "pack": "P072",
+     "packed_extra_defines": [
+      "MOJOLEARN_TREES_T22_OFF=1",
+      "MOJOLEARN_TREES_T25=1"
+     ],
+     "priority": 1,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "T17_BATCH": "64"
      },
      "bindings": [
@@ -28200,31 +28215,9 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-lossguide.T17_BATCH=64",
-     "pack": "P072",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_T22=1",
-      "MOJOLEARN_TREES_T25=1"
-     ],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "T17_BATCH": "128"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_T17_BATCH=128"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-lossguide.T17_BATCH=128",
      "pack": "P073",
      "packed_extra_defines": [
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
       "MOJOLEARN_TREES_T24=1"
      ],
      "priority": 2,
@@ -28386,6 +28379,25 @@
     },
     {
      "assignment": {
+      "HIST_REP_SM": "pinned32"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-lossguide.HIST_REP_SM=pinned32",
+     "pack": "P080",
+     "packed_extra_defines": [],
+     "priority": 11,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "HIST_REP_SM": "64"
      },
      "bindings": [
@@ -28396,25 +28408,6 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-lossguide.HIST_REP_SM=64",
-     "pack": "P080",
-     "packed_extra_defines": [],
-     "priority": 11,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "HIST_REP_SM": "device"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_HIST_REP_SM=0"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-lossguide.HIST_REP_SM=device",
      "pack": "P081",
      "packed_extra_defines": [],
      "priority": 12,
@@ -28463,8 +28456,8 @@
     {
      "assignment": {
       "C50_GB": "on",
-      "HIST_REP_SM": "64",
-      "T17_BATCH": "64",
+      "HIST_REP_SM": "pinned32",
+      "T17_BATCH": "32",
       "T19_DEFER": "on",
       "T21": "on",
       "T21_STREAMS": "2",
@@ -28478,9 +28471,9 @@
      "defines": [
       "MOJOLEARN_TREES_C50_GB_PACKED=1",
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-      "MOJOLEARN_TREES_HIST_REP_SM=64",
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-      "MOJOLEARN_TREES_T17_BATCH=64",
+      "MOJOLEARN_TREES_T17_BATCH=32",
       "MOJOLEARN_TREES_T19_DEFER=1",
       "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
@@ -28491,8 +28484,8 @@
      "pack": "P083",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
       "MOJOLEARN_TREES_T29=1"
@@ -28631,6 +28624,60 @@
       },
       {
        "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2"
+       },
+       "id": "G.trees:gbdt-lossguide.T21_STREAMS=2+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-lossguide.hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-lossguide.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-lossguide.hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-lossguide.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-lossguide.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-lossguide.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
         "HIST_REP_SM": "64",
         "T21_STREAMS": "2"
        },
@@ -28682,60 +28729,6 @@
         "hist_warp_agg": "on"
        },
        "id": "G.trees:gbdt-lossguide.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=64"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2"
-       },
-       "id": "G.trees:gbdt-lossguide.T21_STREAMS=2+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-lossguide.hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-lossguide.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-lossguide.hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-lossguide.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-lossguide.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-lossguide.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
       },
       {
        "assignment": {
@@ -28803,14 +28796,7 @@
      "reason": "group cross (24 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     }
    ],
-   "dropped_arms": {
-    "T17_BATCH": [
-     {
-      "arm": "32",
-      "reason": "note: \"incumbent 32 (== arm 32)\": identical to the shipped B arm"
-     }
-    ]
-   },
+   "dropped_arms": {},
    "dropped_from_all_on": [
     {
      "arm": "on",
@@ -28903,9 +28889,9 @@
    ],
    "representative_arms": {
     "C50_GB": "on",
-    "HIST_REP_SM": "64",
+    "HIST_REP_SM": "pinned32",
     "LG_LEVEL_ROUNDS": "on",
-    "T17_BATCH": "64",
+    "T17_BATCH": "32",
     "T19_DEFER": "on",
     "T21": "on",
     "T21_STREAMS": "2",
@@ -28963,7 +28949,7 @@
      "id": "G.trees:gbdt-multiclass.hist_multistat=4",
      "pack": "P065",
      "packed_extra_defines": [
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T28=1",
       "MOJOLEARN_TREES_T29=1"
      ],
@@ -28999,6 +28985,25 @@
     },
     {
      "assignment": {
+      "HIST_REP_SM": "pinned32"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-multiclass.HIST_REP_SM=pinned32",
+     "pack": "P080",
+     "packed_extra_defines": [],
+     "priority": 4,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "HIST_REP_SM": "64"
      },
      "bindings": [
@@ -29009,25 +29014,6 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.HIST_REP_SM=64",
-     "pack": "P080",
-     "packed_extra_defines": [],
-     "priority": 4,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "HIST_REP_SM": "device"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_HIST_REP_SM=0"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-multiclass.HIST_REP_SM=device",
      "pack": "P081",
      "packed_extra_defines": [],
      "priority": 5,
@@ -29079,7 +29065,7 @@
     {
      "assignment": {
       "C50_GB": "on",
-      "HIST_REP_SM": "64",
+      "HIST_REP_SM": "pinned32",
       "hist_multistat": "4"
      },
      "bindings": [
@@ -29088,7 +29074,7 @@
      "defines": [
       "MOJOLEARN_TREES_C50_GB_PACKED=1",
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_HIST_REP_SM=64"
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.all_on",
@@ -29096,12 +29082,12 @@
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T17_BATCH=64",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+      "MOJOLEARN_TREES_T17_BATCH=32",
       "MOJOLEARN_TREES_T19_DEFER=1",
       "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T23=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
@@ -29110,6 +29096,48 @@
      "priority": 8,
      "queued": true,
      "tier": "all_on",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "HIST_REP_SM": "pinned32",
+      "hist_multistat": "4"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_HIST_MULTISTAT=4",
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=pinned32",
+     "pack": "P087",
+     "packed_extra_defines": [],
+     "priority": 9,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "HIST_REP_SM": "pinned32",
+      "hist_multistat": "8"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_HIST_MULTISTAT=8",
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=pinned32",
+     "pack": "P088",
+     "packed_extra_defines": [],
+     "priority": 10,
+     "queued": true,
+     "tier": "cross",
      "vendor_default_equivalent": []
     },
     {
@@ -29126,9 +29154,9 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=64",
-     "pack": "P087",
+     "pack": "P089",
      "packed_extra_defines": [],
-     "priority": 9,
+     "priority": 11,
      "queued": true,
      "tier": "cross",
      "vendor_default_equivalent": []
@@ -29147,48 +29175,6 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=64",
-     "pack": "P088",
-     "packed_extra_defines": [],
-     "priority": 10,
-     "queued": true,
-     "tier": "cross",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "HIST_REP_SM": "device",
-      "hist_multistat": "4"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_HIST_REP_SM=0"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device",
-     "pack": "P089",
-     "packed_extra_defines": [],
-     "priority": 11,
-     "queued": true,
-     "tier": "cross",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "HIST_REP_SM": "device",
-      "hist_multistat": "8"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_HIST_MULTISTAT=8",
-      "MOJOLEARN_TREES_HIST_REP_SM=0"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device",
      "pack": "P090",
      "packed_extra_defines": [],
      "priority": 12,
@@ -29332,7 +29318,7 @@
    "representative_arms": {
     "C50_GB": "on",
     "GBDT_APPLY_WIDE": "on",
-    "HIST_REP_SM": "64",
+    "HIST_REP_SM": "pinned32",
     "hist_multistat": "4"
    },
    "unmapped_reason": null,
@@ -29364,16 +29350,16 @@
    "configs": [
     {
      "assignment": {
-      "T22": "on"
+      "T22": "off"
      },
      "bindings": [
       "_mojolearn_gbdt"
      ],
      "defines": [
-      "MOJOLEARN_TREES_T22=1"
+      "MOJOLEARN_TREES_T22_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.trees:gbdt-ordered.T22=on",
+     "id": "G.trees:gbdt-ordered.T22=off",
      "pack": "P065",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
@@ -29496,16 +29482,16 @@
     },
     {
      "assignment": {
-      "ORD_STD_GRIDFOLD": "on"
+      "ORD_STD_GRIDFOLD": "off"
      },
      "bindings": [
       "_mojolearn_gbdt"
      ],
      "defines": [
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1"
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=on",
+     "id": "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=off",
      "pack": "P069",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_T18=1"
@@ -29518,8 +29504,8 @@
     {
      "assignment": {
       "C50_GB": "on",
-      "ORD_STD_GRIDFOLD": "on",
-      "T22": "on",
+      "ORD_STD_GRIDFOLD": "off",
+      "T22": "off",
       "T23": "on",
       "T24": "on",
       "T25": "on"
@@ -29529,8 +29515,8 @@
      ],
      "defines": [
       "MOJOLEARN_TREES_C50_GB_PACKED=1",
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T23=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1"
@@ -29541,9 +29527,9 @@
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-      "MOJOLEARN_TREES_HIST_REP_SM=64",
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-      "MOJOLEARN_TREES_T17_BATCH=64",
+      "MOJOLEARN_TREES_T17_BATCH=32",
       "MOJOLEARN_TREES_T19_DEFER=1",
       "MOJOLEARN_TREES_T21=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
@@ -29556,21 +29542,21 @@
     },
     {
      "assignment": {
-      "T22": "on",
+      "T22": "off",
       "T25": "on"
      },
      "bindings": [
       "_mojolearn_gbdt"
      ],
      "defines": [
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T25=1"
      ],
      "global_reach": [],
-     "id": "G.trees:gbdt-ordered.T22=on+T25=on",
+     "id": "G.trees:gbdt-ordered.T22=off+T25=on",
      "pack": "P072",
      "packed_extra_defines": [
-      "MOJOLEARN_TREES_T17_BATCH=64"
+      "MOJOLEARN_TREES_T17_BATCH=32"
      ],
      "priority": 9,
      "queued": true,
@@ -29579,21 +29565,21 @@
     },
     {
      "assignment": {
-      "ORD_STD_GRIDFOLD": "on",
+      "ORD_STD_GRIDFOLD": "off",
       "T24": "on"
      },
      "bindings": [
       "_mojolearn_gbdt"
      ],
      "defines": [
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
       "MOJOLEARN_TREES_T24=1"
      ],
      "global_reach": [],
-     "id": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=on",
+     "id": "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=off",
      "pack": "P073",
      "packed_extra_defines": [
-      "MOJOLEARN_TREES_T17_BATCH=128"
+      "MOJOLEARN_TREES_T17_BATCH=64"
      ],
      "priority": 10,
      "queued": true,
@@ -29714,8 +29700,8 @@
    "representative_arms": {
     "C50_GB": "on",
     "GBDT_APPLY_WIDE": "on",
-    "ORD_STD_GRIDFOLD": "on",
-    "T22": "on",
+    "ORD_STD_GRIDFOLD": "off",
+    "T22": "off",
     "T23": "on",
     "T24": "on",
     "T25": "on"
@@ -29750,7 +29736,7 @@
      "pack": "P065",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T28=1"
      ],
      "priority": 1,
@@ -29904,6 +29890,25 @@
     },
     {
      "assignment": {
+      "HIST_REP_SM": "pinned32"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=pinned32",
+     "pack": "P080",
+     "packed_extra_defines": [],
+     "priority": 9,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "HIST_REP_SM": "64"
      },
      "bindings": [
@@ -29914,25 +29919,6 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=64",
-     "pack": "P080",
-     "packed_extra_defines": [],
-     "priority": 9,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "HIST_REP_SM": "device"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_HIST_REP_SM=0"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=device",
      "pack": "P081",
      "packed_extra_defines": [],
      "priority": 10,
@@ -29984,7 +29970,7 @@
     {
      "assignment": {
       "C50_GB": "on",
-      "HIST_REP_SM": "64",
+      "HIST_REP_SM": "pinned32",
       "T21_STREAMS": "2",
       "T23": "on",
       "T29": "on",
@@ -29997,7 +29983,7 @@
      "defines": [
       "MOJOLEARN_TREES_C50_GB_PACKED=1",
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-      "MOJOLEARN_TREES_HIST_REP_SM=64",
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
       "MOJOLEARN_TREES_T23=1",
@@ -30008,11 +29994,11 @@
      "pack": "P083",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T17_BATCH=64",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+      "MOJOLEARN_TREES_T17_BATCH=32",
       "MOJOLEARN_TREES_T19_DEFER=1",
       "MOJOLEARN_TREES_T21=1",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1"
      ],
@@ -30150,6 +30136,92 @@
       },
       {
        "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_sym_feature_parallel": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.T21_STREAMS=2+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_sym_feature_parallel": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_sym_feature_parallel": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_sym_feature_parallel": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-pairlogit.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
         "HIST_REP_SM": "64",
         "hist_sym_feature_parallel": "on"
        },
@@ -30233,92 +30305,6 @@
         "hist_warp_agg": "on"
        },
        "id": "G.trees:gbdt-rank-pairlogit.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=64"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_sym_feature_parallel": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.T21_STREAMS=2+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_sym_feature_parallel": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_sym_feature_parallel": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_sym_feature_parallel": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-pairlogit.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
       },
       {
        "assignment": {
@@ -30483,7 +30469,7 @@
    "representative_arms": {
     "C50_GB": "on",
     "GBDT_APPLY_WIDE": "on",
-    "HIST_REP_SM": "64",
+    "HIST_REP_SM": "pinned32",
     "T21_STREAMS": "2",
     "T23": "on",
     "T29": "on",
@@ -30624,6 +30610,25 @@
     },
     {
      "assignment": {
+      "HIST_REP_SM": "pinned32"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=pinned32",
+     "pack": "P080",
+     "packed_extra_defines": [],
+     "priority": 7,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "HIST_REP_SM": "64"
      },
      "bindings": [
@@ -30634,25 +30639,6 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=64",
-     "pack": "P080",
-     "packed_extra_defines": [],
-     "priority": 7,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "HIST_REP_SM": "device"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_HIST_REP_SM=0"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-rank-yetirank.HIST_REP_SM=device",
      "pack": "P081",
      "packed_extra_defines": [],
      "priority": 8,
@@ -30704,7 +30690,7 @@
     {
      "assignment": {
       "C50_GB": "on",
-      "HIST_REP_SM": "64",
+      "HIST_REP_SM": "pinned32",
       "T21_STREAMS": "2",
       "T23": "on",
       "hist_packed_gh": "on",
@@ -30716,7 +30702,7 @@
      "defines": [
       "MOJOLEARN_TREES_C50_GB_PACKED=1",
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-      "MOJOLEARN_TREES_HIST_REP_SM=64",
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
       "MOJOLEARN_TREES_T23=1"
@@ -30726,11 +30712,11 @@
      "pack": "P083",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T17_BATCH=64",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+      "MOJOLEARN_TREES_T17_BATCH=32",
       "MOJOLEARN_TREES_T19_DEFER=1",
       "MOJOLEARN_TREES_T21=1",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
       "MOJOLEARN_TREES_T29=1"
@@ -30912,6 +30898,92 @@
       },
       {
        "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_sym_feature_parallel": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.T21_STREAMS=2+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_sym_feature_parallel": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_sym_feature_parallel": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_sym_feature_parallel": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-rank-yetirank.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
         "HIST_REP_SM": "64",
         "hist_sym_feature_parallel": "on"
        },
@@ -30995,92 +31067,6 @@
         "hist_warp_agg": "on"
        },
        "id": "G.trees:gbdt-rank-yetirank.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=64"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_sym_feature_parallel": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.T21_STREAMS=2+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_sym_feature_parallel": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_sym_feature_parallel": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_sym_feature_parallel": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-rank-yetirank.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
       },
       {
        "assignment": {
@@ -31244,7 +31230,7 @@
    "representative_arms": {
     "C50_GB": "on",
     "GBDT_APPLY_WIDE": "on",
-    "HIST_REP_SM": "64",
+    "HIST_REP_SM": "pinned32",
     "T21_STREAMS": "2",
     "T23": "on",
     "hist_packed_gh": "on",
@@ -31384,6 +31370,25 @@
     },
     {
      "assignment": {
+      "HIST_REP_SM": "pinned32"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-symmetric.HIST_REP_SM=pinned32",
+     "pack": "P080",
+     "packed_extra_defines": [],
+     "priority": 7,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "HIST_REP_SM": "64"
      },
      "bindings": [
@@ -31394,25 +31399,6 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric.HIST_REP_SM=64",
-     "pack": "P080",
-     "packed_extra_defines": [],
-     "priority": 7,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "HIST_REP_SM": "device"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_HIST_REP_SM=0"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-symmetric.HIST_REP_SM=device",
      "pack": "P081",
      "packed_extra_defines": [],
      "priority": 8,
@@ -31464,7 +31450,7 @@
     {
      "assignment": {
       "C50_GB": "on",
-      "HIST_REP_SM": "64",
+      "HIST_REP_SM": "pinned32",
       "T21_STREAMS": "2",
       "T23": "on",
       "hist_packed_gh": "on",
@@ -31476,7 +31462,7 @@
      "defines": [
       "MOJOLEARN_TREES_C50_GB_PACKED=1",
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-      "MOJOLEARN_TREES_HIST_REP_SM=64",
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
       "MOJOLEARN_TREES_T23=1"
@@ -31486,11 +31472,11 @@
      "pack": "P083",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T17_BATCH=64",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+      "MOJOLEARN_TREES_T17_BATCH=32",
       "MOJOLEARN_TREES_T19_DEFER=1",
       "MOJOLEARN_TREES_T21=1",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
       "MOJOLEARN_TREES_T29=1"
@@ -31672,6 +31658,92 @@
       },
       {
        "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_sym_feature_parallel": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2"
+       },
+       "id": "G.trees:gbdt-symmetric.T21_STREAMS=2+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_sym_feature_parallel": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_sym_feature_parallel": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_sym_feature_parallel": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
         "HIST_REP_SM": "64",
         "hist_sym_feature_parallel": "on"
        },
@@ -31755,92 +31827,6 @@
         "hist_warp_agg": "on"
        },
        "id": "G.trees:gbdt-symmetric.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=64"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_sym_feature_parallel": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2"
-       },
-       "id": "G.trees:gbdt-symmetric.T21_STREAMS=2+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_sym_feature_parallel": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_sym_feature_parallel": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_sym_feature_parallel": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
       },
       {
        "assignment": {
@@ -32004,7 +31990,7 @@
    "representative_arms": {
     "C50_GB": "on",
     "GBDT_APPLY_WIDE": "on",
-    "HIST_REP_SM": "64",
+    "HIST_REP_SM": "pinned32",
     "T21_STREAMS": "2",
     "T23": "on",
     "hist_packed_gh": "on",
@@ -32148,6 +32134,25 @@
     },
     {
      "assignment": {
+      "HIST_REP_SM": "pinned32"
+     },
+     "bindings": [
+      "_mojolearn_gbdt"
+     ],
+     "defines": [
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=pinned32",
+     "pack": "P080",
+     "packed_extra_defines": [],
+     "priority": 7,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "HIST_REP_SM": "64"
      },
      "bindings": [
@@ -32158,25 +32163,6 @@
      ],
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=64",
-     "pack": "P080",
-     "packed_extra_defines": [],
-     "priority": 7,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "HIST_REP_SM": "device"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_HIST_REP_SM=0"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-symmetric-1000.HIST_REP_SM=device",
      "pack": "P081",
      "packed_extra_defines": [],
      "priority": 8,
@@ -32228,7 +32214,7 @@
     {
      "assignment": {
       "C50_GB": "on",
-      "HIST_REP_SM": "64",
+      "HIST_REP_SM": "pinned32",
       "T21_STREAMS": "2",
       "T23": "on",
       "hist_packed_gh": "on",
@@ -32240,7 +32226,7 @@
      "defines": [
       "MOJOLEARN_TREES_C50_GB_PACKED=1",
       "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-      "MOJOLEARN_TREES_HIST_REP_SM=64",
+      "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
       "MOJOLEARN_TREES_HIST_WARP_AGG=1",
       "MOJOLEARN_TREES_T21_STREAMS=2",
       "MOJOLEARN_TREES_T23=1"
@@ -32250,11 +32236,11 @@
      "pack": "P083",
      "packed_extra_defines": [
       "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-      "MOJOLEARN_TREES_T17_BATCH=64",
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+      "MOJOLEARN_TREES_T17_BATCH=32",
       "MOJOLEARN_TREES_T19_DEFER=1",
       "MOJOLEARN_TREES_T21=1",
-      "MOJOLEARN_TREES_T22=1",
+      "MOJOLEARN_TREES_T22_OFF=1",
       "MOJOLEARN_TREES_T24=1",
       "MOJOLEARN_TREES_T25=1",
       "MOJOLEARN_TREES_T29=1"
@@ -32436,6 +32422,92 @@
       },
       {
        "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_sym_feature_parallel": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.T21_STREAMS=2+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_sym_feature_parallel": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_sym_feature_parallel": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "hist_packed_gh": "on",
+        "hist_sym_feature_parallel": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
+        "HIST_REP_SM": "pinned32",
+        "T21_STREAMS": "2",
+        "hist_packed_gh": "on",
+        "hist_warp_agg": "on"
+       },
+       "id": "G.trees:gbdt-symmetric-1000.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=pinned32"
+      },
+      {
+       "assignment": {
         "HIST_REP_SM": "64",
         "hist_sym_feature_parallel": "on"
        },
@@ -32519,92 +32591,6 @@
         "hist_warp_agg": "on"
        },
        "id": "G.trees:gbdt-symmetric-1000.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=64"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_sym_feature_parallel": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.T21_STREAMS=2+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_sym_feature_parallel": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.T21_STREAMS=2+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_sym_feature_parallel": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.T21_STREAMS=2+hist_packed_gh=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "hist_packed_gh": "on",
-        "hist_sym_feature_parallel": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on+hist_warp_agg=on+hist_sym_feature_parallel=on+HIST_REP_SM=device"
-      },
-      {
-       "assignment": {
-        "HIST_REP_SM": "device",
-        "T21_STREAMS": "2",
-        "hist_packed_gh": "on",
-        "hist_warp_agg": "on"
-       },
-       "id": "G.trees:gbdt-symmetric-1000.T21_STREAMS=2+hist_packed_gh=on+hist_warp_agg=on+HIST_REP_SM=device"
       },
       {
        "assignment": {
@@ -32768,7 +32754,7 @@
    "representative_arms": {
     "C50_GB": "on",
     "GBDT_APPLY_WIDE": "on",
-    "HIST_REP_SM": "64",
+    "HIST_REP_SM": "pinned32",
     "T21_STREAMS": "2",
     "T23": "on",
     "hist_packed_gh": "on",
@@ -34353,12 +34339,12 @@
      "_mojolearn"
     ],
     "defines": [
-     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
     ],
     "global_reach": false,
     "id": "P007",
     "members": [
-     "G.classical:kmeans.idn_kmeans_centroid_fold=on"
+     "G.classical:kmeans.idn_kmeans_centroid_fold=off"
     ]
    },
    {
@@ -34371,7 +34357,7 @@
     "defines": [
      "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
      "MOJOLEARN_C37_FUSED_ROWS=1024",
-     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
+     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
      "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1",
      "MOJOLEARN_KMEANS_ROW_ASSIGN=4"
     ],
@@ -34496,12 +34482,12 @@
     ],
     "defines": [
      "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
-     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
     ],
     "global_reach": false,
     "id": "P015",
     "members": [
-     "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=on"
+     "G.classical:kmeans.c37_fused_accumulate=on+idn_kmeans_centroid_fold=off"
     ]
    },
    {
@@ -34514,12 +34500,12 @@
     "defines": [
      "MOJOLEARN_C37_FUSED_ACCUMULATE=1",
      "MOJOLEARN_C37_FUSED_ROWS=1024",
-     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
     ],
     "global_reach": false,
     "id": "P016",
     "members": [
-     "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=on"
+     "G.classical:kmeans.c37_fused_accumulate=on+c37_fused_rows=1024+idn_kmeans_centroid_fold=off"
     ]
    },
    {
@@ -35133,7 +35119,7 @@
     ],
     "defines": [
      "MOJOLEARN_C52_PAIR_ROWS=128",
-     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
      "MOJOLEARN_CLASSICAL_PCA_COV=4",
      "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS=1"
     ],
@@ -35142,7 +35128,7 @@
     "members": [
      "G.classical:kde.c52_pair_rows=128",
      "G.classical:pca.PCA_COV=c04",
-     "G.more:ridge.linear_gram_solve=on",
+     "G.more:ridge.linear_gram_solve=off",
      "G.more:tsvd.TSVD_FUSED_STATS=on"
     ]
    },
@@ -35158,7 +35144,7 @@
     "defines": [
      "MOJOLEARN_C52_PAIR_ROWS=512",
      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
      "MOJOLEARN_CLASSICAL_PCA_COV=23"
     ],
     "global_reach": false,
@@ -35216,12 +35202,12 @@
      "_mojolearn_x_decomp"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
+     "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1"
     ],
     "global_reach": false,
     "id": "P054",
     "members": [
-     "G.classical:ols.C24_TSQR=panel8"
+     "G.classical:ols.C24_TSQR=rows4096"
     ]
    },
    {
@@ -35234,12 +35220,12 @@
      "_mojolearn_x_decomp"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_C24_ROWS2048=1"
+     "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
     ],
     "global_reach": false,
     "id": "P055",
     "members": [
-     "G.classical:ols.C24_TSQR=rows2048"
+     "G.classical:ols.C24_TSQR=panel8"
     ]
    },
    {
@@ -35306,12 +35292,12 @@
      "_mojolearn_x_decomp"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
     ],
     "global_reach": false,
     "id": "P059",
     "members": [
-     "G.classical:ols.linear_gram_solve=on"
+     "G.classical:ols.linear_gram_solve=off"
     ]
    },
    {
@@ -35325,8 +35311,8 @@
     ],
     "defines": [
      "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1",
-     "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+     "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
      "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1"
     ],
     "global_reach": false,
@@ -35345,13 +35331,32 @@
      "_mojolearn_x_decomp"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1",
+     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1",
      "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF=1"
     ],
     "global_reach": false,
     "id": "P061",
     "members": [
-     "G.classical:ols.ols_one_entry=off+linear_gram_solve=on"
+     "G.classical:ols.ols_one_entry=off+linear_gram_solve=off"
+    ]
+   },
+   {
+    "algorithms": [
+     "classical:ols"
+    ],
+    "bindings": [
+     "_mojolearn_estimators",
+     "_mojolearn_linalg",
+     "_mojolearn_x_decomp"
+    ],
+    "defines": [
+     "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
+     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
+    ],
+    "global_reach": false,
+    "id": "P062",
+    "members": [
+     "G.classical:ols.C24_TSQR=rows4096+linear_gram_solve=off"
     ]
    },
    {
@@ -35365,31 +35370,12 @@
     ],
     "defines": [
      "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
-    ],
-    "global_reach": false,
-    "id": "P062",
-    "members": [
-     "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=on"
-    ]
-   },
-   {
-    "algorithms": [
-     "classical:ols"
-    ],
-    "bindings": [
-     "_mojolearn_estimators",
-     "_mojolearn_linalg",
-     "_mojolearn_x_decomp"
-    ],
-    "defines": [
-     "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
-     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
     ],
     "global_reach": false,
     "id": "P063",
     "members": [
-     "G.classical:ols.C24_TSQR=rows2048+linear_gram_solve=on"
+     "G.classical:ols.C24_TSQR=panel8+linear_gram_solve=off"
     ]
    },
    {
@@ -35403,12 +35389,12 @@
     ],
     "defines": [
      "MOJOLEARN_CLASSICAL_C24_TREE4=1",
-     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE=1"
+     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF=1"
     ],
     "global_reach": false,
     "id": "P064",
     "members": [
-     "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=on"
+     "G.classical:ols.C24_TSQR=tree4+linear_gram_solve=off"
     ]
    },
    {
@@ -35423,7 +35409,7 @@
     ],
     "defines": [
      "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-     "MOJOLEARN_TREES_T22=1",
+     "MOJOLEARN_TREES_T22_OFF=1",
      "MOJOLEARN_TREES_T28=1",
      "MOJOLEARN_TREES_T29=1"
     ],
@@ -35432,7 +35418,7 @@
     "members": [
      "G.trees:gbdt-categorical.T28=on",
      "G.trees:gbdt-multiclass.hist_multistat=4",
-     "G.trees:gbdt-ordered.T22=on",
+     "G.trees:gbdt-ordered.T22=off",
      "G.trees:gbdt-rank-pairlogit.T29=on"
     ]
    },
@@ -35532,14 +35518,14 @@
      "_mojolearn_gbdt"
     ],
     "defines": [
-     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
+     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
      "MOJOLEARN_TREES_T18=1"
     ],
     "global_reach": false,
     "id": "P069",
     "members": [
      "G.trees:gbdt-categorical.T18=on",
-     "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=on"
+     "G.trees:gbdt-ordered.ORD_STD_GRIDFOLD=off"
     ]
    },
    {
@@ -35614,16 +35600,16 @@
      "_mojolearn_gbdt"
     ],
     "defines": [
-     "MOJOLEARN_TREES_T17_BATCH=64",
-     "MOJOLEARN_TREES_T22=1",
+     "MOJOLEARN_TREES_T17_BATCH=32",
+     "MOJOLEARN_TREES_T22_OFF=1",
      "MOJOLEARN_TREES_T25=1"
     ],
     "global_reach": false,
     "id": "P072",
     "members": [
-     "G.trees:gbdt-categorical.T17_BATCH=64",
-     "G.trees:gbdt-lossguide.T17_BATCH=64",
-     "G.trees:gbdt-ordered.T22=on+T25=on"
+     "G.trees:gbdt-categorical.T17_BATCH=32",
+     "G.trees:gbdt-lossguide.T17_BATCH=32",
+     "G.trees:gbdt-ordered.T22=off+T25=on"
     ]
    },
    {
@@ -35636,16 +35622,16 @@
      "_mojolearn_gbdt"
     ],
     "defines": [
-     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-     "MOJOLEARN_TREES_T17_BATCH=128",
+     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+     "MOJOLEARN_TREES_T17_BATCH=64",
      "MOJOLEARN_TREES_T24=1"
     ],
     "global_reach": false,
     "id": "P073",
     "members": [
-     "G.trees:gbdt-categorical.T17_BATCH=128",
-     "G.trees:gbdt-lossguide.T17_BATCH=128",
-     "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=on"
+     "G.trees:gbdt-categorical.T17_BATCH=64",
+     "G.trees:gbdt-lossguide.T17_BATCH=64",
+     "G.trees:gbdt-ordered.T24=on+ORD_STD_GRIDFOLD=off"
     ]
    },
    {
@@ -35807,19 +35793,19 @@
      "_mojolearn_gbdt"
     ],
     "defines": [
-     "MOJOLEARN_TREES_HIST_REP_SM=64"
+     "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
     ],
     "global_reach": false,
     "id": "P080",
     "members": [
-     "G.trees:gbdt-categorical.HIST_REP_SM=64",
-     "G.trees:gbdt-depthwise.HIST_REP_SM=64",
-     "G.trees:gbdt-lossguide.HIST_REP_SM=64",
-     "G.trees:gbdt-multiclass.HIST_REP_SM=64",
-     "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=64",
-     "G.trees:gbdt-rank-yetirank.HIST_REP_SM=64",
-     "G.trees:gbdt-symmetric.HIST_REP_SM=64",
-     "G.trees:gbdt-symmetric-1000.HIST_REP_SM=64"
+     "G.trees:gbdt-categorical.HIST_REP_SM=pinned32",
+     "G.trees:gbdt-depthwise.HIST_REP_SM=pinned32",
+     "G.trees:gbdt-lossguide.HIST_REP_SM=pinned32",
+     "G.trees:gbdt-multiclass.HIST_REP_SM=pinned32",
+     "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=pinned32",
+     "G.trees:gbdt-rank-yetirank.HIST_REP_SM=pinned32",
+     "G.trees:gbdt-symmetric.HIST_REP_SM=pinned32",
+     "G.trees:gbdt-symmetric-1000.HIST_REP_SM=pinned32"
     ]
    },
    {
@@ -35836,18 +35822,18 @@
      "_mojolearn_gbdt"
     ],
     "defines": [
-     "MOJOLEARN_TREES_HIST_REP_SM=0"
+     "MOJOLEARN_TREES_HIST_REP_SM=64"
     ],
     "global_reach": false,
     "id": "P081",
     "members": [
-     "G.trees:gbdt-depthwise.HIST_REP_SM=device",
-     "G.trees:gbdt-lossguide.HIST_REP_SM=device",
-     "G.trees:gbdt-multiclass.HIST_REP_SM=device",
-     "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=device",
-     "G.trees:gbdt-rank-yetirank.HIST_REP_SM=device",
-     "G.trees:gbdt-symmetric.HIST_REP_SM=device",
-     "G.trees:gbdt-symmetric-1000.HIST_REP_SM=device"
+     "G.trees:gbdt-depthwise.HIST_REP_SM=64",
+     "G.trees:gbdt-lossguide.HIST_REP_SM=64",
+     "G.trees:gbdt-multiclass.HIST_REP_SM=64",
+     "G.trees:gbdt-rank-pairlogit.HIST_REP_SM=64",
+     "G.trees:gbdt-rank-yetirank.HIST_REP_SM=64",
+     "G.trees:gbdt-symmetric.HIST_REP_SM=64",
+     "G.trees:gbdt-symmetric-1000.HIST_REP_SM=64"
     ]
    },
    {
@@ -35896,14 +35882,14 @@
      "MOJOLEARN_TREES_C50_GB_PACKED=1",
      "MOJOLEARN_TREES_HIST_MULTISTAT=4",
      "MOJOLEARN_TREES_HIST_PACKED_GH=1",
-     "MOJOLEARN_TREES_HIST_REP_SM=64",
+     "MOJOLEARN_TREES_HIST_REP_SM_OFF=1",
      "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD=1",
-     "MOJOLEARN_TREES_T17_BATCH=64",
+     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF=1",
+     "MOJOLEARN_TREES_T17_BATCH=32",
      "MOJOLEARN_TREES_T19_DEFER=1",
      "MOJOLEARN_TREES_T21=1",
      "MOJOLEARN_TREES_T21_STREAMS=2",
-     "MOJOLEARN_TREES_T22=1",
+     "MOJOLEARN_TREES_T22_OFF=1",
      "MOJOLEARN_TREES_T23=1",
      "MOJOLEARN_TREES_T24=1",
      "MOJOLEARN_TREES_T25=1",
@@ -35989,10 +35975,44 @@
     ],
     "defines": [
      "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-     "MOJOLEARN_TREES_HIST_REP_SM=64"
+     "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
     ],
     "global_reach": false,
     "id": "P087",
+    "members": [
+     "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=pinned32"
+    ]
+   },
+   {
+    "algorithms": [
+     "trees:gbdt-multiclass"
+    ],
+    "bindings": [
+     "_mojolearn_gbdt"
+    ],
+    "defines": [
+     "MOJOLEARN_TREES_HIST_MULTISTAT=8",
+     "MOJOLEARN_TREES_HIST_REP_SM_OFF=1"
+    ],
+    "global_reach": false,
+    "id": "P088",
+    "members": [
+     "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=pinned32"
+    ]
+   },
+   {
+    "algorithms": [
+     "trees:gbdt-multiclass"
+    ],
+    "bindings": [
+     "_mojolearn_gbdt"
+    ],
+    "defines": [
+     "MOJOLEARN_TREES_HIST_MULTISTAT=4",
+     "MOJOLEARN_TREES_HIST_REP_SM=64"
+    ],
+    "global_reach": false,
+    "id": "P089",
     "members": [
      "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=64"
     ]
@@ -36009,43 +36029,9 @@
      "MOJOLEARN_TREES_HIST_REP_SM=64"
     ],
     "global_reach": false,
-    "id": "P088",
-    "members": [
-     "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=64"
-    ]
-   },
-   {
-    "algorithms": [
-     "trees:gbdt-multiclass"
-    ],
-    "bindings": [
-     "_mojolearn_gbdt"
-    ],
-    "defines": [
-     "MOJOLEARN_TREES_HIST_MULTISTAT=4",
-     "MOJOLEARN_TREES_HIST_REP_SM=0"
-    ],
-    "global_reach": false,
-    "id": "P089",
-    "members": [
-     "G.trees:gbdt-multiclass.hist_multistat=4+HIST_REP_SM=device"
-    ]
-   },
-   {
-    "algorithms": [
-     "trees:gbdt-multiclass"
-    ],
-    "bindings": [
-     "_mojolearn_gbdt"
-    ],
-    "defines": [
-     "MOJOLEARN_TREES_HIST_MULTISTAT=8",
-     "MOJOLEARN_TREES_HIST_REP_SM=0"
-    ],
-    "global_reach": false,
     "id": "P090",
     "members": [
-     "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=device"
+     "G.trees:gbdt-multiclass.hist_multistat=8+HIST_REP_SM=64"
     ]
    },
    {
@@ -36186,12 +36172,12 @@
      "_mojolearn_ivf"
     ],
     "defines": [
-     "MOJOLEARN_IVF_DIRECT_DISTANCE=1"
+     "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF=1"
     ],
     "global_reach": false,
     "id": "P098",
     "members": [
-     "G.more:ivf.ivf_direct=on"
+     "G.more:ivf.ivf_direct=off"
     ]
    },
    {
@@ -36202,12 +36188,12 @@
      "_mojolearn_ivf"
     ],
     "defines": [
-     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
     ],
     "global_reach": false,
     "id": "P099",
     "members": [
-     "G.more:ivf.idn_kmeans_centroid_fold=on"
+     "G.more:ivf.idn_kmeans_centroid_fold=off"
     ]
    },
    {
@@ -36218,8 +36204,8 @@
      "_mojolearn_ivf"
     ],
     "defines": [
-     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1",
-     "MOJOLEARN_IVF_DIRECT_DISTANCE=1"
+     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1",
+     "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF=1"
     ],
     "global_reach": false,
     "id": "P100",
@@ -37365,12 +37351,12 @@
      "_mojolearn_mixture"
     ],
     "defines": [
-     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD=1"
+     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF=1"
     ],
     "global_reach": false,
     "id": "P163",
     "members": [
-     "G.more:gmm.idn_kmeans_centroid_fold=on"
+     "G.more:gmm.idn_kmeans_centroid_fold=off"
     ]
    },
    {
@@ -39002,7 +38988,7 @@
     "defines": [
      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
      "MOJOLEARN_CLASSICAL_C23_MCD=1",
-     "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
+     "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1"
     ],
     "global_reach": false,
     "id": "P258",
@@ -39010,7 +38996,7 @@
      "G.expanded:elliptic-envelope.C23_MCD=on",
      "G.expanded:lu-solve.c14_group_rhs=on",
      "G.expanded:min-cov-det.C23_MCD=on",
-     "G.expanded:randomized-svd.C24_TSQR=panel8"
+     "G.expanded:randomized-svd.C24_TSQR=rows4096"
     ]
    },
    {
@@ -39021,12 +39007,12 @@
      "_mojolearn_x_decomp"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_C24_ROWS2048=1"
+     "MOJOLEARN_CLASSICAL_C24_PANEL8=1"
     ],
     "global_reach": false,
     "id": "P259",
     "members": [
-     "G.expanded:randomized-svd.C24_TSQR=rows2048"
+     "G.expanded:randomized-svd.C24_TSQR=panel8"
     ]
    },
    {
@@ -39069,7 +39055,7 @@
      "_mojolearn_x_decomp"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
+     "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF=1",
      "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1"
     ],
     "global_reach": false,
@@ -39086,13 +39072,13 @@
      "_mojolearn_x_decomp"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_C24_ROWS2048=1",
+     "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
      "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO=1"
     ],
     "global_reach": false,
     "id": "P263",
     "members": [
-     "G.expanded:randomized-svd.C24_TSQR=rows2048+rsvd_tsqr_ortho=on"
+     "G.expanded:randomized-svd.C24_TSQR=panel8+rsvd_tsqr_ortho=on"
     ]
    },
    {
@@ -40650,12 +40636,6 @@
     "control": "T11_LEVELS",
     "reason": "note: \"RF K1/K2/K8 already showed no combined gain (forest-final-decisions 2026-10-05): RF grid needs only 16\"",
     "scope": "trees:rf"
-   },
-   {
-    "arm": "32",
-    "control": "T17_BATCH",
-    "reason": "note: \"incumbent 32 (== arm 32)\": identical to the shipped B arm",
-    "scope": "all"
    }
   ],
   "cap_per_algorithm_per_vendor": 16,
@@ -40763,7 +40743,7 @@
     "head": "f0bbeef91",
     "lane": "classical-decomp",
     "path": "experiments/six_lane_integration/grid_controls/classical-decomp.json",
-    "sha256": "1c5c025fd25e36f46d5c1af119449f0f9185aab475c2fbecd8082750f1e4358c"
+    "sha256": "468e88776976411a4aa0170ff9a5adb71d790c549caae5965cc966f344b8b64d"
    },
    "classical-encoders": {
     "branch": "lane/classical-encoders",
@@ -40784,7 +40764,7 @@
     "head": "24dbc6581",
     "lane": "classical-kmeans",
     "path": "experiments/six_lane_integration/grid_controls/classical-kmeans.json",
-    "sha256": "1797b3da9008d6303bf2aa2a2c972b1bb994d85ede509b8d25328397dd2b4042"
+    "sha256": "1bef864b791a17a5ff737f5966f9143019a7d127133e26c3702ce3a9f2c46a72"
    },
    "classical-misc": {
     "branch": "lane/classical-misc",
@@ -40805,7 +40785,7 @@
     "head": "2cde5e0e7",
     "lane": "classical-structural",
     "path": "experiments/six_lane_integration/grid_controls/classical-structural.json",
-    "sha256": "ecaf7c34d774363729c9b158d64b32096ace13c267e400239634a0cf66b5ed67"
+    "sha256": "36504257f5da6786697a0793f1826e190162d4508c5203338c4b6190653faeda"
    },
    "classical-te-gmm": {
     "branch": "lane/classical-te-gmm",
@@ -40868,7 +40848,7 @@
     "head": "78c441468",
     "lane": "trees-cleanup",
     "path": "experiments/six_lane_integration/grid_controls/trees-cleanup.json",
-    "sha256": "19e5d9f05eafe1f3bab0581f51a32dd436a5640bb8c6001096cbebd5989cf388"
+    "sha256": "eb5ee844d2b57f40a9e2702392f73291e9ef9e5d810ddd0ac7f1afece19bd06c"
    },
    "trees-hist-ideas": {
     "branch": "lane/trees-hist-ideas",
@@ -40889,20 +40869,20 @@
     "head": "d9532aeb3",
     "lane": "trees-small",
     "path": "experiments/six_lane_integration/grid_controls/trees-small.json",
-    "sha256": "f985ceea186791462a1d5a7f4140f54a92bd317d5c8a4bfa00643d9369626807"
+    "sha256": "d3070a0862e75fd1cbe8da1ccb19c67cf8d498dbae91a35f14907e106c5104aa"
    },
    "trees-structural": {
     "branch": "lane/trees-structural",
     "head": "75dd2db9a",
     "lane": "trees-structural",
     "path": "experiments/six_lane_integration/grid_controls/trees-structural.json",
-    "sha256": "a76997c1d048b6b10fda199c6b7802eeffca0de41b16498b34b99d36e2b6e661"
+    "sha256": "2043da6a78fdb04536ba513e22fe4dc1b6526f73bf580388bbb4360d0a82b446"
    }
   },
   "guards": {
-   "asserts": 143,
+   "asserts": 149,
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "2ffe06f9f4f1f810e6e853031dc163b070b8f721ed6db77a9f3e86e2df7cda60"
+   "sha256": "2dd701477f7d97b99425ef1d89ff33a6e8fa6a4e2c0c1f680c8d2f77c2016909"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -41079,7 +41059,7 @@
   "deferred_cross_configs": 3514,
   "deferred_cross_groups": 79,
   "excluded_controls": 73,
-  "guard_asserts": 143,
+  "guard_asserts": 149,
   "mapped_algorithms": 86,
   "packed_multi_member": 105,
   "packs": 297,

@@ -27,17 +27,17 @@
    "note": "Minibatch SGD (batch 4096, the board's SGDRegressor/SGDClassifier route _sgd_mb_grid -> fused rows/steprows + parts kernels): once per epoch and problem, right after sgd_perm_kernel and inside the witness unit, two gather launches write the permuted copies xp[p] = x[idx[p]], ysp, swp and an identity order; the batch kernels then read contiguous rows (batch*d words, L2-resident) instead of scattered 44-byte rows. Cost: two streaming passes over X per epoch against batches x scattered-row latency. No bits move: every batch position sees the same operands (x row idx[p], ys[idx[p]], sw[idx[p]]) at the same position and the mb_dot/mb_part folds index by batch position, so the host twin (sgd_mb_one) is unchanged. Memory gate: free device memory >= 2x the copies (ctx.get_memory_info), else the incumbent gathered loads. IDENTICAL only; the FAST+Apple MOJOLEARN_SGD_FAST_EPOCH_RESIDENT arm is untouched and exclusive by mode. tools/bench_board_algos.py:222 mismatch note corrected (ours is minibatch 4096, not per-sample)."
   },
   "linear_gram_solve": {
-   "define": "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE",
+   "define": "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE"
+    "on": [],
+    "off": [
+     "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:81",
+    "experiments/classical_identical_ideas/linear_controls.mojo:100",
     "glm/impl/gram_solve.mojo:179",
     "glm/host/gram_solve_host.mojo:23",
     "core/blocked_moments.mojo (bm_centered_cross_panels)",
@@ -47,8 +47,8 @@
    ],
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "bits_change": true,
-   "status": "new",
-   "note": "LinearRegression (alpha 0) and Ridge (alpha > 0) as ONE resident centered-Gram fit: X and y up once; exact column sums + binary64 means (col_sums_pair_buf/col_means_buf); the centered Gram and cross X^T y read straight from resident X by the blocked leaf kernels (bm_centered_gram_panels, new bm_centered_cross_panels; binary-counter fold; leaves contract_leaf_size(n)); power-of-two equilibration (ols_equilibration_scale); the IDENTICAL Cholesky cells (chol_diag/chol_col_elem statements, one launch per column); a trust gate (non-positive pivot or pivot^2 < 2^-12 of its equilibrated diagonal, x_linear RIDGE_FF_GATE); parallel per-column triangular solves; no U formed. Status 1 (not trusted) -> the Python glue runs the incumbent route (OLS: centered TSQR + SVD cutoff; Ridge: 4-crossing glue + Jacobi eig), both columns alike. Bits change (normal equations); the host column glm/host/gram_solve_host.mojo runs the same cells (centered_gram_v1_cell, new centered_cross_v1_cell, chol_serial, same solve statements). Quality check owed on istella (ill-conditioned; the gate is expected to fall back there for OLS). Reach: classical:ols (LinearRegression.fit, before the TSQR branch, unweighted) and more:ridge (Ridge.fit, before the centering glue). Under 'on' the OLS controls ols_one_entry/C24_TSQR and the Ridge control c02_linear_pair act only on the fallback path."
+   "status": "promoted:ge123e6f9",
+   "note": "LinearRegression (alpha 0) and Ridge (alpha > 0) as ONE resident centered-Gram fit: X and y up once; exact column sums + binary64 means (col_sums_pair_buf/col_means_buf); the centered Gram and cross X^T y read straight from resident X by the blocked leaf kernels (bm_centered_gram_panels, new bm_centered_cross_panels; binary-counter fold; leaves contract_leaf_size(n)); power-of-two equilibration (ols_equilibration_scale); the IDENTICAL Cholesky cells (chol_diag/chol_col_elem statements, one launch per column); a trust gate (non-positive pivot or pivot^2 < 2^-12 of its equilibrated diagonal, x_linear RIDGE_FF_GATE); parallel per-column triangular solves; no U formed. Status 1 (not trusted) -> the Python glue runs the incumbent route (OLS: centered TSQR + SVD cutoff; Ridge: 4-crossing glue + Jacobi eig), both columns alike. Bits change (normal equations); the host column glm/host/gram_solve_host.mojo runs the same cells (centered_gram_v1_cell, new centered_cross_v1_cell, chol_serial, same solve statements). Quality check owed on istella (ill-conditioned; the gate is expected to fall back there for OLS). Reach: classical:ols (LinearRegression.fit, before the TSQR branch, unweighted) and more:ridge (Ridge.fit, before the centering glue). Under 'on' the OLS controls ols_one_entry/C24_TSQR and the Ridge control c02_linear_pair act only on the fallback path. Default ON in IDENTICAL; `_OFF` is the incumbent (TSQR OLS / SVD Ridge) arm. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
   },
   "rsvd_tsqr_ortho": {
    "define": "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO",
@@ -74,25 +74,25 @@
    "note": "randomized_svd's nine orthonormalizations (Kit.orth -> x_decomp_dev_orth -> orth_on_device: two sliced Householder qr_factor passes + 1-thread guard + per-row trsm, ~154 launches/6 syncs each) become ONE blocked TSQR pass (ts_factor_device, the OLS kernels) plus the explicit Q from the kept reflectors applied to the rank-guarded selection C = diag(R[j,j] != 0) (ts_apply_device_buf, C built on the device), ~25 launches/1 sync per orth. Cost: the m x l sketch is read three times at full width instead of being walked by 2,048 strided threads; latency-bound, so it holds for any tall sketch with l small. Bits change (one TSQR Householder pass instead of two sliced passes); the host column HostExec.orth takes the same route via ts_factor_host/ts_apply_host. A dependent column maps to an exactly zero Q column (randomized_svd's nlive compaction contract kept). Shapes outside the TSQR's (l > 512, m < l, Int32 overflow) keep the two-pass route on both columns; TS_SMEM_OK gates the device as for OLS. orth_diag (linalg.svd's U) and the FAST-only SVD_FAST_CHOLQR/DECOMP_FAST_ORTH_WS paths are untouched. more:tsvd does not share this route (covariance_eigh)."
   },
   "idn_kmeans_centroid_fold": {
-   "define": "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD",
+   "define": "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "cluster/checks/reduce_by_key.mojo:848",
+    "cluster/checks/reduce_by_key.mojo:860",
     "cluster/checks/reduce_by_key.mojo:873",
     "cluster/checks/reduce_by_key.mojo:943",
     "cluster/impl/detail/kmeans_fused_accumulate.mojo:52"
    ],
    "binding": "_mojolearn,_mojolearn_mixture,_mojolearn_ivf (host twin _mojolearn_core_host, unchanged)",
    "bits_change": false,
-   "status": "new",
-   "note": "The Lloyd update's fold_block_table_kernel (one thread per (cluster, feature) cell walking EVERY 256-row block serially: k*d threads on one SM, twice per iteration, fabric-crossing on multi-die parts) becomes a two-level parallel fold: level 1 a grid of (32-cell tile x group) blocks whose 32x8 threads sum a fixed strided subset of the row blocks (coalesced over the 32 cells) and fold the 8 lane partials in shared memory in a fixed halving order into one partial per (group, cell) in the table's scratch tail; level 2 one thread per cell over the groups ascending. Groups = min(n_blocks, 64): 512 chains per cell tile cover memory latency on any GPU of this class and level 2 stays <= 64 loads. The table is never modified (the gated arms refold an untouched table past convergence). Int32 fixed-point addends with wrapping addition are associative and commutative (choose_scale bounds any subset in Int32), so every grouping yields the same words: NO bits move and the host twin (host_accumulate, 8192-row chunks) is unchanged. Reaches all six fold sites: the blocked and gated launchers (classical:kmeans Lloyd loop, both conv arms) and the C37 fused path; tables sized by blocked_acc_table_cells/kmeans_fused_table_cells now include the scratch tail. Apple (KMEANS_BLOCK_ACC off) reaches it only under C37."
+   "status": "promoted:ge123e6f9",
+   "note": "The Lloyd update's fold_block_table_kernel (one thread per (cluster, feature) cell walking EVERY 256-row block serially: k*d threads on one SM, twice per iteration, fabric-crossing on multi-die parts) becomes a two-level parallel fold: level 1 a grid of (32-cell tile x group) blocks whose 32x8 threads sum a fixed strided subset of the row blocks (coalesced over the 32 cells) and fold the 8 lane partials in shared memory in a fixed halving order into one partial per (group, cell) in the table's scratch tail; level 2 one thread per cell over the groups ascending. Groups = min(n_blocks, 64): 512 chains per cell tile cover memory latency on any GPU of this class and level 2 stays <= 64 loads. The table is never modified (the gated arms refold an untouched table past convergence). Int32 fixed-point addends with wrapping addition are associative and commutative (choose_scale bounds any subset in Int32), so every grouping yields the same words: NO bits move and the host twin (host_accumulate, 8192-row chunks) is unchanged. Reaches all six fold sites: the blocked and gated launchers (classical:kmeans Lloyd loop, both conv arms) and the C37 fused path; tables sized by blocked_acc_table_cells/kmeans_fused_table_cells now include the scratch tail. Apple (KMEANS_BLOCK_ACC off) reaches it only under C37. Default ON in IDENTICAL; `_OFF` is the serial per-cell chain. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
   }
  },
  "algorithms": {

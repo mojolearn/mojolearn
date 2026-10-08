@@ -127,30 +127,32 @@
    "status": "new"
   },
   "C24_TSQR": {
-   "define": "MOJOLEARN_CLASSICAL_C24_PANEL8,MOJOLEARN_CLASSICAL_C24_ROWS2048,MOJOLEARN_CLASSICAL_C24_TREE4",
+   "define": "MOJOLEARN_CLASSICAL_C24_PANEL8,MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF,MOJOLEARN_CLASSICAL_C24_TREE4",
    "kind": "switch",
    "arms": {
-    "off": [],
+    "rows2048": [],
+    "rows4096": [
+     "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF"
+    ],
     "panel8": [
      "MOJOLEARN_CLASSICAL_C24_PANEL8"
-    ],
-    "rows2048": [
-     "MOJOLEARN_CLASSICAL_C24_ROWS2048"
     ],
     "tree4": [
      "MOJOLEARN_CLASSICAL_C24_TREE4"
     ]
    },
-   "default": "off",
+   "default": "rows2048",
    "source": [
-    "x_decomp/tsqr_core.mojo:51",
-    "x_decomp/tsqr_core.mojo:52",
-    "x_decomp/tsqr_core.mojo:56",
+    "experiments/classical_identical_ideas/linear_controls.mojo:157",
+    "experiments/classical_identical_ideas/linear_controls.mojo:174",
+    "experiments/classical_identical_ideas/linear_controls.mojo:175",
+    "x_decomp/tsqr_core.mojo:55",
     "x_decomp/qr_sliced.mojo:82"
    ],
    "binding": "_mojolearn_x_decomp",
    "bits_change": true,
-   "status": "kept (code unchanged); reach corrected: NOT pca (covariance_eigh) and NOT tsvd (gemm_tn Gram + eig); TSQR consumers only"
+   "status": "promoted:ge123e6f9",
+   "note": "Default rows2048 (2048-row leaves) in IDENTICAL; arm rows4096 (`_ROWS2048_OFF`) is the old leaf size; panel8 and tree4 now run on top of 2048-row leaves. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
   }
  },
  "algorithms": {

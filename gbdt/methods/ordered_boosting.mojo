@@ -679,7 +679,7 @@ def _ord_std_gridfold_kernel(
     total_in: Int32,
     dst: MutPointer[Float32, MutAnyOrigin],
 ):
-    """Lane S3 `MOJOLEARN_TREES_ORD_STD_GRIDFOLD` (IDENTICAL, default off).
+    """Lane S3 `MOJOLEARN_TREES_ORD_STD_GRIDFOLD` (IDENTICAL default since lane/grid-flips-1 2026-10-08; `_OFF` restores the lane chains).
 
     NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 

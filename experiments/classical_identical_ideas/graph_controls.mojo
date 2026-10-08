@@ -28,7 +28,20 @@ comptime DBSCAN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_DBSC
 # which the kernel-matrix route also calls. Each primitive keeps one define on
 # both its device kernel and its host twin.
 comptime GRAPH_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_GRAPH_DIRECT_DISTANCE"]()
-comptime IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE"]()
+# IVF_DIRECT_DISTANCE: the IVF-Flat scan's distances as direct sums of
+# squared differences instead of the -2 q.x + |q|^2 + |x|^2 expansion
+# (device scan, balanced tasks and the ivf_host twin together; bits change).
+# PROMOTED to the IDENTICAL default (lane/grid-flips-1, 2026-10-08, Andrew
+# 13:00Z "flip all of these"). Grid run ge123e6f9 (NVIDIA L40S sm_89 + AMD
+# MI325X gfx942, full board data, one scored run per arm), expanded -> direct:
+#   ivf istella NV 2259 -> 2117 ms (0.937x)    AMD 1562 -> 1505 ms (0.964x)
+#   ivf taxi    NV 225.5 -> 201.6 ms (0.894x)  AMD 243.3 -> 242.1 ms (0.995x)
+#   Geometric mean 0.946x. Quality BETTER on istella (recall), SAME on taxi;
+#   NV vs AMD output hashes MATCH.
+# `-D MOJOLEARN_IVF_DIRECT_DISTANCE_OFF` restores the expansion (the grid's
+# "off" arm). The old opt-in define is refused in
+# core/six_lane_experiment_guards.mojo.
+comptime IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL and not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"]()
 # KMEANS_ASSIGN: ONE control, five arms, replacing C30 (kmeans part) and C36
 # (whose ROWS_4 knob set the same value as C30_ROWS_4):
 #   tiled   (no define)                      incumbent tiled fused L2-NN

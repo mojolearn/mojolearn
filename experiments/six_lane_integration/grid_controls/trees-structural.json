@@ -6,17 +6,17 @@
  "mode": "identical",
  "controls": {
   "ORD_STD_GRIDFOLD": {
-   "define": "MOJOLEARN_TREES_ORD_STD_GRIDFOLD",
+   "define": "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD"
+    "on": [],
+    "off": [
+     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "gbdt/trees_identical_switches.mojo:95",
+    "gbdt/trees_identical_switches.mojo:123",
     "gbdt/methods/ordered_boosting.mojo:675",
     "gbdt/methods/ordered_boosting.mojo:2756",
     "gbdt/host/gbdt_oracle_ordered.mojo:1471",
@@ -25,8 +25,8 @@
    ],
    "binding": "_mojolearn_gbdt,_mojolearn_gbdt_host",
    "bits_change": true,
-   "status": "new",
-   "note": "Ordered score-noise and scale-magnitude sums over a fixed 16,384-lane grid (256 blocks x 64, halving tree per block, then the unchanged 256-wide combine) instead of 256 serial lane chains (8x32). Reached on the fused arm only (random_strength != 0 and no bootstrap: the board's ordered config). New fold order on every vendor; the host column gbdt_oracle_ordered follows it under the same define. Ignores MOJOLEARN_ORD_STD_SPLIT when on. Feeds T24's combine+scale kernel unchanged (crossed)."
+   "status": "promoted:ge123e6f9",
+   "note": "Ordered score-noise and scale-magnitude sums over a fixed 16,384-lane grid (256 blocks x 64, halving tree per block, then the unchanged 256-wide combine) instead of 256 serial lane chains (8x32). Reached on the fused arm only (random_strength != 0 and no bootstrap: the board's ordered config). New fold order on every vendor; the host column gbdt_oracle_ordered follows it under the same define. Ignores MOJOLEARN_ORD_STD_SPLIT when on. Feeds T24's combine+scale kernel unchanged (crossed). Default ON in IDENTICAL; `_OFF` is the 256 serial lane chains (device and host column together). Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
   },
   "LG_LEVEL_ROUNDS": {
    "define": "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
@@ -125,9 +125,10 @@
    "_mojolearn_gbdt",
    "_mojolearn_gbdt_host"
   ],
-  "all_off": [],
+  "all_off": [
+   "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF"
+  ],
   "all_on": [
-   "MOJOLEARN_TREES_ORD_STD_GRIDFOLD",
    "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
    "MOJOLEARN_TREES_CTR_SORTFREE_SUMS"
   ]

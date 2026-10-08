@@ -629,7 +629,7 @@ def linear_gram_fit_binding(
     center`; returns 0 (coef, and with center mu and ymean, written) or 1
     (nothing written; the caller's incumbent route)."""
     comptime if not LINEAR_GRAM_SOLVE:
-        raise Error("linear_gram_fit: only a build with -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE has this route")
+        raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
     if len(params) != 4:
         raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
     var x_address = _index(x_addr)

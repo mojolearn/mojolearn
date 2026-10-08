@@ -51,6 +51,7 @@ from std.sys.compile import is_defined
 
 #: rows per leaf block (the last block takes the remainder)
 comptime TS_TREE_ARITY = 4 if C24_TREE4 else 2
+#: (2048 by default since lane/grid-flips-1; `-D MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF` = 4096)
 comptime TS_ROWS = 2048 if C24_ROWS2048 else 4096
 #: chains per inner product over a block's rows (the fold width)
 comptime TS_P = 16

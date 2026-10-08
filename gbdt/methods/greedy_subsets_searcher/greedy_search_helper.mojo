@@ -3091,8 +3091,9 @@ def replication_int32_for[smem_mode: Int = HIST_SMEM_SHARED2_I32](
 ) -> Int:
     """Lane trees-small: `replication_for` for the INT32 histogram families.
 
-    With MOJOLEARN_TREES_HIST_REP_SM absent (or a float smem mode) this IS
-    `replication_for`. With the define, the IDENTICAL target becomes
+    With MOJOLEARN_TREES_HIST_REP_SM_OFF (or a float smem mode) this IS
+    `replication_for`. Otherwise (the IDENTICAL default since
+    lane/grid-flips-1, arm 0) the target becomes
     `HIST_REP_BPSM * sm` blocks (x2 on the gather arm), where `sm` is
     HIST_REP_SM, or the device's `sm_count` for the device arms (0: 2 blocks
     per SM, 1: 4 blocks per SM).
@@ -3106,7 +3107,7 @@ def replication_int32_for[smem_mode: Int = HIST_SMEM_SHARED2_I32](
     comptime assert (
         HIST_REP_SM == HIST_REP_DEVICE or HIST_REP_SM == HIST_REP_DEVICE_X4
         or HIST_REP_SM == 32 or HIST_REP_SM == 64 or HIST_REP_SM == 128
-    ), "MOJOLEARN_TREES_HIST_REP_SM legal set is {64, 128, 0 = device x2, 1 = device x4}"
+    ), "MOJOLEARN_TREES_HIST_REP_SM legal set is {32, 64, 128, 0 = device x2 (default), 1 = device x4}"
     comptime if not HIST_REP_SM_ON or smem_mode != HIST_SMEM_SHARED2_I32:
         return replication_for(groups, n_live, stat_count, sm_count, gather)
     var sm = HIST_REP_SM
