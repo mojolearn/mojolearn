@@ -91,7 +91,8 @@ def test_binding_exports_match_python_calls():
         "bindings/_mojolearn_hdbscan.mojo": ("python/mojolearn/hdbscan.py", r"_extension\(\)\.(\w+)\("),
         "bindings/_mojolearn_resample.mojo": ("python/mojolearn/resample.py", r"_extension\(numeric_mode\)\.(\w+)\("),
         "bindings/_mojolearn_ivf.mojo": ("python/mojolearn/_ivf_impl.py", r'_entry\(self\._extension\(\), "(\w+)"\)\('),
-        "bindings/_mojolearn_embedding.mojo": ("python/mojolearn/embedding.py", r"_extension\(\)\.(\w+)\("),
+        # embedding.py binds `mod = self._extension()` once per call, then `mod.<entry>(`
+        "bindings/_mojolearn_embedding.mojo": ("python/mojolearn/embedding.py", r"\bmod\.(\w+)\("),
     }
     for binding, (py, pat) in pairs.items():
         exported, called = _exports(binding), _calls(py, pat)
