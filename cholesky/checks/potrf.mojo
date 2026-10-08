@@ -325,6 +325,9 @@ from cholesky.checks.chol_sabotage import (
     sabotage_trsm_panel_kernel,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel, trsm_panel_guarded_kernel
+from cholesky.checks.potrf_blocked import CB_COLS, CB_NB, CHOL_IDN_NB128, chol_blocked_workspace_floats
+from gemm.block_update import blk_gemm_sub
+from x_decomp.cells import I32Ptr
 from cholesky.checks.potrf_strip import (
     CHOL_STRIP_ROUTE,
     CHOL_STRIP_W,
@@ -390,7 +393,13 @@ comptime CHOL_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
 #: replay of it a serial loop. A wider panel would put a fold tree inside the
 #: update, which is legal under the gemm profile and correct, and is a v2
 #: decision rather than a free one.
-comptime CHOL_NB_PINNED = 32
+#: lane gap-linalg (2026-10-08): `-D MOJOLEARN_IDN_CHOL_NB128` (CANDIDATE,
+#: default off; cholesky/checks/potrf_blocked.mojo) pins 128 instead: still
+#: ONE leaf (128 = CONTRACT_K_LEAF_MIN), a 128-long chain per panel, and
+#: the blocked driver `_potrf_lower_blocked`. The host column
+#: (`chol_oracle.CHOL_HOST_NB_PINNED`) reads the same define. Bits change
+#: against v1; NVIDIA, AMD and the host move together.
+comptime CHOL_NB_PINNED = CB_NB if CHOL_IDN_NB128 else 32
 
 #: FAST on Apple: `potrf_lower` runs the trailing update through the vendor
 #: GEMM (MAX `matmul`, the Apple simdgroup path) instead of the pinned
@@ -1637,6 +1646,13 @@ def chol_workspace_floats(n: Int, nb: Int) -> Int:
                 gws = c
         j0 += nb
     var need = nt * nb + nt * nt + gws
+    # lane gap-linalg: the blocked driver's own layout (column-blocked
+    # products: smaller than nt * nt, but its GEMM share is sized per block)
+    comptime if CHOL_IDN_NB128:
+        if nb == CB_NB:
+            var nb128 = chol_blocked_workspace_floats(n)
+            if nb128 > need:
+                need = nb128
     if need < 1:
         return 1
     return need
@@ -1879,6 +1895,95 @@ def _potrf_lower_strips(
     return CholRun(info, CS_NB, n_panels)
 
 
+def _potrf_lower_blocked(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    n: Int,
+    panel_tpb: Int,
+    solve_tpb: Int,
+    elem_tpb: Int,
+    mut trace: IdentityTrace,
+) raises -> CholRun:
+    """`potrf_lower` at CB_NB = 128 (lane gap-linalg, CHOL_IDN_NB128;
+    cholesky/checks/potrf_blocked.mojo states the argument): per panel the
+    guarded diagonal factor, the guarded panel solve, and the trailing
+    update `A22 -= L21 L21^T` through `blk_gemm_sub` in column blocks of
+    CB_COLS over the cells on or below the diagonal; no wait inside the
+    loop, every launch after a failed panel returns at once on `info`, one
+    readback at the end. The same per-cell statements as the generic loop
+    below at nb = 128 (the traced and sabotage runs take that loop), so the
+    two agree bit for bit; `ws` holds `chol_workspace_floats(n, CB_NB)`."""
+    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
+    hinfo.unsafe_ptr().unsafe_store(0, Int32(0))
+    ctx.enqueue_copy(dst_buf=dinfo, src_ptr=hinfo.unsafe_ptr())
+    var ap = F32Ptr(unsafe_from_address=Int(a.unsafe_ptr()))
+    var ip = I32Ptr(unsafe_from_address=Int(dinfo.unsafe_ptr()))
+    var j0 = 0
+    while j0 < n:
+        var w = min(CB_NB, n - j0)
+        var n_trail = n - j0 - w
+        ctx.enqueue_function[panel_factor_guarded_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
+            a.unsafe_ptr(),
+            dinfo.unsafe_ptr(),
+            Int32(n),
+            Int32(j0),
+            Int32(w),
+            grid_dim=(1, 1, 1),
+            block_dim=(panel_tpb, 1, 1),
+        )
+        if n_trail > 0:
+            var solve_grid = (n_trail + solve_tpb - 1) // solve_tpb
+            ctx.enqueue_function[trsm_panel_guarded_kernel](
+                a.unsafe_ptr(),
+                dinfo.unsafe_ptr(),
+                Int32(n),
+                Int32(j0),
+                Int32(w),
+                Int32(n_trail),
+                grid_dim=(solve_grid, 1, 1),
+                block_dim=(solve_tpb, 1, 1),
+            )
+            # A22[cb:, cb:cb+cbw] -= L21[cb:, :] L21[cb:cb+cbw, :]^T, lower
+            # cells only; every column block is one identical GEMM at k = w
+            var base = j0 + w
+            var cb = 0
+            while cb < n_trail:
+                var cbw = min(CB_COLS, n_trail - cb)
+                blk_gemm_sub[True](
+                    ctx, ap, n, base + cb, base + cb,
+                    ap, n, base + cb, j0,
+                    ap, n, base + cb, j0,
+                    n_trail - cb, cbw, w, OP_NT, True, ws, ip, ap, False,
+                )
+                cb += cbw
+        j0 += w
+    ctx.enqueue_function[zero_upper_guarded_kernel](
+        a.unsafe_ptr(),
+        dinfo.unsafe_ptr(),
+        Int32(n),
+        grid_dim=((n * n + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+    ctx.synchronize()
+    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+    var n_panels = (n + CB_NB - 1) // CB_NB
+    if info != 0:
+        n_panels = (info - 1) // CB_NB + 1
+    trace.record_device(ctx, "chol.factor", a, n * n)
+    var nb_record = List[Int32]()
+    nb_record.append(Int32(CB_NB))
+    nb_record.append(Int32(n_panels))
+    nb_record.append(Int32(info))
+    trace.record_list_i32("chol.nb", nb_record)
+    ctx.synchronize()
+    _ = dinfo^
+    _ = hinfo^
+    return CholRun(info, CB_NB, n_panels)
+
+
 def _potrf_lower_fast_blocked(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -1988,6 +2093,18 @@ def potrf_lower(
             " that a small matrix will not show you"
         )
 
+    # lane gap-linalg (2026-10-08): the 128-wide blocked driver (CANDIDATE,
+    # -D MOJOLEARN_IDN_CHOL_NB128; cholesky/checks/potrf_blocked.mojo). The
+    # same cells as the loop below at nb = 128 without its per-panel waits;
+    # a trace, a sabotage or a multi-GPU owner set takes the loop.
+    comptime if CHOL_IDN_NB128:
+        if (
+            sabotage == CHOL_SAB_NONE
+            and not trace.enabled
+            and chol_device_count() == 1
+            and nb == CB_NB
+        ):
+            return _potrf_lower_blocked(ctx, a, ws, n, panel_tpb, solve_tpb, elem_tpb, trace)
     # The strip schedule (cholesky/checks/potrf_strip.mojo): the same cells,
     # the same steps, the same order. Only without a trace, a sabotage or a
     # multi-GPU owner set, at the pinned width. MOJOLEARN_CHOL_STRIP_OFF=1

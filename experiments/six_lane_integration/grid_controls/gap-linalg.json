@@ -1,0 +1,85 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "gap-linalg",
+ "branch": "lane/gap-linalg",
+ "head": "0e8ebb636",
+ "controls": {
+  "chol_nb128": {
+   "define": "MOJOLEARN_IDN_CHOL_NB128",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_CHOL_NB128"]},
+   "default": "off",
+   "source": [
+    "cholesky/checks/potrf_blocked.mojo:1",
+    "cholesky/checks/potrf.mojo:_potrf_lower_blocked",
+    "cholesky/host/chol_oracle.mojo:CHOL_HOST_NB_PINNED",
+    "cholesky/estimator.mojo:cholesky_factor_poolio",
+    "gemm/block_update.mojo:1"
+   ],
+   "binding": "_mojolearn_gp",
+   "bits_change": true,
+   "status": "new",
+   "notes": "Panel width 128 (= CONTRACT_K_LEAF_MIN, one GEMM leaf) instead of 32: guarded diagonal factor + guarded panel solve + trailing update through the identical GEMM in 512-column blocks, lower cells only, no per-panel wait, one info read. Host column (_mojolearn_gp_host) pins 128 with the same define. Bits: a cell's trailing sum bracketed per 128 columns (one 128-chain and one subtraction where v1 had four 32-chains)."
+  },
+  "lu_nb128": {
+   "define": "MOJOLEARN_IDN_LU_NB128",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_LU_NB128"]},
+   "default": "off",
+   "source": [
+    "x_decomp/cells.mojo:IDN_LU_NB128",
+    "x_decomp/lu_blocked.mojo:1",
+    "x_decomp/device.mojo:launch_lu",
+    "x_decomp/device.mojo:launch_trs_tri",
+    "x_decomp/host.mojo:HostExec.lu",
+    "x_decomp/cells.mojo:trs_tri_cols_blocked"
+   ],
+   "binding": "_mojolearn_x_decomp",
+   "bits_change": true,
+   "status": "new",
+   "notes": "128-wide panels through the existing one-launch-per-column lu_fast_panel and lu_swaps_trsm_kernel; trailing update A22 -= L21 U12 through the identical GEMM (block_update; skipped-step L columns zeroed); the solve's block feed as one GEMM + one subtraction per 128-row block when nrhs >= 32. Host column (_mojolearn_x_decomp_host): lu_blocked_host and trs_tri_cols_blocked spell the same chains. LLE's precise factor keeps the per-step order."
+  },
+  "eigh_tridiag_idn": {
+   "define": "MOJOLEARN_IDN_EIGH_TRIDIAG",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_EIGH_TRIDIAG"]},
+   "default": "off",
+   "source": [
+    "x_decomp/eigh_tridiag.mojo:EIGH_TD_IDN",
+    "x_decomp/eigh_tridiag.mojo:eigh_td_on",
+    "x_decomp/device.mojo:DevExec._eigh_on"
+   ],
+   "binding": "_mojolearn_x_decomp",
+   "bits_change": true,
+   "status": "new",
+   "notes": "The Apple FAST tridiagonal eigh (Householder panels, df64 bisection, twisted vectors, compact-WY back-transform) on IDENTICAL NVIDIA/AMD: every product-meets-add / division / sqrt through checks/numerics seams, fixed 256-slot block folds, rank-2k update as ONE OP_NT identical GEMM at k = 64, back-transform as three identical GEMMs; clustered-spectrum refusal falls back to the identical Jacobi (decided by T's bits). Host column keeps the Jacobi (digest recorded, not required). Also linked by _mojolearn_linalg (its eigh_binding calls DevExec.eigh)."
+  }
+ },
+ "algorithms": {
+  "algos:cholesky": {
+   "binding": "_mojolearn_gp",
+   "route": "fit: python/mojolearn/_cholesky_impl.py Cholesky -> bindings/_mojolearn_gp.mojo cholesky_factor_binding -> cholesky/estimator.mojo cholesky_factor_poolio -> cholesky/checks/potrf.mojo potrf_lower -> _potrf_lower_blocked (on) | _potrf_lower_strips (off)",
+   "controls": ["chol_nb128"],
+   "interaction_groups": []
+  },
+  "algos:lu-factor": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "python/mojolearn/_expansion_decomp.py lu_factor -> x_decomp/api.mojo lu_py -> x_decomp/device.mojo DevExec.lu -> launch_lu (nb = 128 on, 32 off)",
+   "controls": ["lu_nb128"],
+   "interaction_groups": []
+  },
+  "expanded:lu-solve": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "python/mojolearn/_expansion_decomp.py solve -> x_decomp/api.mojo lu_gesv_py -> DevExec.lu_gesv -> launch_lu + launch_lu_solve -> launch_trs_tri (GEMM feed on at nrhs >= 32)",
+   "controls": ["lu_nb128"],
+   "interaction_groups": []
+  },
+  "algos:eigh": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "python/mojolearn/_expansion_decomp.py _Kit.eigh -> x_decomp/api.mojo eigh_py -> DevExec.eigh -> _eigh_on -> _eigh_td_try (on) | _eigh_par_on Jacobi (off, and the refusal fallback)",
+   "controls": ["eigh_tridiag_idn"],
+   "interaction_groups": []
+  }
+ },
+ "removed": []
+}

@@ -80,6 +80,7 @@ from cholesky.checks.potrf import (
     potrf_lower,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
+from cholesky.checks.potrf_blocked import CHOL_IDN_NB128
 from cholesky.impl.linalg.cholesky_r1_update import (
     chol_rank1_update,
     chol_rank1_update_workspace_floats,
@@ -352,10 +353,19 @@ def cholesky_factor_poolio(
     var logdet = Float32(0.0)
     if run.info == 0:
         logdet = chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
-    var stage = _chol_stage_ptr(ctx, cells)
-    ctx.enqueue_copy(dst_ptr=stage, src_buf=da)
-    ctx.synchronize()
-    copy_f32(stage, lp, cells)
+    # lane gap-linalg (2026-10-08), CHOL_IDN_NB128: the factor straight into
+    # the caller's array (one device-to-host copy; the pinned stage and the
+    # host `copy_f32` of n^2 floats after it are Metal's transfer rule,
+    # x_decomp/device.mojo `_down`'s note, not NVIDIA's or AMD's). A copy:
+    # no bit moves.
+    comptime if CHOL_IDN_NB128:
+        ctx.enqueue_copy(dst_ptr=lp, src_buf=da.create_sub_buffer[DType.float32](0, cells))
+        ctx.synchronize()
+    else:
+        var stage = _chol_stage_ptr(ctx, cells)
+        ctx.enqueue_copy(dst_ptr=stage, src_buf=da)
+        ctx.synchronize()
+        copy_f32(stage, lp, cells)
     sp.unsafe_store(0, Float64(run.info))
     sp.unsafe_store(1, Float64(run.nb))
     sp.unsafe_store(2, Float64(logdet))

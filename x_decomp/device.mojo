@@ -35,6 +35,13 @@ from core.blocked_moments_ops import C23_MCD_LEAF_ROWS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from std.sys.info import has_apple_gpu_accelerator
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
+from x_decomp.lu_blocked import (
+    lub_feed,
+    lub_feed_applies,
+    lub_feed_workspace_floats,
+    lub_trailing_update,
+    lub_workspace_floats,
+)
 from x_decomp.lu_fast_mma import LU_FAST_MMA, lu_fast_mma_factor
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
 from x_decomp.fast_chol import CHOL_FAST_BLOCKED, CH_NB, launch_chol_blocked
@@ -55,6 +62,8 @@ from x_decomp.fast_qr import (
     orgqr_update_kernel,
 )
 from x_decomp.cells import (
+    IDN_LU_NB128,
+    LUB_NB,
     lu_perm_src,
     lu_aux_clamp,
     lu_aux_join,
@@ -179,7 +188,7 @@ from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
-from x_decomp.eigh_tridiag import EIGH_FAST_TRIDIAG, TD_MIN_N, eigh_td_on, td_copy_kernel
+from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, TD_MIN_N, eigh_td_on, td_copy_kernel
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
 
 
@@ -2154,6 +2163,15 @@ def launch_trs_tri(ctx: DeviceContext, lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int,
     """One triangle by TRS_BLOCK-row blocks in the order they finish: the
     same chains as `trs_tri_serial`."""
     var nblk = (n + TRS_BLOCK - 1) // TRS_BLOCK
+    # lane gap-linalg (2026-10-08), IDN_LU_NB128 at nrhs >= LUB_FEED_MIN_RHS:
+    # the block feed as one identical GEMM and one subtraction per block
+    # (x_decomp/lu_blocked.mojo `lub_feed`; the host twin
+    # `trs_tri_cols_blocked`). TRS_BLOCK == LUB_NB, so the blocks are the
+    # same rows. The scratch dies at the end of this call (one wait).
+    var gemm_feed = lub_feed_applies(nrhs)
+    var feed_ws = ctx.enqueue_create_buffer[DType.float32](
+        lub_feed_workspace_floats(n, nrhs) if gemm_feed else 1
+    )
     for q in range(nblk):
         var bq = q if (tri == 0 or tri == 2) else nblk - 1 - q
         var lo = bq * TRS_BLOCK
@@ -2174,9 +2192,15 @@ def launch_trs_tri(ctx: DeviceContext, lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int,
             )
         var rows = n - hi if (tri == 0 or tri == 2) else lo
         if rows > 0:
-            ctx.enqueue_function[trs_feed_kernel](
-                lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi), grid_dim=_blocks(rows * nrhs), block_dim=TPB
-            )
+            if gemm_feed:
+                lub_feed(ctx, lu, b, n, nrhs, tri, lo, hi, feed_ws)
+            else:
+                ctx.enqueue_function[trs_feed_kernel](
+                    lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi), grid_dim=_blocks(rows * nrhs), block_dim=TPB
+                )
+    if gemm_feed:
+        ctx.synchronize()
+    _ = feed_ws^
 
 
 def lu_finish_kernel(a: F32Ptr, count: Int32):
@@ -2552,6 +2576,18 @@ def launch_lu(
     var swaps_trsm = lu_swaps_trsm_on()
     var trail_rb = lu_trail_rb_on()
     var nb = min(lu_panel_width(), LU_PANEL_NB)
+    # lane gap-linalg (2026-10-08), IDN_LU_NB128 (CANDIDATE, -D
+    # MOJOLEARN_IDN_LU_NB128; the order at x_decomp/cells.mojo IDN_LU_NB128):
+    # 128-wide panels through the same `lu_fast_panel` and
+    # `lu_swaps_trsm_kernel`, the trailing update through the identical
+    # GEMM (x_decomp/lu_blocked.mojo). LLE's `precise` factor keeps the
+    # per-step order (its host twin has no blocked arm).
+    var blocked128 = False
+    comptime if IDN_LU_NB128:
+        blocked128 = not precise
+    if blocked128:
+        nb = LUB_NB
+    var lub_ws = ctx.enqueue_create_buffer[DType.float32](lub_workspace_floats(n) if blocked128 else 1)
     if nb > 0:
         # The blocked route (lane neural-pass32): the panel's steps run
         # the per-step kernels over the panel's columns; the trailing
@@ -2621,7 +2657,9 @@ def launch_lu(
                 var r4 = False
                 comptime if LU_TRAIL_R4:
                     r4 = trail_r4
-                if trail_rb:
+                if blocked128:
+                    lub_trailing_update(ctx, a, act, k0, k1, n, lub_ws)
+                elif trail_rb:
                     # lane neural-pass135's register-blocked trail (default);
                     # MOJOLEARN_XD_LU_TRAIL_RB=0 falls back to np115's r4 arm
                     var rtiles = (n - k1 + LU_RB_TILE - 1) // LU_RB_TILE
@@ -2642,7 +2680,7 @@ def launch_lu(
                         grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
                     )
             k0 = k1
-        if step1:
+        if step1 or blocked128:
             # the scratch dies here: wait for the launches that use it
             ctx.synchronize()
         _ = lfs_p0^
@@ -2664,6 +2702,7 @@ def launch_lu(
             )
 
     launch_lu_finish(ctx, a, n * n)
+    _ = lub_ws^
 
 
 @fieldwise_init
@@ -2971,8 +3010,10 @@ struct DevExec(Exec):
         # Householder tridiagonalization + df64 bisection + twisted
         # vectors (x_decomp/eigh_tridiag.mojo) from n = TD_MIN_N; a refusal
         # (clustered spectrum, nonfinite T) falls through to the Jacobi on
-        # the untouched `da`.
-        comptime if EIGH_FAST_TRIDIAG:
+        # the untouched `da`. lane gap-linalg (2026-10-08): also the
+        # IDENTICAL route on NVIDIA and AMD under -D MOJOLEARN_IDN_EIGH_TRIDIAG
+        # (`EIGH_TD_IDN`, pinned folds and the identical GEMM; CANDIDATE).
+        comptime if EIGH_TRIDIAG_ROUTE:
             if n >= TD_MIN_N:
                 if DevExec._eigh_td_try(ctx, da, w, v, n):
                     # The caller owns the matrix and context (including the

@@ -22,6 +22,7 @@ cell is written so it cannot:
 """
 from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from checks.numerics import (
     ftz,
@@ -1425,6 +1426,115 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
     lu_finish_host(a, n * n)
 
 
+# ---- lane gap-linalg (2026-10-08): the 128-wide blocked LU, IDN_LU_NB128 -------
+#: CANDIDATE, default off: `-D MOJOLEARN_IDN_LU_NB128` on an IDENTICAL build
+#: (docs/plans/gaps-2026-10-08.md section 3.2). The device
+#: (x_decomp/lu_blocked.mojo through `launch_lu`) and this host twin spell
+#: ONE order, stated here:
+#:
+#:   panel [k0, k1), k1 - k0 <= LUB_NB: for each step k ascending, the pivot
+#:   over column k's rows >= k (largest |ftz(a)|, ties to the LOWEST row:
+#:   `lu_pivot`'s rule, a total order so any partition folds to the same
+#:   row), rows k and p exchanged, d = ftz(a[k, k]), act = d != 0 (info at the
+#:   first zero), l_i = div0(a[i, k], d) for i > k, and the panel's later
+#:   columns a[i, j] = ftz(fma(-l_i, ftz(a[k, j]), ftz(a[i, j]))) (the v1
+#:   statements, now restricted to the panel);
+#:   the trailing columns j >= k1: the panel's swaps in order, then row k's
+#:   U entries, k ascending, acc = ftz(a[k, j]), for kp in [k0, k) with
+#:   act[kp]: acc = ftz(fma(-a[k, kp], ftz(a[kp, j]), ftz(acc)))
+#:   (`lu_swaps_trsm_kernel`'s chain);
+#:   the trailing cells i >= k1, j >= k1: G = +0.0, for p ascending over the
+#:   panel: G = ftz(fma(ftz(l_ip), ftz(a[k0 + p, j]), G)) with l_ip = 0 where
+#:   act[k0 + p] = 0, then a[i, j] = ftz(ftz(a[i, j]) - ftz(G)): the identical
+#:   GEMM's one-leaf cell at k <= CONTRACT_K_LEAF_MIN (gemm/block_update.mojo)
+#:   followed by one subtraction.
+#:
+#: BITS CHANGE against the per-step order above (a trailing cell took one
+#: fused multiply-add per step into its running value; it now takes a
+#: 128-long chain from +0.0 and one subtraction per panel). NVIDIA, AMD and
+#: this host column move together. Pivot CHOICES move only where the
+#: rounding difference flips a strict compare.
+comptime IDN_LU_NB128 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_LU_NB128"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: The panel width: CONTRACT_K_LEAF_MIN, one GEMM leaf per trailing cell.
+comptime LUB_NB = 128
+#: The solve's block feed goes through the GEMM from this many right-hand
+#: sides: below 32 columns no register-tiled GEMM plan exists (the narrowest
+#: tuned tile is 32 wide, gemm_identical.PLAN_TUNED_32_2X2), so the GEMM
+#: would be the per-cell kernel plus three extra passes. A width rule from
+#: the GEMM's own dispatch, not a board shape.
+comptime LUB_FEED_MIN_RHS = 32
+
+
+def lu_blocked_host(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
+    """`lu_serial` in the blocked order above (IDN_LU_NB128's host column)."""
+    info.unsafe_store(0, Float32(0))
+    var act = List[Float32](length=max(n, 1), fill=Float32(0))
+    var k0 = 0
+    while k0 < n:
+        var k1 = min(k0 + LUB_NB, n)
+        for k in range(k0, k1):
+            # the pivot over column k (current: the panel's earlier steps
+            # already applied to it)
+            var p = k
+            var best = abs(ftz(a.unsafe_load(k * n + k)))
+            for i in range(k + 1, n):
+                var v = abs(ftz(a.unsafe_load(i * n + k)))
+                if v > best:
+                    best = v
+                    p = i
+            piv.unsafe_store(k, Int32(p))
+            if p != k:
+                for j in range(k1):
+                    var t = a.unsafe_load(k * n + j)
+                    a.unsafe_store(k * n + j, a.unsafe_load(p * n + j))
+                    a.unsafe_store(p * n + j, t)
+            var d = ftz(a.unsafe_load(k * n + k))
+            if d == Float32(0):
+                if info.unsafe_load(0) == Float32(0):
+                    info.unsafe_store(0, Float32(k + 1))
+                act[k] = Float32(0)
+                continue
+            act[k] = Float32(1)
+            for i in range(k + 1, n):
+                var l = div0(a.unsafe_load(i * n + k), d)
+                a.unsafe_store(i * n + k, l)
+                for j in range(k + 1, k1):
+                    a.unsafe_store(
+                        i * n + j,
+                        ftz(identical_mul_add(-l, ftz(a.unsafe_load(k * n + j)), ftz(a.unsafe_load(i * n + j)))),
+                    )
+        if k1 < n:
+            # the trailing columns: the panel's swaps in order, then the U rows
+            for j in range(k1, n):
+                for k in range(k0, k1):
+                    lu_swap_elem(a, piv, k, j, n)
+                for k in range(k0 + 1, k1):
+                    var acc = ftz(a.unsafe_load(k * n + j))
+                    for kp in range(k0, k):
+                        if act[kp] != Float32(0):
+                            var l = a.unsafe_load(k * n + kp)
+                            acc = ftz(identical_mul_add(-l, ftz(a.unsafe_load(kp * n + j)), ftz(acc)))
+                    a.unsafe_store(k * n + j, acc)
+            # the trailing cells: the one-leaf GEMM chain, then one subtraction
+            var w = k1 - k0
+            for i in range(k1, n):
+                for j in range(k1, n):
+                    var g = Float32(0)
+                    for p in range(w):
+                        var lv = Float32(0)
+                        if act[k0 + p] != Float32(0):
+                            lv = ftz(a.unsafe_load(i * n + k0 + p))
+                        g = ftz(identical_mul_add(lv, ftz(a.unsafe_load((k0 + p) * n + j)), g))
+                    a.unsafe_store(i * n + j, ftz(ftz(a.unsafe_load(i * n + j)) - ftz(g)))
+        k0 = k1
+    lu_finish_host(a, n * n)
+    _ = act^
+
+
 # DEVIATION 5309 (PIN; row 134): the orthonormal basis of a tall A is two
 # passes of {R = the Householder QR's R of decomposition/ (qr_factor, TSQR
 # slices a function of the shape); orth_rank_guard(R); Q = A R^-1, one thread
@@ -1527,6 +1637,34 @@ def trs_block_group(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int,
                     coeff, ftz(b.unsafe_load(j * nrhs + c)), ftz(b.unsafe_load(i * nrhs + c)))))
 
 
+def trs_tri_cols_blocked(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1: Int):
+    """IDN_LU_NB128's solve order at nrhs >= LUB_FEED_MIN_RHS (the device's
+    `launch_trs_tri` with the GEMM feed, x_decomp/lu_blocked.mojo): the
+    triangle in LUB_NB-row blocks in the order they finish; the diagonal
+    block `trs_block_col`'s chains (unchanged), then every cell the block
+    feeds takes G = +0.0, j ASCENDING over the block (the packed leaf's
+    order, forward and backward alike): G = ftz(fma(ftz(coef(i, j)),
+    ftz(b[j, c]), G)), then b[i, c] = ftz(ftz(b[i, c]) - ftz(G)). The
+    reference feed chained the block's rows INTO the cell; this is the
+    one-leaf GEMM cell and one subtraction (gemm/block_update.mojo)."""
+    var nblk = (n + LUB_NB - 1) // LUB_NB
+    var fwd = tri == 0 or tri == 2
+    for q in range(nblk):
+        var bq = q if fwd else nblk - 1 - q
+        var lo = bq * LUB_NB
+        var hi = min(n, lo + LUB_NB)
+        for c in range(c0, c1):
+            trs_block_col(lu, b, n, nrhs, tri, lo, hi, c)
+        var i0 = hi if fwd else 0
+        var i1 = n if fwd else lo
+        for i in range(i0, i1):
+            for c in range(c0, c1):
+                var g = Float32(0)
+                for j in range(lo, hi):
+                    g = ftz(identical_mul_add(ftz(trs_coef(lu, n, tri, i, j)), ftz(b.unsafe_load(j * nrhs + c)), g))
+                b.unsafe_store(i * nrhs + c, ftz(ftz(b.unsafe_load(i * nrhs + c)) - ftz(g)))
+
+
 def trs_tri_cols(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1: Int):
     """One triangle on the columns [c0, c1): the reference walk (one row at
     a time, each applied to every row it feeds, columns innermost). Every
@@ -1535,6 +1673,10 @@ def trs_tri_cols(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1
         for first in range(c0, c1, 4):
             trs_block_group(lu, b, n, nrhs, tri, 0, n, first, min(c1, first + 4))
         return
+    comptime if IDN_LU_NB128:
+        if nrhs >= LUB_FEED_MIN_RHS:
+            trs_tri_cols_blocked(lu, b, n, nrhs, tri, c0, c1)
+            return
     if tri == 0 or tri == 2:
         for j in range(n):
             if trs_divides(tri):

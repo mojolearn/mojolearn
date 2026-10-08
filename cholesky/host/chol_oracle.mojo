@@ -91,8 +91,16 @@ from core.host_simd_identical import ftz_v
 #: `cholesky/checks/potrf.mojo::CHOL_PROFILE`.
 comptime CHOL_HOST_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
 
-#: `potrf.mojo::CHOL_NB_PINNED`. NUMERIC (DEVIATION 1630).
-comptime CHOL_HOST_NB_PINNED = 32
+#: `potrf.mojo::CHOL_NB_PINNED`. NUMERIC (DEVIATION 1630). lane gap-linalg
+#: (2026-10-08): 128 under `-D MOJOLEARN_IDN_CHOL_NB128` (the device's
+#: `potrf_blocked.CHOL_IDN_NB128`: the host column moves with NVIDIA and
+#: AMD; the loop below is generic in the width, `contract_leaf_size(128)`
+#: is still one leaf).
+comptime CHOL_HOST_NB_PINNED = 128 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_CHOL_NB128"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+) else 32
 
 #: `potrf.mojo::CHOL_JITTER_BITS`, 2^-20 (DEVIATION 1637).
 comptime CHOL_HOST_JITTER_BITS: UInt32 = 0x35800000
