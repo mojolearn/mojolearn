@@ -6,45 +6,45 @@
  "head_note": "code only, uncompiled (lanes never compile); T3 (FFT), D3 (denseball) skipped this round; H4 already on main as IDN_DENDRO_UNION",
  "controls": {
   "tsne_knn_tile_select": {
-   "define": "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT",
+   "define": "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "x_ann/knn_device.mojo:342",
+    "x_ann/knn_device.mojo:354",
     "x_ann/knn_device.mojo:knn_enqueue"
    ],
    "binding": [
     "_mojolearn_x_ann"
    ],
    "bits_change": false,
-   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
-   "note": "T1. IDENTICAL, NVIDIA+AMD. Block-wide mark/rank/merge top-k per 64x64 distance tile instead of the serial owner insertion; every d takes the 64x64 tile. Same (dist, idx) lists for finite/inf distances. Also the CAGRA build's exact graph."
+   "status": "promoted 2026-10-09 (lane/postmerge-act-4; post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "note": "T1. IDENTICAL, NVIDIA+AMD. Block-wide mark/rank/merge top-k per 64x64 distance tile instead of the serial owner insertion; every d takes the 64x64 tile. Same (dist, idx) lists for finite/inf distances. Also the CAGRA build's exact graph. PROMOTED: both on istella NV 0.86x / AMD 0.62x (avg 0.74x), taxi NV 1.17x / AMD 0.55x (avg 0.86x; vendor split, NV taxi slower). Digests unchanged. The off arm (MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF) restores the serial owner insertion."
   },
   "tsne_rep_tile": {
-   "define": "MOJOLEARN_IDN_TSNE_REP_TILE",
+   "define": "MOJOLEARN_IDN_TSNE_REP_TILE_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_TSNE_REP_TILE"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_TSNE_REP_TILE_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "x_ann/tsne_device.mojo:470"
+    "x_ann/tsne_device.mojo:480"
    ],
    "binding": [
     "_mojolearn_x_ann"
    ],
    "bits_change": false,
-   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
-   "note": "T2. IDENTICAL, NVIDIA+AMD, needs TS_SPLIT and TS_LANE_FOLD. 256-candidate tiles, one row per thread (16 threads x 4 lanes a row), same 64-lane fold order, same Z tree. Bits none."
+   "status": "promoted 2026-10-09 (lane/postmerge-act-4; post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "note": "T2. IDENTICAL, NVIDIA+AMD, needs TS_SPLIT and TS_LANE_FOLD. 256-candidate tiles, one row per thread (16 threads x 4 lanes a row), same 64-lane fold order, same Z tree. Bits none. PROMOTED: both on istella NV 0.86x / AMD 0.62x (avg 0.74x), taxi NV 1.17x / AMD 0.55x (avg 0.86x; vendor split, NV taxi slower). Digests unchanged. The off arm (MOJOLEARN_IDN_TSNE_REP_TILE_OFF) restores the split repulsion kernel."
   },
   "dbscan_eps_tile": {
    "define": "MOJOLEARN_IDN_DBSCAN_EPS_TILE",
