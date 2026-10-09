@@ -52,8 +52,6 @@ THE SABOTAGE. `-D MOJOLEARN_HOST_SABOTAGE=1` reads the core distance one
 slot early (the (k - 1)-th neighbor instead of the k-th), so every core
 distance, and with it the whole graph, differs.
 """
-from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
-from core.classical_distance import direct_distance_step
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
@@ -612,16 +610,17 @@ def hdbh_mutual_reachability(
                 for f in range(n):
                     var qv = ftz(xp.unsafe_load(row * n + f))
                     var yv = ftz(xp.unsafe_load(col * n + f))
-                    comptime if GRAPH_DIRECT_DISTANCE:
-                        acc = direct_distance_step[1](acc,qv,yv)
-                    else:
-                        acc = ftz(identical_mul_add(qv, yv, acc))
+                    # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+                    # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+                    # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+                    acc = ftz(identical_mul_add(qv, yv, acc))
                 var d = ftz(identical_mul_add(
                     Float32(-2.0), acc,
                     ftz(ftz(np.unsafe_load(row)) + ftz(np.unsafe_load(col))),
                 ))
-                comptime if GRAPH_DIRECT_DISTANCE:
-                    d = acc
+                # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+                # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+                # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
                 if d <= Float32(0.0):
                     d = Float32(0.0)
                 d = ftz(identical_sqrt(d))

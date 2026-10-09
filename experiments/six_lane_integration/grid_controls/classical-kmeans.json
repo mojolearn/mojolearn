@@ -139,24 +139,6 @@
    "status": "split_from:C30_DIRECT_DISTANCE",
    "note": "dbscan/impl/neighbors/epsilon_neighborhood.mojo, dbscan/host/dbscan_oracle.mojo | binding fixed (lane classical-fixes 2026-10-07): the public route is density.py:357/371 -> bindings/_mojolearn_estimators.mojo:139/176 dbscan_fit(_core)_binding -> dbscan/impl/runner.mojo -> epsilon_neighborhood.mojo:306; host twin dbscan/host/dbscan_oracle.mojo via _mojolearn_estimators_host; bindings/_mojolearn.mojo exports no KDE or DBSCAN entry. | TIMEOUTS (lane grid-fixups-1 2026-10-08): grid ge123e6f9 dbscan_direct / knn_direct / all_on cells REFUSED(timeout) on taxi on both vendors, but istella ran in every such arm (AMD 262-268 s, NVIDIA 405-415 s) with one output hash (7494ce8e17368282). The direct path is not wrong: it is the incumbent tiled eps kernel (eps_unexp_neigh_kernel, the same O(batch x n) tile pass) with direct_distance_step in place of the expanded fma; it adds no pass. The taxi timeout is the workload: its eps graph is dense (the 2026-09-29 L40S board refused the incumbent on taxi with -1799116104 int32 CSR edges in one batch), and no incumbent taxi record exists in this grid (the C004 incumbent pack was lost to the PREBUILT loader bug). A taxi timeout is therefore NOT evidence against either switch; decide them on istella until the incumbent taxi cell is measured."
   },
-  "graph_direct": {
-   "define": "MOJOLEARN_GRAPH_DIRECT_DISTANCE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_GRAPH_DIRECT_DISTANCE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:29"
-   ],
-   "binding": "_mojolearn_hdbscan",
-   "bits_change": true,
-   "status": "split_from:C30_DIRECT_DISTANCE",
-   "note": "hdbscan sparse_mr_mst + host oracle, hierarchy connectivities/multi_gpu tile + linkage_oracle (Agglomerative shares it)"
-  },
   "ivf_direct": {
    "define": "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF",
    "kind": "switch",
@@ -291,15 +273,9 @@
    "binding": "_mojolearn_hdbscan",
    "route": "kNN core distances (knn primitive) -> sparse_mr_mst / linkage",
    "controls": [
-    "graph_direct",
     "knn_direct"
    ],
-   "interaction_groups": [
-    [
-     "graph_direct",
-     "knn_direct"
-    ]
-   ]
+   "interaction_groups": []
   }
  },
  "removed": [
@@ -358,6 +334,11 @@
    "control": "kmeans_assign",
    "arm": "direct4",
    "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. direct4/tiled ms ratio NV/AMD: kmeans istella 12.695/6.192 (620.2 -> 7873.6 NV, 541.0 -> 3349.7 AMD), taxi 1.777/1.961; combined 4.07x SLOWER; inertia SAME. The direct arms (direct2 shares the code, not a grid arm) are gone from the row kernel, k-means++, k-means||, transform and the host oracle; rows2/rows4 stay. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_GRAPH_DIRECT_DISTANCE",
+   "control": "graph_direct",
+   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: hdbscan istella 1.758/1.699 (1785.0 -> 3137.6 NV, 1413.6 -> 2402.2 AMD), taxi 1.141/1.158; combined 1.41x SLOWER. Deleted from sparse_mr_mst, the hdbscan host oracle, the linkage oracle and the connectivities/multi_gpu tile (expanded tile, [False]). Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
   }
  ]
 }

@@ -20,14 +20,14 @@ comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime KNN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KNN_DIRECT_DISTANCE"]()
 comptime KDE_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KDE_DIRECT_DISTANCE"]()
 comptime DBSCAN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_DBSCAN_DIRECT_DISTANCE"]()
-# GRAPH: HDBSCAN and single-linkage Agglomerative share the linkage host oracle
-# (hierarchy/checks/linkage_oracle.mojo) and the connectivities distance tile,
-# so they share one define. KNN covers the brute-force/RBC kNN primitive and its
+# KNN covers the brute-force/RBC kNN primitive and its
 # host twin wherever it is called (KNN, the kNN graphs of HDBSCAN/UMAP/Spectral,
 # DBSCAN's RBC eps route through rbc_cmp_dist). KDE covers kde/impl/distance,
 # which the kernel-matrix route also calls. Each primitive keeps one define on
 # both its device kernel and its host twin.
-comptime GRAPH_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_GRAPH_DIRECT_DISTANCE"]()
+# Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+# MST and the shared linkage tile (single-linkage Agglomerative, host oracles following); NV/AMD hdbscan istella 1.76x/1.70x,
+# taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 # IVF_DIRECT_DISTANCE: the IVF-Flat scan's distances as direct sums of
 # squared differences instead of the -2 q.x + |q|^2 + |x|^2 expansion
 # (device scan, balanced tasks and the ivf_host twin together; bits change).
