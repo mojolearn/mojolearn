@@ -40,6 +40,7 @@ from core.step_glue import (
     step_glue_blocks,
 )
 from core.device_scan import DeviceScanScratch, device_first_token_oob
+from core.neural_context import neural_ctx
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.neural_identical_experiments import (
@@ -300,7 +301,10 @@ comptime _FAULT_MINUS_ONE: UInt32 = 0xBF800000
 
 
 def _require_finite(values: List[Float32], name: String) raises:
-    for i in range(len(values)):
+    """A handful of host scalars (the downloaded loss, the eight optimizer
+    configuration values). Parameter-sized lists go through
+    `_require_finite_params`, which scans on the device."""
+    for i in range(len(values)):  # small-loop(values: loss or optimizer scalars, at most eight): checks config scalars, never parameters
         if (bitcast[DType.uint32](values[i]) & UInt32(0x7F800000)) == UInt32(0x7F800000):
             raise Error("byte LM: nonfinite " + name + " at " + String(i))
 
@@ -313,6 +317,38 @@ def _require_device_finite(ctx: DeviceContext, mut scan: DeviceScanScratch,
     var bad = scan.first_nonfinite(ctx, buf, n)
     if bad >= 0:
         raise Error("byte LM: nonfinite " + name + " at " + String(bad))
+
+
+# The process context the byte-LM bindings run on (`neural_ctx` caches it per
+# name, so this is the binding's own context, created once, not a new one).
+comptime _BYTE_VALIDATE_CTX = (
+    "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojoNeuralByteLMContextFast")
+
+
+def _device_copy_f32(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
+    """One upload of a host list (at least one cell so an empty list still
+    has a buffer; an empty list copies nothing)."""
+    var buf = ctx.enqueue_create_buffer[DType.float32](max(1, len(values)))
+    if len(values) > 0:
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr())
+    return buf^
+
+
+def _require_finite_params(values: List[Float32], name: String) raises:
+    """`_require_finite` over a parameter-sized host list, on the device:
+    one upload and one parallel multi-block scan (`DeviceScanScratch`,
+    SCAN_TPB threads per block) that returns the smallest nonfinite index,
+    the index the host loop reported. Same message. Replaces a host walk
+    over every parameter (lane H2, 2026-10-09)."""
+    if len(values) == 0:
+        return
+    var ctx = neural_ctx[_BYTE_VALIDATE_CTX]()
+    var scan = DeviceScanScratch(ctx)
+    var buf = _device_copy_f32(ctx, values)
+    _require_device_finite(ctx, scan, buf, len(values), name)
+    _ = buf^
+    _ = scan^
 
 
 def _byte_validate_state_shape(param: List[Float32], m: List[Float32], v: List[Float32],
@@ -333,14 +369,23 @@ def _byte_validate_state_shape(param: List[Float32], m: List[Float32], v: List[F
 
 def byte_validate_state(param: List[Float32], m: List[Float32], v: List[Float32],
                         flags: List[Bool], completed: Int, config: ByteConfig = ByteConfig()) raises:
+    # The parameter-sized predicates run on the device (lane H2, 2026-10-09):
+    # the shape half on the host, then three uploads and the device
+    # validator's four parallel scans, which raise the same messages in the
+    # same order (finite parameters, first moments, second moments, then
+    # `v < 0`) with the smallest index, as the host loops did. No bits change:
+    # nothing here feeds an output.
     _byte_validate_state_shape(param, m, v, flags, completed, config)
-    var n_total = config.n_total()
-    _require_finite(param, "parameters")
-    _require_finite(m, "first moments")
-    _require_finite(v, "second moments")
-    for i in range(n_total):
-        if v[i] < Float32(0):
-            raise Error("byte LM: negative second moment")
+    var ctx = neural_ctx[_BYTE_VALIDATE_CTX]()
+    var scan = DeviceScanScratch(ctx)
+    var dp = _device_copy_f32(ctx, param)
+    var dm = _device_copy_f32(ctx, m)
+    var dv = _device_copy_f32(ctx, v)
+    byte_validate_device_state(ctx, scan, dp, dm, dv, flags, completed, config)
+    _ = dp^
+    _ = dm^
+    _ = dv^
+    _ = scan^
 
 
 def byte_validate_device_state(ctx: DeviceContext, mut scan: DeviceScanScratch,

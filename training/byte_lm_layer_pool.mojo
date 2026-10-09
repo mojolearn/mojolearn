@@ -12,7 +12,7 @@ from core.device_scan import DeviceScanScratch
 from core.step_phase import step_count_d2h
 from training.byte_lm import (
     byte_dims, _block_weights, _require_profile, _byte_validate_allocations,
-    _require_finite, _require_device_finite,
+    _require_finite_params, _require_device_finite,
 )
 from training.byte_lm_config import ByteConfig
 from training.neural_identical_experiments import IDN_LM_PARAM_VIEWS, IDN_TRAIN_NO_DECODE_CACHE
@@ -144,7 +144,7 @@ struct ByteLayerPool(Movable):
         _byte_validate_allocations(shape)
         if len(p) != shape.n_total():
             raise Error("byte layer pool: canonical parameter length required")
-        _require_finite(p, "parameters")
+        _require_finite_params(p, "parameters")
         if len(devices) < 1 or len(devices) > min(64,shape.n_layers+Int(reserve_head_device)):
             raise Error("byte layer pool: too many devices for the layer/head owners")
         for i in range(len(devices)):  # small-loop(devices: device ids, at most 64): duplicate-id refusal on the device list
