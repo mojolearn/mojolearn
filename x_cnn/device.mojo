@@ -1157,8 +1157,45 @@ comptime RES_POOL_MAX_FLOATS = 64 * 1024 * 1024
 comptime RES_POOL = not is_defined["MOJOLEARN_XCNN_NO_RES_POOL"]()
 
 
+#: lane neural-io-2 (MOJOLEARN_XCNN_RES_NEW_NOZERO, read
+#: ~/mojolearn-evidence/neural-gaps-20261009/read.md section 2, batchnorm2d /
+#: dropout2d): `res_alloc` fills every new resident array with +0.0, also the
+#: outputs whose every word the op stores (BatchNorm's y and dx, Dropout2d's
+#: y and dx): one extra pass of 4 n bytes each (two ~51 MB fills per
+#: Dropout2d fit at 64 x 64 x 56 x 56, about 0.12 ms of an L40S's bandwidth
+#: plus their launches). `res_alloc_nofill` hands out the same array unfilled
+#: for those callers only (`DeviceTensor._new_out` in
+#: python/mojolearn/_expansion_cnn.py). Every word is written before any read,
+#: so no bit moves. Default on; -D MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF fills
+#: again (the binding then registers `x_cnn_res_alloc_nofill` as the filling
+#: allocation).
+comptime XCNN_RES_NEW_NOZERO = not is_defined["MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF"]()
+#: lane neural-io-2 (MOJOLEARN_XCNN_RES_FREE_ASYNC): `res_free` waited for the
+#: whole queue before it returned an array to the reuse pool, a host round
+#: trip per freed tensor (each fit frees its previous y and dx). An array kept
+#: in the pool is only handed out again by `res_alloc` on the same one in-order
+#: context, so every later use is queued behind every earlier one: the wait
+#: ordered nothing. It stays where the array is destroyed (pool over its cap,
+#: or no pool). No bit moves. Default on; -D MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF
+#: waits again on every free.
+comptime XCNN_RES_FREE_ASYNC = RES_POOL and not is_defined["MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF"]()
+
+
 def res_alloc(n: Int) raises -> Int:
     """A resident array of `n` floats (4-byte words), zero filled; its device address."""
+    return _res_alloc(n, True)
+
+
+def res_alloc_nofill(n: Int) raises -> Int:
+    """`res_alloc` without the +0.0 fill (XCNN_RES_NEW_NOZERO), for an output
+    whose every word the op stores; the filling `res_alloc` when the switch
+    is off."""
+    comptime if XCNN_RES_NEW_NOZERO:
+        return _res_alloc(n, False)
+    return _res_alloc(n, True)
+
+
+def _res_alloc(n: Int, fill: Bool) raises -> Int:
     var ctx = cnn_ctx()
     var need = n if n > 0 else 1
     # lane/cnn-apple2: a freed array of at least `need` and at most twice
@@ -1173,13 +1210,15 @@ def res_alloc(n: Int) raises -> Int:
                 pick = j
         if pick >= 0:
             var pb = s[].pool.pop(pick)
-            pb.enqueue_fill(Float32(0))
+            if fill:
+                pb.enqueue_fill(Float32(0))
             var paddr = Int(pb.unsafe_ptr())
             s[].res.append(pb^)
             _ = ctx^
             return paddr
     var b = ctx.enqueue_create_buffer[DType.float32](need)
-    b.enqueue_fill(Float32(0))
+    if fill:
+        b.enqueue_fill(Float32(0))
     # No wait (lane/cnn-apple): the fill is ordered before every later use
     # on the one in-order context, and every host read (res_download) waits.
     var addr = Int(b.unsafe_ptr())
@@ -1191,23 +1230,30 @@ def res_alloc(n: Int) raises -> Int:
 def res_free(addr: Int) raises:
     # the array may still be read or written by enqueued work
     var ctx = cnn_ctx()
-    ctx.synchronize()
-    _ = ctx^
+    comptime if not XCNN_RES_FREE_ASYNC:
+        ctx.synchronize()
     var s = _slots()
     for k in range(len(s[].res)):  # small-loop(res: live resident arrays of the session): address lookup, no data
         if Int(s[].res[k].unsafe_ptr()) == addr:
             var b = s[].res.pop(k)
             comptime if RES_POOL:
                 # keep it for reuse while the pool stays under its cap
-                # (the wait above ended every use of it)
+                # (the wait above ended every use of it; XCNN_RES_FREE_ASYNC:
+                # its next user is queued behind those uses on this context)
                 var held = len(b)
                 for j in range(len(s[].pool)):  # small-loop(pool: freed resident arrays, under the pool cap): pool size total for the cap test
                     held += len(s[].pool[j])
                 if held <= RES_POOL_MAX_FLOATS:
                     s[].pool.append(b^)
+                    _ = ctx^
                     return
+            comptime if XCNN_RES_FREE_ASYNC:
+                # destroyed here: end every queued use of it first
+                ctx.synchronize()
             _ = b^
+            _ = ctx^
             return
+    _ = ctx^
     raise Error("x_cnn: res_free of an address res_alloc did not return")
 
 

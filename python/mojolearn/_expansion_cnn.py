@@ -315,6 +315,14 @@ class DeviceTensor:
         return cls(b, shape, h=int(b.x_cnn_res_alloc(max(_size(shape), 1))))
 
     @classmethod
+    def _new_out(cls, b, shape):
+        """`_new` for an output whose every word the entry stores (lane
+        neural-io-2, XCNN_RES_NEW_NOZERO): no +0.0 fill on the device, on a
+        binding that has `x_cnn_res_alloc_nofill`."""
+        alloc = getattr(b, "x_cnn_res_alloc_nofill", None) or b.x_cnn_res_alloc
+        return cls(b, shape, h=int(alloc(max(_size(shape), 1))))
+
+    @classmethod
     def _wrap(cls, b, a):
         """Host float32 array `a` as a tensor on binding `b` (one upload)."""
         np = _np()
@@ -1731,7 +1739,7 @@ class BatchNorm2d(_Layer):
                 if c != self.num_features:
                     raise ValueError(f"mojolearn: input has {c} channels, the layer {self.num_features}")
                 hw = x.size // (n * c)
-                y = DeviceTensor._new(b, shape)
+                y = DeviceTensor._new_out(b, shape)   # bn_apply stores every word
                 self._forward_dev(b, x.h, y.h, n, c, hw, dev_y=True)
                 self._xdev, self._x, self._shape, self._xdev_dev = x.h, None, shape, _dev_of(self, b)
                 self._xt = x  # keeps the resident words alive for the backward
@@ -1767,7 +1775,7 @@ class BatchNorm2d(_Layer):
             own0 = self.__dict__.get("_xdev_dev")
             if (_on_dev(b, grad_out) and _idn(b, _F_LAYER_IO) and xh0 is not None and own0 is not None
                     and own0.b is b and grad_out.size == _size(self._x3shape)):
-                dx = DeviceTensor._new(b, self._shape)
+                dx = DeviceTensor._new_out(b, self._shape)   # the dx pass stores every word
                 self._backward_dev(b, xh0, grad_out.h, dx.h, dev_dx=True)
                 return dx
         g = _f32(grad_out, "grad_out")
@@ -1882,7 +1890,7 @@ class Dropout2d(_Layer):
         seed_hi = ((self.random_state >> 31) * 1000003 + self.calls_) & 0x7FFFFFFF
         self.calls_ += 1
         prm = [n, c, hw, seed_lo, seed_hi, thresh >> 16, thresh & 0xFFFF]
-        y = DeviceTensor._new(b, x.shape)
+        y = DeviceTensor._new_out(b, x.shape)   # every path stores each mask and y word
         h = _dev_of(self, b).get("mask", x.size)
         b.x_cnn_dropout2d_m([x.h, y.h, h], 0b111, prm, self.p)
         self.__dict__.update(_mask_host=None, _mask_dev=h, _mask_shape=x.shape)
@@ -1934,7 +1942,7 @@ class Dropout2d(_Layer):
                 if ht is not None and d.get("_dev") is not None and self._dev.b is bt:
                     if grad_out.size != _size(d["_mask_shape"]):
                         raise ValueError("mojolearn: grad_out does not match the forward's input")
-                    dxt = DeviceTensor._new(bt, grad_out.shape)
+                    dxt = DeviceTensor._new_out(bt, grad_out.shape)   # the product stores every word
                     bt.x_cnn_map2_m([grad_out.h, ht, dxt.h], 0b111, [3, grad_out.size])
                     return dxt
         g = _f32(grad_out, "grad_out")
