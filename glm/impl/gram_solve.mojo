@@ -37,6 +37,10 @@ not factor or the trust gate fails, the entry returns status 1 with nothing
 written, and the Python glue runs the incumbent route (TSQR + SVD cutoff for
 OLS, the eigen route for Ridge). Both columns compute the same booleans, so
 both take the same route.
+Lane fg-linear L2 (IDN_RIDGE_RESIDENT, default on): a rejected RIDGE fit no
+longer goes back to Python; `_gs_ridge_resident_fallback` runs the same eigen
+route on the resident buffers (status 0). The host column keeps returning 1
+and running its host eigen route: the same words.
 
 BITS. They change (normal equations instead of TSQR/eig). The host column,
 glm/host/gram_solve_host.mojo, runs the same cells in the same order:
@@ -53,6 +57,10 @@ from gemm.contract import contract_leaf_size
 from glm.impl.center_device import col_means_buf, col_sums_pair_buf
 from glm.impl.linalg.detail.lstsq import ols_equilibration_scale
 from glm.impl.gram_solve_cells import gs_equilibrated_cell, gs_pivot_trusted, gs_regularized_diag, gs_scaled_rhs
+from experiments.classical_identical_ideas.fg_linear_controls import IDN_RIDGE_RESIDENT
+from glm.impl.center_device import center_buf
+from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced
+from core.identity_trace import IdentityTrace
 
 comptime GS_TPB = 128
 
@@ -181,6 +189,62 @@ def _p(buf: DeviceBuffer[DType.float32]) -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
 
 
+def _gs_ridge_resident_fallback(
+    ctx: DeviceContext,
+    mut d_x: DeviceBuffer[DType.float32],
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_mx: DeviceBuffer[DType.float32],
+    mut d_my: DeviceBuffer[DType.float32],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    alpha: Float32,
+    center: Bool,
+) raises:
+    """IDN_RIDGE_RESIDENT (lane fg-linear L2, experiments/classical_identical_ideas/
+    fg_linear_controls.mojo): Ridge's eig route on the X and y this entry
+    already uploaded and the means it already formed, instead of status 1 and
+    the Python glue's four crossings. The statements are
+    `ridge_fit_resident_host`'s (glm/estimator.mojo) after its means: center X
+    and y by the float32 means (`center_buf`), then `ridge_eig_scratch_traced`
+    with the raw X (dead after the center) as the Gram's scratch. With
+    `center` False the raw X and y are the design, a fresh buffer the scratch.
+    Writes coef (n_features floats)."""
+    var cells = n_rows * n_features
+    var w = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("ridge n=") + String(n_rows) + " d=" + String(n_features)
+            + " algo=" + String(RIDGE_ALGO_EIG)
+        )
+    if center:
+        var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
+        var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
+        center_buf(ctx, d_y, d_my, d_cy, n_rows, 1)
+        ctx.synchronize()
+        trace.record_device[DType.float32](ctx, "ridge.input.A", d_cx, cells)
+        trace.record_device[DType.float32](ctx, "ridge.input.b", d_cy, n_rows)
+        trace.record_scalar_f32("ridge.input.alpha", alpha)
+        # d_x is dead from here: the Gram's gemm_tn scratch.
+        ridge_eig_scratch_traced(ctx, d_cx, n_rows, n_features, d_cy, alpha, w, d_x, trace)
+        _ = d_cx^
+        _ = d_cy^
+    else:
+        var xa = ctx.enqueue_create_buffer[DType.float32](cells)
+        ctx.synchronize()
+        trace.record_device[DType.float32](ctx, "ridge.input.A", d_x, cells)
+        trace.record_device[DType.float32](ctx, "ridge.input.b", d_y, n_rows)
+        trace.record_scalar_f32("ridge.input.alpha", alpha)
+        ridge_eig_scratch_traced(ctx, d_x, n_rows, n_features, d_y, alpha, w, xa, trace)
+        _ = xa^
+    trace.record_device[DType.float32](ctx, "ridge.coef", w, n_features)
+    ctx.enqueue_copy(dst_ptr=coef_ptr, src_buf=w)
+    ctx.synchronize()
+    _ = w^
+
+
 def linear_gram_fit_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -271,6 +335,16 @@ def linear_gram_fit_host(
         ctx.enqueue_copy(dst_ptr=coef_ptr, src_buf=d_w)
         ctx.synchronize()
         status = 0
+    elif alpha > Float32(0.0) and d > 1 and n_rows > 1:
+        # IDN_RIDGE_RESIDENT (lane fg-linear L2, default on): a rejected
+        # Ridge Gram runs the eig route on the resident X / y and the means
+        # formed above (the same words the Python glue's route reaches),
+        # instead of status 1 and four PCIe crossings of X. OLS (alpha 0)
+        # still returns 1 (its incumbent is the TSQR). The d == 1 and n <= 1
+        # cases keep status 1 (the incumbent's own refusals by name).
+        comptime if IDN_RIDGE_RESIDENT:
+            _gs_ridge_resident_fallback(ctx, d_x, d_y, d_mx, d_my, coef_ptr, n_rows, d, alpha, center)
+            status = 0
     _ = h_flag^
     _ = d_x^
     _ = d_y^
