@@ -2756,6 +2756,10 @@ def render_board(result):
         L.append("> SMOKE RUN: %s. These numbers are plumbing checks, not results."
                  % ("; ".join(why) or "a reduced shape"))
         L.append("")
+    # Board-level header notes a result assembler sets (tools/main_board_ingest.py: the
+    # rolling main board's label, cell span and rules). Release boards carry none.
+    for note in result.get("board_notes") or []:
+        L.extend(["> " + clean(note), ""])
     for note in result.get("opponent_resource_notes", []):
         L.extend(["> " + note, ""])
     L.append("## Box")
