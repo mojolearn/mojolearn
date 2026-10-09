@@ -57,7 +57,22 @@ from gemm.contract import contract_leaf_size
 from glm.impl.center_device import col_means_buf, col_sums_pair_buf
 from glm.impl.linalg.detail.lstsq import ols_equilibration_scale
 from glm.impl.gram_solve_cells import gs_equilibrated_cell, gs_pivot_trusted, gs_regularized_diag, gs_scaled_rhs
-from experiments.classical_identical_ideas.fg_linear_controls import IDN_RIDGE_RESIDENT
+from experiments.classical_identical_ideas.fg_linear_controls import IDN_GRAM_FF_FALLBACK, IDN_RIDGE_RESIDENT
+from glm.impl.gram_ff_cells import (
+    GFF_LEAVES,
+    gff_backward_cell,
+    gff_cells,
+    gff_chol_cell,
+    gff_coef,
+    gff_equilibrated_cell,
+    gff_fold_cell,
+    gff_forward_cell,
+    gff_leaf_cell,
+    gff_mean_split,
+    gff_pivot_trusted,
+    gff_regularized_diag_f32,
+)
+from x_linear.ff import ff_ld, ff_mul_f, ff_st
 from glm.impl.center_device import center_buf
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced
 from core.identity_trace import IdentityTrace
@@ -189,6 +204,222 @@ def _p(buf: DeviceBuffer[DType.float32]) -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
 
 
+# ---------------------------------------------------------------------------
+# Lane fg-linear L3 (IDN_GRAM_FF_FALLBACK, default off): the float-float
+# second chance of a rejected Ridge Gram (glm/impl/gram_ff_cells.mojo).
+# ---------------------------------------------------------------------------
+comptime _U64Ptr = MutPointer[UInt64, MutAnyOrigin]
+
+
+def gff_split_kernel(m64: _U64Ptr, mh: F32Ptr, ml: F32Ptr, d_in: Int32, center: Int32):
+    """The d + 1 binary64 means (X then y) as float-float words; zeros when
+    the fit does not center."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j > Int(d_in):
+        return
+    if center != 0:
+        var f = gff_mean_split(m64.unsafe_load(j))
+        mh.unsafe_store(j, f.hi)
+        ml.unsafe_store(j, f.lo)
+    else:
+        mh.unsafe_store(j, Float32(0))
+        ml.unsafe_store(j, Float32(0))
+
+
+def gff_leaf_kernel(x: F32Ptr, y: F32Ptr, mh: F32Ptr, ml: F32Ptr, ph: F32Ptr, pl: F32Ptr, n_in: Int64, d_in: Int32):
+    """grid (cells / GS_TPB, GFF_LEAVES): one thread per (leaf, cell);
+    adjacent threads take adjacent Gram columns j of one row i, so a row's
+    loads of x[r, j] coalesce and x[r, i] broadcasts."""
+    var d = Int(d_in)
+    var t = gff_cells(d)
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var leaf = Int(block_idx.y)
+    if q >= t:
+        return
+    var v = gff_leaf_cell(x, y, mh, ml, Int(n_in), d, leaf, q)
+    ph.unsafe_store(leaf * t + q, v.hi)
+    pl.unsafe_store(leaf * t + q, v.lo)
+
+
+def gff_fold_kernel(ph: F32Ptr, pl: F32Ptr, gh: F32Ptr, gl: F32Ptr, ch: F32Ptr, cl: F32Ptr, d_in: Int32):
+    var d = Int(d_in)
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if q < gff_cells(d):
+        gff_fold_cell(ph, pl, gh, gl, ch, cl, d, q)
+
+
+def gff_equilibrate_kernel(
+    gh: F32Ptr, gl: F32Ptr, ch: F32Ptr, cl: F32Ptr, ah: F32Ptr, al: F32Ptr, adh: F32Ptr, adl: F32Ptr,
+    bh: F32Ptr, bl: F32Ptr, sv: F32Ptr, d_in: Int32, alpha: Float32,
+):
+    """One thread per cell of A (float-float); the diagonal threads also
+    write the diagonal copy, the scaled right-hand side and the scale."""
+    var d = Int(d_in)
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if q >= d * d:
+        return
+    var i = q // d
+    var j = q - i * d
+    var si = ols_equilibration_scale(gff_regularized_diag_f32(gh, gl, i, d, alpha))
+    var sj = ols_equilibration_scale(gff_regularized_diag_f32(gh, gl, j, d, alpha))
+    var v = gff_equilibrated_cell(gh, gl, i, j, d, alpha, si, sj)
+    ff_st(ah, al, q, v)
+    if i == j:
+        ff_st(adh, adl, i, v)
+        ff_st(bh, bl, i, ff_mul_f(ff_ld(ch, cl, i), si))
+        sv.unsafe_store(i, si)
+
+
+def gff_chol_step_kernel(ah: F32Ptr, al: F32Ptr, adh: F32Ptr, adl: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
+    var jj = Int(j)
+    var i = jj + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        gff_chol_cell(ah, al, adh, adl, info, i, jj, Int(n))
+
+
+def gff_trust_kernel(lh: F32Ptr, adh: F32Ptr, info: F32Ptr, flag: F32Ptr, d_in: Int32):
+    """flag[0] = 1 when info is 0 and every float-float pivot passes
+    GFF_TRUST_GATE. One thread over the d pivots."""
+    if block_idx.x != 0 or thread_idx.x != 0:
+        return
+    var d = Int(d_in)
+    var ok = info.unsafe_load(0) == Float32(0)
+    for j in range(d):
+        if not gff_pivot_trusted(lh.unsafe_load(j * d + j), adh.unsafe_load(j)):
+            ok = False
+    flag.unsafe_store(0, Float32(1) if ok else Float32(0))
+
+
+def gff_forward_step_kernel(lh: F32Ptr, ll: F32Ptr, bh: F32Ptr, bl: F32Ptr, zh: F32Ptr, zl: F32Ptr, j: Int32, n: Int32):
+    var jj = Int(j)
+    var i = jj + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        gff_forward_cell(lh, ll, bh, bl, zh, zl, i, jj, Int(n))
+
+
+def gff_backward_step_kernel(lh: F32Ptr, ll: F32Ptr, zh: F32Ptr, zl: F32Ptr, wh: F32Ptr, wl: F32Ptr, j: Int32, n: Int32):
+    var jj = Int(j)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i <= jj:
+        gff_backward_cell(lh, ll, zh, zl, wh, wl, i, jj, Int(n))
+
+
+def gff_coef_kernel(wh: F32Ptr, wl: F32Ptr, sv: F32Ptr, out: F32Ptr, d_in: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(d_in):
+        out.unsafe_store(i, gff_coef(wh, wl, sv, i))
+
+
+def _gs_ff_fit(
+    ctx: DeviceContext,
+    mut d_x: DeviceBuffer[DType.float32],
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_m64: DeviceBuffer[DType.uint64],
+    center: Bool,
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    d: Int,
+    alpha: Float32,
+) raises -> Int:
+    """IDN_GRAM_FF_FALLBACK: 0 with coef written when the float-float factor
+    is trusted, else 1 with nothing written. All on the device; one wait for
+    the trust flag, one for coef."""
+    var t = gff_cells(d)
+    var d_mh = ctx.enqueue_create_buffer[DType.float32](d + 1)
+    var d_ml = ctx.enqueue_create_buffer[DType.float32](d + 1)
+    ctx.enqueue_function[gff_split_kernel](
+        _U64Ptr(unsafe_from_address=Int(d_m64.unsafe_ptr())), _p(d_mh), _p(d_ml), Int32(d), Int32(1 if center else 0),
+        grid_dim=_gs_blocks(d + 1), block_dim=GS_TPB,
+    )
+    var d_ph = ctx.enqueue_create_buffer[DType.float32](GFF_LEAVES * t)
+    var d_pl = ctx.enqueue_create_buffer[DType.float32](GFF_LEAVES * t)
+    ctx.enqueue_function[gff_leaf_kernel](
+        _p(d_x), _p(d_y), _p(d_mh), _p(d_ml), _p(d_ph), _p(d_pl), Int64(n_rows), Int32(d),
+        grid_dim=(_gs_blocks(t), GFF_LEAVES, 1), block_dim=(GS_TPB, 1, 1),
+    )
+    var d_gh = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var d_gl = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var d_ch = ctx.enqueue_create_buffer[DType.float32](d)
+    var d_cl = ctx.enqueue_create_buffer[DType.float32](d)
+    ctx.enqueue_function[gff_fold_kernel](
+        _p(d_ph), _p(d_pl), _p(d_gh), _p(d_gl), _p(d_ch), _p(d_cl), Int32(d), grid_dim=_gs_blocks(t), block_dim=GS_TPB
+    )
+    var d_ah = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var d_al = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var d_adh = ctx.enqueue_create_buffer[DType.float32](d)
+    var d_adl = ctx.enqueue_create_buffer[DType.float32](d)
+    var d_bh = ctx.enqueue_create_buffer[DType.float32](d)
+    var d_bl = ctx.enqueue_create_buffer[DType.float32](d)
+    var d_s = ctx.enqueue_create_buffer[DType.float32](d)
+    ctx.enqueue_function[gff_equilibrate_kernel](
+        _p(d_gh), _p(d_gl), _p(d_ch), _p(d_cl), _p(d_ah), _p(d_al), _p(d_adh), _p(d_adl),
+        _p(d_bh), _p(d_bl), _p(d_s), Int32(d), alpha,
+        grid_dim=_gs_blocks(d * d), block_dim=GS_TPB,
+    )
+    var d_info = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_flag = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.enqueue_function[gs_info_init_kernel](_p(d_info), grid_dim=1, block_dim=1)
+    for j in range(d):
+        ctx.enqueue_function[gff_chol_step_kernel](
+            _p(d_ah), _p(d_al), _p(d_adh), _p(d_adl), _p(d_info), Int32(j), Int32(d),
+            grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
+        )
+    ctx.enqueue_function[gff_trust_kernel](
+        _p(d_ah), _p(d_adh), _p(d_info), _p(d_flag), Int32(d), grid_dim=1, block_dim=1
+    )
+    var h_flag = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.enqueue_copy(dst_buf=h_flag, src_buf=d_flag)
+    ctx.synchronize()
+    var status = 1
+    if h_flag.unsafe_ptr().unsafe_load(0) != Float32(0):
+        var d_zh = ctx.enqueue_create_buffer[DType.float32](d)
+        var d_zl = ctx.enqueue_create_buffer[DType.float32](d)
+        var d_wh = ctx.enqueue_create_buffer[DType.float32](d)
+        var d_wl = ctx.enqueue_create_buffer[DType.float32](d)
+        var d_w = ctx.enqueue_create_buffer[DType.float32](d)
+        for j in range(d):
+            ctx.enqueue_function[gff_forward_step_kernel](
+                _p(d_ah), _p(d_al), _p(d_bh), _p(d_bl), _p(d_zh), _p(d_zl), Int32(j), Int32(d),
+                grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
+            )
+        for jj in range(d):
+            var j = d - 1 - jj
+            ctx.enqueue_function[gff_backward_step_kernel](
+                _p(d_ah), _p(d_al), _p(d_zh), _p(d_zl), _p(d_wh), _p(d_wl), Int32(j), Int32(d),
+                grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB,
+            )
+        ctx.enqueue_function[gff_coef_kernel](
+            _p(d_wh), _p(d_wl), _p(d_s), _p(d_w), Int32(d), grid_dim=_gs_blocks(d), block_dim=GS_TPB
+        )
+        ctx.enqueue_copy(dst_ptr=coef_ptr, src_buf=d_w)
+        ctx.synchronize()
+        status = 0
+        _ = d_zh^
+        _ = d_zl^
+        _ = d_wh^
+        _ = d_wl^
+        _ = d_w^
+    _ = h_flag^
+    _ = d_mh^
+    _ = d_ml^
+    _ = d_ph^
+    _ = d_pl^
+    _ = d_gh^
+    _ = d_gl^
+    _ = d_ch^
+    _ = d_cl^
+    _ = d_ah^
+    _ = d_al^
+    _ = d_adh^
+    _ = d_adl^
+    _ = d_bh^
+    _ = d_bl^
+    _ = d_s^
+    _ = d_info^
+    _ = d_flag^
+    return status
+
+
 def _gs_ridge_resident_fallback(
     ctx: DeviceContext,
     mut d_x: DeviceBuffer[DType.float32],
@@ -272,11 +503,12 @@ def linear_gram_fit_host(
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=y_ptr)
     var d_mx = ctx.enqueue_create_buffer[DType.float32](d)
     var d_my = ctx.enqueue_create_buffer[DType.float32](1)
+    # the binary64 means stay alive for the fit (lane fg-linear L3 reads them)
+    var d_m64 = ctx.enqueue_create_buffer[DType.uint64](d + 1)
     if center:
         var d_sx = ctx.enqueue_create_buffer[DType.uint64](d)
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
         col_sums_pair_buf(ctx, d_x, d_y, d_sx, d_sy, n_rows, d)
-        var d_m64 = ctx.enqueue_create_buffer[DType.uint64](d + 1)
         col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, d)
         # the fit's outputs: mu (float32) and the y mean (binary64 bits)
         ctx.enqueue_copy(dst_ptr=mu_ptr, src_buf=d_mx)
@@ -287,7 +519,6 @@ def linear_gram_fit_host(
         ctx.synchronize()
         _ = d_sx^
         _ = d_sy^
-        _ = d_m64^
     else:
         enqueue_fill(ctx, d_mx, Float32(0))
         enqueue_fill(ctx, d_my, Float32(0))
@@ -335,7 +566,12 @@ def linear_gram_fit_host(
         ctx.enqueue_copy(dst_ptr=coef_ptr, src_buf=d_w)
         ctx.synchronize()
         status = 0
-    elif alpha > Float32(0.0) and d > 1 and n_rows > 1:
+    comptime if IDN_GRAM_FF_FALLBACK:
+        # lane fg-linear L3 (default off): a rejected Ridge Gram first tries
+        # the float-float Gram + Cholesky on the resident X (no Jacobi).
+        if status != 0 and alpha > Float32(0.0):
+            status = _gs_ff_fit(ctx, d_x, d_y, d_m64, center, coef_ptr, n_rows, d, alpha)
+    if status != 0 and alpha > Float32(0.0) and d > 1 and n_rows > 1:
         # IDN_RIDGE_RESIDENT (lane fg-linear L2, default on): a rejected
         # Ridge Gram runs the eig route on the resident X / y and the means
         # formed above (the same words the Python glue's route reaches),
@@ -346,6 +582,7 @@ def linear_gram_fit_host(
             _gs_ridge_resident_fallback(ctx, d_x, d_y, d_mx, d_my, coef_ptr, n_rows, d, alpha, center)
             status = 0
     _ = h_flag^
+    _ = d_m64^
     _ = d_x^
     _ = d_y^
     _ = d_mx^

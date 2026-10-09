@@ -62,3 +62,21 @@ comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_ID
 # PCA-only switches (MOJOLEARN_IDN_PCA_RR_*) stay theirs: if they change the
 # inside of `_eig_rr_device` the linear models inherit it under both flags.
 comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and is_defined["MOJOLEARN_IDN_JACOBI_ROUND_ROBIN"]()
+
+# L3 (DEFAULT OFF, -D MOJOLEARN_IDN_GRAM_FF_FALLBACK). When the float32 Gram
+# fails the trust gate on a RIDGE fit (alpha > 0), a second chance before the
+# eig route: the centered Gram and cross re-formed in float-float from the
+# resident X (glm/impl/gram_ff_cells.mojo: 64 row leaves folded ascending),
+# the same power-of-two equilibration, a float-float Cholesky (one launch per
+# column, rows in parallel) under a 2^-24 gate, float-float triangular
+# solves, coef rounded once. Cost reasoning: one more pass over X at ~10x
+# the fp32 flops per cell (n d^2 / 2 float-float multiply-adds: at
+# 1M x 220 ~0.5 TFLOP of IDENTICAL float32, 50-100 ms on an L40S class GPU)
+# plus 3 d small launches, against the eig route's Gram + Jacobi + U = A V
+# (0.5-1.2 s today). Quality: float-float ~ binary64 normal equations, at
+# least the fp32 eig route's accuracy for alpha > 0. OLS (alpha 0) keeps its
+# TSQR + SVD-cutoff fallback (a rank-deficient design needs the cutoff).
+# When the float-float gate fails too, the L2 / status-1 fallback runs.
+# BITS CHANGE for the fits it takes (normal equations instead of eig); the
+# host column (glm/host/gram_solve_host.mojo) runs the same cells.
+comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK"]()
