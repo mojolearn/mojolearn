@@ -88,15 +88,6 @@ class MatrixStorage(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             git_matrix_bytes(self.root, 'missing-freeze')
 
-    def test_committed_full_matrix_matches_retained_logical_bytes(self):
-        root = Path(__file__).resolve().parents[2]
-        meta = json.loads((root / 'experiments/six_lane_integration/matrix-storage.json').read_text())
-        logical = matrix_bytes(root / meta['compressed_path'])
-        self.assertEqual(len(logical), meta['logical_bytes'])
-        self.assertEqual(hashlib.sha256(logical).hexdigest(), meta['logical_sha256'])
-        self.assertEqual(hashlib.sha256((root / meta['compressed_path']).read_bytes()).hexdigest(),
-                         meta['compressed_sha256'])
-
 
 if __name__ == '__main__':
     unittest.main()

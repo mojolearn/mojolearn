@@ -289,11 +289,10 @@ def resolve_token(token, controls, idx):
 
 # ------------------------------------------------------------------ inventory
 def workload_inventory():
-    from six_lane_matrix_io import read_matrix
     inv = {}
-    matrix = read_matrix(ROOT / 'experiments/six_lane_integration/matrix.json.gz')
-    for cell in matrix['cells']:
-        inv.setdefault(cell['workload_id'], 'existing six-lane matrix workload inventory (ids only; its define catalog is stale)')
+    # The six-lane planning matrix was retired on 2026-10-08; its workload ids live on in workload_ids.json.
+    for wid in json.loads((ROOT / 'experiments/six_lane_integration/workload_ids.json').read_text())['workload_ids']:
+        inv.setdefault(wid, 'existing six-lane matrix workload inventory (ids only; its define catalog is stale)')
     for path, field in (('experiments/six_lane_integration/classification_full_contracts.json', 'variant_workload_id'),
                         ('experiments/six_lane_integration/mlp_full_contracts.json', 'variant_workload_id')):
         for row in json.loads((ROOT / path).read_text())['rows']:
@@ -1149,7 +1148,7 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP, crosses='fu
         inputs=dict(grid_controls=files, guards=dict(path=str(Path(guards_path).relative_to(ROOT)) if Path(guards_path).is_relative_to(ROOT) else str(guards_path),
                                                        sha256=file_sha(guards_path), asserts=guards.assert_count),
                     stale_not_used=['experiments/six_lane_integration/catalog.json (define lists)',
-                                    'experiments/six_lane_integration/matrix.json.gz (define lists; workload ids only are reused)']),
+                                    'experiments/six_lane_integration/workload_ids.json (ids of the retired six-lane matrix; its define lists are not used)']),
         vendors=VENDORS, measurement=dict(excluded_warmups=1, scored_samples=1, rule='owner: one run per arm; Apple does not vote on IDENTICAL'),
         generation_rules=dict(
             cap_per_algorithm_per_vendor=cap,
