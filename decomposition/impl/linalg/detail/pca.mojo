@@ -698,7 +698,7 @@ def _eig_rr_device(
         # P1 + P1b (MOJOLEARN_IDN_PCA_RR_ONE_BLOCK): every sweep, its test,
         # gate and rounds in one launch of one block; the same cells, the
         # same order, the same state words as the loop below
-        ctx.enqueue_function[rr_eigh_one_block_kernel](
+        ctx.enqueue_function[rr_eigh_one_block_kernel](  # small-launch(n: n bounded by rr_one_block_applies, h h + n h <= RR_ONE_BLOCK_STEPS x RR_ONE_TPB cells a round): 1024 threads share every round's cells in parallel, default off, wider n keeps the grid launches
             cov.unsafe_ptr(), vec_buf.unsafe_ptr(), dcs.unsafe_ptr(), doff.unsafe_ptr(),
             dpart.unsafe_ptr(), dfold.unsafe_ptr(), dstate.unsafe_ptr(),
             Int32(n), Int32(PCA_RR_SWEEPS), Float32(JACOBI_TOL),
