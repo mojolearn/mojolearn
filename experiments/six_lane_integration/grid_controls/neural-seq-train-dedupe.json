@@ -5,29 +5,31 @@
  "head": "b81169c61",
  "controls": {
   "m3_angle_carry_cache": {
-   "define": "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE",
+   "define": "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE=1"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "mamba/impl/modules/mamba3_backward.mojo:1313",
-    "mamba/impl/modules/mamba3_backward.mojo:1389"
+    "mamba/impl/modules/mamba3_backward.mojo:1321",
+    "mamba/impl/modules/mamba3_backward.mojo:1397",
+    "mamba/host/gen/mamba3_backward.mojo:1012",
+    "core/six_lane_experiment_guards.mojo:196"
    ],
    "binding": "_mojolearn_mamba",
    "bits_change": false,
-   "status": "split_from:NN38+NI43",
+   "status": "promoted:ge123e6f9",
    "entries": [
     "NN38",
     "NI43"
    ],
    "board": "samba-train-step",
    "tags": [],
-   "note": "NN38 and NI43 enabled the identical seeds kernel; one switch. Same fold order as off (bits equal)."
+   "note": "PROMOTED 2026-10-08 (lane grid-act-4, grid ge123e6f9, one run per arm): incumbent -> carry cache ms samba-train-step NV 96.0->76.9, AMD 147.2->143.5 (0.883x combined); output hashes equal to the incumbent on both vendors (no bits). Measured alone; it now combines with the promoted samba_resident_step and act_retain=2, and the post-merge race measures the combination. Default on in IDENTICAL; arm off = MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF (each chunk re-sums every later chunk total); the old on define is refused. NN38 and NI43 enabled the identical seeds kernel; one switch. Same fold order as off (bits equal)."
   },
   "m2_yoff_exp": {
    "define": "MOJOLEARN_IDN_M2_YOFF_EXP",

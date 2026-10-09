@@ -193,6 +193,7 @@ def _check_configuration() -> Bool:
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     # Lane grid-act-4 (2026-10-08): IDENTICAL grid ge123e6f9 neural promotions and losers (docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main 4e3da4282.
     comptime assert not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-act-4): the device-resident Samba forward and train step are the IDENTICAL default (samba-forward 0.539x, samba-train-step 0.563x, same bits); drop -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP, use -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF for the per-op route (a MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 build takes the per-op route by itself)"
+    comptime assert not is_defined["MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-act-4): the Mamba-3 angle carry cache (NI43 chunk seeds) is the IDENTICAL default (samba-train-step 0.883x, same bits); drop -D MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE, use -D MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF for the per-chunk suffix re-walk"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

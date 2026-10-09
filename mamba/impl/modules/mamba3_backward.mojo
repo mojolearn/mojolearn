@@ -1305,15 +1305,23 @@ comptime IDN_M3_ANGLE_DT_SUFFIX = (
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M3_ANGLE_SUFFIX_CHUNK = 64
-# NI43: default-OFF linear-work scheduling of the existing versioned suffix.
+# NI43: linear-work scheduling of the existing versioned suffix.
 # Each chain folds chunk totals descending exactly once, storing the exclusive
 # carry before adding this chunk. In-place scratch is safe: one owner per chain,
 # one launch boundary before consumers. No token/angle fold or gradient changes.
-# A/B and quality: NOT RUN; host, NVIDIA, AMD and Apple remain unqualified.
+# Promoted 2026-10-08 (lane grid-act-4, IDENTICAL grid ge123e6f9, one run per
+# arm, incumbent -> carry cache ms): samba-train-step NV 96.0 -> 76.9, AMD
+# 147.2 -> 143.5 (0.883x combined); output hashes equal to the incumbent on
+# both vendors, so no bit moves. Each chain does linear work in its chunk count
+# instead of re-summing every later chunk, so the win grows with sequence
+# length. Measured alone; it now combines with the promoted resident Samba step
+# and act_retain=2, and the post-merge race measures the combination. Default
+# on in IDENTICAL; -D MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF restores the
+# per-chunk suffix re-walk.
 comptime IDN_M3_ANGLE_CARRY_CACHE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and IDN_M3_ANGLE_DT_SUFFIX
-    and is_defined["MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE"]()
+    and not is_defined["MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
