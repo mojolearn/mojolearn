@@ -3,7 +3,6 @@
 """`DeviceExec`: the lane's operations on the GPU, one thread per element,
 over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
 from std.ffi import _Global
-from experiments.classical_identical_ideas.stats_controls import C58_FORECAST4
 from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
@@ -231,22 +230,17 @@ def seq_kernel[OP: Int](
     packed two to an Int64 word (bit-exact): Metal binds every kernel
     argument to its own buffer slot and has 31, so the unpacked 33-argument
     signature failed to compile on Apple."""
-    # C58 only schedules classical scalar forecasters. Each series keeps its
-    # own optimizer/recurrence state and the same operation sequence. Four
-    # independent series amortize packed argument setup at fixed register cost.
-    # Neural OP values retain one element per thread.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    comptime GROUP = 4 if C58_FORECAST4 and (OP == OP_THETA or OP == OP_ETS or OP == OP_GARCH) else 1
-    var first = (Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)) * GROUP
-    if first < Int(n):
+    # Tried 2026-10-08 (MOJOLEARN_C58_FORECAST4, four series per thread for theta/ets/garch, run ge123e6f9): NV/AMD
+    # 2.93x/2.58x istella, 2.81x/2.13x taxi on auto-theta and 2.5-3.2x on every theta/damped-ets cell, quality SAME
+    # (4x less parallelism). Deleted, the define refused; recoverable at main bc10b8b56; row in docs/apple-fast/EXPERIMENTS.md.
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
         var a = Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
                      _lo(i01), _hi(i01), _lo(i23), _hi(i23), _lo(i45), _hi(i45),
                      _lo(i67), _hi(i67), _lo(i89), _hi(i89), _lo(i1011), _hi(i1011),
                      _flo(f01), _fhi(f01), _flo(f23), _fhi(f23),
                      _flo(f45), _fhi(f45), _flo(f67), _fhi(f67))
-        for offset in range(GROUP):
-            if first + offset < Int(n):
-                apply[OP](first + offset, a)
+        apply[OP](i, a)
 
 
 def team_kernel[OP: Int](
@@ -917,15 +911,15 @@ struct DeviceExec(Exec):
                 )
                 return
         comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
-            comptime GROUP = 4 if C58_FORECAST4 and (OP == OP_THETA or OP == OP_ETS or OP == OP_GARCH) else 1
-            var tasks = (n + GROUP - 1) // GROUP
+            # Tried 2026-10-08: MOJOLEARN_C58_FORECAST4 (four series per thread, tasks = ceil(n/4)), NV/AMD 2.1-3.2x
+            # SLOWER on every theta/damped-ets cell of run ge123e6f9, quality SAME; deleted, recoverable at main bc10b8b56.
             self.ctx.enqueue_function[seq_kernel[OP]](
                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
                 _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
                 _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
                 _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
                 Int64(n),
-                grid_dim=((tasks + TPB - 1) // TPB, 1, 1),
+                grid_dim=((n + TPB - 1) // TPB, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
 
