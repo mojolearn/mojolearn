@@ -127,7 +127,12 @@ from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
 from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA, SYM_REUSE_PARTITION
 from gbdt.methods.dynamic_boosting_folds import TFold
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
-from gbdt.trees_identical_switches import T22
+from gbdt.trees_identical_switches import (
+    T22,
+    IDN_ORD_CAT_PLANES,
+    IDN_ORD_INDEX_SHARED,
+    ORD_HIST_FOLD_SKIP,
+)
 from gbdt.methods.kernel.pointwise_scores import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_NEWTON_COSINE,
@@ -557,9 +562,30 @@ def fit_oblivious_tree_structure_traced(
                         ctx, fold_layout, pool[0].subsets.bins
                     )
             else:
-                write_fold_based_initial_bins(
-                    ctx, fold_layout, pool[0].subsets.bins
-                )
+                var bins_done = False
+                comptime if IDN_ORD_CAT_PLANES:
+                    # C (trees_identical_switches.mojo): the fit's
+                    # partition-start table (`fit_ordered` builds it once),
+                    # every partition's bins in ONE launch: the same
+                    # integers `write_fold_based_initial_bins` filled per
+                    # partition, without its 2F staging buffers, fills,
+                    # copies and drain
+                    if len(fold_part_off) > 0:
+                        var starts = fold_part_off[0].copy()
+                        ctx.enqueue_function[fold_bins_from_table_kernel](
+                            starts.unsafe_ptr(),
+                            pool[0].subsets.bins.unsafe_ptr(),
+                            Int32(len(fold_layout.parts)),
+                            Int32(doc_count),
+                            grid_dim=max((doc_count + 255) // 256, 1),
+                            block_dim=256,
+                        )
+                        _ = starts^
+                        bins_done = True
+                if not bins_done:
+                    write_fold_based_initial_bins(
+                        ctx, fold_layout, pool[0].subsets.bins
+                    )
             update_subsets_stats(ctx, target, pool[0].subsets)
         pool[0].calcer.reset_for_tree(ctx)
     else:
