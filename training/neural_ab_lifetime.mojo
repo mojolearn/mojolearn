@@ -56,7 +56,7 @@ struct NeuralLifetimeArena(Movable):
             var moved = True
             while moved:
                 moved = False
-                for j in range(i):
+                for j in range(i):  # small-loop(i: earlier live ranges): first-fit over tensor metadata
                     ref previous = ranges[j]
                     var live_overlap = item.first_stage <= previous.last_stage and previous.first_stage <= item.last_stage
                     if live_overlap:
