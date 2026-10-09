@@ -6209,5 +6209,5 @@ def _fit_categories_with_codes(mode, arr):
     pr.stage("unique_inverse", d, sorted_rows, n, d, dictionary, counts, X, inverse)
     pr.run(mode)
     sizes = [int(v) for v in pr.values(counts, d)]  # glue: per-feature output extents
-    categories = [pr.get(dictionary+c*n, sizes[c]) for c in range(d)]  # glue: wraps dictionaries
+    categories = [pr.get(dictionary+c*n, sizes[c]) for c in range(d)]  # small-loop(d: per-feature category dictionaries): wraps fitted metadata per feature
     return categories, pr.get(inverse, (n, d))
