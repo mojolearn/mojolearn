@@ -440,6 +440,9 @@ struct KnnIndexCache(Movable):
     var pool_out_i32: Optional[DeviceBuffer[DType.int32]]
     var pool_host_dist: Optional[HostBuffer[DType.float32]]
     var pool_host_idx: Optional[HostBuffer[DType.uint32]]
+    #: elements held by each pinned stage (0 = none yet)
+    var pool_host_dist_cap: Int
+    var pool_host_idx_cap: Int
     #: 1 while a search holds the pool; a second concurrent search on the
     #: same handle takes the per-call allocations. A search that raises
     #: leaves it held, which only turns the pool off for that handle.
@@ -461,6 +464,8 @@ struct KnnIndexCache(Movable):
         self.pool_out_i32 = Optional[DeviceBuffer[DType.int32]]()
         self.pool_host_dist = Optional[HostBuffer[DType.float32]]()
         self.pool_host_idx = Optional[HostBuffer[DType.uint32]]()
+        self.pool_host_dist_cap = 0
+        self.pool_host_idx_cap = 0
         self.pool_busy = 0
 
 
@@ -512,17 +517,31 @@ def knn_pool_release(cache: MutPointer[KnnIndexCache, MutAnyOrigin]):
     _ = Atomic.fetch_add[ordering = Ordering.SEQUENTIAL](flag, Int64(-1))
 
 
-def knn_pool_host_ptr[dtype: DType](
-    ctx: DeviceContext, mut slot: Optional[HostBuffer[dtype]], n: Int,
-) raises -> MutPointer[Scalar[dtype], MutAnyOrigin]:
-    """A pinned host stage of at least `n` (>= 1) elements, grown only past
-    its high-water length; the caller reads it by pointer only."""
+def knn_pool_host_dist(
+    ctx: DeviceContext, cache: MutPointer[KnnIndexCache, MutAnyOrigin], n: Int,
+) raises -> MutPointer[Float32, MutAnyOrigin]:
+    """The handle's pinned distance readback stage, at least `n` (>= 1)
+    floats, grown only past its high-water length; read by pointer only."""
     var want = n if n > 0 else 1
-    if not slot or len(slot.value()) < want:
+    if not cache[].pool_host_dist or cache[].pool_host_dist_cap < want:
         ctx.synchronize()
-        slot = ctx.enqueue_create_host_buffer[dtype](want)
+        cache[].pool_host_dist = ctx.enqueue_create_host_buffer[DType.float32](want)
+        cache[].pool_host_dist_cap = want
         ctx.synchronize()
-    return slot.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    return cache[].pool_host_dist.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def knn_pool_host_idx(
+    ctx: DeviceContext, cache: MutPointer[KnnIndexCache, MutAnyOrigin], n: Int,
+) raises -> MutPointer[UInt32, MutAnyOrigin]:
+    """The handle's pinned index readback stage (as `knn_pool_host_dist`)."""
+    var want = n if n > 0 else 1
+    if not cache[].pool_host_idx or cache[].pool_host_idx_cap < want:
+        ctx.synchronize()
+        cache[].pool_host_idx = ctx.enqueue_create_host_buffer[DType.uint32](want)
+        cache[].pool_host_idx_cap = want
+        ctx.synchronize()
+    return cache[].pool_host_idx.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 comptime KnnIndexCachePointer = Optional[MutPointer[KnnIndexCache, MutAnyOrigin]]

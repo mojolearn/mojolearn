@@ -156,7 +156,8 @@ struct DeviceStore(Defaultable, Movable):
         """G2: a spare of exactly `n_words` when one is idle, else a fresh
         allocation. Its words are unspecified either way."""
         comptime if STORE_SLOT_POOL:
-            for i in range(len(self.spare)):  # small-loop(spares: idle slot buffers): at most a few entries
+            var n_spare = len(self.spare)
+            for i in range(n_spare):  # small-loop(n_spare: idle spare slot buffers): a few buffer handles, never data
                 if len(self.spare[i]) == n_words:
                     self.spare_bytes -= n_words * 4
                     return self.spare.pop(i)

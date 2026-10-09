@@ -163,7 +163,8 @@ from neighbors.impl.detail.knn_brute_force import (
     KNN_SCRATCH_POOL,
     KnnIndexCachePointer,
     knn_pool_view,
-    knn_pool_host_ptr,
+    knn_pool_host_dist,
+    knn_pool_host_idx,
     knn_pool_acquire,
     knn_pool_release,
     brute_force_knn_impl,
@@ -1396,8 +1397,8 @@ def _knn_search_on_device_index(
     if pooled:
         # K4: the handle's pinned readback stages.
         var cp = cache.value()
-        hdp = knn_pool_host_ptr[DType.float32](ctx, cp[].pool_host_dist, n_queries * k)
-        hip = knn_pool_host_ptr[DType.uint32](ctx, cp[].pool_host_idx, n_queries * k)
+        hdp = knn_pool_host_dist(ctx, cp, n_queries * k)
+        hip = knn_pool_host_idx(ctx, cp, n_queries * k)
     else:
         hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
         hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
