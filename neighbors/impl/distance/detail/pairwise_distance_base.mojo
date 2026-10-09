@@ -81,9 +81,18 @@ def launch_config_generator(
     `Mblk`/`Nblk`/`Nthreads`; the occupancy of `func` is
     `max_active_blocks_per_core` above.
     """
+    return launch_config_generator_cores(m, n, mblk, nblk, n_threads, smem_bytes, TARGET_GPU_CORES)
+
+
+def launch_config_generator_cores(
+    m: Int, n: Int, mblk: Int, nblk: Int, n_threads: Int, smem_bytes: Int, gpu_cores: Int
+) raises -> Tuple[Int, Int]:
+    """`launch_config_generator` with `numSMs` given by the caller (lane
+    fg-ivf B5: the live SM / CU count of the device the launch goes to,
+    where the table row is a stand-in part). SCHEDULING only."""
     var num_blocks_per_sm = max_active_blocks_per_core(n_threads, smem_bytes)
     # `std::size_t minGridSize = numSMs * numBlocksPerSm;` `:308`
-    var min_grid_size = TARGET_GPU_CORES * num_blocks_per_sm
+    var min_grid_size = (gpu_cores if gpu_cores > 0 else TARGET_GPU_CORES) * num_blocks_per_sm
     # `std::size_t yChunks = raft::ceildiv<int>(m, P::Mblk);` `:309`
     var y_chunks = (m + mblk - 1) // mblk
     # `std::size_t xChunks = raft::ceildiv<int>(n, P::Nblk);` `:310`

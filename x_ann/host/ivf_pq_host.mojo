@@ -14,6 +14,8 @@ from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks, ftz_v, mul_add_v
 from x_ann.ivf_rabitq_core import rq_encode_row, rq_pow2, rq_rotate, rq_scale
 from x_ann.ivf_sq_core import sq_encode_cell, sq_range_cell
+from x_ann.switches import IDN_PQ_DEVICE_CODEBOOKS
+from x_ann.ivf_pq_core import PQK_CODES_MAX, PQK_LEN_MAX, PQK_ROWS
 from x_ann.ivf_pq_core import (
     F32P, I32P, IvfPqIndex, pq_assign_cell, pq_coarse_dist, pq_inf, pq_insert, pq_labels_from_lists,
     pq_len_of, pq_lut_entry, pq_residual_cell, pq_validate,
@@ -65,6 +67,109 @@ def _codebooks_host(
         for e in range(n_codes * pq_len):
             codebooks.append(cb[e])
     return codebooks^
+
+
+def _pqk_seed_row(seed: Int, j: Int, c: Int, n: Int, n_train: Int, n_codes: Int) -> Int:
+    """`pqk_init_kernel`'s seed row for code c of subspace j (the device takes
+    the seed as an Int32 argument and widens it, so the same here)."""
+    var stride = n_train // n_codes
+    if stride < 1:
+        stride = 1
+    var h = UInt64(Int(Int32(seed))) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15))
+    h = (h ^ (h >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    h = (h ^ (h >> 27)) * UInt64(0x94D049BB133111EB)
+    h = h ^ (h >> 31)
+    var s = c * stride + Int(h % UInt64(stride))
+    if s >= n_train:
+        s = n_train - 1
+    return (s * n) // n_train
+
+
+def _codebooks_host_batched(
+    mut r: List[Float32], n: Int, n_train: Int, rot_dim: Int, pq_dim: Int, pq_len: Int, n_codes: Int,
+    pq_iters: Int, seed: Int,
+) raises -> List[Float32]:
+    """lane fg-ivf A1 (`IDN_PQ_DEVICE_CODEBOOKS`): the host twin of
+    `x_ann/pq_kmeans_device.mojo::pq_codebooks_device` under `PQK_PINNED`.
+    Seeds: `pqk_init_kernel`'s rows, ftz'd. Then pq_iters times: the labels
+    by `_assign_host` (`pqk_assign_kernel`'s chain: ftz(r), ftz(cb), the fused
+    flushed square sum over u ascending, codes ascending with the strict `<`);
+    per subspace and 256-row block (`PQK_ROWS`) the per-code partial sums
+    over the block's rows in row order starting from 0 (`pqk_partial_kernel`,
+    each add flushed), the partials of every block added in block order to a
+    0 start (`pqk_update_kernel`, flushed), and the centroid
+    `identical_div(sum, count)`; a code with no rows keeps its centroid. The
+    sample row s is dataset row (s n) // n_train, as on the device."""
+    var per = n_codes * pq_len
+    var cb = List[Float32](length=pq_dim * per, fill=Float32(0.0))
+    for j in range(pq_dim):
+        for c in range(n_codes):
+            var row = _pqk_seed_row(seed, j, c, n, n_train, n_codes)
+            for u in range(pq_len):
+                cb[(j * n_codes + c) * pq_len + u] = ftz(r[row * rot_dim + j * pq_len + u])
+    # the sample rows, contiguous (every row when n_train == n: no copy)
+    var rs = List[Float32]()
+    if n_train < n:
+        rs = List[Float32](length=n_train * rot_dim, fill=Float32(0.0))
+        for s in range(n_train):
+            var row = (s * n) // n_train
+            for e in range(rot_dim):
+                rs[s * rot_dim + e] = r[row * rot_dim + e]
+    var rsp: F32P
+    if n_train < n:
+        rsp = fp(rs)
+    else:
+        rsp = fp(r)
+    var labels = List[Int32](length=n_train * pq_dim, fill=Int32(0))
+    var lp = ip(labels)
+    var cbp = fp(cb)
+    var nb = (n_train + PQK_ROWS - 1) // PQK_ROWS
+    var sub_tasks = ann_task_count(pq_dim, n_train * pq_len)
+    for _ in range(pq_iters):
+        _assign_host(rsp, cbp, n_train, pq_dim, rot_dim, pq_len, n_codes, lp)
+
+        def fold_subspaces(t: Int) {imm}:
+            var span = ann_span(t, sub_tasks, pq_dim)
+            var tot = List[Float32](length=per, fill=Float32(0.0))
+            var part = List[Float32](length=per, fill=Float32(0.0))
+            var cnt = List[Int](length=n_codes, fill=0)
+            var pc = List[Int](length=n_codes, fill=0)
+            for j in range(span[0], span[1]):
+                for e in range(per):
+                    tot[e] = Float32(0.0)
+                for c in range(n_codes):
+                    cnt[c] = 0
+                for b in range(nb):
+                    for e in range(per):
+                        part[e] = Float32(0.0)
+                    for c in range(n_codes):
+                        pc[c] = 0
+                    var s0 = b * PQK_ROWS
+                    var s1 = min(s0 + PQK_ROWS, n_train)
+                    for s in range(s0, s1):
+                        var code = Int(lp.unsafe_load(s * pq_dim + j))
+                        var off = s * rot_dim + j * pq_len
+                        for u in range(pq_len):
+                            part[code * pq_len + u] = ftz(part[code * pq_len + u] + ftz(rsp.unsafe_load(off + u)))
+                        pc[code] += 1
+                    for c in range(n_codes):
+                        cnt[c] += pc[c]
+                        for u in range(pq_len):
+                            tot[c * pq_len + u] = ftz(tot[c * pq_len + u] + part[c * pq_len + u])
+                for c in range(n_codes):
+                    if cnt[c] > 0:
+                        var fc = Float32(cnt[c])
+                        for u in range(pq_len):
+                            cbp.unsafe_store((j * n_codes + c) * pq_len + u, identical_div(tot[c * pq_len + u], fc))
+            _ = tot^
+            _ = part^
+            _ = cnt^
+            _ = pc^
+
+        ann_tasks(fold_subspaces, sub_tasks)
+    _ = labels^
+    _ = rs^
+    return cb^
 
 
 #: Codes scored per vector step of the PQ encoding (x86-64-v3 is 8 lanes).
@@ -157,7 +262,16 @@ def ivf_pq_build_host(
             pq_residual_cell(e, xp, cp, lp, dim, rot_dim, rp)
 
     ann_tasks(residual_rows, row_tasks)
-    var cb = _codebooks_host(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+    var dev_cb = False
+    comptime if IDN_PQ_DEVICE_CODEBOOKS:
+        # lane fg-ivf A1: the twin of the device's batched loop, same gate and
+        # limits (every row trains outside FAST, so n_train = n)
+        dev_cb = pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
+    var cb: List[Float32]
+    if dev_cb:
+        cb = _codebooks_host_batched(r, n, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+    else:
+        cb = _codebooks_host(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
     var codes = List[Int32](length=n * pq_dim, fill=Int32(0))
     _assign_host(rp, fp(cb), n, pq_dim, rot_dim, pq_len, n_codes, ip(codes))
     comptime if X_ANN_HOST_SABOTAGE:

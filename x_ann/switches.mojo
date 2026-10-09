@@ -13,6 +13,7 @@ Build an arm with `MOJOLEARN_MOJO_BUILD_FLAGS="-D <name>"` (every
 bindings/build_*.sh passes it to `mojo build`); tools/ann_apple2_ab.sh takes
 `<commit>+<name>[+<name>...]` as an arm."""
 from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: IVF build host passes: list layout by memcpy and without the permuted
 #: vectors for the x_ann indexes, lists moved instead of copied, downloads
@@ -94,3 +95,59 @@ comptime ANN3_TSNE_STEP_ROWS = is_defined["MOJOLEARN_ANN3_TSNE_STEP_ROWS"]()
 #: keeps the cell's walk (the itopk list in threadgroup memory, the same
 #: insertions in the same order). Expected to move no bit.
 comptime ANN3_CAGRA_TEAM = is_defined["MOJOLEARN_ANN3_CAGRA_TEAM"]()
+
+
+#: lane fg-ivf (plan flagship-gaps-2026-10-09, read_ivf.md idea A1), OPT-IN:
+#: the IVF-PQ codebooks in IDENTICAL (every non-FAST mode) from the batched
+#: device Lloyd loop `x_ann/pq_kmeans_device.mojo::pq_codebooks_device`
+#: (Apple FAST's default since lane/apple-fast-ann), on NVIDIA, AMD and
+#: Apple alike, with the host twin `x_ann/host/ivf_pq_host.mojo::
+#: _codebooks_host_batched` doing the same sums in the same order.
+#: Cost: the old path runs one cluster/ k-means fit per subspace (pq_dim of
+#: them, each with k-means|| seeding, ~150 launches and ~16 syncs), so it
+#: scales as pq_dim x (launches + syncs); the batched loop is 3 launches per
+#: Lloyd iteration for every subspace at once and one sync at the end. The
+#: per-subspace fit shape (k = 2^pq_bits codes, d = pq_len, every row) is the
+#: one that runs 500-1,300x slower on the MI325X than on the L40S (the AMD
+#: anomaly in read_ivf.md section 1), so this removes that stage outright.
+#: Bits: CHANGE on every column together (strided seeds instead of
+#: k-means++, a fixed (256-row block, then block order) fold, no tolerance
+#: exit: pq_kmeans_n_iters Lloyd steps). The fold is pinned for the switch:
+#: every partial add flushed (`ftz`), the centroid by `identical_div`.
+#: Paired recall gate against cuVS required (the Apple A/B kept recall:
+#: docs/apple-fast/EXPERIMENTS.md, IVFPQ_FAST_DEVICE_CODEBOOKS).
+#: `pq_len <= PQK_LEN_MAX` and `n_codes <= PQK_CODES_MAX` take it; wider
+#: subspaces keep the per-subspace fits on every column.
+comptime IDN_PQ_DEVICE_CODEBOOKS = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and is_defined["MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS"]()
+)
+
+#: lane fg-ivf (read_ivf.md idea A3), DEFAULT ON outside FAST
+#: (`-D MOJOLEARN_IVF_PQ_ONE_UPLOAD_OFF` restores the old path): IVF-PQ's
+#: coarse step is IVF-Flat's RESIDENT build (`ivf_flat_build_resident_host`
+#: with `keep_rows`), which hands back the rows it uploaded and the final
+#: assignment on the device, so `ivf_pq_build_device` no longer uploads the
+#: n x dim rows a second time nor round-trips the n labels through a host
+#: list; where the IVF build reads the caller's buffer
+#: (`IVF_BUILD_FROM_POINTER`, IDENTICAL) the binding skips the n x dim
+#: numpy -> List copy too. Cost removed: one n x dim x 4 B host copy, one
+#: n x dim x 4 B H2D and one n x 4 B D2H + H2D. A pure waste removal: the
+#: same build statements on the same rows, so no bit moves (the centres
+#: and labels are the build's own words).
+comptime IVF_PQ_ONE_UPLOAD = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_PQ_ONE_UPLOAD_OFF"]()
+)
+
+#: lane fg-ivf (read_ivf.md idea A7), DEFAULT ON outside FAST
+#: (`-D MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF` unregisters the entry, so
+#: `IVFPQIndex.fit` takes the old build and the first search prepares the
+#: handle as before): `x_ann_ivf_pq_build_resident` keeps the fitted index
+#: on the device (centres, codebooks and the n x pq_dim codes the build
+#: already holds there) as an `x_ann/resident.mojo` handle, so fit no longer
+#: downloads the n x pq_dim x 4 B codes and the first search no longer
+#: uploads them again and gathers them into list order. `codes_` is
+#: exported on first read (`x_ann_index_export_codes`, outside fit and
+#: search). No bit moves: the handle holds the words prepare would upload.
+comptime IVF_PQ_RESIDENT_FIT = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF"]()
+)

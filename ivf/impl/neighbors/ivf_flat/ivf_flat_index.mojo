@@ -104,6 +104,44 @@ comptime IVF_TRAINSET_STRIDE = (
     not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
     and not is_defined["MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"]()
 )
+#: lane fg-ivf (read_ivf.md idea B2), DEFAULT ON outside FAST
+#: (`-D MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF` restores KMeansParams.default()'s
+#: 300): the coarse quantizer's k-means|| recluster (the fit of the
+#: oversampled candidate set back to n_lists centres,
+#: `init_scalable_kmeans_plus_plus`) runs at most `kmeans_n_iters` Lloyd
+#: iterations, the caller's own budget for the main fit (cuVS's balanced
+#: k-means bounds every inner fit by n_iters too). Cost: each recluster
+#: iteration is a candidates x n_lists x dim distance pass (the candidate set
+#: is ~ oversampling x rounds x n_lists rows), so up to 300 - kmeans_n_iters
+#: such passes go. Scoped to the IVF builds (`KMeansParams.recluster_max_iter`
+#: is 0, "no cap", for every other k-means). Bits CHANGE when the recluster
+#: had not converged by kmeans_n_iters: device (NVIDIA, AMD) and the host
+#: column (ivf/host/ivf_host.mojo -> host_fit_main) together; recall gate.
+comptime IVF_IDN_RECLUSTER_CAP = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF"]()
+)
+#: lane fg-ivf (read_ivf.md idea B1), OPT-IN outside FAST
+#: (`-D MOJOLEARN_IVF_IDN_STRIDED_INIT`): the coarse quantizer starts from
+#: strided training rows, centre c = training row (c x n_train) // n_lists
+#: (exact integers), instead of k-means|| seeding (up to 8 rounds of
+#: distance passes with ~14 syncs plus the recluster fit). cuVS's balanced
+#: k-means seeds the same way (rows of the trainset, no k-means++). No RNG
+#: and no host read: the rows are gathered on the device
+#: (`ivf_strided_init_kernel`); the host column gathers the same rows. A
+#: function of n_train and n_lists only. Bits CHANGE on every column
+#: (device + ivf/host/ivf_host.mojo); recall gate against cuVS. Applies to
+#: IVF-Flat and to IVF-PQ's coarse step (the same build). B2 is moot with it.
+comptime IVF_IDN_STRIDED_INIT = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT"]()
+)
+
+
+def ivf_strided_init_row(c: Int, n_train: Int, n_lists: Int) -> Int:
+    """`IVF_IDN_STRIDED_INIT`'s start row of centre c: (c n_train) // n_lists,
+    distinct and ascending for n_train >= n_lists."""
+    return (c * n_train) // n_lists
+
+
 #: The training-row target per list. FAISS's `max_points_per_centroid` (256):
 #: past ~256 rows per centroid Lloyd's centroids stop moving measurably, so more
 #: rows only cost time. A cost rule over every shape, not a board size.

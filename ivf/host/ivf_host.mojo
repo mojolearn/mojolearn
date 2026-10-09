@@ -87,6 +87,7 @@ from checks.numerics import ftz, identical_mul_add
 from cluster.host.kmeans_oracle import (
     DEFAULT_OVERSAMPLING,
     DEFAULT_TOL,
+    INIT_ARRAY,
     INIT_KMEANS_PLUS_PLUS,
     KMeansHostTrace,
     host_assign,
@@ -113,6 +114,9 @@ from ivf.impl.neighbors.ivf_common import (
     postprocess_neighbors,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
+    IVF_IDN_RECLUSTER_CAP,
+    IVF_IDN_STRIDED_INIT,
+    ivf_strided_init_row,
     IVF_TRAINSET_STRIDE,
     ivf_trainset_stride,
     METRIC_COSINE_EXPANDED,
@@ -309,20 +313,37 @@ def host_ivf_build(
     var centers = List[Float32](length=n_lists * dim, fill=Float32(0.0))
     var train_labels = List[UInt32](length=n_train, fill=UInt32(0))
     var trace = KMeansHostTrace()
+    # lane fg-ivf B2: the device build's `kp.recluster_max_iter`
+    var recluster_cap = 0
+    comptime if IVF_IDN_RECLUSTER_CAP:
+        recluster_cap = kmeans_n_iters
+    # lane fg-ivf B1: the device build's strided start
+    # (`ivf_strided_init_kernel`): centre c = training row (c n_train) // n_lists
+    var init_kind = INIT_KMEANS_PLUS_PLUS
+    comptime if IVF_IDN_STRIDED_INIT:
+        if n_train >= n_lists:
+            for c in range(n_lists):
+                var row = ivf_strided_init_row(c, n_train, n_lists)
+                for f in range(dim):
+                    if train_stride > 1:
+                        centers[c * dim + f] = xt[row * dim + f]
+                    else:
+                        centers[c * dim + f] = x[row * dim + f]
+            init_kind = INIT_ARRAY
     # lazy_shift=True: the device build's `kp.lazy_shift = True`
     if train_stride > 1:
         _ = host_fit_main(
             xt, n_train, dim, weights, n_lists, centers, train_labels,
-            INIT_KMEANS_PLUS_PLUS, seed, 1, kmeans_n_iters, DEFAULT_TOL, metric,
+            init_kind, seed, 1, kmeans_n_iters, DEFAULT_TOL, metric,
             DEFAULT_OVERSAMPLING, Float32(sum_scale), Float32(weight_scale),
-            trace, String("ivf.quantizer."), True,
+            trace, String("ivf.quantizer."), True, recluster_cap,
         )
     else:
         _ = host_fit_main(
             x, n_rows, dim, weights, n_lists, centers, train_labels,
-            INIT_KMEANS_PLUS_PLUS, seed, 1, kmeans_n_iters, DEFAULT_TOL, metric,
+            init_kind, seed, 1, kmeans_n_iters, DEFAULT_TOL, metric,
             DEFAULT_OVERSAMPLING, Float32(sum_scale), Float32(weight_scale),
-            trace, String("ivf.quantizer."), True,
+            trace, String("ivf.quantizer."), True, recluster_cap,
         )
     _ = xt^
     var labels = List[UInt32](length=n_rows, fill=UInt32(0))
