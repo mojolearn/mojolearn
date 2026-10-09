@@ -36,7 +36,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.rr import RR_OFF_TPB
 from x_decomp.device import (
@@ -106,14 +106,32 @@ comptime RSVD_FAST_DIRECT_IN = (
     and not is_defined["MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF"]()
 )
 
+#: R1, lane fg-pca (2026-10-09), IDENTICAL default on every GPU column;
+#: rollback `-D MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF`. The same route as
+#: RSVD_FAST_DIRECT_IN above (bit 2, `_rsvd_direct_input`): randomized_svd's
+#: input goes from the caller's own buffer straight into a pooled device
+#: matrix (`x_decomp_dev_upload`), instead of `_M.from_input`'s copy of all
+#: n*d floats into a fresh host `array.array` (880 MB of fresh host pages and
+#: a full memcpy at 1M x 220, each extra n*d*4 bytes of host traffic at any
+#: shape) that the first product then uploads. The host finiteness refusal
+#: (`_host_all_finite`) runs first, as before; sparse, wide (host-transposed)
+#: and host-binding inputs keep `_M.from_input`. Cost: -1 host copy of X per
+#: call. Bits: none (a copy is not arithmetic; the same words reach the
+#: device, and `_RES_MIN` = 1 already sent every product to the device).
+comptime RSVD_IDN_DIRECT_IN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF"]()
+)
+
 
 def w4_flags_py() raises -> PythonObject:
     """Which w4 candidates this build compiled in (bit 1 LLE_FAST_DEV_LU,
-    bit 2 RSVD_FAST_DIRECT_IN, bit 4 LLE_FAST_NULL_CANON)."""
+    bit 2 RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN, bit 4
+    LLE_FAST_NULL_CANON)."""
     var f = 0
     comptime if LLE_FAST_DEV_LU:
         f |= 1
-    comptime if RSVD_FAST_DIRECT_IN:
+    comptime if RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN:
         f |= 2
     comptime if LLE_FAST_NULL_CANON:
         f |= 4
