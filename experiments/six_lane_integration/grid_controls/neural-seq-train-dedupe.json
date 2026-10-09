@@ -18,7 +18,7 @@
     "mamba/impl/modules/mamba3_backward.mojo:1321",
     "mamba/impl/modules/mamba3_backward.mojo:1397",
     "mamba/host/gen/mamba3_backward.mojo:1012",
-    "core/six_lane_experiment_guards.mojo:196"
+    "core/six_lane_experiment_guards.mojo:195"
    ],
    "binding": "_mojolearn_mamba",
    "bits_change": false,
