@@ -40,10 +40,9 @@ comptime IN_INTS = 3
 comptime OUT_INTS = 4
 
 
-def check_in_ranges(ins_addr: Int, nins: Int, arena_len: Int, n_host: Int = 0) raises:
+def check_in_ranges(ins_addr: Int, nins: Int, arena_len: Int) raises:
     """Raises unless the input triples are ascending, disjoint and inside
-    the arena. `n_host` (G3, `upload_ranges_host`): src may also be
-    -2 - j for 0 <= j < n_host, host address table entry j."""
+    the arena."""
     if nins < 0 or (nins > 0 and ins_addr == 0):
         raise Error("arena ranges: invalid input range list")
     var r = ArenaIP(unsafe_from_address=ins_addr)
@@ -52,7 +51,7 @@ def check_in_ranges(ins_addr: Int, nins: Int, arena_len: Int, n_host: Int = 0) r
         var lo = Int(r.unsafe_load(IN_INTS * k))
         var hi = Int(r.unsafe_load(IN_INTS * k + 1))
         var src = Int(r.unsafe_load(IN_INTS * k + 2))
-        if lo < at or hi < lo or hi > arena_len or src < -1 - max(n_host, 0):
+        if lo < at or hi < lo or hi > arena_len or src < -1:
             raise Error("arena ranges: input ranges must be ascending, disjoint and inside the arena")
         at = hi
 
@@ -126,43 +125,7 @@ def download_ranges(
             ctx.enqueue_copy(dst_ptr=host_f + lo, src_buf=df.create_sub_buffer[DType.float32](lo, hi - lo))
 
 
-def upload_ranges_host(
-    ctx: DeviceContext, df: DeviceBuffer[DType.float32], host_f: ArenaFP, arena_len: Int,
-    ins_addr: Int, nins: Int, mut store: DeviceStore, host_tab_addr: Int, n_host: Int,
-) raises:
-    """G3 (lane fg-knn-nb, 2026-10-09; x_prep/device.mojo XPREP_NO_SLOT_HOP):
-    `upload_ranges` where a triple's src = -2 - j names entry j of the Int64
-    host address table at `host_tab_addr` (`n_host` entries): that input's
-    host words go STRAIGHT into the arena range, through
-    `DeviceStore.stage_upload` (one copy from the host pointer; TOMBSTONE: the
-    G1 pinned stage was deleted 2026-10-09, lane postmerge-act-1, slower on
-    both vendors, core/device_store.mojo), instead of into a store slot
-    first and then device to device into the arena. Same words in the same
-    places. `check_in_ranges(..., n_host)` must have passed."""
-    var r = ArenaIP(unsafe_from_address=ins_addr)
-    var tab = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=host_tab_addr)
-    var base = Int(df.unsafe_ptr())
-    var at = 0
-    for k in range(nins + 1):
-        var lo = arena_len
-        var hi = arena_len
-        var src = -1
-        if k < nins:
-            lo = Int(r.unsafe_load(IN_INTS * k))
-            hi = Int(r.unsafe_load(IN_INTS * k + 1))
-            src = Int(r.unsafe_load(IN_INTS * k + 2))
-        if lo > at:
-            enqueue_zero_bytes(ctx, MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=base + 4 * at), 4 * (lo - at))
-        if hi > lo:
-            if src >= 0:
-                store.copy_into(ctx, src, df, lo, hi - lo)
-            elif src <= -2:
-                var j = -2 - src
-                if j >= n_host or host_tab_addr == 0:
-                    raise Error("arena ranges: host span names no address table entry")
-                var view = df.create_sub_buffer[DType.float32](lo, hi - lo)
-                store.stage_upload(ctx, view, Int(tab.unsafe_load(j)), hi - lo)
-                _ = view^
-            else:
-                ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](lo, hi - lo), src_ptr=host_f + lo)
-        at = max(at, hi)
+# TOMBSTONE: `upload_ranges_host` (lane fg-knn-nb G3, MOJOLEARN_XPREP_NO_SLOT_HOP: host spans
+# straight into the arena) deleted 2026-10-09 (lane postmerge-act-2): slower on the average,
+# gaussian-nb istella NV 1.25x / AMD 1.00x, taxi 1.02x / 1.03x (nv n0630, amd a1090),
+# same digests; code recoverable at main 5c137b55e.

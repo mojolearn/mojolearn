@@ -172,10 +172,9 @@ struct DeviceStore(Defaultable, Movable):
             )
         ctx.synchronize()
 
-    def stage_upload(mut self, ctx: DeviceContext, dst: DeviceBuffer[DType.float32], src_addr: Int, n_words: Int) raises:
-        """`_upload` for a caller's own device buffer (x_prep's G3 host
-        spans straight into the arena); waits."""
-        self._upload(ctx, dst, src_addr, n_words)
+    # TOMBSTONE: `stage_upload` (x_prep G3 host spans, MOJOLEARN_XPREP_NO_SLOT_HOP) deleted 2026-10-09
+    # (lane postmerge-act-2): G3 slower on the average, gaussian-nb istella NV 1.25x / AMD 1.00x,
+    # taxi 1.02x / 1.03x (nv n0630, amd a1090); code recoverable at main 5c137b55e.
 
     def check(self, id: Int, need: Int) raises:
         """Raises unless `id` is live and holds at least `need` words."""
