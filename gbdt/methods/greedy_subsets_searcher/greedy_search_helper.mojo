@@ -15,7 +15,7 @@ from max.gpu.host.device_attribute import DeviceAttribute
 
 from checks.fixed_point import choose_scale
 from gbdt.trees_identical_switches import T21_STREAMS
-from gbdt.trees_hist_switches import HIST_MULTISTAT, HIST_SYM_FEATURE_PARALLEL
+from gbdt.trees_hist_switches import HIST_SYM_FEATURE_PARALLEL
 from gbdt.trees_small_switches import HIST_REP_SM, HIST_REP_SM_ON, HIST_REP_BPSM, HIST_REP_DEVICE, HIST_REP_DEVICE_X4
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit_wide import (
     hist2_8bit_wide_kernel,
@@ -3638,37 +3638,24 @@ def launch_histograms_for_blocks[
                                 block_hist, acc_i32, fixed_scale,
                             )
                         else:
-                            comptime if HIST_MULTISTAT > 0:
-                                # lane trees-hist-ideas idea 3 (default off): one
-                                # walk per HIST_MULTISTAT planes instead of one
-                                # per plane; same addends, same cells.
-                                comptime assert (
-                                    HIST_MULTISTAT == 4 or HIST_MULTISTAT == 8
-                                ), "MOJOLEARN_TREES_HIST_MULTISTAT is 4 or 8"
-                                launch_hist2_8bit_wide[
-                                    HIST_MULTISTAT, 1, ridx_stats
-                                ](
-                                    ctx, blk, depth, n_live, n_rows, stat_count,
-                                    max_leaves, sm_count, line, base, cindex,
-                                    row_index, stats, p_off, p_sz, ids,
-                                    acc_i32, fixed_scale,
-                                )
-                            else:
-                                # MultiClass carries 1 + (K-1) stat planes and the
-                                # fused arm is two-stat by construction. When it
-                                # landed (8010b2f) every caller WAS two-stat;
-                                # MultiClass arrived later in another lane, and the
-                                # first 254-border multiclass fit hit the fused
-                                # arm's guard instead of a histogram. Multi-stat
-                                # shapes take the PASS route, whose shared-Int32
-                                # arm walks stat pairs on the z axis exactly as
-                                # their ladder does.
-                                launch_one_byte[8, hist2_smem_mode, ridx_stats](
-                                    ctx, blk, depth, n_live, n_rows, stat_count,
-                                    max_leaves, sm_count, line, base, cindex,
-                                    row_index, stats, p_off, p_sz, ids,
-                                    block_hist, acc_i32, fixed_scale,
-                                )
+                            # Tried 2026-10-08 (MOJOLEARN_TREES_HIST_MULTISTAT = 4 | 8, run ge123e6f9): MultiClass one-byte histograms, one cindex
+                            # walk per 4 or 8 stat planes (launch_hist2_8bit_wide[NS, 1]); NV/AMD gbdt-multiclass istella 1.04x/1.41x (4), 0.99x/1.31x (8),
+                            # taxi 1.07x/1.11x (4), 1.11x/1.14x (8) SLOWER; accuracy and mlogloss SAME -> deleted. Recoverable at main 42d1e42c6.
+                            # MultiClass carries 1 + (K-1) stat planes and the
+                            # fused arm is two-stat by construction. When it
+                            # landed (8010b2f) every caller WAS two-stat;
+                            # MultiClass arrived later in another lane, and the
+                            # first 254-border multiclass fit hit the fused
+                            # arm's guard instead of a histogram. Multi-stat
+                            # shapes take the PASS route, whose shared-Int32
+                            # arm walks stat pairs on the z axis exactly as
+                            # their ladder does.
+                            launch_one_byte[8, hist2_smem_mode, ridx_stats](
+                                ctx, blk, depth, n_live, n_rows, stat_count,
+                                max_leaves, sm_count, line, base, cindex,
+                                row_index, stats, p_off, p_sz, ids,
+                                block_hist, acc_i32, fixed_scale,
+                            )
                     else:
                         launch_one_byte[8, hist2_smem_mode, ridx_stats](
                             ctx, blk, depth, n_live, n_rows, stat_count,

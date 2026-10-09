@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pinned pairwise rows; root diagonal policy and Boruvka order stay intact."""
-from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -48,7 +47,10 @@ def pairwise_rows(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
         qnorms.append(peer_clone(ctx, devices[rank], nv))
         rnorms.append(peer_clone(ctx, devices[rank], norms))
         outputs.append(devices[rank].enqueue_create_buffer[DType.float32](rows*m))
-        devices[rank].enqueue_function[pinned_distance_tile_direct_kernel[GRAPH_DIRECT_DISTANCE]](
+        # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+        # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+        # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+        devices[rank].enqueue_function[pinned_distance_tile_direct_kernel[False]](
             outputs[rank].unsafe_ptr(), queries[rank].unsafe_ptr(), references[rank].unsafe_ptr(),
             qnorms[rank].unsafe_ptr(), rnorms[rank].unsafe_ptr(),
             Int32(rows), Int32(m), Int32(d), is_sqrt,

@@ -2,15 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Wide fixed-point 8-bit histograms: NS stat planes x FG compressed-index
 columns per block, in ONE walk of the partition (lane trees-hist-ideas,
-2026-10-07). Default off; reached only through two IDENTICAL switches in
-`gbdt/trees_hist_switches.mojo`:
-
-  MOJOLEARN_TREES_HIST_MULTISTAT=4|8 (idea 3). MultiClass carries
-      `stat_count` > 2 planes, and its >128-bin one-byte blocks take the PASS
-      route `launch_one_byte[8]` with grid z = stat_count: the compressed
-      index, the row index and the dither are read once PER PLANE. Here a
-      block covers NS planes (grid z = ceil(stat_count / NS)), so they are
-      read once per NS planes. FG = 1.
+2026-10-07). Default off; reached only through the IDENTICAL switch in
+`gbdt/trees_hist_switches.mojo` below. (Idea 3, MOJOLEARN_TREES_HIST_MULTISTAT=4|8,
+NS planes per MultiClass walk, was deleted 2026-10-08: grid ge123e6f9
+gbdt-multiclass NV/AMD istella 1.04x/1.41x (4) 0.99x/1.31x (8), taxi
+1.07x/1.11x (4) 1.11x/1.14x (8) slower, quality SAME; recoverable at main
+42d1e42c6. The kernel keeps its general NS.)
 
   MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL (idea 4). Two-stat SymmetricTree
       blocks. The incumbent fused kernel gives each block ONE cindex column

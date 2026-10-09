@@ -42,8 +42,7 @@ NON-FINITE WEIGHTS. Round 1 searches every point against every other, so
 every edge weight is computed at least once; a NaN or infinite weight is
 reported by its point and refused by name (DEVIATION 1607's rule).
 """
-from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE, KNN_DIRECT_DISTANCE
-from core.classical_distance import direct_distance_step
+from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
 from checks.numerics import identical_sqrt
 from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
 from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES, C62_SAME_COMPONENT_SKIP
@@ -91,11 +90,10 @@ comptime SMR_KEY_MIN: Int32 = -0x7FFFFFFF - 1
 
 @always_inline
 def _c30_mr_edge_weight(acc: Float32, na: Float32, nb: Float32, ca: Float32, cb: Float32, inv_alpha: Float32, sabotage: Int32) -> Float32:
-    comptime if GRAPH_DIRECT_DISTANCE:
-        var d = Float32(0) if acc <= Float32(0) else acc
-        return mr_max3(ca,cb,mr_scale(inv_alpha,ftz(identical_sqrt(d))),sabotage)
-    else:
-        return mr_edge_weight(acc,na,nb,ca,cb,inv_alpha,sabotage)
+    # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+    # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+    # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+    return mr_edge_weight(acc,na,nb,ca,cb,inv_alpha,sabotage)
 
 
 def sparse_mr_search_kernel(
@@ -147,10 +145,10 @@ def sparse_mr_search_kernel(
             continue
         var acc = Float32(0.0)
         for f in range(d):
-            comptime if GRAPH_DIRECT_DISTANCE:
-                acc = direct_distance_step[1](acc,xt[f*m+i],x[j*d+f])
-            else:
-                acc = ftz(identical_mul_add(ftz(xt[f * m + i]), ftz(x[j * d + f]), acc))
+            # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+            # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+            # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+            acc = ftz(identical_mul_add(ftz(xt[f * m + i]), ftz(x[j * d + f]), acc))
         var v = _c30_mr_edge_weight(acc, ni, norms[j], cri, core[j], inv_alpha, sabotage)
         if (bitcast[DType.uint32](v) & 0x7F800000) == 0x7F800000:
             bad = True
@@ -374,12 +372,12 @@ def sparse_mr_search_tiled_kernel(
                     bv[c] = b_s[unsafe_offset = kk * SMR_TJ + tx + c * SMR_TX]
                 comptime for r in range(SMR_RI):
                     comptime for c in range(SMR_RJ):
-                        comptime if GRAPH_DIRECT_DISTANCE:
-                            acc[r*SMR_RJ+c] = direct_distance_step[1](acc[r*SMR_RJ+c],av[r],bv[c])
-                        else:
-                            acc[r * SMR_RJ + c] = ftz(
-                                identical_mul_add(av[r], bv[c], acc[r * SMR_RJ + c])
-                            )
+                        # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+                        # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+                        # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+                        acc[r * SMR_RJ + c] = ftz(
+                            identical_mul_add(av[r], bv[c], acc[r * SMR_RJ + c])
+                        )
             barrier()
             k0 += SMR_KC
         comptime for c in range(SMR_RJ):
@@ -605,7 +603,6 @@ def smr_init_kernel(
 comptime IDN_HDB_MST_SEED_KNN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not GRAPH_DIRECT_DISTANCE
     and not KNN_DIRECT_DISTANCE
     and is_defined["MOJOLEARN_IDN_HDB_MST_SEED_KNN"]()
 )

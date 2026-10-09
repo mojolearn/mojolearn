@@ -1390,13 +1390,13 @@
       "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
     },
     {
-      "id": "gemm_group_slack/8",
+      "id": "gemm_group_slack/4-off",
       "candidate_group": "gemm_group_slack",
       "source_ref": "lane/fam2-lm",
       "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
       "baseline_defines": [],
       "candidate_defines": [
-        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8=1"
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF=1"
       ],
       "recommended_builders": [
         "base",

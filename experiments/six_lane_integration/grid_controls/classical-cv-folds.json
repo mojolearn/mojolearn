@@ -28,30 +28,30 @@
    "note": "RidgeCV's float-float fallback (the only route when the float32 Gram cannot be factored): every float-float statistic becomes FOLD_BLOCK-row block partials (one thread per (statistic, block), the rw_gram_parts_kernel shape) folded blocks ascending, and the float-float Cholesky of each untrusted alpha runs on one block team (t_cholesky split, every entry its own chain) in one launch per fold instead of grid 1 / block 1 per alpha. The Ridge refit (_ridge_ff_grid) takes the same blocked statistics and team solve. Host column (ridgecv.mojo _kf_ff_stats_host, ridge.mojo _ridge_ff_host) folds the same blocks. Bits change (block fold order); NV and AMD must match per arm. Cost reasoning: same work, n/FOLD_BLOCK times the threads in flight; no shape rule. NOT COMPILED (lanes never compile), NOT MEASURED."
   },
   "enetcv_score_blocks": {
-   "define": "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",
+   "define": "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS,MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF",
    "kind": "int_sweep",
    "arms": {
-    "off": [],
+    "4096": [],
     "1024": [
      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
     ],
-    "4096": [
-     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+    "off": [
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF"
     ]
    },
-   "default": "off",
+   "default": "4096",
    "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:72",
+    "experiments/classical_identical_ideas/linear_controls.mojo:91",
     "x_linear/cd.mojo:339",
-    "x_linear/cd.mojo:580",
+    "x_linear/cd.mojo:582",
     "x_linear/cd_grid.mojo:333",
     "x_linear/cd_grid.mojo:907",
-    "core/six_lane_experiment_guards.mojo:30"
+    "core/six_lane_experiment_guards.mojo:38"
    ],
    "binding": "_mojolearn_x_linear (device grid) + _mojolearn_x_linear_host (host column)",
    "bits_change": true,
-   "status": "new",
-   "note": "Arm value = rows of the fold's span per score block (fixed count, not a data shape; legal set enforced in core/six_lane_experiment_guards.mojo). The held-out squared errors of every path point become (path, alpha, row-block) partials: block (path, b) stages its rows in the staged kernel's tiles, thread k folds alpha k from zero; a thread per (path, alpha) folds the partials blocks ascending (fold_parts). Replaces ecv_score_staged_kernel's one block per (fold, l1_ratio) path over all held-out rows. Host column (cd.mojo esb_host_score) folds the same blocks. Bits change (fold order); NV and AMD must match per arm. Requires the staged score page (comptime assert). NOT COMPILED, NOT MEASURED."
+   "status": "promoted:ge123e6f9",
+   "note": "Arm value = rows of the fold's span per score block (fixed count, not a data shape; legal set enforced in core/six_lane_experiment_guards.mojo). The held-out squared errors of every path point are (path, alpha, row-block) partials folded blocks ascending (fold_parts); host column (cd.mojo esb_host_score) folds the same blocks. Default 4096 in IDENTICAL; arm 1024 the smaller block; arm off (`MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF`) is the old one-block-per-path ecv_score_staged_kernel. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm): NV/AMD ms off -> 4096 enet-cv istella 1052.9->555.2 / 3567.8->818.1, taxi 122.4->101.6 / 483.8->359.2; lasso-cv istella 1041.8->555.9 / 3530.4->848.7, taxi 122.6->97.9 / 513.2->364.5; r2/rmse identical. PROMOTED to the IDENTICAL default by lane/grid-act-2 2026-10-08; numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
   }
  },
  "algorithms": {

@@ -1,6 +1,6 @@
 """PCA by covariance eigendecomposition. The `input`-unchanged CONTRACT is the one to not drop: `input` is an in-out parameter that must end the call unchanged, and a fit that leaves the caller's matrix centered is wrong in a way nothing in the fit itself will reveal."""
-from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_C23, PCA_COV_LEGAL
-from core.blocked_moments import bm_centered_gram_panels, bm_onepass_covariance
+from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_LEGAL
+from core.blocked_moments import bm_centered_gram_panels
 from gemm.contract import contract_leaf_size
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -227,20 +227,14 @@ def compute_covariance(
     restore_input: Bool = True,
 ) raises:
     """Steps 1, 2, 3 and 6. The branch below must take the fused arm exactly when `gemm_tn` would take split-K for this shape, so it asks the SAME `gram_splitk_applies(m, n, k)` that `gemm_tn` asks -- one predicate, both readers, no target test of our own."""
-    comptime assert PCA_COV_LEGAL, "MOJOLEARN_CLASSICAL_PCA_COV must be 4 (C04 arm) or 23 (C23 arm)"
+    comptime assert PCA_COV_LEGAL, "MOJOLEARN_CLASSICAL_PCA_COV must be 4 (C04 arm); the C23 arm (=23) was deleted 2026-10-08"
     # MOJOLEARN_CLASSICAL_PCA_COV (lane classical-decomp, 2026-10-07; default
-    # absent = the incumbent below). One switch, two named arms, each
+    # absent = the incumbent below). One switch, one named arm (c04),
     # replacing the incumbent's routing at every width; X is never modified.
     # NOT MEASURED.
-    comptime if PCA_COV_C23:
-        # =23: mean and covariance from ONE blocked read (per-leaf centering,
-        # Chan merge in the binary-counter order), scaled by 1 / (n - 1).
-        bm_onepass_covariance(
-            ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows, n_cols,
-        )
-        return
+    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+    # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+    # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
     # column_mean_kernel's value, read row-coalesced where it applies
     # (core/xtdz_coalesced.mojo::column_mean_launch).
     column_mean_launch(ctx, mu, x, n_rows, n_cols)

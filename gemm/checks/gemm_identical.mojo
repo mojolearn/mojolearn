@@ -6516,19 +6516,24 @@ comptime GEMM_KSPLIT_CPT = TUNED_CPT * 2
 comptime GEMM_KSPLIT_KS = 16
 #: `ksplit` coarsens a group while the coarser split still issues at least
 #: this many times `S` blocks (brief section 4, rule 4).
-#: lane/fam2-lm (2026-10-04) CANDIDATE ARMS, default OFF, IDENTICAL only,
-#: schedule only (groups are powers of two aligned at leaf 0, so every
-#: group size is the same fold tree and the same bits; the arms move how
-#: many blocks a grouped launch issues, nothing else):
-#:   -D MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8   the slack below (4 shipped)
+#: lane/fam2-lm (2026-10-04) CANDIDATE ARMS, IDENTICAL only, schedule only
+#: (groups are powers of two aligned at leaf 0, so every group size is the
+#: same fold tree and the same bits; the arms move how many blocks a grouped
+#: launch issues, nothing else):
+#:   slack 8 is the IDENTICAL default since 2026-10-08 (lane/grid-act-2,
+#:        grid ge123e6f9, record at GEMM_KSPLIT_SLACK below);
+#:   -D MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF   the old slack 4;
+#:   -D MOJOLEARN_IDN_GEMM_GROUP_SLACK_2     slack 2;
 #:   -D MOJOLEARN_IDN_GEMM_GROUP_S_HALF / _X2   the SHIPPED row S halved /
 #:        doubled (`GEMM_KSPLIT_DEFAULT_S`; the trial row is untouched)
 #: (The body-tiles arm, MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY, was deleted by
 #: lane/grid-prune 2026-10-07: OVN N01 on the L40S read it as noise, median
 #: 1.005 over 72 cells with 46% faster; recoverable at ab554bb4a.)
 #: The rule's hand-count checks (`check_kpack_rule_hand_counts` and the
-#: section 4 counts) hold the shipped numbers, so they are expected to
-#: refuse under an arm: the arms are for timing against each other.
+#: section 4 counts) hold the brief's slack-4 numbers (`GEMM_KSPLIT_BRIEF_SLACK`):
+#: gemm/checks/gemm_step_arms_check.mojo compares them only on a slack-4
+#: build (`-D MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF`) and prints them beside the
+#: build's own answers otherwise; the rule-equals-rule checks run on every build.
 # 2026-10-05 measured A/B record (frozen a006da73d, one sample per arm):
 # experiments/identical_speed/results/20261005/{nvidia,amd}-screen.json
 # retains every case, timings, bit hashes, compiler flags and binary hashes.
@@ -6574,8 +6579,8 @@ comptime GEMM_KSPLIT_KS = 16
 # Exact shapes/old retained baseline origins are recorded alongside results:
 # experiments/identical_speed/results/20261005/nvidia-integrated-resume/.
 # Final capture bdd685793e39f274a99bbf7319fbd1263cb9169908645eeb39d40a73403af41b.
-# EXPERIMENTS: SLACK_2 and SLACK_8 remain default OFF (TILES_BODY deleted, above). A normal
-# build keeps slack 4 and disables the body-tile override. NEVER TESTED by
+# EXPERIMENTS (2026-10-05): SLACK_2 and SLACK_8 remained default OFF (TILES_BODY deleted,
+# above); superseded 2026-10-08: slack 8 is the IDENTICAL default (record below). NEVER TESTED by
 # this campaign: combined defines, including ONE_PAGE/KPACK_RPT4 combinations.
 # NOT PERFORMANCE-QUALIFIED: identity checks alone never enable these flags.
 # Individual-arm measurements above are historical; no new measurement is
@@ -6590,11 +6595,30 @@ comptime GEMM_KSPLIT_KS = 16
 # defines. Apple checks identity; these scheduling changes target NVIDIA/AMD.
 # Evidence: experiments/identical_speed/results/20261005/light-identity/.
 comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# PROMOTED 2026-10-08 (lane/grid-act-2): slack 8 is the IDENTICAL default.
+# IDENTICAL grid run ge123e6f9 (NVIDIA L40S sm_89 + AMD MI325X gfx942, full
+# board data, one scored run per arm, noise floor from incumbent repeats),
+# gemm:gemm gaussian, slack 4 -> slack 8: NV 69.6 -> 51.7 ms (0.743x), AMD
+# 28.5 -> 28.3 ms (0.99x, inside the floor); combined 0.857x, no vendor split;
+# NV hash == AMD hash on both arms. This supersedes the 2026-10-05 synthetic
+# screen above (slack8 NVIDIA 1.048): that was one sample on the 4090 trial
+# harness, the grid is the board GEMM on the L40S. Bits: the slack only moves
+# the group size (a power of two aligned at leaf 0, Lemmas A-C of brief
+# section 5, `check_group_fold_is_the_contract_tree`), so every group size is
+# the same contract fold tree; the leaf partition (`contract_partition`) and
+# the fold kernels are untouched. Cost reasoning: the rule doubles the group
+# while the coarser split still issues `slack * S` blocks (S = the column's
+# block parallelism row, about its SM count); slack 8 keeps finer groups, so a
+# long-k call with few output tiles issues about 8 blocks per SM instead of 4,
+# which hides more load latency per SM at the cost of more `m n G` workspace
+# (still under SPLITK_MAX_WORKSPACE_FLOATS, `gemm_step_ksplit_finest_leaves`)
+# and a longer second-level fold. Off IDENTICAL (and under
+# MOJOLEARN_IDN_ALL_OFF) the slack stays 4.
+comptime GEMM_KSPLIT_BRIEF_SLACK = 4
+"""The slack the long-k brief's section 4 hand counts were written at."""
 comptime GEMM_KSPLIT_SLACK = (
-    # I01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     2 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]()) else (
-        # I01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-        8 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"]()) else 4
+        GEMM_KSPLIT_BRIEF_SLACK if (not _IDN_GEMM_GROUP_ARMS or is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF"]()) else 8
     )
 )
 #: `S` the `ksplit` TRIAL arm reads (kernel matrix SCHEDULING row, 2591;

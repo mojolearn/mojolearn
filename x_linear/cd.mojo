@@ -555,8 +555,10 @@ def ecv_held_sse(x: FP, y: FP, fid: FP, n: Int, d: Int, fold: Int, wb: FP, o: In
 
 
 # ------------------------------------------------ ENETCV_SCORE_BLOCKS (lane/classical-cv-folds, 2026-10-07)
-# `-D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024|4096` (rows per block, a
-# fixed count, not a data shape; default off, NOT MEASURED): the held-out
+# Rows per block 4096 by default in IDENTICAL (promoted 2026-10-08, grid
+# ge123e6f9, numbers at linear_controls.mojo ENETCV_SCORE_BLOCKS); =1024 the
+# smaller arm, `-D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF` the old
+# unblocked path (a fixed count, not a data shape): the held-out
 # squared errors of a path point as block partials. The fold's held-out rows
 # lie in its span [lo, lo + span) (KFold: exactly them; a row of another
 # fold inside the span is skipped by its id). Block b of the span folds the
@@ -569,7 +571,7 @@ def ecv_held_sse(x: FP, y: FP, fid: FP, n: Int, d: Int, fold: Int, wb: FP, o: In
 # multiply-adds on one block); here span / ESB_ROWS blocks per path share
 # that work, and the fold adds A * span / ESB_ROWS additions per path.
 comptime ESB_ROWS = ENETCV_SCORE_BLOCKS if ENETCV_SCORE_BLOCKS > 0 else 1
-"""Rows of a fold's span one score block owns (1 is a placeholder while the control is off)."""
+"""Rows of a fold's span one score block owns (1 is a placeholder under _OFF and in FAST)."""
 
 
 @always_inline

@@ -106,6 +106,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import ftz, numeric_mode_name
 from gemm.checks.gemm_identical import (
     ANY_SABOTAGE,
+    GEMM_KSPLIT_BRIEF_SLACK,
+    GEMM_KSPLIT_SLACK,
     GEMM_ARM_SHIPPED,
     GEMM_ARM_TRIAL,
     GEMM_FOLD_SLOTS,
@@ -222,6 +224,14 @@ comptime GROUP_NC = 4
 
 #: DEVIATION 2595: an ENABLED block parallelism row, held on every column
 #: (the H100 row the flip was measured at).
+# The long-k brief's hand counts below are its slack-4 numbers. Slack 8 is the
+# IDENTICAL default since 2026-10-08 (lane/grid-act-2, grid ge123e6f9; record
+# at GEMM_KSPLIT_SLACK in gemm_identical.mojo): the slack-dependent hand counts
+# (the S = 132 group sizes and group counts) are compared on a slack-4 build
+# (`-D MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF`) and printed beside the build's own
+# answer otherwise. The rule-equals-rule checks and the slack-free counts
+# (no reading, ksplit_leaf, fold blocks) run on every build.
+comptime HAND_COUNT_SLACK = GEMM_KSPLIT_SLACK == GEMM_KSPLIT_BRIEF_SLACK
 comptime DEFAULT_ROW_ON = 132
 
 
@@ -791,12 +801,12 @@ def check_kpack_rule_hand_counts(mut failures: List[String]) raises:
                 + " and " + String(p0) + " where gemm_step_ksplit_rule gives " + String(k132) + " and "
                 + String(k0)
             )
-        if w132 != want_wide[i]:
+        if HAND_COUNT_SLACK and w132 != want_wide[i]:
             failures.append(
                 "RULE_KPACK " + gemm_step_lm_call_name(i) + ": kpack_wide(S=132)=" + String(w132)
                 + " (brief " + String(want_wide[i]) + ")"
             )
-    print("check_kpack_rule_hand_counts: " + String(len(failures) - before) + " failures")
+    print("check_kpack_rule_hand_counts: " + String(len(failures) - before) + " failures (slack=" + String(GEMM_KSPLIT_SLACK) + ", wide hand counts compared: " + String(HAND_COUNT_SLACK) + ")")
 
 
 # ===========================================================================
@@ -958,18 +968,18 @@ def check_kfold_rule_hand_counts(mut failures: List[String]) raises:
                 "RULE_KFOLD " + cname + ": kfoldv=" + String(gv) + " (ksplit rule " + String(kv)
                 + "), kfoldv_leaf=" + String(gf) + " (ksplit_leaf rule " + String(kf) + ")"
             )
-        if gv != want_v[i] or gf != want_leaf[i]:
+        if (HAND_COUNT_SLACK and gv != want_v[i]) or gf != want_leaf[i]:
             failures.append(
                 "RULE_KFOLD " + cname + ": kfoldv=" + String(gv) + " (brief " + String(want_v[i])
                 + "), kfoldv_leaf=" + String(gf) + " (brief " + String(want_leaf[i]) + ")"
             )
-        if groups_v != want_groups_v[i] or groups_f != want_groups_leaf[i]:
+        if (HAND_COUNT_SLACK and groups_v != want_groups_v[i]) or groups_f != want_groups_leaf[i]:
             failures.append(
                 "RULE_KFOLD " + cname + ": groups kfoldv=" + String(groups_v) + " (brief "
                 + String(want_groups_v[i]) + "), kfoldv_leaf=" + String(groups_f) + " (brief "
                 + String(want_groups_leaf[i]) + ")"
             )
-        if groups_v > GEMM_KFOLD_MAX_GROUPS or groups_f > GEMM_KFOLD_MAX_GROUPS:
+        if (HAND_COUNT_SLACK and groups_v > GEMM_KFOLD_MAX_GROUPS) or groups_f > GEMM_KFOLD_MAX_GROUPS:
             failures.append(
                 "RULE_KFOLD " + cname + ": a taken call has more than " + String(GEMM_KFOLD_MAX_GROUPS)
                 + " groups, so the shipped fold would run there, not the lane fold"
@@ -979,7 +989,7 @@ def check_kfold_rule_hand_counts(mut failures: List[String]) raises:
                 "RULE_KFOLD " + cname + ": fold blocks " + String(blocks) + " (brief "
                 + String(want_blocks[i]) + ")"
             )
-    print("check_kfold_rule_hand_counts: " + String(len(failures) - before) + " failures")
+    print("check_kfold_rule_hand_counts: " + String(len(failures) - before) + " failures (slack=" + String(GEMM_KSPLIT_SLACK) + ", S=132 hand counts compared: " + String(HAND_COUNT_SLACK) + ")")
 
 
 def check_group_rule_hand_counts(mut failures: List[String]) raises:
@@ -1012,19 +1022,19 @@ def check_group_rule_hand_counts(mut failures: List[String]) raises:
             + " default(row=0)=" + String(gd_off) + " default(column row="
             + String(GEMM_KSPLIT_DEFAULT_S) + ")=" + String(gd_col)
         )
-        if gk != want_ksplit[i] or gf != want_leaf[i]:
+        if (HAND_COUNT_SLACK and gk != want_ksplit[i]) or gf != want_leaf[i]:
             failures.append(
                 "RULE " + gemm_step_lm_call_name(i) + ": ksplit(S=132)=" + String(gk) + " (brief "
                 + String(want_ksplit[i]) + "), ksplit_leaf=" + String(gf) + " (brief "
                 + String(want_leaf[i]) + ")"
             )
-        if gd_on != want_ksplit[i] or gd_off != 0:
+        if (HAND_COUNT_SLACK and gd_on != want_ksplit[i]) or gd_off != 0:
             failures.append(
                 "RULE " + gemm_step_lm_call_name(i) + ": default(row=" + String(DEFAULT_ROW_ON)
                 + ")=" + String(gd_on) + " (brief " + String(want_ksplit[i]) + "), default(row=0)="
                 + String(gd_off) + " (must be 0: the row turns the default off)"
             )
-    print("check_group_rule_hand_counts: " + String(len(failures) - before) + " failures")
+    print("check_group_rule_hand_counts: " + String(len(failures) - before) + " failures (slack=" + String(GEMM_KSPLIT_SLACK) + ", S=132 hand counts compared: " + String(HAND_COUNT_SLACK) + ")")
 
 
 # ===========================================================================

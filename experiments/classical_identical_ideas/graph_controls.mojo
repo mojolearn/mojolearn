@@ -20,14 +20,14 @@ comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime KNN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KNN_DIRECT_DISTANCE"]()
 comptime KDE_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KDE_DIRECT_DISTANCE"]()
 comptime DBSCAN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_DBSCAN_DIRECT_DISTANCE"]()
-# GRAPH: HDBSCAN and single-linkage Agglomerative share the linkage host oracle
-# (hierarchy/checks/linkage_oracle.mojo) and the connectivities distance tile,
-# so they share one define. KNN covers the brute-force/RBC kNN primitive and its
+# KNN covers the brute-force/RBC kNN primitive and its
 # host twin wherever it is called (KNN, the kNN graphs of HDBSCAN/UMAP/Spectral,
 # DBSCAN's RBC eps route through rbc_cmp_dist). KDE covers kde/impl/distance,
 # which the kernel-matrix route also calls. Each primitive keeps one define on
 # both its device kernel and its host twin.
-comptime GRAPH_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_GRAPH_DIRECT_DISTANCE"]()
+# Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+# MST and the shared linkage tile (single-linkage Agglomerative, host oracles following); NV/AMD hdbscan istella 1.76x/1.70x,
+# taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 # IVF_DIRECT_DISTANCE: the IVF-Flat scan's distances as direct sums of
 # squared differences instead of the -2 q.x + |q|^2 + |x|^2 expansion
 # (device scan, balanced tasks and the ivf_host twin together; bits change).
@@ -42,28 +42,25 @@ comptime GRAPH_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_GRAPH
 # "off" arm). The old opt-in define is refused in
 # core/six_lane_experiment_guards.mojo.
 comptime IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL and not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"]()
-# KMEANS_ASSIGN: ONE control, five arms, replacing C30 (kmeans part) and C36
-# (whose ROWS_4 knob set the same value as C30_ROWS_4):
+# KMEANS_ASSIGN: ONE control replacing C30 (kmeans part) and C36 (whose
+# ROWS_4 knob set the same value as C30_ROWS_4):
 #   tiled   (no define)                      incumbent tiled fused L2-NN
 #   rows2   MOJOLEARN_KMEANS_ROW_ASSIGN=2    row-register kernel, expanded L2
 #   rows4   MOJOLEARN_KMEANS_ROW_ASSIGN=4
-#   direct2 ROW_ASSIGN=2 + MOJOLEARN_KMEANS_DIRECT_DISTANCE   (x-c)^2 arithmetic
-#   direct4 ROW_ASSIGN=4 + MOJOLEARN_KMEANS_DIRECT_DISTANCE
-# The expanded row arms keep the incumbent's bits (same ascending-d fma chain,
-# same epilogue, same (value, lowest index) minimum), so no host change. The
-# direct arms change bits; the host column (cluster/host/kmeans_oracle.mojo)
-# follows KMEANS_DIRECT_DISTANCE. DIRECT without ROW_ASSIGN is refused at
-# compile time (kmeans_assign_check), so one arm is never two spellings.
+# The row arms keep the incumbent's bits (same ascending-d fma chain, same
+# epilogue, same (value, lowest index) minimum), so no host change.
+# Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arms direct2/direct4, run ge123e6f9): (x-c)^2 distances on the row kernel at
+# every size (plus k-means++, k-means|| and transform, host oracle following); direct4 NV/AMD kmeans istella 12.7x/6.2x, taxi
+# 1.78x/1.96x SLOWER; inertia SAME -> deleted (direct2 shares the code and was not a grid arm). Recoverable at main 42d1e42c6;
+# row in docs/apple-fast/EXPERIMENTS.md.
 comptime KMEANS_ROW_ASSIGN_ROWS = get_defined_int["MOJOLEARN_KMEANS_ROW_ASSIGN", 0]()
 comptime KMEANS_ROW_ASSIGN = GRAPH_IDENTICAL and KMEANS_ROW_ASSIGN_ROWS > 0
-comptime KMEANS_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KMEANS_DIRECT_DISTANCE"]()
 # Cost rule for the EXPANDED row arms: a thread owns a k*d serial fma chain per
 # row with no register reuse across rows of the tile, while the tiled kernel
 # reuses each staged value 4x4. Past 512 chain terms per row the chain latency
 # dominates, so the tiled kernel keeps those launches. Not a board shape: the
 # bound is a per-thread chain length, a power of two, far from k*d at any
-# board row (88 and 1760). The DIRECT arms have no tiled twin and take the row
-# kernel at every size.
+# board row (88 and 1760).
 comptime KMEANS_ROW_ASSIGN_MAX_KD = 512
 comptime C31_DEVICE_BUCKETS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C31_DEVICE_BUCKETS"]()
 comptime C32_COUNT_FUSION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C32_COUNT_FUSION"]()
@@ -77,18 +74,10 @@ comptime C35_TASK_ROWS = 128 if is_defined["MOJOLEARN_C35_ROWS_128"]() else 256
 # row-register kernel, R rows per thread. Arms off|2|4 (one define, int value).
 comptime XCLUSTER_ROW_ASSIGN_ROWS = get_defined_int["MOJOLEARN_XCLUSTER_ROW_ASSIGN", 0]()
 comptime XCLUSTER_ROW_ASSIGN = GRAPH_IDENTICAL and XCLUSTER_ROW_ASSIGN_ROWS > 0
-# C37 REWRITTEN (lane classical-kmeans, 2026-10-07). The old C37 summed every
-# (cluster, feature) cell over all n rows in one thread (88 threads at taxi,
-# 25x/43x slower) and is deleted. The new C37 FUSES the Lloyd assignment with
-# the row-block centroid accumulation: one GPU block per row block assigns its
-# rows and adds their quantized Int32 addends into a shared-memory table, then
-# stores its table row; the existing fold kernel sums the blocks. X is read
-# once per iteration. Int32 sums are associative, so the totals, labels and
-# min distances are the incumbent's bits (no host change).
-comptime C37_FUSED_ACCUMULATE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C37_FUSED_ACCUMULATE"]()
-# Rows per fused GPU block (int sweep, legal set 256|512|1024; default 256).
-# No bit depends on it.
-comptime C37_FUSED_ROWS = get_defined_int["MOJOLEARN_C37_FUSED_ROWS", 256]()
+# Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): the C37 rewrite fused the
+# Lloyd assignment with the Int32 row-block centroid accumulation in shared memory (cluster/impl/detail/kmeans_fused_accumulate.mojo).
+# NV/AMD kmeans istella 104.8x/0.841x, taxi 68.6x/0.895x (vendor split: AMD faster, NVIDIA collapses); combined 9.4x/7.8x
+# SLOWER; inertia SAME -> deleted with its file. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 # C38 split: its KMeans half was a no-op on NVIDIA/AMD (OR-ed into flags the
 # incumbent already sets) and is deleted. Its x_cluster half (k-means++ trial
 # distances computed once per distinct candidate) is real and keeps its

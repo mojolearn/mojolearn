@@ -635,20 +635,23 @@
    "note": "Read in llama_attention_forward (modeling_llama.mojo:4836), the route of lm-forward, lm-train-step, transformer-forward and samba-*: replaces the q/k/v llama_proj calls (they skip gemm/neural_dispatch). Declared for those lanes in neural-small.json, crossed with neural_gemm_pair/neural_gemm_schedule."
   },
   "gemm_group_slack": {
-   "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8",
+   "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF / _2",
    "kind": "switch",
    "arms": {
-    "off": [],
+    "slack8": [],
+    "off": [
+     "MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF=1"
+    ],
     "slack2": [
      "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1"
-    ],
-    "slack8": [
-     "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8=1"
     ]
    },
-   "default": "off",
+   "default": "slack8",
    "source": [
-    "gemm/checks/gemm_identical.mojo:6473"
+    "gemm/checks/gemm_identical.mojo:6619",
+    "gemm/checks/gemm_step_arms_check.mojo:234",
+    "bench/gemm_schedule_ab.mojo:43",
+    "core/six_lane_experiment_guards.mojo"
    ],
    "binding": [
     "_mojolearn_byte_lm",
@@ -658,8 +661,8 @@
     "_mojolearn_linalg"
    ],
    "bits_change": false,
-   "status": "kept",
-   "note": "NI03; still separate defines (owed: one int sweep). The tiles_body arm (MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY) was deleted by lane/grid-prune 2026-10-07 (OVN N01 noise)."
+   "status": "promoted:ge123e6f9",
+   "note": "NI03. Default slack 8 in IDENTICAL (the group rule doubles a ksplit group while the coarser split still issues slack * S blocks); arm off (`MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF`) is the old slack 4, arm slack2 kept; MOJOLEARN_IDN_GEMM_GROUP_SLACK_8 is refused (promoted). Schedule only: groups are powers of two aligned at leaf 0 (brief section 5 Lemmas A-C), same contract fold tree, no bit moves; host unchanged. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm): gemm gaussian NV 69.6 -> 51.7 ms (0.743x), AMD 28.5 -> 28.3 (0.99x, inside the floor), combined 0.857x, NV hash == AMD hash. PROMOTED to the IDENTICAL default by lane/grid-act-2 2026-10-08; numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md. The tiles_body arm (MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY) was deleted by lane/grid-prune 2026-10-07 (OVN N01 noise)."
   },
   "legacy_apple_plan64": {
    "define": "MOJOLEARN_LEGACY_SHAPE_APPLE_PLAN64",

@@ -19,7 +19,6 @@ two candidates tie to the last bit, a different order picks a different
 centroid and the whole fit diverges. Ties at that precision are not expected
 and are not impossible.
 """
-from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -84,8 +83,9 @@ def candidate_cost_kernel(
                 ftz(ftz(x_norm.unsafe_load(i)) + ftz(cn)),
             )
         )
-        comptime if KMEANS_DIRECT_DISTANCE:
-            d = z.unsafe_load(i * n_trials + trial)
+        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
         if d <= Float32(0.0):
             d = Float32(0.0)
         var cur = current_min.unsafe_load(i)
@@ -133,8 +133,9 @@ def adopt_candidate_min_kernel(
                 ftz(ftz(x_norm.unsafe_load(i)) + ftz(cn)),
             )
         )
-        comptime if KMEANS_DIRECT_DISTANCE:
-            d = z.unsafe_load(i * n_trials + trial)
+        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
         if d <= Float32(0.0):
             d = Float32(0.0)
         var cur = current_min.unsafe_load(i)

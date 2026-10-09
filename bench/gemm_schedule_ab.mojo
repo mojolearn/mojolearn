@@ -39,8 +39,9 @@ def main() raises:
         Int(is_defined["MOJOLEARN_GEMM_ONE_PAGE"]())
         # I01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
         + 2 * Int(is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]())
-        # I01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-        + 4 * Int(is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"]())
+        # mask bit 4: slack 8 is the IDENTICAL default since 2026-10-08 (grid ge123e6f9);
+        # the bit now marks the old slack 4 (MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF).
+        + 4 * Int(is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF"]())
         # mask bit 8 was MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY (deleted by lane/grid-prune, 2026-10-07).
         # N01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
         + 16 * Int(is_defined["MOJOLEARN_GEMM_KPACK_RPT4"]())

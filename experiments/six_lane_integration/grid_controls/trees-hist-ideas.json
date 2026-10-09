@@ -47,30 +47,6 @@
    "status": "new",
    "reach": "body loop of the fused 8-bit kernels (direct + gather); whole-wave same-bin aggregation only; NVIDIA/AMD only"
   },
-  "hist_multistat": {
-   "define": "MOJOLEARN_TREES_HIST_MULTISTAT",
-   "kind": "int_sweep",
-   "arms": {
-    "off": [],
-    "4": [
-     "MOJOLEARN_TREES_HIST_MULTISTAT=4"
-    ],
-    "8": [
-     "MOJOLEARN_TREES_HIST_MULTISTAT=8"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_hist_switches.mojo:43",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:3600",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2550",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit_wide.mojo:77"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "new",
-   "reach": "multi-stat (stat_count>2) one-byte blocks >128 folds on the shared-Int32 route, which replaces launch_one_byte[8] (grid z = stat_count)"
-  },
   "hist_sym_feature_parallel": {
    "define": "MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL",
    "kind": "switch",
@@ -156,9 +132,7 @@
   "trees:gbdt-multiclass": {
    "binding": "_mojolearn_gbdt",
    "route": "fit: symmetric greedy -> launch_histograms_for_blocks -> (stat_count>2) launch_one_byte[8] PASS; switch on: launch_hist2_8bit_wide[MULTISTAT,1]",
-   "controls": [
-    "hist_multistat"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "trees:gbdt-rank-yetirank": {
@@ -212,5 +186,11 @@
   "trees/gbdt-ordered": "pointwise PointHist8 (pointwise_hist2_one_byte_8bit.mojo), not the greedy fused kernel",
   "use_pointwise_searcher": "PointHist8 already defers runs; not touched"
  },
- "removed": []
+ "removed": [
+  {
+   "define": "MOJOLEARN_TREES_HIST_MULTISTAT",
+   "control": "hist_multistat",
+   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser, both arms. arm/off ms ratio NV/AMD on gbdt-multiclass: =4 istella 1.038/1.410, taxi 1.066/1.110 (1.147x combined); =8 istella 0.994/1.311, taxi 1.106/1.136 (1.131x combined); accuracy and mlogloss SAME. The MultiClass >128-bin blocks take launch_one_byte[8] again; the wide kernel stays for HIST_SYM_FEATURE_PARALLEL. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
+  }
+ ]
 }

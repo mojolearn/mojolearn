@@ -139,8 +139,8 @@ pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
 brief records what it has shown.
 """
 from experiments.classical_identical_ideas.shared_controls import C01_MEAN
-from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_C23, TSVD_FUSED_STATS
-from core.blocked_moments_host import host_bm_column_mean, host_bm_onepass_covariance, host_bm_tsvd_variances
+from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, TSVD_FUSED_STATS
+from core.blocked_moments_host import host_bm_column_mean, host_bm_tsvd_variances
 from core.classical_centered import centered_gram_v1_cell
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -788,12 +788,10 @@ def host_pca_fit(
     host_pca_validate(n_rows, n_cols, n_components)
     var mu: List[Float32]
     var cov: List[Float32]
-    comptime if PCA_COV_C23:
-        # MOJOLEARN_CLASSICAL_PCA_COV=23: `bm_onepass_covariance`'s host
-        # column; it returns the (n - 1)-scaled covariance and the mean
-        mu = List[Float32]()
-        cov = host_bm_onepass_covariance(x, n_rows, n_cols, mu)
-    elif PCA_COV_C04:
+    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+    # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+    # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+    comptime if PCA_COV_C04:
         # MOJOLEARN_CLASSICAL_PCA_COV=4: the reference cell the device's
         # row-parallel leaves and binary-counter fold reproduce
         mu = host_column_mean_launch(x, n_rows, n_cols)
