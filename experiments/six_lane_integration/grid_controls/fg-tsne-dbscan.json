@@ -1,0 +1,270 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "fg-tsne-dbscan",
+ "branch": "lane/fg-tsne-dbscan",
+ "head": "566f78ab1",
+ "head_note": "code only, uncompiled (lanes never compile); T3 (FFT), D3 (denseball) skipped this round; H4 already on main as IDN_DENDRO_UNION",
+ "controls": {
+  "tsne_knn_tile_select": {
+   "define": "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_ann/knn_device.mojo:342",
+    "x_ann/knn_device.mojo:knn_enqueue"
+   ],
+   "binding": [
+    "_mojolearn_x_ann"
+   ],
+   "bits_change": false,
+   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
+   "note": "T1. IDENTICAL, NVIDIA+AMD. Block-wide mark/rank/merge top-k per 64x64 distance tile instead of the serial owner insertion; every d takes the 64x64 tile. Same (dist, idx) lists for finite/inf distances. Also the CAGRA build's exact graph."
+  },
+  "tsne_rep_tile": {
+   "define": "MOJOLEARN_IDN_TSNE_REP_TILE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_TSNE_REP_TILE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_ann/tsne_device.mojo:470"
+   ],
+   "binding": [
+    "_mojolearn_x_ann"
+   ],
+   "bits_change": false,
+   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
+   "note": "T2. IDENTICAL, NVIDIA+AMD, needs TS_SPLIT and TS_LANE_FOLD. 256-candidate tiles, one row per thread (16 threads x 4 lanes a row), same 64-lane fold order, same Z tree. Bits none."
+  },
+  "dbscan_eps_tile": {
+   "define": "MOJOLEARN_IDN_DBSCAN_EPS_TILE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_DBSCAN_EPS_TILE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "neighbors/impl/ball_cover/registers.mojo:963"
+   ],
+   "binding": [
+    "_mojolearn_estimators",
+    "_mojolearn_estimators_host",
+    "_mojolearn"
+   ],
+   "bits_change": false,
+   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
+   "note": "D1. IDENTICAL, NVIDIA+AMD, Euclidean, not with KNN_DIRECT_DISTANCE (compiled out there). 64x64 register-tiled eps count/fill with the same three per-pair tests (landmark bound, RBC_LANES chunk-walk reach, eps_dist_sq chain); fill rows canonicalized (DEVIATION 551). Every ball-cover eps query (DBSCAN, neighbors radius)."
+  },
+  "dbscan_adj_bitmap": {
+   "define": "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_DBSCAN_EPS_TILE",
+     "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "neighbors/impl/ball_cover/registers.mojo:969",
+    "dbscan/impl/runner.mojo:332"
+   ],
+   "binding": [
+    "_mojolearn_estimators",
+    "_mojolearn_estimators_host"
+   ],
+   "bits_change": false,
+   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
+   "note": "D2, needs D1 (the on arm sets both). Count pass writes word-major bit words; loop 1 keeps each range's bit-scanned CSR (kept total <= edge_cap edges); loop 2, batch 0 and the border pass copy it. Ranges capped at 25% of free memory over n/8 + 8*landmarks bytes a row (more batches at large n)."
+  },
+  "dbscan_batch_sample": {
+   "define": "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "dbscan/impl/runner.mojo:293"
+   ],
+   "binding": [
+    "_mojolearn_estimators",
+    "_mojolearn_estimators_host"
+   ],
+   "bits_change": false,
+   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
+   "note": "D4. IDENTICAL, NVIDIA+AMD. First ranges = edge_cap / (2 x sampled mean degree) from 1,024 strided rows; avoids count-split-recount levels on dense graphs. n_iter_ follows the batch count."
+  },
+  "dbscan_cc_hook": {
+   "define": "MOJOLEARN_IDN_DBSCAN_CC_HOOK",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_DBSCAN_CC_HOOK"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "dbscan/impl/sparse/detail/csr.mojo:383"
+   ],
+   "binding": [
+    "_mojolearn_estimators",
+    "_mojolearn_estimators_host"
+   ],
+   "bits_change": false,
+   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
+   "note": "D5. IDENTICAL, not Apple. weak_cc fixed point by lock-free hook/compress/border, 4 launches + 1 drain per batch. Labels same; n_iter_ = 1 per batch."
+  },
+  "hdb_mst_seed_knn": {
+   "define": "MOJOLEARN_IDN_HDB_MST_SEED_KNN",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_HDB_MST_SEED_KNN"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:605",
+    "hdbscan/impl/cluster/detail/single_linkage.mojo",
+    "hdbscan/impl/detail/reachability.mojo"
+   ],
+   "binding": [
+    "_mojolearn_hdbscan",
+    "_mojolearn_hdbscan_host"
+   ],
+   "bits_change": false,
+   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
+   "note": "H2. IDENTICAL, NVIDIA+AMD, sparse arm, alpha <= 1, no trace/sabotage, not with GRAPH/KNN_DIRECT_DISTANCE. k-NN one wider; round-1 point resolved when its cheapest list weight < the list's last distance (exact cells, per-entry distance bit check)."
+  },
+  "hdb_round_one_sync_off": {
+   "define": "MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:701"
+   ],
+   "binding": [
+    "_mojolearn_hdbscan",
+    "_mojolearn_hdbscan_host"
+   ],
+   "bits_change": false,
+   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
+   "note": "H3, default ON (waste removal). The round's ADDED readback rides on the next round's phase-A count read (cumulative ADDED): 3 -> 2 drains per Boruvka round. The off arm restores three reads."
+  },
+  "hdb_out_memcpy_off": {
+   "define": "MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "bindings/_mojolearn_hdbscan.mojo:55"
+   ],
+   "binding": [
+    "_mojolearn_hdbscan"
+   ],
+   "bits_change": false,
+   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
+   "note": "H5, default ON (waste removal). Fit outputs copied into the caller's arrays by memcpy instead of element loops. Same bytes."
+  }
+ },
+ "algorithms": {
+  "algos:tsne": {
+   "binding": "_mojolearn_x_ann",
+   "route": "_expansion_ann.py TSNE.fit -> x_ann_tsne_fit -> tsne_device.tsne_fit_device -> knn_enqueue (T1) -> perplexity -> symmetrize -> _ts_iter/_enq_repulse_split (T2)",
+   "controls": [
+    "tsne_knn_tile_select",
+    "tsne_rep_tile"
+   ],
+   "interaction_groups": [
+    [
+     "tsne_knn_tile_select"
+    ],
+    [
+     "tsne_rep_tile"
+    ]
+   ]
+  },
+  "algos:cagra": {
+   "binding": "_mojolearn_x_ann",
+   "route": "cagra_device.cagra_knn_enqueue -> knn_enqueue (T1)",
+   "controls": [
+    "tsne_knn_tile_select"
+   ],
+   "interaction_groups": [
+    [
+     "tsne_knn_tile_select"
+    ]
+   ]
+  },
+  "classical:dbscan": {
+   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
+   "route": "density.py:371 -> dbscan_fit_core -> dbscan/impl/runner.mojo dbscan_fit -> rbc_eps_pass_count/fill (D1) | count_bitmap/fill_bitmap (D2) -> weak_cc_batched (D5)",
+   "controls": [
+    "dbscan_eps_tile",
+    "dbscan_adj_bitmap",
+    "dbscan_batch_sample",
+    "dbscan_cc_hook"
+   ],
+   "interaction_groups": [
+    [
+     "dbscan_eps_tile",
+     "dbscan_adj_bitmap",
+     "dbscan_batch_sample"
+    ],
+    [
+     "dbscan_cc_hook"
+    ]
+   ]
+  },
+  "classical:hdbscan": {
+   "binding": "_mojolearn_hdbscan",
+   "route": "build_mr_linkage -> compute_core_dists (H2 width) -> sparse_mr_mst_device (H2 seed, H3 reads) -> dendrogram -> condense/extract -> binding outputs (H5)",
+   "controls": [
+    "hdb_mst_seed_knn",
+    "hdb_round_one_sync_off",
+    "hdb_out_memcpy_off"
+   ],
+   "interaction_groups": [
+    [
+     "hdb_mst_seed_knn",
+     "hdb_round_one_sync_off"
+    ],
+    [
+     "hdb_out_memcpy_off"
+    ]
+   ]
+  }
+ },
+ "removed": []
+}
