@@ -120,3 +120,20 @@ comptime IDN_LINEAR_PINNED_UPLOAD = _FGL_IDN and not is_defined["MOJOLEARN_IDN_L
 # any split), so the host column (`sgd_mb_one`) is unchanged.
 comptime IDN_SGD_EPOCH_KERNEL = _FGL_IDN and is_defined["MOJOLEARN_IDN_SGD_EPOCH_KERNEL"]()
 comptime SGD_EK_MAX_WORK = 1 << 17
+
+# C2 (DEFAULT OFF, -D MOJOLEARN_IDN_CD_GRAM_EPOCHS_64). Lasso / ElasticNet's
+# IDENTICAL Gram sweep (solver/impl/cd.mojo `cd_idn_gram_sweep_kernel`) runs
+# CD_IDN_GRAM_EPOCHS = 16 epochs a launch, then the host reads four state
+# words (one wait, ~30-60 us). At narrow designs an epoch is d coordinates x
+# ~3 barriers (~1-3 us a coordinate: an epoch at d = 16 is ~50 us), so the
+# wait is about half the sweep time. Here a launch runs 64 epochs when
+# n_cols <= CD_EK_SMALL_COLS (64): the epoch is then at most ~64 coordinates,
+# a 64-epoch launch stays a few ms (far from any watchdog), and the epochs a
+# launch runs after convergence (frozen: barriers only, no stores) cost at
+# most 63 x d x 3 barriers. Wider designs keep 16 (their epochs already
+# dominate the wait). Rule by the per-epoch cost (n_cols), not a board width.
+# NO BIT MOVES: the convergence test and the freeze are decided on the device
+# per epoch, so coef and n_iter_ are the same at any epochs-per-launch; the
+# host column (solver/host/cd_oracle.mojo) is unchanged.
+comptime IDN_CD_GRAM_EPOCHS_64 = _FGL_IDN and is_defined["MOJOLEARN_IDN_CD_GRAM_EPOCHS_64"]()
+comptime CD_EK_SMALL_COLS = 64
