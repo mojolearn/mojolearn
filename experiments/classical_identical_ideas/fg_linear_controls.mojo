@@ -34,3 +34,31 @@ comptime _FGL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # (ridge_eig_scratch_traced's contract), so the host column (whose own gate
 # reject runs the host eig route) is unchanged. ID check owed (nv == amd).
 comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_IDN_RIDGE_RESIDENT_OFF"]()
+
+# L1 (DEFAULT OFF, -D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN). The small symmetric
+# eigensolver of the linear models' Gram routes: Ridge's svdEig
+# (glm/impl/linalg/detail/svd.mojo, the eig route the Gram gate falls back
+# to), OLS's lstsqEig (glm/impl/linalg/detail/lstsq.mojo) and the
+# minimum-norm Gram (lstsq_min_norm.mojo). Today each is ONE block running the
+# cyclic Jacobi: d (d - 1) / 2 serial rotations a sweep, each a barrier pair
+# (at d = 220: 24,090 rotations, ~48k barriers a sweep, 12-15 sweeps:
+# 0.45-0.7 s on one SM). Here the round-robin (chess tournament) order: d - 1
+# rounds a sweep, the d / 2 disjoint rotations of a round in parallel across
+# the GPU, the rotation schedule a pure function of d (x_decomp/rr.mojo
+# `pj_first` / `pj_second`), the same on every vendor and the host. The
+# device driver is PCA's `_eig_rr_device` (decomposition/impl/linalg/detail/
+# pca.mojo, called, not edited: its rounds, its device-decided convergence
+# test `rr_converged`, `rr_fro_kept`, RR_EIGH_SWEEPS = 60) and the host column
+# is `host_eigh_rr` (x_decomp/rr.mojo), the pair PCA_RR_EIGH already holds
+# equal on nv, amd and host. Cost reasoning: 2 (d - 1) launches a sweep of
+# O(d^2) parallel work each instead of d^2 / 2 serialized rotations on one
+# SM: at d of a few hundred, launch-bound at ~8-15 us a launch (~20-40 ms for
+# a 12-sweep solve) instead of 0.45-0.7 s. At d <= ~16 the cyclic block is a
+# few hundred rotations and the round-robin chain is ~30 launches a sweep:
+# roughly a wash, so the switch is one flag for all d (no width rule).
+# BITS CHANGE (different rotation order and convergence test): every device
+# column and the host column move together (glm/host/glm_oracle.mojo reads
+# this flag through decomposition/host/jacobi_select_host.mojo). Lane fg-pca's
+# PCA-only switches (MOJOLEARN_IDN_PCA_RR_*) stay theirs: if they change the
+# inside of `_eig_rr_device` the linear models inherit it under both flags.
+comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and is_defined["MOJOLEARN_IDN_JACOBI_ROUND_ROBIN"]()
