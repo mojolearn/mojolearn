@@ -51,13 +51,13 @@ CPython 3.10, 3.11, 3.12, 3.13 and 3.14 on both wheels.
 | Random Forest | yes | yes | yes |
 | Extra Trees | yes | yes | yes |
 | Neural networks, GPU surface (LanguageModelTrainer, TransformerBlock, Mamba1/2/3Block, SambaStack, SmallMLPTrainer, Embedding, linalg GEMMs) | yes | no | Apple only (the Apple FAST neural tier, 2026-10-03; the byte LM's FAST build lands with lane afn-lm) |
-| Every other family | yes | no | no |
+| Every other family (classical ML, expansion lanes) | yes | no | yes (opt-in; tuned and measured on Apple) |
 
 Select a process mode with `mojolearn.set_numeric_mode(...)` or the
 `MOJOLEARN_NUMERIC_MODE` environment variable. Estimators that accept
-`numeric_mode=` override the process mode per call. Asking an
-`identical`-only family for another mode raises a named error rather than
-returning something weaker.
+`numeric_mode=` override the process mode per call. Asking a
+family for a mode it does not ship (only the tree learners ship `deterministic`)
+raises a named error rather than returning something weaker.
 
 `identical` is a claim about certified fixtures and configurations, not about
 arbitrary shapes, parameters, hardware, drivers or future builds. The enforced
