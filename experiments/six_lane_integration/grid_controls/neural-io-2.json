@@ -92,31 +92,6 @@
    "bits_change": false,
    "status": "new",
    "note": "Lane neural-io-2. Default ON (waste removal): res_free returns an array to the reuse pool without waiting for the queue (its next user is queued behind every earlier use on the one in-order context); the wait stays where the array is destroyed. No bit moves. Touches every x_cnn resident tensor (conv, pool, BasicBlock, GCN/SAGE, BatchNorm, Dropout); A/B owed on batchnorm2d, dropout2d, conv2d, resnet-block."
-  },
-  "idn_af_vec_fused": {
-   "define": "MOJOLEARN_IDN_AF_VEC_FUSED",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_AF_VEC_FUSED=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "sequence/adafactor.mojo:278",
-    "sequence/af_fused.mojo:34",
-    "sequence/pyapi.mojo:870",
-    "sequence/exec_device.mojo (OP_AF_VFUSE / OP_AF_VFIN)",
-    "sequence/dispatch.mojo (op_af_vfuse / op_af_vfin, the host column)"
-   ],
-   "binding": [
-    "_mojolearn_x_sequence",
-    "_mojolearn_x_sequence_host"
-   ],
-   "bits_change": false,
-   "status": "new",
-   "note": "Lane neural-io-2. Default OFF (new kernels, fold-bearing): the IDENTICAL Adafactor vector step of more than AF_NORM_BLOCK values as vfuse (op_af_vec cells + p's and u's block partials, coop_sumsq chains) + vfin (both ascending partial folds on two warps, the alpha and denom tails) + the apply: 6 launches -> 3, no one-thread launch, 9n -> 8n words. Same chains in the same order: bits expected unchanged against the OFF arm (ID check on nv + amd decides; build the host twin with the same define)."
   }
  },
  "algorithms": {
@@ -175,14 +150,19 @@
   "neural:adafactor": {
    "binding": "_mojolearn_x_sequence",
    "route": "Adafactor.step (resident) -> adafactor_resident_step_dev_py -> adafactor_core [idn_af_vec_fused]",
-   "controls": [
-    "idn_af_vec_fused"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
      "idn_af_vec_fused"
     ]
    ]
   }
- }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_AF_VEC_FUSED",
+   "control": "idn_af_vec_fused",
+   "reason": "DELETED 2026-10-09 (lane postmerge-act-5): post-merge A/B, one run per arm, found it NOISE: adafactor synthetic NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), vendor average 0.98x; digest aa99a3dc unchanged. sequence/af_fused.mojo, OP_AF_VFUSE/OP_AF_VFIN and the pyapi route deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 0a7b206f1."
+  }
+ ]
 }

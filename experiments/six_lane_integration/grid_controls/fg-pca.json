@@ -65,27 +65,6 @@
    "status": "default CONFIRMED (post-merge A/B, lane postmerge-act-2)",
    "note": "R1: randomized_svd uploads M from the caller's buffer (x_decomp_dev_upload into a pooled device matrix, w4 flag bit 2) on IDENTICAL too, instead of _M.from_input's host array copy. Waste removal; same words. CONFIRMED 2026-10-09 (post-merge A/B, nv n0607 -> n0622, amd a1066 -> a1082): the _OFF arm is slower, randomized-svd istella NV 3.06x / AMD 2.15x, taxi NV 1.39x / AMD 1.12x, same digests."
   },
-  "pca_rr_one_block": {
-   "define": "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "decomposition/pca_rr_switch.mojo:59",
-    "x_decomp/rr_one_block.mojo:74",
-    "decomposition/impl/linalg/detail/pca.mojo:734",
-    "x_decomp/rr.mojo (rr_gate_state)"
-   ],
-   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "bits_change": false,
-   "status": "new",
-   "note": "P1+P1b: whole round-robin Jacobi solve (test, gate, every round's fused cs+update) in one launch of one 1024-thread block where rr_one_block_applies(n) (h h + n h <= RR_ONE_BLOCK_STEPS x 1024 cells a round); same cells, order and state words, so bits do not move. Reaches PCA and TruncatedSVD (eig_and_truncate). Device only. Sub-knob MOJOLEARN_IDN_PCA_RR_ONE_BLOCK_STEPS=<k> (default 64) moves the width cap."
-  },
   "gemm_tn_centered": {
    "define": "MOJOLEARN_IDN_GEMM_TN_CENTERED",
    "kind": "switch",
@@ -156,7 +135,6 @@
    "controls": [
     "pca_lean_scratch",
     "gemm_tn_centered",
-    "pca_rr_one_block",
     "pca_device_truncate"
    ],
    "interaction_groups": [
@@ -172,7 +150,6 @@
    "route": "fit: TruncatedSVD.fit -> tsvd_fit_explained [tsvd_one_upload] (tsvd_fit_device: gemm_tn + eig_and_truncate [pca_rr_one_block, pca_device_truncate]; _tsvd_explained_tail: gemm_nt + 2x _column_variance [colvar_fused])",
    "controls": [
     "tsvd_one_upload",
-    "pca_rr_one_block",
     "pca_device_truncate",
     "colvar_fused"
    ],
@@ -194,7 +171,13 @@
    "note": "Copy-only; R2 (rsvd_tsqr_ortho, classical-structural) is the existing control for the dominant orth stage and is not repeated here."
   }
  },
- "removed": [],
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK",
+   "control": "pca_rr_one_block",
+   "reason": "DELETED 2026-10-09 (lane postmerge-act-5): fg2 board-bridge A/B on main 0a7b206f1 found P1+P1b BROKEN on NVIDIA (nv2 v1030): pca and tsvd on taxi and istella REFUSED at decomposition/impl/linalg/detail/pca.mojo:734:55. x_decomp/rr_one_block.mojo and the pca.mojo launch deleted; define (and _STEPS) refused in core/six_lane_experiment_guards.mojo; code recoverable at main 0a7b206f1."
+  }
+ ],
  "notes": [
   "All new code is UNCOMPILED (lanes never compile, 2026-10-07); the orchestrator build compiles it.",
   "Skipped this round by the brief: R3, R4, T3 (read_pca.md).",

@@ -22,19 +22,19 @@
    ],
    "binding": "_mojolearn_estimators",
    "bits_change": false,
-   "status": "new",
-   "notes": "L2. A Ridge fit the resident Gram trust gate rejects runs the eig route (center_buf + ridge_eig_scratch_traced, ridge_fit_resident_host's statements) on the X/y and means already resident, status 0, instead of status 1 and the Python glue's 4 PCIe crossings of X. Expected no bit change (same launches as the glue's route); host column unchanged (its own reject runs the host eig route). Arm 'off' = -D MOJOLEARN_IDN_RIDGE_RESIDENT_OFF. Only reached when linear_gram_solve is on and the gate rejects (istella-like collinear designs)."
+   "status": "confirmed:postmerge-20261009 (lane/postmerge-act-5; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2.default-linear)): resident stays the default",
+   "notes": "L2. A Ridge fit the resident Gram trust gate rejects runs the eig route (center_buf + ridge_eig_scratch_traced, ridge_fit_resident_host's statements) on the X/y and means already resident, status 0, instead of status 1 and the Python glue's 4 PCIe crossings of X. Expected no bit change (same launches as the glue's route); host column unchanged (its own reject runs the host eig route). Arm 'off' = -D MOJOLEARN_IDN_RIDGE_RESIDENT_OFF. Only reached when linear_gram_solve is on and the gate rejects (istella-like collinear designs). CONFIRMED: the _OFF arm is ridge istella NV 2.22x / AMD 1.28x slower (taxi NV 0.87x / AMD 0.99x; hashes unchanged)."
   },
   "jacobi_round_robin": {
-   "define": "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN",
+   "define": "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_JACOBI_ROUND_ROBIN",
     "glm/impl/linalg/detail/svd.mojo:163",
@@ -45,19 +45,19 @@
    ],
    "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
    "bits_change": true,
-   "status": "new",
-   "notes": "L1. The linear models' small symmetric eigensolver (Ridge svdEig, OLS lstsqEig, min-norm Gram) by the round-robin two-sided Jacobi (PCA's _eig_rr_device, called not edited; host_eigh_rr on the host column) instead of the one-block cyclic jacobi_eigh_kernel. Bits change (rotation order, convergence test, budget 60); device and host columns together. PCA-only sites untouched (fg-pca's MOJOLEARN_IDN_PCA_RR_* are separate). Does NOT reach OLS's TSQR fallback: x_decomp svd of R is already round-robin on main (x_decomp/device.mojo:3609)."
+   "status": "promoted 2026-10-09 (lane/postmerge-act-5; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2.default-linear)): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "notes": "L1. The linear models' small symmetric eigensolver (Ridge svdEig, OLS lstsqEig, min-norm Gram) by the round-robin two-sided Jacobi (PCA's _eig_rr_device, called not edited; host_eigh_rr on the host column) instead of the one-block cyclic jacobi_eigh_kernel. Bits change (rotation order, convergence test, budget 60); device and host columns together. PCA-only sites untouched (fg-pca's MOJOLEARN_IDN_PCA_RR_* are separate). Does NOT reach OLS's TSQR fallback: x_decomp svd of R is already round-robin on main (x_decomp/device.mojo:3609). PROMOTED: ridge istella NV 0.25x / AMD 0.14x (avg 0.20x; hash ff4ab841 -> cce6558a on both vendors, r2 0.328682 -> 0.328636), ridge taxi NV 0.99x / AMD 1.15x (avg 1.07x, vendor split: AMD taxi slower; hash 520d0ae1 unchanged), ols istella 1.00x / 0.99x, taxi 0.99x / 1.02x. The off arm restores the one-block cyclic Jacobi."
   },
   "gram_ff_fallback": {
-   "define": "MOJOLEARN_IDN_GRAM_FF_FALLBACK",
+   "define": "MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GRAM_FF_FALLBACK"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_GRAM_FF_FALLBACK",
     "glm/impl/gram_ff_cells.mojo:1",
@@ -67,8 +67,8 @@
    ],
    "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
    "bits_change": true,
-   "status": "new",
-   "notes": "L3. When the fp32 Gram gate rejects a Ridge fit (alpha > 0): float-float centered Gram + cross (64 row leaves folded ascending, means split from the binary64 means by soft-f64), the same power-of-two equilibration, float-float Cholesky (one launch a column, rows in parallel) under a 2^-24 gate, float-float triangular solves, coef rounded once. Gate fails -> the ridge_resident / status-1 fallback. OLS untouched. Bits change for the fits it takes; host column runs the same cells. Quality gate owed: r2 on istella vs the eig route and vs cuML."
+   "status": "promoted 2026-10-09 (lane/postmerge-act-5; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2.default-linear)): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "notes": "L3. When the fp32 Gram gate rejects a Ridge fit (alpha > 0): float-float centered Gram + cross (64 row leaves folded ascending, means split from the binary64 means by soft-f64), the same power-of-two equilibration, float-float Cholesky (one launch a column, rows in parallel) under a 2^-24 gate, float-float triangular solves, coef rounded once. Gate fails -> the ridge_resident / status-1 fallback. OLS untouched. Bits change for the fits it takes; host column runs the same cells. Quality gate owed: r2 on istella vs the eig route and vs cuML. PROMOTED: ridge istella NV 0.96x / AMD 0.51x (avg 0.74x; hash ff4ab841 -> 5a348e50 on both vendors, r2 0.328682 -> 0.328674), ridge taxi NV 0.91x / AMD 0.99x (hash unchanged), ols istella 1.00x / 1.00x, taxi 0.98x / 1.03x. Measured alone, never with jacobi_round_robin: both-on timing owed. The off arm restores the direct eig-route fallback."
   },
   "linear_pinned_upload": {
    "define": "MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF",
