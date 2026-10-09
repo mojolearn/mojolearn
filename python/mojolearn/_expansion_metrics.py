@@ -1974,6 +1974,14 @@ def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
     return arrays
 
 
+#: terms per chunk of the device trapezoid sum (x_metrics/curve_out.mojo
+#: ax_chunk); the fold order is a function of n and this constant only.
+#: Restored 2026-10-09: b9675438d removed it with the array helper and the
+#: step flags while auc(x, y) still used all three (NameError on both GPUs).
+_AX_CHUNK = 1024
+_AX_NEG, _AX_POS = 1, 2
+
+
 def _f64_array_words(a):
     """A C-order Float64 Array's values as their Int32 word pairs (low
     first), an Int32 Array over a copy of the bytes (no per-value Python).
