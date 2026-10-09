@@ -150,6 +150,13 @@ from neighbors.impl.ball_cover.scan import (
     rbc_max_reduce_launch,
 )
 from core.device_fold import device_sum_i32
+from std.memory import stack_allocation
+from std.sys.compile import is_defined
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+from checks.kernel_matrix import COLUMN_NVIDIA, COLUMN_AMD
+from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
 
 
 #: The lane group one query is walked by. `vote`, `shuffle_idx`, `warp_sum`
@@ -754,6 +761,15 @@ def rbc_eps_pass_count(
         var offsets_ptr = adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         ctx.enqueue_function[_c32_radius_stream[False]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),offsets_ptr,vd.unsafe_ptr(),offsets_ptr,Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
         fast_done=True
+    # fg-tsne-dbscan D1: the tiled count (IDN_DBSCAN_EPS_TILE), the same degrees
+    comptime if IDN_DBSCAN_EPS_TILE:
+        if not fast_done and metric == RBC_METRIC_DEFAULT:
+            _rbc_eps_tile_launch[ET_COUNT](
+                ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
+                vd.unsafe_ptr(), adj_ia.unsafe_ptr(), vd.unsafe_ptr().bitcast[UInt64](), n_queries, n_cols,
+                n_landmarks, eps, metric, metric_arg,
+            )
+            fast_done = True
     if not fast_done:
       ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
         x_reordered.unsafe_ptr(),
@@ -829,6 +845,16 @@ def rbc_eps_pass_fill(
         var offsets_ptr = adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         ctx.enqueue_function[_c32_radius_stream[True]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),offsets_ptr,offsets_ptr,adj_ja.unsafe_ptr(),Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
         fast_done=True
+    # fg-tsne-dbscan D1: the tiled fill (IDN_DBSCAN_EPS_TILE); the rows are
+    # canonicalized below, so the same columns
+    comptime if IDN_DBSCAN_EPS_TILE:
+        if not fast_done and metric == RBC_METRIC_DEFAULT:
+            _rbc_eps_tile_launch[ET_FILL](
+                ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
+                adj_ia.unsafe_ptr(), adj_ja.unsafe_ptr(), adj_ia.unsafe_ptr().bitcast[UInt64](), n_queries, n_cols,
+                n_landmarks, eps, metric, metric_arg,
+            )
+            fast_done = True
     if not fast_done:
       ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
         x_reordered.unsafe_ptr(),
@@ -877,6 +903,386 @@ def rbc_eps_pass_fill(
             Int(h_nnz.unsafe_ptr().unsafe_load(0)),
         )
         _ = h_nnz^
+
+
+# ===========================================================================
+# fg-tsne-dbscan D1 / D2 (IDENTICAL, NVIDIA and AMD, DEFAULT OFF, lane
+# fg-tsne-dbscan 2026-10-09).
+#
+# D1, `-D MOJOLEARN_IDN_DBSCAN_EPS_TILE`: THE EPS COUNT AND FILL AS A
+# REGISTER-TILED BLOCK. `block_rbc_kernel_eps_csr_pass` walks one query per
+# warp and one candidate per lane, each lane reading its candidate's whole
+# row from device memory (rows `n_cols * 4` bytes apart, so the warp's loads
+# do not coalesce) with no reuse of a candidate across queries: at a few
+# hundred features and a cover whose bound prunes little (standardized data,
+# pairwise distances far above eps, landmark radii of the same order), the
+# pass is n_queries x n x d serial-ish fused steps at device-memory rates, and
+# the fit runs it twice (count, fill). `rbc_eps_tile_kernel` computes a
+# 64-query x 64-candidate block of squared distances with both sides staged
+# 16 features at a time in threadgroup memory and 4 x 4 cells per thread (the
+# k-NN wide tile's shape): each staged candidate feeds 64 queries.
+#
+# THE SAME PREDICATE, PAIR BY PAIR, SO THE SAME CSR. A pair (q, y) is an edge
+# of today's kernel iff all of
+#   1. y's landmark L passes q's bound: `rbc_cmp_dist(q, L) <=
+#      rbc_cmp_bound(eps + radius(L))`, the same call on the same words;
+#   2. y is reached by today's backward walk of L's group: the walk takes
+#      chunks of RBC_LANES slots from the top (the tail [limit, size) first)
+#      and stops after the first chunk whose start s has
+#      `cur_r_dist - d1[s] > eps`; d1 ascends, so that test is monotone in s
+#      and slot p is reached iff the test FAILS at s = floor(p / RBC_LANES) *
+#      RBC_LANES + RBC_LANES (or that s >= size). The same RBC_LANES as the
+#      column's warp, so each vendor reaches the slots it reaches today;
+#   3. `eps_dist_sq(q, y) <= eps^2`: here acc = ftz(identical_mul_add(diff,
+#      diff, acc)), diff = ftz(ftz(q_c) - ftz(y_c)), c ascending over exactly
+#      n_cols from +0 (the staged values are the ftz'd words): the same word.
+# The three tests are exact replicas, not bounds, so a pair at the eps
+# boundary decides the same way. The count pass writes each query's degree
+# (an integer sum, order-free). The fill pass emits each query's hits
+# landmark ascending, slot ascending (today: landmark ascending, chunks
+# descending); DEVIATION 551's canonicalization then sorts every row, so the
+# columns are the same words. A tile runs a landmark's group when ANY query
+# of the 64 passes test 1 (a per-(tile, landmark) skip); the per-pair masks
+# keep the edge set exact. Euclidean only (the metric the DBSCAN ball cover
+# serves); another metric, KNN_DIRECT_DISTANCE builds and FAST keep today's
+# kernel. Bits: none. Expected: the two eps passes at tile rates instead of
+# warp-per-query rates.
+#
+# D2, `-D MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP` (needs D1): the count pass also
+# writes a bit per (query, candidate slot), and the fill becomes a scan of
+# the set bits (`rbc_eps_bitscan_fill_kernel`), so a range's columns cost one
+# distance pass, not two. Layout: query q's bits for landmark L's slots
+# [64 t, 64 t + 64) are ONE 64-bit word at word index `L + indptr[L] // 64 +
+# t` (word-major, `word * n_queries + q`, coalesced on both sides); groups
+# never share a word (base(L + 1) >= base(L) + ceil(size_L / 64)), so every
+# word has one writer and no atomics; skipped (landmark, tile) words are
+# written zero. `rbc_eps_bitmap_words(n, n_landmarks) = n_landmarks + n // 64
+# + 1` words per query: n / 8 bytes a query row plus 8 bytes per landmark.
+# The bits are the D1 predicate's, so the CSR is the same; the runner keeps
+# each range's columns from loop 1 (see `runner.mojo`, IDN_DBSCAN_ADJ_BITMAP).
+comptime IDN_DBSCAN_EPS_TILE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not KNN_DIRECT_DISTANCE
+    and is_defined["MOJOLEARN_IDN_DBSCAN_EPS_TILE"]()
+)
+comptime IDN_DBSCAN_ADJ_BITMAP = IDN_DBSCAN_EPS_TILE and is_defined["MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP"]()
+comptime ET_TI = 64
+comptime ET_TJ = 64
+comptime ET_KC = 16
+comptime ET_TX = 16
+comptime ET_TY = 16
+comptime ET_RI = ET_TI // ET_TY
+comptime ET_RJ = ET_TJ // ET_TX
+comptime ET_TPB = ET_TX * ET_TY
+#: landmarks whose query bounds are formed per step (one thread per (query, landmark))
+comptime ET_LB = ET_TPB // ET_TI
+#: the kernel's passes
+comptime ET_COUNT = 0
+comptime ET_FILL = 1
+comptime ET_COUNT_BITMAP = 2
+
+
+def rbc_eps_bitmap_words(n_rows: Int, n_landmarks: Int) -> Int:
+    """64-bit words per query row of D2's bit matrix."""
+    return n_landmarks + n_rows // 64 + 1
+
+
+def rbc_eps_tile_kernel[MODE: Int](
+    x_reordered: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    n_queries_in: Int32,
+    n_cols_in: Int32,
+    r: MutPointer[Float32, MutAnyOrigin],
+    eps_in: Float32,
+    n_landmarks_in: Int32,
+    r_indptr: MutPointer[Int32, MutAnyOrigin],
+    r_1nn_cols: MutPointer[Int32, MutAnyOrigin],
+    r_1nn_dists: MutPointer[Float32, MutAnyOrigin],
+    r_radius: MutPointer[Float32, MutAnyOrigin],
+    adj_ia: MutPointer[Int32, MutAnyOrigin],
+    adj_ja: MutPointer[Int32, MutAnyOrigin],
+    bm: MutPointer[UInt64, MutAnyOrigin],
+    metric_in: Int32,
+    metric_arg_in: Float32,
+):
+    """D1's tiled eps pass. MODE ET_COUNT writes each query's degree to
+    `adj_ia[q]` (the count call's `vd`); ET_FILL emits columns at the
+    offsets `adj_ia[q]` into `adj_ja`; ET_COUNT_BITMAP writes the degrees
+    and D2's bit words into `bm`."""
+    comptime assert ET_LB * ET_TI == ET_TPB, "one thread per (query, landmark) in the bound step"
+    comptime assert ET_TJ == 64, "one 64-bit word per (query, tile)"
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var tid = ty * ET_TX + tx
+    var nq = Int(n_queries_in)
+    var n_cols = Int(n_cols_in)
+    var n_landmarks = Int(n_landmarks_in)
+    var eps = eps_in
+    var metric = Int(metric_in)
+    var metric_arg = metric_arg_in
+    var eps_cmp = rbc_cmp_bound(metric, eps)
+    var q0 = Int(block_idx.x) * ET_TI
+    var a_s = stack_allocation[ET_KC * ET_TI, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var b_s = stack_allocation[ET_KC * ET_TJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var lmd_s = stack_allocation[ET_LB * ET_TI, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var lmo_s = stack_allocation[ET_LB * ET_TI, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var any_s = stack_allocation[ET_LB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var hit_s = stack_allocation[ET_TI * ET_TJ, Scalar[DType.uint8], address_space=AddressSpace.SHARED]()
+    var cnt_s = stack_allocation[ET_TI * ET_TX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var owner = tid < ET_TI and q0 + tid < nq
+    var cur = 0
+    comptime if MODE == ET_FILL:
+        if owner:
+            cur = Int(adj_ia.unsafe_load(q0 + tid))
+    var cnt = InlineArray[Int32, ET_RI](fill=Int32(0))
+    var L0 = 0
+    while L0 < n_landmarks:
+        if tid < ET_LB:
+            any_s[tid] = Int32(0)
+        barrier()
+        # the bounds of ET_LB landmarks for the tile's queries (test 1)
+        var ll = tid // ET_TI
+        var lq = tid - ll * ET_TI
+        var lh = L0 + ll
+        var okh = False
+        var crd = Float32(0.0)
+        if lh < n_landmarks and q0 + lq < nq:
+            var lr = rbc_cmp_dist(x, (q0 + lq) * n_cols, r, lh * n_cols, n_cols, metric, metric_arg)
+            var bound = eps + r_radius.unsafe_load(lh)
+            okh = lr <= rbc_cmp_bound(metric, bound)
+            crd = rbc_true_dist(metric, lr)
+        lmd_s[ll * ET_TI + lq] = crd
+        lmo_s[ll * ET_TI + lq] = Int32(1) if okh else Int32(0)
+        if okh:
+            any_s[ll] = Int32(1)
+        barrier()
+        for l2 in range(ET_LB):
+            var lm = L0 + l2
+            if lm >= n_landmarks:
+                break
+            var rs = Int(r_indptr.unsafe_load(lm))
+            var rsz = Int(r_indptr.unsafe_load(lm + 1)) - rs
+            var wbase = lm + rs // 64
+            if any_s[l2] == Int32(0):
+                comptime if MODE == ET_COUNT_BITMAP:
+                    var nw = (rsz + ET_TJ - 1) // ET_TJ
+                    for e in range(tid, nw * ET_TI, ET_TPB):
+                        var t = e // ET_TI
+                        var qq = e - t * ET_TI
+                        if q0 + qq < nq:
+                            bm.unsafe_store((wbase + t) * nq + q0 + qq, UInt64(0))
+                continue
+            var rok = InlineArray[Bool, ET_RI](fill=False)
+            var rcd = InlineArray[Float32, ET_RI](fill=Float32(0.0))
+            comptime for rr in range(ET_RI):
+                rok[rr] = lmo_s[l2 * ET_TI + ty + rr * ET_TY] != Int32(0)
+                rcd[rr] = lmd_s[l2 * ET_TI + ty + rr * ET_TY]
+            var p0 = 0
+            while p0 < rsz:
+                var acc = InlineArray[Float32, ET_RI * ET_RJ](fill=Float32(0.0))
+                var k0 = 0
+                while k0 < n_cols:
+                    comptime for qd in range(ET_KC * ET_TI // ET_TPB):
+                        var e = tid + qd * ET_TPB
+                        var ii = e // ET_KC
+                        var kk = e - ii * ET_KC
+                        var c = k0 + kk
+                        var v = Float32(0.0)
+                        if c < n_cols and q0 + ii < nq:
+                            v = ftz(x.unsafe_load((q0 + ii) * n_cols + c))
+                        a_s[kk * ET_TI + ii] = v
+                    comptime for qd in range(ET_KC * ET_TJ // ET_TPB):
+                        var e = tid + qd * ET_TPB
+                        var jj = e // ET_KC
+                        var kk = e - jj * ET_KC
+                        var c = k0 + kk
+                        var v = Float32(0.0)
+                        if c < n_cols and p0 + jj < rsz:
+                            v = ftz(x_reordered.unsafe_load((rs + p0 + jj) * n_cols + c))
+                        b_s[kk * ET_TJ + jj] = v
+                    barrier()
+                    var kmax = n_cols - k0
+                    if kmax > ET_KC:
+                        kmax = ET_KC
+                    for kk in range(kmax):
+                        var av = InlineArray[Float32, ET_RI](fill=Float32(0.0))
+                        var bv = InlineArray[Float32, ET_RJ](fill=Float32(0.0))
+                        comptime for rr in range(ET_RI):
+                            av[rr] = a_s[kk * ET_TI + ty + rr * ET_TY]
+                        comptime for cc in range(ET_RJ):
+                            bv[cc] = b_s[kk * ET_TJ + tx + cc * ET_TX]
+                        comptime for rr in range(ET_RI):
+                            comptime for cc in range(ET_RJ):
+                                var diff = ftz(av[rr] - bv[cc])
+                                acc[rr * ET_RJ + cc] = ftz(identical_mul_add(diff, diff, acc[rr * ET_RJ + cc]))
+                    barrier()
+                    k0 += ET_KC
+                # tests 1-3 per pair
+                comptime for cc in range(ET_RJ):
+                    var p = p0 + tx + cc * ET_TX
+                    var live = p < rsz
+                    var s = (p // RBC_LANES) * RBC_LANES + RBC_LANES
+                    var has_s = live and s < rsz
+                    var sd = Float32(0.0)
+                    if has_s:
+                        sd = r_1nn_dists.unsafe_load(rs + s)
+                    comptime for rr in range(ET_RI):
+                        var hit = live and rok[rr] and acc[rr * ET_RJ + cc] <= eps_cmp
+                        if hit and has_s:
+                            hit = not (rcd[rr] - sd > eps)
+                        comptime if MODE == ET_COUNT or MODE == ET_COUNT_BITMAP:
+                            if hit:
+                                cnt[rr] += Int32(1)
+                        comptime if MODE == ET_FILL or MODE == ET_COUNT_BITMAP:
+                            hit_s[(ty + rr * ET_TY) * ET_TJ + tx + cc * ET_TX] = UInt8(1) if hit else UInt8(0)
+                comptime if MODE == ET_FILL or MODE == ET_COUNT_BITMAP:
+                    barrier()
+                    if owner:
+                        comptime if MODE == ET_FILL:
+                            var cn = ET_TJ if rsz - p0 > ET_TJ else rsz - p0
+                            for c2 in range(cn):
+                                if hit_s[tid * ET_TJ + c2] != UInt8(0):
+                                    adj_ja.unsafe_store(cur, r_1nn_cols.unsafe_load(rs + p0 + c2))
+                                    cur += 1
+                        else:
+                            var w = UInt64(0)
+                            for c2 in range(ET_TJ):
+                                if hit_s[tid * ET_TJ + c2] != UInt8(0):
+                                    w |= UInt64(1) << UInt64(c2)
+                            bm.unsafe_store((wbase + p0 // ET_TJ) * nq + q0 + tid, w)
+                    barrier()
+                p0 += ET_TJ
+        barrier()
+        L0 += ET_LB
+    comptime if MODE == ET_COUNT or MODE == ET_COUNT_BITMAP:
+        comptime for rr in range(ET_RI):
+            cnt_s[(ty + rr * ET_TY) * ET_TX + tx] = cnt[rr]
+        barrier()
+        if owner:
+            var tot = Int32(0)
+            for t2 in range(ET_TX):
+                tot += cnt_s[tid * ET_TX + t2]
+            adj_ia.unsafe_store(q0 + tid, tot)
+
+
+def rbc_eps_bitscan_fill_kernel(
+    bm: MutPointer[UInt64, MutAnyOrigin],
+    n_queries_in: Int32,
+    n_landmarks_in: Int32,
+    r_indptr: MutPointer[Int32, MutAnyOrigin],
+    r_1nn_cols: MutPointer[Int32, MutAnyOrigin],
+    adj_ia: MutPointer[Int32, MutAnyOrigin],
+    adj_ja: MutPointer[Int32, MutAnyOrigin],
+):
+    """D2's fill: query q's set bits, landmark ascending, slot ascending, to
+    its CSR row at `adj_ia[q]`. One thread per query; a warp's word loads
+    are adjacent (word-major layout)."""
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nq = Int(n_queries_in)
+    if q >= nq:
+        return
+    var pos = Int(adj_ia.unsafe_load(q))
+    for lm in range(Int(n_landmarks_in)):
+        var rs = Int(r_indptr.unsafe_load(lm))
+        var rsz = Int(r_indptr.unsafe_load(lm + 1)) - rs
+        var wbase = lm + rs // 64
+        var nw = (rsz + 63) // 64
+        for t in range(nw):
+            var w = bm.unsafe_load((wbase + t) * nq + q)
+            while w != UInt64(0):
+                var c = Int(count_trailing_zeros(w))
+                w &= w - UInt64(1)
+                adj_ja.unsafe_store(pos, r_1nn_cols.unsafe_load(rs + 64 * t + c))
+                pos += 1
+
+
+def _rbc_eps_tile_launch[MODE: Int](
+    ctx: DeviceContext,
+    mut x_reordered: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut r: DeviceBuffer[DType.float32],
+    mut r_indptr: DeviceBuffer[DType.int32],
+    mut r_1nn_cols: DeviceBuffer[DType.int32],
+    mut r_1nn_dists: DeviceBuffer[DType.float32],
+    mut r_radius: DeviceBuffer[DType.float32],
+    out_ia: MutPointer[Int32, MutAnyOrigin],
+    out_ja: MutPointer[Int32, MutAnyOrigin],
+    bm: MutPointer[UInt64, MutAnyOrigin],
+    n_queries: Int,
+    n_cols: Int,
+    n_landmarks: Int,
+    eps: Float32,
+    metric: Int,
+    metric_arg: Float32,
+) raises:
+    ctx.enqueue_function[rbc_eps_tile_kernel[MODE]](
+        x_reordered.unsafe_ptr(), query.unsafe_ptr(), Int32(n_queries), Int32(n_cols), r.unsafe_ptr(), eps,
+        Int32(n_landmarks), r_indptr.unsafe_ptr(), r_1nn_cols.unsafe_ptr(), r_1nn_dists.unsafe_ptr(),
+        r_radius.unsafe_ptr(), out_ia, out_ja, bm, Int32(metric), metric_arg,
+        grid_dim=((n_queries + ET_TI - 1) // ET_TI, 1, 1),
+        block_dim=(ET_TX, ET_TY, 1),
+    )
+
+
+def rbc_eps_pass_count_bitmap(
+    ctx: DeviceContext,
+    mut x_reordered: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut r: DeviceBuffer[DType.float32],
+    mut r_indptr: DeviceBuffer[DType.int32],
+    mut r_1nn_cols: DeviceBuffer[DType.int32],
+    mut r_1nn_dists: DeviceBuffer[DType.float32],
+    mut r_radius: DeviceBuffer[DType.float32],
+    mut adj_ia: DeviceBuffer[DType.int32],
+    mut vd: DeviceBuffer[DType.int32],
+    mut bm: DeviceBuffer[DType.uint64],
+    n_queries: Int,
+    n_cols: Int,
+    n_landmarks: Int,
+    eps: Float32,
+) raises -> Int:
+    """D2: `rbc_eps_pass_count` (Euclidean) with the bit matrix written as
+    well; the same degrees, scan, exact total and `vd[n_queries]`."""
+    _rbc_eps_tile_launch[ET_COUNT_BITMAP](
+        ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
+        vd.unsafe_ptr(), adj_ia.unsafe_ptr(), bm.unsafe_ptr(), n_queries, n_cols, n_landmarks, eps,
+        RBC_METRIC_DEFAULT, Float32(2.0),
+    )
+    rbc_exclusive_scan_launch(ctx, adj_ia, vd, n_queries)
+    var nnz = Int(device_sum_i32(ctx, vd, n_queries))
+    var t = ctx.enqueue_create_host_buffer[DType.int32](1)
+    t.unsafe_ptr().unsafe_store(0, Int32(nnz))
+    ctx.enqueue_copy(
+        dst_buf=vd.create_sub_buffer[DType.int32](n_queries, 1),
+        src_ptr=t.unsafe_ptr(),
+    )
+    ctx.synchronize()
+    return nnz
+
+
+def rbc_eps_pass_fill_bitmap(
+    ctx: DeviceContext,
+    mut bm: DeviceBuffer[DType.uint64],
+    mut r_indptr: DeviceBuffer[DType.int32],
+    mut r_1nn_cols: DeviceBuffer[DType.int32],
+    mut adj_ia: DeviceBuffer[DType.int32],
+    mut adj_ja: DeviceBuffer[DType.int32],
+    n_queries: Int,
+    n_landmarks: Int,
+    nnz: Int,
+) raises:
+    """D2: the fill from the bit matrix the count just wrote, then DEVIATION
+    551's row canonicalization (as `rbc_eps_pass_fill`)."""
+    ctx.enqueue_function[rbc_eps_bitscan_fill_kernel](
+        bm.unsafe_ptr(), Int32(n_queries), Int32(n_landmarks), r_indptr.unsafe_ptr(), r_1nn_cols.unsafe_ptr(),
+        adj_ia.unsafe_ptr(), adj_ja.unsafe_ptr(),
+        grid_dim=((n_queries + 127) // 128, 1, 1),
+        block_dim=(128, 1, 1),
+    )
+    ctx.synchronize()
+    comptime if PIN_CROSS_VENDOR:
+        rbc_canonicalize_row_order(ctx, adj_ia, adj_ja, n_queries, nnz)
 
 
 def rbc_eps_pass_dense(
