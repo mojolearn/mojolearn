@@ -1,0 +1,203 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "fg-pca",
+ "branch": "lane/fg-pca",
+ "head": "5c8738666",
+ "controls": {
+  "pca_lean_scratch": {
+   "define": "MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "decomposition/impl/linalg/detail/pca.mojo:445",
+    "decomposition/estimator.mojo:137"
+   ],
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "bits_change": false,
+   "status": "new",
+   "note": "P2: PCA fit skips the dead +mu restore pass (2 n*d words) and sizes the two n*d alias buffers to the IDENTICAL route's scratch (split-K partials / v1 workspace / 1). Waste removal; same words."
+  },
+  "tsvd_one_upload": {
+   "define": "MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "decomposition/estimator.mojo:674",
+    "decomposition/estimator.mojo:681",
+    "bindings/_mojolearn_estimators.mojo:516",
+    "bindings/_mojolearn_estimators_host.mojo:433",
+    "python/mojolearn/decomposition.py"
+   ],
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "bits_change": false,
+   "status": "new",
+   "note": "T1: TruncatedSVD.fit calls tsvd_fit_explained (new export, device + host twin): one H2D copy of X shared by the Gram and the explained-variance tail instead of two. OFF arm runs the two host functions in order inside the same export."
+  },
+  "rsvd_idn_direct_in": {
+   "define": "MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "x_decomp/w4_fast.mojo:121",
+    "x_decomp/w4_fast.mojo:134",
+    "python/mojolearn/_expansion_decomp.py:2933"
+   ],
+   "binding": "_mojolearn_x_decomp",
+   "bits_change": false,
+   "status": "new",
+   "note": "R1: randomized_svd uploads M from the caller's buffer (x_decomp_dev_upload into a pooled device matrix, w4 flag bit 2) on IDENTICAL too, instead of _M.from_input's host array copy. Waste removal; same words."
+  },
+  "pca_rr_one_block": {
+   "define": "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "decomposition/pca_rr_switch.mojo:59",
+    "x_decomp/rr_one_block.mojo:74",
+    "decomposition/impl/linalg/detail/pca.mojo:734",
+    "x_decomp/rr.mojo (rr_gate_state)"
+   ],
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "bits_change": false,
+   "status": "new",
+   "note": "P1+P1b: whole round-robin Jacobi solve (test, gate, every round's fused cs+update) in one launch of one 1024-thread block where rr_one_block_applies(n) (h h + n h <= RR_ONE_BLOCK_STEPS x 1024 cells a round); same cells, order and state words, so bits do not move. Reaches PCA and TruncatedSVD (eig_and_truncate). Device only. Sub-knob MOJOLEARN_IDN_PCA_RR_ONE_BLOCK_STEPS=<k> (default 64) moves the width cap."
+  },
+  "gemm_tn_centered": {
+   "define": "MOJOLEARN_IDN_GEMM_TN_CENTERED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_GEMM_TN_CENTERED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "decomposition/impl/linalg/detail/pca.mojo:423",
+    "decomposition/impl/linalg/detail/pca.mojo:360",
+    "gemm/tn_centered.mojo:101"
+   ],
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "bits_change": false,
+   "status": "new",
+   "note": "P3: past the split-K Gram width, the covariance Gram centers at its tile load on the v1 SPLIT plan's arithmetic (same leaf partition, per-cell chain, partial and fold launch), X read-only; falls back to shift + gemm_tn when the shipped dispatch would not run a split plan. Same staged words as shift_columns_kernel, so no bit should move; the ID check settles it."
+  },
+  "pca_device_truncate": {
+   "define": "MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "decomposition/pca_rr_switch.mojo:77",
+    "decomposition/impl/linalg/detail/pca.mojo:863",
+    "decomposition/impl/linalg/detail/pca.mojo:980",
+    "decomposition/host/pca_oracle.mojo:641",
+    "decomposition/host/pca_oracle.mojo:736"
+   ],
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "bits_change": true,
+   "status": "new",
+   "note": "P5: spectrum order (spectrum_rank_desc, ties to the lower index) and top-k component gather on the device; only k x n components + 2 n words cross. Bits move only on tied eigenvalues (the old exchange sort's tie order); the host column reads the same switch: build the host binding with it too."
+  },
+  "colvar_fused": {
+   "define": "MOJOLEARN_IDN_COLVAR_FUSED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_COLVAR_FUSED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "decomposition/estimator.mojo:413",
+    "decomposition/estimator.mojo:422",
+    "decomposition/estimator.mojo:465"
+   ],
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "bits_change": false,
+   "status": "new",
+   "note": "T2: _column_variance's second pass folds the centered squares in registers in xty_tiled's tile order and chain, X read-only (-2 read/write passes over X and over X V^T). Same words into the same fold."
+  }
+ },
+ "algorithms": {
+  "classical:pca": {
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "route": "fit: PCA.fit -> pca_fit_binding -> pca_fit_host [pca_lean_scratch] -> compute_covariance (column_mean_launch; split-K centered Gram | [gemm_tn_centered] | shift + gemm_tn_identical_v1) -> eig_and_truncate (_eig_rr_device [pca_rr_one_block]; host tail | [pca_device_truncate])",
+   "controls": [
+    "pca_lean_scratch",
+    "gemm_tn_centered",
+    "pca_rr_one_block",
+    "pca_device_truncate"
+   ],
+   "interaction_groups": [
+    [
+     "pca_lean_scratch",
+     "gemm_tn_centered"
+    ]
+   ],
+   "note": "gemm_tn_centered reads x_alias2, which pca_lean_scratch sizes; it only acts past the split-K width (d > 128). pca_rr_one_block and pca_device_truncate are independent of the Gram switches."
+  },
+  "more:tsvd": {
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "route": "fit: TruncatedSVD.fit -> tsvd_fit_explained [tsvd_one_upload] (tsvd_fit_device: gemm_tn + eig_and_truncate [pca_rr_one_block, pca_device_truncate]; _tsvd_explained_tail: gemm_nt + 2x _column_variance [colvar_fused])",
+   "controls": [
+    "tsvd_one_upload",
+    "pca_rr_one_block",
+    "pca_device_truncate",
+    "colvar_fused"
+   ],
+   "interaction_groups": [
+    [
+     "tsvd_one_upload",
+     "colvar_fused"
+    ]
+   ],
+   "note": "colvar_fused leaves X read-only, which the merged tail does not need but the OFF arm of tsvd_one_upload does not depend on either; cross them once."
+  },
+  "expanded:randomized-svd": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "randomized_svd -> _rsvd_direct_input [rsvd_idn_direct_in] | _M.from_input -> _rsvd_core",
+   "controls": [
+    "rsvd_idn_direct_in"
+   ],
+   "interaction_groups": [],
+   "note": "Copy-only; R2 (rsvd_tsqr_ortho, classical-structural) is the existing control for the dominant orth stage and is not repeated here."
+  }
+ },
+ "removed": [],
+ "notes": [
+  "All new code is UNCOMPILED (lanes never compile, 2026-10-07); the orchestrator build compiles it.",
+  "Skipped this round by the brief: R3, R4, T3 (read_pca.md).",
+  "No switch keys on a board dimension: P1's cap is a per-thread cell budget, P3 follows the shipped plan choice, P2 follows the route predicates."
+ ]
+}
