@@ -74,29 +74,8 @@
     "_mojolearn_x_ann"
    ],
    "bits_change": false,
-   "status": "new default (read_ivf.md A4)",
-   "note": "Rollback arm: pq_score_kernel (per-candidate pq_lut_entry when pq_dim x n_codes > LUT_MAX). Default: pq_score_tiled_kernel in IDENTICAL. Same words: ID check owed against the _OFF arm."
-  },
-  "idn_pq_scan_fused": {
-   "define": "MOJOLEARN_IDN_PQ_SCAN_FUSED",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_PQ_SCAN_FUSED"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_ann/vsearch_fast.mojo:98",
-    "x_ann/ivf_scan_device.mojo"
-   ],
-   "binding": [
-    "_mojolearn_x_ann"
-   ],
-   "bits_change": false,
-   "status": "new opt-in (read_ivf.md A5)",
-   "note": "On: pq_scan_fused_kernel (score + register top-k under the (distance, id) total order) in IDENTICAL for k <= SEL_KM; no candidate buffer, no select chain. Outputs and n_candidates_ the same words."
+   "status": "confirmed:postmerge-20261009 (nv2 v0996->v0995, amd a1131->a1136): tiled stays the default",
+   "note": "Rollback arm: pq_score_kernel (per-candidate pq_lut_entry when pq_dim x n_codes > LUT_MAX). Default: pq_score_tiled_kernel in IDENTICAL. Same words: ID check owed against the _OFF arm. CONFIRMED (lane postmerge-act-3, post-merge A/B on main a47bd9fb2): the _OFF arm is neutral, ivf-pq istella NV 1.00x / AMD 1.00x, taxi NV 1.04x / AMD 1.00x, same digests."
   },
   "ivf_pq_resident_fit_off": {
    "define": "MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF",
@@ -171,44 +150,24 @@
     "_mojolearn_x_ann_host"
    ],
    "bits_change": "only when the k-means|| recluster ran past kmeans_n_iters; device and host columns together",
-   "status": "new default per the lane brief (read_ivf.md B2); bit-changing default, flagged",
-   "note": "Rollback arm: the recluster runs up to KMeansParams.default()'s 300 iterations. Default: capped at the IVF build's kmeans_n_iters. Recall gate vs cuVS required."
-  },
-  "ivf_layout_scatter": {
-   "define": "MOJOLEARN_IVF_LAYOUT_SCATTER",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IVF_LAYOUT_SCATTER"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "ivf/impl/neighbors/ivf_flat/ivf_group_device.mojo:290"
-   ],
-   "binding": [
-    "_mojolearn_ivf",
-    "_mojolearn_x_ann"
-   ],
-   "bits_change": false,
-   "status": "new opt-in (read_ivf.md B3)",
-   "note": "On: the list layout as per-block rank + list-major table scan + scatter (stable, the radix order) while n_lists x ceil(n / 1024) <= 4 n. Same offsets, ids and words."
+   "status": "confirmed:postmerge-20261009 (nv2 v0996->v0994, amd a1131->a1135): the cap stays the default",
+   "note": "Rollback arm: the recluster runs up to KMeansParams.default()'s 300 iterations. Default: capped at the IVF build's kmeans_n_iters. Recall gate vs cuVS required. CONFIRMED (lane postmerge-act-3, post-merge A/B on main a47bd9fb2, k-means|| seeding): the _OFF arm is slower, ivf-pq istella NV 1.36x / AMD 1.49x, taxi NV 1.01x / AMD 1.02x (recall@10 istella +0.0016, taxi +0.0009). Under the strided-init default the recluster never runs; the cap matters only with MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF."
   },
   "ivf_idn_strided_init": {
-   "define": "MOJOLEARN_IVF_IDN_STRIDED_INIT",
+   "define": "MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IVF_IDN_STRIDED_INIT"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo:134",
-    "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:264",
-    "ivf/host/ivf_host.mojo"
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo:140",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:866",
+    "ivf/host/ivf_host.mojo:323",
+    "core/six_lane_experiment_guards.mojo:229"
    ],
    "binding": [
     "_mojolearn_ivf",
@@ -217,23 +176,22 @@
     "_mojolearn_x_ann_host"
    ],
    "bits_change": true,
-   "status": "new opt-in (read_ivf.md B1)",
-   "note": "On: centre c = training row (c n_train) // n_lists (device gather; host the same rows), INIT_ARRAY, no k-means|| seeding. Bits change on every column; recall gate vs cuVS. Makes ivf_idn_recluster_cap_off moot."
+   "status": "promoted:postmerge-20261009 (nv2 v0996->v0993, amd a1131->a1134)",
+   "note": "lane postmerge-act-3 (2026-10-09): PROMOTED to the IDENTICAL default; -D MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF restores k-means|| seeding; the old on-define is refused by the guard. Post-merge A/B on main a47bd9fb2, one run per arm: ivf-pq istella NV 1008.1->756.9 ms (0.75x) / AMD 853.1->542.2 (0.64x), recall@10 0.7489->0.8021 on both; taxi NV 157.2->100.0 (0.64x) / AMD 195.0->83.9 (0.43x), recall@10 0.98125 equal. Digests NV == AMD (istella 7a39a98cdca7dc6e, taxi 5c793de3ec021c64). Centre c = training row (c n_train) // n_lists (device gather; host the same rows), INIT_ARRAY. Bits change vs the old default on NV, AMD and the host column together. Makes ivf_idn_recluster_cap_off moot unless _OFF is set.",
+   "board": "ivf-pq"
   }
  },
  "algorithms": {
   "expanded:ivf-pq": {
    "binding": "_mojolearn_x_ann",
-   "route": "IVFPQIndex.fit -> x_ann_ivf_pq_build_resident [ivf_pq_resident_fit_off] -> _ivf_pq_build_impl: coarse = ivf_flat_build_resident_host keep_rows [ivf_pq_one_upload_off; ivf_idn_strided_init, ivf_idn_recluster_cap_off, kmeans_live_cores_off, ivf_layout_scatter] -> residual -> codebooks (pq_codebooks_device [idn_pq_device_codebooks] or per-subspace kmeans_fit_rows) -> encode; search -> ivf_scan_search score (pq_score_tiled_kernel [idn_pq_lut_tiled_off] / pq_scan_fused_kernel [idn_pq_scan_fused])",
+   "route": "IVFPQIndex.fit -> x_ann_ivf_pq_build_resident [ivf_pq_resident_fit_off] -> _ivf_pq_build_impl: coarse = ivf_flat_build_resident_host keep_rows [ivf_pq_one_upload_off; ivf_idn_strided_init (default), ivf_idn_recluster_cap_off, kmeans_live_cores_off] -> residual -> codebooks (pq_codebooks_device [idn_pq_device_codebooks] or per-subspace kmeans_fit_rows) -> encode; search -> ivf_scan_search score (pq_score_tiled_kernel [idn_pq_lut_tiled_off]) (A5 pq_scan_fused_kernel and B3 counting-sort layout deleted)",
    "controls": [
     "idn_pq_device_codebooks",
     "ivf_pq_one_upload_off",
     "idn_pq_lut_tiled_off",
-    "idn_pq_scan_fused",
     "ivf_pq_resident_fit_off",
     "kmeans_live_cores_off",
     "ivf_idn_recluster_cap_off",
-    "ivf_layout_scatter",
     "ivf_idn_strided_init"
    ],
    "interaction_groups": [
@@ -246,25 +204,20 @@
      "ivf_pq_resident_fit_off"
     ],
     [
-     "idn_pq_lut_tiled_off",
-     "idn_pq_scan_fused"
+     "idn_pq_lut_tiled_off"
     ],
     [
      "ivf_idn_strided_init",
      "ivf_idn_recluster_cap_off"
-    ],
-    [
-     "ivf_layout_scatter"
     ]
    ]
   },
   "ann:ivf": {
    "binding": "_mojolearn_ivf",
-   "route": "IVFIndex.fit -> ivf_flat_build_resident (strided trainset, k-means|| [ivf_idn_strided_init, ivf_idn_recluster_cap_off] + lazy Lloyd with the fused assignment [kmeans_live_cores_off], predict, layout [ivf_layout_scatter]) -> handle",
+   "route": "IVFIndex.fit -> ivf_flat_build_resident (strided trainset, strided start [ivf_idn_strided_init (default; _OFF = k-means||), ivf_idn_recluster_cap_off] + lazy Lloyd with the fused assignment [kmeans_live_cores_off], predict, radix layout) -> handle",
    "controls": [
     "kmeans_live_cores_off",
     "ivf_idn_recluster_cap_off",
-    "ivf_layout_scatter",
     "ivf_idn_strided_init"
    ],
    "interaction_groups": [
@@ -274,12 +227,20 @@
     ],
     [
      "kmeans_live_cores_off"
-    ],
-    [
-     "ivf_layout_scatter"
     ]
    ]
   }
  },
- "removed": []
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_PQ_SCAN_FUSED",
+   "control": "idn_pq_scan_fused",
+   "reason": "DELETED 2026-10-09 (lane postmerge-act-3): post-merge A/B on main a47bd9fb2 (one run per arm) found fg-ivf A5 slower: ivf-pq istella NV 1.80x / AMD 1.00x (AMD 853.1 -> 852.4 ms), taxi NV 1.77x / AMD 1.00x (195.0 -> 195.5), recall@10 equal (nv n0669-n0671, amd a1131 -> a1132). The IDENTICAL scan keeps the tiled score + select chain; FAST Apple keeps PQ_SCAN_FUSED. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at main a47bd9fb2."
+  },
+  {
+   "define": "MOJOLEARN_IVF_LAYOUT_SCATTER",
+   "control": "ivf_layout_scatter",
+   "reason": "DELETED 2026-10-09 (lane postmerge-act-3): post-merge A/B on main a47bd9fb2 (one run per arm) found fg-ivf B3 slower: ivf-pq istella NV 1.62x / AMD 1.00x (AMD 853.1 -> 851.6 ms), taxi NV 1.80x / AMD 1.00x (195.0 -> 195.3), recall@10 equal (nv n0669-n0671, amd a1131 -> a1133). The radix-sort layout stays. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at main a47bd9fb2."
+  }
+ ]
 }
