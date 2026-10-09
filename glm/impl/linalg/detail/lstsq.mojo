@@ -142,6 +142,8 @@ from core.column_stats import (
     xty_kernel,
 )
 from core.identity_trace import IdentityTrace
+from experiments.classical_identical_ideas.fg_linear_controls import IDN_JACOBI_ROUND_ROBIN
+from decomposition.impl.linalg.detail.pca import _eig_rr_device
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_INFO_UNWRITTEN,
     JACOBI_SWEEPS,
@@ -460,16 +462,24 @@ def lstsq_eig_traced(
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
     enqueue_fill(ctx, info_buf, JACOBI_INFO_UNWRITTEN)
     ctx.synchronize()
-    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
-        cov_a.unsafe_ptr(),
-        q.unsafe_ptr(),
-        info_buf.unsafe_ptr(),
-        Int32(n_cols),
-        Int32(JACOBI_SWEEPS),
-        Float32(JACOBI_TOL),
-        grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_ROT_TPB, 1, 1),
-    )
+    comptime if IDN_JACOBI_ROUND_ROBIN:
+        # lane fg-linear L1 (-D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN, default off;
+        # experiments/classical_identical_ideas/fg_linear_controls.mojo): the
+        # round-robin rounds, every rotation of a round in parallel, the same
+        # layout out (cov_a diagonal = eigenvalues, q columns = vectors,
+        # info_buf = converged / off / sweeps). Host column: host_eigh_rr.
+        _eig_rr_device(ctx, cov_a, q, info_buf, n_cols)
+    else:
+        ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
+            cov_a.unsafe_ptr(),
+            q.unsafe_ptr(),
+            info_buf.unsafe_ptr(),
+            Int32(n_cols),
+            Int32(JACOBI_SWEEPS),
+            Float32(JACOBI_TOL),
+            grid_dim=(1, 1, 1),
+            block_dim=(JACOBI_ROT_TPB, 1, 1),
+        )
     ctx.enqueue_function[diagonal_to_vector_kernel](
         s_vec.unsafe_ptr(),
         cov_a.unsafe_ptr(),

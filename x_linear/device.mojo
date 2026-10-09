@@ -16,6 +16,7 @@ exhausts Metal's per-process command queues, and x_cluster/x_neighbors hung
 on the second GPU call of a process). Each entry's buffers are released
 before it returns; the context stays.
 """
+from experiments.classical_identical_ideas.fg_linear_controls import IDN_SGD_EPOCH_KERNEL, SGD_EK_MAX_WORK
 from std.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
 from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
@@ -1646,6 +1647,16 @@ def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[
     _ = wit^
 
 
+def _sgd_ek_applies(batch: Int, d: Int, dev_eta: Int) -> Bool:
+    """lane fg-linear S1 (experiments/classical_identical_ideas/fg_linear_controls.mojo
+    IDN_SGD_EPOCH_KERNEL): a batch above XG_TPB rows runs through the chunk
+    kernel when its work batch x (d + 2) is at most SGD_EK_MAX_WORK words
+    and the rate is the host schedule's (dev_eta 0)."""
+    comptime if IDN_SGD_EPOCH_KERNEL:
+        return dev_eta == 0 and d >= 1 and batch * (d + 2) <= SGD_EK_MAX_WORK
+    return False
+
+
 def _sgd_chunk() -> Int:
     var v = String(getenv("MOJOLEARN_X_LINEAR_SGD_CHUNK"))
     if v == "":
@@ -1929,7 +1940,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                             wo += 1
                 if fast_fused:
                     pass
-                elif chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB:
+                elif chunk > 1 and ((batch <= XG_TPB and d + 2 <= XG_TPB) or _sgd_ek_applies(batch, d, dev_eta)):
+                    # lane fg-linear S1 (IDN_SGD_EPOCH_KERNEL, default off): the
+                    # chunk kernel also takes a large batch of small work
                     if pa_rate:
                         ctx.enqueue_function[sgd_rowsq_kernel](
                             dx.unsafe_ptr(), Int32(n), Int32(d), dsq.unsafe_ptr(), wit.p(), Int32(wo), nonce,

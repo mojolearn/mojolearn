@@ -53,6 +53,8 @@ from decomposition.spectrum_order_device import spectrum_rank_desc
 from core.column_stats import diagonal_to_vector_kernel
 from core.gemm import gemm_nt, gemm_tn
 from core.identity_trace import IdentityTrace
+from experiments.classical_identical_ideas.fg_linear_controls import IDN_JACOBI_ROUND_ROBIN
+from decomposition.impl.linalg.detail.pca import _eig_rr_device
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_INFO_UNWRITTEN,
     JACOBI_SWEEPS,
@@ -158,16 +160,24 @@ def svd_eig_scratch_traced(
     # eigDC -> V, S. `svd.cuh:146`. The device Jacobi (row 31) consumes
     # `cov` and leaves S on its diagonal; `eigDC` ABORTS on a non-zero
     # `dev_info` (`raft/linalg/detail/eig.cuh:149-151`) and so does this.
-    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
-        cov.unsafe_ptr(),
-        v_raw.unsafe_ptr(),
-        info_buf.unsafe_ptr(),
-        Int32(n_cols),
-        Int32(JACOBI_SWEEPS),
-        Float32(JACOBI_TOL),
-        grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_ROT_TPB, 1, 1),
-    )
+    comptime if IDN_JACOBI_ROUND_ROBIN:
+        # lane fg-linear L1 (-D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN, default off;
+        # experiments/classical_identical_ideas/fg_linear_controls.mojo): the
+        # round-robin rounds, every rotation of a round in parallel, the same
+        # layout out (cov diagonal = eigenvalues, v_raw columns = vectors,
+        # info_buf = converged / off / sweeps). Host column: host_eigh_rr.
+        _eig_rr_device(ctx, cov, v_raw, info_buf, n_cols)
+    else:
+        ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
+            cov.unsafe_ptr(),
+            v_raw.unsafe_ptr(),
+            info_buf.unsafe_ptr(),
+            Int32(n_cols),
+            Int32(JACOBI_SWEEPS),
+            Float32(JACOBI_TOL),
+            grid_dim=(1, 1, 1),
+            block_dim=(JACOBI_ROT_TPB, 1, 1),
+        )
     ctx.enqueue_function[diagonal_to_vector_kernel](
         s_raw.unsafe_ptr(),
         cov.unsafe_ptr(),

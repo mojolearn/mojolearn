@@ -16,6 +16,22 @@ from glm.host.center_host import col_sums_on_cpu
 from glm.host.glm_oracle import host_equilibration_scale
 from glm.impl.gram_solve_cells import gs_equilibrated_cell, gs_pivot_trusted, gs_regularized_diag, gs_scaled_rhs
 from x_decomp.cells import F32Ptr, chol_serial, div0
+from experiments.classical_identical_ideas.fg_linear_controls import IDN_GRAM_FF_FALLBACK
+from glm.impl.gram_ff_cells import (
+    GFF_LEAVES,
+    gff_backward_cell,
+    gff_cells,
+    gff_chol_cell,
+    gff_coef,
+    gff_equilibrated_cell,
+    gff_fold_cell,
+    gff_forward_cell,
+    gff_leaf_cell,
+    gff_mean_split,
+    gff_pivot_trusted,
+    gff_regularized_diag_f32,
+)
+from x_linear.ff import ff_ld, ff_mul_f, ff_st
 
 comptime _AP = MutPointer[Float32, MutAnyOrigin]
 
@@ -42,6 +58,9 @@ def host_linear_gram_fit(
     var yp = _AP(unsafe_from_address=Int(y.unsafe_ptr()))
     var means = List[Float32](length=d, fill=Float32(0.0))
     var ymean32 = Float32(0.0)
+    # the binary64 mean bits (X then y), zero when not centering: lane
+    # fg-linear L3's float-float means (the device keeps d_m64 the same way)
+    var m64 = List[UInt64](length=d + 1, fill=UInt64(0))
     if center:
         var sums = List[UInt64](length=d + 1, fill=UInt64(0))
         var sp = Int(sums.unsafe_ptr())
@@ -49,6 +68,7 @@ def host_linear_gram_fit(
         col_sums_on_cpu(Int(y.unsafe_ptr()), sp + 8 * d, n_rows, 1)
         for j in range(d + 1):  # small-loop(d + 1: feature count): the means' narrowing, the fit's outputs
             var mean = bitcast[DType.float64](sums[j]) / Float64(n_rows)
+            m64[j] = bitcast[DType.uint64](mean)
             if j < d:
                 means[j] = mean.cast[DType.float32]()
                 mu_ptr.unsafe_store(j, means[j])
@@ -96,6 +116,11 @@ def host_linear_gram_fit(
         if not gs_pivot_trusted(a[j * d + j], adiag[j]):
             ok = False
     if not ok:
+        comptime if IDN_GRAM_FF_FALLBACK:
+            # lane fg-linear L3: the device's float-float second chance for
+            # a rejected Ridge Gram, the same cells in the same order
+            if alpha > Float32(0.0):
+                return _host_gff_fit(x, y, m64, n_rows, d, alpha, coef_ptr)
         return 1
     # forward L z = b (column steps, rows below in order), then L^T w = z:
     # the device kernels' statements, z and w in their own vectors
@@ -114,4 +139,106 @@ def host_linear_gram_fit(
         w[j] = wj
     for i in range(d):
         coef_ptr.unsafe_store(i, ftz(identical_mul(ftz(sv[i]), ftz(w[i]))))
+    return 0
+
+
+def _host_gff_fit(
+    x: List[Float32],
+    y: List[Float32],
+    m64: List[UInt64],
+    n_rows: Int,
+    d: Int,
+    alpha: Float32,
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """`_gs_ff_fit` (glm/impl/gram_solve.mojo) on the host: 0 with coef
+    written when the float-float factor is trusted, else 1. The leaf cells
+    run in parallel (each its own chain), every other step in the device's
+    column order."""
+    var t = gff_cells(d)
+    var mh = List[Float32](length=d + 1, fill=Float32(0.0))
+    var ml = List[Float32](length=d + 1, fill=Float32(0.0))
+    for j in range(d + 1):  # small-loop(d + 1: feature count): the means' float-float split
+        var f = gff_mean_split(m64[j])
+        mh[j] = f.hi
+        ml[j] = f.lo
+    var ph = List[Float32](length=GFF_LEAVES * t, fill=Float32(0.0))
+    var pl = List[Float32](length=GFF_LEAVES * t, fill=Float32(0.0))
+    var xp = _AP(unsafe_from_address=Int(x.unsafe_ptr()))
+    var yp = _AP(unsafe_from_address=Int(y.unsafe_ptr()))
+    var mhp = _AP(unsafe_from_address=Int(mh.unsafe_ptr()))
+    var mlp = _AP(unsafe_from_address=Int(ml.unsafe_ptr()))
+    var php = _AP(unsafe_from_address=Int(ph.unsafe_ptr()))
+    var plp = _AP(unsafe_from_address=Int(pl.unsafe_ptr()))
+
+    def _leaf_task(u: Int) {imm xp, imm yp, imm mhp, imm mlp, imm php, imm plp, imm n_rows, imm d, imm t}:
+        var leaf = u // t
+        var q = u - leaf * t
+        var v = gff_leaf_cell(xp, yp, mhp, mlp, n_rows, d, leaf, q)
+        php.unsafe_store(u, v.hi)
+        plp.unsafe_store(u, v.lo)
+
+    host_parallelize(_leaf_task, GFF_LEAVES * t)
+    var gh = List[Float32](length=d * d, fill=Float32(0.0))
+    var gl = List[Float32](length=d * d, fill=Float32(0.0))
+    var ch = List[Float32](length=d, fill=Float32(0.0))
+    var cl = List[Float32](length=d, fill=Float32(0.0))
+    var ghp = _AP(unsafe_from_address=Int(gh.unsafe_ptr()))
+    var glp = _AP(unsafe_from_address=Int(gl.unsafe_ptr()))
+    var chp = _AP(unsafe_from_address=Int(ch.unsafe_ptr()))
+    var clp = _AP(unsafe_from_address=Int(cl.unsafe_ptr()))
+    for q in range(t):
+        gff_fold_cell(php, plp, ghp, glp, chp, clp, d, q)
+    var ah = List[Float32](length=d * d, fill=Float32(0.0))
+    var al = List[Float32](length=d * d, fill=Float32(0.0))
+    var adh = List[Float32](length=d, fill=Float32(0.0))
+    var adl = List[Float32](length=d, fill=Float32(0.0))
+    var bh = List[Float32](length=d, fill=Float32(0.0))
+    var bl = List[Float32](length=d, fill=Float32(0.0))
+    var sv = List[Float32](length=d, fill=Float32(0.0))
+    var ahp = _AP(unsafe_from_address=Int(ah.unsafe_ptr()))
+    var alp = _AP(unsafe_from_address=Int(al.unsafe_ptr()))
+    var adhp = _AP(unsafe_from_address=Int(adh.unsafe_ptr()))
+    var adlp = _AP(unsafe_from_address=Int(adl.unsafe_ptr()))
+    var bhp = _AP(unsafe_from_address=Int(bh.unsafe_ptr()))
+    var blp = _AP(unsafe_from_address=Int(bl.unsafe_ptr()))
+    var svp = _AP(unsafe_from_address=Int(sv.unsafe_ptr()))
+    for i in range(d):
+        sv[i] = host_equilibration_scale(gff_regularized_diag_f32(ghp, glp, i, d, alpha))
+    for q in range(d * d):
+        var i = q // d
+        var j = q - i * d
+        var v = gff_equilibrated_cell(ghp, glp, i, j, d, alpha, sv[i], sv[j])
+        ff_st(ahp, alp, q, v)
+        if i == j:
+            ff_st(adhp, adlp, i, v)
+            ff_st(bhp, blp, i, ff_mul_f(ff_ld(chp, clp, i), sv[i]))
+    var info = List[Float32](length=1, fill=Float32(0.0))
+    var infop = _AP(unsafe_from_address=Int(info.unsafe_ptr()))
+    for j in range(d):
+        for i in range(j, d):
+            gff_chol_cell(ahp, alp, adhp, adlp, infop, i, j, d)
+    var ok = info[0] == Float32(0)
+    for j in range(d):
+        if not gff_pivot_trusted(ah[j * d + j], adh[j]):
+            ok = False
+    if not ok:
+        return 1
+    var zh = List[Float32](length=d, fill=Float32(0.0))
+    var zl = List[Float32](length=d, fill=Float32(0.0))
+    var wh = List[Float32](length=d, fill=Float32(0.0))
+    var wl = List[Float32](length=d, fill=Float32(0.0))
+    var zhp = _AP(unsafe_from_address=Int(zh.unsafe_ptr()))
+    var zlp = _AP(unsafe_from_address=Int(zl.unsafe_ptr()))
+    var whp = _AP(unsafe_from_address=Int(wh.unsafe_ptr()))
+    var wlp = _AP(unsafe_from_address=Int(wl.unsafe_ptr()))
+    for j in range(d):
+        for i in range(j, d):
+            gff_forward_cell(ahp, alp, bhp, blp, zhp, zlp, i, j, d)
+    for jj in range(d):
+        var j = d - 1 - jj
+        for i in range(j + 1):
+            gff_backward_cell(ahp, alp, zhp, zlp, whp, wlp, i, j, d)
+    for i in range(d):
+        coef_ptr.unsafe_store(i, gff_coef(whp, wlp, svp, i))
     return 0

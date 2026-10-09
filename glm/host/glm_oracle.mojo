@@ -88,6 +88,7 @@ from x_decomp.eigh_scale import host_es_scale, host_es_unscale
 from decomposition.spectrum_order_device import spectrum_rank_desc
 from core.host_predict_threads import HostF32Ptr, host_list_ptr
 from core.host_tile_fold import IDN_XTY_TILED, host_xty_tiled
+from decomposition.host.jacobi_select_host import host_symmetric_eigh
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -218,7 +219,9 @@ def host_lstsq_eig(
         ab[i] = ftz(ab[i] * scale[i])
 
     # Q S Q* <- covA.
-    var jac = host_jacobi_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+    # lane fg-linear L1: the cyclic replay, or the round-robin rounds under
+    # -D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN (decomposition/host/jacobi_select_host.mojo)
+    var jac = host_symmetric_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
     var q = jac.vectors.copy()
     var s_vec = _diagonal(cov, n_cols)
     if not jac.converged:
@@ -296,7 +299,9 @@ def host_svd_eig(
     var cov = host_gemm_tn(a, n_cols, n_rows)
     # the device's power-of-two range scale (x_decomp/eigh_scale.mojo)
     var fac = host_es_scale(cov, n_cols)
-    var jac = host_jacobi_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+    # lane fg-linear L1: the cyclic replay, or the round-robin rounds under
+    # -D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN (decomposition/host/jacobi_select_host.mojo)
+    var jac = host_symmetric_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
     var v_raw = jac.vectors.copy()
     var s_raw = _diagonal(cov, n_cols)
     host_es_unscale(s_raw, fac)

@@ -142,6 +142,7 @@ from solver.impl.linalg.norm import col_norm_l2_squared
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 from solver.impl.cd_gram_rule import CD_IDN_GRAM_ON, cd_idn_gram_shape
+from experiments.classical_identical_ideas.fg_linear_controls import CD_EK_SMALL_COLS, IDN_CD_GRAM_EPOCHS_64
 from checks.rtf_seam import rtf_mul_add
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from solver.impl.shuffle import init_shuffle
@@ -1678,10 +1679,16 @@ def cd_fit_traced(
             identical_gemm_into(ctx, gram, x, x_b, gws, gp, gp, n_rows, OP_NT)
             identical_gemm_into(ctx, gq, x, labels, gws, gp, 1, n_rows, OP_NT)
             ctx.enqueue_memset(gst, Float32(0.0))
+            # lane fg-linear C2 (IDN_CD_GRAM_EPOCHS_64, default off): 64
+            # epochs a launch at narrow designs (fg_linear_controls.mojo)
+            var per_launch = CD_IDN_GRAM_EPOCHS
+            comptime if IDN_CD_GRAM_EPOCHS_64:
+                if gp <= CD_EK_SMALL_COLS:
+                    per_launch = 64
             while n_iter < epochs:
                 var e_here = epochs - n_iter
-                if e_here > CD_IDN_GRAM_EPOCHS:
-                    e_here = CD_IDN_GRAM_EPOCHS
+                if e_here > per_launch:
+                    e_here = per_launch
                 ctx.enqueue_function[cd_idn_gram_sweep_kernel](
                     gram.unsafe_ptr(), gq.unsafe_ptr(), coef.unsafe_ptr(),
                     squared.unsafe_ptr(), gst.unsafe_ptr(), Int32(gp),
