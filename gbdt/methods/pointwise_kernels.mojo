@@ -215,6 +215,14 @@ from gbdt.methods.kernel.pointwise_hist2_half_byte_template import PW_HB_BLOCK, 
 from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import (
     compute_split_properties_nb_kernel,
     PW_WRITE_EPS,
+    ORD_SMALL_FOLD_BLOCK,
+    ORD_SMALL_FOLD_PART_GROUPS,
+    ord_small_fold_convert_kernel,
+    ord_small_fold_hist8_kernel,
+)
+from gbdt.trees_identical_switches import (
+    ORD_HIST_FOLD_SKIP,
+    ORD_HIST_FOLD_SKIP_DOCS,
 )
 from gbdt.methods.kernel.pointwise_hist2_binary import (
     compute_split_properties_b_kernel,
@@ -866,8 +874,12 @@ def run_compute_hist2_non_binary_kernel[
     nz: Int,
     int_slot: Bool = False,
     dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
+    z_skip: Int = 0,
 ) raises:
     """`RunComputeHist2NonBinaryKernel` (`:190-216`), copied.
+
+    `z_skip` (A ORD_HIST_FOLD_SKIP): the leading fold partitions whose
+    blocks leave at entry; 0 everywhere else.
 
     A `bool` selecting between two template instantiations, which is what
     theirs is and all that theirs is.
@@ -899,6 +911,7 @@ def run_compute_hist2_non_binary_kernel[
             Int32(bin_feature_count),
             fixed_scale,
             Int32(1 if int_slot else 0),
+            Int32(z_skip),
             dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(nb_block, 1, 1),
@@ -922,6 +935,7 @@ def run_compute_hist2_non_binary_kernel[
             Int32(bin_feature_count),
             fixed_scale,
             Int32(1 if int_slot else 0),
+            Int32(z_skip),
             dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(nb_block, 1, 1),
@@ -960,8 +974,13 @@ def compute_hist2_non_binary_dev[
     sm_count: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
     dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
+    fold_part_sizes: List[Int] = List[Int](),
 ) raises:
     """`ComputeHist2NonBinary<Bits>` (`:221-270`), copied line for line.
+
+    `fold_part_sizes` (A ORD_HIST_FOLD_SKIP, the Ordered fold arm only):
+    the document count of each of the `fold_count` fold partitions, in
+    fold-id order; empty everywhere else (no skip).
 
         if (featureCountForBits) {
             numBlocks.y = (fullPass ? partCount : partCount / 2);
@@ -1026,6 +1045,67 @@ def compute_hist2_non_binary_dev[
     if is_grid_empty(nx, ny, nz):
         return
 
+    # A ORD_HIST_FOLD_SKIP (trees_identical_switches.mojo): the leading
+    # fold partitions with fewer than `part_count x ORD_HIST_FOLD_SKIP_DOCS`
+    # documents (fewer documents per part than the budget, so the regular
+    # block's shared zero + reduce + writeback outweighs its documents) go
+    # to the small-fold kernel and its conversion pass; the regular grid
+    # below skips them (`z_skip`). The fold partitions ascend in size
+    # (geometric folds, learn then quality per fold), so they are a prefix.
+    # Same cells (Int32 sums are order-free); fixed 8-bit route only.
+    var z_skip = 0
+    comptime if (
+        ORD_HIST_FOLD_SKIP
+        and bits == 8
+        and pointwise_one_byte_fixed_for[
+            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        ]()
+    ):
+        if fold_count > 1 and len(fold_part_sizes) == fold_count:
+            var budget = part_count * ORD_HIST_FOLD_SKIP_DOCS
+            while z_skip < fold_count and fold_part_sizes[z_skip] < budget:  # small-loop(fold_count: fold partitions, 2F): the small-fold prefix
+                z_skip += 1
+        if z_skip > 0:
+            var fb = (
+                nb_count + PW_NB_FEATURES_PER_BLOCK - 1
+            ) // PW_NB_FEATURES_PER_BLOCK
+            var groups = ny if ny < ORD_SMALL_FOLD_PART_GROUPS else ORD_SMALL_FOLD_PART_GROUPS
+            var line_blocks = (2 * hist_line_size + 255) // 256
+            if full_pass:
+                ctx.enqueue_function[ord_small_fold_hist8_kernel[True]](
+                    feature_offset, feature_first_fold_index, feature_folds,
+                    Int32(nb_count), cindex, target, weight, indices,
+                    partition, bin_sums, Int32(hist_line_size),
+                    Int32(fold_count), Int32(ny), fixed_scale, dither_ids,
+                    grid_dim=(fb, z_skip, groups),
+                    block_dim=(ORD_SMALL_FOLD_BLOCK, 1, 1),
+                )
+                ctx.enqueue_function[ord_small_fold_convert_kernel[True]](
+                    bin_sums, Int32(hist_line_size), Int32(fold_count),
+                    Int32(ny), fixed_scale,
+                    grid_dim=(line_blocks, z_skip, ny),
+                    block_dim=(256, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[ord_small_fold_hist8_kernel[False]](
+                    feature_offset, feature_first_fold_index, feature_folds,
+                    Int32(nb_count), cindex, target, weight, indices,
+                    partition, bin_sums, Int32(hist_line_size),
+                    Int32(fold_count), Int32(ny), fixed_scale, dither_ids,
+                    grid_dim=(fb, z_skip, groups),
+                    block_dim=(ORD_SMALL_FOLD_BLOCK, 1, 1),
+                )
+                ctx.enqueue_function[ord_small_fold_convert_kernel[False]](
+                    bin_sums, Int32(hist_line_size), Int32(fold_count),
+                    Int32(ny), fixed_scale,
+                    grid_dim=(line_blocks, z_skip, ny),
+                    block_dim=(256, 1, 1),
+                )
+            if z_skip >= nz:
+                # every fold partition was small: the regular grid has
+                # nothing left to file
+                return
+
     if int_slots:
         var stride_i = ny * nz * 2 * hist_line_size
         var slots_i = ctx.enqueue_create_buffer[DType.float32](
@@ -1039,7 +1119,7 @@ def compute_hist2_non_binary_dev[
             nb_count, cindex, target, weight, indices, partition,
             slots_i.unsafe_ptr(), hist_line_size, full_pass, fixed_scale,
             multiplier, nx, ny, nz, True,
-            dither_ids=dither_ids,
+            dither_ids=dither_ids, z_skip=z_skip,
         )
         launch_pw_fold_int_slots(
             ctx, slots_i, bin_sums, full_pass, stride_i, multiplier, fixed_scale
@@ -1060,7 +1140,7 @@ def compute_hist2_non_binary_dev[
                 nb_count, cindex, target, weight, indices, partition,
                 slots.unsafe_ptr(), hist_line_size, full_pass, fixed_scale,
                 multiplier, nx, ny, nz,
-                dither_ids=dither_ids,
+                dither_ids=dither_ids, z_skip=z_skip,
             )
             launch_pw_fold_doc_slots(
                 ctx, slots, bin_sums, full_pass, stride, multiplier
@@ -1071,7 +1151,7 @@ def compute_hist2_non_binary_dev[
         ctx, feature_offset, feature_first_fold_index, feature_folds,
         nb_count, cindex, target, weight, indices, partition, bin_sums,
         hist_line_size, full_pass, fixed_scale, multiplier, nx, ny, nz,
-        dither_ids=dither_ids,
+        dither_ids=dither_ids, z_skip=z_skip,
     )
 
 
@@ -1273,6 +1353,7 @@ def non_binary_multiplier_ladder[
     nz: Int,
     int_slot: Bool = False,
     dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
+    z_skip: Int = 0,
 ) raises:
     """The `COMPUTE(1|2|4|8|16|32|64) else exit(1)` ladder of
     `ComputeHist2NonBinary`, lifted out of the launcher unchanged so
@@ -1282,49 +1363,49 @@ def non_binary_multiplier_ladder[
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
-            dither_ids=dither_ids,
+            dither_ids=dither_ids, z_skip=z_skip,
         )
     elif multiplier == 2:
         run_compute_hist2_non_binary_kernel[bits, 2](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
-            dither_ids=dither_ids,
+            dither_ids=dither_ids, z_skip=z_skip,
         )
     elif multiplier == 4:
         run_compute_hist2_non_binary_kernel[bits, 4](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
-            dither_ids=dither_ids,
+            dither_ids=dither_ids, z_skip=z_skip,
         )
     elif multiplier == 8:
         run_compute_hist2_non_binary_kernel[bits, 8](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
-            dither_ids=dither_ids,
+            dither_ids=dither_ids, z_skip=z_skip,
         )
     elif multiplier == 16:
         run_compute_hist2_non_binary_kernel[bits, 16](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
-            dither_ids=dither_ids,
+            dither_ids=dither_ids, z_skip=z_skip,
         )
     elif multiplier == 32:
         run_compute_hist2_non_binary_kernel[bits, 32](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
-            dither_ids=dither_ids,
+            dither_ids=dither_ids, z_skip=z_skip,
         )
     elif multiplier == 64:
         run_compute_hist2_non_binary_kernel[bits, 64](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
-            dither_ids=dither_ids,
+            dither_ids=dither_ids, z_skip=z_skip,
         )
     else:
         # DEVIATION 101: theirs is `exit(1)` (`:266`)
@@ -1955,8 +2036,12 @@ def compute_hist2_dev[
     sm_count: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
     dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
+    fold_part_sizes: List[Int] = List[Int](),
 ) raises:
     """`TComputeHist2Kernel::Run` (`pointwise_kernels.cpp:17-93`), copied.
+
+    `fold_part_sizes` (A ORD_HIST_FOLD_SKIP): the fold partitions' document
+    counts, read by the fixed 8-bit one-byte launch only; empty = no skip.
 
     THE TOP-LEVEL FAN-OUT, and it is three steps in a fixed order:
 
@@ -2050,6 +2135,7 @@ def compute_hist2_dev[
                 folds_hist.feature_count_for_bits(4, 8), sm_count,
                 fixed_scale,
                 dither_ids=dither_ids,
+                fold_part_sizes=fold_part_sizes,
             )
         else:
             compute_hist2_non_binary_dev[5](
