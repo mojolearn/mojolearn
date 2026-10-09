@@ -27,7 +27,11 @@ after sorting them) moves no bit.
 
 from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
+from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 from core.device_fold import device_exclusive_scan_total_from
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
@@ -268,6 +272,138 @@ def ivf_group_pairs_device(
     return IvfPairGroups(goff^, gq^, gp^, bl^, bs^, n_blocks)
 
 
+#: lane fg-ivf (read_ivf.md idea B3), OPT-IN (`-D MOJOLEARN_IVF_LAYOUT_SCATTER`):
+#: the build's list layout (rows grouped by label, each list ascending in the
+#: row index) as a counting sort in three device passes instead of the
+#: stable 32-bit radix sort plus the histogram and scan: (1) per block of
+#: LS_ROWS rows, each row's rank among the earlier rows of its block with
+#: its label, and the block's per-label count into a list-major table
+#: (n_lists x n_blocks); (2) one exclusive scan of that table; (3) each row
+#: scattered to scan[label, block] + rank. The order within a list is
+#: (block ascending, rank ascending) = row ascending, the radix sort's
+#: order, and the offsets are the table scan at each list's first block, so
+#: the offsets, ids and words are the same (integers and copies only). The
+#: radix path makes ~4 passes over 4 n-word buffers; the table path makes
+#: one pass over the labels and ~3 over the table, so it is taken while the
+#: table is no larger than those buffers (n_lists x n_blocks <= 4 n, i.e.
+#: n_lists <= 4 LS_ROWS for any n); past that the radix path stays.
+comptime IVF_LAYOUT_SCATTER = is_defined["MOJOLEARN_IVF_LAYOUT_SCATTER"]()
+comptime LS_ROWS = 1024
+comptime LS_TPB = 256
+
+
+def _ls_rank_kernel(labels: _U32P, n_in: Int32, n_lists_in: Int32, nb_in: Int32, table: _I32P, rank: _I32P,
+                    flag: _I32P):
+    """Block b: rows b LS_ROWS .. + LS_ROWS - 1. Row i's rank = the number of
+    earlier rows of the block with its label; the LAST row of each label in
+    the block writes rank + 1 at table[label nb + b]. A label >= n_lists
+    sets flag[0] (the caller refuses it by name before any scatter)."""
+    var b = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var n = Int(n_in)
+    var nl = Int(n_lists_in)
+    var nb = Int(nb_in)
+    var lab = stack_allocation[LS_ROWS, Scalar[DType.uint32], address_space=AddressSpace.SHARED]()
+    var r0 = b * LS_ROWS
+    var rn = LS_ROWS if n - r0 > LS_ROWS else n - r0
+    for e in range(t, LS_ROWS, LS_TPB):
+        var v = UInt32(0xFFFFFFFF)
+        if e < rn:
+            v = labels[r0 + e]
+        lab[e] = v
+    barrier()
+    for e in range(t, rn, LS_TPB):
+        var l = lab[e]
+        if Int(l) >= nl:
+            flag[0] = Int32(1)
+            continue
+        var rk = 0
+        for rr in range(e):
+            if lab[rr] == l:
+                rk += 1
+        var last = True
+        for rr in range(e + 1, rn):
+            if lab[rr] == l:
+                last = False
+                break
+        rank[r0 + e] = Int32(rk)
+        if last:
+            table[Int(l) * nb + b] = Int32(rk + 1)
+
+
+def _ls_scatter_kernel(labels: _U32P, n_in: Int32, nb_in: Int32, rank: _I32P, scan: _I32P, vals: _U32P):
+    """Row i to slot scan[label nb + i // LS_ROWS] + rank[i] of `vals`."""
+    var i = Int(block_idx.x) * _TPB + Int(thread_idx.x)
+    if i < Int(n_in):
+        var l = Int(labels[i])
+        var pos = Int(scan[l * Int(nb_in) + i // LS_ROWS]) + Int(rank[i])
+        vals[pos] = UInt32(i)
+
+
+def _ls_offsets_kernel(scan: _I32P, n_lists_in: Int32, nb_in: Int32, goff: _I32P):
+    """goff[l] = scan[l nb] (list l's first slot), l = 0 .. n_lists (the scan's
+    total at l = n_lists)."""
+    var l = Int(block_idx.x) * _TPB + Int(thread_idx.x)
+    if l <= Int(n_lists_in):
+        goff[l] = scan[l * Int(nb_in)]
+
+
+def ivf_layout_scatter_takes(n: Int, n_lists: Int) -> Bool:
+    """Whether `IVF_LAYOUT_SCATTER` lays out these rows (see the switch)."""
+    comptime if IVF_LAYOUT_SCATTER:
+        if n < 1 or n_lists < 1:
+            return False
+        var nb = (n + LS_ROWS - 1) // LS_ROWS
+        return n_lists * nb <= 4 * n and n_lists * nb < 2147483647
+    return False
+
+
+def ivf_layout_scatter_device(
+    ctx: DeviceContext, mut labels: DeviceBuffer[DType.uint32], n: Int, n_lists: Int,
+    mut vals: DeviceBuffer[DType.uint32], mut goff: DeviceBuffer[DType.int32],
+) raises -> Bool:
+    """`IVF_LAYOUT_SCATTER`'s three passes: `vals` (n words) the rows in list
+    order, `goff` (n_lists + 1) the offsets. Returns False (nothing laid out)
+    when a label is >= n_lists; the caller refuses it by name."""
+    var nb = (n + LS_ROWS - 1) // LS_ROWS
+    var cells = n_lists * nb
+    var table = ctx.enqueue_create_buffer[DType.int32](cells)
+    var scan = ctx.enqueue_create_buffer[DType.int32](cells + 1)
+    var rank = ctx.enqueue_create_buffer[DType.int32](n)
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_function[_zero_kernel](table.unsafe_ptr(), Int32(cells), grid_dim=_grid(cells), block_dim=_TPB)
+    ctx.enqueue_function[_zero_kernel](flag.unsafe_ptr(), Int32(1), grid_dim=1, block_dim=_TPB)
+    ctx.enqueue_function[_ls_rank_kernel](
+        labels.unsafe_ptr(), Int32(n), Int32(n_lists), Int32(nb), table.unsafe_ptr(), rank.unsafe_ptr(),
+        flag.unsafe_ptr(), grid_dim=nb, block_dim=LS_TPB,
+    )
+    var hflag = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hflag.unsafe_ptr(), src_buf=flag)
+    ctx.synchronize()
+    var bad = hflag.unsafe_ptr()[0] != Int32(0)
+    _ = hflag^
+    if bad:
+        _ = table^
+        _ = scan^
+        _ = rank^
+        _ = flag^
+        return False
+    device_exclusive_scan_total_from(ctx, table, scan, cells)
+    ctx.enqueue_function[_ls_scatter_kernel](
+        labels.unsafe_ptr(), Int32(n), Int32(nb), rank.unsafe_ptr(), scan.unsafe_ptr(), vals.unsafe_ptr(),
+        grid_dim=_grid(n), block_dim=_TPB,
+    )
+    ctx.enqueue_function[_ls_offsets_kernel](
+        scan.unsafe_ptr(), Int32(n_lists), Int32(nb), goff.unsafe_ptr(), grid_dim=_grid(n_lists + 1), block_dim=_TPB,
+    )
+    ctx.synchronize()
+    _ = table^
+    _ = scan^
+    _ = rank^
+    _ = flag^
+    return True
+
+
 def _gather_rows_kernel(x: MutPointer[Float32, MutAnyOrigin], rows: _U32P, n_in: Int32, dim_in: Int32,
                         dst: MutPointer[Float32, MutAnyOrigin]):
     """out[j, :] = x[rows[j], :], one thread per element: a copy, no float op."""
@@ -296,6 +432,31 @@ def ivf_list_layout_device(
     ids and words. Returns (offsets, list_indices, list_data, max label);
     the caller refuses a max label >= n_lists by name."""
     var n = n_rows
+    if ivf_layout_scatter_takes(n, n_lists):
+        # lane fg-ivf B3 (`IVF_LAYOUT_SCATTER`, opt-in): the counting-sort layout
+        var svals = ctx.enqueue_create_buffer[DType.uint32](n)
+        var sgoff = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+        var s_offsets = List[Int32](length=n_lists + 1, fill=Int32(0))
+        var s_indices = List[UInt32](length=n, fill=UInt32(0))
+        var s_data = List[Float32](length=(n * dim if with_data else 0), fill=Float32(0.0))
+        if not ivf_layout_scatter_device(ctx, labels, n, n_lists, svals, sgoff):
+            # a bound past every list: the caller refuses the labels by name
+            return (s_offsets^, s_indices^, s_data^, UInt32(n_lists))
+        ctx.enqueue_copy(dst_ptr=s_offsets.unsafe_ptr(), src_buf=sgoff)
+        ctx.enqueue_copy(dst_ptr=s_indices.unsafe_ptr(), src_buf=svals)
+        if with_data and dim > 0:
+            var sdd = ctx.enqueue_create_buffer[DType.float32](n * dim)
+            ctx.enqueue_function[_gather_rows_kernel](
+                dx.unsafe_ptr(), svals.unsafe_ptr(), Int32(n), Int32(dim), sdd.unsafe_ptr(),
+                grid_dim=_grid(n * dim), block_dim=_TPB,
+            )
+            ctx.enqueue_copy(dst_ptr=s_data.unsafe_ptr(), src_buf=sdd)
+            ctx.synchronize()
+            _ = sdd^
+        ctx.synchronize()
+        _ = svals^
+        _ = sgoff^
+        return (s_offsets^, s_indices^, s_data^, UInt32(0))
     var keys = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
     var vals = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
     var tk = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
@@ -401,6 +562,25 @@ def ivf_list_layout_device_resident(
     var n = n_rows
     if n < 1:
         raise Error("ivf_list_layout_device_resident: empty dataset")
+    if ivf_layout_scatter_takes(n, n_lists):
+        # lane fg-ivf B3 (`IVF_LAYOUT_SCATTER`, opt-in): the counting-sort layout
+        var svals = ctx.enqueue_create_buffer[DType.uint32](n)
+        var sgoff = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+        var sdd = ctx.enqueue_create_buffer[DType.float32](max(n * dim, 1) if with_data else 1)
+        var s_offsets = List[Int32](length=n_lists + 1, fill=Int32(0))
+        var s_indices = List[UInt32](length=n, fill=UInt32(0))
+        if not ivf_layout_scatter_device(ctx, labels, n, n_lists, svals, sgoff):
+            return IvfDeviceLayout(s_offsets^, s_indices^, UInt32(n_lists), sgoff^, svals^, sdd^)
+        ctx.enqueue_copy(dst_ptr=s_offsets.unsafe_ptr(), src_buf=sgoff)
+        ctx.enqueue_copy(dst_ptr=s_indices.unsafe_ptr(), src_buf=svals)
+        if with_data and dim > 0:
+            ctx.enqueue_function[_gather_rows_kernel](
+                dx.unsafe_ptr(), svals.unsafe_ptr(), Int32(n), Int32(dim), sdd.unsafe_ptr(),
+                grid_dim=_grid(n * dim), block_dim=_TPB,
+            )
+        # drained while the two host lists the copies write are alive
+        ctx.synchronize()
+        return IvfDeviceLayout(s_offsets^, s_indices^, UInt32(0), sgoff^, svals^, sdd^)
     var keys = ctx.enqueue_create_buffer[DType.uint32](n)
     var vals = ctx.enqueue_create_buffer[DType.uint32](n)
     var tk = ctx.enqueue_create_buffer[DType.uint32](n)
