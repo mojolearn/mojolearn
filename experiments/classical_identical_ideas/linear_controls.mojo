@@ -28,9 +28,13 @@ comptime CLASSICAL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # the incumbent on both vendors, NVIDIA and AMD output hashes equal. C13 is the
 # only candidate control on the RidgeCV route (catalog.json). Evidence:
 # experiments/six_lane_integration/measurements/20261006/BOARD.md (ridge-cv rows).
-# `-D MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF` restores the per-fold passes (arm B
-# of the isolated confirmation A/B owed on nv and amd).
-comptime C13_FOLD_STATS = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF"]()
+# The `-D MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF` switch (per-fold passes in an
+# IDENTICAL build) was tried 2026-10-08 (lane grid-act-3, run ge123e6f9): ridge-cv
+# NV/AMD 1.19x/1.11x istella, 19.5x/18.0x taxi SLOWER, quality SAME. The switch is
+# deleted and the define refused: the fold cache is the only IDENTICAL RidgeCV route.
+# FAST builds keep the per-fold passes (C13_FOLD_STATS is False outside IDENTICAL).
+# Recoverable at main bc10b8b56.
+comptime C13_FOLD_STATS = CLASSICAL_IDN
 # The LassoCV/ElasticNetCV fold cache (C13_CD_FOLD_STATS) was deleted on
 # lane/classical-cv (2026-10-07): T.C13.only measured it 4.0x/1.4x slower on
 # Taxi and quality-failing on both vendors (row in docs/apple-fast/EXPERIMENTS.md).
