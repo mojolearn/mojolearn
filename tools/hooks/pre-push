@@ -20,15 +20,16 @@
 #   refs/heads/main                       the whole tree
 #   refs/heads/<anything else>            --branch: only what it adds over its
 #                                         merge-base with main (lane/*, fix/*, ...)
-#   refs/heads/archive/*, refs/tags/archive-*, refs/tags/archive/*,
-#   refs/heads/salvage/*                  SKIPPED, with one line saying so: archive
-#                                         and salvage refs are never merged, so the
+#   refs/heads/archive/*, refs/tags/archive-*, refs/tags/archive/*
+#                                         SKIPPED, with one line saying so: archive
+#                                         refs are never merged, so the
 #                                         fence has nothing to protect there, and
 #                                         keeping them in git beats hiding old
 #                                         branches in bundles. Archive a dead branch
 #                                         as archive/<date>/<old name>; never merge
 #                                         an archive ref (revive it as a new lane/*
 #                                         branch, which the fence judges as usual).
+#   refs/heads/salvage/*                  skipped silently (2026-10-05, unchanged)
 #   any other ref (tags, refs/archive/...) not judged (unchanged)
 # The size fence below applies to every push, archive refs included.
 #
@@ -47,7 +48,8 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     # archive/* and salvage/* refs are archives of dead branches and old worktrees (owner, 2026-10-05 and
     # 2026-10-09): never merged, so no host-route check; the size fence below still applies.
     case "$remote_ref" in
-        refs/heads/archive/*|refs/tags/archive-*|refs/tags/archive/*|refs/heads/salvage/*)
+        refs/heads/salvage/*) continue ;;
+        refs/heads/archive/*|refs/tags/archive-*|refs/tags/archive/*)
             echo "pre-push: host-route fence skipped for $remote_ref: it is an archive ref, and archive refs are never merged (the size fence still applies)" >&2
             continue ;;
         refs/heads/*) ;;
