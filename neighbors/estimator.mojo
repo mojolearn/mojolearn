@@ -124,7 +124,7 @@ from core.device_fold import device_sum_i32
 from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.math import fma, sqrt
 
 comptime KNN_FAST_REFINE = (
@@ -160,7 +160,13 @@ from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
     KNN_RESIDENT_CACHE,
+    KNN_SCRATCH_POOL,
     KnnIndexCachePointer,
+    knn_pool_view,
+    knn_pool_host_dist,
+    knn_pool_host_idx,
+    knn_pool_acquire,
+    knn_pool_release,
     brute_force_knn_impl,
     cached_index_norm_ready,
     compute_norms_for_metric,
@@ -267,11 +273,14 @@ from neighbors.impl.ball_cover.ball_cover import (
 
 # Measured NVIDIA IDENTICAL query batching; row arithmetic is unchanged.
 # Other columns retain 256 unless explicitly opting into qualification.
-from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, knn_query_tile_for
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, knn_query_tile_for, knn_nvidia_schedule_column
+# K1 (lane fg-knn-nb): the AMD column takes NVIDIA's scope too
+# (`knn_nvidia_schedule_column`; `-D MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE=1`
+# restores AMD's 256). Query tiling never moves a bit.
 comptime QUERY_TILE_512_CANDIDATE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_KNN_LEGACY_QUERY_TILE"]()
-    and (TARGET_COLUMN == COLUMN_NVIDIA or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
+    and (knn_nvidia_schedule_column(TARGET_COLUMN) or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
 )
 # DEVIATION 2631 (kernel-matrix row `knn_query_tile_for`): the row's tile
 # replaces the 512 candidate where it is set; 0 keeps the historical rule.
@@ -1189,27 +1198,59 @@ def _knn_search_on_device_index(
     `devices` and `buf_len` are the plan's (`_knn_search_plan`). Split out
     2026-09-17 (DEVIATION 2921) so a resident index enters here; every
     statement below is where it was."""
-    var queries = ctx.enqueue_create_buffer[DType.float32](
-        n_queries * n_features
-    )
-    var index_norm = ctx.enqueue_create_buffer[DType.float32](n_index)
-    var query_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
-    # `identical_index_tile` is `n_index` on FAST and DETERMINISTIC builds;
-    # under IDENTICAL on the columns that tile the index axis it is the
-    # kernel-matrix row's width, so the tile is bounded whatever the index.
-    # DEVIATION 2667: one cell when the fused launch writes no matrix.
-    var dist_tile = ctx.enqueue_create_buffer[DType.float32](
-        tiled_distance_tile_cells(query_tile, n_index, n_features, k, mtr)
-    )
-    var buf_val = ctx.enqueue_create_buffer[DType.float32](
-        query_tile * 2 * buf_len
-    )
-    var buf_idx = ctx.enqueue_create_buffer[DType.uint32](
-        query_tile * 2 * buf_len
-    )
-    var out_dist = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
-    var out_idx = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
-    var out_i32 = ctx.enqueue_create_buffer[DType.int32](n_queries * k)
+    # K4 (KNN_SCRATCH_POOL, `-D MOJOLEARN_KNN_SCRATCH_POOL_OFF=1` restores
+    # the per-call allocations; see knn_brute_force.mojo): a single-device
+    # search over a resident index takes exact-length views of the handle's
+    # pooled scratch instead of allocating it per call.
+    var pooled = False
+    comptime if KNN_SCRATCH_POOL:
+        if cache and devices <= 1:
+            pooled = knn_pool_acquire(cache.value())
+    var n_dist_cells = tiled_distance_tile_cells(query_tile, n_index, n_features, k, mtr)
+    var queries: DeviceBuffer[DType.float32]
+    var index_norm: DeviceBuffer[DType.float32]
+    var query_norm: DeviceBuffer[DType.float32]
+    var dist_tile: DeviceBuffer[DType.float32]
+    var buf_val: DeviceBuffer[DType.float32]
+    var buf_idx: DeviceBuffer[DType.uint32]
+    var out_dist: DeviceBuffer[DType.float32]
+    var out_idx: DeviceBuffer[DType.uint32]
+    var out_i32: DeviceBuffer[DType.int32]
+    if pooled:
+        var cp = cache.value()
+        queries = knn_pool_view[DType.float32](ctx, cp[].pool_queries, n_queries * n_features)
+        index_norm = knn_pool_view[DType.float32](ctx, cp[].pool_index_norm, n_index)
+        query_norm = knn_pool_view[DType.float32](ctx, cp[].pool_query_norm, n_queries)
+        dist_tile = knn_pool_view[DType.float32](ctx, cp[].pool_dist_tile, n_dist_cells)
+        buf_val = knn_pool_view[DType.float32](ctx, cp[].pool_buf_val, query_tile * 2 * buf_len)
+        buf_idx = knn_pool_view[DType.uint32](ctx, cp[].pool_buf_idx, query_tile * 2 * buf_len)
+        out_dist = knn_pool_view[DType.float32](ctx, cp[].pool_out_dist, n_queries * k)
+        if keep_device_indices:
+            # Moved out to the caller below: never a pool view.
+            out_idx = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
+        else:
+            out_idx = knn_pool_view[DType.uint32](ctx, cp[].pool_out_idx, n_queries * k)
+        out_i32 = knn_pool_view[DType.int32](ctx, cp[].pool_out_i32, n_queries * k)
+    else:
+        queries = ctx.enqueue_create_buffer[DType.float32](
+            n_queries * n_features
+        )
+        index_norm = ctx.enqueue_create_buffer[DType.float32](n_index)
+        query_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
+        # `identical_index_tile` is `n_index` on FAST and DETERMINISTIC builds;
+        # under IDENTICAL on the columns that tile the index axis it is the
+        # kernel-matrix row's width, so the tile is bounded whatever the index.
+        # DEVIATION 2667: one cell when the fused launch writes no matrix.
+        dist_tile = ctx.enqueue_create_buffer[DType.float32](n_dist_cells)
+        buf_val = ctx.enqueue_create_buffer[DType.float32](
+            query_tile * 2 * buf_len
+        )
+        buf_idx = ctx.enqueue_create_buffer[DType.uint32](
+            query_tile * 2 * buf_len
+        )
+        out_dist = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+        out_idx = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
+        out_i32 = ctx.enqueue_create_buffer[DType.int32](n_queries * k)
     ctx.synchronize()
 
     # PHASE TIMERS (`-D MOJOLEARN_KNN_PHASE_TIMERS=1`, lane/knn-tiled-distance):
@@ -1349,10 +1390,22 @@ def _knn_search_on_device_index(
     _knn_order_rows_device(ctx, out_dist, out_idx, n_queries, k)
     if negate_products and mtr == DIST_INNER_PRODUCT:
         _knn_negate_device(ctx, out_dist, n_queries * k)
-    var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
-    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
-    ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=out_dist)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=out_idx)
+    var hd = Optional[HostBuffer[DType.float32]]()
+    var hi = Optional[HostBuffer[DType.uint32]]()
+    var hdp: MutPointer[Float32, MutAnyOrigin]
+    var hip: MutPointer[UInt32, MutAnyOrigin]
+    if pooled:
+        # K4: the handle's pinned readback stages.
+        var cp = cache.value()
+        hdp = knn_pool_host_dist(ctx, cp, n_queries * k)
+        hip = knn_pool_host_idx(ctx, cp, n_queries * k)
+    else:
+        hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
+        hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
+        hdp = hd.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        hip = hi.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_copy(dst_ptr=hdp, src_buf=out_dist)
+    ctx.enqueue_copy(dst_ptr=hip, src_buf=out_idx)
     ctx.synchronize()
     comptime if KNN_PHASE_TIMERS:
         ns_readback = perf_counter_ns() - t_phase
@@ -1400,14 +1453,17 @@ def _knn_search_on_device_index(
     # (`bench/results/column_invariance/`), so the pair is not hypothetical
     # bookkeeping.
     if trace.enabled:
-        trace.record_host("knn.sorted_dist", hd.unsafe_ptr(), n_queries * k)
-        trace.record_host("knn.sorted_idx", hi.unsafe_ptr(), n_queries * k)
+        trace.record_host("knn.sorted_dist", hdp, n_queries * k)
+        trace.record_host("knn.sorted_idx", hip, n_queries * k)
 
-    var hdp = hd.unsafe_ptr()
-    var hip = hi.unsafe_ptr()
     for i in range(n_queries * k):
         out_dist_ptr.unsafe_store(i, hdp.unsafe_load(i))
         out_idx_ptr.unsafe_store(i, hip.unsafe_load(i))
+    _ = hd^
+    _ = hi^
+    if pooled:
+        # Every queued read of the pool retired at the readback's wait.
+        knn_pool_release(cache.value())
     comptime if KNN_PHASE_TIMERS:
         ns_sort = perf_counter_ns() - t_phase
         print(

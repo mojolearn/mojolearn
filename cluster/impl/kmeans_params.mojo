@@ -147,6 +147,11 @@ struct KMeansParams(Copyable, ImplicitlyCopyable, Movable):
     # KMeans estimator leaves it False unless built with
     # `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` (2026-10-04).
     var lazy_shift: Bool
+    # Not a cuVS field (lane fg-ivf B2, `IVF_IDN_RECLUSTER_CAP`): when > 0,
+    # the k-means|| recluster (`init_scalable_kmeans_plus_plus`) runs at most
+    # this many Lloyd iterations instead of `KMeansParams.default()`'s 300.
+    # 0 (the default, every caller but the IVF builds) leaves it uncapped.
+    var recluster_max_iter: Int
 
     @staticmethod
     def default() -> Self:
@@ -173,6 +178,7 @@ struct KMeansParams(Copyable, ImplicitlyCopyable, Movable):
             batch_centroids=0,
             inertia_check=False,
             lazy_shift=False,
+            recluster_max_iter=0,
         )
 
     def uses_scalable_plus_plus(self) -> Bool:

@@ -2,8 +2,6 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Transformer backward kernels and host-side launch composition used by the independent gradient checks."""
 
-from transformer.experiments.summary_model import model_summary_backward
-from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
 from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
@@ -3608,24 +3606,11 @@ def llama_decoder_layer_backward_device(
     timing_tick(ctx, ton, tk, "bwd.before_attention")
     bst.attn_repaired = 0
     bst.attn_backward_status = -1
-    if NN20_BALANCED_SUMMARY_TREE:
-        if fwd.attn_forward_status != 20:
-            raise Error("NN20 backward requires summary-profile forward state")
-        var record_attention = materialize or trace.enabled
-        if record_attention:
-            ensure_backward_attention_capacity(ctx, bst, l, s)
-        model_summary_backward(ctx,bst.attn_zdot,bst.d_q_rope,bst.d_k_cache,bst.d_v_cache,
-            fwd.q_rope,bst.d_attn_ctx,fwd.k_cache,fwd.v_cache,fwd.amax,fwd.denom,
-            bst.d_attn_weights,bst.d_attn_masked,bst.d_attn_scores,bst.d_qk_cell,
-            b,l,nh,nkv,hd,s,pos0,key_lo,window,scale,record_attention)
-        bst.attn_backward_status = 20
-        if record_attention:
-            _rec(ctx,trace,prefix,17,bst.d_attn_weights,cells)
-            _rec(ctx,trace,prefix,18,bst.attn_zdot,b*nh*l)
-            _rec(ctx,trace,prefix,19,bst.d_attn_masked,cells)
-            _rec(ctx,trace,prefix,20,bst.d_attn_scores,cells)
-            _rec(ctx,trace,prefix,21,bst.d_qk_cell,cells)
-    elif fwd.attn_v2:
+    # Tried 2026-10-08 (MOJOLEARN_IDN_ATTN_SOFTMAX=1, the NN20 summary_tree arm, run ge123e6f9): NV/AMD lm-forward
+    # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
+    # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
+    # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
+    if fwd.attn_v2:
         if materialize or trace.enabled:
             ensure_backward_attention_capacity(ctx, bst, l, s)
             attention_v2_model_backward[True](

@@ -56,7 +56,9 @@ from core.xtdz_coalesced import column_mean_launch
 from core.gemm import gemm_nt
 from decomposition.impl.linalg.detail.pca import (
     PCA_FAST_GRAM_MMA,
+    PCA_LEAN_SCRATCH,
     compute_covariance,
+    pca_cov_scratch_floats,
     eig_and_truncate,
     pca_transform,
     pca_validate,
@@ -131,8 +133,15 @@ def pca_fit_host(
         pooled = not gram_splitk_applies(n_features, n_features, n_rows)
     var x = pool_take[_PCA_POOL](ctx, big) if pooled else ctx.enqueue_create_buffer[DType.float32](big)
     var alias_n = 1 if pooled else big
+    var alias2_n = alias_n
+    comptime if PCA_LEAN_SCRATCH:
+        # P2 (MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF restores n*d each): each
+        # alias buffer sized to what the IDENTICAL route reads, 1 if unread
+        var lean = pca_cov_scratch_floats(n_rows, n_features)
+        alias_n = lean[0]
+        alias2_n = lean[1]
     var xa = ctx.enqueue_create_buffer[DType.float32](alias_n)
-    var xa2 = ctx.enqueue_create_buffer[DType.float32](alias_n)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](alias2_n)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -151,9 +160,12 @@ def pca_fit_host(
     # (row 31). `pca.cov` is the product as the solver receives it;
     # `pca.jacobi.a` keeps its name and is the matrix the solver left.
     pca_validate(n_rows, n_features, n_components)
-    # PCA_FAST_GRAM_MMA: `x` is this fit's own device copy, never read again,
-    # so its restore pass is skipped
-    compute_covariance(ctx, x, xa, xa2, mu, cov, n_rows, n_features, not PCA_FAST_GRAM_MMA)
+    # PCA_FAST_GRAM_MMA and P2 (PCA_LEAN_SCRATCH): `x` is this fit's own
+    # device copy, never read again, so its restore pass is skipped
+    compute_covariance(
+        ctx, x, xa, xa2, mu, cov, n_rows, n_features,
+        not (PCA_FAST_GRAM_MMA or PCA_LEAN_SCRATCH),
+    )
     if trace.enabled:
         trace.record_device(ctx, "pca.mean", mu, n_features)
         trace.record_device(ctx, "pca.cov", cov, n_features * n_features)
@@ -300,6 +312,26 @@ def tsvd_fit_host(
     n_components: Int,
 ) raises:
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    tsvd_fit_device(
+        ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components
+    )
+    _ = x^
+
+
+def tsvd_fit_device(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises:
+    """`tsvd_fit_host`'s body on a caller-owned device buffer `x` of
+    n_rows * n_features floats: uploads X into it, and leaves it holding X
+    unchanged (the Gram only reads it), so T1 can run the explained tail on
+    the same buffer."""
     var gram = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
@@ -359,6 +391,65 @@ from experiments.classical_identical_ideas.linear_controls import TSVD_FUSED_STA
 from core.blocked_moments import bm_tsvd_variances
 
 
+from core.host_tile_fold import IDN_XTY_TILED, XTY_TILE_ROWS, xty_tiles
+from core.xtdz_coalesced import XTY_TILE_TPB, xty_tile_fold_kernel
+from experiments.classical_identical_ideas.shared_controls import C01_MEAN
+from checks.numerics import identical_mul_add
+
+#: T2, lane fg-pca (2026-10-09), DEFAULT OFF: `-D MOJOLEARN_IDN_COLVAR_FUSED`.
+#: `_column_variance` (TruncatedSVD's explained variance, on X and on X V^T)
+#: ran the mean pass, the centering pass (n*c read + write), the square pass
+#: (read + write) and the mean of the squares (read): 5 n*c words. Here the
+#: second mean pass folds `ftz(identical_mul(c, c))` with
+#: `c = ftz(identical_mul_add(-1, ftz(mu), ftz(x)))` formed in registers:
+#: the words `shift_columns_kernel` then `square_in_place_kernel` stored, in
+#: the SAME tile order and chain as `xty_tiled` (`xty_tile_partial_kernel`'s
+#: `ftz(acc + v)` over the tile's rows ascending from 0.0, then the unchanged
+#: `xty_tile_fold_kernel` with its quotient), and `m` is left untouched. Cost:
+#: -2 read/write passes over the matrix (-4 n*c words) at any shape. Bits:
+#: none (the same words into the same fold); the host column is unchanged.
+#: Taken only where the mean pass is `xty_tiled` (IDENTICAL's IDN_XTY_TILED,
+#: no C01_MEAN arm, no FAST column-variance switch).
+comptime IDN_COLVAR_FUSED = (
+    IDN_XTY_TILED
+    and IDN_DECOMP_MEAN_LAUNCH
+    and not C01_MEAN
+    and not TSVD_FAST_COLVAR
+    and is_defined["MOJOLEARN_IDN_COLVAR_FUSED"]()
+)
+
+
+def colvar_tile_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    mu: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+):
+    """`xty_tile_partial_kernel`'s mean arm over the centered squares: thread
+    (k, j), j fastest, column j's chain `acc = ftz(acc + sq)` over tile k's
+    rows ascending from 0.0, sq the word the shift and square passes stored;
+    `part[j * tiles + k]`."""
+    var n = Int(n_in)
+    var D = Int(d_in)
+    var tiles = Int(tiles_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = gid // D
+    var j = gid - k * D
+    if k >= tiles:
+        return
+    var r0 = k * XTY_TILE_ROWS
+    var r1 = min(n, r0 + XTY_TILE_ROWS)
+    var mv = ftz(mu.unsafe_load(j))
+    var acc = Float32(0.0)
+    for r in range(r0, r1):
+        var xv = ftz(x.unsafe_load(r * D + j))
+        var c = ftz(identical_mul_add(Float32(-1.0), mv, xv))
+        acc = ftz(acc + ftz(identical_mul(c, c)))
+    part.unsafe_store(j * tiles + k, acc)
+
+
 def _column_variance(
     ctx: DeviceContext,
     mut m: DeviceBuffer[DType.float32],
@@ -371,6 +462,31 @@ def _column_variance(
     mean (`column_mean_kernel`), the centering (`shift_columns_kernel`),
     the pinned square, then the column mean of the squares."""
     var cells = n_rows * n_cols
+    comptime if IDN_COLVAR_FUSED:
+        # T2: the mean (xty_tiled), then the centered squares' mean in the
+        # same tile order, `m` read-only
+        column_mean_launch(ctx, mu, m, n_rows, n_cols)
+        var tiles = xty_tiles(n_rows)
+        var tcells = tiles * n_cols
+        var ws = ctx.enqueue_create_buffer[DType.float32](max(tcells, 1))
+        ctx.enqueue_function[colvar_tile_partial_kernel](
+            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            m.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_rows), Int32(n_cols), Int32(tiles),
+            grid_dim=((tcells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
+            block_dim=(XTY_TILE_TPB, 1, 1),
+        )
+        ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
+            var_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(tiles), Int32(n_rows), Int32(1),
+            grid_dim=(n_cols, 1, 1),
+            block_dim=(STATS_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        _ = ws^
+        return
     comptime if TSVD_FAST_COLVAR:
         column_mean_launch[True](ctx, mu, m, n_rows, n_cols)
     elif IDN_DECOMP_MEAN_LAUNCH:
@@ -487,13 +603,39 @@ def tsvd_explained_host(
         x = pool_take[_PCA_POOL](ctx, n_rows * n_features)
     else:
         x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    _tsvd_explained_tail(
+        ctx, x, components_ptr, explained_ptr, ratio_ptr,
+        n_rows, n_features, n_components,
+    )
+    comptime if TSVD_FAST_POOL:
+        # after the final wait: no launch still reads x
+        pool_give[_PCA_POOL](x^)
+    else:
+        _ = x^
+
+
+def _tsvd_explained_tail(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises:
+    """`tsvd_explained_host` from the device copy of X on: uploads the
+    components, X V^T, both column variances (`x` is left centered and
+    squared: the caller must not read it again), the device tail, the two
+    downloads and the final wait. Shared by `tsvd_explained_host` and
+    `tsvd_fit_explained_host` (T1) so the two cannot drift."""
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
     var xt = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     var mu_t = ctx.enqueue_create_buffer[DType.float32](n_components)
     var var_t = ctx.enqueue_create_buffer[DType.float32](n_components)
     var mu_x = ctx.enqueue_create_buffer[DType.float32](n_features)
     var var_x = ctx.enqueue_create_buffer[DType.float32](n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     ctx.synchronize()
     gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
@@ -513,10 +655,58 @@ def tsvd_explained_host(
     ctx.synchronize()
     _ = d_exp^
     _ = d_rat^
-    comptime if TSVD_FAST_POOL:
-        # after the final wait: no launch still reads x
-        pool_give[_PCA_POOL](x^)
+    _ = components^
+    _ = xt^
+
+
+#: T1, lane fg-pca (2026-10-09), IDENTICAL default; rollback
+#: `-D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF`. `TruncatedSVD.fit` called
+#: `tsvd_fit` and then `tsvd_explained`, and each copied X host -> device
+#: (n*d*4 bytes each: 880 MB at 1M x 220, about 46 ms per copy at a
+#: pageable ~19 GB/s) and allocated its own n*d buffer. `tsvd_fit_explained`
+#: is one binding call that uploads X once: the Gram (`gemm_tn` reads X and
+#: never writes it), the eigensolver, then the explained-variance tail on the
+#: SAME device buffer. Cost: -1 H2D copy of X and -1 n*d allocation per fit at
+#: any shape. Bits: none (the same kernels on the same words in the same
+#: order; the components reach the tail through the same Float32 output
+#: array). The OFF arm (and FAST, which keeps its pooled pair, and
+#: TSVD_FUSED_STATS, which has its own upload) runs the two calls in order.
+comptime TSVD_ONE_UPLOAD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF"]()
+    and not TSVD_FUSED_STATS
+)
+
+
+def tsvd_fit_explained_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises:
+    """`tsvd_fit_host` then `tsvd_explained_host`, with one upload of X
+    under TSVD_ONE_UPLOAD (T1)."""
+    comptime if not TSVD_ONE_UPLOAD:
+        tsvd_fit_host(ctx, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components)
+        tsvd_explained_host(
+            ctx, x_ptr, components_ptr, explained_ptr, ratio_ptr,
+            n_rows, n_features, n_components,
+        )
     else:
+        var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+        tsvd_fit_device(
+            ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components
+        )
+        pca_validate(n_rows, n_features, n_components)
+        _tsvd_explained_tail(
+            ctx, x, components_ptr, explained_ptr, ratio_ptr,
+            n_rows, n_features, n_components,
+        )
         _ = x^
 
 

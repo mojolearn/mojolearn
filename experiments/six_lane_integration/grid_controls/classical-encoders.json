@@ -23,11 +23,11 @@
       "notes": "keys one (column, chunk) radix task counts and scatters; same words for every arm"
     },
     "c08_unique_scan": {
-      "define": "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN", "kind": "switch",
-      "arms": {"off": [], "on": ["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN"]}, "default": "off",
-      "source": ["experiments/classical_identical_ideas/shared_controls.mojo:46", "x_prep/device.mojo:564", "x_prep/ddict.mojo:209"],
-      "binding": "_mojolearn_x_prep", "bits_change": false, "status": "new",
-      "notes": "device unique_cols op as a chunked run scan (count / per-column offsets / write) over all columns in 3 launches, replacing one thread per column walking n sorted rows; same words and counts as unique_cols_unit"
+      "define": "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF", "kind": "switch",
+      "arms": {"on": [], "off": ["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF"]}, "default": "on",
+      "source": ["experiments/classical_identical_ideas/shared_controls.mojo:84", "x_prep/device.mojo:567", "x_prep/ddict.mojo:209", "core/six_lane_experiment_guards.mojo:193"],
+      "binding": "_mojolearn_x_prep", "bits_change": false, "status": "promoted:ge123e6f9",
+      "notes": "PROMOTED 2026-10-08 (lane grid-act-3, grid ge123e6f9): incumbent -> scan ms NV/AMD istella, taxi: onehot 53.9->46.7 / 75.2->21.2, 41.7->32.1 / 72.1->18.2; ordinal 65.0->46.2 / 75.2->21.2, 49.0->30.2 / 71.5->17.5; target-encoder 188.3->175.4 / 142.3->88.4, 148.2->133.0 / 134.3->78.8; 0.525x combined; digests equal to the incumbent (no bits). Default on in IDENTICAL; arm off = MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF (old one-thread-per-column walk); the old on define is refused. device unique_cols op as a chunked run scan (count / per-column offsets / write) over all columns in 3 launches, replacing one thread per column walking n sorted rows; same words and counts as unique_cols_unit"
     },
     "c08_target_codes": {
       "define": "MOJOLEARN_CLASSICAL_C08_TARGET_CODES", "kind": "switch",

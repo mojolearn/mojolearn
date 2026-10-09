@@ -51,22 +51,18 @@
     "off": [],
     "c04": [
      "MOJOLEARN_CLASSICAL_PCA_COV=4"
-    ],
-    "c23": [
-     "MOJOLEARN_CLASSICAL_PCA_COV=23"
     ]
    },
    "default": "off",
    "source": [
-    "decomposition/impl/linalg/detail/pca.mojo:214",
-    "decomposition/impl/linalg/detail/pca.mojo:227",
+    "decomposition/impl/linalg/detail/pca.mojo:220",
     "core/blocked_moments.mojo:521",
-    "core/blocked_moments.mojo:554",
-    "decomposition/host/pca_oracle.mojo:737"
+    "decomposition/host/pca_oracle.mojo:740",
+    "experiments/classical_identical_ideas/linear_controls.mojo"
    ],
    "binding": "_mojolearn_estimators",
-   "bits_change": true,
-   "status": "split_from:C04_LOAD_CENTER(PCA)+C23_CENTERED_PANELS(PCA), both rewritten row-parallel; c04 keeps the old C04 cell values, c23 is a new one-pass Chan profile"
+   "bits_change": "c04: true (the old C04 cell values)",
+   "status": "split_from:C04_LOAD_CENTER(PCA)+C23_CENTERED_PANELS(PCA), both rewritten row-parallel; c04 keeps the old C04 cell values, c23 is a new one-pass Chan profile; c23 arm deleted 2026-10-08 (lane grid-act-2, grid ge123e6f9 loser)"
   },
   "C04_LDA": {
    "define": "MOJOLEARN_CLASSICAL_C04_LDA",
@@ -297,6 +293,12 @@
    "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE",
    "control": "C25_PROJECTION_REUSE",
    "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 noise, a loser. on/off ms ratio NV/AMD: nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884; kernel_rel_error SAME. Code recoverable at main ad7ed2370; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_PCA_COV=23",
+   "control": "PCA_COV",
+   "arm": "c23",
+   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. c23/off ms ratio NV/AMD on pca: istella 2.281/1.265 (154.0 -> 351.3 NV, 53.1 -> 67.2 AMD), taxi 0.903/0.782; combined 1.195x SLOWER (dimension-dependent: the one-pass d x d leaf Gram loses at wide d; lane grid-flips-1 refused to flip it). Deleted the C23 branch in decomposition/impl/linalg/detail/pca.mojo and pca_oracle.mojo, bm_onepass_covariance (core/blocked_moments.mojo) and its host twin; c04 stays (unmeasured), C23_MCD is separate. Code recoverable at main 42d1e42c6; =23 refused in core/six_lane_experiment_guards.mojo."
   }
  ],
  "notes": [

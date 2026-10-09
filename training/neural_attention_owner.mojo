@@ -35,7 +35,9 @@ from transformer.checks.transformer_backward import (
     LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
 
-# Both are OFF: no new source has compile/identity/quality/timing evidence.
+# NN31 (MOJOLEARN_IDN_ACT_RETAIN=2) is the IDENTICAL default since 2026-10-08
+# (lane grid-act-4, grid ge123e6f9: samba-train-step 0.890x, same bits); NN32
+# (=1) stays an arm; -D MOJOLEARN_IDN_ACT_RETAIN_OFF replays.
 # NN32 isolates retention vs replay in one native layer owner. NN31 admits
 # retention by actual retained bytes and replay cost; budget misses replay.
 # Never choose a rule from a dataset, board size or hardware vendor.
@@ -122,13 +124,13 @@ struct AttentionCheckpointBudget(Movable):
         return owner
 
     def begin_forward(mut self, owner: Int) raises:
-        for i in range(len(self.outstanding_owners)):
+        for i in range(len(self.outstanding_owners)):  # small-loop(outstanding_owners: open forward owners): walks owner handles, not data
             if self.outstanding_owners[i] == owner:
                 raise Error("NN31: owner already has an outstanding forward")
         self.outstanding_owners.append(owner)
 
     def end_forward(mut self, owner: Int) raises:
-        for i in range(len(self.outstanding_owners)):
+        for i in range(len(self.outstanding_owners)):  # small-loop(outstanding_owners: open forward owners): walks owner handles, not data
             if self.outstanding_owners[i] == owner:
                 _ = self.outstanding_owners.pop(i)
                 return
@@ -138,7 +140,7 @@ struct AttentionCheckpointBudget(Movable):
                     replay_operations: Int, apply_cost_policy: Bool) raises -> Int:
         if owner <= 0 or bytes <= 0 or replay_operations < 0:
             raise Error("NN31: invalid retained-state reservation")
-        for i in range(len(self.leases)):
+        for i in range(len(self.leases)):  # small-loop(leases: retained-state leases): walks lease records, not data
             if self.leases[i].owner == owner:
                 raise Error("NN31: owner already holds a retained forward")
         if bytes > self.limit_bytes - self.live_bytes:
@@ -158,7 +160,7 @@ struct AttentionCheckpointBudget(Movable):
     def release(mut self, owner: Int, lease: Int) raises:
         if lease == 0:
             return
-        for i in range(len(self.leases)):
+        for i in range(len(self.leases)):  # small-loop(leases: retained-state leases): walks lease records, not data
             if self.leases[i].number == lease:
                 if self.leases[i].owner != owner:
                     raise Error("NN31: lease belongs to another owner")

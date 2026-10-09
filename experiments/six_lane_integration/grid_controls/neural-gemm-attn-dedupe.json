@@ -18,9 +18,6 @@
     "stream": [
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2"
     ],
-    "stream_all": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3"
-    ],
     "pages": [
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=9"
     ],
@@ -37,11 +34,10 @@
    "default": "off",
    "source": [
     "gemm/experiments/neural_switches.mojo:57",
-    "gemm/neural_dispatch.mojo:65",
+    "gemm/neural_dispatch.mojo:67",
     "gemm/experiments/neural_plans.mojo:31",
     "gemm/experiments/neural_streaming.mojo:31",
-    "gemm/experiments/neural_tiled.mojo:28",
-    "gemm/checks/gemm_identical.mojo:295"
+    "gemm/experiments/neural_tiled.mojo:28"
    ],
    "binding": [
     "_mojolearn_byte_lm",
@@ -77,7 +73,7 @@
      "as pages"
     ]
    },
-   "note": "Arms are mutually exclusive by construction. stream_all (NI02) moves every GEMM caller (gemm lane, classical, neural); the other arms only the neural dispatch. bits_change: stream/stream_all/stream_exact/fold_exact/pages/threadmap/cost/async run the selected neural profile (v1 contract leaf unless the leaf control is set); geometry reuses incumbent geometries. ID check required per arm.",
+   "note": "Arms are mutually exclusive by construction; every arm moves only the neural dispatch (stream_all, NI02, the every-caller arm, deleted 2026-10-08, see removed). bits_change: stream/stream_exact/fold_exact/pages/threadmap/cost/async run the selected neural profile (v1 contract leaf unless the leaf control is set); geometry reuses incumbent geometries. ID check required per arm.",
    "phase2_combinations": {
     "stream_exact": [
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=4"
@@ -115,7 +111,7 @@
    "default": "all",
    "source": [
     "gemm/experiments/neural_switches.mojo:64",
-    "gemm/neural_dispatch.mojo:162",
+    "gemm/neural_dispatch.mojo:164",
     "gemm/neural_backward.mojo:58",
     "training/byte_lm.mojo:1465",
     "training/mlp_ops.mojo:507"
@@ -225,30 +221,28 @@
    "note": "mlp arm reaches mlp-train-step; cnn arm is non-board (x_cnn)."
   },
   "neural_gemm_pair": {
-   "define": "MOJOLEARN_IDN_NEURAL_NN05 / MOJOLEARN_IDN_NEURAL_NN07",
+   "define": "MOJOLEARN_IDN_NEURAL_NN07",
    "kind": "switch",
    "arms": {
     "off": [],
-    "nn05": [
-     "MOJOLEARN_IDN_NEURAL_NN05=1"
-    ],
     "nn07": [
      "MOJOLEARN_IDN_NEURAL_NN07=1"
     ]
    },
    "default": "off",
    "source": [
-    "gemm/experiments/neural_grouped.mojo:24",
-    "gemm/experiments/neural_grouped.mojo:25",
-    "gemm/neural_dispatch.mojo:286"
+    "gemm/experiments/neural_grouped.mojo:28",
+    "gemm/neural_dispatch.mojo:45",
+    "gemm/neural_dispatch.mojo:279",
+    "core/six_lane_experiment_guards.mojo:199"
    ],
    "binding": [
     "_mojolearn_transformer",
     "_mojolearn_byte_lm"
    ],
    "bits_change": true,
-   "status": "kept",
-   "note": "Out of this lane's merge list; review proposes IDN_NEURAL_GEMM_GROUP={pair,pack,v2} with NI07. Owed to a follow-up lane."
+   "status": "kept (nn05 arm removed 2026-10-08)",
+   "note": "nn05 (MOJOLEARN_IDN_NEURAL_NN05, the fused gate/up pair kernel) DELETED 2026-10-08 by lane grid-act-4 (grid ge123e6f9 loser, see removed); nn07 (operand staging) is unmeasured and stays. Out of this lane's merge list; review proposes IDN_NEURAL_GEMM_GROUP={pair,pack,v2} with NI07. Owed to a follow-up lane."
   },
   "neural_gemm_workspace": {
    "define": "MOJOLEARN_IDN_NEURAL_NN12",
@@ -327,21 +321,16 @@
    "kind": "arms",
    "arms": {
     "off": [],
-    "summary_tree": [
-     "MOJOLEARN_IDN_ATTN_SOFTMAX=1"
-    ],
     "online_tile32": [
      "MOJOLEARN_IDN_ATTN_SOFTMAX=2"
     ]
    },
    "default": "off",
    "source": [
-    "transformer/experiments/attention_summary_contract.mojo:14",
     "training/neural_identical_experiments.mojo:80",
-    "transformer/impl/llama/modeling_llama.mojo:4203",
     "transformer/impl/llama/attention_v2_model_device.mojo:331",
     "transformer/impl/llama/attention_v2_model_device.mojo:795",
-    "transformer/checks/transformer_backward.mojo:3628"
+    "core/six_lane_experiment_guards.mojo:77"
    ],
    "binding": [
     "_mojolearn_transformer",
@@ -354,7 +343,7 @@
     "I.N.NN20",
     "I.N.NI20"
    ],
-   "note": "online_tile32 (MOJOLEARN_IDN_ATTN_SOFTMAX=2) is the attention-online-tile32.fp32.v2 profile; since lane/attention-tiled-v2 (2026-10-07) its device kernels are the tiled ones in attention_v2_model_device.mojo (forward _forward_tiled: one QK^T and one PV sweep per query tile, 32-key device tiles in a 64-key shared ring, two running words per row; backward _prepare_tiled/_dq_tiled/_dkdv_tiled, all in the contract's fold order), not the one-thread-per-row reference, which remains for the Apple column, the trace-only diagnostic cells and head dims outside {16,32,64}. Host column: attention_v2_model_host.mojo (byte_lm_host_kernels.mojo:931, transformer_oracle.mojo:2057). Bits change vs off/summary_tree (profile), equal on NVIDIA and AMD. Its forward rows-per-block sweep is attn_v2_tq (grid_controls/attention-tiled-v2.json)."
+   "note": "online_tile32 (MOJOLEARN_IDN_ATTN_SOFTMAX=2) is the attention-online-tile32.fp32.v2 profile; since lane/attention-tiled-v2 (2026-10-07) its device kernels are the tiled ones in attention_v2_model_device.mojo (forward _forward_tiled: one QK^T and one PV sweep per query tile, 32-key device tiles in a 64-key shared ring, two running words per row; backward _prepare_tiled/_dq_tiled/_dkdv_tiled, all in the contract's fold order), not the one-thread-per-row reference, which remains for the Apple column, the trace-only diagnostic cells and head dims outside {16,32,64}. Host column: attention_v2_model_host.mojo (byte_lm_host_kernels.mojo:931, transformer_oracle.mojo:2057). Bits change vs off (profile), equal on NVIDIA and AMD. Its forward rows-per-block sweep is attn_v2_tq (grid_controls/attention-tiled-v2.json). Arm summary_tree (=1) deleted 2026-10-08 (grid ge123e6f9, 1.6-43x slower); see removed."
   },
   "attn_stash": {
    "define": "MOJOLEARN_IDN_ATTN_STASH",
@@ -390,7 +379,7 @@
     "MOJOLEARN_ATTN_V1_PACKED_ESTASH",
     "MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"
    ],
-   "note": "Off = shipped profile (alias_y automatic on NVIDIA estash, full estash elsewhere). NN19/NN18 ATTN_ARM runtime arms stay a runtime env sweep inside an ATTN_ARM_TRIAL build (MOJOLEARN_ATTN_ARM), not grid dimensions. Build scripts map MOJOLEARN_ATTENTION_MEMORY_PROFILE=recompute|packed|alias-y to arms 1|2|3."
+   "note": "grid ge123e6f9 (lane grid-act-4, 2026-10-08): recompute SPLIT by algorithm: samba-train-step 0.905x FASTER (NV 96.0->79.5, AMD 147.2->145.7), lm-train-step 1.24x SLOWER (NV 36.0->43.6, AMD 42.7->54.4), same bits. The build-wide default stays off (stash) for the LM / transformer steps; the Samba train step takes recompute by model kind through control samba_attn_recompute (grid_controls/samba-resident.json). Off = shipped profile (alias_y automatic on NVIDIA estash, full estash elsewhere). NN19/NN18 ATTN_ARM runtime arms stay a runtime env sweep inside an ATTN_ARM_TRIAL build (MOJOLEARN_ATTN_ARM), not grid dimensions. Build scripts map MOJOLEARN_ATTENTION_MEMORY_PROFILE=recompute|packed|alias-y to arms 1|2|3."
   },
   "attn_scale_mask": {
    "define": "MOJOLEARN_NN21_SCALE_MASK",
@@ -635,20 +624,23 @@
    "note": "Read in llama_attention_forward (modeling_llama.mojo:4836), the route of lm-forward, lm-train-step, transformer-forward and samba-*: replaces the q/k/v llama_proj calls (they skip gemm/neural_dispatch). Declared for those lanes in neural-small.json, crossed with neural_gemm_pair/neural_gemm_schedule."
   },
   "gemm_group_slack": {
-   "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8",
+   "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF / _2",
    "kind": "switch",
    "arms": {
-    "off": [],
+    "slack8": [],
+    "off": [
+     "MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF=1"
+    ],
     "slack2": [
      "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1"
-    ],
-    "slack8": [
-     "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8=1"
     ]
    },
-   "default": "off",
+   "default": "slack8",
    "source": [
-    "gemm/checks/gemm_identical.mojo:6473"
+    "gemm/checks/gemm_identical.mojo:6619",
+    "gemm/checks/gemm_step_arms_check.mojo:234",
+    "bench/gemm_schedule_ab.mojo:43",
+    "core/six_lane_experiment_guards.mojo"
    ],
    "binding": [
     "_mojolearn_byte_lm",
@@ -658,8 +650,8 @@
     "_mojolearn_linalg"
    ],
    "bits_change": false,
-   "status": "kept",
-   "note": "NI03; still separate defines (owed: one int sweep). The tiles_body arm (MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY) was deleted by lane/grid-prune 2026-10-07 (OVN N01 noise)."
+   "status": "promoted:ge123e6f9",
+   "note": "NI03. Default slack 8 in IDENTICAL (the group rule doubles a ksplit group while the coarser split still issues slack * S blocks); arm off (`MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF`) is the old slack 4, arm slack2 kept; MOJOLEARN_IDN_GEMM_GROUP_SLACK_8 is refused (promoted). Schedule only: groups are powers of two aligned at leaf 0 (brief section 5 Lemmas A-C), same contract fold tree, no bit moves; host unchanged. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm): gemm gaussian NV 69.6 -> 51.7 ms (0.743x), AMD 28.5 -> 28.3 (0.99x, inside the floor), combined 0.857x, NV hash == AMD hash. PROMOTED to the IDENTICAL default by lane/grid-act-2 2026-10-08; numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md. The tiles_body arm (MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY) was deleted by lane/grid-prune 2026-10-07 (OVN N01 noise)."
   },
   "legacy_apple_plan64": {
    "define": "MOJOLEARN_LEGACY_SHAPE_APPLE_PLAN64",
@@ -1077,6 +1069,24 @@
    "control": "neural_gemm_schedule",
    "arm": "async",
    "reason": "DELETED by lane/grid-prune 2026-10-07: OVN N03 NVIDIA async pipeline 2.2x/4.2x slower than its sync control; guards refuse arm 8. Recoverable at main ab554bb4a."
+  },
+  {
+   "define": "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+   "control": "attn_softmax",
+   "arm": "summary_tree",
+   "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. summary_tree/off ms ratio NV/AMD: lm-forward 4.86/16.79 (65.8 -> 319.9 NV, 34.2 -> 574.2 AMD), lm-train-step 42.89/40.18, samba-forward 1.79/4.79, samba-train-step 1.64/1.81, transformer-forward 5.48/21.89 (7.30x combined SLOWER); mean_nll not judged. The NN20 summary tree (transformer/experiments/attention_summary_contract/tree/split.mojo, summary_model*.mojo) and its split-KV controls (nn20_split_kv, nn20_split_kv_leaves) are deleted; online_tile32 (HOLD_BROKEN) stays. Code recoverable at main bc10b8b56; =1 refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3",
+   "control": "neural_gemm_schedule",
+   "arm": "stream_all",
+   "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. stream_all/off ms ratio NV/AMD: gemm gaussian 2.07/1.78 (61.9 -> 128.4 NV, 28.5 -> 50.7 AMD), lm-train-step 1.11/1.07 (36.0 -> 40.0 NV, 42.7 -> 45.7 AMD); 1.45x combined SLOWER; quality not judged. NI02 (gemm/checks/gemm_identical.mojo _ni02_* kernels, dispatch, workspace sizing, identical_gemm_streaming_applies and the x_cnn pre-check) deleted; geometry, stream, stream_exact, pages, cost, fold_exact, threadmap, pages_threadmap stay. Code recoverable at main bc10b8b56; =3 refused in core/six_lane_experiment_guards.mojo."
+   },
+   {
+   "define": "MOJOLEARN_IDN_NEURAL_NN05=1",
+   "control": "neural_gemm_pair",
+   "arm": "nn05",
+   "reason": "DELETED 2026-10-08 (lane grid-act-4): IDENTICAL grid ge123e6f9 loser. nn05/off ms NV/AMD: lm-forward 65.8 -> 144.4 / 34.2 -> 95.9 (2.19x / 2.80x), lm-train-step 36.0 -> 134.1 / 42.7 -> 104.2 (3.72x / 2.44x), transformer-forward 7.3 -> 28.1 / 3.2 -> 11.1 (3.85x / 3.47x); 3.0x combined SLOWER; hashes equal to the incumbent (no bits). _neural_pair_kernel (gemm/neural_dispatch.mojo) and neural_grouped_ab's shared-left / grouped arms (gemm/experiments/neural_grouped.mojo) deleted; nn07 stays. Code recoverable at main 4e3da4282; the define refused in core/six_lane_experiment_guards.mojo."
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."

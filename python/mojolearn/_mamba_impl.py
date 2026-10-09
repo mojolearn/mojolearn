@@ -924,7 +924,7 @@ class Mamba1DecodeSession:
         else:
             self._ext.mamba1_session_load_state(
                 self._native, [addr(win, name="conv_window"), addr(h, name="h")]
-                + [addr(a, name="affine checkpoint") for a in affine]
+                + [addr(a, name="affine checkpoint") for a in affine]  # glue: affine checkpoint buffer addresses
                 + ([self._state.absolute_position] if self._profile == 2 else []))
         if self._profile == 2:
             self._position = int(self._state.absolute_position)
@@ -1804,14 +1804,14 @@ class Mamba3Block(_MambaBase):
                   (nh,), (dm, di))
         arrays = [_buffers.empty(shape, '<f4') for shape in shapes]  # glue: fixed parameter buffer list
         self._prefill_binding.mamba3_prefill_session_export_weights(
-            self._prefill_session, [_addr(a) for a in arrays], generation)
+            self._prefill_session, [_addr(a) for a in arrays], generation)  # glue: exported weight buffer addresses
         return dict(zip(self._W_NAMES, arrays))
 
     def __getstate__(self):
         state = self.__dict__.copy()
         if getattr(self, "_owned_generation", None) is not None:
             snapshot = self.export_owned_weights()
-            state["_w"] = [snapshot[name] for name in self._W_NAMES]  # glue: parameter names
+            state["_w"] = [snapshot[name] for name in self._W_NAMES]  # glue: fixed parameter name list
             state["_owned_restore_pending"] = True
         state["_owned_generation"] = None
         for name in ("_prefill_session", "_prefill_binding"):  # glue: drops two native handles

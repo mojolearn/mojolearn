@@ -2786,14 +2786,20 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     if hidden2 != hidden or b1.shape != (hidden,) or b2.shape != (out_width,):
         raise ValueError("MLP session weight/bias shapes do not agree")
     # API objects and their shape metadata only; row values stay in buffers.
-    sessions = [_c32(x, "session input", "mlp_inference_sessions") for x in inputs]
-    if not sessions or any(len(x.shape) != 2 or x.shape[1] != width for x in sessions):
-        raise ValueError("MLP sessions require at least one (rows, width) input")
-    rows = [int(x.shape[0]) for x in sessions]
-    output = _buffers.empty((sum(rows), out_width), '<f4')
-    wrote = int(_load(numeric_mode).mlp_sessions(
+    sessions = [_c32(x, "session input", "mlp_inference_sessions") for x in inputs]  # glue: converts caller session arrays
+    shapes = [x.shape for x in sessions]  # glue: session shape tuples only
+    native = _load(numeric_mode)
+    # The binding checks every (rows, width) shape and returns the total
+    # rows, so the output size is Mojo's number, not a Python sum.
+    try:
+        total_rows = int(native.mlp_sessions_rows(shapes, width))
+    except Exception as exc:
+        raise ValueError(str(exc)) from exc
+    output = _buffers.empty((total_rows, out_width), '<f4')
+    addrs = [_addr_ro(x) for x in sessions]  # glue: session buffer addresses
+    wrote = int(native.mlp_sessions(
         [_addr(output), _addr_ro(w1), _addr_ro(b1), _addr_ro(w2), _addr_ro(b2)],
-        [_addr_ro(x) for x in sessions], rows, [width, hidden, out_width]))
+        addrs, shapes, [width, hidden, out_width]))
     if wrote != output.size:
         raise RuntimeError("MLP sessions returned an invalid output count")
     return output

@@ -430,6 +430,42 @@ def tsvd_explained_binding(
 
 
 
+def tsvd_fit_explained_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    singular_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The GPU binding's `tsvd_fit_explained` (lane fg-pca T1) on the host:
+    `host_tsvd_fit` then `host_tsvd_explained` on the components just
+    written, exactly the two calls above in order (the host column has no
+    upload to save). Returns 0."""
+    if len(params) != 3:
+        raise Error("tsvd_fit_explained: params must contain 3 values")
+    var x_address = _index(x_addr)
+    var c_address = _index(components_addr)
+    var cp = f32_ptr(c_address)
+    var sp = f32_ptr(_index(singular_addr))
+    var ep = f32_ptr(_index(explained_addr))
+    var rp = f32_ptr(_index(ratio_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    with GILReleased(Python()):
+        host_pca_validate_first(nr, nf, nc)
+        var x = read_f32(x_address, nr * nf)
+        var result = host_tsvd_fit(x, nr, nf, nc)
+        for i in range(nc * nf):
+            cp[i] = Float32(result.components[i])
+        for i in range(nc):
+            sp[i] = Float32(result.singular_vals[i])
+        host_pca_validate_first(nr, nf, nc)
+        host_tsvd_explained(f32_ptr(x_address), f32_ptr(c_address), ep, rp, nr, nf, nc)
+    return PythonObject(0)
+
+
 def lm_classical_stats_binding() raises -> PythonObject:
     # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     return PythonObject(Int(C02_LINEAR_PAIR))
@@ -1533,6 +1569,7 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[pca_fit_full_binding]("pca_fit_full")
         module.def_function[tsvd_fit_binding]("tsvd_fit")
         module.def_function[tsvd_explained_binding]("tsvd_explained")
+        module.def_function[tsvd_fit_explained_binding]("tsvd_fit_explained")
         module.def_function[ols_fit_binding]("ols_fit")
         module.def_function[lm_col_sums_binding]("lm_col_sums")
         module.def_function[lm_classical_stats_binding]("lm_classical_stats")

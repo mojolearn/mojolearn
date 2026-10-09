@@ -556,7 +556,7 @@ def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: buffer addresses of one block call): reads the pointer list, not data
         a.append(Int(py=addrs[i]))
     return a^
 
@@ -810,7 +810,7 @@ def mamba1_session_open_binding(
         raise Error("mamba1 session: already open; close it first")
     var a = List[Int]()
     a.append(0)
-    for i in range(count):
+    for i in range(count):  # small-loop(count: session buffer addresses): reads the pointer list, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba1_session_open: null buffer address at slot " + String(i))
@@ -2656,7 +2656,8 @@ def mamba3_prefill_session_backward_owned_binding(session: PythonObject, addrs: 
 # compilation, identity, quality or end-to-end measurements have been run.
 comptime IDN_SAMBA_M3_FORWARD_TAPE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 0]() == 3  # NI48 arm
+    and not is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]()
+    and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]() == 3  # NI48 arm (default 2 since 2026-10-08)
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 

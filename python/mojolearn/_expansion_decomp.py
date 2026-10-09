@@ -538,7 +538,8 @@ class _Kit:
     def w4_flags(self):
         """lane/apple-fast-w4-decomp: the binding's compiled w4 candidates
         (`x_decomp_w4_flags`: bit 1 LLE_FAST_DEV_LU, bit 2
-        RSVD_FAST_DIRECT_IN; 0 on a binding without the entry)."""
+        RSVD_FAST_DIRECT_IN on FAST + Apple or RSVD_IDN_DIRECT_IN on
+        IDENTICAL, lane fg-pca R1; 0 on a binding without the entry)."""
         f = self.__dict__.get("_w4_flags")
         if f is None:
             try:

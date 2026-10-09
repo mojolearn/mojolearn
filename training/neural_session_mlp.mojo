@@ -56,7 +56,7 @@ def nn_mlp_sessions_device(ctx: DeviceContext, inputs: List[Int], rows: List[Int
         identical_gemm_workspace_max_floats(total, out_width, hidden))
     # Dispatch can choose different scratch plans on a session and the packed
     # batch, so size against every actual shape, not a monotonicity assumption.
-    for i in range(len(rows)):
+    for i in range(len(rows)):  # small-loop(rows: per-session row counts): sizes the scratch over sessions, not rows
         if rows[i] > 0:
             workspace_cells = max(workspace_cells, max(
                 identical_gemm_workspace_max_floats(rows[i], hidden, in_width),

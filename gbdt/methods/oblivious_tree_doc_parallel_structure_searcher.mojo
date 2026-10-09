@@ -127,7 +127,12 @@ from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
 from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA, SYM_REUSE_PARTITION
 from gbdt.methods.dynamic_boosting_folds import TFold
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
-from gbdt.trees_identical_switches import T22
+from gbdt.trees_identical_switches import (
+    T22,
+    IDN_ORD_CAT_PLANES,
+    IDN_ORD_INDEX_SHARED,
+    ORD_HIST_FOLD_SKIP,
+)
 from gbdt.methods.kernel.pointwise_scores import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_NEWTON_COSINE,
@@ -174,6 +179,11 @@ def ordered_fold_index() -> Bool:
     main's. Keying the dither on docIndices[position] would make it a pure
     layout change; it measured 6% of pw.hist on the L40S."""
     return String(getenv("MOJOLEARN_ORDERED_FOLD_INDEX")) == "1"
+
+
+#: E IDN_ORD_INDEX_SHARED: the pool key of the fold position -> permutation
+#: index map (permutation ids are >= 0)
+comptime ORD_POS_MAP_KEY = -2
 
 
 def fold_cindex_gather_kernel(
@@ -506,6 +516,24 @@ def fit_oblivious_tree_structure_traced(
         fold_order = fold_count > 1 and ordered_fold_index()
     comptime if T22:
         fold_order = fold_count > 1
+    # E IDN_ORD_INDEX_SHARED (trees_identical_switches.mojo): one
+    # permutation-order index per searched permutation (stride n_rows)
+    # instead of the fold-order copy (stride doc_count ~ 2n); the levels
+    # gather positions -> permutation indices (the pre-T22 gather through a
+    # fold position map) and the dither keys on perm[i], the document id
+    # T22 keys on. Needs a cached permutation id and a full permutation.
+    var shared_index = False
+    comptime if IDN_ORD_INDEX_SHARED:
+        shared_index = (
+            fold_count > 1 and permutation_id >= 0
+            and len(permutation) == n_rows
+        )
+        if shared_index:
+            fold_order = False
+    # the histogram and split kernels read the caller's `cindex` unless a
+    # per-permutation index stands in (T22's fold-order copy, or E's
+    # permutation-order copy), both held in `d_fold_cindex`
+    var use_fold_ci = fold_order or shared_index
     var stride = doc_count if fold_order else n_rows
     var blocks = blocks_for(layout, stride)
     var global_ids = List[Int]()
@@ -557,9 +585,30 @@ def fit_oblivious_tree_structure_traced(
                         ctx, fold_layout, pool[0].subsets.bins
                     )
             else:
-                write_fold_based_initial_bins(
-                    ctx, fold_layout, pool[0].subsets.bins
-                )
+                var bins_done = False
+                comptime if IDN_ORD_CAT_PLANES:
+                    # C (trees_identical_switches.mojo): the fit's
+                    # partition-start table (`fit_ordered` builds it once),
+                    # every partition's bins in ONE launch: the same
+                    # integers `write_fold_based_initial_bins` filled per
+                    # partition, without its 2F staging buffers, fills,
+                    # copies and drain
+                    if len(fold_part_off) > 0:
+                        var starts = fold_part_off[0].copy()
+                        ctx.enqueue_function[fold_bins_from_table_kernel](
+                            starts.unsafe_ptr(),
+                            pool[0].subsets.bins.unsafe_ptr(),
+                            Int32(len(fold_layout.parts)),
+                            Int32(doc_count),
+                            grid_dim=max((doc_count + 255) // 256, 1),
+                            block_dim=256,
+                        )
+                        _ = starts^
+                        bins_done = True
+                if not bins_done:
+                    write_fold_based_initial_bins(
+                        ctx, fold_layout, pool[0].subsets.bins
+                    )
             update_subsets_stats(ctx, target, pool[0].subsets)
         pool[0].calcer.reset_for_tree(ctx)
     else:
@@ -626,6 +675,11 @@ def fit_oblivious_tree_structure_traced(
             if pool[0].doc_ids_keys[i] == permutation_id:
                 cached = i
     var d_doc_ids: DeviceBuffer[DType.uint32]
+    # E: the permutation on the device (the dither's position -> document
+    # id map, indexed by permutation index) and the permutation-order index,
+    # one entry each when `shared_index`
+    var e_perm_ids = List[DeviceBuffer[DType.uint32]]()
+    var e_index = List[DeviceBuffer[DType.uint32]]()
     # lane/apple-fast-sym-iter, SYM_BUF_ARENA: the plain arm never reads
     # `d_doc_ids`, `d_fold_cindex` or `d_observations` (all three are the
     # fold arm's), so a handle onto a pooled word stands in for the three
@@ -635,6 +689,61 @@ def fit_oblivious_tree_structure_traced(
         sym_pooled_dummies = fold_count == 1
     if sym_pooled_dummies:
         d_doc_ids = pool[0].d_best_ids.copy()
+    elif shared_index:
+        # E: `d_doc_ids` is the fold POSITION -> permutation index map
+        # (`make_fold_doc_indices_device` at the identity: position
+        # offsets[f] + i of either slice holds prefix row i), one for every
+        # permutation, pooled under the reserved key ORD_POS_MAP_KEY; the
+        # permutation and its permutation-order index pooled per id (the
+        # pool's `doc_ids` / `fold_cindex` slots, as T22 pools its copy)
+        var pm = -1
+        for i in range(len(pool[0].doc_ids_keys)):  # small-loop(doc_ids_keys: cached permutation ids, a handful): cache lookup by id only
+            if pool[0].doc_ids_keys[i] == ORD_POS_MAP_KEY:
+                pm = i
+        if pm >= 0:
+            d_doc_ids = pool[0].doc_ids[pm].copy()
+        else:
+            d_doc_ids = ctx.enqueue_create_buffer[DType.uint32](doc_count)
+            var no_perm = ctx.enqueue_create_buffer[DType.uint32](1)
+            _ = make_fold_doc_indices_device(
+                ctx, folds, no_perm, False, d_doc_ids
+            )
+            ctx.synchronize()
+            _ = no_perm^
+            pool[0].doc_ids_keys.append(ORD_POS_MAP_KEY)
+            pool[0].doc_ids.append(d_doc_ids.copy())
+            # a one-word stand-in keeps `fold_cindex` index-aligned
+            pool[0].fold_cindex.append(ctx.enqueue_create_buffer[DType.uint32](1))
+        if cached >= 0:
+            e_perm_ids.append(pool[0].doc_ids[cached].copy())
+            e_index.append(pool[0].fold_cindex[cached].copy())
+        else:
+            var d_perm_e = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+            ctx.enqueue_copy(dst_buf=d_perm_e, src_ptr=permutation.unsafe_ptr())
+            var n_cols_e = _cindex_columns(layout)
+            var d_index_e = ctx.enqueue_create_buffer[DType.uint32](
+                max(n_cols_e * n_rows, 1)
+            )
+            # P[c, i] = cindex[c, perm[i]]: the fold-order gather at
+            # doc_count = n_rows with the permutation as the id list
+            ctx.enqueue_function[fold_cindex_gather_kernel](
+                cindex.unsafe_ptr(),
+                d_perm_e.unsafe_ptr(),
+                d_index_e.unsafe_ptr(),
+                Int32(n_rows),
+                Int32(n_rows),
+                Int32(n_cols_e),
+                grid_dim=max((n_cols_e * n_rows + 255) // 256, 1),
+                block_dim=256,
+            )
+            ctx.synchronize()
+            # held past the drain: the upload read the host list
+            _ = len(permutation)
+            pool[0].doc_ids_keys.append(permutation_id)
+            pool[0].doc_ids.append(d_perm_e.copy())
+            pool[0].fold_cindex.append(d_index_e.copy())
+            e_perm_ids.append(d_perm_e^)
+            e_index.append(d_index_e^)
     elif cached >= 0:
         d_doc_ids = pool[0].doc_ids[cached].copy()
     else:
@@ -667,6 +776,8 @@ def fit_oblivious_tree_structure_traced(
     var d_fold_cindex: DeviceBuffer[DType.uint32]
     if sym_pooled_dummies:
         d_fold_cindex = pool[0].d_best_ids.copy()
+    elif shared_index:
+        d_fold_cindex = e_index[0].copy()
     elif fold_order and cached >= 0 and cached < len(pool[0].fold_cindex):
         d_fold_cindex = pool[0].fold_cindex[cached].copy()
     elif fold_order:
@@ -755,6 +866,17 @@ def fit_oblivious_tree_structure_traced(
     # this one is re-seeded per tree from the caller's `seed`.
     var level_rand = TRandom(seed)
 
+    # A ORD_HIST_FOLD_SKIP (trees_identical_switches.mojo): the fold
+    # partitions' document counts in fold-id order (partition p of the fold
+    # layout is fold id p: `write_fold_based_initial_bins` files it under
+    # bin p, the fold bits); the fixed 8-bit histogram routes its small
+    # leading ones to the small-fold kernel. Empty = no skip.
+    var fold_part_sizes = List[Int]()
+    comptime if ORD_HIST_FOLD_SKIP:
+        if fold_count > 1 and len(fold_layout.parts) == fold_count:
+            for p in range(fold_count):  # small-loop(fold_count: fold partitions, 2F): host sizes of the fold plan
+                fold_part_sizes.append(Int(fold_layout.parts[p].size))
+
     for depth in range(max_depth):
         # their `Gather(groupedByBinObservations, observations,
         # subsets.Indices)` (`:67`). At identity observations the gather IS
@@ -774,23 +896,30 @@ def fit_oblivious_tree_structure_traced(
         var dither_ids = Optional[MutPointer[UInt32, MutAnyOrigin]]()
         comptime if ORD_DOC_ID_STORAGE:
             if fold_order:dither_ids = d_doc_ids.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        comptime if IDN_ORD_INDEX_SHARED:
+            # E: `docs` holds permutation indices; perm[i] is the document
+            # id, T22's dither key
+            if shared_index:
+                dither_ids = e_perm_ids[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if len(std_scale_word) > 0:
             var scale_word = rebind[MutPointer[Float32, MutAnyOrigin]](
                 std_scale_word[0].unsafe_ptr().unsafe_offset(1)
             )
-            if fold_order:
+            if use_fold_ci:
                 calcer.submit_compute_dev(
                     ctx, subsets, d_fold_cindex, docs, doc_count, sm_count,
                     scale_word,
                     dither_ids=dither_ids,
+                    fold_part_sizes=fold_part_sizes,
                 )
             else:
                 calcer.submit_compute_dev(
                     ctx, subsets, cindex, docs, doc_count, sm_count,
                     scale_word,
                     dither_ids=dither_ids,
+                    fold_part_sizes=fold_part_sizes,
                 )
-        elif fold_order:
+        elif use_fold_ci:
             calcer.submit_compute(
                 ctx, subsets, d_fold_cindex, docs, doc_count, sm_count,
                 fixed_scale,
@@ -939,7 +1068,7 @@ def fit_oblivious_tree_structure_traced(
                 var split_ci = rebind[MutPointer[UInt32, MutAnyOrigin]](
                     cindex.unsafe_ptr()
                 )
-                if fold_order:
+                if use_fold_ci:
                     split_ci = rebind[MutPointer[UInt32, MutAnyOrigin]](
                         d_fold_cindex.unsafe_ptr()
                     )
@@ -971,7 +1100,7 @@ def fit_oblivious_tree_structure_traced(
                     grid_dim=(num_blocks, 1, 1),
                     block_dim=(PW_SPLIT_BLOCK_SIZE, 1, 1),
                 )
-        if fold_order:
+        if use_fold_ci:
             split_subsets_from_desc(
                 ctx,
                 target,

@@ -5,54 +5,6 @@
  "head": "0034d93b4b98",
  "head_note": "head is the commit before this file was added; see git log for the final sha",
  "controls": {
-  "c61_nb": {
-   "define": "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "1": [
-     "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1"
-    ],
-    "2": [
-     "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:74",
-    "x_prep/blocked.mojo:706",
-    "x_prep/blocked.mojo:772",
-    "x_prep/blocked.mojo:825",
-    "x_prep/units.mojo:83",
-    "python/mojolearn/_expansion_prep.py:2632",
-    "python/mojolearn/_expansion_prep.py:2660"
-   ],
-   "binding": "_mojolearn_x_prep",
-   "bits_change": true,
-   "status": "new",
-   "note": "arm 1: GaussianNB class stats single blocked pass (Welford per block, Chan merge, compensated M2); arm 2: also epsilon's column variance from the class M2, so unweighted fit walks X once (incumbent: 4 walks). Class means/counts/sums keep incumbent words; variances change."
-  },
-  "c61_da": {
-   "define": "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:75",
-    "python/mojolearn/_expansion_prep.py:3398",
-    "python/mojolearn/_expansion_prep.py:2632",
-    "x_prep/blocked.mojo:706"
-   ],
-   "binding": "_mojolearn_x_prep",
-   "bits_change": true,
-   "status": "new",
-   "note": "LDA svd fit: within-class std from pooled class M2 (csbm_pool) instead of materialising X - mean[y] (n*d) and two column-stat passes; LDA lsqr/eigen and QDA with shrinkage: single-pass class variance. Board qda (reg_param, no shrinkage) reads no class variance: not reached."
-  },
   "c04_lda": {
    "define": "MOJOLEARN_CLASSICAL_C04_LDA",
    "kind": "switch",
@@ -122,9 +74,7 @@
   "expanded:gaussian-nb": {
    "binding": "_mojolearn_x_prep",
    "route": "fit: _gnb_stats -> (_col_stats + gnb_eps) + _class_stats[csb1_part, csb_fold, csb1_ss, csb_var] | C61_NB: csbm_part, csbm_fold (+ csbm_pool, gnb_eps on arm 2) -> gnb_params; predict: gnb_jll",
-   "controls": [
-    "c61_nb"
-   ],
+   "controls": [],
    "interaction_groups": [],
    "not_reached": [
     "MOJOLEARN_CLASSICAL_C02_STATS_PAIR (StandardScaler only)",
@@ -173,9 +123,7 @@
   "expanded:lda-clf": {
    "binding": "_mojolearn_x_prep",
    "route": "fit(svd): _cls[csb1_part, csb_fold] -> lda_prep -> center_rows(z) -> _cs(z) -> lda_w | C61_DA: csbm_part, csbm_fold, csbm_pool -> lda_w; then center_rows(z2) -> _gram -> eigh -> lda_stage2 -> eigh -> lda_stage3; predict/proba: matmul jll",
-   "controls": [
-    "c61_da"
-   ],
+   "controls": [],
    "interaction_groups": [],
    "not_reached": [
     "c04_lda (transform only)",
@@ -208,6 +156,16 @@
   {
    "define": "MOJOLEARN_CLASSICAL_C04_LOAD_CENTER (LDA half)",
    "reason": "LDA use split to MOJOLEARN_CLASSICAL_C04_LDA; C04_LOAD_CENTER now only reaches PCA"
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS",
+   "control": "c61_da",
+   "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: lda-clf istella 1.38/1.04 (201.0 -> 277.3 NV, 295.6 -> 307.2 AMD), taxi 1.54/1.11 (15.2 -> 23.4 NV, 16.4 -> 18.3 AMD); 1.25x combined SLOWER; quality SAME. Shares the deleted C61 csbm_* ops 190-192 (x_prep/blocked.mojo) with c61_nb; the Python LDA/QDA routes are the blocked two-pass class stats again. Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS",
+   "control": "c61_nb",
+   "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser, both arms. on/off ms ratio NV/AMD: gaussian-nb arm 1 istella 1.58/1.05 (57.3 -> 90.6 NV, 28.8 -> 30.2 AMD), taxi 1.42/1.08 (14.7 -> 20.9 NV, 12.7 -> 13.7 AMD), 1.26x combined; arm 2 istella 1.57/1.02, taxi 1.37/1.03, 1.22x combined SLOWER; quality SAME. The C61 csbm_* ops 190-192 (x_prep/blocked.mojo, units.mojo), the binding bits 16-64 and the Python _c61/_class_stats_m2 routes are gone. Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
   }
  ]
 }

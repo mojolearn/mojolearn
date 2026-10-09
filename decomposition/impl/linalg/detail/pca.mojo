@@ -1,6 +1,6 @@
 """PCA by covariance eigendecomposition. The `input`-unchanged CONTRACT is the one to not drop: `input` is an in-out parameter that must end the call unchanged, and a fit that leaves the caller's matrix centered is wrong in a way nothing in the fit itself will reveal."""
-from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_C23, PCA_COV_LEGAL
-from core.blocked_moments import bm_centered_gram_panels, bm_onepass_covariance
+from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_LEGAL
+from core.blocked_moments import bm_centered_gram_panels
 from gemm.contract import contract_leaf_size
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -52,7 +52,20 @@ comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_PCA_FA
 comptime PCA_GRAM_BLOCK_TARGET = 640
 from checks.numerics import ftz, identical_div, identical_mul
 from core.device_zero import enqueue_fill
-from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_FLAG_TEST, PCA_RR_SWEEPS
+from decomposition.pca_rr_switch import (
+    PCA_DEVICE_TRUNCATE,
+    PCA_RR_EIGH,
+    PCA_RR_FLAG_TEST,
+    PCA_RR_ONE_BLOCK,
+    PCA_RR_SWEEPS,
+)
+from decomposition.spectrum_order_device import (
+    _TPB as _SO_TPB,
+    _blocks as _so_blocks,
+    _gather_diag_kernel,
+    _rank_kernel,
+)
+from x_decomp.rr_one_block import RR_ONE_TPB, rr_eigh_one_block_kernel, rr_one_block_applies
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_off_fold_kernel,
@@ -61,8 +74,16 @@ from x_decomp.jacobi_par import (
 )
 from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale_diag
-from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_vrow
-from core.gram_splitk import gram_centered_splitk_into, gram_splitk_applies
+from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_gate_state, rr_vrow
+from core.gram_splitk import (
+    gram_centered_splitk_into,
+    gram_splitk_applies,
+    gram_splitk_chunk_count,
+    gram_splitk_scratch_covers,
+)
+from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
+from gemm.tn_centered import gemm_tn_centered_identical
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.xtdz_coalesced import column_mean_launch
 from core.column_stats import (
     STATS_TPB,
@@ -206,20 +227,14 @@ def compute_covariance(
     restore_input: Bool = True,
 ) raises:
     """Steps 1, 2, 3 and 6. The branch below must take the fused arm exactly when `gemm_tn` would take split-K for this shape, so it asks the SAME `gram_splitk_applies(m, n, k)` that `gemm_tn` asks -- one predicate, both readers, no target test of our own."""
-    comptime assert PCA_COV_LEGAL, "MOJOLEARN_CLASSICAL_PCA_COV must be 4 (C04 arm) or 23 (C23 arm)"
+    comptime assert PCA_COV_LEGAL, "MOJOLEARN_CLASSICAL_PCA_COV must be 4 (C04 arm); the C23 arm (=23) was deleted 2026-10-08"
     # MOJOLEARN_CLASSICAL_PCA_COV (lane classical-decomp, 2026-10-07; default
-    # absent = the incumbent below). One switch, two named arms, each
+    # absent = the incumbent below). One switch, one named arm (c04),
     # replacing the incumbent's routing at every width; X is never modified.
     # NOT MEASURED.
-    comptime if PCA_COV_C23:
-        # =23: mean and covariance from ONE blocked read (per-leaf centering,
-        # Chan merge in the binary-counter order), scaled by 1 / (n - 1).
-        bm_onepass_covariance(
-            ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows, n_cols,
-        )
-        return
+    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+    # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+    # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
     # column_mean_kernel's value, read row-coalesced where it applies
     # (core/xtdz_coalesced.mojo::column_mean_launch).
     column_mean_launch(ctx, mu, x, n_rows, n_cols)
@@ -330,21 +345,28 @@ def compute_covariance(
             ctx.synchronize()
             return
     var fused = gram_splitk_applies(n_cols, n_cols, n_rows)
+    var centered_v1 = False
     if fused:
         gram_centered_splitk_into(
             ctx, cov, x, mu, x_alias, n_cols, n_rows
         )
     else:
-        ctx.enqueue_function[shift_columns_kernel](
-            x.unsafe_ptr(),
-            mu.unsafe_ptr(),
-            Int32(n_rows),
-            Int32(n_cols),
-            Float32(-1.0),
-            grid_dim=((cells + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-        gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
+        comptime if PCA_GRAM_TN_CENTERED:
+            # P3 (MOJOLEARN_IDN_GEMM_TN_CENTERED): the v1 split-plan Gram
+            # centers at its tile load, X read-only (gemm/tn_centered.mojo);
+            # False when the shipped dispatch would not run a split plan
+            centered_v1 = gemm_tn_centered_identical(ctx, cov, x, mu, x_alias2, n_cols, n_rows)
+        if not centered_v1:
+            ctx.enqueue_function[shift_columns_kernel](
+                x.unsafe_ptr(),
+                mu.unsafe_ptr(),
+                Int32(n_rows),
+                Int32(n_cols),
+                Float32(-1.0),
+                grid_dim=((cells + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
     ctx.enqueue_function[scale_in_place_kernel](
         cov.unsafe_ptr(),
         Int32(n_cols * n_cols),
@@ -352,7 +374,7 @@ def compute_covariance(
         grid_dim=((n_cols * n_cols + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    if restore_input and not fused:
+    if restore_input and not fused and not centered_v1:
         ctx.enqueue_function[shift_columns_kernel](
             x.unsafe_ptr(),
             mu.unsafe_ptr(),
@@ -377,6 +399,68 @@ def pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
         )
     if n_components > n_cols:
         raise Error("n_components cannot exceed n_cols")
+
+
+#: P3, lane fg-pca (2026-10-09), DEFAULT OFF (it replaces the Gram kernel
+#: of the wide route): `-D MOJOLEARN_IDN_GEMM_TN_CENTERED`. Past the split-K
+#: Gram's width the IDENTICAL covariance centered X in place (n*d read +
+#: n*d write), ran the v1 OP_TN Gram on the copy, then restored it (another
+#: read + write, gone with P2). Here the v1 SPLIT plan's arithmetic runs on
+#: operands centered at the tile load (gemm/tn_centered.mojo
+#: `gemm_tn_centered_identical`): X is read for the mean and for the Gram and
+#: never written. Cost: -2 n*d words of traffic per fit (-4 without P2) at
+#: any width past the split-K Gram. Bits: none (the staged word is
+#: `shift_columns_kernel`'s, the per-cell chain, leaf partition and fold are
+#: the split plan's); any shape the shipped dispatch serves with another plan
+#: keeps the incumbent. The host column (`centered_gram_v1_cell`) already
+#: computes the centered words: no host change.
+comptime PCA_GRAM_TN_CENTERED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_GEMM_TN_CENTERED"]()
+)
+
+
+#: P2, lane fg-pca (2026-10-09), IDENTICAL default; rollback
+#: `-D MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF`. `pca_fit_host` uploads X into a
+#: device buffer that is the fit's own and nothing reads after the Gram, so
+#: (a) the restore pass (`shift_columns_kernel` +mu: one n*d read and one
+#: n*d write, 2 x 1.8 GB at 2M x 220) is dead and is skipped, and (b) the two
+#: n*d alias buffers are sized to what the route below actually reads
+#: (`pca_cov_scratch_floats`): the split-K centered Gram reads only `x_alias`
+#: as its n_chunks*d*d partials (when `gram_splitk_scratch_covers`), the v1
+#: OP_TN Gram past the split-K width reads only `x_alias2` as the
+#: identical_gemm workspace (when that fits the old k*m contract); every other
+#: case allocated its own workspace before and still does. Cost reasoning:
+#: 2 x n*d floats of allocation and 2 x n*d words of traffic per fit at any
+#: width, against a workspace of at most n_chunks*d*d or the plan's own size.
+#: Bits: none (the words the Gram and the eigensolver read are unchanged;
+#: the restored copy was never read). IDENTICAL only: the FAST NVIDIA/AMD
+#: route (`gemm_tn_via_transpose`) reads both alias buffers at full size.
+comptime PCA_LEAN_SCRATCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF"]()
+)
+
+
+def pca_cov_scratch_floats(n_rows: Int, n_cols: Int) raises -> Tuple[Int, Int]:
+    """(x_alias, x_alias2) float counts `compute_covariance` reads on the
+    IDENTICAL default route for this shape; 1 for a buffer the route never
+    reads. Mirrors the two predicates the route itself asks
+    (`gram_splitk_applies`, then the scratch-cover tests in
+    `gram_centered_splitk_into` / `gemm_tn_identical_v1`), so a buffer is
+    either big enough for the route's reuse branch or unread."""
+    var k = n_rows
+    var m = n_cols
+    if gram_splitk_applies(m, m, k):
+        if gram_splitk_scratch_covers(m, k):
+            return (max(1, gram_splitk_chunk_count() * m * m), 1)
+        return (1, 1)
+    var need = identical_gemm_workspace_max_floats(m, m, k)
+    if need <= k * m:
+        # gemm_tn_identical_v1 tests `need <= k * m` against the buffer's
+        # nominal k*m contract; a buffer of `need` floats serves that branch
+        return (1, max(1, need))
+    return (1, 1)
 
 
 def pca_fit(
@@ -535,20 +619,9 @@ def pca_rr_gate_kernel(fold: F32Ptr, state: F32Ptr, tol: Float32):
     started. `host_eigh_rr` (x_decomp/rr.mojo) decides the same from the
     same sums. One thread."""
     if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
-        if state.unsafe_load(0) == Float32(0.0):
-            var off = fold.unsafe_load(0)
-            var dg = fold.unsafe_load(1)
-            if not (fold.unsafe_load(2) >= Float32(0.0)):
-                state.unsafe_store(4, Float32(-1.0))
-            var fro = ftz(off + dg)
-            state.unsafe_store(1, off)
-            state.unsafe_store(3, fro)
-            if state.unsafe_load(2) < Float32(0.0):
-                state.unsafe_store(2, fro)
-            if rr_converged(off, dg, tol):
-                state.unsafe_store(0, Float32(1.0))
-            else:
-                state.unsafe_store(5, state.unsafe_load(5) + Float32(1.0))
+        # x_decomp/rr.mojo `rr_gate_state`: these statements, moved there
+        # unchanged so the one-block sweep (PCA_RR_ONE_BLOCK) runs the same
+        rr_gate_state(fold.unsafe_load(0), fold.unsafe_load(1), fold.unsafe_load(2), state, tol)
 
 
 def pca_rr_cs_kernel(a: F32Ptr, cs: F32Ptr, state: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
@@ -651,7 +724,22 @@ def _eig_rr_device(
     )
     var hstate = ctx.enqueue_create_host_buffer[DType.float32](PCA_RR_STATE)
     var launched = 0
+    var one_block = False
+    comptime if PCA_RR_ONE_BLOCK:
+        one_block = rr_one_block_applies(n)
+    if one_block:
+        # P1 + P1b (MOJOLEARN_IDN_PCA_RR_ONE_BLOCK): every sweep, its test,
+        # gate and rounds in one launch of one block; the same cells, the
+        # same order, the same state words as the loop below
+        ctx.enqueue_function[rr_eigh_one_block_kernel](  # small-launch(n: n bounded by rr_one_block_applies, h h + n h <= RR_ONE_BLOCK_STEPS x RR_ONE_TPB cells a round): 1024 threads share every round's cells in parallel, default off, wider n keeps the grid launches
+            cov.unsafe_ptr(), vec_buf.unsafe_ptr(), dcs.unsafe_ptr(), doff.unsafe_ptr(),
+            dpart.unsafe_ptr(), dfold.unsafe_ptr(), dstate.unsafe_ptr(),
+            Int32(n), Int32(PCA_RR_SWEEPS), Float32(JACOBI_TOL),
+            grid_dim=1, block_dim=RR_ONE_TPB,
+        )
     for sweep in range(PCA_RR_SWEEPS + 1):
+        if one_block:
+            break
         ctx.enqueue_function[eigh_par_off_part_kernel](
             cov.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n),
             grid_dim=nb, block_dim=RR_OFF_TPB,
@@ -699,6 +787,171 @@ def pca_rr_state_init_kernel(state: F32Ptr):
         state.unsafe_store(2, Float32(-1.0))
 
 
+def _eig_info_check(info0: Float32, info1: Float32, n_cols: Int) raises:
+    """The solver's outcome words (`pca_rr_finish_kernel` / the cyclic
+    kernel's info) to its refusals, in their words; shared by the host tail
+    and P5's device tail (lane fg-pca: moved here unchanged)."""
+    comptime if PCA_RR_EIGH:
+        if info0 < Float32(0.0):
+            raise Error(
+                "the device Jacobi's convergence test did not run at n_cols = "
+                + String(n_cols)
+                + " (a block's mark is still -1): a launch failure, not a"
+                " convergence failure. Check that the binding is built for this device."
+            )
+        # non-convergence is the refusal of the cyclic solver this replaced:
+        # the same error, in its words, on the device and the host column
+        if info0 != Float32(1.0):
+            raise Error(
+                "the device Jacobi did not converge in "
+                + String(PCA_RR_SWEEPS)
+                + " sweeps at n_cols = "
+                + String(n_cols)
+                + " (round-robin order; off-diagonal mass "
+                + String(info1)
+                + ", or ||A||_F moved) against a tolerance of "
+                + String(JACOBI_TOL)
+                + ". cuSOLVER's syevj has the same failure mode and the same"
+                " remedy, which is more sweeps. A non-symmetric covariance"
+                " produces this too; see check_covariance_is_symmetric."
+            )
+    if info0 == Float32(0.0):
+        raise Error(
+            "the device Jacobi did not converge in "
+            + String(JACOBI_SWEEPS)
+            + " sweeps at n_cols = "
+            + String(n_cols)
+            + ": ||offdiag(A)||_F / ||A||_F is still "
+            + String(info1)
+            + " against a tolerance of "
+            + String(JACOBI_TOL)
+            + ". cuSOLVER's syevj has the same failure mode and the same"
+            " remedy, which is more sweeps. A non-symmetric covariance"
+            " produces this too; see check_covariance_is_symmetric."
+        )
+
+
+
+def pca_inv_order_kernel(pos: MutPointer[Int32, MutAnyOrigin], n_in: Int32, inv: MutPointer[Int32, MutAnyOrigin]):
+    """inv[pos[i]] = i: the index at each place of the descending order
+    (`_rank_kernel`'s ranks are a permutation). One thread a value."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        inv.unsafe_store(Int(pos.unsafe_load(i)), Int32(i))
+
+
+def pca_gather_components_kernel(
+    vec: F32Ptr, inv: MutPointer[Int32, MutAnyOrigin], n_in: Int32, k_in: Int32, comp: F32Ptr
+):
+    """comp[c, f] = vec[f, inv[c]] for the first k places: component c is the
+    eigenvector column at place c (`order_truncate_spectrum`'s gather). One
+    thread a cell, no arithmetic."""
+    var n = Int(n_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(k_in) * n:
+        var c = t // n
+        var f = t - c * n
+        comp.unsafe_store(t, vec.unsafe_load(f * n + Int(inv.unsafe_load(c))))
+
+
+def _device_truncate(
+    ctx: DeviceContext,
+    mut cov: DeviceBuffer[DType.float32],
+    mut vec_buf: DeviceBuffer[DType.float32],
+    mut info_buf: DeviceBuffer[DType.float32],
+    n_cols: Int,
+    n_components: Int,
+    singular_scale: Int,
+) raises -> PCAResult:
+    """P5: `eig_and_truncate`'s tail with the order (`spectrum_rank_desc`,
+    ties to the lower index) and the component gather on the device; the
+    Float64 tail on the downloaded diagonal is `order_truncate_spectrum`'s
+    statements given that order."""
+    var n = n_cols
+    var k = n_components
+    var ddiag = ctx.enqueue_create_buffer[DType.float32](n)
+    var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+    var dinv = ctx.enqueue_create_buffer[DType.int32](n)
+    var dcomp = ctx.enqueue_create_buffer[DType.float32](max(k * n, 1))
+    var cp = cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var vp = vec_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var gp = ddiag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pp = dpos.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var ip = dinv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var op = dcomp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[_gather_diag_kernel](cp, Int32(n), gp, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
+    ctx.enqueue_function[_rank_kernel](gp, Int32(n), pp, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
+    ctx.enqueue_function[pca_inv_order_kernel](pp, Int32(n), ip, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
+    ctx.enqueue_function[pca_gather_components_kernel](
+        vp, ip, Int32(n), Int32(k), op, grid_dim=_so_blocks(k * n), block_dim=_SO_TPB
+    )
+    var h_diag = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var h_inv = ctx.enqueue_create_host_buffer[DType.int32](n)
+    var h_comp = ctx.enqueue_create_host_buffer[DType.float32](max(k * n, 1))
+    var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
+    ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=ddiag)
+    ctx.enqueue_copy(dst_ptr=h_inv.unsafe_ptr(), src_buf=dinv)
+    ctx.enqueue_copy(dst_ptr=h_comp.unsafe_ptr(), src_buf=dcomp)
+    ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
+    ctx.synchronize()
+    _eig_info_check(h_info.unsafe_ptr().unsafe_load(0), h_info.unsafe_ptr().unsafe_load(1), n)
+    _ = ddiag^
+    _ = dpos^
+    _ = dinv^
+    _ = dcomp^
+    var result = truncate_in_order(
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_diag.unsafe_ptr())),
+        MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(h_inv.unsafe_ptr())),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_comp.unsafe_ptr())),
+        n, k, singular_scale,
+    )
+    _ = h_diag^
+    _ = h_inv^
+    _ = h_comp^
+    _ = h_info^
+    return result^
+
+
+def truncate_in_order(
+    diag32: MutPointer[Float32, MutAnyOrigin],
+    order32: MutPointer[Int32, MutAnyOrigin],
+    comp32: MutPointer[Float32, MutAnyOrigin],
+    n_cols: Int,
+    n_components: Int,
+    singular_scale: Int,
+) raises -> PCAResult:
+    """`order_truncate_spectrum`'s tail (its Float64 statements, unchanged)
+    on P5's downloads: the diagonal, the order (`order32[c]` the index at
+    place c) and the gathered k x n components. The same host tail main runs
+    after `eig_and_truncate`, over n values instead of n^2."""
+    var count = n_cols
+    var diag = List[Float64]()
+    for i in range(count):
+        diag.append(Float64(diag32.unsafe_load(i)))
+    var total = 0.0
+    for i in range(count):
+        total += diag[i]
+    var components = List[Float64]()
+    var explained_var = List[Float64]()
+    var explained_var_ratio = List[Float64]()
+    var singular_vals = List[Float64]()
+    for c in range(n_components):
+        var lam = diag[Int(order32.unsafe_load(c))]
+        for f in range(n_cols):
+            components.append(Float64(comp32.unsafe_load(c * n_cols + f)))
+        explained_var.append(lam)
+        explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
+        singular_vals.append(sqrt(lam * Float64(singular_scale)))
+    var noise = 0.0
+    if n_components < count and n_components <= singular_scale:
+        for c in range(n_components, count):
+            noise += diag[Int(order32.unsafe_load(c))]
+        noise /= Float64(count - n_components)
+    return PCAResult(
+        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
+    )
+
+
 def eig_and_truncate(
     ctx: DeviceContext,
     mut cov: DeviceBuffer[DType.float32],
@@ -743,6 +996,11 @@ def eig_and_truncate(
     ctx.synchronize()
     _ = dfac^
 
+    comptime if PCA_DEVICE_TRUNCATE:
+        # P5 (MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE): order and gather on the
+        # device, only k x n components + 2 n words + the info cross
+        return _device_truncate(ctx, cov, vec_buf, info_buf, n_cols, n_components, singular_scale)
+
     var h_cov = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
     var h_vec = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
     var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
@@ -751,44 +1009,7 @@ def eig_and_truncate(
     ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
     ctx.synchronize()
 
-    comptime if PCA_RR_EIGH:
-        if h_info.unsafe_ptr().unsafe_load(0) < Float32(0.0):
-            raise Error(
-                "the device Jacobi's convergence test did not run at n_cols = "
-                + String(n_cols)
-                + " (a block's mark is still -1): a launch failure, not a"
-                " convergence failure. Check that the binding is built for this device."
-            )
-        # non-convergence is the refusal of the cyclic solver this replaced:
-        # the same error, in its words, on the device and the host column
-        if h_info.unsafe_ptr().unsafe_load(0) != Float32(1.0):
-            raise Error(
-                "the device Jacobi did not converge in "
-                + String(PCA_RR_SWEEPS)
-                + " sweeps at n_cols = "
-                + String(n_cols)
-                + " (round-robin order; off-diagonal mass "
-                + String(h_info.unsafe_ptr().unsafe_load(1))
-                + ", or ||A||_F moved) against a tolerance of "
-                + String(JACOBI_TOL)
-                + ". cuSOLVER's syevj has the same failure mode and the same"
-                " remedy, which is more sweeps. A non-symmetric covariance"
-                " produces this too; see check_covariance_is_symmetric."
-            )
-    if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
-        raise Error(
-            "the device Jacobi did not converge in "
-            + String(JACOBI_SWEEPS)
-            + " sweeps at n_cols = "
-            + String(n_cols)
-            + ": ||offdiag(A)||_F / ||A||_F is still "
-            + String(h_info.unsafe_ptr().unsafe_load(1))
-            + " against a tolerance of "
-            + String(JACOBI_TOL)
-            + ". cuSOLVER's syevj has the same failure mode and the same"
-            " remedy, which is more sweeps. A non-symmetric covariance"
-            " produces this too; see check_covariance_is_symmetric."
-        )
+    _eig_info_check(h_info.unsafe_ptr().unsafe_load(0), h_info.unsafe_ptr().unsafe_load(1), n_cols)
 
     var diag = List[Float64]()
     for i in range(n_cols):

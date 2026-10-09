@@ -43,6 +43,16 @@ from checks.numerics import ftz, identical_mul_add, identical_div
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
 
+#: The batched codebook loop (`x_ann/pq_kmeans_device.mojo`) and its host
+#: twin (`x_ann/host/ivf_pq_host.mojo::_codebooks_host_batched`): threads per
+#: threadgroup (one per code in the partial sums), rows per partial block
+#: (= the threads, so one thread stages one label; the host twin folds the
+#: same 256-row blocks), the widest subspace and the most codes it takes.
+comptime PQK_T = 256
+comptime PQK_ROWS = 256
+comptime PQK_LEN_MAX = 16
+comptime PQK_CODES_MAX = 256
+
 
 def pq_inf() -> Float32:
     return bitcast[DType.float32](UInt32(0x7F800000))

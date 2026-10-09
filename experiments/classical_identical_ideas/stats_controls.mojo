@@ -32,7 +32,9 @@ comptime C56_QDA_PROJECT = get_defined_int["MOJOLEARN_CLASSICAL_C56_QDA_PROJECT"
 comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57_CANDIDATE_STATE"]()
 # C58/59: only independent classical series/trials, no neural sequence callers.
 comptime C58_SERIES4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SERIES4"]()
-comptime C58_FORECAST4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_FORECAST4"]()
+# C58_FORECAST4 (four theta/ets/garch series per thread) tried 2026-10-08, run ge123e6f9: NV/AMD 2.93x/2.58x
+# synthetic, 2.81x/2.13x taxi-hourly (auto-theta), 2.2-3.1x on every theta/damped-ets cell, quality SAME. Deleted and
+# refused (core/six_lane_experiment_guards.mojo); recoverable at main bc10b8b56.
 # C58 team state budget in MiB: integer sweep -D MOJOLEARN_C58_TEAM_MIB=64|256
 # (was the boolean MOJOLEARN_C58_TEAM64); absent = 256 = incumbent. A memory
 # budget only: it sets series per launch slice, never per-series arithmetic.

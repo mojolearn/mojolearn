@@ -1,0 +1,301 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "fg-knn-nb",
+ "branch": "lane/fg-knn-nb",
+ "head": "3b59db56a",
+ "controls": {
+  "knn_amd_legacy_schedule": {
+   "define": "MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "checks/kernel_matrix.mojo:knn_nvidia_schedule_column",
+    "neighbors/estimator.mojo:270",
+    "neighbors/impl/detail/knn_brute_force.mojo:use_vector"
+   ],
+   "binding": [
+    "_mojolearn",
+    "_mojolearn_estimators",
+    "_mojolearn_hdbscan",
+    "_mojolearn_metrics",
+    "_mojolearn_x_ann",
+    "_mojolearn_ivf",
+    "_mojolearn_x_cluster",
+    "_mojolearn_estimators_host",
+    "_mojolearn_hdbscan_host",
+    "_mojolearn_metrics_host",
+    "_mojolearn_x_ann_host",
+    "_mojolearn_x_cluster_host"
+   ],
+   "bits_change": false,
+   "status": "new default K1 (plan flagship-gaps-2026-10-09 kNN K1)",
+   "note": "Rollback arm: AMD back to its old IDENTICAL kNN rows (query tile 256, no radix scratch shrink, no resident derived cache, generic-K selector without warp-bound guard, no bound-and-compact at k>=17, 4 register rows, scalar index loads). Default: AMD takes NVIDIA's rows. Kept per-vendor: hardware FTZ FMA (NVVM instruction, no AMD spelling) and the AMD smem tile d>=32 gate (measured AMD loss). NVIDIA build unchanged by this control."
+  },
+  "knn_scratch_pool_off": {
+   "define": "MOJOLEARN_KNN_SCRATCH_POOL_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KNN_SCRATCH_POOL_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "neighbors/impl/detail/knn_brute_force.mojo:KNN_SCRATCH_POOL",
+    "neighbors/estimator.mojo:_knn_search_on_device_index"
+   ],
+   "binding": [
+    "_mojolearn",
+    "_mojolearn_estimators",
+    "_mojolearn_hdbscan",
+    "_mojolearn_metrics",
+    "_mojolearn_x_ann",
+    "_mojolearn_ivf",
+    "_mojolearn_x_cluster",
+    "_mojolearn_estimators_host",
+    "_mojolearn_hdbscan_host",
+    "_mojolearn_metrics_host",
+    "_mojolearn_x_ann_host",
+    "_mojolearn_x_cluster_host"
+   ],
+   "bits_change": false,
+   "status": "new default K4",
+   "note": "Rollback arm: per-call allocation of queries, norms, dist_tile, radix pairs, outputs and pinned readback on every resident search. Default: exact-length views of the handle's high-water pool."
+  },
+  "knn_widek_radix": {
+   "define": "MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "neighbors/impl/detail/knn_brute_force.mojo:KNN_WIDEK_RADIX"
+   ],
+   "binding": [
+    "_mojolearn",
+    "_mojolearn_estimators",
+    "_mojolearn_hdbscan",
+    "_mojolearn_metrics",
+    "_mojolearn_x_ann",
+    "_mojolearn_ivf",
+    "_mojolearn_x_cluster",
+    "_mojolearn_estimators_host",
+    "_mojolearn_hdbscan_host",
+    "_mojolearn_metrics_host",
+    "_mojolearn_x_ann_host",
+    "_mojolearn_x_cluster_host"
+   ],
+   "bits_change": false,
+   "status": "new K2 (A/B owed)",
+   "note": "On a 64-lane column (AMD CDNA) k>=17 column-tile selection by the radix selector (scratch shrink skipped there). NVIDIA build unaffected (32-lane). Same composite-key total order."
+  },
+  "knn_amd_block_topk_all_k": {
+   "define": "MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "checks/kernel_matrix.mojo:KNN_BLOCK_TOPK_MAX_K"
+   ],
+   "binding": [
+    "_mojolearn",
+    "_mojolearn_estimators",
+    "_mojolearn_hdbscan",
+    "_mojolearn_metrics",
+    "_mojolearn_x_ann",
+    "_mojolearn_ivf",
+    "_mojolearn_x_cluster",
+    "_mojolearn_estimators_host",
+    "_mojolearn_hdbscan_host",
+    "_mojolearn_metrics_host",
+    "_mojolearn_x_ann_host",
+    "_mojolearn_x_cluster_host"
+   ],
+   "bits_change": false,
+   "status": "new K3 (A/B owed)",
+   "note": "AMD column only: block top-k serves k up to 64 (no distance matrix, no selector launch) where the smem tile runs (d>=32 on AMD). NVIDIA keeps 16."
+  },
+  "knn_amd_exact_chain": {
+   "define": "MOJOLEARN_KNN_AMD_EXACT_CHAIN",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KNN_AMD_EXACT_CHAIN"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "checks/kernel_matrix.mojo:knn_distance_exact_chain_for"
+   ],
+   "binding": [
+    "_mojolearn",
+    "_mojolearn_estimators",
+    "_mojolearn_hdbscan",
+    "_mojolearn_metrics",
+    "_mojolearn_x_ann",
+    "_mojolearn_ivf",
+    "_mojolearn_x_cluster",
+    "_mojolearn_estimators_host",
+    "_mojolearn_hdbscan_host",
+    "_mojolearn_metrics_host",
+    "_mojolearn_x_ann_host",
+    "_mojolearn_x_cluster_host"
+   ],
+   "bits_change": false,
+   "status": "new K5 (A/B owed)",
+   "note": "AMD column only: the register tile (d<32 on AMD) admits proven tiles to the unflushed chain. Time on taxi-like narrow rows."
+  },
+  "xprep_pinned_upload_off": {
+   "define": "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/device_store.mojo:STORE_PINNED_UPLOAD"
+   ],
+   "binding": [
+    "_mojolearn_x_prep",
+    "_mojolearn_x_metrics",
+    "_mojolearn_x_prep_host",
+    "_mojolearn_x_metrics_host"
+   ],
+   "bits_change": false,
+   "status": "new default G1",
+   "note": "Rollback arm: DeviceStore put/write copy from the caller's pageable pointer. Default (not FAST, not Apple): >=1M-word puts through a 2 x 32 MB pinned stage, memcpy overlapped with DMA. Every DeviceStore binding (x_prep, x_metrics, model selection)."
+  },
+  "xprep_arena_pool_off": {
+   "define": "MOJOLEARN_XPREP_ARENA_POOL_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_XPREP_ARENA_POOL_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/device_store.mojo:STORE_SLOT_POOL",
+    "x_prep/device.mojo:X_PREP_POOL_ARENA_IDN"
+   ],
+   "binding": [
+    "_mojolearn_x_prep",
+    "_mojolearn_x_metrics",
+    "_mojolearn_x_prep_host",
+    "_mojolearn_x_metrics_host"
+   ],
+   "bits_change": false,
+   "status": "new default G2",
+   "note": "Rollback arm: fresh device arena per program and free-at-once store slots. Default (not FAST): exact-size pooled arena (core/device_pool.mojo, 2 GB idle cap) and spare slot buffers (2 GB idle cap)."
+  },
+  "xprep_no_slot_hop": {
+   "define": "MOJOLEARN_XPREP_NO_SLOT_HOP",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_XPREP_NO_SLOT_HOP"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_prep/device.mojo:XPREP_NO_SLOT_HOP",
+    "core/arena_io.mojo:upload_ranges_host",
+    "python/mojolearn/_expansion_prep.py:_Prog.run"
+   ],
+   "binding": [
+    "_mojolearn_x_prep"
+   ],
+   "bits_change": false,
+   "status": "new G3 (A/B owed)",
+   "note": "Large direct inputs go host -> arena through the pinned stage (no slot, no D2D, no second X allocation). Python routes by the presence of x_prep_run_ranges_host."
+  },
+  "xprep_device_codes": {
+   "define": "MOJOLEARN_XPREP_DEVICE_CODES",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_XPREP_DEVICE_CODES"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_prep/device.mojo:XPREP_DEVICE_CODES",
+    "python/mojolearn/_expansion_prep.py:_fit_device_codes"
+   ],
+   "binding": [
+    "_mojolearn_x_prep",
+    "_mojolearn (unique_inverse)"
+   ],
+   "bits_change": false,
+   "status": "new G5 (A/B owed)",
+   "note": "GaussianNB.fit classes and codes from the base binding's device unique_inverse instead of the host native encoder sort, for int/float label vectors. Python routes by the presence of x_prep_device_codes."
+  }
+ },
+ "algorithms": {
+  "classical:knn": {
+   "binding": "_mojolearn",
+   "route": "neighbors.py kneighbors -> knn_search_resident -> _knn_search_on_device_index (K4 pool) -> brute_force_knn_impl -> tiled_brute_force_knn (resident cache) -> smem/register distance tile + bound-compact | small-k | radix (K2) | block top-k (K3) + partial merges",
+   "controls": [
+    "knn_amd_legacy_schedule",
+    "knn_scratch_pool_off",
+    "knn_widek_radix",
+    "knn_amd_block_topk_all_k",
+    "knn_amd_exact_chain"
+   ],
+   "interaction_groups": [
+    [
+     "knn_amd_legacy_schedule",
+     "knn_widek_radix",
+     "knn_amd_block_topk_all_k"
+    ],
+    [
+     "knn_amd_legacy_schedule",
+     "knn_amd_exact_chain"
+    ]
+   ],
+   "notes": "Diagnostic first: one AMD build with -D MOJOLEARN_KNN_PHASE_TIMERS (existing, vendor-neutral) splits transpose/distance/select/merge/upload. K2/K3/K5 move the AMD build only."
+  },
+  "expanded:gaussian-nb": {
+   "binding": "_mojolearn_x_prep",
+   "route": "GaussianNB.fit: (G5 device codes | encode_labels) -> _Prog.put(X) -> DeviceCache.dev_put (G1 pinned stage, G2 spare slot) | G3 host span -> run_ranges (G2 pooled arena) -> stages -> download_ranges",
+   "controls": [
+    "xprep_pinned_upload_off",
+    "xprep_arena_pool_off",
+    "xprep_no_slot_hop",
+    "xprep_device_codes"
+   ],
+   "interaction_groups": [
+    [
+     "xprep_pinned_upload_off",
+     "xprep_arena_pool_off",
+     "xprep_no_slot_hop"
+    ]
+   ],
+   "notes": "Diagnostic first: MOJOLEARN_XPREP_PROFILE=1 (XPPHASE upload/alloc us). G4 (C61 arm 2) is classical-nbda.json c61_nb; G6 not in this lane."
+  }
+ },
+ "removed": []
+}

@@ -69,17 +69,31 @@ class _AnnResident:
             prepare = native.x_ann_index_prepare
         except (ImportError, AttributeError):
             return None
-        attrs = tuple(getattr(self, a) for a, _dtype in self._SAVE_ARRAYS)  # glue: saved array attributes by name
-        key = (tuple((id(a), addr_ro(a, name=name), tuple(a.shape))
-                     for a, (name, _dtype) in zip(attrs, self._SAVE_ARRAYS)), id(native))  # glue: saved array attributes by name
+        key = self._resident_key(native)
         cached = self.__dict__.get("_resident")
         if cached is not None and cached[0] == key:
             return cached[1]
+        # an array still held only on the device comes to numpy first, then
+        # the handle is replaced by a prepared one (lane fg-ivf A7)
+        self._materialize_device_arrays()
         self._release_resident()
         addrs, params = self._resident_arrays()
         handle = int(prepare(self._KIND, addrs, params))
         self._resident = (key, handle, native)
         return handle
+
+    def _resident_key(self, native):
+        """The arrays a handle was made from, by identity, address and shape;
+        an array a resident fit left on the device (lane fg-ivf A7) is the
+        marker ("device",). Reads the dict, so no export happens."""
+        d = self.__dict__
+        arrays = tuple(d.get(a) for a, _dtype in self._SAVE_ARRAYS)  # glue: saved array attributes by name
+        return (tuple(("device",) if a is None else (id(a), addr_ro(a, name=name), tuple(a.shape))
+                      for a, (name, _dtype) in zip(arrays, self._SAVE_ARRAYS)), id(native))  # glue: saved array attributes by name
+
+    def _materialize_device_arrays(self):
+        """Arrays held only on the device come to numpy (none by default)."""
+        return None
 
     def _resident_search(self, native, owner, filter, q, dist, idx, cand, params):
         """The IVF kinds' search through the handle; False where there is
@@ -236,7 +250,42 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
                  addr_ro(self.codes_.reshape((n * pq_dim,)), name="codes_")],
                 [n, dim, self.n_lists_, pq_dim, self.pq_bits_])
 
+    def __getattr__(self, name):
+        # `codes_` of a RESIDENT fit (lane fg-ivf A7) is made on first read,
+        # outside fit and search: `save`, a pickle and user code read it here
+        if name == "codes_" and "_device_codes" in self.__dict__:
+            self._materialize_device_arrays()
+            return self.__dict__["codes_"]
+        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
+    def _materialize_device_arrays(self):
+        """Write the resident fit's codes into a new numpy array
+        (`x_ann_index_export_codes`, one device copy in Mojo) and re-key the
+        held handle to it: the handle keeps serving searches, since the array
+        holds the words it holds."""
+        d = self.__dict__
+        if "_device_codes" not in d:
+            return
+        cached = d.get("_resident")
+        if cached is None:
+            raise RuntimeError("mojolearn IVFPQIndex: the resident index was released before its codes were read")
+        n, pq_dim = self.n_rows_, self.pq_dim_
+        codes = empty((n * pq_dim,), "<i4")
+        cached[2].x_ann_index_export_codes(cached[1], addr(codes, name="codes_"), n * pq_dim)
+        d["codes_"] = codes.reshape((n, pq_dim))
+        del d["_device_codes"]
+        d["_resident"] = (self._resident_key(cached[2]), cached[1], cached[2])
+
+    def _is_built(self):
+        d = self.__dict__
+        return "codes_" in d or "_device_codes" in d
+
+    def __getstate__(self):
+        self._materialize_device_arrays()
+        return super().__getstate__()
+
     def fit(self, X, y=None):
+        self.__dict__.pop("_device_codes", None)
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
@@ -253,8 +302,31 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         offsets = empty((n_lists + 1,), "<i4")
         indices = empty((n,), "<i4")
         codebooks = empty((pq_dim * n_codes * pq_len,), "<f4")
+        native = self._bind()
+        resident_build = getattr(native, "x_ann_ivf_pq_build_resident", None)
+        if resident_build is not None:
+            # lane fg-ivf A7: the index stays on the device under a handle;
+            # the four small arrays are written here, `codes_` on first read
+            handle = int(resident_build(
+                # x, centers, offsets, list_indices, codebooks (bindings/_mojolearn_x_ann.mojo)
+                [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(offsets, name="list_offsets_"),
+                 addr(indices, name="list_indices_"), addr(codebooks, name="codebooks_")],
+                # n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters
+                [n, dim, n_lists, self._p("kmeans_n_iters"), self._p("random_state"), pq_dim, pq_bits,
+                 self._p("pq_kmeans_n_iters")],
+            ))
+            self.__dict__.pop("codes_", None)
+            self.centers_ = centers.reshape((n_lists, dim))
+            self.list_offsets_ = offsets
+            self.list_indices_ = indices
+            self.codebooks_ = codebooks.reshape((pq_dim, n_codes, pq_len))
+            self.n_features_in_, self.n_rows_, self.n_lists_ = dim, n, n_lists
+            self.pq_dim_, self.pq_bits_, self.pq_len_ = pq_dim, pq_bits, pq_len
+            self._device_codes = True
+            self._resident = (self._resident_key(native), handle, native)
+            return self
         codes = empty((n * pq_dim,), "<i4")
-        self._bind().x_ann_ivf_pq_build(
+        native.x_ann_ivf_pq_build(
             # x, centers, offsets, list_indices, codebooks, codes
             [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(offsets, name="list_offsets_"),
              addr(indices, name="list_indices_"), addr(codebooks, name="codebooks_"), addr(codes, name="codes_")],
@@ -274,7 +346,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def search(self, queries, filter=None):
         """`filter`: optional boolean array over the indexed rows; a False row
         is never returned (cuVS's sample filter, applied before scoring)."""
-        if not hasattr(self, "codes_"):
+        if not self._is_built():
             raise ValueError("mojolearn IVFPQIndex: call fit before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
         m, dim = (int(s) for s in q.shape)  # glue: two shape integers of the input

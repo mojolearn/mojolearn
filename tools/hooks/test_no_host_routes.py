@@ -450,6 +450,31 @@ def test_cli_tree_and_diff_modes():
     assert r.returncode == 0, r.stderr
 
 
+_HELPER_SRC = (
+    "from gpu.host import DeviceContext\n"
+    "@always_inline\n"
+    "def helper(p: Ptr, n: Int) -> Int:  # device-helper: one row per thread\n"
+    "    var s = 0\n"
+    "    for i in range(n):\n"
+    "        s += p[i]\n"
+    "    return s\n\n"
+    "def thing_kernel(p: Ptr, n: Int):\n"
+    "    var r = thread_idx.x\n"
+    "    _ = helper(p, n)\n")
+
+
+def test_device_helper_note_skips_a_kernel_only_helper():
+    """A noted per-thread helper that only kernels call is device code."""
+    assert nhr._mojo_host_loops(nhr._code_lines(_HELPER_SRC, "mojo"), "x/y.mojo") == []
+
+
+def test_device_helper_note_fails_with_a_host_caller():
+    """One non-kernel caller in the file charges the helper's loop again,
+    and without the note the loop is charged as before."""
+    bad = _HELPER_SRC + "\ndef drive_it(ctx: DeviceContext, p: Ptr, n: Int):\n    _ = helper(p, n)\n"
+    assert [n for n, _ in nhr._mojo_host_loops(nhr._code_lines(bad, "mojo"), "x/y.mojo")] == [5]
+    bare = _HELPER_SRC.replace("  # device-helper: one row per thread", "")
+    assert [n for n, _ in nhr._mojo_host_loops(nhr._code_lines(bare, "mojo"), "x/y.mojo")] == [5]
 
 # ------------------------------------------------- pre-push ref routing ----
 # The hook is run as git runs it (stdin "<local ref> <sha> <remote ref> <sha>")

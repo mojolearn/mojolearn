@@ -252,8 +252,13 @@ def compute_core_dists(
     mut knn_inds: DeviceBuffer[DType.int32],
     core_tpb: Int = CORE_TPB,
     sabotage: Int32 = HDB_SAB_NONE,
+    n_neighbors: Int = 0,
 ) raises:
-    """`_compute_core_dists`, `reachability.cuh:100-122`. Their name has a
+    """`n_neighbors` (fg-tsne-dbscan H2): the k-NN's width when it is wider
+    than `min_samples` (0 = `min_samples`); the core distance is still slot
+    `min_samples - 1` of each sorted row (DEVIATION 1602), the same value.
+
+    `_compute_core_dists`, `reachability.cuh:100-122`. Their name has a
     leading underscore because it is their CPU/GPU interop entry; the
     underscore is dropped here because Mojo has no such convention and
 
@@ -289,10 +294,11 @@ def compute_core_dists(
             compute_core_dists_tile(ctx, x, core_dists, m, n, min_samples)
             core_tiled = True
     if not core_tiled:
-        compute_knn(ctx, trace, x, m, n, min_samples, knn_dists, knn_inds)
+        var nn_w = n_neighbors if n_neighbors > min_samples else min_samples
+        compute_knn(ctx, trace, x, m, n, nn_w, knn_dists, knn_inds)
         # `:121` Slice core distances (distances to kth nearest neighbor)
         core_distances(
-            ctx, knn_dists, min_samples, min_samples, m, core_dists,
+            ctx, knn_dists, min_samples, nn_w, m, core_dists,
             core_tpb, sabotage,
         )
     # NOT THEIRS. DEVIATION 1607: the core distances come off a different

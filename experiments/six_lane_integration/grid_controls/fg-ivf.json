@@ -1,0 +1,283 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "fg-ivf",
+ "branch": "lane/fg-ivf",
+ "head": "1c24f289b",
+ "head_note": "code only, uncompiled (orchestrator compiles every switch on and off, NV and AMD, host twins)",
+ "controls": {
+  "idn_pq_device_codebooks": {
+   "define": "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_ann/switches.mojo:121",
+    "x_ann/pq_kmeans_device.mojo:45",
+    "x_ann/ivf_pq_device.mojo",
+    "x_ann/host/ivf_pq_host.mojo:88"
+   ],
+   "binding": [
+    "_mojolearn_x_ann",
+    "_mojolearn_x_ann_host"
+   ],
+   "bits_change": true,
+   "status": "new opt-in (plan flagship-gaps-2026-10-09 read_ivf.md A1)",
+   "note": "On: IDENTICAL IVF-PQ codebooks from the batched device Lloyd loop (pq_codebooks_device: strided seeds, 3 launches per iteration, one sync) with the pinned fold (ftz partial adds, identical_div centroid), host twin _codebooks_host_batched. Bits change on NV, AMD and the host column together; recall gate vs cuVS. Expected to remove the AMD 145 s taxi codebook stage."
+  },
+  "ivf_pq_one_upload_off": {
+   "define": "MOJOLEARN_IVF_PQ_ONE_UPLOAD_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IVF_PQ_ONE_UPLOAD_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_ann/switches.mojo:137",
+    "x_ann/ivf_pq_device.mojo",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo (IvfFlatBuildDevice.keep_rows)",
+    "ivf/impl/neighbors/ivf_flat/ivf_group_device.mojo (with_data)",
+    "bindings/_mojolearn_x_ann.mojo"
+   ],
+   "binding": [
+    "_mojolearn_x_ann",
+    "_mojolearn_ivf"
+   ],
+   "bits_change": false,
+   "status": "new default (read_ivf.md A3)",
+   "note": "Rollback arm: the coarse build's rows are uploaded twice and the labels round-trip through the host. Default: resident coarse build with keep_rows hands dx, centres and labels to the residual step; no numpy->List copy under IVF_BUILD_FROM_POINTER."
+  },
+  "idn_pq_lut_tiled_off": {
+   "define": "MOJOLEARN_IDN_PQ_LUT_TILED_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_PQ_LUT_TILED_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_ann/vsearch_fast.mojo:85",
+    "x_ann/ivf_scan_device.mojo"
+   ],
+   "binding": [
+    "_mojolearn_x_ann"
+   ],
+   "bits_change": false,
+   "status": "new default (read_ivf.md A4)",
+   "note": "Rollback arm: pq_score_kernel (per-candidate pq_lut_entry when pq_dim x n_codes > LUT_MAX). Default: pq_score_tiled_kernel in IDENTICAL. Same words: ID check owed against the _OFF arm."
+  },
+  "idn_pq_scan_fused": {
+   "define": "MOJOLEARN_IDN_PQ_SCAN_FUSED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_PQ_SCAN_FUSED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_ann/vsearch_fast.mojo:98",
+    "x_ann/ivf_scan_device.mojo"
+   ],
+   "binding": [
+    "_mojolearn_x_ann"
+   ],
+   "bits_change": false,
+   "status": "new opt-in (read_ivf.md A5)",
+   "note": "On: pq_scan_fused_kernel (score + register top-k under the (distance, id) total order) in IDENTICAL for k <= SEL_KM; no candidate buffer, no select chain. Outputs and n_candidates_ the same words."
+  },
+  "ivf_pq_resident_fit_off": {
+   "define": "MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_ann/switches.mojo:151",
+    "x_ann/ivf_pq_device.mojo (IvfPqDevice, ivf_pq_build_device_resident)",
+    "x_ann/resident.mojo (x_ann_register_pq_built, x_ann_index_export_codes_binding)",
+    "bindings/_mojolearn_x_ann.mojo",
+    "python/mojolearn/_expansion_ann.py"
+   ],
+   "binding": [
+    "_mojolearn_x_ann"
+   ],
+   "bits_change": false,
+   "status": "new default (read_ivf.md A7)",
+   "note": "Rollback arm: x_ann_ivf_pq_build_resident is not registered; fit downloads codes and the first search prepares the handle. Default: fit returns a resident handle; codes_ is exported on first read."
+  },
+  "kmeans_live_cores_off": {
+   "define": "MOJOLEARN_KMEANS_LIVE_CORES_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KMEANS_LIVE_CORES_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "cluster/impl/detail/min_cluster_distance_compute.mojo:102",
+    "neighbors/impl/distance/detail/pairwise_distance_base.mojo (launch_config_generator_cores)"
+   ],
+   "binding": [
+    "_mojolearn",
+    "_mojolearn_x_cluster",
+    "_mojolearn_ivf",
+    "_mojolearn_x_ann"
+   ],
+   "bits_change": false,
+   "status": "new default (read_ivf.md B5)",
+   "note": "Rollback arm: the fused assignment grid from gpu_cores_for (108 NV / 110 AMD). Default on NVIDIA/AMD: MULTIPROCESSOR_COUNT (cached). Scheduling only."
+  },
+  "ivf_idn_recluster_cap_off": {
+   "define": "MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo:120",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo",
+    "cluster/impl/kmeans_params.mojo (recluster_max_iter)",
+    "cluster/impl/detail/kmeans.mojo",
+    "cluster/host/kmeans_oracle.mojo",
+    "ivf/host/ivf_host.mojo:318"
+   ],
+   "binding": [
+    "_mojolearn_ivf",
+    "_mojolearn_ivf_host",
+    "_mojolearn_x_ann",
+    "_mojolearn_x_ann_host"
+   ],
+   "bits_change": "only when the k-means|| recluster ran past kmeans_n_iters; device and host columns together",
+   "status": "new default per the lane brief (read_ivf.md B2); bit-changing default, flagged",
+   "note": "Rollback arm: the recluster runs up to KMeansParams.default()'s 300 iterations. Default: capped at the IVF build's kmeans_n_iters. Recall gate vs cuVS required."
+  },
+  "ivf_layout_scatter": {
+   "define": "MOJOLEARN_IVF_LAYOUT_SCATTER",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IVF_LAYOUT_SCATTER"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ivf/impl/neighbors/ivf_flat/ivf_group_device.mojo:290"
+   ],
+   "binding": [
+    "_mojolearn_ivf",
+    "_mojolearn_x_ann"
+   ],
+   "bits_change": false,
+   "status": "new opt-in (read_ivf.md B3)",
+   "note": "On: the list layout as per-block rank + list-major table scan + scatter (stable, the radix order) while n_lists x ceil(n / 1024) <= 4 n. Same offsets, ids and words."
+  },
+  "ivf_idn_strided_init": {
+   "define": "MOJOLEARN_IVF_IDN_STRIDED_INIT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IVF_IDN_STRIDED_INIT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo:134",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:264",
+    "ivf/host/ivf_host.mojo"
+   ],
+   "binding": [
+    "_mojolearn_ivf",
+    "_mojolearn_ivf_host",
+    "_mojolearn_x_ann",
+    "_mojolearn_x_ann_host"
+   ],
+   "bits_change": true,
+   "status": "new opt-in (read_ivf.md B1)",
+   "note": "On: centre c = training row (c n_train) // n_lists (device gather; host the same rows), INIT_ARRAY, no k-means|| seeding. Bits change on every column; recall gate vs cuVS. Makes ivf_idn_recluster_cap_off moot."
+  }
+ },
+ "algorithms": {
+  "expanded:ivf-pq": {
+   "binding": "_mojolearn_x_ann",
+   "route": "IVFPQIndex.fit -> x_ann_ivf_pq_build_resident [ivf_pq_resident_fit_off] -> _ivf_pq_build_impl: coarse = ivf_flat_build_resident_host keep_rows [ivf_pq_one_upload_off; ivf_idn_strided_init, ivf_idn_recluster_cap_off, kmeans_live_cores_off, ivf_layout_scatter] -> residual -> codebooks (pq_codebooks_device [idn_pq_device_codebooks] or per-subspace kmeans_fit_rows) -> encode; search -> ivf_scan_search score (pq_score_tiled_kernel [idn_pq_lut_tiled_off] / pq_scan_fused_kernel [idn_pq_scan_fused])",
+   "controls": [
+    "idn_pq_device_codebooks",
+    "ivf_pq_one_upload_off",
+    "idn_pq_lut_tiled_off",
+    "idn_pq_scan_fused",
+    "ivf_pq_resident_fit_off",
+    "kmeans_live_cores_off",
+    "ivf_idn_recluster_cap_off",
+    "ivf_layout_scatter",
+    "ivf_idn_strided_init"
+   ],
+   "interaction_groups": [
+    [
+     "idn_pq_device_codebooks",
+     "kmeans_live_cores_off"
+    ],
+    [
+     "ivf_pq_one_upload_off",
+     "ivf_pq_resident_fit_off"
+    ],
+    [
+     "idn_pq_lut_tiled_off",
+     "idn_pq_scan_fused"
+    ],
+    [
+     "ivf_idn_strided_init",
+     "ivf_idn_recluster_cap_off"
+    ],
+    [
+     "ivf_layout_scatter"
+    ]
+   ]
+  },
+  "ann:ivf": {
+   "binding": "_mojolearn_ivf",
+   "route": "IVFIndex.fit -> ivf_flat_build_resident (strided trainset, k-means|| [ivf_idn_strided_init, ivf_idn_recluster_cap_off] + lazy Lloyd with the fused assignment [kmeans_live_cores_off], predict, layout [ivf_layout_scatter]) -> handle",
+   "controls": [
+    "kmeans_live_cores_off",
+    "ivf_idn_recluster_cap_off",
+    "ivf_layout_scatter",
+    "ivf_idn_strided_init"
+   ],
+   "interaction_groups": [
+    [
+     "ivf_idn_strided_init",
+     "ivf_idn_recluster_cap_off"
+    ],
+    [
+     "kmeans_live_cores_off"
+    ],
+    [
+     "ivf_layout_scatter"
+    ]
+   ]
+  }
+ },
+ "removed": []
+}

@@ -31,39 +31,6 @@
    "status": "new",
    "note": "off = main = DEVIATION 2900 _bswz heaviest-causal-tile-first map (already the NVIDIA and AMD default word, so the proposed desc arm IS main). asc: _blk_map ignores SWZ (rollback, every estash kernel). zdot_asc: only the estash zdot kernel takes the ascending decode (the H100 leg measured _bswz costing zdot +6 regs, 4->3 blocks/SM, 14.79->15.61 ms). paired not built (EXPERIMENTS.md). Forward arms reach fwd r2 (lm-forward, transformer-forward); zdot_asc reaches only backward (train lanes). No bits: _blk_map is a bijection."
   },
-  "gemm_ozaki_linalg": {
-   "define": "MOJOLEARN_IDN_GEMM_OZAKI_LINALG",
-   "kind": "int_sweep",
-   "arms": {
-    "off": [],
-    "4": [
-     "MOJOLEARN_IDN_GEMM_OZAKI_LINALG=1",
-     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4"
-    ],
-    "5": [
-     "MOJOLEARN_IDN_GEMM_OZAKI_LINALG=1",
-     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
-    ]
-   },
-   "default": "off",
-   "legal_set": [
-    4,
-    5
-   ],
-   "source": [
-    "gemm/host_entry.mojo:74",
-    "gemm/host_entry.mojo:157",
-    "gemm/neural_dispatch.mojo:155"
-   ],
-   "binding": "_mojolearn_linalg",
-   "bits_change": true,
-   "status": "new",
-   "exclusive_with": [
-    "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE",
-    "MOJOLEARN_IDN_NEURAL_CHAINS"
-   ],
-   "note": "Routes gemm/host_entry.mojo through gemm.neural_dispatch.identical_gemm_into; each arm carries the Ozaki slice count it needs (comptime assert without it). BITS CHANGE: new profile (exact int8 diagonal sums, one RNE epilogue); same words on NVIDIA and AMD by construction; the host column runs the same construction (PIECES kernel) and changes together. k > ozaki_max_k[S] falls back to the incumbent. Quality: fp32-equivalent error bound at S>=4 (neural_ozaki.mojo header); the grid quality check applies."
-  },
   "gemm_tile_min_blocks": {
    "define": "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",
    "kind": "int_sweep",
@@ -365,8 +332,7 @@
      "attn_tile_order",
      "attn_fwd_tq_rule",
      "attn_softmax",
-     "attn_scale_mask",
-     "nn20_split_kv"
+     "attn_scale_mask"
     ],
     [
      "grouped_projections_v2",
@@ -402,8 +368,7 @@
     [
      "attn_tile_order",
      "attn_fwd_tq_rule",
-     "attn_softmax",
-     "nn20_split_kv"
+     "attn_softmax"
     ],
     [
      "m3_angle_parallel",
@@ -621,9 +586,8 @@
   },
   "gemm:gemm": {
    "binding": "_mojolearn_linalg",
-   "route": "linalg gemm_binding (bindings/_mojolearn_linalg.mojo:211) -> gemm/host_entry.mojo identical_gemm_host -> gemm_identical.identical_gemm_into (main) | gemm.neural_dispatch.identical_gemm_into (gemm_ozaki_linalg)",
+   "route": "linalg gemm_binding (bindings/_mojolearn_linalg.mojo:211) -> gemm/host_entry.mojo identical_gemm_host -> gemm_identical.identical_gemm_into",
    "controls": [
-    "gemm_ozaki_linalg",
     "gemm_contract_leaf",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
@@ -672,11 +636,16 @@
    "define": "MOJOLEARN_IDN_GEMM_FS2",
    "control": "gemm_fs2",
    "reason": "DELETED by lane/grid-prune 2026-10-07: OVN N02 FS2 vs FS4 noise (0.996/0.995). Recoverable at main ab554bb4a."
+  },
+  {
+   "define": "MOJOLEARN_IDN_GEMM_OZAKI_LINALG",
+   "control": "gemm_ozaki_linalg",
+   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser, both arms. arm/off ms ratio NV/AMD on gemm gaussian: S=4 3.972/2.061 (69.6 -> 276.6 NV, 28.5 -> 58.8 AMD), S=5 7.986/2.510 (-> 556.2 NV, 71.6 AMD); combined 2.86x / 4.48x SLOWER. The linalg GEMM calls gemm_identical directly again (gemm/host_entry.mojo); MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES (the neural Ozaki profile) is untouched. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
   }
  ],
  "notes": {
   "ozaki": "neural_gemm_ozaki_slices (neural-ozaki-gemm.json) is now declared for every neural lane whose GEMMs go through gemm/neural_dispatch (NI07 bypasses it for q/k/v when on).",
-  "nn20": "nn20_split_kv (neural-fusions.json): off arm is now main (no define); the NN20 profile comes from its parent attn_softmax (transitive parent closure in tools/six_lane_grid.py).",
+  "nn20": "nn20_split_kv and nn20_split_kv_leaves were deleted 2026-10-08 (lane grid-act-3) with their parent arm attn_softmax=summary_tree (grid ge123e6f9 loser); see neural-fusions.json removed.",
   "gemm_leaf": "gemm_leaf=all256 split into gemm_contract_leaf (neural-gemm-attn-dedupe.json), declared for gemm:gemm only; gemm_leaf keeps the neural-scope arms."
  }
 }

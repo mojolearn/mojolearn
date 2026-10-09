@@ -137,8 +137,9 @@ from training.samba_afn import (
     samba_afn_tail_train_binding,
 )
 # lane S1 samba-resident (2026-10-07): the device-resident Samba forward and
-# train step, registered only under -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP
-# (IDENTICAL); `samba_resident_enabled` is registered always so the Python
+# train step, registered only when IDN_SAMBA_RESIDENT_STEP holds (IDENTICAL
+# default since 2026-10-08, lane grid-act-4; off under
+# -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2); `samba_resident_enabled` is registered always so the Python
 # shell can ask (training/samba_resident.mojo).
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
 from training.samba_resident import (
@@ -1427,18 +1428,40 @@ def rms_norm_backward_binding(
     return PythonObject(count)
 
 
+def mlp_sessions_rows_binding(shapes: PythonObject, width: PythonObject) raises -> PythonObject:
+    """Output sizing for `mlp_sessions`: `shapes` is the session inputs'
+    shape tuples (metadata only, never row values) and `width` the model's
+    input width. Checks every session is a (rows, width) matrix and returns
+    the total row count, so the caller sizes the output from Mojo's number
+    (no Python `sum` over session rows)."""
+    var w = Int(py=width)
+    var n = len(shapes)
+    if n == 0:
+        raise Error("MLP sessions require at least one (rows, width) input")
+    var total = 0
+    for i in range(n):  # small-loop(n: session shape tuples): reads caller metadata, not data
+        var shape = shapes[i]
+        if len(shape) != 2 or Int(py=shape[1]) != w or Int(py=shape[0]) < 0:
+            raise Error("MLP sessions require at least one (rows, width) input")
+        total += Int(py=shape[0])
+    return PythonObject(total)
+
+
 def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
-                         row_counts: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """Native whole-model A/B: shared weights, independent session row batches."""
+                         shapes: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """Native whole-model A/B: shared weights, independent session row batches.
+    `shapes` is the session inputs' shape tuples; the rows are their first
+    entries (`mlp_sessions_rows` checked them and sized the output)."""
     var a = _addrs(addresses, 5, "mlp_sessions")
     _params(dims, 3, "mlp_sessions")
-    if len(input_addresses) != len(row_counts):
+    var n_sessions = len(shapes)
+    if len(input_addresses) != n_sessions:
         raise Error("neural MLP sessions: metadata length mismatch")
     var inputs = List[Int]()
     var rows = List[Int]()
-    for i in range(len(row_counts)):
+    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
         inputs.append(Int(py=input_addresses[i]))
-        rows.append(Int(py=row_counts[i]))
+        rows.append(Int(py=shapes[i][0]))
     var in_width = Int(py=dims[0])
     var hidden = Int(py=dims[1])
     var out_width = Int(py=dims[2])
@@ -1519,7 +1542,8 @@ def samba_head_loss_binding(
 
 # ===========================================================================
 # THE DEVICE-RESIDENT SAMBA FORWARD AND TRAIN STEP (lane S1 samba-resident,
-# 2026-10-07; -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP, IDENTICAL, default off).
+# 2026-10-07; IDENTICAL default since 2026-10-08 (lane grid-act-4, grid
+# ge123e6f9); -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF restores the per-op route).
 # One `_SambaResidentSession` per Python `SambaStack` (samba_resident_open),
 # then one call per forward (samba_resident_forward) or per optimizer step
 # (samba_resident_step): the registry, the gradient, the activations and the
@@ -1545,7 +1569,7 @@ def samba_resident_open_binding(
     `param_addr` = the flat float32 registry (n_total floats, read once here).
     Returns the session object; pass it to the two entries below."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_open: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+        raise Error("samba_resident_open: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
     else:
         _params(params, 9, "samba_resident_open")
         var kinds = List[Int]()
@@ -1575,7 +1599,7 @@ def samba_resident_forward_binding(
     read), ids (b*l i32), logits (b*l*vocab f32, written)]; params = [b, l].
     Returns `b * l * vocab`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_forward: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+        raise Error("samba_resident_forward: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
     else:
         var owner = session.downcast_value_ptr[SambaResidentSession]()
         var a = _addrs(addresses, 3, "samba_resident_forward")
@@ -1611,7 +1635,7 @@ def samba_resident_step_binding(
     (`optimizer_resident_open`, n_total floats). Returns `count`, the number
     of targets that are not the ignore index."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_step: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+        raise Error("samba_resident_step: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
     else:
         var owner = session.downcast_value_ptr[SambaResidentSession]()
         var a = _addrs(addresses, 7, "samba_resident_step")
@@ -1858,6 +1882,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[linear_forward_binding]("linear_forward")
         m.def_function[neural_gemm_binding]("neural_gemm")
         m.def_function[mlp_sessions_binding]("mlp_sessions")
+        m.def_function[mlp_sessions_rows_binding]("mlp_sessions_rows")
         m.def_function[residual_dropout_binding]("residual_dropout")
         m.def_function[residual_dropout_backward_binding]("residual_dropout_backward")
         m.def_function[linear_backward_binding]("linear_backward")

@@ -1,0 +1,204 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "fg-linear",
+ "branch": "lane/fg-linear",
+ "head": "a5101cb29",
+ "head_note": "lane fg-linear (flagship gaps, 2026-10-09): code only, nothing compiled, run or queued by the lane. Read file docs/plans/flagship-gaps-20261009/read_linear.md.",
+ "controls": {
+  "ridge_resident": {
+   "define": "MOJOLEARN_IDN_RIDGE_RESIDENT_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_RIDGE_RESIDENT_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_RIDGE_RESIDENT",
+    "glm/impl/gram_solve.mojo:_gs_ridge_resident_fallback",
+    "glm/impl/gram_solve.mojo:584"
+   ],
+   "binding": "_mojolearn_estimators",
+   "bits_change": false,
+   "status": "new",
+   "notes": "L2. A Ridge fit the resident Gram trust gate rejects runs the eig route (center_buf + ridge_eig_scratch_traced, ridge_fit_resident_host's statements) on the X/y and means already resident, status 0, instead of status 1 and the Python glue's 4 PCIe crossings of X. Expected no bit change (same launches as the glue's route); host column unchanged (its own reject runs the host eig route). Arm 'off' = -D MOJOLEARN_IDN_RIDGE_RESIDENT_OFF. Only reached when linear_gram_solve is on and the gate rejects (istella-like collinear designs)."
+  },
+  "jacobi_round_robin": {
+   "define": "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_JACOBI_ROUND_ROBIN",
+    "glm/impl/linalg/detail/svd.mojo:163",
+    "glm/impl/linalg/detail/lstsq.mojo:465",
+    "glm/impl/linalg/detail/lstsq_min_norm.mojo:271",
+    "decomposition/host/jacobi_select_host.mojo:host_symmetric_eigh",
+    "glm/host/glm_oracle.mojo:224,304"
+   ],
+   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
+   "bits_change": true,
+   "status": "new",
+   "notes": "L1. The linear models' small symmetric eigensolver (Ridge svdEig, OLS lstsqEig, min-norm Gram) by the round-robin two-sided Jacobi (PCA's _eig_rr_device, called not edited; host_eigh_rr on the host column) instead of the one-block cyclic jacobi_eigh_kernel. Bits change (rotation order, convergence test, budget 60); device and host columns together. PCA-only sites untouched (fg-pca's MOJOLEARN_IDN_PCA_RR_* are separate). Does NOT reach OLS's TSQR fallback: x_decomp svd of R is already round-robin on main (x_decomp/device.mojo:3609)."
+  },
+  "gram_ff_fallback": {
+   "define": "MOJOLEARN_IDN_GRAM_FF_FALLBACK",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_GRAM_FF_FALLBACK"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_GRAM_FF_FALLBACK",
+    "glm/impl/gram_ff_cells.mojo:1",
+    "glm/impl/gram_solve.mojo:_gs_ff_fit",
+    "glm/impl/gram_solve.mojo:572",
+    "glm/host/gram_solve_host.mojo:_host_gff_fit"
+   ],
+   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
+   "bits_change": true,
+   "status": "new",
+   "notes": "L3. When the fp32 Gram gate rejects a Ridge fit (alpha > 0): float-float centered Gram + cross (64 row leaves folded ascending, means split from the binary64 means by soft-f64), the same power-of-two equilibration, float-float Cholesky (one launch a column, rows in parallel) under a 2^-24 gate, float-float triangular solves, coef rounded once. Gate fails -> the ridge_resident / status-1 fallback. OLS untouched. Bits change for the fits it takes; host column runs the same cells. Quality gate owed: r2 on istella vs the eig route and vs cuML."
+  },
+  "linear_pinned_upload": {
+   "define": "MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_LINEAR_PINNED_UPLOAD",
+    "glm/impl/pinned_upload.mojo:linear_upload_f32",
+    "glm/impl/gram_solve.mojo:505",
+    "glm/estimator.mojo:439,685"
+   ],
+   "binding": "_mojolearn_estimators",
+   "bits_change": false,
+   "status": "new",
+   "notes": "L4. The resident Gram fit's, the incumbent ridge_fit_host's and qn_fit_host's X/y uploads (>= 1M floats) through a process-lifetime pinned stage of two 32 MB halves, double-buffered (memcpy of chunk i overlaps DMA of chunk i-1), instead of one pageable enqueue_copy. Not on Apple, IDENTICAL only. Transport only: no bit moves. Time it on the whole clock (the board's fit clock includes the X upload); also read upload_ms_separate."
+  },
+  "sgd_epoch_kernel": {
+   "define": "MOJOLEARN_IDN_SGD_EPOCH_KERNEL",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_SGD_EPOCH_KERNEL"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_SGD_EPOCH_KERNEL",
+    "x_linear/device.mojo:_sgd_ek_applies",
+    "x_linear/device.mojo:1943"
+   ],
+   "binding": "_mojolearn_x_linear (host twin _mojolearn_x_linear_host unchanged)",
+   "bits_change": false,
+   "status": "new",
+   "notes": "S1. Batch > XG_TPB with batch x (d + 2) <= 2^17 and the host-schedule rate (dev_eta 0: optimal / invscaling / PA) runs through sgd_mb_chunk_kernel (64 consecutive batches a launch, one block of SGD_CHUNK_TPB) instead of SGD_IDN_MB_FUSE's 2 launches a batch. Same statements, same operands, same order: no bit change expected (ID check owed). sgd-clf taxi (d 11) qualifies at batch 4096; istella (d 220) keeps the grid form."
+  },
+  "cd_gram_epochs_64": {
+   "define": "MOJOLEARN_IDN_CD_GRAM_EPOCHS_64",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_CD_GRAM_EPOCHS_64"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_CD_GRAM_EPOCHS_64",
+    "solver/impl/cd.mojo:1685"
+   ],
+   "binding": "_mojolearn_solver",
+   "bits_change": false,
+   "status": "new",
+   "notes": "C2. 64 CD Gram epochs a launch (16 otherwise) when n_cols <= 64: one state read per 64 epochs. Convergence and freeze decided on the device per epoch: coef and n_iter_ unchanged, no bit change. Lasso / ElasticNet were not raced in the last grid (read file C1): race both arms with n_iter_ recorded."
+  }
+ },
+ "algorithms": {
+  "classical:ols": {
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "route": "fit: LinearRegression.fit -> linear_gram_fit (linear_pinned_upload on the X/y upload; status 0 ends) -> else _ols_tsqr_centered (x_decomp, untouched); jacobi_round_robin reaches only the lstsqEig route (ols_fit_host), not the TSQR fallback",
+   "controls": [
+    "linear_pinned_upload",
+    "jacobi_round_robin"
+   ],
+   "interaction_groups": []
+  },
+  "more:ridge": {
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "route": "fit: Ridge.fit -> linear_gram_fit (linear_pinned_upload) -> gate reject -> [gram_ff_fallback: _gs_ff_fit] -> [ridge_resident: _gs_ridge_resident_fallback -> ridge_eig_scratch_traced -> svd_eig_scratch_traced (jacobi_round_robin)] -> else status 1 -> Python glue + ridge_fit_host (linear_pinned_upload, jacobi_round_robin)",
+   "controls": [
+    "ridge_resident",
+    "jacobi_round_robin",
+    "gram_ff_fallback",
+    "linear_pinned_upload"
+   ],
+   "interaction_groups": [
+    [
+     "ridge_resident",
+     "jacobi_round_robin"
+    ],
+    [
+     "gram_ff_fallback",
+     "ridge_resident"
+    ],
+    [
+     "gram_ff_fallback",
+     "jacobi_round_robin"
+    ]
+   ],
+   "note": "all four act only through classical-structural's linear_gram_solve (on by default); ridge_resident / gram_ff_fallback / jacobi_round_robin matter only where the fp32 gate rejects (istella), linear_pinned_upload on both datasets"
+  },
+  "more:lasso": {
+   "binding": "_mojolearn_solver",
+   "route": "fit: Lasso.fit -> cd_fit_host -> cd_fit_traced -> CD_IDN_GRAM -> cd_idn_gram_sweep_kernel (cd_gram_epochs_64 at n_cols <= 64)",
+   "controls": [
+    "cd_gram_epochs_64"
+   ],
+   "interaction_groups": []
+  },
+  "more:elasticnet": {
+   "binding": "_mojolearn_solver",
+   "route": "fit: ElasticNet.fit -> cd_fit_host -> cd_fit_traced -> CD_IDN_GRAM -> cd_idn_gram_sweep_kernel (cd_gram_epochs_64 at n_cols <= 64)",
+   "controls": [
+    "cd_gram_epochs_64"
+   ],
+   "interaction_groups": []
+  },
+  "more:logreg": {
+   "binding": "_mojolearn_estimators",
+   "route": "fit: LogisticRegression.fit -> qn_fit -> qn_fit_host (linear_pinned_upload on X/y) -> min_lbfgs -> GLMWithData.evaluate_pen -> enqueue_tiled (QN_TILED + QN_IDN_FUSED, already main's IDENTICAL default)",
+   "controls": [
+    "linear_pinned_upload"
+   ],
+   "interaction_groups": [],
+   "note": "read file's G1 (row-split X^T dZ) and G2 (fused evaluate) are already main's IDENTICAL defaults (QN_TILED glm/impl/qn/glm_base.mojo:471, QN_IDN_FUSED :1211); no new switch"
+  },
+  "expanded:sgd-clf": {
+   "binding": "_mojolearn_x_linear (host twin _mojolearn_x_linear_host)",
+   "route": "fit: SGDClassifier.fit -> _sgd_fit -> x_linear_fit -> _sgd_mb_grid -> [sgd_epoch_kernel: sgd_mb_chunk_kernel] | SGD_IDN_MB_FUSE steprows + parts",
+   "controls": [
+    "sgd_epoch_kernel"
+   ],
+   "interaction_groups": [],
+   "note": "the brief's algos:sgd-clf is the FAST key; the IDENTICAL catalog key is expanded:sgd-clf (classical-structural.json, catalog.json)"
+  }
+ }
+}

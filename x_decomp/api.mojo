@@ -578,11 +578,15 @@ def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises 
 
 # lane idn-dense-linalg (2026-10-04): the one-entry routes Python takes when
 # `idn_flags_py` says so (both bindings; the same words as the calls they
-# replace). -D MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF / -D MOJOLEARN_IDN_LU_GESV_OFF
-# clear the bit, and Python keeps the old call sequence. IDENTICAL builds
-# only: a FAST build's bits are 0 and its routes are as they were.
+# replace). -D MOJOLEARN_IDN_LU_GESV_OFF clears its bit, and Python keeps
+# the old call sequence. IDENTICAL builds only: a FAST build's bits are 0
+# and its routes are as they were.
+# Tried 2026-10-08 (MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF, the ols_one_entry "off" arm, run ge123e6f9): the old four-crossing
+# OLS sequence (_column_means + _center + _ols_tsqr) is NV/AMD 2.97x/1.74x SLOWER istella, 6.17x/3.83x taxi, r2 SAME, so
+# the one-entry route is the only IDENTICAL OLS route (MOJOLEARN_IDN_ALL_OFF no longer clears it); the _OFF define is
+# refused. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime IDN_OLS_ONE_ENTRY = _API_IDN and not (is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime IDN_OLS_ONE_ENTRY = _API_IDN
 comptime IDN_LU_GESV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 # lane fam-decomp (2026-10-04): LLE builds F0 = [F^ | u] in three cells and
 # takes F^ X as F0 [X; 0] on every column of an IDENTICAL build (device and

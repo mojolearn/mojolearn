@@ -143,36 +143,6 @@
       "measurements": "not_run_by_request"
     },
     {
-      "id": "NN05",
-      "title": "Group independent projection jobs",
-      "lane": "gemm",
-      "callers": [
-        "Q/K/V",
-        "gate/up",
-        "independent dX/dW products",
-        "Samba"
-      ],
-      "source_anchors": [
-        "gemm/experiments/grouped_jobs.mojo",
-        "training/dev_tensors.mojo",
-        "transformer/impl/llama/modeling_llama.mojo"
-      ],
-      "arm_a": "Launch separate logical products as grid jobs, sharing read-only operand staging when compatible; attribute grouping and sharing independently.",
-      "arm_b": "Independent GEMM launches with the same operands.",
-      "identity_contract": "Each contraction's k, leaves, rounded products and output tree remain unchanged; concatenating backward contractions is excluded.",
-      "quality_gate": "Every projection and gradient, complete layer/step quality and memory lifetime.",
-      "rejection_conditions": "Reject descriptor overhead or extra scratch/serialization at small batches.",
-      "prior_work": "Reuse I03; new caller combinations need their own reach mapping.",
-      "kind": "schedule",
-      "priority": "P0",
-      "mode": "identical",
-      "default_enabled": false,
-      "implementation": "planned",
-      "compilation": "not_run_by_request",
-      "verification": "not_run_by_request",
-      "measurements": "not_run_by_request"
-    },
-    {
       "id": "NN06",
       "title": "Rounded neural GEMM epilogues",
       "lane": "gemm",

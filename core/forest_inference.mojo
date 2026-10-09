@@ -250,7 +250,7 @@ def forest_row_outputs_kernel[RF_INPUT: Bool, PACKED: Bool = False](
 
 
 @always_inline
-def forest_argmax_row(
+def forest_argmax_row(  # device-helper: one row's class argmax inside forest_argmax_kernel
     scores: MutPointer[Float32, MutAnyOrigin], row: Int, outputs: Int,
 ) -> Int32:
     """First-index maximum, with the original nonfinite sentinel."""
@@ -1199,7 +1199,7 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
 # T34/T35/T38, C50. Default OFF through core.forest_experiments.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 @always_inline
-def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](
+def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # device-helper: one row's tree fold inside the forest kernels
     offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
     thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
     leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
@@ -1272,7 +1272,7 @@ def forest_leaf_ids_kernel[RF_INPUT: Bool, PACKED: Bool](
 
 
 @always_inline
-def _forest_leaf_value[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],
+def _forest_leaf_value[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],  # device-helper: one row's leaf fold inside the leaf kernels
                                    row: Int, k: Int, nt: Int, channel: Int) -> Float32:
     var total = Float32(0)
     var sums = InlineArray[Float32, 32](fill=Float32(0))

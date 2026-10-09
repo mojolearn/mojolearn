@@ -16,7 +16,6 @@ NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
 |---|---|---|---|
 | MOJOLEARN_TREES_HIST_PACKED_GH   | switch   | on/off        | hist_2_one_byte_8bit.mojo `h8_add_point` |
 | MOJOLEARN_TREES_HIST_WARP_AGG    | switch   | on/off        | hist_2_one_byte_8bit.mojo body loops |
-| MOJOLEARN_TREES_HIST_MULTISTAT   | int sweep| 4, 8 (0 = off)| greedy_search_helper.mojo multi-stat 8-bit arm |
 | MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL | switch | on/off | greedy_search_helper.mojo `replication_for` |
 """
 from std.sys.compile import is_defined
@@ -35,12 +34,10 @@ comptime HIST_PACKED_GH = _IDN and is_defined["MOJOLEARN_TREES_HIST_PACKED_GH"](
 # reduction and ONE lane issues the atomic. See `h8_add_point_wave`.
 comptime HIST_WARP_AGG = _IDN and is_defined["MOJOLEARN_TREES_HIST_WARP_AGG"]()
 
-# Idea 3: multi-stat (MultiClass) 8-bit histograms. The incumbent walks the
-# compressed index once PER STAT PLANE (`launch_one_byte[8]`, grid z =
-# stat_count). This arm walks it once per GROUP of HIST_MULTISTAT planes.
-# Legal sweep {4, 8}; 0 (absent) keeps the incumbent. 2 is the fused
-# two-stat kernel and is not a legal value here.
-comptime HIST_MULTISTAT = get_defined_int["MOJOLEARN_TREES_HIST_MULTISTAT", 0]() if _IDN else 0
+# Tried 2026-10-08 (MOJOLEARN_TREES_HIST_MULTISTAT = 4 | 8, run ge123e6f9): MultiClass one-byte histograms, one cindex
+# walk per 4 or 8 stat planes (launch_hist2_8bit_wide[NS, 1]); NV/AMD gbdt-multiclass istella 1.04x/1.41x (4), 0.99x/1.31x (8),
+# taxi 1.07x/1.11x (4), 1.11x/1.14x (8) SLOWER; accuracy and mlogloss SAME -> deleted. Recoverable at main 42d1e42c6.
+# (Idea 3; the wide kernel stays for idea 4.)
 
 # Idea 4: cost-chosen feature-parallel vs row-parallel histogram grid for
 # the SymmetricTree greedy searcher. See `sym_feature_parallel_replicas`.

@@ -13,6 +13,7 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from std.sys import has_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
@@ -47,7 +48,7 @@ from x_prep.fastpt import (
     pt_colbatch_fold, pt_spec_fold, cs_tile_stats, ptimpute_part_words, fused_tail_pair,
 )
 from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank, mi_colscale_fast_kernel, mi_reduce_fast_kernel, TGF
-from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
+from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, upload_ranges_host, download_ranges
 from core.staged_download import download_f32_into
 from core.device_pool import pool_take, pool_give
 
@@ -85,9 +86,23 @@ comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
 #: it, and the clear keeps a pooled run word-identical even if one does not).
 #: Copies and clears only: no bit moves. Idle pooled bytes are capped by
 #: core/device_pool.mojo POOL_KEEP_BYTES (2 GB).
+#: G2 (lane fg-knn-nb, 2026-10-09, arena half; the slot half is
+#: core/device_store.mojo STORE_SLOT_POOL): the same pooled `df` outside
+#: FAST, on every GPU vendor. Cost reasoning: an x_prep fit allocates and
+#: frees its device arena (the whole X range plus outputs and scratch, ~880
+#: MB for a 1M x 220 float32 X) once per call; repeated fits of one shape
+#: (cross-validation, the board's rounds) paid a device allocation, a device
+#: free and first-touch page mapping of it every call. The region contract
+#: above makes a pooled buffer word-identical (inputs uploaded, every other
+#: arena word zeroed by upload_ranges or copied whole, output memset, scratch
+#: cleared), and the idle cap is POOL_KEEP_BYTES (2 GB). DEFAULT ON (storage
+#: only, no bit moves); `-D MOJOLEARN_XPREP_ARENA_POOL_OFF=1` restores the
+#: fresh allocation (and the store's free-at-once slots).
+comptime X_PREP_POOL_ARENA_IDN = (GLOBAL_NUMERIC_MODE != NUMERIC_FAST and has_accelerator()
+                                 and not is_defined["MOJOLEARN_XPREP_ARENA_POOL_OFF"]())
 comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                             and not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"]())
-comptime _XP_DF_POOL = "MojoXPrepArenaPoolFast"
+                             and not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"]()) or X_PREP_POOL_ARENA_IDN
+comptime _XP_DF_POOL = "MojoXPrepArenaPoolFast" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojoXPrepArenaPoolIdentical"
 #: 2^24 words = 64 MB: smaller programs keep the fresh allocation
 comptime _XP_POOL_MIN_WORDS = 1 << 24
 
@@ -360,9 +375,50 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
     )
 
 
+#: G3 (lane fg-knn-nb, 2026-10-09; `-D MOJOLEARN_XPREP_NO_SLOT_HOP=1`, DEFAULT
+#: OFF, an A/B arm): the binding registers `x_prep_run_ranges_host`, and the
+#: Python program (`_Prog.run`) sends a large direct input (the
+#: MOJOLEARN_XPREP_DIRECT case) as a host span of the range list instead of
+#: putting it into a store slot first: `upload_ranges_host` copies its host
+#: words straight into the arena range through the pinned stage. Cost
+#: reasoning: the slot route allocates a second device copy of X (~880 MB at
+#: 1M x 220), uploads into it, copies it device to device into the arena
+#: (another ~880 MB of traffic) and frees it, per fit; the host span route
+#: does one upload into the arena and nothing else. Bits: none (the same
+#: words reach the same arena offsets before any stage runs).
+comptime XPREP_NO_SLOT_HOP = is_defined["MOJOLEARN_XPREP_NO_SLOT_HOP"]()
+
+#: G5 (lane fg-knn-nb, 2026-10-09; `-D MOJOLEARN_XPREP_DEVICE_CODES=1`,
+#: DEFAULT OFF, an A/B arm): the binding registers `x_prep_device_codes`, and
+#: GaussianNB.fit (python/mojolearn/_expansion_prep.py `_fit_device_codes`)
+#: takes the classes and the class codes of a numeric label vector from the
+#: base binding's DEVICE `unique_inverse` (core/label_encode_device.mojo: a
+#: device sort, a flag/scan compaction and a gather) instead of the native
+#: HOST encoder (`_labels.encode_labels`: a single-threaded host sort of all
+#: n labels). Cost reasoning: the host sort is O(n log n) serial work on the
+#: fit's critical path (tens of ms at 1M labels); the device sort is a few
+#: parallel passes over 8 MB. Bits: none (the same sorted classes and dense
+#: codes by definition; `-0.0`/`0.0` one class with the first spelling kept
+#: and NaN refused on both routes).
+comptime XPREP_DEVICE_CODES = is_defined["MOJOLEARN_XPREP_DEVICE_CODES"]()
+
+
+def run_program_device_ranges_host(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int,
+                                   out_addr: Int, out_len: Int, ins_addr: Int, nins: Int, outs_addr: Int,
+                                   nouts: Int, host_tab: Int, n_host: Int) raises:
+    """G3: `run_program_device_ranges` whose range list may name host spans
+    (src = -2 - j: entry j of the Int64 address table `host_tab`)."""
+    check_in_ranges(ins_addr, nins, arena_len, n_host)
+    check_out_ranges(outs_addr, nouts, arena_len)
+    run_program_device_ptr(
+        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len,
+        out_addr, out_len, ins_addr, nins, outs_addr, nouts, host_tab, n_host,
+    )
+
+
 def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, scratch_len: Int = 0,
                            out_addr: Int = 0, out_len: Int = 0, ins_addr: Int = 0, nins: Int = -1,
-                           outs_addr: Int = 0, nouts: Int = -1) raises:
+                           outs_addr: Int = 0, nouts: Int = -1, host_tab: Int = 0, n_host: Int = 0) raises:
     """scratch_len (lane prep-apple2): words of DEVICE-ONLY arena after the
     host's arena_len words (offsets arena_len ..); they never cross to or
     from the host and start undefined, so a program writes each scratch word
@@ -497,7 +553,11 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         print("XPPHASE alloc us", (now - t_last) // 1000, "arena", arena_len, "scratch", max(scratch_len, 0), "out", out_n,
               "sort", scratch)
         t_last = now
-    if nins >= 0:
+    if nins >= 0 and n_host > 0:
+        # G3: host spans straight into the arena (only `x_prep_run_ranges_host` passes any)
+        upload_ranges_host(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[],
+                           host_tab, n_host)
+    elif nins >= 0:
         upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[])
     elif arena_len > 0:
         if dev_len > arena_len:

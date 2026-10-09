@@ -74,8 +74,7 @@
      "attn_softmax",
      "attn_v2_tq",
      "attn_tile_order",
-     "attn_fwd_tq_rule",
-     "nn20_split_kv"
+     "attn_fwd_tq_rule"
     ]
    ]
   },
@@ -90,8 +89,7 @@
      "attn_softmax",
      "attn_v2_tq",
      "attn_tile_order",
-     "attn_fwd_tq_rule",
-     "nn20_split_kv"
+     "attn_fwd_tq_rule"
     ]
    ]
   },

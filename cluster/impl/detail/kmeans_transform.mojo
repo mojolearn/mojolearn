@@ -29,8 +29,6 @@ on every column, the order the fused kernel already pins. No reduction runs
 across cells, so the launch geometry below is scheduling only and moves no
 bit.
 """
-from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -88,8 +86,9 @@ def kmeans_transform_kernel(
         dist * dist < TRANSFORM_CLAMP_PRECISION and xn == yn
     ):
         dist = Float32(0.0)
-    comptime if KMEANS_DIRECT_DISTANCE:
-        dist = direct_squared_distance(x + row*d, centroids + col*d, d)
+    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
     if is_sqrt_in != 0:
         dist = identical_sqrt(dist)
     dist_out.unsafe_store(cell, dist)

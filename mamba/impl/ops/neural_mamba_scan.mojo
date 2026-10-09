@@ -138,7 +138,7 @@ def nn34_checkpoint_chain(chain: Int, hck: NN34FP, initial: NN34FP,
 
 
 @always_inline
-def nn34_tree_vjp_chain(chain: Int, factor_grad: NN34FP, dy: NN34FP, c: NN34FP,
+def nn34_tree_vjp_chain(chain: Int, factor_grad: NN34FP, dy: NN34FP, c: NN34FP,  # device-helper: one chain per thread of nn34_tree_vjp_kernel
     u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP, hck: NN34FP,
     batch: Int, L: Int, dim: Int):
     """Actual tree VJP. Prefix losses are visited newest to oldest; each

@@ -443,6 +443,153 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
         done.unsafe_store(0, Int32(0))
 
 
+#: fg-tsne-dbscan T2 (IDENTICAL, NVIDIA and AMD, DEFAULT OFF, lane
+#: fg-tsne-dbscan 2026-10-09): THE REPULSION IN 256-CANDIDATE TILES, ONE ROW
+#: PER THREAD. `repulse_split_kernel` stages 64 candidates per tile (one lane
+#: group) and gives each thread RS_Q = 8 (row, lane) pairs of 8 DIFFERENT
+#: rows, so every pair reads both points from threadgroup memory and a
+#: barrier pair falls every 8 pairs per thread (n / 64 tiles x 2 barriers per
+#: block per iteration). `repulse_rep_tile_kernel` stages RT2_TJ = 256
+#: candidates (4 lane groups) per tile; thread (rr, q) owns row
+#: i0 + rr (its y in registers, loaded once) and the RT2_U = 4 lanes
+#: s = q + RT2_LQ u of that row, and for each lane folds the tile's
+#: candidates j = j0 + 64 g + s for g ascending: lane s still folds its own j
+#: (j mod 64 = s) ascending from +0 with `ts_repulse_fold`'s statements, j ==
+#: i skipped, exactly TS_LANE_FOLD's lanes. The row's sums are its 64 lane
+#: partials added in ascending s from +0, each add flushed (the split
+#: kernel's owner statements), and Z is the split kernel's pinned pairwise
+#: tree over the rows (RT2_ROWS a power of two: each block is an aligned
+#: subtree), its parts folded by the last block. The same words in the same
+#: order: bits none. Cost: 16 pairs per thread per barrier pair (8 before),
+#: n / 256 tiles (4x fewer barriers per block), one y_i load per row per
+#: pass; n / RT2_ROWS blocks of 256 threads (2x the blocks of the split
+#: kernel: more of the GPU busy at a few tens of thousands of rows). The
+#: division and the flushes stay. Expected ~2x on the iteration stage.
+#: Requires TS_LANE_FOLD (the single-chain arm keeps the split kernel).
+#: -D MOJOLEARN_IDN_TSNE_REP_TILE turns it on.
+comptime IDN_TSNE_REP_TILE = (
+    TS_SPLIT and TS_LANE_FOLD and is_defined["MOJOLEARN_IDN_TSNE_REP_TILE"]()
+)
+#: threads per row, lanes per thread, rows per block, candidates per tile
+comptime RT2_LQ = 16
+comptime RT2_U = TS_LANES // RT2_LQ
+comptime RT2_TPB = 256
+comptime RT2_ROWS = RT2_TPB // RT2_LQ
+comptime RT2_TJ = 4 * TS_LANES
+#: the rows per Z part of the iteration's repulsion launch (dparts' size)
+comptime TS_PART_ROWS = RT2_ROWS if IDN_TSNE_REP_TILE else RS_ROWS
+
+
+def repulse_rep_tile_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P, done: I32P, parts: F32P):
+    """`repulse_split_kernel` under TS_LANE_FOLD with 256-candidate tiles and
+    one row per thread (IDN_TSNE_REP_TILE): the same words."""
+    comptime assert RT2_U * RT2_LQ == TS_LANES, "a row's lanes split evenly over its threads"
+    comptime assert RT2_TJ % TS_LANES == 0, "a tile holds whole lane groups"
+    comptime assert RT2_ROWS * RT2_LQ == RT2_TPB, "the block is whole rows"
+    comptime assert 2 * RT2_TJ == 2 * RT2_TPB, "one candidate staged per thread"
+    var tid = Int(thread_idx.x)
+    var nr = Int(n)
+    var i0 = Int(block_idx.x) * RT2_ROWS
+    var rr = tid // RT2_LQ
+    var q = tid - rr * RT2_LQ
+    var i = i0 + rr
+    var live = i < nr
+    var owner = live and q == 0
+    var ys = stack_allocation[2 * RT2_TJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var part = stack_allocation[3 * RT2_ROWS * TS_LANES, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var y0 = Float32(0.0)
+    var y1 = Float32(0.0)
+    if live:
+        y0 = ftz(y.unsafe_load(2 * i))
+        y1 = ftz(y.unsafe_load(2 * i + 1))
+    var lz = SIMD[DType.float32, RT2_U](0.0)
+    var l0 = SIMD[DType.float32, RT2_U](0.0)
+    var l1 = SIMD[DType.float32, RT2_U](0.0)
+    var j0 = 0
+    while j0 < nr:
+        var v0 = Float32(0.0)
+        var v1 = Float32(0.0)
+        if j0 + tid < nr:
+            v0 = ftz(y.unsafe_load(2 * (j0 + tid)))
+            v1 = ftz(y.unsafe_load(2 * (j0 + tid) + 1))
+        ys[2 * tid] = v0
+        ys[2 * tid + 1] = v1
+        barrier()
+        if live:
+            # lane s = q + RT2_LQ u folds j = j0 + 64 g + s, g ascending
+            comptime for g in range(RT2_TJ // TS_LANES):
+                comptime for u in range(RT2_U):
+                    var jj = g * TS_LANES + q + RT2_LQ * u
+                    if j0 + jj < nr and j0 + jj != i:
+                        var tm = ts_repulse_terms(y0, y1, ys[2 * jj], ys[2 * jj + 1])
+                        var zz = lz[u]
+                        var aa = l0[u]
+                        var bb = l1[u]
+                        ts_repulse_fold(tm, zz, aa, bb)
+                        lz[u] = zz
+                        l0[u] = aa
+                        l1[u] = bb
+        barrier()
+        j0 += RT2_TJ
+    # publish the lane partials; row i's owner adds its TS_LANES lanes in
+    # ascending s from +0, each add flushed
+    comptime for u in range(RT2_U):
+        var s = q + RT2_LQ * u
+        part[rr * TS_LANES + s] = lz[u]
+        part[(RT2_ROWS + rr) * TS_LANES + s] = l0[u]
+        part[(2 * RT2_ROWS + rr) * TS_LANES + s] = l1[u]
+    barrier()
+    var z = Float32(0.0)
+    var r0 = Float32(0.0)
+    var r1 = Float32(0.0)
+    if owner:
+        for s in range(TS_LANES):
+            z = ftz(z + part[rr * TS_LANES + s])
+            r0 = ftz(r0 + part[(RT2_ROWS + rr) * TS_LANES + s])
+            r1 = ftz(r1 + part[(2 * RT2_ROWS + rr) * TS_LANES + s])
+        row_z.unsafe_store(i, z)
+        rep.unsafe_store(2 * i, r0)
+        rep.unsafe_store(2 * i + 1, r1)
+        fence[ordering = Ordering.RELEASE]()
+    # Z: `repulse_split_kernel`'s tail with RT2_ROWS rows per block
+    var zs = stack_allocation[ZT_CHUNK, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var rows_here = RT2_ROWS if nr - i0 > RT2_ROWS else nr - i0
+    if owner:
+        zs[rr] = z
+    var root = _tree_shared_kern(zs, rows_here, tid, RT2_TPB)
+    if tid == 0:
+        parts.unsafe_store(Int(block_idx.x), root)
+        fence[ordering = Ordering.RELEASE]()
+    var last = stack_allocation[1, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    barrier()
+    if tid == 0:
+        var old = Atomic.fetch_add(done, Int32(1))
+        last[0] = Int32(1) if Int(old) == Int(grid_dim.x) - 1 else Int32(0)
+    barrier()
+    if last[0] == Int32(0):
+        return
+    fence[ordering = Ordering.ACQUIRE]()
+    var count = Int(grid_dim.x)
+    while count > 1:
+        var c0 = 0
+        var nc = 0
+        while c0 < count:
+            var w = ZT_CHUNK if count - c0 > ZT_CHUNK else count - c0
+            for e in range(tid, w, RT2_TPB):
+                zs[e] = parts.unsafe_load(c0 + e)
+            var r = _tree_shared_kern(zs, w, tid, RT2_TPB)
+            if tid == 0:
+                parts.unsafe_store(nc, r)
+            barrier()
+            fence[ordering = Ordering.ACQUIRE]()
+            c0 += ZT_CHUNK
+            nc += 1
+        count = nc
+    if tid == 0:
+        z_out.unsafe_store(0, ftz(parts.unsafe_load(0)))
+        done.unsafe_store(0, Int32(0))
+
+
 @always_inline
 def _tree_shared_kern(
     buf: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], w_in: Int, tid: Int, nth: Int
@@ -535,6 +682,23 @@ def kl_kernel(n: Int32, y: F32P, indptr: I32P, indices: I32P, values: F32P, z: F
         ts_kl_cell(i, y, indptr, indices, values, z, kl)
 
 
+def _enq_repulse_split(
+    ctx: DeviceContext, n: Int, mut ycur: DeviceBuffer[DType.float32], mut drz: DeviceBuffer[DType.float32],
+    mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32], mut dcnt: DeviceBuffer[DType.int32],
+    mut dparts: DeviceBuffer[DType.float32],
+) raises:
+    """TS_SPLIT's repulsion + Z launch (IDN_TSNE_REP_TILE picks the shape)."""
+    comptime if IDN_TSNE_REP_TILE:
+        ctx.enqueue_function[repulse_rep_tile_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(),
+                                                      drep.unsafe_ptr(), dz.unsafe_ptr(), dcnt.unsafe_ptr(),
+                                                      dparts.unsafe_ptr(), grid_dim=(n + RT2_ROWS - 1) // RT2_ROWS,
+                                                      block_dim=RT2_TPB)
+    else:
+        ctx.enqueue_function[repulse_split_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   dz.unsafe_ptr(), dcnt.unsafe_ptr(), dparts.unsafe_ptr(),
+                                                   grid_dim=(n + RS_ROWS - 1) // RS_ROWS, block_dim=RS_TPB)
+
+
 def _ts_iter(
     ctx: DeviceContext, mut ycur: DeviceBuffer[DType.float32], mut ynext: DeviceBuffer[DType.float32], n: Int,
     mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
@@ -544,9 +708,7 @@ def _ts_iter(
     mut dzs: DeviceBuffer[DType.float32],
 ) raises:
     comptime if TS_SPLIT:
-        ctx.enqueue_function[repulse_split_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                                   dz.unsafe_ptr(), dcnt.unsafe_ptr(), dparts.unsafe_ptr(),
-                                                   grid_dim=(n + RS_ROWS - 1) // RS_ROWS, block_dim=RS_TPB)
+        _enq_repulse_split(ctx, n, ycur, drz, drep, dz, dcnt, dparts)
         ctx.enqueue_function[step_rows_kernel](
             Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
             dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
@@ -575,11 +737,29 @@ def _ts_iter_timed(
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
     lr: Float32, mut t_rep: Int, mut t_sum: Int, mut t_step: Int, mut dzs: DeviceBuffer[DType.float32],
+    mut dcnt: DeviceBuffer[DType.int32], mut dparts: DeviceBuffer[DType.float32],
 ) raises:
     """`_ts_iter` for the stage pass only (MOJOLEARN_ANN_STAGES, lane
     ann-apple3): the same three launches, drained one by one, their wall
     times added to t_rep / t_sum / t_step (ns)."""
     var t0 = Int(perf_counter_ns())
+    # fg-tsne-dbscan: on TS_SPLIT builds the stage pass times the launches
+    # the fit runs (repulsion and Z in one launch, reported as repulse; sum
+    # 0), not the tiled route's three
+    comptime if TS_SPLIT:
+        _enq_repulse_split(ctx, n, ycur, drz, drep, dz, dcnt, dparts)
+        ctx.synchronize()
+        var ts1 = Int(perf_counter_ns())
+        ctx.enqueue_function[step_rows_kernel](
+            Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+            mom, lr, grid_dim=_grid(n), block_dim=TPB,
+        )
+        ctx.synchronize()
+        var ts3 = Int(perf_counter_ns())
+        t_rep += ts1 - t0
+        t_step += ts3 - ts1
+        return
     _enq_repulse(ctx, n, ycur, drz, drep)
     ctx.synchronize()
     var t1 = Int(perf_counter_ns())
@@ -632,10 +812,13 @@ def tsne_fit_device(
     var dni = ctx.enqueue_create_buffer[DType.int32](n * nn)
     var dp = ctx.enqueue_create_buffer[DType.float32](n * nn)
     knn_enqueue(ctx, dx, n, d, nn, dnd, dni)
+    # fg-tsne-dbscan: the kNN stage alone (MOJOLEARN_ANN_STAGES only; unset,
+    # `mark` neither syncs nor prints)
+    st.mark(ctx, "knn")
     ctx.enqueue_function[perplexity_kernel](Int32(n), dnd.unsafe_ptr(), Int32(nn), identical_log(perplexity),
                                             dp.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
     ctx.synchronize()
-    st.host("knn_perplexity")
+    st.host("perplexity")
     # lane cgr4-download-loop: P symmetrized on the device
     # (x_ann/tsne_sym_device.mojo), the host function's CSR and words; the
     # graph never comes to the host
@@ -654,7 +837,7 @@ def tsne_fit_device(
     var dz = ctx.enqueue_create_buffer[DType.float32](1)
     var dcnt = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.enqueue_memset(dcnt, Int32(0))
-    var dparts = ctx.enqueue_create_buffer[DType.float32]((n + RS_ROWS - 1) // RS_ROWS + 1)
+    var dparts = ctx.enqueue_create_buffer[DType.float32]((n + TS_PART_ROWS - 1) // TS_PART_ROWS + 1)
     var dzs = ctx.enqueue_create_buffer[DType.float32]((n + 1) // 2 + 1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
     st.mark(ctx, "upload_graph")
@@ -668,10 +851,10 @@ def tsne_fit_device(
             # the stage pass: each launch drained and timed (ann-apple3)
             if it % 2 == 0:
                 _ts_iter_timed(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step, dzs)
+                               learning_rate, t_rep, t_sum, t_step, dzs, dcnt, dparts)
             else:
                 _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step, dzs)
+                               learning_rate, t_rep, t_sum, t_step, dzs, dcnt, dparts)
         elif it % 2 == 0:
             _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts, dzs)
         else:

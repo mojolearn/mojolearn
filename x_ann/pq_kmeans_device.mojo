@@ -29,16 +29,20 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul_add
 from x_ann.ivf_pq_core import F32P, I32P
+from x_ann.stage_timer import AnnStages
 
-#: threads per threadgroup (one per code in the partial sums), rows per
-#: partial block (= the threads, so one thread stages one label)
-comptime PQK_T = 256
-comptime PQK_ROWS = 256
-#: the widest subspace and the most codes this path takes
-comptime PQK_LEN_MAX = 16
-comptime PQK_CODES_MAX = 256
+# the launch shape and limits live in x_ann/ivf_pq_core.mojo (lane fg-ivf):
+# the host twin `_codebooks_host_batched` reads the same block size and limits
+from x_ann.ivf_pq_core import PQK_CODES_MAX, PQK_LEN_MAX, PQK_ROWS, PQK_T
+#: lane fg-ivf (A1, `IDN_PQ_DEVICE_CODEBOOKS`, x_ann/switches.mojo): outside
+#: FAST every partial and block add is flushed (`ftz`, the IDENTICAL denormal
+#: policy) and the centroid is `identical_div(sum, count)` (one correctly
+#: rounded division under the flush model) instead of `sum * (1 / count)`,
+#: so NVIDIA, AMD and the host twin `_codebooks_host_batched` write the same
+#: words. FAST keeps its spelling (and its bits).
+comptime PQK_PINNED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 
 
 def _tid() -> Int:
@@ -93,7 +97,11 @@ def pqk_assign_kernel(
         PQK_CODES_MAX * PQK_LEN_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
     for e in range(t, per, PQK_T):
-        tile[e] = cb.unsafe_load(j * per + e)
+        comptime if PQK_PINNED:
+            # `pq_assign_cell`'s ftz(b) (the host twin's `_assign_host`)
+            tile[e] = ftz(cb.unsafe_load(j * per + e))
+        else:
+            tile[e] = cb.unsafe_load(j * per + e)
     barrier()
     if s >= Int(n_train):
         return
@@ -158,7 +166,10 @@ def pqk_partial_kernel(
     for rr in range(sn):
         if Int(lab[rr]) == t:
             for u in range(pl):
-                sum[u] = sum[u] + vals[rr * pl + u]
+                comptime if PQK_PINNED:
+                    sum[u] = ftz(sum[u] + vals[rr * pl + u])
+                else:
+                    sum[u] = sum[u] + vals[rr * pl + u]
             cnt += 1
     var o = (j * Int(nb) + b) * nc + t
     for u in range(pl):
@@ -182,11 +193,19 @@ def pqk_update_kernel(count: Int32, pq_len: Int32, n_codes: Int32, nb: Int32, ps
             var o = (j * Int(nb) + b) * nc + c
             cnt += Int(pcnt.unsafe_load(o))
             for u in range(pl):
-                sum[u] = sum[u] + psum.unsafe_load(o * pl + u)
+                comptime if PQK_PINNED:
+                    sum[u] = ftz(sum[u] + psum.unsafe_load(o * pl + u))
+                else:
+                    sum[u] = sum[u] + psum.unsafe_load(o * pl + u)
         if cnt > 0:
-            var inv = Float32(1.0) / Float32(cnt)
-            for u in range(pl):
-                cb.unsafe_store(e * pl + u, sum[u] * inv)
+            comptime if PQK_PINNED:
+                var fc = Float32(cnt)
+                for u in range(pl):
+                    cb.unsafe_store(e * pl + u, identical_div(sum[u], fc))
+            else:
+                var inv = Float32(1.0) / Float32(cnt)
+                for u in range(pl):
+                    cb.unsafe_store(e * pl + u, sum[u] * inv)
 
 
 def pq_codebooks_device(
@@ -203,11 +222,15 @@ def pq_codebooks_device(
     var dlab = ctx.enqueue_create_buffer[DType.int32](n_train * pq_dim)
     var dps = ctx.enqueue_create_buffer[DType.float32](pq_dim * nb * n_codes * pq_len)
     var dpc = ctx.enqueue_create_buffer[DType.int32](pq_dim * nb * n_codes)
+    # lane fg-ivf: MOJOLEARN_ANN_STAGES=1 prints `ANN-STAGE ivf_pq_codebooks_dev
+    # (init|lloyd.<i>) <ms>` (each mark syncs; unset: no sync, no print)
+    var cst = AnnStages("ivf_pq_codebooks_dev")
     ctx.enqueue_function[pqk_init_kernel](
         Int32(cells), Int32(n), Int32(n_train), Int32(rot_dim), Int32(pq_len), Int32(n_codes), Int32(seed),
         dr.unsafe_ptr(), dcb.unsafe_ptr(), grid_dim=(cells + PQK_T - 1) // PQK_T, block_dim=PQK_T,
     )
-    for _ in range(pq_iters):
+    cst.mark(ctx, "init")
+    for it in range(pq_iters):
         ctx.enqueue_function[pqk_assign_kernel](
             Int32(n_train), Int32(n), dr.unsafe_ptr(), dcb.unsafe_ptr(), Int32(pq_dim), Int32(rot_dim),
             Int32(pq_len), Int32(n_codes), dlab.unsafe_ptr(),
@@ -222,6 +245,7 @@ def pq_codebooks_device(
             Int32(pq_dim * n_codes), Int32(pq_len), Int32(n_codes), Int32(nb), dps.unsafe_ptr(), dpc.unsafe_ptr(),
             dcb.unsafe_ptr(), grid_dim=(pq_dim * n_codes + PQK_T - 1) // PQK_T, block_dim=PQK_T,
         )
+        cst.mark(ctx, String("lloyd.") + String(it))
     ctx.synchronize()
     _ = dpc^
     _ = dps^

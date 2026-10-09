@@ -82,6 +82,8 @@ from ivf.impl.neighbors.ivf_flat.ivf_group_device import (
     ivf_list_layout_device_resident,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
+    IVF_IDN_RECLUSTER_CAP,
+    IVF_IDN_STRIDED_INIT,
     IVF_MAGNITUDE_BOUND,
     IVF_TRAINSET_STRIDE,
     ivf_trainset_stride,
@@ -257,6 +259,29 @@ def ivf_gather_rows_kernel(
 
 comptime IVF_STRIDE_BLOCKS = 1024
 comptime IVF_STRIDE_TPB = 256
+
+
+def ivf_strided_init_kernel(
+    src: MutPointer[Float32, MutAnyOrigin], n_train: Int32, n_lists: Int32, dim: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """`IVF_IDN_STRIDED_INIT`'s start (lane fg-ivf B1): centre c =
+    training row `ivf_strided_init_row(c, n_train, n_lists)` =
+    (c n_train) // n_lists of the row-major `src`, for c < n_lists. A
+    grid-stride loop over the n_lists x dim destination words; each word is
+    written once, by a copy, so the start is independent of the launch
+    geometry and of the vendor, and the host column gathers the same rows."""
+    var d = Int(dim)
+    var nl = Int(n_lists)
+    var total = nl * d
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var step = Int(block_dim.x) * IVF_STRIDE_BLOCKS
+    while t < total:
+        var c = t // d
+        var f = t - c * d
+        var row = (c * Int(n_train)) // nl
+        dst.unsafe_store(t, src.unsafe_load(row * d + f))
+        t += step
 
 
 def ivf_stride_rows_kernel(
@@ -492,6 +517,16 @@ struct IvfFlatBuildDevice(Movable):
     var dlist_data: DeviceBuffer[DType.float32]
     var d_off: DeviceBuffer[DType.int32]
     var d_ind: DeviceBuffer[DType.uint32]
+    # lane fg-ivf (A3, `IVF_PQ_ONE_UPLOAD`, x_ann/ivf_pq_device.mojo): a
+    # caller that sets `keep_rows` before the build gets the uploaded rows
+    # (`dx`, n_rows x dim in row order) and the final assignment (`dlabels`)
+    # back instead of having them dropped, and the permuted list vectors are
+    # NOT laid out (`dlist_data` stays a one-word buffer unless the build is
+    # traced). IVF-PQ's coarse step reads exactly these two buffers, so it
+    # uploads the rows once. Off (the default): the resident build as before.
+    var keep_rows: Bool
+    var dx: DeviceBuffer[DType.float32]
+    var dlabels: DeviceBuffer[DType.uint32]
 
     def __init__(out self, ctx: DeviceContext) raises:
         self.dcenters = ctx.enqueue_create_buffer[DType.float32](1)
@@ -499,6 +534,9 @@ struct IvfFlatBuildDevice(Movable):
         self.dlist_data = ctx.enqueue_create_buffer[DType.float32](1)
         self.d_off = ctx.enqueue_create_buffer[DType.int32](1)
         self.d_ind = ctx.enqueue_create_buffer[DType.uint32](1)
+        self.keep_rows = False
+        self.dx = ctx.enqueue_create_buffer[DType.float32](1)
+        self.dlabels = ctx.enqueue_create_buffer[DType.uint32](1)
 
 
 #: The resident build reads the caller's rows straight from their address
@@ -768,6 +806,10 @@ def _ivf_flat_build_impl[resident: Bool](
     # callers that ask for it: the coarse quantizer does (and its k-means||
     # recluster inherits it); a no-op in every other mode
     kp.lazy_shift = True
+    # lane fg-ivf B2 (`IVF_IDN_RECLUSTER_CAP`, default on outside FAST): the
+    # k-means|| recluster stops at the caller's kmeans_n_iters, not at 300
+    comptime if IVF_IDN_RECLUSTER_CAP:
+        kp.recluster_max_iter = params.kmeans_n_iters
 
     comptime if IVF_FAST_SEED and not IVF_COARSE_FAISS_INIT:
         if not trace.enabled and n_train >= n_lists:
@@ -821,6 +863,24 @@ def _ivf_flat_build_impl[resident: Bool](
             _ = pick^
             kp.init = INIT_ARRAY
             st.host("random_init")
+
+    comptime if IVF_IDN_STRIDED_INIT:
+        # lane fg-ivf B1 (OPT-IN, bits change on every column): the strided
+        # training rows are the start; no k-means|| rounds, no recluster. The
+        # host column (ivf/host/ivf_host.mojo) starts from the same rows.
+        if kp.init == INIT_KMEANS_PLUS_PLUS and n_train >= n_lists:
+            if n_train < n_rows:
+                ctx.enqueue_function[ivf_strided_init_kernel](
+                    dxt.unsafe_ptr(), Int32(n_train), Int32(n_lists), Int32(dim), centroids.unsafe_ptr(),
+                    grid_dim=(IVF_STRIDE_BLOCKS, 1, 1), block_dim=(IVF_STRIDE_TPB, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[ivf_strided_init_kernel](
+                    dx.unsafe_ptr(), Int32(n_train), Int32(n_lists), Int32(dim), centroids.unsafe_ptr(),
+                    grid_dim=(IVF_STRIDE_BLOCKS, 1, 1), block_dim=(IVF_STRIDE_TPB, 1, 1),
+                )
+            kp.init = INIT_ARRAY
+            st.host("strided_init")
 
     if n_train < n_rows:
         _ = kmeans_fit_main_traced(
@@ -892,7 +952,9 @@ def _ivf_flat_build_impl[resident: Bool](
         # on the device in `out_dev`, and the labels are downloaded only to
         # name a bad one.
         st.host("download")
-        var rl = ivf_list_layout_device_resident(ctx, labels, dx, n_rows, dim, n_lists)
+        var rl = ivf_list_layout_device_resident(
+            ctx, labels, dx, n_rows, dim, n_lists, (not out_dev.keep_rows) or trace.enabled
+        )
         if Int(rl.max_label) >= n_lists:
             var bad_labels = download_u32(ctx, labels, n_rows)
             if from_ptr:
@@ -920,6 +982,10 @@ def _ivf_flat_build_impl[resident: Bool](
         swap(out_dev.dlist_data, rl.d_data)
         swap(out_dev.d_off, rl.d_off)
         swap(out_dev.d_ind, rl.d_ind)
+        if out_dev.keep_rows:
+            # lane fg-ivf A3: the rows and the final assignment go to the caller
+            swap(out_dev.dx, dx)
+            swap(out_dev.dlabels, labels)
         _ = rl^
         _ = dx^
         _ = dxt^

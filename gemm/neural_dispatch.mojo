@@ -32,7 +32,7 @@ from gemm.experiments.neural_streaming import (
 )
 from gemm.experiments.neural_tiled import NN09,NN15,neural_tiled_ab
 from gemm.experiments.neural_plans import NN01,NN10,NN12,neural_schedule_ab,neural_cost_plan
-from gemm.experiments.neural_grouped import NN05,NN07,_neural_operand_pack_kernel
+from gemm.experiments.neural_grouped import NN07,_neural_operand_pack_kernel
 from gemm.experiments.neural_switches import (
     ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD,ROLE_ALL,NEURAL_GEMM_ROLES,
 )
@@ -40,7 +40,9 @@ from gemm.experiments.neural_ozaki import (
     NEURAL_OZAKI,OZAKI_SLICES,neural_ozaki_into,ozaki_workspace_floats,
 )
 
-comptime NEURAL_PAIR_ENABLED = NN05 or NN07
+# NN05 (the fused pair kernel arm) deleted 2026-10-08 (lane grid-act-4, grid
+# ge123e6f9, 2.2-3.9x slower); see the tombstone at _neural_pair_kernel's old site.
+comptime NEURAL_PAIR_ENABLED = NN07
 comptime NEURAL_GEMM_EXPERIMENT_ENABLED = (
     NEURAL_PROFILE_CHANGED or NN01 or NN02 or NN09 or NN10 or NN11 or NN12 or NN15 or NN16
     or NEURAL_OZAKI
@@ -222,35 +224,13 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     _ = workspace^
 
 
-def _neural_pair_kernel(
-    c1: MutPointer[Float32,MutAnyOrigin],c2: MutPointer[Float32,MutAnyOrigin],
-    a: MutPointer[Float32,MutAnyOrigin],b1: MutPointer[Float32,MutAnyOrigin],
-    b2: MutPointer[Float32,MutAnyOrigin],m: Int32,n: Int32,k: Int32,
-    leaf: Int32,leaves: Int32,asi: Int32,asp: Int32,bsp: Int32,bsj: Int32,
-):
-    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if cell>=Int(m)*Int(n):
-        return
-    var row = cell//Int(n)
-    var col = cell%Int(n)
-    var stack1 = SIMD[DType.float32,16](0.0)
-    var stack2 = SIMD[DType.float32,16](0.0)
-    var occupied1 = 0
-    var occupied2 = 0
-    for t in range(Int(leaves)):
-        var acc1 = SIMD[DType.float32,NEURAL_CHAINS](0.0)
-        var acc2 = SIMD[DType.float32,NEURAL_CHAINS](0.0)
-        var begin = t*Int(leaf)
-        for p in range(begin,min((t+1)*Int(leaf),Int(k))):
-            var av = ftz(a.unsafe_load(row*Int(asi)+p*Int(asp)))
-            var off = p*Int(bsp)+col*Int(bsj)
-            var chain = (p-begin)%NEURAL_CHAINS
-            acc1[chain] = rtf_mul_add(av,ftz(b1.unsafe_load(off)),acc1[chain])
-            acc2[chain] = rtf_mul_add(av,ftz(b2.unsafe_load(off)),acc2[chain])
-        neural_fold_push[16](stack1,occupied1,neural_merge_chains[NEURAL_CHAINS](acc1))
-        neural_fold_push[16](stack2,occupied2,neural_merge_chains[NEURAL_CHAINS](acc2))
-    c1.unsafe_store(cell,neural_fold_drain[16](stack1,occupied1))
-    c2.unsafe_store(cell,neural_fold_drain[16](stack2,occupied2))
+# TOMBSTONE NN05 (MOJOLEARN_IDN_NEURAL_NN05, neural_gemm_pair=nn05, deleted
+# 2026-10-08 by lane grid-act-4): _neural_pair_kernel ran the gate and up
+# projections as one kernel, one A load feeding both contractions, same leaf
+# chains and fold. IDENTICAL grid ge123e6f9 nn05/off NV/AMD: lm-forward
+# 2.19x/2.80x, lm-train-step 3.72x/2.44x, transformer-forward 3.85x/3.47x
+# SLOWER (one thread per cell loses the tiled GEMM); bits same. Recoverable at
+# main 4e3da4282.
 
 
 def identical_gemm_pair_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
@@ -293,21 +273,16 @@ def identical_gemm_pair_into(ctx: DeviceContext,
                 actual_op = OP_NN
     var scratch = DeviceBuffer[DType.float32](ctx,(ws.unsafe_ptr()+scratch_offset).unsafe_origin_cast[MutAnyOrigin](),
         len(ws)-scratch_offset,owning=False)
-    comptime if NN05 and not _PAIR_CONTROL:
-        var part = neural_partition[NEURAL_LEAF](k)
-        var actual = neural_strides(actual_op,m,n,k)
-        ctx.enqueue_function[_neural_pair_kernel](c1,c2,input,b1,b2,Int32(m),Int32(n),Int32(k),
-            Int32(part[0]),Int32(part[1]),Int32(actual[0]),Int32(actual[1]),Int32(actual[2]),Int32(actual[3]),
-            grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
-    else:
-        identical_gemm_into(ctx,c1,input,b1,scratch,m,n,k,actual_op)
-        comptime if NN07 and _PAIR_CONTROL:
-            if k>0:
-                # B repeats the same producer; A shares its completed stage.
-                # Both include packing in the whole model operation.
-                ctx.enqueue_function[_neural_operand_pack_kernel](input,a,Int32(m),Int32(k),Int32(st[0]),Int32(st[1]),
-                    grid_dim=((m*k+127)//128,1,1),block_dim=(128,1,1))
-        identical_gemm_into(ctx,c2,input,b2,scratch,m,n,k,actual_op)
+    # NN05's fused pair kernel arm (deleted 2026-10-08, see the tombstone above)
+    # ran here; both projections are the identical GEMM.
+    identical_gemm_into(ctx,c1,input,b1,scratch,m,n,k,actual_op)
+    comptime if NN07 and _PAIR_CONTROL:
+        if k>0:
+            # B repeats the same producer; A shares its completed stage.
+            # Both include packing in the whole model operation.
+            ctx.enqueue_function[_neural_operand_pack_kernel](input,a,Int32(m),Int32(k),Int32(st[0]),Int32(st[1]),
+                grid_dim=((m*k+127)//128,1,1),block_dim=(128,1,1))
+    identical_gemm_into(ctx,c2,input,b2,scratch,m,n,k,actual_op)
     _ = input^
     _ = scratch^
 

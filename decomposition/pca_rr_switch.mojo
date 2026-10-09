@@ -44,3 +44,34 @@ comptime PCA_RR_SWEEPS = RR_EIGH_SWEEPS
 comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not (
     is_defined["MOJOLEARN_PCA_RR_FLAG_TEST_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+
+#: P1 + P1b, lane fg-pca (2026-10-09), DEFAULT OFF (it restructures the
+#: eigensolver's schedule): `-D MOJOLEARN_IDN_PCA_RR_ONE_BLOCK` runs the whole
+#: round-robin solve in one launch of one block (x_decomp/rr_one_block.mojo
+#: `rr_eigh_one_block_kernel`: every round's (c, s) and update fused behind
+#: barriers, the test and the gate in the same kernel, no host read between
+#: sweeps) wherever `rr_one_block_applies(n)` says one block's round beats two
+#: launches; wider solves keep the per-round launches. Device only: the same
+#: cells in the same order (no bit moves), so the host column needs no build
+#: change. The kernel and the rule live in x_decomp (the shared round-robin
+#: solver) so x_decomp's own eigh (`DevExec._eigh_par_on`) can take them too;
+#: its routing is not changed here.
+comptime PCA_RR_ONE_BLOCK = PCA_RR_EIGH and is_defined["MOJOLEARN_IDN_PCA_RR_ONE_BLOCK"]()
+
+#: P5, lane fg-pca (2026-10-09), DEFAULT OFF: `-D MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE`.
+#: `eig_and_truncate` downloaded the whole n x n covariance and eigenvector
+#: matrices and ordered the spectrum on the host (an O(n^2) exchange sort on
+#: `>` over Float64 lists, the components gathered on the host). Here the
+#: order is formed on the device (decomposition/spectrum_order_device.mojo
+#: `spectrum_rank_desc`: descending, ties to the LOWER index, one thread a
+#: value), the top n_components columns are gathered on the device, and only
+#: the diagonal (n), the order (n) and the k x n components cross; the
+#: Float64 tail (total, ratios, singular values, noise) is the same statements
+#: on the same words. Cost: 2 n^2 floats of download become k n + 2 n; the
+#: host loops over n^2 Float64 values go. BITS: the same, except where two
+#: eigenvalues tie (or a NaN): the exchange sort's tie order was not the
+#: lower index (`decomposition/host/linalg_public.mojo` `_argsort_desc` made
+#: the same move for eigh), so tied components may swap. The host column
+#: (`host_eig_and_truncate`, decomposition/host/pca_oracle.mojo) reads this
+#: switch and takes the same order: build the host binding with it too.
+comptime PCA_DEVICE_TRUNCATE = PCA_RR_EIGH and is_defined["MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE"]()

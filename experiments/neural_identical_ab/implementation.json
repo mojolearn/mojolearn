@@ -318,69 +318,6 @@
       ]
     },
     {
-      "id": "NN05",
-      "title": "Group independent projection jobs",
-      "handoffs": [
-        {
-          "id": "NN05",
-          "implementation_status": "wired_draft",
-          "implementation_paths": [
-            "gemm/experiments/neural_grouped.mojo",
-            "gemm/experiments/grouped_jobs.mojo",
-            "gemm/experiments/neural_profile.mojo",
-            "gemm/neural_dispatch.mojo",
-            "gemm/neural_backward.mojo",
-            "gemm/host/neural_gemm.mojo",
-            "gemm/experiments/neural_profile_device.mojo",
-            "training/dev_tensors.mojo",
-            "training/mlp_ops.mojo",
-            "training/byte_lm.mojo",
-            "training/byte_lm_logits.mojo",
-            "transformer/impl/llama/modeling_llama.mojo",
-            "transformer/checks/transformer_backward.mojo",
-            "mamba/impl/modules/idn_gemm_ws.mojo",
-            "x_cnn/device.mojo"
-          ],
-          "candidate_defines": [
-            "MOJOLEARN_NUMERIC_IDENTICAL=1",
-            "MOJOLEARN_IDN_NEURAL_NN05=1"
-          ],
-          "baseline_defines": [
-            "MOJOLEARN_NUMERIC_IDENTICAL=1",
-            "MOJOLEARN_IDN_NEURAL_NN05=1",
-            "MOJOLEARN_IDN_NEURAL_PAIR_CONTROL=1"
-          ],
-          "runtime_env": {},
-          "entry_points": [
-            "GemmWorkspace.run_pair",
-            "identical_gemm_pair_into",
-            "llama_mlp_forward gate/up projections"
-          ],
-          "arms": {
-            "A1": "CANDIDATE=True, SHARE_LEFT=False: existing I03 grouped grid for independent products",
-            "A2": "CANDIDATE=True, SHARE_LEFT=True: new common-A load feeds 1-4 independent job chains per thread",
-            "B": "CANDIDATE=False: independent launches with identical leaf/fold arithmetic"
-          },
-          "default_enabled": false,
-          "remaining": [
-            "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
-            "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
-          ],
-          "compilation": "not_run_by_request",
-          "verification": "not_run_by_request",
-          "identity": "not_run_by_request",
-          "quality": "not_run_by_request",
-          "timing": "not_run_by_request",
-          "wired_callers": [
-            "transformer/impl/llama/modeling_llama.mojo::llama_mlp_forward"
-          ],
-          "optional_variants": [],
-          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
-          "handoff": "gemm.json"
-        }
-      ]
-    },
-    {
       "id": "NN06",
       "title": "Rounded neural GEMM epilogues",
       "handoffs": [

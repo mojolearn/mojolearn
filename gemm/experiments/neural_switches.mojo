@@ -12,8 +12,10 @@ absent define is the incumbent IDENTICAL GEMM. Arms:
                       by -D MOJOLEARN_IDN_NEURAL_GEMM_ARM (needs
                       MOJOLEARN_GEMM_ARM_TRIAL)
    2  stream         NN02: bounded partial-plane groups, neural callers only
-   3  stream_all     NI02: bounded partial planes in gemm_identical, EVERY
-                      GEMM caller (gemm lane, classical, neural)
+   (3 stream_all, NI02, bounded partial planes for EVERY GEMM caller, was
+      deleted by lane/grid-act-3 2026-10-08: grid ge123e6f9 gemm 2.07x NV /
+      1.78x AMD, lm-train-step 1.11x / 1.07x slower; recoverable at main
+      bc10b8b56. The guards refuse 3.)
    4  stream_exact   NN02 + NN11: stream with exact fold-state slots
    (8 async, NN08, was deleted by lane/grid-prune 2026-10-07: OVN N03 measured
       the NVIDIA async pipeline 2.2x and 4.2x slower than its synchronous
@@ -30,8 +32,7 @@ keep the incumbent route in the same build. Bits: 1 projection (forward and
 dInput of every layer that is not the LM head), 2 head (LM head forward and
 dInput), 4 weight-grad (every dWeight/dBias product). The role is a
 call-site tag (`identical_gemm_into[ROLE=...]`), never a matrix size, so one
-mask covers every model width. Arm 3 is a global GEMM-contract arm and takes
-only the default mask.
+mask covers every model width.
 
 The legal-arm asserts live in core/six_lane_experiment_guards.mojo, which
 every binding evaluates through GLOBAL_NUMERIC_MODE.
@@ -47,7 +48,6 @@ comptime _ALLOWED = (
 comptime SCHED_INCUMBENT = 0
 comptime SCHED_GEOMETRY = 1
 comptime SCHED_STREAM = 2
-comptime SCHED_STREAM_ALL = 3
 comptime SCHED_STREAM_EXACT = 4
 comptime SCHED_PAGES = 9
 comptime SCHED_COST = 10

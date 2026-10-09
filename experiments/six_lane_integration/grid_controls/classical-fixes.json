@@ -27,26 +27,6 @@
    "status": "rewritten",
    "note": "Lloyd iterations enqueued per device-convergence flag read (IDN_KMEANS_DEVICE_CONV loop). ONE int sweep define replacing the five mutually overriding MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1|_2|_4|_16|_32 (now refused by the guard); each value keeps that old arm's loop. Legal set 1|2|4|8|16|32, default 8. Cost: one host sync per chunk vs up to chunk-1 near-empty launches past convergence; no shape rule. No bit moves (labels, centroids, inertia, n_iter are the per-iteration loop's); the host column has no chunked loop, so it is unaffected. Reached by every kmeans_fit caller: classical:kmeans (_mojolearn), more:gmm kmeans init (_mojolearn_mixture), more:ivf coarse kmeans (_mojolearn_ivf). Prior evidence (source comment): A08 chunk 1 partial AMD win 0.83-0.99x, NVIDIA mixed."
   },
-  "ols_one_entry": {
-   "define": "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_decomp/api.mojo:585",
-    "x_decomp/device.mojo:4133",
-    "python/mojolearn/linear_model.py:694"
-   ],
-   "binding": "_mojolearn_x_decomp",
-   "bits_change": false,
-   "status": "kept",
-   "note": "This is the brief's MOJOLEARN_CLASSICAL_OLS_CENTER_RESIDENT idea, which is ALREADY the IDENTICAL default: idn_flags bit 0 (IDN_OLS_ONE_ENTRY, on in every IDENTICAL build) routes LinearRegression.fit (fit_intercept=True, no weights, tall design: the board's call) through _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> DevExec.ols_tsqr_factor, which uploads X and y once and does column sums, means, centering and the blocked TSQR on resident buffers. The host round trip the report read at linear_model.py:715-726 is the fallback taken only when the flag is clear. No new define was added (it would duplicate this one). The grid control is the existing _OFF arm, so the A/B measures the resident route against the old four-crossing route. Same words both arms (docstring); host column (_mojolearn_x_decomp_host) follows the same flag."
-  },
   "ridge_ff_always": {
    "define": "MOJOLEARN_RIDGE_FF_ALWAYS",
    "kind": "switch",
@@ -76,19 +56,12 @@
    "controls": [
     "kmeans_conv_chunk"
    ],
-   "interaction_groups": [
-    [
-     "kmeans_conv_chunk",
-     "c37_fused_accumulate"
-    ]
-   ]
+   "interaction_groups": []
   },
   "classical:ols": {
    "binding": "_mojolearn_x_decomp (host twin _mojolearn_x_decomp_host)",
    "route": "fit: LinearRegression.fit (linear_model.py:694) -> _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> ols_tsqr_factor (x_decomp/device.mojo:4133)",
-   "controls": [
-    "ols_one_entry"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "more:logreg": {
@@ -123,12 +96,7 @@
    "controls": [
     "ridge_ff_always"
    ],
-   "interaction_groups": [
-    [
-     "ridge_ff_always",
-     "c13_fold_stats_ridgecv"
-    ]
-   ]
+   "interaction_groups": []
   }
  },
  "removed": [
@@ -148,6 +116,12 @@
    "define": "MOJOLEARN_QN_IDN_DCONV",
    "control": "qn_idn_dconv",
    "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 neutral/slower (1.030x combined), a loser. on/off ms ratio NV/AMD: logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983; linearsvr istella 1.045/1.025, taxi 1.058/1.075 (SLOWER); accuracy/logloss/r2/rmse SAME. Code recoverable at main ad7ed2370; MOJOLEARN_QN_IDN_DCONV and its _POLL_2/_POLL_8 refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF",
+   "control": "ols_one_entry",
+   "arm": "off",
+   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser (the OFF arm). off/on ms ratio NV/AMD on ols: istella 2.968/1.738 (816.2 -> 2422.8 NV, 468.9 -> 815.1 AMD), taxi 6.165/3.828 (34.0 -> 209.9 NV, 14.5 -> 55.4 AMD); r2 SAME. The one-entry resident TSQR is the only IDENTICAL OLS route (x_decomp/api.mojo IDN_OLS_ONE_ENTRY = IDENTICAL; MOJOLEARN_IDN_ALL_OFF no longer clears it); the Python four-crossing sequence stays only for FAST builds and older bindings. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
   }
  ]
 }

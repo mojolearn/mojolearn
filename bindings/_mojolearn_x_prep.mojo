@@ -1,7 +1,7 @@
 """THE PREP LANE'S GPU BINDING (preprocessing additions, naive Bayes and
 discriminant analysis). One entry runs a program of units on the device
 (x_prep/common.mojo); the host binding runs the same units on the CPU."""
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT, C61_NB_ARM, C61_DA
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -15,6 +15,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
+from x_prep.device import run_program_device_ranges_host, XPREP_NO_SLOT_HOP, XPREP_DEVICE_CODES
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py, IDN_NB_CSR, nb_csr_fit_int_py, nb_csr_jll_chk_py
 from x_prep.blocked import IDN_NB_ONEPASS, IDN_NB_CSR_DENSE
@@ -103,6 +104,39 @@ def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_ad
     with GILReleased(Python()):
         run_program_device_ranges(fa, n, qa, s, sc, oa, on, ia, ni, ra, no)
     return PythonObject(s)
+
+
+def run_ranges_host_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_addr: PythonObject,
+                            sizes: PythonObject, ranges: PythonObject, hosts: PythonObject) raises -> PythonObject:
+    """G3 (`-D MOJOLEARN_XPREP_NO_SLOT_HOP`, x_prep/device.mojo): x_prep_run_ranges
+    whose input triples may name host spans, src = -2 - j for entry j of
+    hosts = (table_addr, n): n Int64 host addresses."""
+    var fa = Int(py=arena_addr)
+    var qa = Int(py=prog_addr)
+    var oa = Int(py=out_addr)
+    var n = Int(py=sizes[0])
+    var sc = Int(py=sizes[1])
+    var on = Int(py=sizes[2])
+    var s = Int(py=sizes[3])
+    var ia = Int(py=ranges[0])
+    var ni = Int(py=ranges[1])
+    var ra = Int(py=ranges[2])
+    var no = Int(py=ranges[3])
+    var ta = Int(py=hosts[0])
+    var nh = Int(py=hosts[1])
+    if fa == 0 or qa == 0 or n < 0 or sc < 0 or on < 0 or s < 0 or (on > 0 and oa == 0) or ni < 0 or no < 0:
+        raise Error("x_prep: invalid program buffers")
+    if nh < 0 or (nh > 0 and ta == 0):
+        raise Error("x_prep: invalid host span table")
+    with GILReleased(Python()):
+        run_program_device_ranges_host(fa, n, qa, s, sc, oa, on, ia, ni, ra, no, ta, nh)
+    return PythonObject(s)
+
+
+def device_codes_binding() raises -> PythonObject:
+    """G5 (`-D MOJOLEARN_XPREP_DEVICE_CODES`, x_prep/device.mojo): present only
+    when built with it; GaussianNB.fit's probe for the device label codes."""
+    return PythonObject(1)
 
 
 def dev_put_binding(addr: PythonObject, n_words: PythonObject) raises -> PythonObject:
@@ -279,7 +313,7 @@ def idn_int_binding() raises -> PythonObject:
 
 
 def pool_arena_binding() raises -> PythonObject:
-    """Present only in a FAST Apple build with X_PREP_POOL_ARENA on (default; absent under -D MOJOLEARN_X_PREP_POOL_ARENA_OFF). A probe for checkers."""
+    """Present when X_PREP_POOL_ARENA is on: a FAST Apple build (absent under -D MOJOLEARN_X_PREP_POOL_ARENA_OFF) or, since lane fg-knn-nb G2, any non-FAST GPU build (absent under -D MOJOLEARN_XPREP_ARENA_POOL_OFF). A probe for checkers."""
     return PythonObject(1)
 
 
@@ -323,10 +357,10 @@ def c08_routes_binding() raises -> PythonObject:
 def classical_shared_binding() raises -> PythonObject:
     """Bits read by python/mojolearn/_expansion_prep.py `_classical_shared`:
     1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 C04_LDA,
-    8 C56_LDA_INPUT, 16-48 C61_NB_ARM << 4, 64 C61_DA."""
+    8 C56_LDA_INPUT; 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
+    after grid ge123e6f9: slower on both vendors, quality same)."""
     return PythonObject(
         Int(C08_DICTIONARY) | (Int(C04_LDA) << 2) | (Int(C56_LDA_INPUT) << 3)
-        | ((C61_NB_ARM & 3) << 4) | (Int(C61_DA) << 6)
     )
 
 
@@ -384,6 +418,12 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
         m.def_function[run_ranges_binding]("x_prep_run_ranges")
+        comptime if XPREP_NO_SLOT_HOP:
+            # lane fg-knn-nb G3 (default off)
+            m.def_function[run_ranges_host_binding]("x_prep_run_ranges_host")
+        comptime if XPREP_DEVICE_CODES:
+            # lane fg-knn-nb G5 (default off)
+            m.def_function[device_codes_binding]("x_prep_device_codes")
         m.def_function[dev_put_binding]("x_prep_dev_put")
         m.def_function[dev_free_binding]("x_prep_dev_free")
         m.def_function[dev_live_binding]("x_prep_dev_live")

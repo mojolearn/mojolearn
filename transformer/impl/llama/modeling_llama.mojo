@@ -267,8 +267,6 @@ agreement with HuggingFace, PyTorch or MAX: the fold orders,
 transcendentals and division below are OURS.
 """
 
-from transformer.experiments.summary_model import model_summary_forward
-from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
 from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
@@ -1712,6 +1710,17 @@ struct LlamaDeviceStages(Movable):
     carry planes). Set by `llama_decoder_layer_forward_planted` on every
     call; read by S11 and by the attention path choice."""
     var attn_prefer_eager: Bool  # byte-LM auto policy; explicit fused overrides
+    var attn_recompute_backward: Bool
+    """Model-kind attention stash policy (lane grid-act-4, 2026-10-08): the
+    caller's training step wants the backward to recompute the attention
+    exponents instead of keeping the fused forward's exp stash in `aexp`.
+    The fused forward then takes the plain launcher (nothing kept,
+    `attn_estash_cells` stays 0) and the backward takes the plain launcher,
+    exactly what `-D MOJOLEARN_IDN_ATTN_STASH=1` does for every caller. Set
+    only by the Samba resident train step (training/samba_resident.mojo,
+    IDN_SAMBA_ATTN_RECOMPUTE); every other caller (the LM / transformer
+    training steps) keeps the build's stash profile. False by default and
+    after `reset`."""
     var attn_forward_status: Int  # -1 not attempted; otherwise FUSED_* for last forward
     var attn_fused_off: Bool
     """DEVIATION 3110: this layer's fused FORWARD refused once, so it is not
@@ -1832,6 +1841,7 @@ struct LlamaDeviceStages(Movable):
         self.sbh = _zeros[False](ctx, sbh_n)
         self.qk_sumsq = _zeros[False](ctx, m * nh)
         self.attn_prefer_eager = False
+        self.attn_recompute_backward = False
         self.attn_forward_status = -1
         self.attn_fused_off = False
         self.attn_materialized = False
@@ -1913,6 +1923,7 @@ struct LlamaDeviceStages(Movable):
         step_count_launch()
         self.qk_sumsq.enqueue_fill(Float32(0))
         self.attn_prefer_eager = False
+        self.attn_recompute_backward = False
         self.attn_forward_status = -1
         self.attn_fused_off = False
         self.attn_materialized = False
@@ -4174,31 +4185,10 @@ def eager_attention_forward(
     corner says so. Returns the fused status (`FUSED_RAN` when the fused
     bits are the ones in `stages.ctxv`; -1 when the fused path was not
     attempted)."""
-    comptime if NN20_BALANCED_SUMMARY_TREE:
-        if softcap != Float32(0.0) or stages.int15_on or plant_at != PLANT_AT_NONE:
-            raise Error("NN20 summary profile refuses softcap, INT15 and legacy score plants")
-        var record_stages = materialize or trace.enabled
-        if record_stages:
-            ensure_attention_stage_capacity(ctx, stages, l, s)
-        model_summary_forward(ctx, stages.ctxv, stages.amax, stages.denom,
-            stages.scores, stages.masked, stages.aexp, stages.weights,
-            stages.q_rope, stages.k_cache, stages.v_cache, b, l,
-            dims.n_heads, dims.n_kv, dims.head_dim, s, pos0, key_lo, window,
-            llama_attention_scale(dims.head_dim), record_stages)
-        stages.attn_materialized = record_stages
-        stages.attn_estash_cells = 0
-        stages.attn_fwd_scan.clear()
-        stages.attn_forward_status = 20  # explicit new arithmetic version
-        if trace.enabled:
-            var cells = b * dims.n_heads * l * s
-            trace.record_device[DType.float32](ctx,prefix+".attn.scores",stages.scores,cells)
-            trace.record_device[DType.float32](ctx,prefix+".attn.masked",stages.masked,cells)
-            trace.record_device[DType.float32](ctx,prefix+".attn.max",stages.amax,b*dims.n_heads*l)
-            trace.record_device[DType.float32](ctx,prefix+".attn.exp",stages.aexp,cells)
-            trace.record_device[DType.float32](ctx,prefix+".attn.denom",stages.denom,b*dims.n_heads*l)
-            trace.record_device[DType.float32](ctx,prefix+".attn.weights",stages.weights,cells)
-        trace.record_device[DType.float32](ctx,prefix+".attn.ctx",stages.ctxv,b*l*dims.n_heads*dims.head_dim)
-        return 20
+    # Tried 2026-10-08 (MOJOLEARN_IDN_ATTN_SOFTMAX=1, the NN20 summary_tree arm, run ge123e6f9): NV/AMD lm-forward
+    # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
+    # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
+    # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
     stages.attn_v2 = False
     comptime if IDN_ATTENTION_V2 and not BLOCK_ANY_SABOTAGE:
         # Numeric-profile choice, independent of hardware and dimensions.
@@ -4273,7 +4263,10 @@ def eager_attention_forward(
             # (DEVIATION 2657); every other build takes the branch below
             # unchanged.
             var arm = fused_attention_arm_from_env()
-            if (not need_eager) and fused_attention_arm_estash_runs(arm):
+            # A caller that asked for the recompute policy
+            # (`attn_recompute_backward`, the Samba train step) keeps no
+            # stash: the plain launcher below runs, as under ATTN_STASH=1.
+            if (not need_eager) and fused_attention_arm_estash_runs(arm) and not stages.attn_recompute_backward:
                 var ran = 0
                 status = fused_forward_launch_estash_ran(
                     ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,

@@ -62,7 +62,6 @@ _BINDING = "_mojolearn_x_prep"
 
 #: op name -> id; x_prep/units.mojo `run_unit` holds the same table.
 _OPS = dict(
-    csbm_part=190, csbm_fold=191, csbm_pool=192,
     centered_matmul=178, unique_inverse=177, sort_cols=0, col_stats=1, quantile=2, affine=3, scale_params=4, unique_cols=5, mode_cols=6,
     lookup=7, count_neg=8, onehot=9, i2f=10, f2i=11, binarize=12, matmul=13, row_softmax=14,
     row_argmax=15, class_stats=16, center_rows=17, eigh=18, where_neg=19,
@@ -531,6 +530,12 @@ class _Prog:
         spans = []
         direct = None
         gathered = []
+        # lane fg-knn-nb G3 (-D MOJOLEARN_XPREP_NO_SLOT_HOP, default off): a
+        # large direct input goes up as a host span straight into the arena
+        # (no store slot, no device-to-device copy); absent entry = off
+        run_host = (_optional_prep_entry(binding, "x_prep_run_ranges_host")
+                    if run_ranges is not None else None)
+        host_addrs = []
         for off, arr, _ in self._inputs:  # glue: walks the program input buffers once
             if not arr.size:
                 continue
@@ -555,6 +560,10 @@ class _Prog:
                     and _switch("MOJOLEARN_XPREP_DIRECT")):
                 # MOJOLEARN_XPREP_DIRECT: up from the input's own buffer into a
                 # slot freed when the run ends (no copy into the host arena)
+                if run_host is not None:
+                    host_addrs.append(addr_ro(arr, name="input"))
+                    spans.append((off, off + arr.size, -1 - len(host_addrs)))  # src -2 - j: host table entry j
+                    continue
                 if direct is None and _arena_io.DeviceCache.supports(binding, "x_prep"):
                     direct = _arena_io.DeviceCache(binding, "x_prep")
                 cache = direct
@@ -580,9 +589,16 @@ class _Prog:
             ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
             out, out_addr = _zero_words(on, self._out_code) if dev_out else (None, 0)
             try:
-                run_ranges(base, prog.buffer_info()[0], out_addr,
-                           (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
-                           (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
+                if host_addrs:
+                    tab = array.array("q", host_addrs)  # glue: packs the G3 host span addresses
+                    run_host(base, prog.buffer_info()[0], out_addr,
+                             (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
+                             (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)),
+                             (tab.buffer_info()[0], len(host_addrs)))
+                else:
+                    run_ranges(base, prog.buffer_info()[0], out_addr,
+                               (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
+                               (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
             finally:
                 for slot in gathered:  # glue: frees each fold-rows slot
                     binding.x_prep_dev_free(slot)
@@ -2584,54 +2600,28 @@ def _cs(pr, mode, xo, n, d, out, var=True):
         pr.stage("col_stats", d, xo, n, d, out)
 
 
-def _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, sums, *tail, family=None):
+def _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, sums, *tail):
     """An unweighted class_stats stage: x_prep/blocked.mojo's blocked order
     under IDN_STATS_BLOCKED (IDENTICAL; `_class_stats`) while its partial
     tables stay within _CLS_BLOCK_WORDS, else one thread per (class, column)
     over every row (`tail`: the serial stage's trailing parameters)."""
     nb = (n + _XB - 1) // _XB
     if _blocked() and _idn_fam(mode) & _IDN_STATS_BLOCKED and nb * K * d <= _CLS_BLOCK_WORDS:
-        _class_stats(pr, None, K * d, xo, n, d, yo, K, cnt, mean, var, sums, mode=mode, family=family)
+        _class_stats(pr, None, K * d, xo, n, d, yo, K, cnt, mean, var, sums, mode=mode)
     else:
         pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, sums, *tail)
 
 
-def _c61(mode, family):
-    """The C61 single-pass class-statistics arm this binding was built with
-    for an estimator family ('nb': 0, 1 or 2; 'da': 0 or 1), from
-    `x_prep_classical_shared` bits 4-5 / 6 (compile-time admission only)."""
-    if family is None:
-        return 0
-    bits = _classical_shared(mode if mode is not None else _mode())
-    if family == "nb":
-        return (bits >> 4) & 3
-    return 1 if family == "da" and bits & 64 else 0
-
-
-def _class_stats_m2(pr, wo, xo, n, d, yo, K, cnt, mean, var, sums, m2=_NONE):
-    """C61 (x_prep/blocked.mojo csbm_part / csbm_fold): class statistics from
-    ONE walk of X; the class means and sums are csb_fold's words, the
-    variances (and the raw M2 into m2) come from Chan-merged block Welford
-    partials. Returns the per-(class, column) count table for csbm_pool."""
-    nb = (n + _XB - 1) // _XB
-    w = _NONE if wo is None else wo
-    ps, pc, pm, pm2 = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(nb * K * d), pr.work(nb * K * d)
-    cn = pr.work(K * d)
-    pr.stage("csbm_part", nb * d, xo, n, d, yo, K, ps, pc, pm, pm2, nb, w)
-    pr.stage("csbm_fold", K * d, ps, pc, pm, pm2, nb, K, d, cn, cnt, mean, sums, var, m2, w)
-    return cn
-
-
-def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None, family=None):
+# Tried 2026-10-08 (C61 single-pass class statistics, csbm_part / csbm_fold / csbm_pool, x_prep ops 190-192;
+# MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1|2 and MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS, run ge123e6f9): slower on
+# both vendors, quality SAME. gaussian-nb arm 1 NV/AMD 1.58x/1.05x istella, 1.42x/1.08x taxi; arm 2 1.57x/1.02x,
+# 1.37x/1.03x; lda-clf 1.38x/1.04x, 1.54x/1.11x. Deleted with the defines refused; recoverable at main bc10b8b56.
+def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None):
     """class_stats, or its weighted form when a sample_weight offset is given;
     in x_prep/blocked.mojo's blocked order when `_blocked()` (offsets
     _NONE are not written). mode given and IDN_CLASS_ONEPASS (IDENTICAL):
     one unit per (block, column) walks X once for every class (csb1_part /
-    csb1_ss; the same words as csb_part / csb_ss). family ('nb' / 'da') with
-    its C61 switch built in and a variance wanted: `_class_stats_m2`."""
-    if _blocked() and var != _NONE and _c61(mode, family):
-        _class_stats_m2(pr, wo, xo, n, d, yo, K, cnt, mean, var, sums)
-        return
+    csb1_ss; the same words as csb_part / csb_ss)."""
     if _blocked():
         nb = (n + _XB - 1) // _XB
         w = _NONE if wo is None else wo
@@ -2659,20 +2649,13 @@ def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None
 
 def _gnb_stats(pr, mode, wo, xo, n, d, yo, K, cnt, theta, var, eps, vs):
     """GaussianNB's statistics stages: epsilon (var_smoothing * the largest
-    column variance) and the class counts, means and variances. C61 arm 2
-    (unweighted): the column variance is the Chan merge of the class M2 over
-    the classes (csbm_pool), so X is walked once; otherwise column stats and
-    `_class_stats` (C61 arm 1: its single-pass form)."""
-    if wo is None and _blocked() and _c61(mode, "nb") == 2:
-        m2, cv = pr.work(K * d), pr.work(d)
-        cn = _class_stats_m2(pr, None, xo, n, d, yo, K, cnt, theta, var, _NONE, m2)
-        pr.stage("csbm_pool", d, m2, theta, cn, K, d, n, cv, 1)
-        pr.stage("gnb_eps", 1, cv, d, eps, vs)
-        return
+    column variance) and the class counts, means and variances (column
+    stats, then `_class_stats`; the C61 single-pass arms were deleted
+    2026-10-08, see the note above `_class_stats`)."""
     st = pr.alloc(6 * d)
     _col_stats(pr, xo, n, d, st)
     pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
-    _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE, mode=mode, family="nb")
+    _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE, mode=mode)
 
 
 def _given_priors(values, K, who, check_sum=False):
@@ -2716,6 +2699,36 @@ def _partial_dev(est, y, n, walk):
     if lb is None or lb.n != n:
         return None
     return _DevCodes(lb, cats, walk)
+
+
+#: lane fg-knn-nb G5: the label dtypes whose classes the device
+#: `unique_inverse` returns exactly as the native encoder does (bool, uint64
+#: and object labels keep `encode_labels`).
+_DEVICE_CODE_DTYPES = frozenset(("i1", "i2", "i4", "i8", "u1", "u2", "u4", "f4", "f8"))
+
+
+def _fit_device_codes(est, y, n, mode):
+    """lane fg-knn-nb G5 (-D MOJOLEARN_XPREP_DEVICE_CODES, default off; the
+    binding's `x_prep_device_codes` probe is the switch): a fit's classes and
+    int32 codes from the base binding's DEVICE `unique_inverse` instead of the
+    native host sort, for a numeric label vector of n labels; else None (the
+    caller keeps `_encode_y`). Sets `est.classes_` as `_encode_y` does."""
+    if isinstance(y, (list, tuple, str, bytes)):
+        return None
+    if _optional_prep_entry(_prep_binding(mode), "x_prep_device_codes") is None:
+        return None
+    from ._buffer import _materialize
+    try:
+        arr, _ = _materialize(y, "y")
+    except (TypeError, ValueError):
+        return None
+    dt = arr.dtype.lstrip("<>|=")
+    if dt not in _DEVICE_CODE_DTYPES or arr.size != n or arr.size == 0 or arr.size != max(arr.shape):  # glue: largest axis of the shape
+        return None
+    classes, codes = _labels.unique_inverse(arr)
+    conv = float if dt[0] == "f" else int
+    est.classes_ = [conv(v) for v in classes.tolist()]  # glue: the k class values
+    return codes
 
 
 def _stage_partial_codes(pr, codes, mode):
@@ -2815,9 +2828,12 @@ class GaussianNB(_Classifier):
     def fit(self, X, y, sample_weight=None):
         arr = _x2d(X)
         n, d = arr.shape
-        codes = self._encode_y(y, n)
-        K = len(self.classes_)
         mode = _mode()
+        # lane fg-knn-nb G5 (default off): device label codes when built in
+        codes = _fit_device_codes(self, y, n, mode)
+        if codes is None:
+            codes = self._encode_y(y, n)
+        K = len(self.classes_)
         pr = _Prog()
         xo = pr.put(arr)
         yo = pr.put_codes(codes)
@@ -3397,28 +3413,18 @@ class LinearDiscriminantAnalysis(_Classifier):
         scal1, g2, ms = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(K * d)
         e2, v2 = pr.alloc(d), pr.alloc(d * d)
         scal, coef, inter, evr, tmp = pr.alloc(d * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(d), pr.alloc(K * d)
-        # C61_DA: the within-class std from the pooled class M2 of one walk of X
-        # (csbm_pool), not from X - mean[y] materialised and two column-stat passes
-        c61 = _blocked() and _c61(mode, "da") and ((n + _XB - 1) // _XB) * K * d <= _CLS_BLOCK_WORDS
-        if c61:
-            m2 = pr.work(K * d)
-            cn = _class_stats_m2(pr, None, xo, n, d, yo, K, cnt, mean, _NONE, _NONE, m2)
-        else:
-            _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
+        # C61_DA (the within-class std from a pooled class M2, csbm_pool) tried 2026-10-08, run ge123e6f9:
+        # lda-clf NV/AMD 1.38x/1.04x istella, 1.54x/1.11x taxi SLOWER, quality SAME; deleted, recoverable at main bc10b8b56.
+        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
         gflag, gofs = 0, 0
         if self.priors is not None:
             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
             gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)  # glue: validates the user priors argument sums to one (pv-sized: user prior list)
         pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
-        if c61:
-            wv = pr.work(d)
-            pr.stage("csbm_pool", d, m2, mean, cn, K, d, n, wv, 0)
-        else:
-            z, stz = pr.work(n * d), pr.alloc(6 * d)
-            pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
-            _cs(pr, mode, z, n, d, stz)
-            wv = stz + 2 * d
-        pr.stage("lda_w", d, wv, d, n, K, std, w)
+        z, stz = pr.work(n * d), pr.alloc(6 * d)
+        pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
+        _cs(pr, mode, z, n, d, stz)
+        pr.stage("lda_w", d, stz + 2 * d, d, n, K, std, w)
         pr.stage("center_rows", n * d, xo, n, d, mean, yo, w, z2)
         _gram(pr, mode, z2, n, d, g)
         pr.stage("eigh", 1, g, d, 0, e1, v1)
@@ -3454,7 +3460,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         yo = pr.put_codes(codes)
         cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
         var = pr.alloc(K * d) if shr is not None else _NONE
-        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE, family="da")
+        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE)
         gflag, gofs = 0, 0
         if self.priors is not None:
             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
@@ -3467,7 +3473,7 @@ class LinearDiscriminantAnalysis(_Classifier):
             y0 = pr.put_list([0.0] * n)
             c1, m1 = pr.alloc(1), pr.alloc(d)
             v1 = pr.alloc(d) if shr is not None else _NONE
-            _cls(pr, mode, xo, n, d, y0, 1, c1, m1, v1, _NONE, family="da")
+            _cls(pr, mode, xo, n, d, y0, 1, c1, m1, v1, _NONE)
             gt = None if est is None else _estimator_covs(est, arr, None, 1, "LinearDiscriminantAnalysis")
             tot = _lda_cov_blocks(pr, xo, n, d, y0, 1, m1, v1, c1, shr, gt)
         gk = None if est is None else _estimator_covs(est, arr, codes, K, "LinearDiscriminantAnalysis")
@@ -3645,7 +3651,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         var = pr.alloc(K * d) if shr is not None else _NONE
         # the trailing 1: FAST keeps row-order class sums here (the tree sums did not pass
         # QuadraticDiscriminantAnalysis' paired quality check)
-        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE, 1, family="da")
+        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
         gflag, gofs = 0, 0
         if self.priors is not None:
             gflag, gofs = 1, pr.put_list(_given_priors(self.priors, K, "QuadraticDiscriminantAnalysis"))
@@ -6209,5 +6215,5 @@ def _fit_categories_with_codes(mode, arr):
     pr.stage("unique_inverse", d, sorted_rows, n, d, dictionary, counts, X, inverse)
     pr.run(mode)
     sizes = [int(v) for v in pr.values(counts, d)]  # glue: per-feature output extents
-    categories = [pr.get(dictionary+c*n, sizes[c]) for c in range(d)]  # glue: wraps dictionaries
+    categories = [pr.get(dictionary+c*n, sizes[c]) for c in range(d)]  # small-loop(d: per-feature category dictionaries): wraps fitted metadata per feature
     return categories, pr.get(inverse, (n, d))

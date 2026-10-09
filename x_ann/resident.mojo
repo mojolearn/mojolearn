@@ -48,9 +48,10 @@ from x_ann.abi import a_int, check_search, in_f32, in_i32, out_f32, out_i32, p_i
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.io import upload_f32, upload_i32
 from core.abs_sum_blocked import device_any_index_out_of_range
-from x_ann.ivf_pq_core import F32P, I32P, pq_len_of
+from x_ann.ivf_pq_core import F32P, I32P, IvfPqIndex, pq_len_of
 from x_ann.ivf_rabitq_core import rq_pow2
 from x_ann.ivf_pq_device import ivf_pq_search_on, ivf_sq_search_on, ivf_rabitq_search_on
+from x_ann.ivf_pq_device import IvfPqDevice
 from x_ann.ivf_scan_device import scan_gather_f32, scan_gather_i32
 from x_ann.cagra_device import cagra_search_on
 
@@ -184,6 +185,55 @@ struct AnnResident(Movable):
         # `_ann_mask(None)` sent on every search
         self.ones = upload_i32(ctx, List[Int32](length=n, fill=Int32(1)))
 
+    def __init__(out self, *, var built: IvfPqIndex, var dev: IvfPqDevice) raises:
+        """lane fg-ivf A7 (`IVF_PQ_RESIDENT_FIT`): a KIND_PQ entry from a
+        resident build (`ivf_pq_build_device_resident`): the centres, the
+        codebooks and the row-order codes are the build's own device buffers
+        (moved in, the words prepare would upload from the downloaded
+        arrays); the offsets and the ids go up from the build's host lists
+        (n_lists + 1 and n words); then the same list-order gather and
+        all-ones filter as prepare's KIND_PQ branch, so a search reads the
+        same words either way."""
+        var ctx = x_ann_ctx()
+        var empty_f = List[Float32]()
+        self.kind = KIND_PQ
+        self.n = built.n_rows
+        self.dim = built.dim
+        self.n_lists = built.n_lists
+        self.a = built.pq_dim
+        var pq_bits = 0
+        while (1 << pq_bits) < built.n_codes:
+            pq_bits += 1
+        self.b = pq_bits
+        var n = self.n
+        if n < 1 or self.dim < 1 or self.n_lists < 1:
+            raise Error("x_ann: an index needs n, dim and n_lists of at least 1")
+        if len(built.offsets) != self.n_lists + 1 or len(built.list_indices) != n:
+            raise Error("x_ann_ivf_pq_build_resident: the built lists disagree with n and n_lists")
+        self.offsets = built.offsets.copy()
+        self.i0 = upload_i32(ctx, self.offsets)
+        var ids = upload_i32(ctx, built.list_indices)
+        var n_slots = Int(self.offsets[self.n_lists])
+        var pre = n_slots == n
+        comptime if not ANN3_PREPARE:
+            pre = False
+        var gs = n_slots if pre else 0
+        self.pre = pre
+        self.f0 = ctx.enqueue_create_buffer[DType.float32](1)
+        self.f1 = ctx.enqueue_create_buffer[DType.float32](1)
+        self.i2 = ctx.enqueue_create_buffer[DType.int32](1)
+        swap(self.f0, dev.dcenters)
+        swap(self.f1, dev.dcb)
+        swap(self.i2, dev.dcodes)
+        self.f2 = upload_f32(ctx, empty_f)
+        self.g_codes = scan_gather_i32(ctx, _p(self.i2), _p(ids), gs, built.pq_dim)
+        self.g_a = upload_f32(ctx, empty_f)
+        self.g_b = upload_f32(ctx, empty_f)
+        self.i1 = ids^
+        self.ones = upload_i32(ctx, List[Int32](length=n, fill=Int32(1)))
+        _ = dev^
+        _ = built^
+
 
 struct AnnRegistry(Movable):
     var entries: Dict[Int, AnnResident]
@@ -214,6 +264,40 @@ def x_ann_index_prepare_binding(kind: PythonObject, addrs: PythonObject, params:
     state[].next_id += 1
     state[].entries[handle] = entry^
     return PythonObject(handle)
+
+
+def x_ann_register_pq_built(var built: IvfPqIndex, var dev: IvfPqDevice) raises -> Int:
+    """lane fg-ivf A7: register a resident IVF-PQ build; returns its handle
+    (the same handle space and release as `x_ann_index_prepare`)."""
+    var state = ANN_REGISTRY.get_or_create_ptr()
+    if state[].next_id == 9223372036854775807:
+        raise Error("resident ann index handle space exhausted")
+    var entry = AnnResident(built=built^, dev=dev^)
+    var handle = state[].next_id
+    state[].next_id += 1
+    state[].entries[handle] = entry^
+    return handle
+
+
+def x_ann_index_export_codes_binding(handle: PythonObject, address: PythonObject, count: PythonObject) raises -> PythonObject:
+    """lane fg-ivf A7: write a resident IVF-PQ index's row-order codes
+    (n x pq_dim int32) into the caller's array: one device copy, outside fit
+    and search (`IVFPQIndex.codes_` on first read)."""
+    var state = ANN_REGISTRY.get_or_create_ptr()
+    var h = Int(py=handle)
+    if h not in state[].entries:
+        raise Error("unknown or released resident ann index handle")
+    ref e = state[].entries[h]
+    if e.kind != KIND_PQ:
+        raise Error("x_ann_index_export_codes: the handle is not an IVF-PQ index")
+    var c = Int(py=count)
+    if c != e.n * e.a:
+        raise Error("x_ann_index_export_codes: count must be n * pq_dim")
+    var ctx = x_ann_ctx()
+    ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=Int(py=address)), src_buf=e.i2)
+    ctx.synchronize()
+    _ = ctx^
+    return PythonObject(0)
 
 
 def x_ann_index_release_binding(handle: PythonObject) raises -> PythonObject:

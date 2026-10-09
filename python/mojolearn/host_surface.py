@@ -1927,6 +1927,8 @@ FAMILIES = (
             # lane hr-small-passes (2026-10-02): the linear models' centering
             "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",
+            # lane fg-pca T1 (2026-10-09): tsvd_fit + tsvd_explained in one call
+            "tsvd_fit_explained",
             "dbscan_fit_core", "labeled_reference_predict",
             "dbscan_core_arrays", "estimators_py2mojo_cluster",
             "ols_predict", "tsvd_transform", "pca_transform",
@@ -2720,7 +2722,7 @@ FAMILIES = (
             "rms_norm_backward", "linear_forward", "linear_backward",
             "neural_rng", "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "neural_arithmetic_profile", "neural_gemm", "mlp_sessions",
+            "neural_arithmetic_profile", "neural_gemm", "mlp_sessions", "mlp_sessions_rows",
             "residual_dropout", "residual_dropout_backward", "training_chunked_lm_head_enabled",
             "training_experiment_profile",
         ),

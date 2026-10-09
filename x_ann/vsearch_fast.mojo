@@ -67,3 +67,32 @@ comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_SCA
 #: 1 run per arm) ivf-refine taxi 1208.3->1201.8 ms (-0.5%), NEUTRAL; no
 #: default change. No longer turned on by VSEARCH_ALL (a no-op alias now).
 comptime IVF_REFINE_TEAM = VSEARCH_FAST_APPLE and is_defined["MOJOLEARN_IVF_REFINE_TEAM"]()
+
+#: lane fg-ivf (read_ivf.md idea A4), DEFAULT ON outside FAST
+#: (`-D MOJOLEARN_IDN_PQ_LUT_TILED_OFF` restores `pq_score_kernel`):
+#: `pq_score_tiled_kernel` (`PQ_LUT_TILED` above) is the IDENTICAL IVF-PQ
+#: score on every vendor. Cost: when pq_dim x n_codes exceeds LUT_MAX the
+#: untiled kernel evaluates every (candidate, subspace) entry from device
+#: memory (pq_len query + pq_len centre + pq_len codebook loads and pq_len
+#: FMAs per entry); the tiled kernel builds each table tile once per
+#: (query, probe) block in threadgroup memory and reads one word per
+#: (candidate, subspace). A table that fits whole (pq_dim x n_codes <=
+#: LUT_MAX) is one tile, the old LUT path's cost. Same words: the entry is
+#: `pq_lut_entry`'s fold on the same residual words, each total
+#: `ts_ftz_nonneg(total + v)` over j ascending carried between tiles in the
+#: candidate buffer (an exact store). Check: ID line, NV digest == AMD
+#: digest == the _OFF arm's.
+comptime IDN_PQ_LUT_TILED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IDN_PQ_LUT_TILED_OFF"]()
+
+#: lane fg-ivf (read_ivf.md idea A5), OPT-IN outside FAST
+#: (`-D MOJOLEARN_IDN_PQ_SCAN_FUSED`): `pq_scan_fused_kernel`
+#: (`PQ_SCAN_FUSED` above) as the IDENTICAL IVF-PQ score + top-k: one launch
+#: per chunk of queries, no mc x stride candidate buffer written and read
+#: back, no select_part / select_pair / select_merge chain. The kernel tiles
+#: the table itself (any pq_dim with n_codes <= LUT_MAX). The k results are
+#: the k least under the (distance, row id) total order (`pq_better`; ids
+#: are distinct), which does not depend on the scan order, and a NaN
+#: candidate sends the query to the cell's sequential insertion, so the
+#: outputs and `n_candidates_` are the select chain's words. Default off
+#: until the ID line and the NV/AMD A/B land (k <= SEL_KM takes it).
+comptime IDN_PQ_SCAN_FUSED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST and is_defined["MOJOLEARN_IDN_PQ_SCAN_FUSED"]()

@@ -3192,7 +3192,7 @@ def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
     S, POS, W = prog.put(scores), _put_flags(prog, flags), _put_weights(prog, weights)
     curves = []
     for _ in range(2):  # glue: two fixed requested reports, never rows
-        order, fps, tps, thr = (prog.scratch(n) for _ in range(4))
+        order, fps, tps, thr = prog.scratch(n), prog.scratch(n), prog.scratch(n), prog.scratch(n)
         count = prog.scratch(1)
         curves.append((fps, tps, thr, count))
         prog.stage("bin_curve", 1, S, 1, POS, W, n, order, fps, tps, thr, count, _NONE, 0, 0, 0)

@@ -761,3 +761,30 @@ whole/whole. `tools/board_clock_audit.py --board NAME=board.json --out DIR`
 writes the per-cell audit (which clock each cell is, whether the copy is
 recoverable, the copy's share of the median) and the rerun candidates; the
 fields are derived at render time and never written into `board.json`.
+
+## The main board (unreleased, rolling)
+
+Besides the release boards, each GPU column has a rolling main board:
+[NVIDIA L40S](../bench/results/bench_board/main-nvidia-l40s/BOARD.md) and
+[AMD MI325X](../bench/results/bench_board/main-amd-mi325x/BOARD.md) (Apple later).
+It is labelled `main@<sha>` of its newest cell, never a wheel number, and it is
+unreleased: it cannot be reproduced with `pip install`, and the release boards
+remain the reference.
+
+`tools/main_board_ingest.py` builds it from the lq results and the board-runner
+summaries of default-configuration jobs on main (lines carrying
+`MOJOLEARN_BUILD_DEFINES` or a grid run's `MOJOLEARN_GRID_TAG` are A/B or grid
+arms and never enter). For each lane x dataset the newest race wins: the
+highest commit date of its sha, then the job number. A newer cell replaces an
+older one whatever the two times are. A run whose status is not ok (error,
+refused, timeout, `not_ready`, `NO-RECORD`) is never a numeric cell and never
+replaces an ok cell: it is listed in the board's FAILED table with its reason,
+and an older ok cell stays, flagged with the newer failed run. Every replaced
+or failed observation stays in the column's `LEDGER.md` with its numbers. The
+Identity section at the top lists every `DIFFER` cell with both digests. Each cell names its commit, box/job and
+commit date, and gives the other vendor's digest at the same commit (identity
+`MATCH`, `DIFFER` or `n/a`). Opponents are copied from the stored opponent
+boards and never re-run. For an algos or classical2 race whose lane settings
+changed after its opponents were scored, the opponents are withheld. The page
+is written through `tools/bench_board.py` and shows the same two clocks as
+every board. `--check` prints the cells that would change and writes nothing.

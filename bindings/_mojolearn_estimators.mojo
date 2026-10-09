@@ -90,6 +90,7 @@ from decomposition.estimator import (
     pca_whiten_transform_host,
     pca_whiten_inverse_transform_host,
     tsvd_explained_host,
+    tsvd_fit_explained_host,
     tsvd_fit_host,
     tsvd_transform_host,
 )
@@ -508,6 +509,35 @@ def tsvd_explained_binding(
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         tsvd_explained_host(ctx, xp, cp, ep, rp, nr, nf, nc)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
+def tsvd_fit_explained_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    singular_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`tsvd_fit` then `tsvd_explained` in one call (`tsvd_fit_explained_host`,
+    lane fg-pca T1: one upload of X under the IDENTICAL default; the two
+    calls in order under -D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF): params
+    `n_rows, n_features, n_components`."""
+    if len(params) != 3:
+        raise Error("tsvd_fit_explained: params must contain 3 values")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=components_addr))
+    var sp = _f32_ptr(Int(py=singular_addr))
+    var ep = _f32_ptr(Int(py=explained_addr))
+    var rp = _f32_ptr(Int(py=ratio_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        tsvd_fit_explained_host(ctx, xp, cp, sp, ep, rp, nr, nf, nc)
         ctx.synchronize()
     return PythonObject(0)
 
@@ -1547,6 +1577,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[tsvd_fit_binding]("tsvd_fit")
         m.def_function[tsvd_transform_binding]("tsvd_transform")
         m.def_function[tsvd_explained_binding]("tsvd_explained")
+        m.def_function[tsvd_fit_explained_binding]("tsvd_fit_explained")
         m.def_function[inverse_transform_binding]("inverse_transform")
         m.def_function[ols_fit_binding]("ols_fit")
         m.def_function[ols_fit_resident_binding]("ols_fit_resident")

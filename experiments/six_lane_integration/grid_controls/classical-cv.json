@@ -54,26 +54,6 @@
    "status": "kept",
    "note": "Measured alone neutral and quality-equal (T.C18.residual-only: NV 1.009/1.006/0.970/1.007, AMD 1.004/1.034/0.946/0.974 lasso taxi/istella, enet taxi/istella). Forwarding only; coordinate order and FMA unchanged."
   },
-  "c13_fold_stats_ridgecv": {
-   "define": "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:33",
-    "x_linear/device.mojo:3618",
-    "x_linear/ridgecv.mojo:207"
-   ],
-   "binding": "_mojolearn_x_linear",
-   "bits_change": true,
-   "status": "split_from:MOJOLEARN_CLASSICAL_C13_FOLD_STATS",
-   "note": "RidgeCV half of C13 (lane/ridgecv-c13, merged here, unchanged). Default ON in IDENTICAL; `_OFF` is the rollback arm."
-  },
   "c13_logcv_weights": {
    "define": "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS",
    "kind": "switch",
@@ -127,9 +107,7 @@
   "expanded:ridge-cv": {
    "binding": "_mojolearn_x_linear",
    "route": "fit: ALGO_RIDGE_KFOLD -> device.mojo _ridge_kfold_grid (C13 kfold grams at device.mojo:3618); not touched by this lane",
-   "controls": [
-    "c13_fold_stats_ridgecv"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "expanded:logreg-cv": {
@@ -153,6 +131,11 @@
   {
    "define": "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH",
    "reason": "per brief. Correction: implemented in solver/impl/cd.mojo (plain Lasso/ElasticNet Gram prefetch), never measured. Deleted; recoverable at c59be1781."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF",
+   "control": "c13_fold_stats_ridgecv",
+   "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9, the off arm loses. off/on ms ratio NV/AMD: ridge-cv istella 1.19/1.11 (23110.5 -> 27500.3 NV, 62881.7 -> 69645.8 AMD), taxi 19.52/18.01 (152.2 -> 2970.3 NV, 287.9 -> 5183.8 AMD); quality SAME. The switch is gone: C13_FOLD_STATS = CLASSICAL_IDN (the fold cache is the only IDENTICAL RidgeCV route; FAST keeps the per-fold passes). Recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
   }
  ],
  "cv_local_profiles": {

@@ -602,28 +602,9 @@ def bm_centered_cross_panels(
     _ = part^
 
 
-def bm_onepass_covariance(
-    ctx: DeviceContext, mu: BmPtr, cov: BmPtr, x: BmPtr, n: Int, d: Int,
-) raises:
-    """C23 (PCA): the mean and the (n - 1)-scaled covariance in one blocked
-    read: each leaf centers on its own means, and the leaves merge by Chan's
-    update in the binary-counter order. Needs n >= 2."""
-    if d < 1 or n < 2:
-        return
-    var cells = d * d
-    var leaf = bm_onepass_leaf_rows(n, cells)
-    var leaves = bm_leaf_count(n, leaf)
-    var tiles = (d + BM_TILE - 1) // BM_TILE
-    var part = ctx.enqueue_create_buffer[DType.float32](leaves * cells)
-    var means = ctx.enqueue_create_buffer[DType.float32](leaves * d)
-    ctx.enqueue_function[bm_leaf_gram_kernel](
-        _bp(part), _bp(means), x, x,
-        Int32(n), Int32(d), Int32(leaf), Int32(tiles), Int32(1),
-        grid_dim=(leaves, tiles * (tiles + 1) // 2, 1), block_dim=BM_TPB,
-    )
-    bm_chan_fold[False](ctx, part, means, leaves, d, n, leaf, cov, mu, n - 1)
-    _ = part^
-    _ = means^
+# Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+# (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 
 
 def bm_tsvd_variances(

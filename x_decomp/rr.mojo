@@ -219,6 +219,30 @@ def rr_fro_kept(fro_in: Float32, fro_now: Float32) -> Bool:
     return abs(ftz(fro_now - fro_in)) <= ftz(identical_mul(Float32(1.0e-3), fro_in))
 
 
+@always_inline
+def rr_gate_state(off: Float32, dg: Float32, mark: Float32, state: F32Ptr, tol: Float32):
+    """The round-robin solve's device convergence decision on the six state
+    words (PCA_RR_STATE; `pca_rr_gate_kernel`, decomposition/impl/linalg/
+    detail/pca.mojo, and the one-block sweep x_decomp/rr_one_block.mojo both
+    run exactly this): state[0] = 1 once `rr_converged` holds (sticky),
+    state[1] = the off-diagonal sum, state[2] = the first test's ||A||_F^2
+    (the caller fills -1), state[3] = this test's, state[4] = -1 when a block
+    of the test did not run (`mark` < 0), state[5] = sweeps started. One
+    thread. Extracted unchanged from `pca_rr_gate_kernel` (lane fg-pca P1)."""
+    if state.unsafe_load(0) == Float32(0.0):
+        if not (mark >= Float32(0.0)):
+            state.unsafe_store(4, Float32(-1.0))
+        var fro = ftz(off + dg)
+        state.unsafe_store(1, off)
+        state.unsafe_store(3, fro)
+        if state.unsafe_load(2) < Float32(0.0):
+            state.unsafe_store(2, fro)
+        if rr_converged(off, dg, tol):
+            state.unsafe_store(0, Float32(1.0))
+        else:
+            state.unsafe_store(5, state.unsafe_load(5) + Float32(1.0))
+
+
 def host_eigh_rr(mut a: List[Float32], mut v: List[Float32], n: Int, sweeps: Int, tol: Float32) -> Tuple[Bool, Int]:
     """The device driver's solve on the host (x_decomp/device.mojo `_eigh_par`,
     x_decomp/rr_batch.mojo `rr_batch_kernel`): `a` consumed in place (its

@@ -28,9 +28,13 @@ comptime CLASSICAL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # the incumbent on both vendors, NVIDIA and AMD output hashes equal. C13 is the
 # only candidate control on the RidgeCV route (catalog.json). Evidence:
 # experiments/six_lane_integration/measurements/20261006/BOARD.md (ridge-cv rows).
-# `-D MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF` restores the per-fold passes (arm B
-# of the isolated confirmation A/B owed on nv and amd).
-comptime C13_FOLD_STATS = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF"]()
+# The `-D MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF` switch (per-fold passes in an
+# IDENTICAL build) was tried 2026-10-08 (lane grid-act-3, run ge123e6f9): ridge-cv
+# NV/AMD 1.19x/1.11x istella, 19.5x/18.0x taxi SLOWER, quality SAME. The switch is
+# deleted and the define refused: the fold cache is the only IDENTICAL RidgeCV route.
+# FAST builds keep the per-fold passes (C13_FOLD_STATS is False outside IDENTICAL).
+# Recoverable at main bc10b8b56.
+comptime C13_FOLD_STATS = CLASSICAL_IDN
 # The LassoCV/ElasticNetCV fold cache (C13_CD_FOLD_STATS) was deleted on
 # lane/classical-cv (2026-10-07): T.C13.only measured it 4.0x/1.4x slower on
 # Taxi and quality-failing on both vendors (row in docs/apple-fast/EXPERIMENTS.md).
@@ -59,17 +63,36 @@ comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_G
 # unchanged; the thread count goes from (d+1)^2 / 2 to n / FOLD_BLOCK times
 # that, with each block's threads reading the same row tile. No shape rule.
 comptime RIDGECV_FF_BLOCKED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED"]()
-# lane/classical-cv-folds (2026-10-07), NEW, opt-in, NOT MEASURED: LassoCV /
-# ElasticNetCV held-out scoring as (path, alpha, row-block) partials. The
-# incumbent `ecv_score_staged_kernel` is ONE block per (fold, l1_ratio) path
-# walking every held-out row for every alpha. Here each block owns
-# ENETCV_SCORE_BLOCKS rows of the fold's span (the integer arm: rows per
-# block, legal 1024 | 4096, a fixed count, not a data shape), thread k folds
-# alpha k's squared errors over them from zero, and a thread per (path,
-# alpha) folds the block partials ascending (`fold_parts`, the kf_sq /
-# kf_score shape). Changes bits (the block fold order; host column and both
-# GPU vendors together). Absent (0) = the incumbent.
-comptime _ESB_RAW = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS", 0]()
+# lane/classical-cv-folds (2026-10-07); PROMOTED to the IDENTICAL default
+# 2026-10-08 (lane/grid-act-2, grid run ge123e6f9: NVIDIA L40S sm_89 + AMD
+# MI325X gfx942, full board data, one run per arm; r2 and rmse identical A vs
+# B on every cell; NV hash == AMD hash on every arm). LassoCV / ElasticNetCV
+# held-out scoring as (path, alpha, row-block) partials. The old
+# `ecv_score_staged_kernel` is ONE block per (fold, l1_ratio) path walking
+# every held-out row for every alpha. Here each block owns
+# ENETCV_SCORE_BLOCKS rows of the fold's span (rows per block, legal
+# 1024 | 4096, a fixed count, not a data shape), thread k folds alpha k's
+# squared errors over them from zero, and a thread per (path, alpha) folds
+# the block partials ascending (`fold_parts`, the kf_sq / kf_score shape).
+# Changes bits (the block fold order; host column and both GPU vendors
+# together). Grid ge123e6f9, NV / AMD ms, unblocked -> 4096:
+#   enet-cv  istella 1052.9 -> 555.2 / 3567.8 -> 818.1 (0.348x combined),
+#            taxi 122.4 -> 101.6 / 483.8 -> 359.2 (0.785x);
+#   lasso-cv istella 1041.8 -> 555.9 / 3530.4 -> 848.7 (0.358x),
+#            taxi 122.6 -> 97.9 / 513.2 -> 364.5 (0.753x).
+# 1024 is also faster (0.541x) but 4096 wins every cell. Cost reasoning: the
+# score is n_heldout * A * d multiply-adds per path; one block per path
+# serializes all of it on one SM, while span / ESB_ROWS blocks per path
+# spread it over the device. 4096 rows per block keeps each block's work
+# (4096 * A * d) large against its launch and staging cost and makes the
+# second-level fold short (span / 4096 partials per alpha), which is why it
+# beats 1024 (four times the partials to write and fold for the same work).
+# Absent = 4096 in IDENTICAL; -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024
+# is the smaller-block arm; -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF is
+# the old unblocked path (value 0; an explicit =0 is refused by the guard,
+# use _OFF). FAST keeps the unblocked path.
+comptime ENETCV_SCORE_BLOCKS_OFF = is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF"]()
+comptime _ESB_RAW = 0 if ENETCV_SCORE_BLOCKS_OFF else get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS", 4096]()
 comptime ENETCV_SCORE_BLOCKS = _ESB_RAW if CLASSICAL_IDN else 0
 comptime ENETCV_SCORE_BLOCKS_LEGAL = _ESB_RAW == 0 or _ESB_RAW == 1024 or _ESB_RAW == 4096
 comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
@@ -123,8 +146,8 @@ comptime C20_PAIR_LOAD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_P
 comptime C21_EXTREMA = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"]()
 comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"]()
 # lane classical-decomp (2026-10-07): the old C23_CENTERED_PANELS define is
-# split per algorithm family. Its PCA use is the ONE_PASS arm of
-# MOJOLEARN_CLASSICAL_PCA_COV below; its MCD use is C23_MCD. Both run
+# split per algorithm family. Its PCA use (the ONE_PASS arm of
+# MOJOLEARN_CLASSICAL_PCA_COV, =23) was deleted 2026-10-08 (below); its MCD use is C23_MCD. Both run
 # row-parallel (core/blocked_moments.mojo); the per-cell serial kernels
 # (one GPU thread per covariance cell over every row) are deleted.
 # C23_MCD: MinCovDet/EllipticEnvelope `emp_cov_at` as the centered Gram
@@ -132,21 +155,20 @@ comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TR
 # counter: the old C23 cell's value (x_decomp/classical_cells.mojo, the host
 # column), now computed in parallel. NOT MEASURED.
 comptime C23_MCD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_MCD"]()
-# PCA covariance, ONE switch with named arms (the old C04-over-C23 silent
+# PCA covariance, ONE switch with a named arm (the old C04-over-C23 silent
 # priority is gone): -D MOJOLEARN_CLASSICAL_PCA_COV=4 is the C04 arm
 # (two passes: the column mean, then the centered Gram around it read
 # straight from X, leaves of contract_leaf_size(n) rows, binary-counter
 # fold: the old C04 cell's value, computed in parallel, no shift/unshift
-# passes); =23 is the C23 arm (ONE blocked pass: each leaf of
-# bm_onepass_leaf_rows rows centers on its own means, leaves merge by
-# Chan's update in the binary-counter order; the mean comes out of the same
-# pass). Absent = the incumbent (column_mean_launch, then split-K or
-# shift + gemm_tn). Either arm replaces the incumbent's routing at every
+# passes). Absent = the incumbent (column_mean_launch, then split-K or
+# shift + gemm_tn). The arm replaces the incumbent's routing at every
 # width. NOT MEASURED.
+# Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+# (c04 stays; C23_MCD is separate). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 comptime _PCA_COV_RAW = get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV", 0]()
-comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4 or _PCA_COV_RAW == 23
+comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4
 comptime PCA_COV_C04 = CLASSICAL_IDN and _PCA_COV_RAW == 4
-comptime PCA_COV_C23 = CLASSICAL_IDN and _PCA_COV_RAW == 23
 # TSVD_FUSED_STATS (new, lane classical-decomp): TruncatedSVD's
 # explained_variance_ / _ratio_ in one blocked kernel: per leaf the mean and
 # centered sum of squares of X's columns and of X V^T's columns (the

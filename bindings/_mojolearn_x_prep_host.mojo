@@ -1,7 +1,7 @@
 """CPU binding for `_mojolearn_x_prep`. HOST ONLY: the same units as the
 device, run in a loop on the caller's arena (x_prep/host/program.mojo), with
 the GPU binding's export names and address contract."""
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT, C61_NB_ARM, C61_DA
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -198,10 +198,10 @@ def c08_routes_binding() raises -> PythonObject:
 def classical_shared_binding() raises -> PythonObject:
     """Bits read by python/mojolearn/_expansion_prep.py `_classical_shared`:
     1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 C04_LDA,
-    8 C56_LDA_INPUT, 16-48 C61_NB_ARM << 4, 64 C61_DA."""
+    8 C56_LDA_INPUT; 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
+    after grid ge123e6f9: slower on both vendors, quality same)."""
     return PythonObject(
         Int(C08_DICTIONARY) | (Int(C04_LDA) << 2) | (Int(C56_LDA_INPUT) << 3)
-        | ((C61_NB_ARM & 3) << 4) | (Int(C61_DA) << 6)
     )
 
 

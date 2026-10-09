@@ -76,9 +76,16 @@ from gbdt.methods.kernel.compute_point_hist2_loop import (
 )
 from gbdt.methods.kernel.split_properties_helpers import (
     PW_PRIVATE_DOC_SLOTS,
+    PointwisePartOffsetsHelper,
     pw_private_doc_slot,
     shift_part_and_bin_sums_ptr,
 )
+from gbdt.methods.kernel.compute_point_hist2_loop import _hist_doc_key
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    hist2_dither,
+    hist2_quantize,
+)
+from gbdt.trees_identical_switches import ORD_HIST_FOLD_SKIP
 from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import (
     PW_HIST2_BLOCK,
     PW_HIST2_FLOAT_BLOCK,
@@ -240,6 +247,7 @@ def compute_split_properties_nb_kernel[
     total_feature_count_in: Int32,
     fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
     int_slot: Int32,
+    z_skip: Int32 = 0,
     dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ):
     """`ComputeSplitPropertiesNBImpl` (`:153-187`) with
@@ -255,6 +263,15 @@ def compute_split_properties_nb_kernel[
     comptime max_fold_count = pw_max_fold_count[bits]()
     comptime bounds = pw_bounds[bits]()
     comptime is_fixed = bits == 8
+
+    # A ORD_HIST_FOLD_SKIP (trees_identical_switches.mojo): the leading
+    # `z_skip` fold partitions are histogrammed by
+    # `ord_small_fold_hist8_kernel`; this grid's blocks for them leave at
+    # entry, before any barrier (the whole block returns together).
+    # `z_skip` is 0 on every other call.
+    comptime if ORD_HIST_FOLD_SKIP:
+        if Int(block_idx.z) < Int(z_skip):
+            return
 
     # T5 drain (cpu3-gbdt-a): the fixed-point scale is a device word
     # (the ordered fit forms it on the device); every thread loads it
@@ -471,3 +488,147 @@ def compute_split_properties_nb_kernel[
                     # value.
                     bin_sums.unsafe_store(at, val)
         fold += 32
+
+
+# ================= lane fg-gbdt-ordered, A ORD_HIST_FOLD_SKIP =================
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — NOT MEASURED.
+# The small fold partitions of the Ordered fold layout, histogrammed without a
+# shared-memory accumulator. Each cell the 8-bit one-block path writes is
+#
+#     val = Float32(Int(sum_d q(d))) / scale,  stored when abs(val) > 1e-20
+#
+# where the sum runs over the documents of the cell's (part, fold partition)
+# whose feature byte equals the cell's bin, `q` is `hist2_quantize(stat,
+# scale, hist2_dither(key))` with the key `_hist_doc_key(index, dither_ids)`,
+# and the Int32 sum wraps (PointHist8 folds its shared counters as Int32).
+# Integer addition is exact in any order, so the cell does not depend on who
+# adds: here every document adds its two values per feature with a global
+# Int32 atomic straight into the cell, read as Int32 (the cell is +0.0 = Int32
+# 0 before this level writes it: the calcer zeroes the histogram per tree and
+# a pass writes only slots no earlier level wrote, which the one-block guarded
+# store relies on too), and `ord_small_fold_convert_kernel` then rewrites each
+# such cell with the statement above (an all-zero cell becomes +0.0, the
+# value the guarded store leaves). The layout statements restate
+# `compute_split_properties_nb_kernel` + PointHist8: four features per block
+# from one compressed word (`feature_offset[f_base]`), feature j's byte at
+# shift 24 - 8 j, weight in the cell's even slot and target in the odd slot,
+# only bins below the feature's fold count written, the block claimed by the
+# 8-bit width only when its widest feature is inside `pw_bounds[8]`, and the
+# partial pass's smaller child filed under the right child's slot
+# (`shift_part_and_bin_sums_ptr` with the regular grid's `grid_y`).
+
+#: threads per small-fold block
+comptime ORD_SMALL_FOLD_BLOCK = 256
+#: blocks per (feature block, fold partition) along the part axis; block g
+#: takes parts g, g + groups, ... (a fixed schedule; the cells are order-free)
+comptime ORD_SMALL_FOLD_PART_GROUPS = 8
+
+
+def ord_small_fold_hist8_kernel[
+    full_pass: Bool
+](
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_first_fold_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_folds: MutPointer[UInt32, MutAnyOrigin],
+    f_count_in: Int32,
+    cindex: MutPointer[UInt32, MutAnyOrigin],
+    target: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    indices: MutPointer[UInt32, MutAnyOrigin],
+    partition: MutPointer[UInt32, MutAnyOrigin],
+    bin_sums: MutPointer[Float32, MutAnyOrigin],
+    total_feature_count_in: Int32,
+    fold_count_in: Int32,
+    grid_y_in: Int32,
+    fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
+):
+    """Grid (feature blocks, small fold partitions, part groups): block
+    (x, z, g) adds the documents of fold partition z's parts g, g + G, ...
+    for features 4x .. 4x + 3 into their cells as raw Int32 counts."""
+    var fixed_scale = fixed_scale_p.unsafe_load(0)
+    var f_base = Int(block_idx.x) * PW_NB_FEATURES_PER_BLOCK
+    var f_count = Int(f_count_in) - f_base
+    if f_count > PW_NB_FEATURES_PER_BLOCK:
+        f_count = PW_NB_FEATURES_PER_BLOCK
+    if f_count <= 0:
+        return
+    # the regular kernel's width claim (`get_max_bin_count` + `pw_bounds`)
+    comptime bounds = pw_bounds[8]()
+    var max_bin_count = 0
+    for j in range(f_count):
+        var c = Int(feature_folds.unsafe_load(f_base + j))
+        if c > max_bin_count:
+            max_bin_count = c
+    if max_bin_count <= bounds[0] or max_bin_count > bounds[1]:
+        return
+    var ci = cindex.unsafe_offset(Int(feature_offset.unsafe_load(f_base)))
+    var cells = bin_sums.unsafe_bitcast[Int32]()
+    var z = UInt32(block_idx.y)
+    var fold_count = UInt32(fold_count_in)
+    var grid_y = Int(grid_y_in)
+    var total_feature_count = UInt32(total_feature_count_in)
+    var y = Int(block_idx.z)
+    while y < grid_y:
+        var shifted = shift_part_and_bin_sums_ptr(
+            partition, fold_count, UInt32(y), z, UInt32(grid_y),
+            total_feature_count, full_pass, 2,
+        )
+        var part = Int(shifted.partition_offset)
+        var base = Int(shifted.bin_sums_offset)
+        var part_offset = Int(partition.unsafe_load(2 * part))
+        var part_size = Int(partition.unsafe_load(2 * part + 1))
+        var i = Int(thread_idx.x)
+        while i < part_size:
+            var index = indices.unsafe_load(part_offset + i)
+            var word = ci.unsafe_load(Int(index))
+            var w = weight.unsafe_load(part_offset + i)
+            var t = target.unsafe_load(part_offset + i)
+            var u = hist2_dither(Int(_hist_doc_key(index, dither_ids)))
+            var qw = hist2_quantize(w, fixed_scale, u)
+            var qt = hist2_quantize(t, fixed_scale, u)
+            for j in range(f_count):
+                var b = Int((word >> UInt32(24 - 8 * j)) & 255)
+                if b < Int(feature_folds.unsafe_load(f_base + j)):
+                    var at = base + (
+                        Int(feature_first_fold_index.unsafe_load(f_base + j)) + b
+                    ) * 2
+                    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                        cells.unsafe_offset(at), qw
+                    )
+                    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                        cells.unsafe_offset(at + 1), qt
+                    )
+            i += Int(block_dim.x)
+        y += Int(grid_dim.z)
+
+
+def ord_small_fold_convert_kernel[
+    full_pass: Bool
+](
+    bin_sums: MutPointer[Float32, MutAnyOrigin],
+    total_feature_count_in: Int32,
+    fold_count_in: Int32,
+    grid_y_in: Int32,
+    fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
+):
+    """Grid (line chunks, small fold partitions, parts): every cell of
+    fold partition z's slot for part y (the right child's on a partial
+    pass), raw Int32 -> `Float32(Int(raw)) / scale` under the 1e-20 guard,
+    +0.0 otherwise -- the one-block writeback's value."""
+    var fixed_scale = fixed_scale_p.unsafe_load(0)
+    var line = 2 * Int(total_feature_count_in)
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if c >= line:
+        return
+    var helper = PointwisePartOffsetsHelper(UInt32(fold_count_in))
+    var y = UInt32(block_idx.z)
+    comptime if not full_pass:
+        y = UInt32(grid_y_in) | y
+    var at = Int(helper.histogram_offset(y, UInt32(block_idx.y))) * line + c
+    var raw = bitcast[DType.int32](bin_sums.unsafe_load(at))
+    var val = Float32(Int(raw)) / fixed_scale
+    if abs(val) > PW_WRITE_EPS:
+        bin_sums.unsafe_store(at, val)
+    else:
+        bin_sums.unsafe_store(at, Float32(0.0))
