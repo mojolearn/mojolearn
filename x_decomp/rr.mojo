@@ -223,8 +223,8 @@ def rr_fro_kept(fro_in: Float32, fro_now: Float32) -> Bool:
 def rr_gate_state(off: Float32, dg: Float32, mark: Float32, state: F32Ptr, tol: Float32):
     """The round-robin solve's device convergence decision on the six state
     words (PCA_RR_STATE; `pca_rr_gate_kernel`, decomposition/impl/linalg/
-    detail/pca.mojo, and the one-block sweep x_decomp/rr_one_block.mojo both
-    run exactly this): state[0] = 1 once `rr_converged` holds (sticky),
+    detail/pca.mojo, runs exactly this; the one-block sweep that shared it,
+    x_decomp/rr_one_block.mojo, was deleted 2026-10-09, recoverable at main 0a7b206f1): state[0] = 1 once `rr_converged` holds (sticky),
     state[1] = the off-diagonal sum, state[2] = the first test's ||A||_F^2
     (the caller fills -1), state[3] = this test's, state[4] = -1 when a block
     of the test did not run (`mark` < 0), state[5] = sweeps started. One

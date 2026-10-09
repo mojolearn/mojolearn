@@ -56,7 +56,6 @@ from decomposition.pca_rr_switch import (
     PCA_DEVICE_TRUNCATE,
     PCA_RR_EIGH,
     PCA_RR_FLAG_TEST,
-    PCA_RR_ONE_BLOCK,
     PCA_RR_SWEEPS,
 )
 from decomposition.spectrum_order_device import (
@@ -65,7 +64,6 @@ from decomposition.spectrum_order_device import (
     _gather_diag_kernel,
     _rank_kernel,
 )
-from x_decomp.rr_one_block import RR_ONE_TPB, rr_eigh_one_block_kernel, rr_one_block_applies
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_off_fold_kernel,
@@ -620,7 +618,7 @@ def pca_rr_gate_kernel(fold: F32Ptr, state: F32Ptr, tol: Float32):
     same sums. One thread."""
     if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
         # x_decomp/rr.mojo `rr_gate_state`: these statements, moved there
-        # unchanged so the one-block sweep (PCA_RR_ONE_BLOCK) runs the same
+        # unchanged (the one-block sweep that shared them was deleted 2026-10-09)
         rr_gate_state(fold.unsafe_load(0), fold.unsafe_load(1), fold.unsafe_load(2), state, tol)
 
 
@@ -724,22 +722,11 @@ def _eig_rr_device(
     )
     var hstate = ctx.enqueue_create_host_buffer[DType.float32](PCA_RR_STATE)
     var launched = 0
-    var one_block = False
-    comptime if PCA_RR_ONE_BLOCK:
-        one_block = rr_one_block_applies(n)
-    if one_block:
-        # P1 + P1b (MOJOLEARN_IDN_PCA_RR_ONE_BLOCK): every sweep, its test,
-        # gate and rounds in one launch of one block; the same cells, the
-        # same order, the same state words as the loop below
-        ctx.enqueue_function[rr_eigh_one_block_kernel](  # small-launch(n: n bounded by rr_one_block_applies, h h + n h <= RR_ONE_BLOCK_STEPS x RR_ONE_TPB cells a round): 1024 threads share every round's cells in parallel, default off, wider n keeps the grid launches
-            cov.unsafe_ptr(), vec_buf.unsafe_ptr(), dcs.unsafe_ptr(), doff.unsafe_ptr(),
-            dpart.unsafe_ptr(), dfold.unsafe_ptr(), dstate.unsafe_ptr(),
-            Int32(n), Int32(PCA_RR_SWEEPS), Float32(JACOBI_TOL),
-            grid_dim=1, block_dim=RR_ONE_TPB,
-        )
+    # TOMBSTONE (lane/postmerge-act-5, 2026-10-09): P1 + P1b MOJOLEARN_IDN_PCA_RR_ONE_BLOCK
+    # (the whole round-robin solve in one launch of one block) was BROKEN on NVIDIA:
+    # nv2 v1030, pca and tsvd on taxi and istella REFUSED at this launch. Deleted;
+    # recoverable at main 0a7b206f1 (x_decomp/rr_one_block.mojo and this branch).
     for sweep in range(PCA_RR_SWEEPS + 1):
-        if one_block:
-            break
         ctx.enqueue_function[eigh_par_off_part_kernel](
             cov.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n),
             grid_dim=nb, block_dim=RR_OFF_TPB,

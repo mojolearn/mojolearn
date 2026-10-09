@@ -45,18 +45,10 @@ comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not (
     is_defined["MOJOLEARN_PCA_RR_FLAG_TEST_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
-#: P1 + P1b, lane fg-pca (2026-10-09), DEFAULT OFF (it restructures the
-#: eigensolver's schedule): `-D MOJOLEARN_IDN_PCA_RR_ONE_BLOCK` runs the whole
-#: round-robin solve in one launch of one block (x_decomp/rr_one_block.mojo
-#: `rr_eigh_one_block_kernel`: every round's (c, s) and update fused behind
-#: barriers, the test and the gate in the same kernel, no host read between
-#: sweeps) wherever `rr_one_block_applies(n)` says one block's round beats two
-#: launches; wider solves keep the per-round launches. Device only: the same
-#: cells in the same order (no bit moves), so the host column needs no build
-#: change. The kernel and the rule live in x_decomp (the shared round-robin
-#: solver) so x_decomp's own eigh (`DevExec._eigh_par_on`) can take them too;
-#: its routing is not changed here.
-comptime PCA_RR_ONE_BLOCK = PCA_RR_EIGH and is_defined["MOJOLEARN_IDN_PCA_RR_ONE_BLOCK"]()
+#: TOMBSTONE (lane/postmerge-act-5, 2026-10-09): P1 + P1b, -D MOJOLEARN_IDN_PCA_RR_ONE_BLOCK
+#: (one-launch one-block round-robin solve) was BROKEN on NVIDIA (nv2 v1030: pca and tsvd
+#: on taxi and istella REFUSED at decomposition/impl/linalg/detail/pca.mojo:734). Deleted,
+#: refused in core/six_lane_experiment_guards.mojo; recoverable at main 0a7b206f1.
 
 #: P5, lane fg-pca (2026-10-09), DEFAULT OFF: `-D MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE`.
 #: `eig_and_truncate` downloaded the whole n x n covariance and eigenvector
