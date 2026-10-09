@@ -729,7 +729,9 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
         ident = identity(ob, idx)
         cell = our_cell(BB, ob, ident, failures.get((col, rid)) or ())
         opps, src_rr, why = copy_opponents(BB, sources, ob["family"], ob["lane"], rid)
-        cells = BB.add_ratios([cell] + opps)
+        # our cell without a quality (the host reference refused) whose output hash equals a copied opponent's:
+        # quality {"identical_to": <arm>} (tools/bench_board.py stored_identity_quality; a digest compare only)
+        cells = BB.add_ratios(BB.stored_identity_quality([cell] + opps))
         lane_config = copy.deepcopy((src_rr or {}).get("lane_config")) if src_rr else None
         if why:
             withheld += 1
@@ -747,6 +749,11 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
               "main_board": {"sha": ob["sha"], "box": ob["box"], "job": ob["job"], "identity": ident["status"]}}
         if lane_config:
             rr["lane_config"] = lane_config
+        # neural lanes: the headline is ours IDENTICAL over torch's fastest bf16 arm, the fp32 twin beside it
+        # (tools/bench_board.py neural_headline; render_board draws the table and each race's headline line)
+        hl = BB.neural_headline(rr)
+        if hl is not None:
+            rr["neural_headline"] = hl
         races[rid] = rr
         boxes.add(ob["box"])
         shas.append((ob.get("ct") or 0, ob["sha"]))
@@ -779,6 +786,10 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
         "other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded "
         "upload_ms_separate. Opponents withheld for changed lane settings: %d races." % (
             ", ".join(s["label"] for s in sources) or "none found", withheld),
+        "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over "
+        "torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. "
+        "Note: " + BB.IDENTITY_TAX_NOTE + ". A cell of ours whose output hash equals a copied opponent's shows "
+        "quality identical_to=<arm> (the same bits) where the own-host reference gave none.",
     ]
     fsec, n_failed = failed_section(failures, winners, column)
     isec = identity_section(races)
