@@ -102,3 +102,19 @@ comptime IDN_SAMBA_RESIDENT_STEP = (
     and not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF"]()
     and not is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
 )
+# attn_stash=recompute for the Samba training step only (lane grid-act-4,
+# 2026-10-08, IDENTICAL grid ge123e6f9, one run per arm, stash -> recompute
+# ms): samba-train-step NV 96.0 -> 79.5, AMD 147.2 -> 145.7 (0.905x) but
+# lm-train-step NV 36.0 -> 43.6, AMD 42.7 -> 54.4 (1.24x SLOWER), so the
+# choice is keyed on the model kind, never a dimension: the Samba resident
+# train step sets `LlamaDeviceStages.attn_recompute_backward` on its attention
+# layers (training/samba_resident.mojo _forward_blocks) and the LM /
+# transformer training steps keep the build's stash profile. Same bits (the
+# recompute arm hashed equal to the stash incumbent on both vendors). Measured
+# on the per-op Samba route against the incumbent; it now combines with the
+# promoted resident step, m3 angle carry cache and act_retain=2, and the
+# post-merge race measures the combination. The per-op Samba route
+# (MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF) keeps the stash profile. Default on
+# in IDENTICAL; -D MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF keeps the stash on
+# the Samba step too.
+comptime IDN_SAMBA_ATTN_RECOMPUTE = _ENABLED and not is_defined["MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF"]()

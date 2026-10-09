@@ -107,7 +107,7 @@ from training.estimator import (
 )
 from training.neural_ab_pointwise import NN58_ACCUMULATE_STATUS
 from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
-from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
+from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_SAMBA_ATTN_RECOMPUTE
 from training.samba_ops import (
     SAMBA_TPB,
     _grid,
@@ -651,6 +651,12 @@ def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: B
             s.kv.value().k.enqueue_fill(Float32(0.0))
             s.kv.value().v.enqueue_fill(Float32(0.0))
             s.t_stages[j].reset(s.ctx)
+            # attn_stash=recompute for the Samba train step only (grid
+            # ge123e6f9: samba-train-step 0.905x; the LM step keeps its
+            # stash, 1.24x slower there). A forward-only call keeps the
+            # build's profile (samba-forward was not measured with it).
+            comptime if IDN_SAMBA_ATTN_RECOMPUTE:
+                s.t_stages[j].attn_recompute_backward = not forward_only
             llama_decoder_layer_forward(
                 s.ctx, s.t_stages[j], s.kv.value(), s.rope.value(), s.t_w[j], s.acts[i],
                 b, l, 0, trace, String("samba.resident.attn"), forward_only=forward_only,

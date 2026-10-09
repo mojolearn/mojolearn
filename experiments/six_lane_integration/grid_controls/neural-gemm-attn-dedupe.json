@@ -390,7 +390,7 @@
     "MOJOLEARN_ATTN_V1_PACKED_ESTASH",
     "MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"
    ],
-   "note": "Off = shipped profile (alias_y automatic on NVIDIA estash, full estash elsewhere). NN19/NN18 ATTN_ARM runtime arms stay a runtime env sweep inside an ATTN_ARM_TRIAL build (MOJOLEARN_ATTN_ARM), not grid dimensions. Build scripts map MOJOLEARN_ATTENTION_MEMORY_PROFILE=recompute|packed|alias-y to arms 1|2|3."
+   "note": "grid ge123e6f9 (lane grid-act-4, 2026-10-08): recompute SPLIT by algorithm: samba-train-step 0.905x FASTER (NV 96.0->79.5, AMD 147.2->145.7), lm-train-step 1.24x SLOWER (NV 36.0->43.6, AMD 42.7->54.4), same bits. The build-wide default stays off (stash) for the LM / transformer steps; the Samba train step takes recompute by model kind through control samba_attn_recompute (grid_controls/samba-resident.json). Off = shipped profile (alias_y automatic on NVIDIA estash, full estash elsewhere). NN19/NN18 ATTN_ARM runtime arms stay a runtime env sweep inside an ATTN_ARM_TRIAL build (MOJOLEARN_ATTN_ARM), not grid dimensions. Build scripts map MOJOLEARN_ATTENTION_MEMORY_PROFILE=recompute|packed|alias-y to arms 1|2|3."
   },
   "attn_scale_mask": {
    "define": "MOJOLEARN_NN21_SCALE_MASK",
