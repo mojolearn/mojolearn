@@ -72,7 +72,16 @@ comptime C08_DICTIONARY = C08_TARGET_CODES or C08_ONEHOT_FT or C08_ORDINAL_FT
 # OneHot/Ordinal/TargetEncoder fit, LabelEncoder-style callers) as a parallel
 # chunked run scan over all columns at once (x_prep/ddict.mojo) instead of one
 # thread per column walking n sorted rows. Same words, same counts.
-comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN"]()
+# Promoted 2026-10-08 (lane grid-act-3, IDENTICAL grid ge123e6f9, one run per arm,
+# incumbent -> scan ms, istella / taxi): onehot NV 53.9 -> 46.7 / 41.7 -> 32.1,
+# AMD 75.2 -> 21.2 / 72.1 -> 18.2; ordinal NV 65.0 -> 46.2 / 49.0 -> 30.2, AMD
+# 75.2 -> 21.2 / 71.5 -> 17.5; target-encoder NV 188.3 -> 175.4 / 148.2 -> 133.0,
+# AMD 142.3 -> 88.4 / 134.3 -> 78.8 (0.525x combined); output digests equal to the
+# incumbent's, so no bit moves. The scan's work is a fixed row chunk per task
+# across every column, so it wins wherever n rows per column outgrow one
+# thread's serial walk. Default on in IDENTICAL; -D MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF
+# restores the one-thread-per-column walk.
+comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL and not is_defined["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF"]()
 comptime C09_REG_BUNDLE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C09_REG_BUNDLE"]()
 comptime C10_RANK_REUSE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C10_RANK_REUSE"]()
 comptime C11_DRAW_GATHER = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C11_DRAW_GATHER"]()
