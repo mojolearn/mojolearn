@@ -418,6 +418,7 @@ struct PolicyScoreHelper(Movable):
         sm_count: Int,
         scale_word: MutPointer[Float32, MutAnyOrigin],
         dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
+        fold_part_sizes: List[Int] = List[Int](),
     ) raises:
         """T5 drain (lane cpu3-gbdt-a): `submit_compute` with the scale on
         the device (the ordered fit's `_ord_std_scale_kernel` word), never
@@ -441,6 +442,7 @@ struct PolicyScoreHelper(Movable):
             ctx, subsets, cindex, docs, n_rows, sm_count, host_scale,
             scale_word,
             dither_ids=dither_ids,
+            fold_part_sizes=fold_part_sizes,
         )
 
     def _submit(
@@ -454,9 +456,12 @@ struct PolicyScoreHelper(Movable):
         fixed_scale: Float32,
         scale_word: MutPointer[Float32, MutAnyOrigin],
         dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
+        fold_part_sizes: List[Int] = List[Int](),
     ) raises:
         """The shared body: the multi-GPU shards take `fixed_scale` (a
-        host value), the one-device histogram reads `scale_word`."""
+        host value), the one-device histogram reads `scale_word`.
+        `fold_part_sizes`: A ORD_HIST_FOLD_SKIP's fold partition counts
+        (one device only; empty = no skip)."""
         var plan = self.hist_helper.plan(Int(subsets.current_depth))
         var devices = pointwise_device_count()
         if devices > 1:
@@ -506,6 +511,7 @@ struct PolicyScoreHelper(Movable):
             sm_count,
             scale_word,
             dither_ids=dither_ids,
+            fold_part_sizes=fold_part_sizes,
         )
         comptime if ORD_DOC_ID_STORAGE:
             if dither_ids:ordered_doc_hit()
@@ -736,13 +742,15 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         sm_count: Int,
         scale_word: MutPointer[Float32, MutAnyOrigin],
         dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
+        fold_part_sizes: List[Int] = List[Int](),
     ) raises:
         """T5 drain (lane cpu3-gbdt-a): `submit_compute` with the scale a
-        device word."""
+        device word. `fold_part_sizes`: A ORD_HIST_FOLD_SKIP."""
         for i in range(len(self.helpers)):
             self.helpers[i].submit_compute_dev(
                 ctx, subsets, cindex, docs, n_rows, sm_count, scale_word,
                 dither_ids=dither_ids,
+                fold_part_sizes=fold_part_sizes,
             )
 
     def compute_optimal_split(

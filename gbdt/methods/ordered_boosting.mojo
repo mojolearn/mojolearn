@@ -202,7 +202,13 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
 )
 from gbdt.methods.kernel.pointwise_split_resolve import PW_FUSED_LEVEL
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ord_all_on
-from gbdt.trees_identical_switches import T24, T25, ORD_STD_GRIDFOLD
+from gbdt.trees_identical_switches import (
+    T24,
+    T25,
+    ORD_STD_GRIDFOLD,
+    ORD_SKIP_UNSEARCHED_PERM,
+    IDN_ORD_CAT_PLANES,
+)
 from gbdt.methods.oblivious_tree_fold_tasks import (
     fold_tasks_from_folds,
     plan_fold_layout,
@@ -480,6 +486,20 @@ def _ord_scatter_planes_kernel(
         var off = Int(offset_in)
         sw.unsafe_store(off + i, stats.unsafe_load(i))
         sg.unsafe_store(off + i, stats.unsafe_load(size + i))
+
+
+def _ord_copy_into_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+    offset_in: Int32,
+):
+    """C IDN_ORD_CAT_PLANES: `dst[offset + i] = src[i]` for `i < size`, a
+    fold's prefix of a permutation-order plane into its slot of the
+    concatenated fold layout (once per fit)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(size_in):
+        dst.unsafe_store(Int(offset_in) + i, src.unsafe_load(i))
 
 
 def _ord_std_terms_kernel(
@@ -2347,6 +2367,19 @@ def fit_ordered(
     var perm_count = len(perms)
     var est_p = perm_count - 1
     var learn_count = est_p if est_p > 0 else 1
+    # F ORD_SKIP_UNSEARCHED_PERM (trees_identical_switches.mojo): the tree
+    # loop draws `learn_p = rng % (learn_count - 1)`, so the last learn
+    # permutation is never searched on; nothing outside its own fold tasks
+    # reads its cursors, so its tasks, its partition and its resident
+    # buffers are skipped. -1 = none skipped (one learn permutation, the
+    # switch off, or a traced run, which keeps every task's records).
+    var skip_p = -1
+    comptime if ORD_SKIP_UNSEARCHED_PERM:
+        if learn_count > 1 and not trace.enabled:
+            skip_p = learn_count - 1
+    # the learn permutations the structure can be searched on (the tree
+    # loop's draw range): only they need the derivative inputs below
+    var searchable = learn_count - 1 if learn_count > 1 else 1
     var folds = ordered_folds(n_rows, opts.fold_len_multiplier, opts.min_fold_size)
     var n_folds = len(folds)
     # THE FIT'S ARENA (`gbdt/gpu_util/arena.mojo`): the long-lived per-fold
@@ -2392,6 +2425,13 @@ def fit_ordered(
     # cursors: [learn permutation][fold], each over [0, R_f); the
     # estimation cursor over every row in the estimation permutation's order
     var cursors = List[List[DeviceBuffer[DType.float32]]]()
+    # C IDN_ORD_CAT_PLANES: per learn permutation (index lp; empty for a
+    # skipped one -- always the last, so lp indexes it), the concatenated cursor parent, and per
+    # SEARCHABLE permutation its own-order targets and weights in the same
+    # concatenated layout; the derivative scratch over `total`
+    var cat_cursors = List[DeviceBuffer[DType.float32]]()
+    var cat_y = List[DeviceBuffer[DType.float32]]()
+    var cat_w = List[DeviceBuffer[DType.float32]]()
     # the Apple FAST state (see the section above): empty lists unless a
     # switch is on, one entry each when it is
     var fast_cat = List[DeviceBuffer[DType.float32]]()
@@ -2417,7 +2457,9 @@ def fit_ordered(
     var fast_obs = List[DeviceBuffer[DType.uint32]]()
     var fast_planes = List[DeviceBuffer[DType.float32]]()
     var fast_bins = List[DeviceBuffer[DType.uint32]]()
-    if ord_wide:
+    # C IDN_ORD_CAT_PLANES reuses the same start table for the searcher's
+    # one-launch fold bins on the IDENTICAL path (`ord_wide` stays False)
+    if ord_wide or IDN_ORD_CAT_PLANES:
         var fl = plan_fold_layout(fold_tasks_from_folds(folds))
         var n_parts = len(fl.parts)
         var hp = ctx.enqueue_create_host_buffer[DType.uint32](n_parts + 1)
@@ -2443,14 +2485,35 @@ def fit_ordered(
             cursors, fast_cat, fast_fold_off,
         )
     else:
-        for _ in range(learn_count):
+        for lp in range(learn_count):
             var per = List[DeviceBuffer[DType.float32]]()
-            for f in range(n_folds):
-                var c = arena.device[DType.float32](
-                    ctx, folds[f].quality_evaluate_samples.right
-                )
-                enqueue_fill(ctx, c, opts.start_value)
-                per.append(c^)
+            if lp == skip_p:
+                # F: one-cell placeholders; no task of this permutation runs
+                for _ in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): placeholder views
+                    per.append(arena.device[DType.float32](ctx, 1))
+                cursors.append(per^)
+                continue
+            comptime if IDN_ORD_CAT_PLANES:
+                # C: every fold's cursor in ONE buffer at the concatenated
+                # fold offsets, the per-fold buffers are views of it (the
+                # tasks read and write them as before); the derivatives
+                # read the whole buffer in one launch
+                var cat = ctx.enqueue_create_buffer[DType.float32](total)
+                enqueue_fill(ctx, cat, opts.start_value)
+                for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): sub-buffer views per fold
+                    per.append(
+                        cat.create_sub_buffer[DType.float32](
+                            offsets[f], folds[f].quality_evaluate_samples.right
+                        )
+                    )
+                cat_cursors.append(cat^)
+            else:
+                for f in range(n_folds):
+                    var c = arena.device[DType.float32](
+                        ctx, folds[f].quality_evaluate_samples.right
+                    )
+                    enqueue_fill(ctx, c, opts.start_value)
+                    per.append(c^)
             cursors.append(per^)
     var est_cursor = ctx.enqueue_create_buffer[DType.float32](n_rows)
     enqueue_fill(ctx, est_cursor, opts.start_value)
@@ -2475,6 +2538,11 @@ def fit_ordered(
     var dys = List[DeviceBuffer[DType.float32]]()
     var dws = List[DeviceBuffer[DType.float32]]()
     for p in range(perm_count):
+        if p == skip_p:
+            # F: never read (only this permutation's skipped tasks would)
+            dys.append(arena.device[DType.float32](ctx, 1))
+            dws.append(arena.device[DType.float32](ctx, 1))
+            continue
         var dy = arena.device[DType.float32](ctx, n_rows)
         var dw = arena.device[DType.float32](ctx, n_rows)
         ctx.enqueue_function[_ord_gather_kernel](
@@ -2489,6 +2557,28 @@ def fit_ordered(
         )
         dys.append(dy^)
         dws.append(dw^)
+    comptime if IDN_ORD_CAT_PLANES:
+        # C: each searchable learn permutation's targets and weights in the
+        # concatenated fold layout, ONCE for the fit: position
+        # offsets[f] + i holds row i of the permutation's own order, the
+        # operand the per-fold launch read at prefix index i
+        for lp in range(searchable):  # small-loop(searchable: learn permutations, a handful): once-per-fit layout copies
+            var yc = ctx.enqueue_create_buffer[DType.float32](total)
+            var wc = ctx.enqueue_create_buffer[DType.float32](total)
+            for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): once-per-fit fold slices
+                var r = folds[f].quality_evaluate_samples.right
+                ctx.enqueue_function[_ord_copy_into_kernel](
+                    dys[lp].unsafe_ptr(), yc.unsafe_ptr(), Int32(r),
+                    Int32(offsets[f]), grid_dim=(_grid(r), 1, 1),
+                    block_dim=(ORDERED_BLOCK, 1, 1),
+                )
+                ctx.enqueue_function[_ord_copy_into_kernel](
+                    dws[lp].unsafe_ptr(), wc.unsafe_ptr(), Int32(r),
+                    Int32(offsets[f]), grid_dim=(_grid(r), 1, 1),
+                    block_dim=(ORDERED_BLOCK, 1, 1),
+                )
+            cat_y.append(yc^)
+            cat_w.append(wc^)
 
     var bootstrap_on = opts.bootstrap_kind >= 0
     var boot_seeds: DeviceBuffer[DType.uint64]
@@ -2509,14 +2599,25 @@ def fit_ordered(
     # per fold per tree, nine a tree below 500 rows)
     var der_stats = List[DeviceBuffer[DType.float32]]()
     var der_part = List[DeviceBuffer[DType.float32]]()
-    for f in range(n_folds):
-        var r = folds[f].quality_evaluate_samples.right
-        der_stats.append(arena.device[DType.float32](ctx, 2 * r))
+    comptime if IDN_ORD_CAT_PLANES:
+        # C: one scratch over the concatenated layout (`2 * total` stats,
+        # the kernel's planar [weights | weighted targets] layout) and its
+        # block partials (unread: compute_fv = 0)
+        der_stats.append(ctx.enqueue_create_buffer[DType.float32](2 * total))
         der_part.append(
-            arena.device[DType.float32](
-                ctx, (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+            ctx.enqueue_create_buffer[DType.float32](
+                (total + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
             )
         )
+    else:
+        for f in range(n_folds):
+            var r = folds[f].quality_evaluate_samples.right
+            der_stats.append(arena.device[DType.float32](ctx, 2 * r))
+            der_part.append(
+                arena.device[DType.float32](
+                    ctx, (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+                )
+            )
     var pool = List[PointwiseTreeWorkspace]()
     # ONE ESTIMATION WORKSPACE PER ESTIMATE SIZE, not one for the fit.
     # `_estimate_and_apply`'s pool of one (DEVIATION 1890) is keyed on
@@ -2571,8 +2672,12 @@ def fit_ordered(
         est_pools.append(List[TEstimationWorkspace]())
     var slots = List[_OrderedSlot]()
     if batch and not fast_on:
-        for _ in range(learn_count):
+        for lp in range(learn_count):
             for f in range(n_folds):
+                if lp == skip_p:
+                    # F: a one-cell slot keeps the slot index; never used
+                    slots.append(_OrderedSlot(ctx, arena, 1, 1))
+                    continue
                 var est = folds[f].estimate_samples.right
                 comptime if ORDERED_SABOTAGE:
                     est = folds[f].quality_evaluate_samples.right
@@ -2585,6 +2690,10 @@ def fit_ordered(
     var parts = List[_PermPartition]()
     if batch:
         for p in range(perm_count):
+            if p == skip_p:
+                # F: a one-row partition keeps the index; never sorted
+                parts.append(_PermPartition(ctx, arena, [1], 1))
+                continue
             var bounds = List[Int]()
             if p < learn_count:
                 for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): fold prefixes per permutation
@@ -2663,33 +2772,63 @@ def fit_ordered(
         else:
             sw = ctx.enqueue_create_buffer[DType.float32](total)
             sg = ctx.enqueue_create_buffer[DType.float32](total)
-        for f in range(n_folds):
-            var r = folds[f].quality_evaluate_samples.right
-            # the prefix [0, r) of the learn permutation's own-order copies
-            ref gy = dys[learn_p]
-            ref gw = dws[learn_p]
-            ref stats = der_stats[f]
-            ref part = der_part[f]
-            var blocks = (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+        var cat_done = False
+        comptime if IDN_ORD_CAT_PLANES:
+            # C: the fold derivatives of every fold in ONE launch over the
+            # concatenated layout (position offsets[f] + i is fold f's
+            # prefix row i: the same targets, weights and cursor cell the
+            # per-fold launch read), then ONE scatter of the two planes
+            ref cs = der_stats[0]
+            ref cp = der_part[0]
+            var cblocks = (total + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
             if second_order:
                 launch_approximate[False, True](
-                    ctx, opts.objective, gy, gw, Int32(r),
-                    cursors[learn_p][f], Int32(1), opts.kernel_alpha,
-                    opts.logloss_border, stats, part, Int32(0),
-                    dummy_mag, Int32(0), blocks,
+                    ctx, opts.objective, cat_y[learn_p], cat_w[learn_p],
+                    Int32(total), cat_cursors[learn_p], Int32(1),
+                    opts.kernel_alpha, opts.logloss_border, cs, cp, Int32(0),
+                    dummy_mag, Int32(0), cblocks,
                 )
             else:
                 launch_approximate[False](
-                    ctx, opts.objective, gy, gw, Int32(r),
-                    cursors[learn_p][f], Int32(1), opts.kernel_alpha,
-                    opts.logloss_border, stats, part, Int32(0),
-                    dummy_mag, Int32(0), blocks,
+                    ctx, opts.objective, cat_y[learn_p], cat_w[learn_p],
+                    Int32(total), cat_cursors[learn_p], Int32(1),
+                    opts.kernel_alpha, opts.logloss_border, cs, cp, Int32(0),
+                    dummy_mag, Int32(0), cblocks,
                 )
             ctx.enqueue_function[_ord_scatter_planes_kernel](
-                stats.unsafe_ptr(), sw.unsafe_ptr(), sg.unsafe_ptr(),
-                Int32(r), Int32(offsets[f]), grid_dim=(_grid(r), 1, 1),
+                cs.unsafe_ptr(), sw.unsafe_ptr(), sg.unsafe_ptr(),
+                Int32(total), Int32(0), grid_dim=(_grid(total), 1, 1),
                 block_dim=(ORDERED_BLOCK, 1, 1),
             )
+            cat_done = True
+        if not cat_done:
+            for f in range(n_folds):
+                var r = folds[f].quality_evaluate_samples.right
+                # the prefix [0, r) of the learn permutation's own-order copies
+                ref gy = dys[learn_p]
+                ref gw = dws[learn_p]
+                ref stats = der_stats[f]
+                ref part = der_part[f]
+                var blocks = (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+                if second_order:
+                    launch_approximate[False, True](
+                        ctx, opts.objective, gy, gw, Int32(r),
+                        cursors[learn_p][f], Int32(1), opts.kernel_alpha,
+                        opts.logloss_border, stats, part, Int32(0),
+                        dummy_mag, Int32(0), blocks,
+                    )
+                else:
+                    launch_approximate[False](
+                        ctx, opts.objective, gy, gw, Int32(r),
+                        cursors[learn_p][f], Int32(1), opts.kernel_alpha,
+                        opts.logloss_border, stats, part, Int32(0),
+                        dummy_mag, Int32(0), blocks,
+                    )
+                ctx.enqueue_function[_ord_scatter_planes_kernel](
+                    stats.unsafe_ptr(), sw.unsafe_ptr(), sg.unsafe_ptr(),
+                    Int32(r), Int32(offsets[f]), grid_dim=(_grid(r), 1, 1),
+                    block_dim=(ORDERED_BLOCK, 1, 1),
+                )
 
         times.end(ctx, "ord.derivatives")
         # 3. the score noise, from the UNBOOTSTRAPPED quality slices
@@ -3019,6 +3158,9 @@ def fit_ordered(
             # one device counting sort per permutation (`_PermPartition`),
             # one drain for all of them, their counts home
             for p in range(perm_count):
+                if p == skip_p:
+                    # F: no task reads this permutation's partition
+                    continue
                 if ord_wide:
                     # the batched estimation reads the counts on the
                     # device; the three host copies are dead under it
@@ -3032,8 +3174,9 @@ def fit_ordered(
                     )
             if not fast_on:
                 ctx.synchronize()
-                for p in range(perm_count):
-                    parts[p].settle(n_leaves)
+                for p in range(perm_count):  # small-loop(perm_count: permutations, a handful): settle orchestration per permutation
+                    if p != skip_p:
+                        parts[p].settle(n_leaves)
         else:
             # the tree's bins on the host ONCE, for every task's partition
             # (`_partition_from_host_bins`)
@@ -3064,8 +3207,15 @@ def fit_ordered(
                 )
         elif batch:
             var pend = List[_OrderedPending]()
+            # F: `pend_of[slot]` is the slot's entry in `pend` (-1 for a
+            # skipped permutation's slot); the estimation task is last
+            var pend_of = List[Int]()
             for lp in range(learn_count):
                 for f in range(n_folds):
+                    if lp == skip_p:
+                        pend_of.append(-1)
+                        continue
+                    pend_of.append(len(pend))
                     var est = folds[f].estimate_samples.right
                     comptime if ORDERED_SABOTAGE:
                         est = folds[f].quality_evaluate_samples.right
@@ -3080,6 +3230,7 @@ def fit_ordered(
                         )
                     )
             var est_slot = learn_count * n_folds
+            var est_pend = len(pend)
             pend.append(
                 _ordered_estimate_prepare(
                     ctx, n_rows, n_rows, n_leaves, dys[est_p], dws[est_p],
@@ -3105,23 +3256,25 @@ def fit_ordered(
             for lp in range(learn_count):
                 for f in range(n_folds):
                     var slot = lp * n_folds + f
+                    if pend_of[slot] < 0:
+                        continue
                     var apply_bins = bins.copy()
                     comptime if T25:
                         apply_bins = parts[lp].d_leaf.copy()
                     _ = _ordered_estimate_complete(
-                        ctx, pend[slot], slots[slot], n_leaves, dperms[lp],
+                        ctx, pend[pend_of[slot]], slots[slot], n_leaves, dperms[lp],
                         apply_bins,
                         cursors[lp][f], opts, est_pools[slot], trace,
                         tag + ".perm." + String(lp) + ".fold." + String(f),
                         est_times, walker_times, want_leaves=False,
                     )
-            ord_dev_leaves = pend[est_slot].est.device_done
+            ord_dev_leaves = pend[est_pend].est.device_done
             ord_dev_slot = est_slot
             var estimation_bins = bins.copy()
             comptime if T25:
                 estimation_bins = parts[est_p].d_leaf.copy()
             leaves = _ordered_estimate_complete(
-                ctx, pend[est_slot], slots[est_slot], n_leaves,
+                ctx, pend[est_pend], slots[est_slot], n_leaves,
                 dperms[est_p], estimation_bins,
                 est_cursor, opts, est_pools[est_slot], trace,
                 tag + ".estimation", est_times, walker_times,
@@ -3132,6 +3285,9 @@ def fit_ordered(
                 ctx.synchronize()
                 _ = pend^
         for lp in range(0 if batch else learn_count):
+            if lp == skip_p:
+                # F: no reader of this permutation's cursors
+                continue
             for f in range(n_folds):
                 var est = folds[f].estimate_samples.right
                 comptime if ORDERED_SABOTAGE:
@@ -3245,6 +3401,10 @@ def fit_ordered(
     _ = der_stats^
     _ = der_part^
     _ = cursors^
+    # C: the concatenated cursor parents (the views above) and planes
+    _ = cat_cursors^
+    _ = cat_y^
+    _ = cat_w^
     _ = arena^
     _ = boot_seeds^
     _ = boot_mags^

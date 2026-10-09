@@ -1673,3 +1673,14 @@ Code-only lane (plan `docs/plans/flagship-gaps-20261009/read_pca.md`), uncompile
 | `MOJOLEARN_IDN_GEMM_TN_CENTERED` (default off) | classical:pca / istella (d > 128 only) | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | P3: centered tile load on the v1 split-plan arithmetic, X read-only; no bit claimed to move (ID check settles it) |
 | `MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE` (default off) | classical:pca, more:tsvd / istella, taxi | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | P5: device order + top-k gather, k x d download; bits move only on tied eigenvalues (host column moves with it) |
 | `MOJOLEARN_IDN_COLVAR_FUSED` (default off) | more:tsvd / istella, taxi | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | T2: read-only fused column variance in the xty_tiled order; same words |
+
+## Flagship gaps: Ordered fold-arm overhead (lane/fg-gbdt-ordered, 2026-10-09)
+
+Plan: `docs/plans/flagship-gaps-20261009/read_gbdt_ordered.md` ideas F, C, A, E (B and D not this round). IDENTICAL only; NOT COMPILED, NOT MEASURED.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF` (absent = skip, default ON) | trees:gbdt-ordered / taxi, istella | lane/fg-gbdt-ordered @ 1ca47fae7 | owed | owed (grid flips1 NV taxi 21,192 / istella 36,587) | PENDING A/B | F: the last learn permutation is never searched on (`rng % (learn_count - 1)`); its fold tasks, partition sort/settle and buffers are skipped; exported model bits unchanged (traced runs keep the tasks) |
+| `MOJOLEARN_IDN_ORD_CAT_PLANES_OFF` (absent = on, default ON) | trees:gbdt-ordered / taxi, istella | lane/fg-gbdt-ordered @ 1ca47fae7 | owed | owed | PENDING A/B | C: concatenated fold cursors, one derivative launch + one scatter per tree (was 2F), one-launch fold bins (was 2F fill/copy + drain); no bits change |
+| `MOJOLEARN_ORD_HIST_FOLD_SKIP` (+ `_DOCS=64\|256\|1024`, default OFF) | trees:gbdt-ordered / taxi, istella | lane/fg-gbdt-ordered @ 1ca47fae7 | owed | owed | PENDING A/B | A: small fold partitions by a global-Int32-atomic kernel + conversion; regular 8-bit grid skips them; order-free Int32 cells, no bits change |
+| `MOJOLEARN_IDN_ORD_INDEX_SHARED` (default OFF) | trees:gbdt-ordered / taxi, istella | lane/fg-gbdt-ordered @ 1ca47fae7 | owed | owed | PENDING A/B | E: permutation-order index per searched permutation (n x n_cols, was ~2n x n_cols) + shared fold position map; per-level gather; dither keys on perm[i]; no bits change |

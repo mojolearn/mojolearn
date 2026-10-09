@@ -1,0 +1,135 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "fg-gbdt-ordered",
+ "branch": "lane/fg-gbdt-ordered",
+ "head": "1ca47fae7",
+ "mode": "IDENTICAL",
+ "controls": {
+  "ORD_SKIP_UNSEARCHED_PERM": {
+   "define": "MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:161",
+    "gbdt/methods/ordered_boosting.mojo:2376",
+    "gbdt/methods/ordered_boosting.mojo:2490",
+    "gbdt/methods/ordered_boosting.mojo:2541",
+    "gbdt/methods/ordered_boosting.mojo:2677",
+    "gbdt/methods/ordered_boosting.mojo:2693",
+    "gbdt/methods/ordered_boosting.mojo:3161",
+    "gbdt/methods/ordered_boosting.mojo:3215",
+    "gbdt/methods/ordered_boosting.mojo:3288"
+   ],
+   "binding": "_mojolearn_gbdt,_mojolearn_gbdt_host",
+   "bits_change": false,
+   "status": "pending",
+   "note": "F: the last learn permutation (learn_count - 1) is never searched on (learn_p = rng % (learn_count - 1)); its fold tasks, partition sort + settle and resident buffers (cursors, own-order y/w, partition, slots) are skipped. Only its own tasks read its cursors; the exported leaves are the estimation permutation's. Traced runs keep the tasks. Exported model bits unchanged (output hash comparable); trace loses *.perm.<last>.fold.* records only when tracing is off. Its T22 fold-order index was never built (cached per searched id). Default ON (waste removal); _OFF restores."
+  },
+  "IDN_ORD_CAT_PLANES": {
+   "define": "MOJOLEARN_IDN_ORD_CAT_PLANES_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_ORD_CAT_PLANES_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:177",
+    "gbdt/methods/ordered_boosting.mojo:2462",
+    "gbdt/methods/ordered_boosting.mojo:2496",
+    "gbdt/methods/ordered_boosting.mojo:2560",
+    "gbdt/methods/ordered_boosting.mojo:2602",
+    "gbdt/methods/ordered_boosting.mojo:2776",
+    "gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:589"
+   ],
+   "binding": "_mojolearn_gbdt,_mojolearn_gbdt_host",
+   "bits_change": false,
+   "status": "pending",
+   "note": "C: concatenated per-permutation fold cursors (views), fit-long concatenated own-order y/w per searchable permutation; per tree ONE launch_approximate over total + ONE plane scatter instead of 2F launches, and the pooled fold bins in ONE fold_bins_from_table_kernel launch (un-gated from Apple ORD_ALL) instead of 2F create+fill+copy and a drain. Same per-row statements and integers: no bits change. Honors MOJOLEARN_IDN_ALL_OFF. Default ON; _OFF restores."
+  },
+  "ORD_HIST_FOLD_SKIP": {
+   "define": "MOJOLEARN_ORD_HIST_FOLD_SKIP",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_ORD_HIST_FOLD_SKIP"
+    ],
+    "on_docs64": [
+     "MOJOLEARN_ORD_HIST_FOLD_SKIP",
+     "MOJOLEARN_ORD_HIST_FOLD_SKIP_DOCS=64"
+    ],
+    "on_docs1024": [
+     "MOJOLEARN_ORD_HIST_FOLD_SKIP",
+     "MOJOLEARN_ORD_HIST_FOLD_SKIP_DOCS=1024"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:202",
+    "gbdt/methods/kernel/pointwise_hist2_one_byte_templ.mojo:272",
+    "gbdt/methods/pointwise_kernels.mojo:1058",
+    "gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:875"
+   ],
+   "binding": "_mojolearn_gbdt,_mojolearn_gbdt_host",
+   "bits_change": false,
+   "status": "pending",
+   "legal_set": [
+    64,
+    256,
+    1024
+   ],
+   "note": "A: the leading fold partitions with fewer than parts x DOCS documents are histogrammed by ord_small_fold_hist8_kernel (global Int32 atomics into the cell, then ord_small_fold_convert_kernel: Float32(Int(raw))/scale under the 1e-20 guard); the regular 8-bit grid's blocks for those z return at entry (z_skip). Int32 sums are order-free and wrap as the shared counters do: the multiplier-1 cells, no bits change. Fixed 8-bit one-byte route, single device, device-scale submit (IDENTICAL default). DOCS default 256 (one document per thread of the block); arms 64/1024 are the sweep."
+  },
+  "IDN_ORD_INDEX_SHARED": {
+   "define": "MOJOLEARN_IDN_ORD_INDEX_SHARED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_ORD_INDEX_SHARED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:225",
+    "gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:526",
+    "gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:899"
+   ],
+   "binding": "_mojolearn_gbdt,_mojolearn_gbdt_host",
+   "bits_change": false,
+   "status": "pending",
+   "note": "E: per searched permutation one permutation-order index (n_cols x n words) instead of T22's fold-order copy (n_cols x ~2n), plus one fold position -> permutation index map shared by all permutations; the levels gather docs through the map, kernels read stride n, dither keys on perm[i] = document id (T22's key). Same words and keys: no bits change. Memory -n_cols x n words per searched permutation; +one 2n gather per level. Takes the fold arm whether T22 is on or off (it replaces both storages). The partition readbacks stay: task_partition still needs host leaf sizes until idea B."
+  }
+ },
+ "algorithms": {
+  "trees:gbdt-ordered": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: fit_ordered tree loop (F skip of the unsearched learn permutation; C concatenated cursors + one derivative launch) -> fit_oblivious_tree_structure_traced fold arm (C one-launch fold bins; E permutation-order index; A small-fold histograms in compute_hist2_non_binary_dev[8]) -> batched estimation tasks",
+   "controls": [
+    "ORD_SKIP_UNSEARCHED_PERM",
+    "IDN_ORD_CAT_PLANES",
+    "ORD_HIST_FOLD_SKIP",
+    "IDN_ORD_INDEX_SHARED"
+   ],
+   "interaction_groups": [
+    [
+     "ORD_SKIP_UNSEARCHED_PERM",
+     "IDN_ORD_CAT_PLANES"
+    ],
+    [
+     "ORD_HIST_FOLD_SKIP",
+     "IDN_ORD_INDEX_SHARED"
+    ]
+   ]
+  }
+ }
+}
