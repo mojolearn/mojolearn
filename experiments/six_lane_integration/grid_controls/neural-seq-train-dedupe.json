@@ -515,30 +515,31 @@
    "note": "NN55 required NN56; arm 1 isolates NN56, arm 2 adds NN55. NI30 has no define."
   },
   "act_retain": {
-   "define": "MOJOLEARN_IDN_ACT_RETAIN",
+   "define": "MOJOLEARN_IDN_ACT_RETAIN,MOJOLEARN_IDN_ACT_RETAIN_OFF",
    "kind": "arms",
    "arms": {
-    "0": [],
+    "2": [],
+    "0": [
+     "MOJOLEARN_IDN_ACT_RETAIN_OFF"
+    ],
     "1": [
      "MOJOLEARN_IDN_ACT_RETAIN=1"
-    ],
-    "2": [
-     "MOJOLEARN_IDN_ACT_RETAIN=2"
     ],
     "3": [
      "MOJOLEARN_IDN_ACT_RETAIN=3"
     ]
    },
-   "default": "0",
+   "default": "2",
    "source": [
-    "transformer/experiments/checkpoint_contract.mojo:11",
-    "training/neural_attention_owner.mojo:451",
-    "training/neural_identical_experiments.mojo:58",
-    "bindings/_mojolearn_mamba.mojo:2659"
+    "transformer/experiments/checkpoint_contract.mojo:20",
+    "training/neural_attention_owner.mojo:453",
+    "training/neural_identical_experiments.mojo:75",
+    "bindings/_mojolearn_mamba.mojo:2660",
+    "core/six_lane_experiment_guards.mojo:197"
    ],
    "binding": "_mojolearn_transformer+_mojolearn_mamba",
    "bits_change": false,
-   "status": "rewritten",
+   "status": "promoted:ge123e6f9",
    "entries": [
     "NN31",
     "NN32",
@@ -555,7 +556,7 @@
     "2": "nn31_bounded_checkpoints",
     "3": "ni48_samba_owned_tapes"
    },
-   "note": "NI36's tape half was NI48's define; NI36 now means only the scratch arm of train_scratch."
+   "note": "PROMOTED 2026-10-08 (lane grid-act-4, grid ge123e6f9, one run per arm): arm 2 (NN31 bounded checkpoints), replay -> arm 2 ms samba-train-step NV 96.0->77.6, AMD 147.2->144.3 (0.890x combined); output hashes equal to the incumbent on both vendors (no bits). Measured alone; it now combines with the promoted samba_resident_step and m3_angle_carry_cache, and the post-merge race measures the combination. Default 2 in IDENTICAL; arm 0 (replay) = MOJOLEARN_IDN_ACT_RETAIN_OFF; arms 1 and 3 stay (3 is HOLD_BROKEN in the grid, kept as an arm); explicit =0 and =N with _OFF are refused. NI36's tape half was NI48's define; NI36 now means only the scratch arm of train_scratch."
   },
   "train_scratch": {
    "define": "MOJOLEARN_IDN_TRAIN_SCRATCH",

@@ -2656,7 +2656,8 @@ def mamba3_prefill_session_backward_owned_binding(session: PythonObject, addrs: 
 # compilation, identity, quality or end-to-end measurements have been run.
 comptime IDN_SAMBA_M3_FORWARD_TAPE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 0]() == 3  # NI48 arm
+    and not is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]()
+    and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]() == 3  # NI48 arm (default 2 since 2026-10-08)
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
