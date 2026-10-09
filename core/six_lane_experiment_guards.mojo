@@ -196,6 +196,7 @@ def _check_configuration() -> Bool:
     # ACT_RETAIN arm 2 promoted 2026-10-08 (lane/grid-act-4, grid ge123e6f9, samba-train-step 0.890x, same bits): absent = 2; =1 and =3 stay arms; _OFF = arm 0 replay.
     comptime assert get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",2]() == 1 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",2]() == 2 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",2]() == 3, "invalid MOJOLEARN_IDN_ACT_RETAIN arm (legal: 1|2|3; replay is -D MOJOLEARN_IDN_ACT_RETAIN_OFF)"
     comptime assert not (is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]() and is_defined["MOJOLEARN_IDN_ACT_RETAIN"]()), "MOJOLEARN_IDN_ACT_RETAIN_OFF (replay) and MOJOLEARN_IDN_ACT_RETAIN=N are exclusive arms"
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_NN05"](), "removed 2026-10-08 (grid ge123e6f9, lane/grid-act-4): neural_gemm_pair=nn05 (fused gate/up pair kernel) was SLOWER on both vendors: lm-forward NV 2.19x / AMD 2.80x, lm-train-step 3.72x / 2.44x, transformer-forward 3.85x / 3.47x (3.0x combined); same bits; code at main 4e3da4282, see docs/apple-fast/EXPERIMENTS.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

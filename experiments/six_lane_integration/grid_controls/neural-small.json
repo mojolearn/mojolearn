@@ -53,7 +53,7 @@
    "source": [
     "gemm/host_entry.mojo:74",
     "gemm/host_entry.mojo:157",
-    "gemm/neural_dispatch.mojo:155"
+    "gemm/neural_dispatch.mojo:157"
    ],
    "binding": "_mojolearn_linalg",
    "bits_change": true,
