@@ -142,8 +142,8 @@ comptime C20_PAIR_LOAD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_P
 comptime C21_EXTREMA = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"]()
 comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"]()
 # lane classical-decomp (2026-10-07): the old C23_CENTERED_PANELS define is
-# split per algorithm family. Its PCA use is the ONE_PASS arm of
-# MOJOLEARN_CLASSICAL_PCA_COV below; its MCD use is C23_MCD. Both run
+# split per algorithm family. Its PCA use (the ONE_PASS arm of
+# MOJOLEARN_CLASSICAL_PCA_COV, =23) was deleted 2026-10-08 (below); its MCD use is C23_MCD. Both run
 # row-parallel (core/blocked_moments.mojo); the per-cell serial kernels
 # (one GPU thread per covariance cell over every row) are deleted.
 # C23_MCD: MinCovDet/EllipticEnvelope `emp_cov_at` as the centered Gram
@@ -151,21 +151,20 @@ comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TR
 # counter: the old C23 cell's value (x_decomp/classical_cells.mojo, the host
 # column), now computed in parallel. NOT MEASURED.
 comptime C23_MCD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_MCD"]()
-# PCA covariance, ONE switch with named arms (the old C04-over-C23 silent
+# PCA covariance, ONE switch with a named arm (the old C04-over-C23 silent
 # priority is gone): -D MOJOLEARN_CLASSICAL_PCA_COV=4 is the C04 arm
 # (two passes: the column mean, then the centered Gram around it read
 # straight from X, leaves of contract_leaf_size(n) rows, binary-counter
 # fold: the old C04 cell's value, computed in parallel, no shift/unshift
-# passes); =23 is the C23 arm (ONE blocked pass: each leaf of
-# bm_onepass_leaf_rows rows centers on its own means, leaves merge by
-# Chan's update in the binary-counter order; the mean comes out of the same
-# pass). Absent = the incumbent (column_mean_launch, then split-K or
-# shift + gemm_tn). Either arm replaces the incumbent's routing at every
+# passes). Absent = the incumbent (column_mean_launch, then split-K or
+# shift + gemm_tn). The arm replaces the incumbent's routing at every
 # width. NOT MEASURED.
+# Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+# (c04 stays; C23_MCD is separate). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 comptime _PCA_COV_RAW = get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV", 0]()
-comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4 or _PCA_COV_RAW == 23
+comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4
 comptime PCA_COV_C04 = CLASSICAL_IDN and _PCA_COV_RAW == 4
-comptime PCA_COV_C23 = CLASSICAL_IDN and _PCA_COV_RAW == 23
 # TSVD_FUSED_STATS (new, lane classical-decomp): TruncatedSVD's
 # explained_variance_ / _ratio_ in one blocked kernel: per leaf the mean and
 # centered sum of squares of X's columns and of X V^T's columns (the

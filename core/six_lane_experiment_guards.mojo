@@ -201,6 +201,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_OZAKI_LINALG"](), "removed: MOJOLEARN_IDN_GEMM_OZAKI_LINALG retired 2026-10-08: slower, gemm S=4 NV 3.97x / AMD 2.06x, S=5 NV 7.99x / AMD 2.51x (grid ge123e6f9); the neural Ozaki profile (MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES) is separate; see EXPERIMENTS.md"
     comptime assert get_defined_int["MOJOLEARN_TREES_HIST_MULTISTAT",0]() == 0, "removed: MOJOLEARN_TREES_HIST_MULTISTAT (=4|8) retired 2026-10-08: slower, gbdt-multiclass =4 NV 1.04x / AMD 1.41x istella, 1.07x / 1.11x taxi; =8 0.99x / 1.31x istella, 1.11x / 1.14x taxi; quality SAME (grid ge123e6f9); see EXPERIMENTS.md"
     comptime assert not is_defined["MOJOLEARN_TREES_T29_VERSIONED"](), "removed: MOJOLEARN_TREES_T29_VERSIONED (T29 arm 'versioned') retired 2026-10-08: slower, gbdt-rank-pairlogit istella NV 3.43x / AMD 3.76x (grid ge123e6f9); MOJOLEARN_TREES_T29 alone stays; see EXPERIMENTS.md"
+    comptime assert get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV",0]() != 23, "removed: MOJOLEARN_CLASSICAL_PCA_COV=23 (C23 one-pass covariance) retired 2026-10-08: slower, pca NV 2.28x / AMD 1.27x istella, NV 0.90x / AMD 0.78x taxi, combined 1.195x (grid ge123e6f9); =4 (c04) stays; see EXPERIMENTS.md"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True

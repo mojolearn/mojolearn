@@ -165,39 +165,9 @@ def host_bm_column_mean(x: List[Float32], n: Int, d: Int) -> List[Float32]:
     return host_bm_sum_fold(part^, leaves, d, n)
 
 
-def host_bm_onepass_covariance(
-    x: List[Float32], n: Int, d: Int, mut mu: List[Float32],
-) -> List[Float32]:
-    """`bm_onepass_covariance`: returns the (n - 1)-scaled covariance and
-    sets `mu`."""
-    var cells = d * d
-    var leaf = bm_onepass_leaf_rows(n, cells)
-    var leaves = bm_leaf_count(n, leaf)
-    var part = List[Float32](length=max(1, leaves * cells), fill=Float32(0.0))
-    var means = List[Float32](length=max(1, leaves * d), fill=Float32(0.0))
-    var c = List[Float32](length=max(1, d), fill=Float32(0.0))
-    for k in range(leaves):
-        var r0 = k * leaf
-        var r1 = min(n, r0 + leaf)
-        for col in range(d):
-            var tot = Float32(0.0)
-            for s in range(BM_GRAM_MEAN_CHAINS):
-                var acc = Float32(0.0)
-                var r = r0 + s
-                while r < r1:
-                    acc = bm_add(acc, x[r * d + col])
-                    r += BM_GRAM_MEAN_CHAINS
-                tot = acc if s == 0 else bm_add(tot, acc)
-            c[col] = bm_div(tot, Float32(r1 - r0))
-            means[k * d + col] = c[col]
-        for i in range(d):
-            for j in range(i, d):
-                var acc = Float32(0.0)
-                for r in range(r0, r1):
-                    acc = bm_fma(bm_sub(x[r * d + i], c[i]), bm_sub(x[r * d + j], c[j]), acc)
-                part[k * cells + i * d + j] = acc
-                part[k * cells + j * d + i] = acc
-    return host_bm_chan_fold(part^, means^, leaves, d, False, n, leaf, n - 1, mu)
+# Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+# (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 
 
 def _host_tsvd_value(x: List[Float32], v: List[Float32], r: Int, d: Int, j: Int) -> Float32:
