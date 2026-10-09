@@ -40,18 +40,17 @@
    }
   },
   {
-   "batch_hash": "d163cb6c6261207e",
+   "batch_hash": "d29d3fd253bd2ac1",
    "bytes": 1642,
    "class": "LinearRegression",
    "file": "ols.base.npz",
    "fixture": "base",
    "lane": "ols",
    "load": "load",
-   "model_hash": "3b74082583c13a48",
+   "model_hash": "bb5b3a1e4e32cd6e",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -59,18 +58,17 @@
    }
   },
   {
-   "batch_hash": "65941b218439dea2",
+   "batch_hash": "a4393ca903fbbea4",
    "bytes": 3138,
    "class": "PCA",
    "file": "pca.base.npz",
    "fixture": "base",
    "lane": "pca",
    "load": "load",
-   "model_hash": "b41a408ef6ffb8c9",
+   "model_hash": "9ac162debf1581fe",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -591,18 +589,17 @@
    }
   },
   {
-   "batch_hash": "12fa7ead7bca7aa6",
+   "batch_hash": "5e984c2dfbe79955",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-laplacian.base.npz",
    "fixture": "base",
    "lane": "nystroem-laplacian",
    "load": "load",
-   "model_hash": "28f4695cd4465bfd",
+   "model_hash": "e2622bf013c93512",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -610,18 +607,17 @@
    }
   },
   {
-   "batch_hash": "5eebd25d657956f5",
+   "batch_hash": "704d7c74cb960ad8",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-laplacian.denormal.npz",
    "fixture": "denormal",
    "lane": "nystroem-laplacian",
    "load": "load",
-   "model_hash": "36e7097286c2bb97",
+   "model_hash": "361962ce9c40dd42",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -629,18 +625,17 @@
    }
   },
   {
-   "batch_hash": "5eebd25d657956f5",
+   "batch_hash": "704d7c74cb960ad8",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-laplacian.denormal_ftz.npz",
    "fixture": "denormal_ftz",
    "lane": "nystroem-laplacian",
    "load": "load",
-   "model_hash": "837c24b153316e6f",
+   "model_hash": "53fb3bc11d1e846e",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -648,18 +643,17 @@
    }
   },
   {
-   "batch_hash": "12fa7ead7bca7aa6",
+   "batch_hash": "5e984c2dfbe79955",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-laplacian.dupes.npz",
    "fixture": "dupes",
    "lane": "nystroem-laplacian",
    "load": "load",
-   "model_hash": "28f4695cd4465bfd",
+   "model_hash": "e2622bf013c93512",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -667,18 +661,17 @@
    }
   },
   {
-   "batch_hash": "9a6d08b22e608e27",
+   "batch_hash": "baa732fef7af4bca",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-laplacian.hashed.npz",
    "fixture": "hashed",
    "lane": "nystroem-laplacian",
    "load": "load",
-   "model_hash": "539991c19e879093",
+   "model_hash": "11064f13887203c9",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -686,18 +679,17 @@
    }
   },
   {
-   "batch_hash": "065432d75fbd3400",
+   "batch_hash": "0118bf973919218a",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-laplacian.negative.npz",
    "fixture": "negative",
    "lane": "nystroem-laplacian",
    "load": "load",
-   "model_hash": "bded433ad62b9443",
+   "model_hash": "a3e41708c273d254",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -705,18 +697,17 @@
    }
   },
   {
-   "batch_hash": "0f0f54b034306561",
+   "batch_hash": "44a128298266be2a",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-laplacian.odd.npz",
    "fixture": "odd",
    "lane": "nystroem-laplacian",
    "load": "load",
-   "model_hash": "96704e86af8cc3d6",
+   "model_hash": "a552b4ac4fdd8f92",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -724,18 +715,17 @@
    }
   },
   {
-   "batch_hash": "94c300b9a20404b4",
+   "batch_hash": "be0dc6507991cf25",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-laplacian.ties.npz",
    "fixture": "ties",
    "lane": "nystroem-laplacian",
    "load": "load",
-   "model_hash": "bff3c6ddc9eb1bcb",
+   "model_hash": "b1c1c1a404b3d228",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -743,18 +733,17 @@
    }
   },
   {
-   "batch_hash": "f2d4e65b88e66089",
+   "batch_hash": "1a092155fb9c4653",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-laplacian.wide.npz",
    "fixture": "wide",
    "lane": "nystroem-laplacian",
    "load": "load",
-   "model_hash": "dff8bbac56c9b8db",
+   "model_hash": "bfef724a4f312d61",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -762,18 +751,17 @@
    }
   },
   {
-   "batch_hash": "420564d7ed5051b7",
+   "batch_hash": "f3c85f217b843b23",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-poly.base.npz",
    "fixture": "base",
    "lane": "nystroem-poly",
    "load": "load",
-   "model_hash": "c774abd983d4c17e",
+   "model_hash": "c2497029d3a9f994",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -781,18 +769,17 @@
    }
   },
   {
-   "batch_hash": "ad148dc32e01fc72",
+   "batch_hash": "2aca18ef82b8a3ac",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-poly.denormal.npz",
    "fixture": "denormal",
    "lane": "nystroem-poly",
    "load": "load",
-   "model_hash": "60625a8079a65c65",
+   "model_hash": "ddfc444a0bf5200c",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -800,18 +787,17 @@
    }
   },
   {
-   "batch_hash": "ad148dc32e01fc72",
+   "batch_hash": "2aca18ef82b8a3ac",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-poly.denormal_ftz.npz",
    "fixture": "denormal_ftz",
    "lane": "nystroem-poly",
    "load": "load",
-   "model_hash": "bae6fd0317617982",
+   "model_hash": "b4842707f65fca9b",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -819,18 +805,17 @@
    }
   },
   {
-   "batch_hash": "420564d7ed5051b7",
+   "batch_hash": "f3c85f217b843b23",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-poly.dupes.npz",
    "fixture": "dupes",
    "lane": "nystroem-poly",
    "load": "load",
-   "model_hash": "c774abd983d4c17e",
+   "model_hash": "c2497029d3a9f994",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -838,18 +823,17 @@
    }
   },
   {
-   "batch_hash": "233b5ca3945abda9",
+   "batch_hash": "695b601ae073d30b",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-poly.hashed.npz",
    "fixture": "hashed",
    "lane": "nystroem-poly",
    "load": "load",
-   "model_hash": "6a75a46ca93a2495",
+   "model_hash": "cf6a37d21baa41a9",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -857,18 +841,17 @@
    }
   },
   {
-   "batch_hash": "7a6c3c22523567e6",
+   "batch_hash": "469cf3b5d0d77939",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-poly.negative.npz",
    "fixture": "negative",
    "lane": "nystroem-poly",
    "load": "load",
-   "model_hash": "f3f717a18d4b8373",
+   "model_hash": "459ed091ec304438",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -876,18 +859,17 @@
    }
   },
   {
-   "batch_hash": "0e14e23781ba2597",
+   "batch_hash": "e12fc3b062f51bd4",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-poly.odd.npz",
    "fixture": "odd",
    "lane": "nystroem-poly",
    "load": "load",
-   "model_hash": "710ec4027aef65f9",
+   "model_hash": "6e52cb78eb5d0bff",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -895,18 +877,17 @@
    }
   },
   {
-   "batch_hash": "2c0faf6d9f385ff4",
+   "batch_hash": "4421e2494101e9d9",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-poly.ties.npz",
    "fixture": "ties",
    "lane": "nystroem-poly",
    "load": "load",
-   "model_hash": "83fbe7988b408856",
+   "model_hash": "340e7b9d3af7d8c0",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -914,18 +895,17 @@
    }
   },
   {
-   "batch_hash": "51eb48bcf271dfda",
+   "batch_hash": "aea17191ef178d52",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-poly.wide.npz",
    "fixture": "wide",
    "lane": "nystroem-poly",
    "load": "load",
-   "model_hash": "b31eacfe0fee3308",
+   "model_hash": "ec803d3387286c62",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -933,18 +913,17 @@
    }
   },
   {
-   "batch_hash": "db0184625875244d",
+   "batch_hash": "0313d5a954b4ffad",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-sigmoid.base.npz",
    "fixture": "base",
    "lane": "nystroem-sigmoid",
    "load": "load",
-   "model_hash": "b606536588020728",
+   "model_hash": "d7b73cd95d37b3ce",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -952,18 +931,17 @@
    }
   },
   {
-   "batch_hash": "45379ace2b86d3c2",
+   "batch_hash": "6a4f360b573227a9",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-sigmoid.denormal.npz",
    "fixture": "denormal",
    "lane": "nystroem-sigmoid",
    "load": "load",
-   "model_hash": "4bfa400514d0ecbf",
+   "model_hash": "417fbd6a4460c473",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -971,18 +949,17 @@
    }
   },
   {
-   "batch_hash": "45379ace2b86d3c2",
+   "batch_hash": "6a4f360b573227a9",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-sigmoid.denormal_ftz.npz",
    "fixture": "denormal_ftz",
    "lane": "nystroem-sigmoid",
    "load": "load",
-   "model_hash": "9c9e1a298930db2d",
+   "model_hash": "aabec6dc05d442a8",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -990,18 +967,17 @@
    }
   },
   {
-   "batch_hash": "db0184625875244d",
+   "batch_hash": "0313d5a954b4ffad",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-sigmoid.dupes.npz",
    "fixture": "dupes",
    "lane": "nystroem-sigmoid",
    "load": "load",
-   "model_hash": "b606536588020728",
+   "model_hash": "d7b73cd95d37b3ce",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -1009,18 +985,17 @@
    }
   },
   {
-   "batch_hash": "a800b30f0200d455",
+   "batch_hash": "b376a70b73324786",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-sigmoid.hashed.npz",
    "fixture": "hashed",
    "lane": "nystroem-sigmoid",
    "load": "load",
-   "model_hash": "020a40e03b552809",
+   "model_hash": "1a48fc3497c832d2",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -1028,18 +1003,17 @@
    }
   },
   {
-   "batch_hash": "c3f6e7f2a6866c2c",
+   "batch_hash": "36612e8cd57adddd",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-sigmoid.negative.npz",
    "fixture": "negative",
    "lane": "nystroem-sigmoid",
    "load": "load",
-   "model_hash": "290324d689ccdd95",
+   "model_hash": "c8d55fc9f9c8125f",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -1047,18 +1021,17 @@
    }
   },
   {
-   "batch_hash": "ef3ec79e1709336b",
+   "batch_hash": "1de3a1f03d733894",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-sigmoid.odd.npz",
    "fixture": "odd",
    "lane": "nystroem-sigmoid",
    "load": "load",
-   "model_hash": "e21103395c9be9d1",
+   "model_hash": "18e58cb13bd32516",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -1066,18 +1039,17 @@
    }
   },
   {
-   "batch_hash": "1ff21c7d7bc7d6e3",
+   "batch_hash": "c2fac2060cd4dc39",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-sigmoid.ties.npz",
    "fixture": "ties",
    "lane": "nystroem-sigmoid",
    "load": "load",
-   "model_hash": "535f23122efa5fa9",
+   "model_hash": "bb32c0a0d4cf4a80",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
@@ -1085,18 +1057,17 @@
    }
   },
   {
-   "batch_hash": "415ad551affc8538",
+   "batch_hash": "bcece1cadad1eaa8",
    "bytes": 3256,
    "class": "Nystroem",
    "file": "nystroem-sigmoid.wide.npz",
    "fixture": "wide",
    "lane": "nystroem-sigmoid",
    "load": "load",
-   "model_hash": "0f1765d6855a61a9",
+   "model_hash": "100ee295c93e351b",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "apple",
      "cpu",
      "nvidia"
     ],
