@@ -1575,6 +1575,21 @@ def knn_distance_exact_chain_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN"]():
         return identical
+    # K5 (lane fg-knn-nb, 2026-10-09; `-D MOJOLEARN_KNN_AMD_EXACT_CHAIN=1`,
+    # DEFAULT OFF, an A/B arm): the AMD column ONLY admits its REGISTER tile
+    # (rows narrower than the shared tile's d >= 32 gate) to the unflushed
+    # chain too. Cost reasoning: AMD has no hardware FTZ FMA, so every step
+    # of the flushed chain pays the software flush (`v_cmp_class` + select,
+    # `checks/numerics.mojo::ftz`) on top of the FMA; on narrow rows the
+    # distance class is that chain, so dropping the flush on admitted tiles
+    # is up to ~2x of the distance class there. The admission is one
+    # O((n_queries + n_index) x d) exponent pass per request (cached per
+    # resident index). The H100's neutral reading does not transfer: NVIDIA's
+    # flush is one instruction. Bits: none (admission proves the flush is the
+    # identity on every value it would see; tiles that fail keep the flush).
+    comptime if is_defined["MOJOLEARN_KNN_AMD_EXACT_CHAIN"]():
+        if column == COLUMN_AMD:
+            return identical
     # 2026-09-17 (lane/knn-tiled-distance, DEVIATION 3000): ON where the
     # shared-memory tile runs, subject to that tile's runtime minimum feature
     # width, which admits per BLOCK from the same request-local metadata.
