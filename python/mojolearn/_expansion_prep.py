@@ -530,12 +530,6 @@ class _Prog:
         spans = []
         direct = None
         gathered = []
-        # lane fg-knn-nb G3 (-D MOJOLEARN_XPREP_NO_SLOT_HOP, default off): a
-        # large direct input goes up as a host span straight into the arena
-        # (no store slot, no device-to-device copy); absent entry = off
-        run_host = (_optional_prep_entry(binding, "x_prep_run_ranges_host")
-                    if run_ranges is not None else None)
-        host_addrs = []
         for off, arr, _ in self._inputs:  # glue: walks the program input buffers once
             if not arr.size:
                 continue
@@ -560,10 +554,9 @@ class _Prog:
                     and _switch("MOJOLEARN_XPREP_DIRECT")):
                 # MOJOLEARN_XPREP_DIRECT: up from the input's own buffer into a
                 # slot freed when the run ends (no copy into the host arena)
-                if run_host is not None:
-                    host_addrs.append(addr_ro(arr, name="input"))
-                    spans.append((off, off + arr.size, -1 - len(host_addrs)))  # src -2 - j: host table entry j
-                    continue
+                # TOMBSTONE: lane fg-knn-nb G3 (MOJOLEARN_XPREP_NO_SLOT_HOP, x_prep_run_ranges_host host spans) deleted 2026-10-09
+                # (lane postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD 1.00x, taxi 1.02x / 1.03x
+                # (nv n0668->n0630, amd a1066->a1090), accuracy SAME, same digests; code recoverable at main 5c137b55e.
                 if direct is None and _arena_io.DeviceCache.supports(binding, "x_prep"):
                     direct = _arena_io.DeviceCache(binding, "x_prep")
                 cache = direct
@@ -589,16 +582,9 @@ class _Prog:
             ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
             out, out_addr = _zero_words(on, self._out_code) if dev_out else (None, 0)
             try:
-                if host_addrs:
-                    tab = array.array("q", host_addrs)  # glue: packs the G3 host span addresses
-                    run_host(base, prog.buffer_info()[0], out_addr,
-                             (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
-                             (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)),
-                             (tab.buffer_info()[0], len(host_addrs)))
-                else:
-                    run_ranges(base, prog.buffer_info()[0], out_addr,
-                               (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
-                               (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
+                run_ranges(base, prog.buffer_info()[0], out_addr,
+                           (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
+                           (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
             finally:
                 for slot in gathered:  # glue: frees each fold-rows slot
                     binding.x_prep_dev_free(slot)

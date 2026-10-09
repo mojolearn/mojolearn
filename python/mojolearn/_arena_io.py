@@ -67,14 +67,13 @@ def ranges_enabled():
 
 def input_ranges(spans):
     """[(lo, hi, src)] ascending, disjoint, empty spans dropped, adjacent
-    HOST-ARENA spans (src -1) merged (a G3 host-table span, src <= -2, is
-    never merged: it names its own address). `spans` are (lo, hi, src) in any order;
+    HOST spans (src -1) merged. `spans` are (lo, hi, src) in any order;
     overlapping inputs are a layout bug and raise."""
     out = []
     for lo, hi, src in sorted((int(a), int(b), int(c)) for a, b, c in spans if int(b) > int(a)):  # glue: orders arena layout spans
         if out and lo < out[-1][1]:
             raise AssertionError(f"arena ranges: inputs overlap at [{lo}, {hi})")
-        if out and src == -1 and out[-1][2] == -1 and lo == out[-1][1]:
+        if out and src < 0 and out[-1][2] < 0 and lo == out[-1][1]:
             out[-1][1] = hi
         else:
             out.append([lo, hi, src])

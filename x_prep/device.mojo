@@ -48,7 +48,7 @@ from x_prep.fastpt import (
     pt_colbatch_fold, pt_spec_fold, cs_tile_stats, ptimpute_part_words, fused_tail_pair,
 )
 from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank, mi_colscale_fast_kernel, mi_reduce_fast_kernel, TGF
-from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, upload_ranges_host, download_ranges
+from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.staged_download import download_f32_into
 from core.device_pool import pool_take, pool_give
 
@@ -375,20 +375,13 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
     )
 
 
-#: G3 (lane fg-knn-nb, 2026-10-09; `-D MOJOLEARN_XPREP_NO_SLOT_HOP=1`, DEFAULT
-#: OFF, an A/B arm): the binding registers `x_prep_run_ranges_host`, and the
-#: Python program (`_Prog.run`) sends a large direct input (the
-#: MOJOLEARN_XPREP_DIRECT case) as a host span of the range list instead of
-#: putting it into a store slot first: `upload_ranges_host` copies its host
-#: words straight into the arena range (one copy from the host pointer;
-#: TOMBSTONE: the G1 pinned stage it went through was deleted 2026-10-09,
-#: lane postmerge-act-1, slower on both vendors, core/device_store.mojo). Cost
-#: reasoning: the slot route allocates a second device copy of X (~880 MB at
-#: 1M x 220), uploads into it, copies it device to device into the arena
-#: (another ~880 MB of traffic) and frees it, per fit; the host span route
-#: does one upload into the arena and nothing else. Bits: none (the same
-#: words reach the same arena offsets before any stage runs).
-comptime XPREP_NO_SLOT_HOP = is_defined["MOJOLEARN_XPREP_NO_SLOT_HOP"]()
+#: TOMBSTONE: G3 (lane fg-knn-nb, MOJOLEARN_XPREP_NO_SLOT_HOP: large direct
+#: inputs as host spans straight into the arena, `run_program_device_ranges_host`,
+#: core/arena_io.mojo `upload_ranges_host`) deleted 2026-10-09 (lane
+#: postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD
+#: 1.00x, taxi NV 1.02x / AMD 1.03x (nv n0668->n0630, amd a1066->a1090),
+#: accuracy SAME, same digests; refused in core/six_lane_experiment_guards.mojo;
+#: code recoverable at main 5c137b55e.
 
 #: TOMBSTONE: G5 (lane fg-knn-nb, MOJOLEARN_XPREP_DEVICE_CODES: GaussianNB.fit
 #: label codes from the device unique_inverse) deleted 2026-10-09 (lane
@@ -397,22 +390,9 @@ comptime XPREP_NO_SLOT_HOP = is_defined["MOJOLEARN_XPREP_NO_SLOT_HOP"]()
 #: digests; refused in core/six_lane_experiment_guards.mojo; main 5c137b55e.
 
 
-def run_program_device_ranges_host(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int,
-                                   out_addr: Int, out_len: Int, ins_addr: Int, nins: Int, outs_addr: Int,
-                                   nouts: Int, host_tab: Int, n_host: Int) raises:
-    """G3: `run_program_device_ranges` whose range list may name host spans
-    (src = -2 - j: entry j of the Int64 address table `host_tab`)."""
-    check_in_ranges(ins_addr, nins, arena_len, n_host)
-    check_out_ranges(outs_addr, nouts, arena_len)
-    run_program_device_ptr(
-        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len,
-        out_addr, out_len, ins_addr, nins, outs_addr, nouts, host_tab, n_host,
-    )
-
-
 def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, scratch_len: Int = 0,
                            out_addr: Int = 0, out_len: Int = 0, ins_addr: Int = 0, nins: Int = -1,
-                           outs_addr: Int = 0, nouts: Int = -1, host_tab: Int = 0, n_host: Int = 0) raises:
+                           outs_addr: Int = 0, nouts: Int = -1) raises:
     """scratch_len (lane prep-apple2): words of DEVICE-ONLY arena after the
     host's arena_len words (offsets arena_len ..); they never cross to or
     from the host and start undefined, so a program writes each scratch word
@@ -547,11 +527,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         print("XPPHASE alloc us", (now - t_last) // 1000, "arena", arena_len, "scratch", max(scratch_len, 0), "out", out_n,
               "sort", scratch)
         t_last = now
-    if nins >= 0 and n_host > 0:
-        # G3: host spans straight into the arena (only `x_prep_run_ranges_host` passes any)
-        upload_ranges_host(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[],
-                           host_tab, n_host)
-    elif nins >= 0:
+    if nins >= 0:
         upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[])
     elif arena_len > 0:
         if dev_len > arena_len:

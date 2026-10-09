@@ -183,30 +183,8 @@
     "_mojolearn_x_metrics_host"
    ],
    "bits_change": false,
-   "status": "new default G2",
-   "note": "Rollback arm: fresh device arena per program and free-at-once store slots. Default (not FAST): exact-size pooled arena (core/device_pool.mojo, 2 GB idle cap) and spare slot buffers (2 GB idle cap)."
-  },
-  "xprep_no_slot_hop": {
-   "define": "MOJOLEARN_XPREP_NO_SLOT_HOP",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_XPREP_NO_SLOT_HOP"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_prep/device.mojo:XPREP_NO_SLOT_HOP",
-    "core/arena_io.mojo:upload_ranges_host",
-    "python/mojolearn/_expansion_prep.py:_Prog.run"
-   ],
-   "binding": [
-    "_mojolearn_x_prep"
-   ],
-   "bits_change": false,
-   "status": "new G3 (A/B owed)",
-   "note": "Large direct inputs go host -> arena in one copy from the host pointer (the G1 pinned stage was deleted 2026-10-09; no slot, no D2D, no second X allocation). Python routes by the presence of x_prep_run_ranges_host."
+   "status": "default G2 CONFIRMED (post-merge A/B, lane postmerge-act-2)",
+   "note": "Rollback arm: fresh device arena per program and free-at-once store slots. Default (not FAST): exact-size pooled arena (core/device_pool.mojo, 2 GB idle cap) and spare slot buffers (2 GB idle cap). CONFIRMED 2026-10-09 (post-merge A/B, nv n0668 -> n0629, amd a1066 -> a1089): the _OFF arm is slower, gaussian-nb istella NV 1.12x / AMD 1.02x, taxi NV 1.38x / AMD 1.06x, same digests."
   }
  },
  "algorithms": {
@@ -235,17 +213,11 @@
   },
   "expanded:gaussian-nb": {
    "binding": "_mojolearn_x_prep",
-   "route": "GaussianNB.fit: encode_labels (G5 device codes deleted) -> _Prog.put(X) -> DeviceCache.dev_put (G2 spare slot; one pageable copy, G1 pinned stage deleted) | G3 host span -> run_ranges (G2 pooled arena) -> stages -> download_ranges",
+   "route": "GaussianNB.fit: encode_labels (G5 device codes deleted) -> _Prog.put(X) -> DeviceCache.dev_put (G2 spare slot; one pageable copy, G1 pinned stage deleted; G3 host spans deleted) -> run_ranges (G2 pooled arena) -> stages -> download_ranges",
    "controls": [
-    "xprep_arena_pool_off",
-    "xprep_no_slot_hop"
+    "xprep_arena_pool_off"
    ],
-   "interaction_groups": [
-    [
-     "xprep_arena_pool_off",
-     "xprep_no_slot_hop"
-    ]
-   ],
+   "interaction_groups": [],
    "notes": "Diagnostic first: MOJOLEARN_XPREP_PROFILE=1 (XPPHASE upload/alloc us). G4 (C61 arm 2) is classical-nbda.json c61_nb; G6 not in this lane."
   }
  },
@@ -259,6 +231,11 @@
    "define": "MOJOLEARN_XPREP_DEVICE_CODES",
    "control": "xprep_device_codes",
    "reason": "DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found G5 (GaussianNB.fit label codes from the device unique_inverse) SLOWER: default -> on ms gaussian-nb istella NV 92.1 -> 119.1 (1.29x) / AMD 46.4 -> 52.0 (1.12x), taxi NV 20.0 -> 34.0 (1.70x) / AMD 14.1 -> 19.1 (1.35x) (nv n0668 -> n0631, amd a1066 -> a1091); accuracy SAME, same digests. The x_prep_device_codes probe and the Python route (_fit_device_codes) are deleted; the define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e."
+  },
+  {
+   "define": "MOJOLEARN_XPREP_NO_SLOT_HOP",
+   "control": "xprep_no_slot_hop",
+   "reason": "DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found G3 (large direct inputs as host spans straight into the arena) slower on the average: default -> on ms gaussian-nb istella NV 92.1 -> 114.7 (1.25x) / AMD 46.4 -> 46.3 (1.00x), taxi NV 20.0 -> 20.4 (1.02x) / AMD 14.1 -> 14.5 (1.03x) (nv n0668 -> n0630, amd a1066 -> a1090); accuracy SAME, same digests. x_prep_run_ranges_host, run_program_device_ranges_host, core/arena_io.mojo upload_ranges_host, DeviceStore.stage_upload and the _Prog.run glue are deleted; the define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e."
   }
  ]
 }

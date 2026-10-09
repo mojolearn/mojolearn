@@ -15,7 +15,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
-from x_prep.device import run_program_device_ranges_host, XPREP_NO_SLOT_HOP
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py, IDN_NB_CSR, nb_csr_fit_int_py, nb_csr_jll_chk_py
 from x_prep.blocked import IDN_NB_ONEPASS, IDN_NB_CSR_DENSE
@@ -103,33 +102,6 @@ def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_ad
         raise Error("x_prep: invalid program buffers")
     with GILReleased(Python()):
         run_program_device_ranges(fa, n, qa, s, sc, oa, on, ia, ni, ra, no)
-    return PythonObject(s)
-
-
-def run_ranges_host_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_addr: PythonObject,
-                            sizes: PythonObject, ranges: PythonObject, hosts: PythonObject) raises -> PythonObject:
-    """G3 (`-D MOJOLEARN_XPREP_NO_SLOT_HOP`, x_prep/device.mojo): x_prep_run_ranges
-    whose input triples may name host spans, src = -2 - j for entry j of
-    hosts = (table_addr, n): n Int64 host addresses."""
-    var fa = Int(py=arena_addr)
-    var qa = Int(py=prog_addr)
-    var oa = Int(py=out_addr)
-    var n = Int(py=sizes[0])
-    var sc = Int(py=sizes[1])
-    var on = Int(py=sizes[2])
-    var s = Int(py=sizes[3])
-    var ia = Int(py=ranges[0])
-    var ni = Int(py=ranges[1])
-    var ra = Int(py=ranges[2])
-    var no = Int(py=ranges[3])
-    var ta = Int(py=hosts[0])
-    var nh = Int(py=hosts[1])
-    if fa == 0 or qa == 0 or n < 0 or sc < 0 or on < 0 or s < 0 or (on > 0 and oa == 0) or ni < 0 or no < 0:
-        raise Error("x_prep: invalid program buffers")
-    if nh < 0 or (nh > 0 and ta == 0):
-        raise Error("x_prep: invalid host span table")
-    with GILReleased(Python()):
-        run_program_device_ranges_host(fa, n, qa, s, sc, oa, on, ia, ni, ra, no, ta, nh)
     return PythonObject(s)
 
 
@@ -412,9 +384,9 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
         m.def_function[run_ranges_binding]("x_prep_run_ranges")
-        comptime if XPREP_NO_SLOT_HOP:
-            # lane fg-knn-nb G3 (default off)
-            m.def_function[run_ranges_host_binding]("x_prep_run_ranges_host")
+        # TOMBSTONE: lane fg-knn-nb G3 `x_prep_run_ranges_host` (MOJOLEARN_XPREP_NO_SLOT_HOP) deleted 2026-10-09
+        # (lane postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD 1.00x, taxi 1.02x / 1.03x
+        # (nv n0630, amd a1090), accuracy SAME, same digests; code recoverable at main 5c137b55e.
         # TOMBSTONE: lane fg-knn-nb G5 `x_prep_device_codes` probe (MOJOLEARN_XPREP_DEVICE_CODES) deleted 2026-10-09
         # (lane postmerge-act-2): SLOWER, gaussian-nb istella NV 1.29x / AMD 1.12x, taxi 1.70x / 1.35x (nv n0631, amd a1091),
         # accuracy SAME, same digests; code recoverable at main 5c137b55e.
