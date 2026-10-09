@@ -62,8 +62,8 @@
    ],
    "binding": "_mojolearn_x_decomp",
    "bits_change": false,
-   "status": "new",
-   "note": "R1: randomized_svd uploads M from the caller's buffer (x_decomp_dev_upload into a pooled device matrix, w4 flag bit 2) on IDENTICAL too, instead of _M.from_input's host array copy. Waste removal; same words."
+   "status": "default CONFIRMED (post-merge A/B, lane postmerge-act-2)",
+   "note": "R1: randomized_svd uploads M from the caller's buffer (x_decomp_dev_upload into a pooled device matrix, w4 flag bit 2) on IDENTICAL too, instead of _M.from_input's host array copy. Waste removal; same words. CONFIRMED 2026-10-09 (post-merge A/B, nv n0607 -> n0622, amd a1066 -> a1082): the _OFF arm is slower, randomized-svd istella NV 3.06x / AMD 2.15x, taxi NV 1.39x / AMD 1.12x, same digests."
   },
   "pca_rr_one_block": {
    "define": "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK",
