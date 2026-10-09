@@ -3822,7 +3822,7 @@ def _build_layer(lane, arm, D):
         # seeded default init) and the backward seed dy are the fixture files
         # tools/neural_fixtures.py generated with the very builders the torch arm runs below
         # (_layer_inputs, make(), Generator(SEED + 1)), sha256-verified on load. A missing set
-        # refuses (not_ready, infrastructure); it never falls back to torch.
+        # refuses (not_ready, infrastructure); there is no torch fallback here
         NF = _tool("neural_fixtures")
         fx = NF.load_for_lane(_NEURAL_FIXTURES, lane, s, _DATASET, D)
         state = fx["state"]
