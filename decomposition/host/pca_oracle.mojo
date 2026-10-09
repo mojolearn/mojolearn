@@ -678,7 +678,6 @@ def host_order_truncate_spectrum_ranked(
         for c in range(n_components, count):
             noise += diag[order[c]]
         noise /= Float64(count - n_components)
-    _ = diag32
     return PCAHostResult(
         components^, explained_var^, explained_var_ratio^, singular_vals^, noise
     )
