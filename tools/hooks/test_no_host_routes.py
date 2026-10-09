@@ -450,6 +450,74 @@ def test_cli_tree_and_diff_modes():
     assert r.returncode == 0, r.stderr
 
 
+
+# ------------------------------------------------- pre-push ref routing ----
+# The hook is run as git runs it (stdin "<local ref> <sha> <remote ref> <sha>")
+# from a scratch directory beside a stub checker that records its arguments
+# and refuses, so each case shows whether the fence judged the ref and how.
+# local sha == remote sha leaves the size fence an empty range.
+
+_STUB = """#!/usr/bin/env python3
+import sys
+with open(__file__ + ".calls", "a") as f:
+    f.write(" ".join(sys.argv[1:]) + "\\n")
+sys.exit(1)
+"""
+
+
+def _pre_push(remote_ref):
+    sha = _git("rev-parse", "HEAD")
+    with tempfile.TemporaryDirectory(prefix="nhr_prepush_") as d:
+        hook = os.path.join(d, "pre-push")
+        with open(os.path.join(HERE, "pre-push"), encoding="utf-8") as f, \
+                open(hook, "w", encoding="utf-8") as g:
+            g.write(f.read())
+        stub = os.path.join(d, "no_host_routes.py")
+        with open(stub, "w", encoding="utf-8") as g:
+            g.write(_STUB)
+        r = subprocess.run(["sh", hook, "origin", "https://example.invalid/repo.git"],
+                           input=f"refs/heads/x {sha} {remote_ref} {sha}\n",
+                           capture_output=True, text=True)
+        calls = ""
+        if os.path.exists(stub + ".calls"):
+            with open(stub + ".calls", encoding="utf-8") as f:
+                calls = f.read()
+    return r.returncode, r.stderr, calls
+
+
+def test_pre_push_skips_archive_refs():
+    for ref in ("refs/heads/archive/branch-prune-20261006/lane/x",
+                "refs/heads/archive/x", "refs/tags/archive-x", "refs/tags/archive/x"):
+        rc, err, calls = _pre_push(ref)
+        assert rc == 0 and calls == "", (ref, rc, calls, err)
+        assert err.count("host-route fence skipped") == 1, (ref, err)
+        assert ref in err and "never merged" in err, (ref, err)
+
+
+def test_pre_push_judges_every_other_ref_as_before():
+    # (remote ref, checker arguments expected, or None when the fence does not run)
+    cases = [
+        ("refs/heads/lane/x", "--branch"),
+        ("refs/heads/fix/x", "--branch"),
+        ("refs/heads/archived-x", "--branch"),     # only the archive/ namespace is exempt
+        ("refs/heads/lane/archive/x", "--branch"),
+        ("refs/heads/main", ""),
+        ("refs/heads/salvage/x", None),
+        ("refs/tags/v1", None),
+        ("refs/archive/x", None),
+    ]
+    sha = _git("rev-parse", "HEAD")
+    for ref, mode in cases:
+        rc, err, calls = _pre_push(ref)
+        assert "host-route fence skipped" not in err, (ref, err)
+        if mode is None:
+            assert rc == 0 and calls == "", (ref, rc, calls, err)
+            continue
+        assert rc == 1, (ref, rc, err)
+        want = f"--tree {sha}" + (f" {mode}" if mode else "")
+        assert calls.strip() == want, (ref, calls)
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in list(globals().items()):
