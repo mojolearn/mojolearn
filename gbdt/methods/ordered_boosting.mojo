@@ -3174,7 +3174,7 @@ def fit_ordered(
                     )
             if not fast_on:
                 ctx.synchronize()
-                for p in range(perm_count):
+                for p in range(perm_count):  # small-loop(perm_count: permutations, a handful): settle orchestration per permutation
                     if p != skip_p:
                         parts[p].settle(n_leaves)
         else:
