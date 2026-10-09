@@ -19,7 +19,13 @@ large binaries are git-ignored: `checkpoint.blm` comes from R2
 - License: Apache-2.0 for weights, tokenizer and code (MojoLearn's license);
   FineWeb-Edu credited under ODC-By 1.0.
 
-## Publishing (only when the owner says so)
+## Published
+
+https://huggingface.co/ajhendel/mojolearn-162m (2026-10-08, the arXiv version). The post-publish
+check passed from an anonymous download: ~/mojolearn-evidence/hf-published-check-20261008/check.log.
+To update it, edit this folder, regenerate files.sha256.json, and upload again.
+
+## Publishing steps
 
 ```sh
 cd release/gpt3-small-162m
