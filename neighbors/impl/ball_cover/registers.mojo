@@ -766,7 +766,8 @@ def rbc_eps_pass_count(
         if not fast_done and metric == RBC_METRIC_DEFAULT:
             _rbc_eps_tile_launch[ET_COUNT](
                 ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
-                vd.unsafe_ptr(), adj_ia.unsafe_ptr(), vd.unsafe_ptr().bitcast[UInt64](), n_queries, n_cols,
+                vd.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                vd.unsafe_ptr().bitcast[UInt64]().unsafe_origin_cast[MutAnyOrigin](), n_queries, n_cols,
                 n_landmarks, eps, metric, metric_arg,
             )
             fast_done = True
@@ -851,7 +852,8 @@ def rbc_eps_pass_fill(
         if not fast_done and metric == RBC_METRIC_DEFAULT:
             _rbc_eps_tile_launch[ET_FILL](
                 ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
-                adj_ia.unsafe_ptr(), adj_ja.unsafe_ptr(), adj_ia.unsafe_ptr().bitcast[UInt64](), n_queries, n_cols,
+                adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), adj_ja.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                adj_ia.unsafe_ptr().bitcast[UInt64]().unsafe_origin_cast[MutAnyOrigin](), n_queries, n_cols,
                 n_landmarks, eps, metric, metric_arg,
             )
             fast_done = True
@@ -1246,7 +1248,8 @@ def rbc_eps_pass_count_bitmap(
     well; the same degrees, scan, exact total and `vd[n_queries]`."""
     _rbc_eps_tile_launch[ET_COUNT_BITMAP](
         ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
-        vd.unsafe_ptr(), adj_ia.unsafe_ptr(), bm.unsafe_ptr(), n_queries, n_cols, n_landmarks, eps,
+        vd.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), bm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_queries, n_cols,
+        n_landmarks, eps,
         RBC_METRIC_DEFAULT, Float32(2.0),
     )
     rbc_exclusive_scan_launch(ctx, adj_ia, vd, n_queries)
