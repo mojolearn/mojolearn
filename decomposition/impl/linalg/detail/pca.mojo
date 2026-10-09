@@ -901,33 +901,58 @@ def _device_truncate(
     ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
     ctx.synchronize()
     _eig_info_check(h_info.unsafe_ptr().unsafe_load(0), h_info.unsafe_ptr().unsafe_load(1), n)
-    # `order_truncate_spectrum`'s Float64 tail, the order given
+    _ = ddiag^
+    _ = dpos^
+    _ = dinv^
+    _ = dcomp^
+    var result = truncate_in_order(
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_diag.unsafe_ptr())),
+        MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(h_inv.unsafe_ptr())),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_comp.unsafe_ptr())),
+        n, k, singular_scale,
+    )
+    _ = h_diag^
+    _ = h_inv^
+    _ = h_comp^
+    _ = h_info^
+    return result^
+
+
+def truncate_in_order(
+    diag32: MutPointer[Float32, MutAnyOrigin],
+    order32: MutPointer[Int32, MutAnyOrigin],
+    comp32: MutPointer[Float32, MutAnyOrigin],
+    n_cols: Int,
+    n_components: Int,
+    singular_scale: Int,
+) raises -> PCAResult:
+    """`order_truncate_spectrum`'s tail (its Float64 statements, unchanged)
+    on P5's downloads: the diagonal, the order (`order32[c]` the index at
+    place c) and the gathered k x n components. The same host tail main runs
+    after `eig_and_truncate`, over n values instead of n^2."""
+    var count = n_cols
     var diag = List[Float64]()
-    for i in range(n):
-        diag.append(Float64(h_diag.unsafe_ptr().unsafe_load(i)))
+    for i in range(count):
+        diag.append(Float64(diag32.unsafe_load(i)))
     var total = 0.0
-    for i in range(n):
+    for i in range(count):
         total += diag[i]
     var components = List[Float64]()
     var explained_var = List[Float64]()
     var explained_var_ratio = List[Float64]()
     var singular_vals = List[Float64]()
-    for c in range(k):
-        var lam = diag[Int(h_inv.unsafe_ptr().unsafe_load(c))]
-        for f in range(n):
-            components.append(Float64(h_comp.unsafe_ptr().unsafe_load(c * n + f)))
+    for c in range(n_components):
+        var lam = diag[Int(order32.unsafe_load(c))]
+        for f in range(n_cols):
+            components.append(Float64(comp32.unsafe_load(c * n_cols + f)))
         explained_var.append(lam)
         explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
         singular_vals.append(sqrt(lam * Float64(singular_scale)))
     var noise = 0.0
-    if k < n and k <= singular_scale:
-        for c in range(k, n):
-            noise += diag[Int(h_inv.unsafe_ptr().unsafe_load(c))]
-        noise /= Float64(n - k)
-    _ = ddiag^
-    _ = dpos^
-    _ = dinv^
-    _ = dcomp^
+    if n_components < count and n_components <= singular_scale:
+        for c in range(n_components, count):
+            noise += diag[Int(order32.unsafe_load(c))]
+        noise /= Float64(count - n_components)
     return PCAResult(
         components^, explained_var^, explained_var_ratio^, singular_vals^, noise
     )
