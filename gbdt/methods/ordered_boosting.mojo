@@ -3401,6 +3401,10 @@ def fit_ordered(
     _ = der_stats^
     _ = der_part^
     _ = cursors^
+    # C: the concatenated cursor parents (the views above) and planes
+    _ = cat_cursors^
+    _ = cat_y^
+    _ = cat_w^
     _ = arena^
     _ = boot_seeds^
     _ = boot_mags^
