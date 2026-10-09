@@ -305,10 +305,10 @@ def gff_backward_step_kernel(lh: F32Ptr, ll: F32Ptr, zh: F32Ptr, zl: F32Ptr, wh:
         gff_backward_cell(lh, ll, zh, zl, wh, wl, i, jj, Int(n))
 
 
-def gff_coef_kernel(wh: F32Ptr, wl: F32Ptr, sv: F32Ptr, out: F32Ptr, d_in: Int32):
+def gff_coef_kernel(wh: F32Ptr, wl: F32Ptr, sv: F32Ptr, dst: F32Ptr, d_in: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(d_in):
-        out.unsafe_store(i, gff_coef(wh, wl, sv, i))
+        dst.unsafe_store(i, gff_coef(wh, wl, sv, i))
 
 
 def _gs_ff_fit(
