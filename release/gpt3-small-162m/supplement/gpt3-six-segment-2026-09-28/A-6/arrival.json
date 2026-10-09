@@ -1,0 +1,31 @@
+{
+  "schema": "mojolearn.lm-segment.run.v1",
+  "route": "A",
+  "segment": "6-arrival",
+  "label": "apple-A-6",
+  "from_checkpoint": {
+    "file": "ckpt_00004898.blm",
+    "sha256": "7fc7ae38e127cdb7edf2bf8d74b2e4b4272b498643b2d6dfd61719864c56eaa4",
+    "step": 4898
+  },
+  "first_step": 4898,
+  "last_step": 4900,
+  "devices": [
+    0
+  ],
+  "logical_shards": 64,
+  "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+  "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "verdict": "PASS",
+  "disagreements": [],
+  "steps_completed": 2,
+  "last_completed": 4900,
+  "checkpoints": [],
+  "zero_moments": false,
+  "box": {
+    "machine": "arm64",
+    "system": "Darwin",
+    "python": "3.12.14"
+  }
+}

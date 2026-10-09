@@ -1,0 +1,11 @@
+{
+  "task": "hellaswag",
+  "split": "validation",
+  "shots": 0,
+  "items": 10042,
+  "acc": 0.27972515435172274,
+  "acc_norm": 0.2956582354112727,
+  "scoring": "lm-evaluation-harness hellaswag formulation; acc_norm = per-byte",
+  "model": "reference_torch.py on model.safetensors",
+  "torch_version": "2.14.1"
+}

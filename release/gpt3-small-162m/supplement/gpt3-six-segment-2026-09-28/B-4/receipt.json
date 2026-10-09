@@ -1,0 +1,146 @@
+{
+  "schema": "mojolearn.lm-segment.run.v1",
+  "route": "B",
+  "segment": "4",
+  "label": "nvidia-B-4",
+  "from_checkpoint": {
+    "file": "ckpt_00002400.blm",
+    "sha256": "82249517f68c8e0dd7997869e4bd649136434a7105e970fecf928e39bb726598",
+    "step": 2400
+  },
+  "first_step": 2400,
+  "last_step": 3900,
+  "devices": [
+    0,
+    1
+  ],
+  "logical_shards": 64,
+  "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+  "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "verdict": "PASS",
+  "disagreements": [],
+  "steps_completed": 1500,
+  "last_completed": 3900,
+  "checkpoints": [
+    {
+      "step": 2500,
+      "file": "ckpt_00002500.blm",
+      "bytes": 1945780169,
+      "sha256": "374ec7a1a408e22f616ad787eddf1dd4a91326d3e42d995e05fe001518d98cc0",
+      "save_seconds": 4.417
+    },
+    {
+      "step": 2600,
+      "file": "ckpt_00002600.blm",
+      "bytes": 1945780170,
+      "sha256": "756b0c9f0fbc0a8cdda63833dbcfd470ce82573ece29da34e64c6bccefac4605",
+      "save_seconds": 4.574
+    },
+    {
+      "step": 2700,
+      "file": "ckpt_00002700.blm",
+      "bytes": 1945780169,
+      "sha256": "1ac0f97c0c0d0fc4e11c9bbdafe51a29096bb30e1f2dd5704d8fa9bac4b42b0f",
+      "save_seconds": 4.541
+    },
+    {
+      "step": 2800,
+      "file": "ckpt_00002800.blm",
+      "bytes": 1945780169,
+      "sha256": "e2ab3729535121466be021851806b0b5372a3a02fc17769bec5df051fa3451b8",
+      "save_seconds": 4.128
+    },
+    {
+      "step": 2900,
+      "file": "ckpt_00002900.blm",
+      "bytes": 1945780170,
+      "sha256": "aeb9e091273b93ceeb502545d5da85e430081785ea02028326445d972f33fa84",
+      "save_seconds": 4.504
+    },
+    {
+      "step": 3000,
+      "file": "ckpt_00003000.blm",
+      "bytes": 1945780170,
+      "sha256": "ec314e7eb40685cc308a8550fdc1955bbac99f6c5bd1035b8a532eda5b247b55",
+      "save_seconds": 4.507
+    },
+    {
+      "step": 3100,
+      "file": "ckpt_00003100.blm",
+      "bytes": 1945780170,
+      "sha256": "c10d9e0b9e2935d37004d9e66129c3c13d18c4ec22c7ff2f78c95cb61fcb97a6",
+      "save_seconds": 4.714
+    },
+    {
+      "step": 3200,
+      "file": "ckpt_00003200.blm",
+      "bytes": 1945780169,
+      "sha256": "b337b9c59ba5fc98cda53a9925fba957966fb2d58ade94d0d4f97f918537f104",
+      "save_seconds": 5.734
+    },
+    {
+      "step": 3300,
+      "file": "ckpt_00003300.blm",
+      "bytes": 1945780169,
+      "sha256": "32367a324a4d88cca30be7eb7dfcfd9b4cf7e8e59fd6303cca6674a0221a2e87",
+      "save_seconds": 4.355
+    },
+    {
+      "step": 3400,
+      "file": "ckpt_00003400.blm",
+      "bytes": 1945780170,
+      "sha256": "8cf99ed5889a155cf3835bb5ae27f7e5cac41cd131d7d15a73c2587d42a3293d",
+      "save_seconds": 4.427
+    },
+    {
+      "step": 3500,
+      "file": "ckpt_00003500.blm",
+      "bytes": 1945780170,
+      "sha256": "62249dc566ab0fb473f1e7284ba470e6d79755eaefda840dd71053f445cb0a31",
+      "save_seconds": 4.766
+    },
+    {
+      "step": 3600,
+      "file": "ckpt_00003600.blm",
+      "bytes": 1945780170,
+      "sha256": "4a15af1057e45b1f6d7b32e807c393bd0f29846925cd68347fe2593ce87b76b3",
+      "save_seconds": 4.458
+    },
+    {
+      "step": 3700,
+      "file": "ckpt_00003700.blm",
+      "bytes": 1945780170,
+      "sha256": "239523eeb8792c3496dced27ca6e53e176743e006317591033d0988fe79ba89e",
+      "save_seconds": 5.191
+    },
+    {
+      "step": 3800,
+      "file": "ckpt_00003800.blm",
+      "bytes": 1945780170,
+      "sha256": "ad966fe4168a8e7066c53e7052656eedbb51a1b1687a3a442cf23ea6ff3c7799",
+      "save_seconds": 4.422
+    },
+    {
+      "step": 3898,
+      "file": "ckpt_00003898.blm",
+      "bytes": 1945780170,
+      "sha256": "813f1e2303029c1fcc29b2be823b3e433f90640e1eb42719b9835e0794925894",
+      "save_seconds": 4.16
+    },
+    {
+      "step": 3900,
+      "file": "ckpt_00003900.blm",
+      "bytes": 1945780170,
+      "sha256": "d935aba7cb29e09a336d87e23b4c81f6ae32710e545cea53ccda73a8952e59a2",
+      "save_seconds": 4.458
+    }
+  ],
+  "zero_moments": false,
+  "box": {
+    "machine": "x86_64",
+    "system": "Linux",
+    "python": "3.11.10",
+    "nvidia-smi": "NVIDIA H100 80GB HBM3, GPU-beff2cf7-a32f-9210-897b-0d52ffb1235a, 580.126.09\nNVIDIA H100 80GB HBM3, GPU-74fd4d05-2bcc-aa9e-2691-5c3f13260073, 580.126.09"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "run": "runs/t3/2026-09-22",
+  "route": "B",
+  "segment": "2",
+  "from_key": "runs/t3/2026-09-22/B/1/ckpt_00001000.blm",
+  "from_sha": "ce8c6b98e45bd42dd9cfb400c376e0b25c2eea1f2e4acc17f4df304241540f03",
+  "boundary": 2000
+}
