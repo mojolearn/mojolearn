@@ -126,20 +126,20 @@ def _rw_fold_sq(x: FP, base: Int, D: Int, mean: Float32) -> Float32:
 
 
 def _stats(x: FP, base: Int, D: Int, eps: Float32) -> Tuple[Float32, Float32]:
-    comptime if LN_ROW_WARP:
-        var s_rw = _rw_fold_sum(x, base, D)
-        var mean_rw = div(s_rw, Float32(D))
-        var q_rw = _rw_fold_sq(x, base, D, mean_rw)
-        var rstd_rw = ftz(identical_rsqrt(add(div(q_rw, Float32(D)), eps)))
-        return (mean_rw, rstd_rw)
     var s = Float32(0.0)
-    for c in range(D):
-        s = add(s, ld(x, base + c))
-    var mean = div(s, Float32(D))
     var q = Float32(0.0)
-    for c in range(D):
-        var d = sub(ld(x, base + c), mean)
-        q = fma3(d, d, q)
+    var mean = Float32(0.0)
+    comptime if LN_ROW_WARP:
+        s = _rw_fold_sum(x, base, D)
+        mean = div(s, Float32(D))
+        q = _rw_fold_sq(x, base, D, mean)
+    else:
+        for c in range(D):
+            s = add(s, ld(x, base + c))
+        mean = div(s, Float32(D))
+        for c in range(D):
+            var d = sub(ld(x, base + c), mean)
+            q = fma3(d, d, q)
     var rstd = ftz(identical_rsqrt(add(div(q, Float32(D)), eps)))
     return (mean, rstd)
 

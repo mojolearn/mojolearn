@@ -3940,9 +3940,15 @@ def _build_layer(lane, arm, D):
         # the device, a synchronize before the clock stops: ours' entries wait before they return).
         # y is read back in outputs(), outside the clock, as torch's .cpu() is.
         # MOJOLEARN_XCNN_DEVICE_IO_OFF=1 keeps host arrays (the before arm).
+        # lane layernorm-idn: a layer with its own `to_device` (the sequence LayerNorm, whose
+        # resident tensors live on the sequence binding, not the CNN one) uploads through it, so
+        # the lane races what a user who puts x on the device gets (the `layer_norm_dev` entry);
+        # MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1 (or MOJOLEARN_SEQ_DEVICE_IO_OFF=1) is its before arm.
         to_dev = None
         if getattr(layer, "_device_io", False):
-            from mojolearn._expansion_cnn import to_device as to_dev
+            to_dev = getattr(layer, "to_device", None)
+            if to_dev is None:
+                from mojolearn._expansion_cnn import to_device as to_dev
             x = to_dev(x)
             if getattr(x, "_device_tensor", False):
                 info["input_home"] = "device"
