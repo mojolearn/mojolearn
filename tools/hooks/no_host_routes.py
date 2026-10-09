@@ -1230,6 +1230,62 @@ _KERNEL_NAME = re.compile(r"(^|_)kernel(_\w*)?$|_kern$")
 _KERNEL_IDX = re.compile(r"\b_?(tid|gtid|thread_id|global_id)\s*\(\s*\)")
 
 
+# A per-thread device helper (an @always_inline function a kernel calls for
+# one row, chain or leaf) is device code, though it has no thread index of its
+# own. Its def line carries `# device-helper: <reason of 3+ words>`, and the
+# note holds only when every caller in the file is a kernel, another such
+# helper or a host-column twin, with at least one kernel or helper among them
+# when the file calls it at all; one other caller in the file and its loops
+# are charged again. Callers in other modules are the note's reviewed claim.
+_DEVICE_HELPER = re.compile(r"#\s*device-helper:\s*(\S+\s+){2,}\S+")
+
+
+def _device_helpers(lines, owner, top, skipdef):
+    """Mark noted device helpers as skipped defs (see _DEVICE_HELPER)."""
+    names = {}
+    for i, (_, t) in enumerate(lines):
+        dm = re.match(r"\s*(?:def|fn)\s+(\w+)", t)
+        if dm:
+            names[i] = dm.group(1)
+    first = {}
+    for i in sorted(names):
+        first.setdefault(top[i], i)  # the top-level def of each name
+    noted = [i for i in names if _DEVICE_HELPER.search(lines[i][1]) and not skipdef.get(i)]
+    helpers = set()
+    changed = True
+    while changed:
+        changed = False
+        for i in noted:
+            if i in helpers:
+                continue
+            call = re.compile(r"\b" + re.escape(names[i]) + r"\s*[\[(]")
+            by_device, ok, seen = False, True, False
+            for k, (_, t) in enumerate(lines):
+                if k == i or not call.search(t.split("#", 1)[0]):
+                    continue
+                seen = True
+                o = owner[k]
+                if o is None:
+                    ok = False  # a module-level use, or another def's line naming it
+                    break
+                outer = first.get(top[o], o)
+                if outer == i or o == i:
+                    continue  # its own body
+                if o in helpers or outer in helpers:
+                    by_device = True
+                elif skipdef.get(o) or skipdef.get(outer):
+                    # a kernel, or a host-column twin / native host helper body
+                    if not (_HOST_COLUMN_FN.search(names[o]) or _HOST_COLUMN_FN.search(names[outer])):
+                        by_device = True
+                else:
+                    ok = False
+                    break
+            if ok and (by_device or not seen):
+                helpers.add(i)
+                skipdef[i] = True
+                changed = True
+
+
 def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
     """[(line_no, text)] of host `for` loops over a runtime data size whose body
     touches data (indexes it with the loop variable, appends, or computes), in
@@ -1237,7 +1293,8 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
     the device. Skipped: kernels, the functions behind a native host helper
     (charged at the Python call site), host-column functions, check replays
     (checks/), trace-only and debug blocks, comptime loops, loops already
-    charged as d2h-host-work, and loops marked `# small-loop(...)`."""
+    charged as d2h-host-work, loops marked `# small-loop(...)`, and the
+    bodies of verified `# device-helper:` functions (_device_helpers)."""
     if "/checks/" in "/" + path:
         return []
     if not (path.startswith("bindings/") or any(_DEVICE_MODULE.search(t) for _, t in lines)):
@@ -1264,6 +1321,7 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
         owner.append(o)
         if o is not None and (_KERNEL_TOK.search(t) or _KERNEL_IDX.search(t) or _TRACE_ONLY.match(t)):
             skipdef[o] = True
+    _device_helpers(lines, owner, top, skipdef)
     out = []
     ifs = []  # (indent, is_debug)
     until = None  # indent of a flagged loop whose body is skipped
