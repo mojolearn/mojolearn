@@ -318,69 +318,6 @@
       ]
     },
     {
-      "id": "NN06",
-      "title": "Rounded neural GEMM epilogues",
-      "handoffs": [
-        {
-          "id": "NN06",
-          "implementation_status": "wired_draft",
-          "implementation_paths": [
-            "gemm/experiments/neural_epilogue.mojo",
-            "gemm/experiments/neural_profile.mojo",
-            "gemm/neural_dispatch.mojo",
-            "gemm/neural_backward.mojo",
-            "gemm/host/neural_gemm.mojo",
-            "gemm/experiments/neural_profile_device.mojo",
-            "training/dev_tensors.mojo",
-            "training/mlp_ops.mojo",
-            "training/byte_lm.mojo",
-            "training/byte_lm_logits.mojo",
-            "transformer/impl/llama/modeling_llama.mojo",
-            "transformer/checks/transformer_backward.mojo",
-            "mamba/impl/modules/idn_gemm_ws.mojo",
-            "x_cnn/device.mojo"
-          ],
-          "candidate_defines": [
-            "MOJOLEARN_NUMERIC_IDENTICAL=1",
-            "MOJOLEARN_IDN_NEURAL_NN06=1"
-          ],
-          "baseline_defines": [
-            "MOJOLEARN_NUMERIC_IDENTICAL=1",
-            "MOJOLEARN_IDN_NEURAL_NN06=1",
-            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
-          ],
-          "runtime_env": {},
-          "entry_points": [
-            "training.mlp_ops._mlp_fused_projection",
-            "mlp_train_step_host forward projections"
-          ],
-          "arms": {
-            "A": "CANDIDATE=True: producer returns rounded dot and performs selected epilogue stages before final store",
-            "B": "CANDIDATE=False: dot store followed by separate kernel for each enabled stage",
-            "stage_mask": "BIAS=1, SCALE=2, RESIDUAL=4, RELU=8; exact order bias/scale/residual/ReLU"
-          },
-          "default_enabled": false,
-          "remaining": [
-            "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
-            "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
-          ],
-          "compilation": "not_run_by_request",
-          "verification": "not_run_by_request",
-          "identity": "not_run_by_request",
-          "quality": "not_run_by_request",
-          "timing": "not_run_by_request",
-          "wired_callers": [
-            "training/mlp_ops.mojo::mlp_train_step_host"
-          ],
-          "optional_variants": [
-            "Additional residual/scale/nonlinear epilogues already exist as components; further model placements are optional separately attributed arms."
-          ],
-          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
-          "handoff": "gemm.json"
-        }
-      ]
-    },
-    {
       "id": "NN07",
       "title": "Reuse transposed operand staging across neural jobs",
       "handoffs": [

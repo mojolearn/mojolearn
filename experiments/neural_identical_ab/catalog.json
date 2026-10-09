@@ -143,35 +143,6 @@
       "measurements": "not_run_by_request"
     },
     {
-      "id": "NN06",
-      "title": "Rounded neural GEMM epilogues",
-      "lane": "gemm",
-      "callers": [
-        "MLP",
-        "transformer projections",
-        "CNN dense layers"
-      ],
-      "source_anchors": [
-        "gemm/experiments/rounded_epilogue.mojo",
-        "transformer/impl/llama/modeling_llama.mojo",
-        "training/mlp_ops.mojo"
-      ],
-      "arm_a": "Independently fuse bias, residual, scaling or activation output passes into the producer with explicit stored-value rounding seams.",
-      "arm_b": "GEMM writes followed by separate pointwise kernels.",
-      "identity_contract": "FMA formation cannot cross an incumbent materialization boundary; preserve the exact portable activation and FTZ order.",
-      "quality_gate": "Intermediate/final words, activation derivatives and full step/model quality.",
-      "rejection_conditions": "Reject register pressure slowing GEMM or fusion of a nonlinear operation without its backward contract.",
-      "prior_work": "Extend I05 separately for each epilogue/caller.",
-      "kind": "schedule",
-      "priority": "P0",
-      "mode": "identical",
-      "default_enabled": false,
-      "implementation": "planned",
-      "compilation": "not_run_by_request",
-      "verification": "not_run_by_request",
-      "measurements": "not_run_by_request"
-    },
-    {
       "id": "NN07",
       "title": "Reuse transposed operand staging across neural jobs",
       "lane": "gemm",
