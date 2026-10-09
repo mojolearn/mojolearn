@@ -52,7 +52,19 @@ comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_PCA_FA
 comptime PCA_GRAM_BLOCK_TARGET = 640
 from checks.numerics import ftz, identical_div, identical_mul
 from core.device_zero import enqueue_fill
-from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_FLAG_TEST, PCA_RR_ONE_BLOCK, PCA_RR_SWEEPS
+from decomposition.pca_rr_switch import (
+    PCA_DEVICE_TRUNCATE,
+    PCA_RR_EIGH,
+    PCA_RR_FLAG_TEST,
+    PCA_RR_ONE_BLOCK,
+    PCA_RR_SWEEPS,
+)
+from decomposition.spectrum_order_device import (
+    _TPB as _SO_TPB,
+    _blocks as _so_blocks,
+    _gather_diag_kernel,
+    _rank_kernel,
+)
 from x_decomp.rr_one_block import RR_ONE_TPB, rr_eigh_one_block_kernel, rr_one_block_applies
 from x_decomp.jacobi_par import (
     PJ_TPB,
@@ -781,6 +793,146 @@ def pca_rr_state_init_kernel(state: F32Ptr):
         state.unsafe_store(2, Float32(-1.0))
 
 
+def _eig_info_check(info0: Float32, info1: Float32, n_cols: Int) raises:
+    """The solver's outcome words (`pca_rr_finish_kernel` / the cyclic
+    kernel's info) to its refusals, in their words; shared by the host tail
+    and P5's device tail (lane fg-pca: moved here unchanged)."""
+    comptime if PCA_RR_EIGH:
+        if info0 < Float32(0.0):
+            raise Error(
+                "the device Jacobi's convergence test did not run at n_cols = "
+                + String(n_cols)
+                + " (a block's mark is still -1): a launch failure, not a"
+                " convergence failure. Check that the binding is built for this device."
+            )
+        # non-convergence is the refusal of the cyclic solver this replaced:
+        # the same error, in its words, on the device and the host column
+        if info0 != Float32(1.0):
+            raise Error(
+                "the device Jacobi did not converge in "
+                + String(PCA_RR_SWEEPS)
+                + " sweeps at n_cols = "
+                + String(n_cols)
+                + " (round-robin order; off-diagonal mass "
+                + String(info1)
+                + ", or ||A||_F moved) against a tolerance of "
+                + String(JACOBI_TOL)
+                + ". cuSOLVER's syevj has the same failure mode and the same"
+                " remedy, which is more sweeps. A non-symmetric covariance"
+                " produces this too; see check_covariance_is_symmetric."
+            )
+    if info0 == Float32(0.0):
+        raise Error(
+            "the device Jacobi did not converge in "
+            + String(JACOBI_SWEEPS)
+            + " sweeps at n_cols = "
+            + String(n_cols)
+            + ": ||offdiag(A)||_F / ||A||_F is still "
+            + String(info1)
+            + " against a tolerance of "
+            + String(JACOBI_TOL)
+            + ". cuSOLVER's syevj has the same failure mode and the same"
+            " remedy, which is more sweeps. A non-symmetric covariance"
+            " produces this too; see check_covariance_is_symmetric."
+        )
+
+
+
+def pca_inv_order_kernel(pos: MutPointer[Int32, MutAnyOrigin], n_in: Int32, inv: MutPointer[Int32, MutAnyOrigin]):
+    """inv[pos[i]] = i: the index at each place of the descending order
+    (`_rank_kernel`'s ranks are a permutation). One thread a value."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        inv.unsafe_store(Int(pos.unsafe_load(i)), Int32(i))
+
+
+def pca_gather_components_kernel(
+    vec: F32Ptr, inv: MutPointer[Int32, MutAnyOrigin], n_in: Int32, k_in: Int32, comp: F32Ptr
+):
+    """comp[c, f] = vec[f, inv[c]] for the first k places: component c is the
+    eigenvector column at place c (`order_truncate_spectrum`'s gather). One
+    thread a cell, no arithmetic."""
+    var n = Int(n_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(k_in) * n:
+        var c = t // n
+        var f = t - c * n
+        comp.unsafe_store(t, vec.unsafe_load(f * n + Int(inv.unsafe_load(c))))
+
+
+def _device_truncate(
+    ctx: DeviceContext,
+    mut cov: DeviceBuffer[DType.float32],
+    mut vec_buf: DeviceBuffer[DType.float32],
+    mut info_buf: DeviceBuffer[DType.float32],
+    n_cols: Int,
+    n_components: Int,
+    singular_scale: Int,
+) raises -> PCAResult:
+    """P5: `eig_and_truncate`'s tail with the order (`spectrum_rank_desc`,
+    ties to the lower index) and the component gather on the device; the
+    Float64 tail on the downloaded diagonal is `order_truncate_spectrum`'s
+    statements given that order."""
+    var n = n_cols
+    var k = n_components
+    var ddiag = ctx.enqueue_create_buffer[DType.float32](n)
+    var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+    var dinv = ctx.enqueue_create_buffer[DType.int32](n)
+    var dcomp = ctx.enqueue_create_buffer[DType.float32](max(k * n, 1))
+    var cp = cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var vp = vec_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var gp = ddiag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pp = dpos.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var ip = dinv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var op = dcomp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[_gather_diag_kernel](cp, Int32(n), gp, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
+    ctx.enqueue_function[_rank_kernel](gp, Int32(n), pp, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
+    ctx.enqueue_function[pca_inv_order_kernel](pp, Int32(n), ip, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
+    ctx.enqueue_function[pca_gather_components_kernel](
+        vp, ip, Int32(n), Int32(k), op, grid_dim=_so_blocks(k * n), block_dim=_SO_TPB
+    )
+    var h_diag = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var h_inv = ctx.enqueue_create_host_buffer[DType.int32](n)
+    var h_comp = ctx.enqueue_create_host_buffer[DType.float32](max(k * n, 1))
+    var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
+    ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=ddiag)
+    ctx.enqueue_copy(dst_ptr=h_inv.unsafe_ptr(), src_buf=dinv)
+    ctx.enqueue_copy(dst_ptr=h_comp.unsafe_ptr(), src_buf=dcomp)
+    ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
+    ctx.synchronize()
+    _eig_info_check(h_info.unsafe_ptr().unsafe_load(0), h_info.unsafe_ptr().unsafe_load(1), n)
+    # `order_truncate_spectrum`'s Float64 tail, the order given
+    var diag = List[Float64]()
+    for i in range(n):
+        diag.append(Float64(h_diag.unsafe_ptr().unsafe_load(i)))
+    var total = 0.0
+    for i in range(n):
+        total += diag[i]
+    var components = List[Float64]()
+    var explained_var = List[Float64]()
+    var explained_var_ratio = List[Float64]()
+    var singular_vals = List[Float64]()
+    for c in range(k):
+        var lam = diag[Int(h_inv.unsafe_ptr().unsafe_load(c))]
+        for f in range(n):
+            components.append(Float64(h_comp.unsafe_ptr().unsafe_load(c * n + f)))
+        explained_var.append(lam)
+        explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
+        singular_vals.append(sqrt(lam * Float64(singular_scale)))
+    var noise = 0.0
+    if k < n and k <= singular_scale:
+        for c in range(k, n):
+            noise += diag[Int(h_inv.unsafe_ptr().unsafe_load(c))]
+        noise /= Float64(n - k)
+    _ = ddiag^
+    _ = dpos^
+    _ = dinv^
+    _ = dcomp^
+    return PCAResult(
+        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
+    )
+
+
 def eig_and_truncate(
     ctx: DeviceContext,
     mut cov: DeviceBuffer[DType.float32],
@@ -825,6 +977,11 @@ def eig_and_truncate(
     ctx.synchronize()
     _ = dfac^
 
+    comptime if PCA_DEVICE_TRUNCATE:
+        # P5 (MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE): order and gather on the
+        # device, only k x n components + 2 n words + the info cross
+        return _device_truncate(ctx, cov, vec_buf, info_buf, n_cols, n_components, singular_scale)
+
     var h_cov = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
     var h_vec = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
     var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
@@ -833,44 +990,7 @@ def eig_and_truncate(
     ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
     ctx.synchronize()
 
-    comptime if PCA_RR_EIGH:
-        if h_info.unsafe_ptr().unsafe_load(0) < Float32(0.0):
-            raise Error(
-                "the device Jacobi's convergence test did not run at n_cols = "
-                + String(n_cols)
-                + " (a block's mark is still -1): a launch failure, not a"
-                " convergence failure. Check that the binding is built for this device."
-            )
-        # non-convergence is the refusal of the cyclic solver this replaced:
-        # the same error, in its words, on the device and the host column
-        if h_info.unsafe_ptr().unsafe_load(0) != Float32(1.0):
-            raise Error(
-                "the device Jacobi did not converge in "
-                + String(PCA_RR_SWEEPS)
-                + " sweeps at n_cols = "
-                + String(n_cols)
-                + " (round-robin order; off-diagonal mass "
-                + String(h_info.unsafe_ptr().unsafe_load(1))
-                + ", or ||A||_F moved) against a tolerance of "
-                + String(JACOBI_TOL)
-                + ". cuSOLVER's syevj has the same failure mode and the same"
-                " remedy, which is more sweeps. A non-symmetric covariance"
-                " produces this too; see check_covariance_is_symmetric."
-            )
-    if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
-        raise Error(
-            "the device Jacobi did not converge in "
-            + String(JACOBI_SWEEPS)
-            + " sweeps at n_cols = "
-            + String(n_cols)
-            + ": ||offdiag(A)||_F / ||A||_F is still "
-            + String(h_info.unsafe_ptr().unsafe_load(1))
-            + " against a tolerance of "
-            + String(JACOBI_TOL)
-            + ". cuSOLVER's syevj has the same failure mode and the same"
-            " remedy, which is more sweeps. A non-symmetric covariance"
-            " produces this too; see check_covariance_is_symmetric."
-        )
+    _eig_info_check(h_info.unsafe_ptr().unsafe_load(0), h_info.unsafe_ptr().unsafe_load(1), n_cols)
 
     var diag = List[Float64]()
     for i in range(n_cols):
