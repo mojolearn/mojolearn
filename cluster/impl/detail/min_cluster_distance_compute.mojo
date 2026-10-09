@@ -47,7 +47,7 @@ The tile is indexed with `IndexT`, so the tile itself, not the dataset, is
 what must fit the index type.
 """
 from experiments.classical_identical_ideas.graph_controls import (
-    KMEANS_ROW_ASSIGN, KMEANS_DIRECT_DISTANCE, KMEANS_ROW_ASSIGN_MAX_KD,
+    KMEANS_ROW_ASSIGN, KMEANS_ROW_ASSIGN_MAX_KD,
 )
 from cluster.impl.detail.classical_assignment import ASSIGN_ROWS, classical_assign_kernel, classical_assign_gated_kernel
 # SPDX-License-Identifier: Apache-2.0
@@ -91,18 +91,15 @@ from cluster.impl.distance.unfused_distance_nn import (
 
 def kmeans_row_assign_takes(n_clusters: Int, n_features: Int) -> Bool:
     """KMEANS_ASSIGN (graph_controls.mojo): the row-register kernel takes this
-    assignment. The direct arms always do (the tiled kernel has no direct
-    arithmetic). The expanded row arms do only while the per-thread chain
+    assignment. The expanded row arms do only while the per-thread chain
     `k * d` is at most `KMEANS_ROW_ASSIGN_MAX_KD` (cost rule, see there); past
     it the tiled kernel keeps the launch. Either kernel gives the expanded
     arms the same bits."""
-    comptime assert not KMEANS_DIRECT_DISTANCE or KMEANS_ROW_ASSIGN, (
-        "MOJOLEARN_KMEANS_DIRECT_DISTANCE is an arm of MOJOLEARN_KMEANS_ROW_ASSIGN=2|4"
-    )
     comptime if not KMEANS_ROW_ASSIGN:
         return False
-    comptime if KMEANS_DIRECT_DISTANCE:
-        return True
+    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
     return n_clusters * n_features <= KMEANS_ROW_ASSIGN_MAX_KD
 
 def compute_centroid_norms(

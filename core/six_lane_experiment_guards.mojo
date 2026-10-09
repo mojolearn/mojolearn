@@ -196,6 +196,7 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF"]() and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]()), "MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF (slack 4) and MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 are exclusive arms"
     # Deleted 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 losers (docs/apple-fast/EXPERIMENTS.md). Recoverable at main 42d1e42c6.
     comptime assert not (is_defined["MOJOLEARN_C37_FUSED_ACCUMULATE"]() or is_defined["MOJOLEARN_C37_FUSED_ROWS"]()), "removed: MOJOLEARN_C37_FUSED_ACCUMULATE (and _FUSED_ROWS) retired 2026-10-08: slower, kmeans NV 104.8x / AMD 0.84x istella, NV 68.6x / AMD 0.90x taxi (vendor split; combined 9.4x / 7.8x), inertia SAME (grid ge123e6f9); see EXPERIMENTS.md"
+    comptime assert not is_defined["MOJOLEARN_KMEANS_DIRECT_DISTANCE"](), "removed: MOJOLEARN_KMEANS_DIRECT_DISTANCE (kmeans_assign direct arms) retired 2026-10-08: slower, kmeans direct4 NV 12.7x / AMD 6.2x istella, NV 1.78x / AMD 1.96x taxi, inertia SAME (grid ge123e6f9); MOJOLEARN_KMEANS_ROW_ASSIGN=2|4 stays; see EXPERIMENTS.md"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True

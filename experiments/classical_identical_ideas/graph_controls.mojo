@@ -42,28 +42,25 @@ comptime GRAPH_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_GRAPH
 # "off" arm). The old opt-in define is refused in
 # core/six_lane_experiment_guards.mojo.
 comptime IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL and not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"]()
-# KMEANS_ASSIGN: ONE control, five arms, replacing C30 (kmeans part) and C36
-# (whose ROWS_4 knob set the same value as C30_ROWS_4):
+# KMEANS_ASSIGN: ONE control replacing C30 (kmeans part) and C36 (whose
+# ROWS_4 knob set the same value as C30_ROWS_4):
 #   tiled   (no define)                      incumbent tiled fused L2-NN
 #   rows2   MOJOLEARN_KMEANS_ROW_ASSIGN=2    row-register kernel, expanded L2
 #   rows4   MOJOLEARN_KMEANS_ROW_ASSIGN=4
-#   direct2 ROW_ASSIGN=2 + MOJOLEARN_KMEANS_DIRECT_DISTANCE   (x-c)^2 arithmetic
-#   direct4 ROW_ASSIGN=4 + MOJOLEARN_KMEANS_DIRECT_DISTANCE
-# The expanded row arms keep the incumbent's bits (same ascending-d fma chain,
-# same epilogue, same (value, lowest index) minimum), so no host change. The
-# direct arms change bits; the host column (cluster/host/kmeans_oracle.mojo)
-# follows KMEANS_DIRECT_DISTANCE. DIRECT without ROW_ASSIGN is refused at
-# compile time (kmeans_assign_check), so one arm is never two spellings.
+# The row arms keep the incumbent's bits (same ascending-d fma chain, same
+# epilogue, same (value, lowest index) minimum), so no host change.
+# Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arms direct2/direct4, run ge123e6f9): (x-c)^2 distances on the row kernel at
+# every size (plus k-means++, k-means|| and transform, host oracle following); direct4 NV/AMD kmeans istella 12.7x/6.2x, taxi
+# 1.78x/1.96x SLOWER; inertia SAME -> deleted (direct2 shares the code and was not a grid arm). Recoverable at main 42d1e42c6;
+# row in docs/apple-fast/EXPERIMENTS.md.
 comptime KMEANS_ROW_ASSIGN_ROWS = get_defined_int["MOJOLEARN_KMEANS_ROW_ASSIGN", 0]()
 comptime KMEANS_ROW_ASSIGN = GRAPH_IDENTICAL and KMEANS_ROW_ASSIGN_ROWS > 0
-comptime KMEANS_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KMEANS_DIRECT_DISTANCE"]()
 # Cost rule for the EXPANDED row arms: a thread owns a k*d serial fma chain per
 # row with no register reuse across rows of the tile, while the tiled kernel
 # reuses each staged value 4x4. Past 512 chain terms per row the chain latency
 # dominates, so the tiled kernel keeps those launches. Not a board shape: the
 # bound is a per-thread chain length, a power of two, far from k*d at any
-# board row (88 and 1760). The DIRECT arms have no tiled twin and take the row
-# kernel at every size.
+# board row (88 and 1760).
 comptime KMEANS_ROW_ASSIGN_MAX_KD = 512
 comptime C31_DEVICE_BUCKETS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C31_DEVICE_BUCKETS"]()
 comptime C32_COUNT_FUSION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C32_COUNT_FUSION"]()

@@ -148,8 +148,6 @@ of its own.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the kmeans lane is the measurement.
 """
-from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
@@ -561,19 +559,9 @@ def host_assign(
         var val = FUSED_MAX
         var key = UInt32(0xFFFFFFFF)
         var xn = xnp.unsafe_load(row)
-        comptime if KMEANS_DIRECT_DISTANCE:
-            # The shared helper only reads these arrays. Its raw-pointer ABI
-            # needs an explicit origin; the enclosing Lists retain the storage.
-            var raw_x = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(xp))
-            var raw_ct = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(ctp))
-            for col in range(k):
-                var dist = direct_squared_distance(raw_x + row*d, raw_ct + col, d, 1, k)
-                if dist < val or (dist == val and UInt32(col) < key):
-                    val = dist
-                    key = UInt32(col)
-            mp.unsafe_store(row, identical_sqrt(val) if is_sqrt else val)
-            lp.unsafe_store(row, key)
-            return
+        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
         var col0 = 0
         while col0 + ASSIGN_W <= k:
             var acc = host_cell_dots[ASSIGN_W](xp, row, d, ctp, k, col0)
@@ -823,8 +811,9 @@ def _candidate_distance(
 ) -> Float32:
     """The clamped expanded distance of `candidate_cost_kernel` and
     `adopt_candidate_min_kernel` (`plus_plus.mojo:50, 93`)."""
-    comptime if KMEANS_DIRECT_DISTANCE:
-        return z[i*n_trials+trial]
+    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
     var dd = ftz(
         identical_mul_add(
             Float32(-2.0),
@@ -874,10 +863,9 @@ def host_kmeans_plus_plus(
                 candidates[t * d + p] = x[sel * d + p]
         var cand_norm = host_row_norms(candidates, n_trials, d, False)
         var z = host_gemm_nt(x, candidates, n, n_trials, d)
-        comptime if KMEANS_DIRECT_DISTANCE:
-            for row in range(n):
-                for trial in range(n_trials):
-                    z[row*n_trials+trial] = direct_squared_distance((host_list_ptr(x)+row*d).unsafe_origin_cast[MutAnyOrigin](),(host_list_ptr(candidates)+trial*d).unsafe_origin_cast[MutAnyOrigin](),d)
+        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
         # candidate_cost_kernel: one block per trial, lanes stride the rows.
         var cost = List[Float32](length=n_trials, fill=Float32(0.0))
         # Each (trial, lane) chain is independent: one task per chain, its
@@ -1655,8 +1643,9 @@ def host_kmeans_transform(
         for col in range(k):
             var acc = host_cell_dot(xp, row, d, ctp, k, col)
             var dist = _assign_dist(acc, xn, cnp.unsafe_load(col))
-            comptime if KMEANS_DIRECT_DISTANCE:
-                dist = direct_squared_distance((xp+row*d).unsafe_origin_cast[MutAnyOrigin](),(ctp+col).unsafe_origin_cast[MutAnyOrigin](),d,1,k)
+            # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+            # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+            # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
             if is_sqrt:
                 dist = identical_sqrt(dist)
             comptime if KMEANS_TRANSFORM_HOST_SABOTAGE:
