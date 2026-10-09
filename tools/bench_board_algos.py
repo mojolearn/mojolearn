@@ -3641,7 +3641,7 @@ def _layer_inputs(lane, D, torch):
     g = torch.Generator().manual_seed(SEED)
     nn = torch.nn
     extra = ()
-    nb = 4 if D.get("_cap") else 64          # a smoke shrinks the batch, never the layer
+    nb = _tool("neural_fixtures").layer_batch(D)   # a smoke shrinks the batch, never the layer
     if t in ("lstm", "gru", "rnn"):
         raw = torch.from_numpy(np.asarray(D["bytes"][:64 * 256], dtype=np.int64)).view(64, 256)
         emb = torch.randn(256, p["input_size"], generator=g)
@@ -3685,10 +3685,9 @@ def _layer_inputs(lane, D, torch):
         x = torch.randn(nb, p["inplanes"], 56, 56, generator=g)
         make = lambda: _basic_block(torch, p["inplanes"], p["planes"])  # noqa: E731
     elif t in ("gcn", "sage"):
-        x = torch.from_numpy(np.asarray(D["X"], dtype=np.float32))
-        ip = np.asarray(D["indptr"])
-        src = np.repeat(np.arange(ip.shape[0] - 1), np.diff(ip))
-        extra = (torch.from_numpy(np.stack([np.asarray(D["indices"]), src]).astype(np.int64)),)
+        x_np, edges = _graph_layer_inputs(D)
+        x = torch.from_numpy(x_np)
+        extra = (torch.from_numpy(edges),)
         d = x.shape[1]
         if t == "gcn":
             from torch_geometric.nn import GCNConv
@@ -3700,6 +3699,58 @@ def _layer_inputs(lane, D, torch):
         raise ValueError(t)
     torch.manual_seed(SEED)
     return make, x, extra
+
+
+def _graph_layer_inputs(D):
+    """The graph layer lanes' x and (2, E) edge index, numpy only (the dataset's X and CSR;
+    no torch draw, so these are not fixture files: both arms derive them from the data)."""
+    np = _np()
+    x = np.ascontiguousarray(np.asarray(D["X"], dtype=np.float32))
+    ip = np.asarray(D["indptr"])
+    src = np.repeat(np.arange(ip.shape[0] - 1), np.diff(ip))
+    return x, np.ascontiguousarray(np.stack([np.asarray(D["indices"]), src]).astype(np.int64))
+
+
+#: the neural fixture directory this worker reads (set by worker() from --neural-fixtures,
+#: default tools/neural_fixtures.default_dir(--data)); see tools/neural_fixtures.py
+_NEURAL_FIXTURES = None
+
+
+def _neural_fixture_drift_check(lane, D, x_cpu, state, torch):
+    """Torch arms: assert the tensors torch just built equal the fixture bytes our arm reads
+    (x, every state tensor, dy re-drawn from Generator(SEED + 1) at the fixture's shape), so a
+    drift in torch's generator or init is caught, not silently compared. No fixture set on
+    this box: the torch arm runs as before and says so in its info."""
+    np = _np()
+    NF = _tool("neural_fixtures")
+    s = LANES[lane]
+    try:
+        fx = NF.load_for_lane(_NEURAL_FIXTURES, lane, s, _DATASET, D)
+    except NF.FixturesMissing as exc:
+        return {"status": "absent", "detail": str(exc)[:300]}
+    bad = []
+    if fx["x"] is not None:
+        xt = x_cpu.detach().cpu().numpy()
+        if xt.dtype != fx["x"].dtype or xt.shape != fx["x"].shape or not np.array_equal(xt, fx["x"]):
+            bad.append("x")
+    if sorted(state) != sorted(fx["state"]):
+        bad.append("state keys %s vs %s" % (sorted(state), sorted(fx["state"])))
+    else:
+        for k, v in state.items():
+            f = fx["state"][k]
+            if v.dtype != f.dtype or v.shape != f.shape or not np.array_equal(v, f):
+                bad.append("state." + k)
+    if fx["dy"] is not None:
+        g2 = torch.Generator().manual_seed(SEED + 1)
+        dyt = torch.randn(tuple(fx["dy"].shape), generator=g2).numpy()
+        if not np.array_equal(dyt, fx["dy"]):
+            bad.append("dy")
+    if bad:
+        raise NF.FixtureMismatch(
+            "neural fixture drift: torch %s built tensors that differ from the fixtures our arm "
+            "reads (generated with torch %s): %s; regenerate with tools/neural_fixtures.py generate "
+            "and re-check before comparing" % (torch.__version__, fx["torch_version"], ", ".join(bad)))
+    return dict(NF.provenance(fx), status="match")
 
 
 def _MoE(torch, hidden_size, intermediate_size, num_experts, top_k, norm_topk_prob):
@@ -3764,22 +3815,33 @@ def _basic_block(torch, inplanes, planes):
 
 def _build_layer(lane, arm, D):
     np = _np()
-    import torch
     s = LANES[lane]
-    make, x_cpu, extra_cpu = _layer_inputs(lane, D, torch)
-    ref = make()
-    _neural_ab_layer_mode(ref, s)
-    state = {k: v.detach().cpu().numpy() for k, v in ref.state_dict().items()}
-    g = torch.Generator().manual_seed(SEED + 1)
     S = {}
     if arm in OURS_ARMS:
+        # Our arm imports torch NOWHERE (Andrew 2026-10-09). x, the initial state (torch's
+        # seeded default init) and the backward seed dy are the fixture files
+        # tools/neural_fixtures.py generated with the very builders the torch arm runs below
+        # (_layer_inputs, make(), Generator(SEED + 1)), sha256-verified on load. A missing set
+        # refuses (not_ready, infrastructure); there is no torch fallback here
+        NF = _tool("neural_fixtures")
+        fx = NF.load_for_lane(_NEURAL_FIXTURES, lane, s, _DATASET, D)
+        state = fx["state"]
+        if s["task"] in ("gcn", "sage"):      # x and edges are the dataset's (numpy, no draw)
+            x_np, edges = _graph_layer_inputs(D)
+            if int(fx["entry"].get("in_channels", -1)) != int(x_np.shape[1]):
+                raise NF.FixtureMismatch("neural fixture %s: in_channels %s, data has %d"
+                                         % (lane, fx["entry"].get("in_channels"), x_np.shape[1]))
+            x_cpu, extra_cpu = x_np, (edges,)
+        else:
+            x_cpu, extra_cpu = fx["x"], ()
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
+        info["neural_fixtures"] = NF.provenance(fx)
         kw = dict(s["params"])
         if name == "layer_norm_forward":      # the functional form: F.layer_norm and its backward
             import mojolearn as ml
             bwd = getattr(ml, "layer_norm_backward", None)
-            x = x_cpu.detach().numpy()
+            x = x_cpu
             w_, b_ = state["weight"], state["bias"]
             info["config"] = "mojolearn.layer_norm_forward / layer_norm_backward, eps %g" % kw["eps"]
             info["weights_loaded"] = info["output_comparable"] = True
@@ -3796,7 +3858,7 @@ def _build_layer(lane, arm, D):
             def fit():
                 y = cls(x, None, w_, b_, kw["eps"])
                 if "dy" not in dyh:
-                    dyh["dy"] = torch.randn(tuple(y.shape), generator=g).numpy()
+                    dyh["dy"] = NF.take_dy(fx, tuple(y.shape))
                     if on_dev:
                         dyh["dy"] = seq_to_dev(dyh["dy"])
                 if bwd is None:
@@ -3808,9 +3870,9 @@ def _build_layer(lane, arm, D):
             return _with_upload(Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
                                        record=dict(kw, __library__="mojolearn")), [("x", x)])
         if s["task"] == "embedding":          # ours takes the table (weight=), torch's seeded init
-            ids = x_cpu.numpy()
+            ids = x_cpu                       # (from the fixture file)
             layer = cls(weight=state["weight"], **kw)
-            info["config"] = "mojolearn.%s(%s, weight=torch's init)" % (name, kw)
+            info["config"] = "mojolearn.%s(%s, weight=torch's init via the neural fixture)" % (name, kw)
             info["weights_loaded"] = info["output_comparable"] = True
             dyh = {}
             # lane gap-neural-io: y, dy and the (V, d) gradient stay on the device, as the torch
@@ -3830,8 +3892,7 @@ def _build_layer(lane, arm, D):
             def fit():
                 y = layer.forward(ids, device=True) if dev_io else layer.forward(ids)
                 if "dy" not in dyh:
-                    dyh["dy"] = torch.randn(tuple(y.shape) if dev_io else tuple(np.shape(y)),
-                                            generator=g).numpy()
+                    dyh["dy"] = NF.take_dy(fx, tuple(y.shape) if dev_io else tuple(np.shape(y)))
                     if dev_io:
                         dyh["dy"] = layer.to_device(dyh["dy"])
                 layer.backward(ids, dyh["dy"])
@@ -3871,8 +3932,8 @@ def _build_layer(lane, arm, D):
             except Exception:  # noqa: BLE001  (Conv1d keeps (O, C, 1, k))
                 layer.set_weights(w.reshape(w.shape[0], w.shape[1], 1, -1), b_)
             info["weights_loaded"] = True
-        x = x_cpu.detach().numpy()
-        extra = tuple(e.numpy() for e in extra_cpu)
+        x = x_cpu
+        extra = tuple(extra_cpu)
         # lane idn-cnn-resident: a layer that takes device tensors (conv, pool, BasicBlock, GCNConv,
         # SAGEConv) gets x and dy on the device before the clock and keeps y and dx there, as the
         # torch arm does (x_cpu.to(dev), dy.to(dev) on the first fit, y and the gradients left on
@@ -3900,7 +3961,7 @@ def _build_layer(lane, arm, D):
             if s.get("forward_only"):
                 return
             if dy is None:
-                dy = torch.randn(tuple(y.shape if to_dev else np.shape(y)), generator=g).numpy()
+                dy = NF.take_dy(fx, tuple(y.shape if to_dev else np.shape(y)))
                 if to_dev:
                     dy = to_dev(dy)
             if not hasattr(layer, "backward"):
@@ -3928,12 +3989,21 @@ def _build_layer(lane, arm, D):
         # when x went to the device before the clock)
         return _with_upload(Runner(info, fit, out, infer, record=rec),
                             [("x", x_cpu)] + [("extra%d" % i, e) for i, e in enumerate(extra_cpu)])
+    import torch
+    make, x_cpu, extra_cpu = _layer_inputs(lane, D, torch)
+    ref = make()
+    _neural_ab_layer_mode(ref, s)
+    state = {k: v.detach().cpu().numpy() for k, v in ref.state_dict().items()}
+    # untimed, before the generator below: torch's tensors must equal our arm's fixture bytes
+    drift = _neural_fixture_drift_check(lane, D, x_cpu, state, torch)
+    g = torch.Generator().manual_seed(SEED + 1)
     setting = arm[len("torch-"):]
     mode, prec = setting.split("-")
     dev = _torch_device(torch)
     info = {"library": "torch", "version": torch.__version__, "device": "gpu" if dev != "cpu" else "cpu",
             "device_name": torch.cuda.get_device_name(0) if dev == "cuda" else dev,
-            "pre_clock_fit": False, "input_home": "device", "setting": setting}
+            "pre_clock_fit": False, "input_home": "device", "setting": setting,
+            "neural_fixtures": drift}
     if s["task"] in ("gcn", "sage"):
         import torch_geometric
         info["torch_geometric"] = torch_geometric.__version__
@@ -4767,6 +4837,7 @@ def _aft_capture_worker(args, B, D, rec, runner):
 
 
 def worker(args):
+    global _NEURAL_FIXTURES
     proto = os.fdopen(os.dup(1), "w", buffering=1)
     os.dup2(2, 1)
     sys.stdout = sys.stderr
@@ -4780,6 +4851,8 @@ def worker(args):
         ab_config = _configure_neural_ab(getattr(args, "neural_ab_config", None), args.lane)
         if ab_config is not None and args.arm == "ours-fast":
             raise ValueError("neural A/B configuration requires the ours IDENTICAL arm")
+        _NEURAL_FIXTURES = (getattr(args, "neural_fixtures", None)
+                            or _tool("neural_fixtures").default_dir(args.data))
         B, rec = _load_block(args.lane, args.dataset, args.data)
         D = lane_arrays(args.lane, B)
         runner = build(args.lane, args.arm, D)
@@ -4789,6 +4862,10 @@ def worker(args):
     except BaseException as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
+        if getattr(exc, "infrastructure", False):   # e.g. neural fixtures missing on this box
+            say({"event": "error", "stage": "ready", "class": "infrastructure",
+                 "status": "not_ready", "error": str(exc)})
+            return 1
         say({"event": "error", "stage": "ready", "error": repr(exc)})
         return 1
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
@@ -5340,6 +5417,9 @@ def race(args):
                                  "--dataset", ds, "--data", args.data]
         if frozen_config is not None:
             cmd += ["--neural-ab-config", frozen_config]
+        if LANES[lane]["kind"] == "layer":    # the ours arms read x/state/dy from here; torch checks
+            cmd += ["--neural-fixtures", os.path.abspath(
+                getattr(args, "neural_fixtures", None) or _tool("neural_fixtures").default_dir(args.data))]
         if getattr(args, "full_tree_workload", False):
             raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
             cmd.append("--full-tree-workload")
@@ -5556,6 +5636,9 @@ def build_parser():
     r.add_argument("--out", required=True)
     r.add_argument("--work", required=True)
     r.add_argument("--smoke-rows", type=int, default=0)
+    r.add_argument("--neural-fixtures", default=None,
+                   help="the layer lanes' fixture dir (tools/neural_fixtures.py); default "
+                        "$MOJOLEARN_NEURAL_FIXTURES, else <dirname(--data)>/neural-fixtures")
     r.add_argument("--full-tree-workload", action="store_true",
                    help="tree-only: use aft-full inputs, no lane row subsets, full TreeSHAP background")
     r.add_argument("--ours-python", default=sys.executable)
@@ -5574,6 +5657,7 @@ def build_parser():
     w.add_argument("--dataset", required=True)
     w.add_argument("--data", required=True)
     w.add_argument("--neural-ab-config", help="frozen neural A/B JSON from conductor")
+    w.add_argument("--neural-fixtures", default=None, help="the layer lanes' fixture dir (from the conductor)")
     w.add_argument("--full-tree-workload", action="store_true")
     sub.add_parser("table")
     return p

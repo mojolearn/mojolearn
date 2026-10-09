@@ -21,7 +21,6 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_AFN26_MAMBA3_THREADS64"]() and is_defined["MOJOLEARN_AFN26_MAMBA3_THREADS256"]()), "incompatible integrated strategies: MOJOLEARN_AFN26_MAMBA3_THREADS64 / MOJOLEARN_AFN26_MAMBA3_THREADS256"
     comptime assert not (is_defined["MOJOLEARN_AFN26_EMB_THREADS64"]() and is_defined["MOJOLEARN_AFN26_EMB_THREADS128"]()), "incompatible integrated strategies: MOJOLEARN_AFN26_EMB_THREADS64 / MOJOLEARN_AFN26_EMB_THREADS128"
     comptime assert not (is_defined["MOJOLEARN_AFN26_ATTN_NORM_TPB128"]() and is_defined["MOJOLEARN_AFN26_ATTN_NORM_TPB512"]()), "incompatible integrated strategies: MOJOLEARN_AFN26_ATTN_NORM_TPB128 / MOJOLEARN_AFN26_ATTN_NORM_TPB512"
-    comptime assert not (is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP"]() and is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()), "incompatible integrated strategies: MOJOLEARN_IDN_SAMBA_RESIDENT_STEP / MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"
     # Retired alternative-override defines: each became ONE define with arms (lane classical-misc).
     comptime assert not (is_defined["MOJOLEARN_C52_PAIR_128"]() or is_defined["MOJOLEARN_C52_PAIR_512"]()), "retired: use -D MOJOLEARN_C52_PAIR_ROWS=128|512"
     comptime assert not is_defined["MOJOLEARN_C52_PAIR_ROWS"]() or get_defined_int["MOJOLEARN_C52_PAIR_ROWS",128]() == 128 or get_defined_int["MOJOLEARN_C52_PAIR_ROWS",128]() == 512, "invalid MOJOLEARN_C52_PAIR_ROWS (128|512)"
@@ -160,7 +159,6 @@ def _check_configuration() -> Bool:
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 2, "invalid MOJOLEARN_IDN_LM_RESIDENT_TOKENS arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 2 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 3, "invalid MOJOLEARN_IDN_LM_VIEWS arm (legal: 0|1|2|3)"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 2, "invalid MOJOLEARN_IDN_LM_GROUPED_ADAM arm (legal: 0|1|2)"
-    comptime assert get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",0]() == 0 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",0]() == 1 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",0]() == 2 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",0]() == 3, "invalid MOJOLEARN_IDN_ACT_RETAIN arm (legal: 0|1|2|3)"
     comptime assert get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 0 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 1 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 2 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 3, "invalid MOJOLEARN_IDN_TRAIN_SCRATCH arm (legal: 0|1|2|3)"
     # Lane grid-prune (2026-10-07): deleted losers and dead arms (rows in docs/apple-fast/EXPERIMENTS.md
     # "IDENTICAL grid prune"); recoverable at main ab554bb4a. A stale build line must not run the incumbent silently.
@@ -210,6 +208,13 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_IDN_NN20_SPLIT_KV"]() or is_defined["MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES"]()), "removed: MOJOLEARN_IDN_NN20_SPLIT_KV (and _LEAVES) retired 2026-10-08 with the summary_tree arm it split (MOJOLEARN_IDN_ATTN_SOFTMAX=1, grid ge123e6f9 loser); see EXPERIMENTS.md"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
+    # Lane grid-act-4 (2026-10-08): IDENTICAL grid ge123e6f9 neural promotions and losers (docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main 4e3da4282.
+    comptime assert not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-act-4): the device-resident Samba forward and train step are the IDENTICAL default (samba-forward 0.539x, samba-train-step 0.563x, same bits); drop -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP, use -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF for the per-op route (a MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 build takes the per-op route by itself)"
+    comptime assert not is_defined["MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-act-4): the Mamba-3 angle carry cache (NI43 chunk seeds) is the IDENTICAL default (samba-train-step 0.883x, same bits); drop -D MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE, use -D MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF for the per-chunk suffix re-walk"
+    # ACT_RETAIN arm 2 promoted 2026-10-08 (lane/grid-act-4, grid ge123e6f9, samba-train-step 0.890x, same bits): absent = 2; =1 and =3 stay arms; _OFF = arm 0 replay.
+    comptime assert get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",2]() == 1 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",2]() == 2 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",2]() == 3, "invalid MOJOLEARN_IDN_ACT_RETAIN arm (legal: 1|2|3; replay is -D MOJOLEARN_IDN_ACT_RETAIN_OFF)"
+    comptime assert not (is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]() and is_defined["MOJOLEARN_IDN_ACT_RETAIN"]()), "MOJOLEARN_IDN_ACT_RETAIN_OFF (replay) and MOJOLEARN_IDN_ACT_RETAIN=N are exclusive arms"
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_NN05"](), "removed 2026-10-08 (grid ge123e6f9, lane/grid-act-4): neural_gemm_pair=nn05 (fused gate/up pair kernel) was SLOWER on both vendors: lm-forward NV 2.19x / AMD 2.80x, lm-train-step 3.72x / 2.44x, transformer-forward 3.85x / 3.47x (3.0x combined); same bits; code at main 4e3da4282, see docs/apple-fast/EXPERIMENTS.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

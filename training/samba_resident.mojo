@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device-resident Samba forward and train step (lane S1 samba-resident,
-2026-10-07; `-D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP`, IDENTICAL only, default
-off; `training/neural_identical_experiments.mojo::IDN_SAMBA_RESIDENT_STEP`).
+2026-10-07; IDENTICAL only; promoted to the IDENTICAL default 2026-10-08 by
+lane grid-act-4 (grid ge123e6f9: samba-forward 0.539x, samba-train-step 0.563x,
+same bits); `-D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF` restores arm B;
+`training/neural_identical_experiments.mojo::IDN_SAMBA_RESIDENT_STEP`).
 
 WHAT ARM B PAYS. `python/mojolearn/_samba_impl.py` drives the stack layer by
 layer from Python: the embedding, each Mamba-3 or attention block, the final
@@ -105,7 +107,7 @@ from training.estimator import (
 )
 from training.neural_ab_pointwise import NN58_ACCUMULATE_STATUS
 from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
-from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
+from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_SAMBA_ATTN_RECOMPUTE
 from training.samba_ops import (
     SAMBA_TPB,
     _grid,
@@ -649,6 +651,12 @@ def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: B
             s.kv.value().k.enqueue_fill(Float32(0.0))
             s.kv.value().v.enqueue_fill(Float32(0.0))
             s.t_stages[j].reset(s.ctx)
+            # attn_stash=recompute for the Samba train step only (grid
+            # ge123e6f9: samba-train-step 0.905x; the LM step keeps its
+            # stash, 1.24x slower there). A forward-only call keeps the
+            # build's profile (samba-forward was not measured with it).
+            comptime if IDN_SAMBA_ATTN_RECOMPUTE:
+                s.t_stages[j].attn_recompute_backward = not forward_only
             llama_decoder_layer_forward(
                 s.ctx, s.t_stages[j], s.kv.value(), s.rope.value(), s.t_w[j], s.acts[i],
                 b, l, 0, trace, String("samba.resident.attn"), forward_only=forward_only,
@@ -746,7 +754,7 @@ def samba_resident_forward(
     board's forward span includes that download, as for lm-forward).
     Returns `B * L * vocab`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
     _ensure_shape(s, b, l)
     var m = b * l
     s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
@@ -804,7 +812,7 @@ def samba_resident_train_step(
     `param_ptr`, the loss to `loss_ptr`, the flags to `init_ptr` and the
     clip info to `info_ptr`. Returns `count`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
     if b < 1 or l < 1:
         raise Error("mojolearn samba resident: B and L must be positive")
     var m = b * l

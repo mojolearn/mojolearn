@@ -24,8 +24,8 @@
    "source": [
     "gemm/experiments/neural_ozaki.mojo:89",
     "gemm/experiments/neural_ozaki.mojo:600",
-    "gemm/neural_dispatch.mojo:143",
-    "gemm/neural_dispatch.mojo:82"
+    "gemm/neural_dispatch.mojo:145",
+    "gemm/neural_dispatch.mojo:84"
    ],
    "binding": "_mojolearn_x_cnn",
    "bits_change": true,

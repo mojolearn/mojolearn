@@ -35,7 +35,9 @@ from transformer.checks.transformer_backward import (
     LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
 
-# Both are OFF: no new source has compile/identity/quality/timing evidence.
+# NN31 (MOJOLEARN_IDN_ACT_RETAIN=2) is the IDENTICAL default since 2026-10-08
+# (lane grid-act-4, grid ge123e6f9: samba-train-step 0.890x, same bits); NN32
+# (=1) stays an arm; -D MOJOLEARN_IDN_ACT_RETAIN_OFF replays.
 # NN32 isolates retention vs replay in one native layer owner. NN31 admits
 # retention by actual retained bytes and replay cost; budget misses replay.
 # Never choose a rule from a dataset, board size or hardware vendor.

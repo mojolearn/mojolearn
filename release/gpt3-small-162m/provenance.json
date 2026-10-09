@@ -1,6 +1,6 @@
 {
   "prepared_date": "2026-10-08",
-  "publication_status": "unpublished; ready pending namespace, token and owner go-ahead",
+  "publication_status": "published 2026-10-08: https://huggingface.co/ajhendel/mojolearn-162m (arXiv version; first upload commit 3c9bf2c)",
   "evidence_source": "supplement/gpt3-six-segment-2026-09-28 (copied unchanged from the paper's supplement)",
   "checker_source": "tools/check_gpt3_evidence.py (copied unchanged)",
   "mojolearn_repository": "https://github.com/mojolearn/mojolearn",

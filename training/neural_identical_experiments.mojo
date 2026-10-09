@@ -72,7 +72,7 @@ comptime IDN_LOSS_TOKEN_TREE_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_CE
 comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
 # NI36/NI48: immutable native forward tapes, consumed exactly once.
 # Arm 3 of MOJOLEARN_IDN_ACT_RETAIN (transformer/experiments/checkpoint_contract.mojo).
-comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 0]() == 3
+comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and not is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]() and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]() == 3
 
 # NI20: fixed tile32 online attention numerical graph on every column. Arm 2
 # of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1, the NN20
@@ -86,4 +86,36 @@ comptime IDN_ATTENTION_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_ATTN_SOF
 # driving training/samba_ops.mojo and the block bindings layer by layer, a
 # PCIe round trip and a device drain at every op) is arm B. Same kernels on
 # the same operands in the same order: no bit change on any column.
-comptime IDN_SAMBA_RESIDENT_STEP = _ENABLED and is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP"]()
+# Promoted 2026-10-08 (lane grid-act-4, IDENTICAL grid ge123e6f9, one run per
+# arm, incumbent per-op route -> resident ms): samba-forward NV 12.0 -> 5.3,
+# AMD 8.8 -> 5.8; samba-train-step NV 96.0 -> 39.2, AMD 147.2 -> 114.2 (0.551x
+# combined); output hashes equal to the incumbent on both vendors, no bit
+# moves. The win is the removed per-op upload/download/drain, which grows with
+# layers and op count, not with any one shape. Measured alone against the
+# incumbent; it now combines with the promoted m3_angle_carry_cache and
+# act_retain=2 and attn_stash=recompute (Samba only), and the post-merge race
+# measures the combination. Default on in IDENTICAL; -D
+# MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF restores the per-op route. The NI34
+# chunked head (MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2) spells a different head, so a
+# chunked-head build takes the per-op route (was a refused pair).
+comptime IDN_SAMBA_RESIDENT_STEP = (
+    _ENABLED
+    and not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
+)
+# attn_stash=recompute for the Samba training step only (lane grid-act-4,
+# 2026-10-08, IDENTICAL grid ge123e6f9, one run per arm, stash -> recompute
+# ms): samba-train-step NV 96.0 -> 79.5, AMD 147.2 -> 145.7 (0.905x) but
+# lm-train-step NV 36.0 -> 43.6, AMD 42.7 -> 54.4 (1.24x SLOWER), so the
+# choice is keyed on the model kind, never a dimension: the Samba resident
+# train step sets `LlamaDeviceStages.attn_recompute_backward` on its attention
+# layers (training/samba_resident.mojo _forward_blocks) and the LM /
+# transformer training steps keep the build's stash profile. Same bits (the
+# recompute arm hashed equal to the stash incumbent on both vendors). Measured
+# on the per-op Samba route against the incumbent; it now combines with the
+# promoted resident step, m3 angle carry cache and act_retain=2, and the
+# post-merge race measures the combination. The per-op Samba route
+# (MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF) keeps the stash profile. Default on
+# in IDENTICAL; -D MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF keeps the stash on
+# the Samba step too.
+comptime IDN_SAMBA_ATTN_RECOMPUTE = _ENABLED and not is_defined["MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF"]()

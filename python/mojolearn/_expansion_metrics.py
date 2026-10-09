@@ -1974,6 +1974,17 @@ def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
     return arrays
 
 
+def _f64_array_words(a):
+    """A C-order Float64 Array's values as their Int32 word pairs (low
+    first), an Int32 Array over a copy of the bytes (no per-value Python).
+    Its own name: the scalar `_f64_words(prog, v)` below shadowed the
+    original `_f64_words(a)` and broke auc(x, y) (TypeError, found by the
+    2026-10-09 reference re-record, x-metrics-ranking)."""
+    store = array.array("i")
+    store.frombytes(a.tobytes())
+    return Array._owned(store, (len(store),), "<i4", "C")
+
+
 def auc(x, y):
     """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x, on
     the device (lane cpu4-python: x_metrics/curve_out.mojo auc_xy; the host
@@ -1992,8 +2003,8 @@ def auc(x, y):
         raise ValueError(f"At least 2 points are needed to compute area under curve, but x.shape = ({xa.size},)")
     n = xa.size
     prog = _Prog()
-    X = prog.put_i32(_f64_words(xa))
-    Y = prog.put_i32(_f64_words(ya))
+    X = prog.put_i32(_f64_array_words(xa))
+    Y = prog.put_i32(_f64_array_words(ya))
     OUT = prog.want(prog.alloc(3), 3)
     prog.stage("auc_xy", 1, n, X, Y, OUT, _AX_CHUNK)
     _execute(prog, None)

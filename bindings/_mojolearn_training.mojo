@@ -137,8 +137,9 @@ from training.samba_afn import (
     samba_afn_tail_train_binding,
 )
 # lane S1 samba-resident (2026-10-07): the device-resident Samba forward and
-# train step, registered only under -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP
-# (IDENTICAL); `samba_resident_enabled` is registered always so the Python
+# train step, registered only when IDN_SAMBA_RESIDENT_STEP holds (IDENTICAL
+# default since 2026-10-08, lane grid-act-4; off under
+# -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2); `samba_resident_enabled` is registered always so the Python
 # shell can ask (training/samba_resident.mojo).
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
 from training.samba_resident import (
@@ -1541,7 +1542,8 @@ def samba_head_loss_binding(
 
 # ===========================================================================
 # THE DEVICE-RESIDENT SAMBA FORWARD AND TRAIN STEP (lane S1 samba-resident,
-# 2026-10-07; -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP, IDENTICAL, default off).
+# 2026-10-07; IDENTICAL default since 2026-10-08 (lane grid-act-4, grid
+# ge123e6f9); -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF restores the per-op route).
 # One `_SambaResidentSession` per Python `SambaStack` (samba_resident_open),
 # then one call per forward (samba_resident_forward) or per optimizer step
 # (samba_resident_step): the registry, the gradient, the activations and the
@@ -1567,7 +1569,7 @@ def samba_resident_open_binding(
     `param_addr` = the flat float32 registry (n_total floats, read once here).
     Returns the session object; pass it to the two entries below."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_open: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+        raise Error("samba_resident_open: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
     else:
         _params(params, 9, "samba_resident_open")
         var kinds = List[Int]()
@@ -1597,7 +1599,7 @@ def samba_resident_forward_binding(
     read), ids (b*l i32), logits (b*l*vocab f32, written)]; params = [b, l].
     Returns `b * l * vocab`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_forward: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+        raise Error("samba_resident_forward: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
     else:
         var owner = session.downcast_value_ptr[SambaResidentSession]()
         var a = _addrs(addresses, 3, "samba_resident_forward")
@@ -1633,7 +1635,7 @@ def samba_resident_step_binding(
     (`optimizer_resident_open`, n_total floats). Returns `count`, the number
     of targets that are not the ignore index."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_step: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+        raise Error("samba_resident_step: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
     else:
         var owner = session.downcast_value_ptr[SambaResidentSession]()
         var a = _addrs(addresses, 7, "samba_resident_step")

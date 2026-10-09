@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""NN05/NN07: independent projections and immutable operand staging.
+"""NN07: immutable operand staging (NN05's independent-projection arms deleted 2026-10-08).
 
 These are explicit neural component entry points, not public-model routing.
 All numerical work is Mojo; no classical path imports this module. No build
-or verification has been run. Reused I03 machinery is identified separately
-from gemm.experiments.neural_profile_device import neural_profile_kernel
-from the new per-thread shared-left operand arm.
+or verification has been run.
 """
+from gemm.experiments.neural_profile_device import neural_profile_kernel
 from std.sys.compile import is_defined
 from std.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
@@ -17,69 +16,24 @@ from gemm.experiments.neural_profile import (
     NEURAL_EXPERIMENTS_ALLOWED,neural_partition,neural_strides,neural_validate,
     neural_profile_host,
 )
-from gemm.experiments.grouped_jobs import grouped_gemm
 
 # OFF until full-caller combined NVIDIA/AMD evidence and all-column identity.
 # I03 component wins/losses are inherited context, not these arms' outcomes.
-comptime NN05 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN05"]()
+# TOMBSTONE NN05 (MOJOLEARN_IDN_NEURAL_NN05, neural_gemm_pair=nn05, deleted
+# 2026-10-08 by lane grid-act-4): the gate/up projection pair as one kernel
+# sharing each A load (_neural_pair_kernel, gemm/neural_dispatch.mojo) plus the
+# shared-left / grouped A arms of neural_grouped_ab. IDENTICAL grid ge123e6f9
+# nn05/off NV/AMD: lm-forward 2.19x/2.80x, lm-train-step 3.72x/2.44x,
+# transformer-forward 3.85x/3.47x SLOWER; bits same. Recoverable at main 4e3da4282.
 comptime NN07 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN07"]()
 
 
-def _neural_shared_left_kernel[JOBS: Int](
-    c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,MutAnyOrigin],
-    b: MutPointer[Float32,MutAnyOrigin],m: Int32,n: Int32,k: Int32,
-    leaf: Int32,leaves: Int32,asi: Int32,asp: Int32,bsp: Int32,bsj: Int32,
-):
-    comptime assert JOBS >= 1 and JOBS <= 4, "one to four independent jobs"
-    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if cell >= Int(m)*Int(n):
-        return
-    var row = cell//Int(n)
-    var col = cell%Int(n)
-    var stack = SIMD[DType.float32,64](0.0)
-    var occupied = 0
-    for t in range(Int(leaves)):
-        var value = SIMD[DType.float32,4](0.0)
-        var begin = t*Int(leaf)
-        var end = min((t+1)*Int(leaf),Int(k))
-        for p in range(begin,end):
-            # One global A load feeds JOBS independent contractions. No jobs'
-            # k dimensions, FMA chains or fold nodes are concatenated.
-            var av = ftz(a.unsafe_load(row*Int(asi)+p*Int(asp)))
-            comptime for job in range(JOBS):
-                var bv = ftz(b.unsafe_load(job*Int(n)*Int(k)+p*Int(bsp)+col*Int(bsj)))
-                value[job] = rtf_mul_add(av,bv,value[job])
-        var placed = False
-        comptime for level in range(16):
-            if not placed:
-                if (occupied & (1 << level)) != 0:
-                    comptime for job in range(JOBS):
-                        value[job] = ftz(ftz(stack[job*16+level])+ftz(value[job]))
-                    occupied -= 1 << level
-                else:
-                    comptime for job in range(JOBS):
-                        stack[job*16+level] = ftz(value[job])
-                    occupied += 1 << level
-                    placed = True
-    var result = SIMD[DType.float32,4](0.0)
-    var have = False
-    comptime for level in range(16):
-        if (occupied & (1 << level)) != 0:
-            comptime for job in range(JOBS):
-                if have:
-                    result[job] = ftz(ftz(stack[job*16+level])+ftz(result[job]))
-                else:
-                    result[job] = stack[job*16+level]
-            have = True
-    comptime for job in range(JOBS):
-        c.unsafe_store(job*Int(m)*Int(n)+cell,ftz(result[job]))
-
-
-def neural_grouped_ab[JOBS: Int = 3,CANDIDATE: Bool = False,SHARE_LEFT: Bool = False](
+def neural_grouped_ab[JOBS: Int = 3](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
 ) raises:
-    """B independent launches; A1 grouped grid (I03); A2 shared-left registers.
+    """B independent launches (the A1 grouped-grid and A2 shared-left arms
+    were NN05's, deleted 2026-10-08; see the tombstone above).
 
     JOBS is a semantic projection group, not a matrix-dimension route rule.
     An actual model must identify truly independent products and retain
@@ -93,19 +47,6 @@ def neural_grouped_ab[JOBS: Int = 3,CANDIDATE: Bool = False,SHARE_LEFT: Bool = F
         return
     var part = neural_partition[CONTRACT_K_LEAF_MIN](k)
     var st = neural_strides(op,m,n,k)
-    comptime if CANDIDATE and NN05:
-        comptime if SHARE_LEFT:
-            ctx.enqueue_function[_neural_shared_left_kernel[JOBS]](c,a,b,
-                Int32(m),Int32(n),Int32(k),Int32(part[0]),Int32(part[1]),
-                Int32(st[0]),Int32(st[1]),Int32(st[2]),Int32(st[3]),
-                grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
-            return
-        else:
-            # Existing I03 adapter rejects k=0. Retain defined zero products
-            # through the same explicit independent-launch control below.
-            if k > 0:
-                grouped_gemm(c,a,b,ctx,m,n,k,op,JOBS)
-                return
     comptime for job in range(JOBS):
         ctx.enqueue_function[neural_profile_kernel[1,16]](
             c.unsafe_ptr()+job*m*n,a.unsafe_ptr(),b.unsafe_ptr()+job*n*k,

@@ -4,11 +4,20 @@ from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # L11 (2026-10-07): activation retention is ONE switch with arms,
-# -D MOJOLEARN_IDN_ACT_RETAIN=0|1|2|3: 0 replay (default), 1 = NN32 retain
-# every attention forward, 2 = NN31 budgeted checkpoints, 3 = NI48 owned
-# Samba forward tapes (training/neural_identical_experiments.mojo,
-# bindings/_mojolearn_mamba.mojo). Scheduling only; no arithmetic changes.
-comptime IDN_ACT_RETAIN_ARM = get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 0]()
+# -D MOJOLEARN_IDN_ACT_RETAIN=1|2|3: 1 = NN32 retain every attention forward,
+# 2 = NN31 budgeted checkpoints (default), 3 = NI48 owned Samba forward tapes
+# (training/neural_identical_experiments.mojo, bindings/_mojolearn_mamba.mojo);
+# -D MOJOLEARN_IDN_ACT_RETAIN_OFF = arm 0, replay. Scheduling only; no
+# arithmetic changes.
+# Arm 2 promoted 2026-10-08 (lane grid-act-4, IDENTICAL grid ge123e6f9, one run
+# per arm, replay -> budgeted checkpoints ms): samba-train-step NV 96.0 -> 77.6,
+# AMD 147.2 -> 144.3 (0.890x combined); output hashes equal to the incumbent on
+# both vendors, no bit moves. The rule keeps a forward only when its actual
+# retained bytes fit the budget and its replay work per byte clears the floor,
+# so it holds for any shape that fits (no shape or dataset key). Measured alone;
+# it now combines with the promoted resident Samba step and m3 angle carry
+# cache, and the post-merge race measures the combination.
+comptime IDN_ACT_RETAIN_ARM = 0 if is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]() else get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]()
 comptime NN32_RETAIN_FORWARD = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and IDN_ACT_RETAIN_ARM == 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())

@@ -1710,6 +1710,17 @@ struct LlamaDeviceStages(Movable):
     carry planes). Set by `llama_decoder_layer_forward_planted` on every
     call; read by S11 and by the attention path choice."""
     var attn_prefer_eager: Bool  # byte-LM auto policy; explicit fused overrides
+    var attn_recompute_backward: Bool
+    """Model-kind attention stash policy (lane grid-act-4, 2026-10-08): the
+    caller's training step wants the backward to recompute the attention
+    exponents instead of keeping the fused forward's exp stash in `aexp`.
+    The fused forward then takes the plain launcher (nothing kept,
+    `attn_estash_cells` stays 0) and the backward takes the plain launcher,
+    exactly what `-D MOJOLEARN_IDN_ATTN_STASH=1` does for every caller. Set
+    only by the Samba resident train step (training/samba_resident.mojo,
+    IDN_SAMBA_ATTN_RECOMPUTE); every other caller (the LM / transformer
+    training steps) keeps the build's stash profile. False by default and
+    after `reset`."""
     var attn_forward_status: Int  # -1 not attempted; otherwise FUSED_* for last forward
     var attn_fused_off: Bool
     """DEVIATION 3110: this layer's fused FORWARD refused once, so it is not
@@ -1830,6 +1841,7 @@ struct LlamaDeviceStages(Movable):
         self.sbh = _zeros[False](ctx, sbh_n)
         self.qk_sumsq = _zeros[False](ctx, m * nh)
         self.attn_prefer_eager = False
+        self.attn_recompute_backward = False
         self.attn_forward_status = -1
         self.attn_fused_off = False
         self.attn_materialized = False
@@ -1911,6 +1923,7 @@ struct LlamaDeviceStages(Movable):
         step_count_launch()
         self.qk_sumsq.enqueue_fill(Float32(0))
         self.attn_prefer_eager = False
+        self.attn_recompute_backward = False
         self.attn_forward_status = -1
         self.attn_fused_off = False
         self.attn_materialized = False
@@ -4250,7 +4263,10 @@ def eager_attention_forward(
             # (DEVIATION 2657); every other build takes the branch below
             # unchanged.
             var arm = fused_attention_arm_from_env()
-            if (not need_eager) and fused_attention_arm_estash_runs(arm):
+            # A caller that asked for the recompute policy
+            # (`attn_recompute_backward`, the Samba train step) keeps no
+            # stash: the plain launcher below runs, as under ATTN_STASH=1.
+            if (not need_eager) and fused_attention_arm_estash_runs(arm) and not stages.attn_recompute_backward:
                 var ran = 0
                 status = fused_forward_launch_estash_ran(
                     ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
