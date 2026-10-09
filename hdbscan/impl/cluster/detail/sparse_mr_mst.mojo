@@ -598,6 +598,52 @@ def smr_round_reset_kernel(
     win[c] = -1
 
 
+#: fg-tsne-dbscan H3 (IDENTICAL, NVIDIA and AMD, DEFAULT ON, lane
+#: fg-tsne-dbscan 2026-10-09): ONE READBACK FEWER PER BORUVKA ROUND. A round
+#: drained the queue three times: phase A's list count, phase B's list
+#: count, and the round's joined-edge count (st[ADDED]) that the host
+#: subtracts from n_comp. The joined count now rides on the NEXT round's
+#: phase-A read: right after a round's relabel the next round's prefix (reset,
+#: classify, drop, arg, assign, compact A) is enqueued and ONE read returns
+#: both st[COUNT] (the next list) and st[ADDED], which under this switch is
+#: cumulative (`smr_round_reset_keep_kernel` leaves it; the host keeps the
+#: previous total). When the forest is complete the extra prefix has run on
+#: one component: it writes only the per-round scratch (state, bounds, the
+#: todo list, COUNT), never the edge slots the ranking reads, so the MST is
+#: the same. Phase B's count stays a readback: the search's slicing (its
+#: parallelism) is sized from the list length, and a device-side bound would
+#: launch phase B at the whole-list shape. 3 -> 2 drains per round (+1 before
+#: the first round, as before). Integer plumbing only; bits none.
+#: `-D MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF` (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the three reads.
+comptime IDN_HDB_ROUND_ONE_SYNC = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not (
+        is_defined["MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+def smr_round_reset_keep_kernel(
+    ub: _I32P, amin: _I32P, aidx: _I32P, ckey: _I32P, clo: _I32P,
+    chi: _I32P, nxt: _I32P, win: _I32P, m_in: Int32,
+):
+    """`smr_round_reset_kernel` without clearing st[ADDED] (H3: cumulative)."""
+    var c = _gid()
+    if c >= Int(m_in):
+        return
+    ub[c] = WEIGHT_KEY_SENTINEL
+    amin[c] = WEIGHT_KEY_SENTINEL
+    aidx[c] = SMR_INT_MAX
+    ckey[c] = WEIGHT_KEY_SENTINEL
+    clo[c] = SMR_INT_MAX
+    chi[c] = SMR_INT_MAX
+    nxt[c] = -1
+    win[c] = -1
+
+
 def smr_classify_kernel(
     comp: _I32P, pk: _I32P, pj: _I32P, ub: _I32P, lb: _I32P, state: _I32P,
     m_in: Int32,
@@ -1190,6 +1236,68 @@ def _read_status(
         )
 
 
+def _round_prefix(
+    ctx: DeviceContext,
+    keep_added: Bool,
+    mut ub_d: DeviceBuffer[DType.int32],
+    mut amin_d: DeviceBuffer[DType.int32],
+    mut aidx_d: DeviceBuffer[DType.int32],
+    mut ckey_d: DeviceBuffer[DType.int32],
+    mut clo_d: DeviceBuffer[DType.int32],
+    mut chi_d: DeviceBuffer[DType.int32],
+    mut nxt_d: DeviceBuffer[DType.int32],
+    mut win_d: DeviceBuffer[DType.int32],
+    mut st_d: DeviceBuffer[DType.int32],
+    mut comp_d: DeviceBuffer[DType.int32],
+    mut pk_d: DeviceBuffer[DType.int32],
+    mut pj_d: DeviceBuffer[DType.int32],
+    mut lb_d: DeviceBuffer[DType.int32],
+    mut state_d: DeviceBuffer[DType.int32],
+    mut bcount_d: DeviceBuffer[DType.int32],
+    mut boff_d: DeviceBuffer[DType.int32],
+    mut todo_d: DeviceBuffer[DType.int32],
+    m: Int,
+) raises:
+    """A Boruvka round's launches up to phase A's list (reset, classify,
+    drop, arg, assign, compact A), enqueued only. `keep_added` (H3) leaves
+    st[ADDED] cumulative."""
+    var g = _grid(m)
+    if keep_added:
+        ctx.enqueue_function[smr_round_reset_keep_kernel](
+            ub_d.unsafe_ptr(), amin_d.unsafe_ptr(), aidx_d.unsafe_ptr(),
+            ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(), chi_d.unsafe_ptr(),
+            nxt_d.unsafe_ptr(), win_d.unsafe_ptr(),
+            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[smr_round_reset_kernel](
+            ub_d.unsafe_ptr(), amin_d.unsafe_ptr(), aidx_d.unsafe_ptr(),
+            ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(), chi_d.unsafe_ptr(),
+            nxt_d.unsafe_ptr(), win_d.unsafe_ptr(), st_d.unsafe_ptr(),
+            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+    ctx.enqueue_function[smr_classify_kernel](
+        comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+        ub_d.unsafe_ptr(), lb_d.unsafe_ptr(), state_d.unsafe_ptr(),
+        Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+    )
+    ctx.enqueue_function[smr_drop_arg_kernel](
+        comp_d.unsafe_ptr(), lb_d.unsafe_ptr(), ub_d.unsafe_ptr(),
+        state_d.unsafe_ptr(), amin_d.unsafe_ptr(), Int32(m),
+        grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+    )
+    ctx.enqueue_function[smr_arg_idx_kernel](
+        comp_d.unsafe_ptr(), lb_d.unsafe_ptr(), state_d.unsafe_ptr(),
+        amin_d.unsafe_ptr(), aidx_d.unsafe_ptr(), Int32(m),
+        grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+    )
+    ctx.enqueue_function[smr_assign_kernel](
+        comp_d.unsafe_ptr(), state_d.unsafe_ptr(), aidx_d.unsafe_ptr(),
+        Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+    )
+    _compact(ctx, state_d, SMR_LIST_A, bcount_d, boff_d, todo_d, st_d, m)
+
+
 def sparse_mr_mst_device(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -1270,37 +1378,27 @@ def sparse_mr_mst_device(
 
     var n_comp = m
     var merge_rounds = 0
+    # H3: the first round's prefix and its read (later rounds' prefixes are
+    # enqueued at the end of the round before)
+    var added_prev = 0
+    comptime if IDN_HDB_ROUND_ONE_SYNC:
+        _round_prefix(
+            ctx, True, ub_d, amin_d, aidx_d, ckey_d, clo_d, chi_d, nxt_d,
+            win_d, st_d, comp_d, pk_d, pj_d, lb_d, state_d, bcount_d, boff_d,
+            sb.todo_d, m,
+        )
+        _read_status(ctx, st_d, st_h)
     while n_comp > 1:
         merge_rounds += 1
         if merge_rounds > 64:
             raise Error("hdbscan.sparse_mr_mst: Boruvka did not converge")
-        ctx.enqueue_function[smr_round_reset_kernel](
-            ub_d.unsafe_ptr(), amin_d.unsafe_ptr(), aidx_d.unsafe_ptr(),
-            ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(), chi_d.unsafe_ptr(),
-            nxt_d.unsafe_ptr(), win_d.unsafe_ptr(), st_d.unsafe_ptr(),
-            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-        )
-        ctx.enqueue_function[smr_classify_kernel](
-            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-            ub_d.unsafe_ptr(), lb_d.unsafe_ptr(), state_d.unsafe_ptr(),
-            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-        )
-        ctx.enqueue_function[smr_drop_arg_kernel](
-            comp_d.unsafe_ptr(), lb_d.unsafe_ptr(), ub_d.unsafe_ptr(),
-            state_d.unsafe_ptr(), amin_d.unsafe_ptr(), Int32(m),
-            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-        )
-        ctx.enqueue_function[smr_arg_idx_kernel](
-            comp_d.unsafe_ptr(), lb_d.unsafe_ptr(), state_d.unsafe_ptr(),
-            amin_d.unsafe_ptr(), aidx_d.unsafe_ptr(), Int32(m),
-            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-        )
-        ctx.enqueue_function[smr_assign_kernel](
-            comp_d.unsafe_ptr(), state_d.unsafe_ptr(), aidx_d.unsafe_ptr(),
-            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-        )
-        _compact(ctx, state_d, SMR_LIST_A, bcount_d, boff_d, sb.todo_d, st_d, m)
-        _read_status(ctx, st_d, st_h)
+        comptime if not IDN_HDB_ROUND_ONE_SYNC:
+            _round_prefix(
+                ctx, False, ub_d, amin_d, aidx_d, ckey_d, clo_d, chi_d, nxt_d,
+                win_d, st_d, comp_d, pk_d, pj_d, lb_d, state_d, bcount_d,
+                boff_d, sb.todo_d, m,
+            )
+            _read_status(ctx, st_d, st_h)
         var n_a = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_COUNT))
         _ = _search(
             ctx, sb, xt_d, x, norms_d, core_d, comp_d, pk_d, pj_d, st_d,
@@ -1380,8 +1478,21 @@ def sparse_mr_mst_device(
                 comp_d.unsafe_ptr(), par_a.unsafe_ptr(), Int32(m),
                 grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
             )
-        _read_status(ctx, st_d, st_h)
-        var added = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_ADDED))
+        var added: Int
+        comptime if IDN_HDB_ROUND_ONE_SYNC:
+            # H3: the next round's prefix, then one read for both counts
+            _round_prefix(
+                ctx, True, ub_d, amin_d, aidx_d, ckey_d, clo_d, chi_d, nxt_d,
+                win_d, st_d, comp_d, pk_d, pj_d, lb_d, state_d, bcount_d,
+                boff_d, sb.todo_d, m,
+            )
+            _read_status(ctx, st_d, st_h)
+            var added_total = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_ADDED))
+            added = added_total - added_prev
+            added_prev = added_total
+        else:
+            _read_status(ctx, st_d, st_h)
+            added = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_ADDED))
         if added == 0:
             raise Error(
                 "hdbscan.sparse_mr_mst: a Boruvka round joined nothing with "
