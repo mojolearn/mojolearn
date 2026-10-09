@@ -68,10 +68,11 @@ from experiments.classical_identical_ideas.shared_controls import C06_ROWS_ON
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.sys.compile import is_defined
 from std.ffi import _Global
 from std.time import perf_counter_ns
+from std.atomic import Atomic, Ordering
 from std.os import getenv
 
 from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
@@ -425,12 +426,103 @@ struct KnnIndexCache(Movable):
     var y_meta: Optional[DeviceBuffer[DType.float32]]
     var index_norm: Optional[DeviceBuffer[DType.float32]]
     var norm_takes_sqrt: Bool
+    # K4 (KNN_SCRATCH_POOL): the per-search scratch, kept at its high-water
+    # size and handed out as exact-length sub-buffers. Scratch, not derived
+    # data: every search writes each cell it reads before reading it.
+    var pool_queries: Optional[DeviceBuffer[DType.float32]]
+    var pool_query_norm: Optional[DeviceBuffer[DType.float32]]
+    var pool_index_norm: Optional[DeviceBuffer[DType.float32]]
+    var pool_dist_tile: Optional[DeviceBuffer[DType.float32]]
+    var pool_buf_val: Optional[DeviceBuffer[DType.float32]]
+    var pool_buf_idx: Optional[DeviceBuffer[DType.uint32]]
+    var pool_out_dist: Optional[DeviceBuffer[DType.float32]]
+    var pool_out_idx: Optional[DeviceBuffer[DType.uint32]]
+    var pool_out_i32: Optional[DeviceBuffer[DType.int32]]
+    var pool_host_dist: Optional[HostBuffer[DType.float32]]
+    var pool_host_idx: Optional[HostBuffer[DType.uint32]]
+    #: 1 while a search holds the pool; a second concurrent search on the
+    #: same handle takes the per-call allocations. A search that raises
+    #: leaves it held, which only turns the pool off for that handle.
+    var pool_busy: Int64
 
     def __init__(out self):
         self.transposed = Optional[DeviceBuffer[DType.float32]]()
         self.y_meta = Optional[DeviceBuffer[DType.float32]]()
         self.index_norm = Optional[DeviceBuffer[DType.float32]]()
         self.norm_takes_sqrt = False
+        self.pool_queries = Optional[DeviceBuffer[DType.float32]]()
+        self.pool_query_norm = Optional[DeviceBuffer[DType.float32]]()
+        self.pool_index_norm = Optional[DeviceBuffer[DType.float32]]()
+        self.pool_dist_tile = Optional[DeviceBuffer[DType.float32]]()
+        self.pool_buf_val = Optional[DeviceBuffer[DType.float32]]()
+        self.pool_buf_idx = Optional[DeviceBuffer[DType.uint32]]()
+        self.pool_out_dist = Optional[DeviceBuffer[DType.float32]]()
+        self.pool_out_idx = Optional[DeviceBuffer[DType.uint32]]()
+        self.pool_out_i32 = Optional[DeviceBuffer[DType.int32]]()
+        self.pool_host_dist = Optional[HostBuffer[DType.float32]]()
+        self.pool_host_idx = Optional[HostBuffer[DType.uint32]]()
+        self.pool_busy = 0
+
+
+# K4 (lane fg-knn-nb, 2026-10-09): `-D MOJOLEARN_KNN_SCRATCH_POOL_OFF=1`
+# restores the per-call allocations. DEFAULT ON (a waste removal): a search
+# over a resident index used to create and free, on every call, the query
+# copy, both norm vectors, the `query_tile x index_tile` distance tile
+# (1 GiB at a 4096 x 65,536 tile), the `query_tile x 2 x buf_len` radix
+# pairs, three output vectors and two pinned readback buffers: about ten
+# allocations and frees per call, hundreds of MB, which ROCm serves 10-100x
+# slower than CUDA. With the pool they are made once at the handle's
+# high-water size and each call takes exact-length sub-buffers (no
+# allocation), so nothing downstream sees a longer buffer than before. Bits:
+# none (every cell is written before it is read on both paths). The pool is
+# owned by the resident entry, dropped with it before its context, and only
+# used on a single-device search; a call that keeps its device indices takes
+# a fresh `out_idx` (it is moved out to the caller).
+comptime KNN_SCRATCH_POOL = not is_defined["MOJOLEARN_KNN_SCRATCH_POOL_OFF"]()
+
+
+def knn_pool_view[dtype: DType](
+    ctx: DeviceContext, mut slot: Optional[DeviceBuffer[dtype]], n: Int,
+) raises -> DeviceBuffer[dtype]:
+    """An exact-length `n` view of the pooled buffer `slot`, growing the
+    slot (one allocation) only when `n` is above its high-water length. A
+    non-positive `n` gets its own buffer, as the per-call path made it."""
+    if n <= 0:
+        return ctx.enqueue_create_buffer[dtype](n)
+    if not slot or len(slot.value()) < n:
+        # Grow: drain queued work that may still read the buffer this
+        # assignment releases (gemm/host_transport.mojo's rule).
+        ctx.synchronize()
+        slot = ctx.enqueue_create_buffer[dtype](n)
+    return slot.value().create_sub_buffer[dtype](0, n)
+
+
+def knn_pool_acquire(cache: MutPointer[KnnIndexCache, MutAnyOrigin]) -> Bool:
+    """Take the handle's scratch pool; False when another search holds it."""
+    var flag = UnsafePointer(to=cache[].pool_busy)
+    var old = Atomic.fetch_add[ordering = Ordering.SEQUENTIAL](flag, Int64(1))
+    if old == 0:
+        return True
+    _ = Atomic.fetch_add[ordering = Ordering.SEQUENTIAL](flag, Int64(-1))
+    return False
+
+
+def knn_pool_release(cache: MutPointer[KnnIndexCache, MutAnyOrigin]):
+    var flag = UnsafePointer(to=cache[].pool_busy)
+    _ = Atomic.fetch_add[ordering = Ordering.SEQUENTIAL](flag, Int64(-1))
+
+
+def knn_pool_host_ptr[dtype: DType](
+    ctx: DeviceContext, mut slot: Optional[HostBuffer[dtype]], n: Int,
+) raises -> MutPointer[Scalar[dtype], MutAnyOrigin]:
+    """A pinned host stage of at least `n` (>= 1) elements, grown only past
+    its high-water length; the caller reads it by pointer only."""
+    var want = n if n > 0 else 1
+    if not slot or len(slot.value()) < want:
+        ctx.synchronize()
+        slot = ctx.enqueue_create_host_buffer[dtype](want)
+        ctx.synchronize()
+    return slot.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 comptime KnnIndexCachePointer = Optional[MutPointer[KnnIndexCache, MutAnyOrigin]]
