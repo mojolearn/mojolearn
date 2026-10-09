@@ -17,6 +17,8 @@ tags:
 
 # Mojolearn 162M: one model, two hardware routes
 
+[![DOI](https://img.shields.io/badge/DOI-10.57967%2Fhf%2F10832-blue)](https://doi.org/10.57967/hf/10832)
+
 A 162M-parameter decoder trained twice from the same initialization on the same
 2.62 billion FineWeb-Edu tokens, once along each of two different routes through
 NVIDIA, AMD and Apple GPUs. The two runs are **bitwise identical at every one of the
@@ -221,6 +223,21 @@ License 2.0, the license of Mojolearn. The training data is FineWeb-Edu
 the underlying Common Crawl data apply to the data, not to this repository's files.
 
 Source: [github.com/mojolearn/mojolearn](https://github.com/mojolearn/mojolearn), where
-this model card, its tools and evidence live in `release/gpt3-small-162m/`. Cite
-Mojolearn with its concept DOI
+this model card, its tools and evidence live in `release/gpt3-small-162m/`.
+
+Cite this model with its DOI,
+[10.57967/hf/10832](https://doi.org/10.57967/hf/10832):
+
+```bibtex
+@misc{hendel2026mojolearn162m,
+  author    = {Hendel, Andrew},
+  title     = {Mojolearn 162M: One Model, Two Hardware Routes},
+  year      = {2026},
+  publisher = {Hugging Face},
+  doi       = {10.57967/hf/10832},
+  url       = {https://huggingface.co/mojolearn-ai/mojolearn-162m}
+}
+```
+
+Cite the Mojolearn library with its concept DOI
 [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632).
