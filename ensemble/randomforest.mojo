@@ -3425,7 +3425,7 @@ def fit_forest_prepared[
     if feature_importances:
         comptime if T15:
             var values = importance_stores[0].finish(ctx)
-            for c in range(n_cols):
+            for c in range(n_cols):  # small-loop(n_cols: fitted per-feature importances): casts the d device results into the model
                 forest.feature_importances_.append(Scalar[O.DataT](values[c]))
         else:
             var importance_values = List[Scalar[O.DataT]](length=n_cols,fill=0)
