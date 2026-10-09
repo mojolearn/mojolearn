@@ -1341,7 +1341,7 @@ class TransformerBlock(NumericModeMixin):
         ext = self._extension()
         if not _exports(ext, "transformer_session_forward_tape"):
             raise NotImplementedError(f"mojolearn {what}: loaded binding lacks the native tape API")
-        addrs = [_addr_ro(x)] + [_addr_ro(a) for a in self._w] + [_addr(y)]  # glue: tensor addresses
+        addrs = [_addr_ro(x)] + [_addr_ro(a) for a in self._w] + [_addr(y)]  # glue: input, weight and output addresses
         params = [b, l, self.d_model, self.n_heads, self.n_kv_heads,
                   self.head_dim, self.intermediate, self.window, budget, cost]
         with self._runtime_lock:
@@ -1377,8 +1377,8 @@ class TransformerBlock(NumericModeMixin):
                     or tape._configuration != self._tape_configuration()):
                 raise ValueError(f"mojolearn {what}: stale, consumed or incompatible tape")
             grads = [_buffers.empty(tape.shape, "<f4")] + [
-                _buffers.empty(shape, "<f4") for shape in tape._weight_shapes]  # glue: gradient buffers
-            addrs = [_addr_ro(dy)] + [_addr(g) for g in grads]  # glue: tensor addresses
+                _buffers.empty(shape, "<f4") for shape in tape._weight_shapes]  # glue: one gradient buffer per weight
+            addrs = [_addr_ro(dy)] + [_addr(g) for g in grads]  # glue: upstream and gradient buffer addresses
             tape._consumed = True
             ext.transformer_session_backward_tape(tape._session, addrs, tape._token)
         return dict(zip(("x",) + self._W_NAMES, grads))

@@ -556,7 +556,7 @@ def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: buffer addresses of one block call): reads the pointer list, not data
         a.append(Int(py=addrs[i]))
     return a^
 
@@ -810,7 +810,7 @@ def mamba1_session_open_binding(
         raise Error("mamba1 session: already open; close it first")
     var a = List[Int]()
     a.append(0)
-    for i in range(count):
+    for i in range(count):  # small-loop(count: session buffer addresses): reads the pointer list, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba1_session_open: null buffer address at slot " + String(i))

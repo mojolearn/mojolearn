@@ -7,6 +7,7 @@ for each normalization, ascending trees, then ascending features for the forest
 normalization. Integer soft binary64 preserves explicit multiply/add/divide
 seams on all devices. No floating atomic or completion-order fold is used.
 """
+from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from ensemble.flatnode import SparseTreeNode
 from checks.soft_f64 import (SF64_INF, SF64_ONE, sf64_add, sf64_div,
@@ -97,9 +98,9 @@ struct ImportanceStore(Movable):
             accumulated.unsafe_ptr(),Int32(self.n_trees),Int32(self.n_features),grid_dim=1,block_dim=1)
         ctx.enqueue_copy(dst_buf=host,src_buf=output)
         ctx.synchronize()
-        var result = List[Float32](capacity=self.n_features)
-        for c in range(self.n_features):
-            result.append(host.unsafe_ptr()[c])
+        # One host copy of the drained results, not a per-feature loop.
+        var result = List[Float32](length=self.n_features, fill=Float32(0))
+        memcpy(dest=result.unsafe_ptr(), src=host.unsafe_ptr(), count=self.n_features)
         _ = accumulated^
         _ = output^
         _ = host^

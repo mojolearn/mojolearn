@@ -56,8 +56,8 @@ class ByteLanguageModelConfig:
 
     @property
     def native_shape(self):
-        dimensions = tuple(getattr(self, field.name) for field in fields(self)
-                           if field.name != 'chunked_lm_head_v2')  # glue: shape metadata
+        dimensions = tuple(getattr(self, field.name) for field in fields(self)  # glue: dataclass shape fields only
+                           if field.name != 'chunked_lm_head_v2')  # glue: dataclass shape fields only
         # Preserve the existing nine-integer ABI when the opt-in is absent.
         return dimensions + (1,) if self.chunked_lm_head_v2 else dimensions
 

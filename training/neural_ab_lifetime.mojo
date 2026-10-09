@@ -48,7 +48,7 @@ struct NeuralLifetimeArena(Movable):
         var high = 1
         # Metadata only: each range describes a model tensor, not a data row.
         # First fit is deterministic and entirely driven by live byte intervals.
-        for i in range(len(ranges)):
+        for i in range(len(ranges)):  # small-loop(ranges: model tensor live ranges): plans arena offsets from metadata
             ref item = ranges[i]
             if item.cells < 1 or item.cells > capacity or item.first_stage < 0 or item.last_stage < item.first_stage:
                 raise Error("NN62 invalid live range or insufficient byte budget")
@@ -56,7 +56,7 @@ struct NeuralLifetimeArena(Movable):
             var moved = True
             while moved:
                 moved = False
-                for j in range(i):
+                for j in range(i):  # small-loop(i: earlier live ranges): first-fit over tensor metadata
                     ref previous = ranges[j]
                     var live_overlap = item.first_stage <= previous.last_stage and previous.first_stage <= item.last_stage
                     if live_overlap:

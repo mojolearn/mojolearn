@@ -5,6 +5,7 @@ NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED �
 from std.atomic import Atomic
 from std.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite
+from std.memory import memcpy
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import identical_mul_add
 from core.device_zero import enqueue_fill
@@ -93,9 +94,9 @@ def t26_estimate_apply(
     ctx.enqueue_function[_apply_kernel](bins.unsafe_ptr(), values.unsafe_ptr(), cursor.unsafe_ptr(),
         Int32(n), rate, grid_dim=(n + 255) // 256, block_dim=256)
     ctx.synchronize()
-    var result = List[Float32](capacity=leaves)
-    for leaf in range(leaves):
-        result.append(hv[leaf])
+    # One host copy of the drained leaf values, not a per-leaf loop.
+    var result = List[Float32](length=leaves, fill=Float32(0))
+    memcpy(dest=result.unsafe_ptr(), src=hv.unsafe_ptr(), count=leaves)
     _ = part^
     _ = values^
     _ = bad^

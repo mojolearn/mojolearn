@@ -122,13 +122,13 @@ struct AttentionCheckpointBudget(Movable):
         return owner
 
     def begin_forward(mut self, owner: Int) raises:
-        for i in range(len(self.outstanding_owners)):
+        for i in range(len(self.outstanding_owners)):  # small-loop(outstanding_owners: open forward owners): walks owner handles, not data
             if self.outstanding_owners[i] == owner:
                 raise Error("NN31: owner already has an outstanding forward")
         self.outstanding_owners.append(owner)
 
     def end_forward(mut self, owner: Int) raises:
-        for i in range(len(self.outstanding_owners)):
+        for i in range(len(self.outstanding_owners)):  # small-loop(outstanding_owners: open forward owners): walks owner handles, not data
             if self.outstanding_owners[i] == owner:
                 _ = self.outstanding_owners.pop(i)
                 return
@@ -138,7 +138,7 @@ struct AttentionCheckpointBudget(Movable):
                     replay_operations: Int, apply_cost_policy: Bool) raises -> Int:
         if owner <= 0 or bytes <= 0 or replay_operations < 0:
             raise Error("NN31: invalid retained-state reservation")
-        for i in range(len(self.leases)):
+        for i in range(len(self.leases)):  # small-loop(leases: retained-state leases): walks lease records, not data
             if self.leases[i].owner == owner:
                 raise Error("NN31: owner already holds a retained forward")
         if bytes > self.limit_bytes - self.live_bytes:
@@ -158,7 +158,7 @@ struct AttentionCheckpointBudget(Movable):
     def release(mut self, owner: Int, lease: Int) raises:
         if lease == 0:
             return
-        for i in range(len(self.leases)):
+        for i in range(len(self.leases)):  # small-loop(leases: retained-state leases): walks lease records, not data
             if self.leases[i].number == lease:
                 if self.leases[i].owner != owner:
                     raise Error("NN31: lease belongs to another owner")
