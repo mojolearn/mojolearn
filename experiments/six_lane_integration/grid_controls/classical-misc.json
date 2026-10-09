@@ -302,25 +302,6 @@
       "grid": "exclude",
       "note": "UNREACHED on the board: serial estimate arm only (frequency + 5 > HW_EST_BLOCK=64); board ets uses seasonal_periods=24."
     },
-    "c58_forecast4": {
-      "define": "MOJOLEARN_C58_FORECAST4",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C58_FORECAST4"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "sequence/exec_device.mojo:236",
-        "sequence/exec_device.mojo:880"
-      ],
-      "binding": "_mojolearn_x_sequence",
-      "bits_change": false,
-      "status": "kept",
-      "note": "4 series per thread: 64 series -> 16 threads in one block; 4x less parallelism, likely slower. garch does NOT reach it (team_kernel)."
-    },
     "c58_team_mib": {
       "define": "MOJOLEARN_C58_TEAM_MIB",
       "kind": "int_sweep",
@@ -580,49 +561,37 @@
     "expanded:theta": {
       "binding": "_mojolearn_x_sequence",
       "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [
-        "c58_forecast4"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:optimized-theta": {
       "binding": "_mojolearn_x_sequence",
       "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [
-        "c58_forecast4"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:dynamic-theta": {
       "binding": "_mojolearn_x_sequence",
       "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [
-        "c58_forecast4"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:dynamic-optimized-theta": {
       "binding": "_mojolearn_x_sequence",
       "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [
-        "c58_forecast4"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:auto-theta": {
       "binding": "_mojolearn_x_sequence",
       "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [
-        "c58_forecast4"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:damped-ets": {
       "binding": "_mojolearn_x_sequence",
       "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [
-        "c58_forecast4"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:garch": {
@@ -727,6 +696,11 @@
       "define": "MOJOLEARN_C58_SHARED_PREP",
       "control": "c58_shared_prep",
       "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 noise, a loser. on/off ms ratio NV/AMD: ets synthetic 0.996/0.980; forecast_rmse and insample_rmse SAME. Code recoverable at main ad7ed2370; define refused in core/six_lane_experiment_guards.mojo."
+    },
+    {
+      "define": "MOJOLEARN_C58_FORECAST4",
+      "control": "c58_forecast4",
+      "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD (istella, taxi): auto-theta 2.93/2.58, 2.81/2.13; damped-ets 2.59/2.39, 2.53/2.43; dynamic-optimized-theta 2.96/2.49, 2.66/1.81; dynamic-theta 3.15/3.00, 3.02/2.91; optimized-theta 2.72/2.60, 3.09/2.99; theta 2.93/2.86, 3.13/3.08 (2.72x combined SLOWER); quality SAME. Four series per thread cut the parallelism 4x. seq_kernel is one series per thread again (sequence/exec_device.mojo). Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
     }
   ],
   "owed_removal_ab": [

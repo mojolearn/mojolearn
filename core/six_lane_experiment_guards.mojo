@@ -192,6 +192,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-flips-1): IVF direct distance is the IDENTICAL default; drop -D MOJOLEARN_IVF_DIRECT_DISTANCE, use -D MOJOLEARN_IVF_DIRECT_DISTANCE_OFF for the old path"
     # Lane grid-act-3 (2026-10-08): IDENTICAL grid ge123e6f9 promotions and losers (docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main bc10b8b56.
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-act-3): the unique_cols run scan is the IDENTICAL default (onehot/ordinal/target-encoder 0.525x combined, same bits); drop -D MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN, use -D MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF for the old path"
+    comptime assert not is_defined["MOJOLEARN_C58_FORECAST4"](), "removed: MOJOLEARN_C58_FORECAST4 retired 2026-10-08: slower, theta/ets family NV 2.53-3.15x / AMD 1.81-3.08x on istella and taxi (2.72x combined), quality SAME (grid ge123e6f9); see EXPERIMENTS.md"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True
