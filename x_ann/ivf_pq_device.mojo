@@ -12,11 +12,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import (
-    ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_SEED, ANN3_ROW_THREADS,
+    ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_SEED, ANN3_ROW_THREADS, IDN_PQ_DEVICE_CODEBOOKS,
 )
 from x_ann.kpp_seed import kpp_seed
 from x_ann.fast_env import FAST_IVFPQ_DEVICE_CODEBOOKS
-from x_ann.pq_kmeans_device import PQK_CODES_MAX, PQK_LEN_MAX, pq_codebooks_device
+from x_ann.pq_kmeans_device import pq_codebooks_device
+from x_ann.ivf_pq_core import PQK_CODES_MAX, PQK_LEN_MAX
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.ivf_scan_device import ivf_scan_search
 
@@ -268,7 +269,7 @@ def _codebooks(
             Int32(j), Int32(pq_len), _dp(dsub),
             grid_dim=_grid(n_train * pq_len), block_dim=TPB,
         )
-        cbs.host("gather")
+        cbs.host(String("gather.") + String(j))
         var cb_ptr = codebooks.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_offset(j * cb_len)
         var init_kind: Int = INIT_KMEANS_PLUS_PLUS
         comptime if PQ_FAST_SEED:
@@ -292,7 +293,9 @@ def _codebooks(
             lazy_shift=True,  # KMEANS_LAZY_SHIFT (FAST on Apple default, 2026-10-04): IVF-PQ codebooks
         )
         ctx.synchronize()
-        cbs.host("kmeans_fit")
+        # lane fg-ivf: the subspace in the stage name (MOJOLEARN_ANN_STAGES=1;
+        # MOJOLEARN_KMEANS_STAGES=1 adds cluster/'s `KM` lines inside the fit)
+        cbs.host(String("kmeans_fit.") + String(j))
     _ = lab^
     _ = dsub^
     _ = drows^
@@ -337,6 +340,12 @@ def ivf_pq_build_device(
     # them where they are. Moves FAST bits: paired recall check.
     var dev_cb = False
     comptime if FAST_IVFPQ_DEVICE_CODEBOOKS:
+        dev_cb = pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
+    # lane fg-ivf A1 (`-D MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS`, OPT-IN, bits
+    # change on every column; x_ann/switches.mojo): the same batched loop in
+    # IDENTICAL on NVIDIA and AMD, with the pinned fold (`PQK_PINNED`); the
+    # host twin is `_codebooks_host_batched` under the same gate and limits.
+    comptime if IDN_PQ_DEVICE_CODEBOOKS:
         dev_cb = pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
     var codebooks = List[Float32]()
     var dcb: DeviceBuffer[DType.float32]

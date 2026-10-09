@@ -94,3 +94,30 @@ comptime ANN3_TSNE_STEP_ROWS = is_defined["MOJOLEARN_ANN3_TSNE_STEP_ROWS"]()
 #: keeps the cell's walk (the itopk list in threadgroup memory, the same
 #: insertions in the same order). Expected to move no bit.
 comptime ANN3_CAGRA_TEAM = is_defined["MOJOLEARN_ANN3_CAGRA_TEAM"]()
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+#: lane fg-ivf (plan flagship-gaps-2026-10-09, read_ivf.md idea A1), OPT-IN:
+#: the IVF-PQ codebooks in IDENTICAL (every non-FAST mode) from the batched
+#: device Lloyd loop `x_ann/pq_kmeans_device.mojo::pq_codebooks_device`
+#: (Apple FAST's default since lane/apple-fast-ann), on NVIDIA, AMD and
+#: Apple alike, with the host twin `x_ann/host/ivf_pq_host.mojo::
+#: _codebooks_host_batched` doing the same sums in the same order.
+#: Cost: the old path runs one cluster/ k-means fit per subspace (pq_dim of
+#: them, each with k-means|| seeding, ~150 launches and ~16 syncs), so it
+#: scales as pq_dim x (launches + syncs); the batched loop is 3 launches per
+#: Lloyd iteration for every subspace at once and one sync at the end. The
+#: per-subspace fit shape (k = 2^pq_bits codes, d = pq_len, every row) is the
+#: one that runs 500-1,300x slower on the MI325X than on the L40S (the AMD
+#: anomaly in read_ivf.md section 1), so this removes that stage outright.
+#: Bits: CHANGE on every column together (strided seeds instead of
+#: k-means++, a fixed (256-row block, then block order) fold, no tolerance
+#: exit: pq_kmeans_n_iters Lloyd steps). The fold is pinned for the switch:
+#: every partial add flushed (`ftz`), the centroid by `identical_div`.
+#: Paired recall gate against cuVS required (the Apple A/B kept recall:
+#: docs/apple-fast/EXPERIMENTS.md, IVFPQ_FAST_DEVICE_CODEBOOKS).
+#: `pq_len <= PQK_LEN_MAX` and `n_codes <= PQK_CODES_MAX` take it; wider
+#: subspaces keep the per-subspace fits on every column.
+comptime IDN_PQ_DEVICE_CODEBOOKS = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and is_defined["MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS"]()
+)
