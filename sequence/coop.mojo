@@ -36,6 +36,8 @@ from sequence.ops import OP_THETA, OP_COLSCALE, OP_VAR_SIGMA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, add, mul, sub
 from sequence.vecar import pow2_scale
 from sequence.layernorm import div as ln_div
+from sequence.layernorm import LN_ROW_WARP, LN_RW_LANES, ln_bwd_g
+from std.gpu.primitives.warp import shuffle_xor
 from checks.numerics import ftz, identical_rsqrt
 from sequence.theta_spec import THETA_SPEC, op_theta_spec
 from sequence.ops import OP_AF_RMEAN, OP_AF_ROW
@@ -215,6 +217,128 @@ def coop_ln_bwd_x(row: Int, lane: Int, a: Args):
         c += COOP_W
 
 
+#: lane layernorm-idn N3 (2026-10-09), `-D MOJOLEARN_IDN_LN_ROW_WARP` (the
+#: define and the cost reasoning: sequence/layernorm.mojo LN_ROW_WARP). The
+#: row's reductions on the cell's 32 lanes: lane j folds c = j, j + 32, ...
+#: ascending from +0.0 (coalesced: consecutive lanes read consecutive
+#: words), then `coop_rw_total` runs the five-level tree of `rw_tree`. Same
+#: partials, same tree, same adds as the host twin; BITS CHANGE against the
+#: one-chain row (fold order), on every column together.
+#: blocks of LN_RW_LANES words a lane loads ahead of its chain (loads only:
+#: the chain's order is unchanged)
+comptime LN_RW_R = 8
+
+
+@always_inline
+def coop_rw_total(v: Float32) -> Float32:
+    """`rw_tree` on the cell: level h (16, 8, 4, 2, 1) gives lane j the sum
+    add(p[j], p[j ^ h]); for j < h that is the tree's add(p[j], p[j + h]), and
+    for j >= h the same two operands (an IEEE add is commutative, so the
+    lane's word is bit-identical to its partner's). After five levels every
+    lane holds p[0], the row total. `shuffle_xor` with a stride below 32
+    never leaves a 32-lane half, so a 64-wide CDNA wavefront's two cells
+    fold apart; no mask arithmetic is needed."""
+    var t = v
+    comptime for lv in range(5):
+        comptime h = LN_RW_LANES >> (lv + 1)
+        t = add(t, shuffle_xor(t, UInt32(h)))
+    return t
+
+
+@always_inline
+def coop_rw_sum(p: FP, base: Int, D: Int, lane: Int) -> Float32:
+    """Lane `lane`'s partial of sum p[base + c] (c = lane, lane + 32, ...,
+    ascending from +0.0), then the cell total."""
+    var acc = Float32(0.0)
+    var k = 0
+    while k + LN_RW_LANES * LN_RW_R <= D:
+        var v = SIMD[DType.float32, LN_RW_R]()
+        comptime for r in range(LN_RW_R):
+            v[r] = ld(p, base + k + r * LN_RW_LANES + lane)
+        comptime for r in range(LN_RW_R):
+            acc = add(acc, v[r])
+        k += LN_RW_LANES * LN_RW_R
+    var c = k + lane
+    while c < D:
+        acc = add(acc, ld(p, base + c))
+        c += LN_RW_LANES
+    return coop_rw_total(acc)
+
+
+@always_inline
+def coop_rw_sq(p: FP, base: Int, D: Int, mean: Float32, lane: Int) -> Float32:
+    """Lane `lane`'s partial of sum (p[base + c] - mean)^2 (fma3 chain, the
+    host twin's `_rw_fold_sq`), then the cell total."""
+    var acc = Float32(0.0)
+    var k = 0
+    while k + LN_RW_LANES * LN_RW_R <= D:
+        var v = SIMD[DType.float32, LN_RW_R]()
+        comptime for r in range(LN_RW_R):
+            v[r] = sub(ld(p, base + k + r * LN_RW_LANES + lane), mean)
+        comptime for r in range(LN_RW_R):
+            acc = fma3(v[r], v[r], acc)
+        k += LN_RW_LANES * LN_RW_R
+    var c = k + lane
+    while c < D:
+        var d = sub(ld(p, base + c), mean)
+        acc = fma3(d, d, acc)
+        c += LN_RW_LANES
+    return coop_rw_total(acc)
+
+
+@always_inline
+def coop_ln_fwd_rw(row: Int, lane: Int, a: Args):
+    """`op_ln_fwd`'s row under LN_ROW_WARP: the host twin's `_stats` fold on
+    the cell (`_rw_fold_sum`, `_rw_fold_sq`, `rw_tree`); elementwise outputs
+    as `coop_ln_fwd`."""
+    var D = a.i0
+    var base = row * D
+    var mean = ln_div(coop_rw_sum(a.p0, base, D, lane), Float32(D))
+    var q = coop_rw_sq(a.p0, base, D, mean, lane)
+    var rstd = ftz(identical_rsqrt(add(ln_div(q, Float32(D)), a.f0)))
+    if lane == 0:
+        st(a.p4, row, mean)
+        st(a.p5, row, rstd)
+    var c = lane
+    while c < D:
+        var y = mul(sub(ld(a.p0, base + c), mean), rstd)
+        if a.i1 != 0:
+            y = mul(y, ld(a.p1, c))
+        if a.i2 != 0:
+            y = add(y, ld(a.p2, c))
+        st(a.p3, base + c, y)
+        c += LN_RW_LANES
+
+
+@always_inline
+def coop_ln_bwd_x_rw(row: Int, lane: Int, a: Args):
+    """`op_ln_bwd_x`'s row under LN_ROW_WARP: lane j's add(sg, g) and
+    fma3(g, xh, sgx) chains over c = j, j + 32, ... (the host twin's
+    `_rw_fold_bwd`), one tree per sum; elementwise outputs as
+    `coop_ln_bwd_x`."""
+    var D = a.i0
+    var base = row * D
+    var mean = ld(a.p4, row)
+    var rstd = ld(a.p5, row)
+    var sg = Float32(0.0)
+    var sgx = Float32(0.0)
+    var c = lane
+    while c < D:
+        var gx = ln_bwd_g(a, base, c, mean, rstd)
+        sg = add(sg, gx[0])
+        sgx = fma3(gx[0], gx[1], sgx)
+        c += LN_RW_LANES
+    sg = coop_rw_total(sg)
+    sgx = coop_rw_total(sgx)
+    var mg = ln_div(sg, Float32(D))
+    var mgx = ln_div(sgx, Float32(D))
+    c = lane
+    while c < D:
+        var gx = ln_bwd_g(a, base, c, mean, rstd)
+        st(a.p3, base + c, mul(rstd, sub(sub(gx[0], mg), mul(gx[1], mgx))))
+        c += LN_RW_LANES
+
+
 @always_inline
 def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
     """Cell `cell` of OP on one simdgroup. A FAST launch that carries
@@ -312,9 +436,15 @@ def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
         if lane == 0:
             af_rmean_tail(a, s)
     elif OP == OP_LN_FWD:
-        coop_ln_fwd(cell, lane, a)
+        comptime if LN_ROW_WARP:
+            coop_ln_fwd_rw(cell, lane, a)
+        else:
+            coop_ln_fwd(cell, lane, a)
     elif OP == OP_LN_BWD_X:
-        coop_ln_bwd_x(cell, lane, a)
+        comptime if LN_ROW_WARP:
+            coop_ln_bwd_x_rw(cell, lane, a)
+        else:
+            coop_ln_bwd_x(cell, lane, a)
     elif OP == OP_GEMM:
         # op_gemm's cell, the fold on the simdgroup
         var n_cols = a.i1
