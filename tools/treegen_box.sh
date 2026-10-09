@@ -37,12 +37,16 @@ for m in catboost xgboost cuml lightgbm sklearn; do $P/python -c "import $m;prin
 $P/pip list 2>/dev/null | grep -iE "scikit|cuml|xgboost|lightgbm" | sed 's/^/TG2-PIP /'
 export GBM_BENCH_DATA=/root/gbm PYTHONPATH=$T/python MOJOLEARN_SPEED_ROUNDS=1 MOJOLEARN_SPEED_SIZE=shipped \
   MOJOLEARN_SPEED_EXPECTED_VENDOR=cuda MOJOLEARN_SPEED_BUDGET_S=5400 MOJOLEARN_SPEED_DEADLINE_S=21600
-for SHAPE in "covtype" "higgs --rows 1000000" "higgs"; do
-  for L in "rf cuml-rf-gpu" "et lightgbm-cuda" "gbdt-depthwise xgboost-gpu"; do
+# TG_SHAPES / TG_LANES (";"-separated) select a subset, e.g. for a requeue of the cells a first job did not finish
+IFS=';' read -ra SHAPES <<< "${TG_SHAPES:-covtype;higgs --rows 1000000;higgs}"
+IFS=';' read -ra LANES <<< "${TG_LANES:-rf cuml-rf-gpu;et lightgbm-cuda;gbdt-depthwise xgboost-gpu}"
+for SHAPE in "${SHAPES[@]}"; do
+  for L in "${LANES[@]}"; do
     set -- $L; echo "TG-RACE lane=$1 shape=$SHAPE"
     f=$LOGD/race-$1-${SHAPE// /_}.log
-    $P/python -u bench/speed/forest_speed_arm.py --lane $1 --dataset $SHAPE --devices gpu --arms $2 --mem > $f 2>&1; rc=$?
-    grep -E '^(FSPEED|OPPVER)' $f; echo "TG-RACE-RC lane=$1 shape=$SHAPE rc=$rc"
+    # hard cap per race (attempt 2 v1009: et vs lightgbm-cuda on 7-class covtype ran past 2 h in one process and held the queue)
+    timeout ${TG_RACE_TIMEOUT_S:-3600} $P/python -u bench/speed/forest_speed_arm.py --lane $1 --dataset $SHAPE --devices gpu --arms $2 --mem > $f 2>&1; rc=$?
+    grep -E '^(FSPEED|OPPVER)' $f; echo "TG-RACE-RC lane=$1 shape=$SHAPE rc=$rc$([ $rc = 124 ] && echo ' TIMEOUT')"
     [ $rc = 0 ] || grep -m 3 -E 'Error|Traceback' $f | cut -c1-240
   done
 done
