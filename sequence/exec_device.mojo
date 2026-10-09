@@ -44,6 +44,8 @@ from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, s
 from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
 from sequence.adafactor import AF_COL_CHUNK_FOLD
+from sequence.ops import OP_AF_VFUSE, OP_AF_VFIN
+from sequence.af_fused import AF_VF_TPB, af_vec_fused_kernel, af_vec_finish_kernel
 from sequence.adafactor_candidates import AF_COL_LANES, af_col_chunk_kernel
 from sequence.theta_spec import THETA_SPEC
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
@@ -647,6 +649,21 @@ struct DeviceExec(Exec):
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
                 raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
+        # lane neural-io-2 (IDN_AF_VEC_FUSED, sequence/af_fused.mojo): one
+        # block per AF_NORM_BLOCK values (n = the block count), and the one
+        # block of both norm tails; the host runs the same item bodies
+        comptime if OP == OP_AF_VFUSE:
+            self.ctx.enqueue_function[af_vec_fused_kernel](
+                a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, Int32(a.i0), a.f0, a.f1,
+                grid_dim=(n, 1, 1), block_dim=(AF_VF_TPB, 1, 1),
+            )
+            return
+        comptime if OP == OP_AF_VFIN:
+            self.ctx.enqueue_function[af_vec_finish_kernel](
+                a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1), a.f0, a.f1, a.f2,
+                grid_dim=(1, 1, 1), block_dim=(AF_VF_TPB, 1, 1),
+            )
+            return
         # NI54 neural optimizer-only opcode. Every lane's logical leaf is
         # shared with HostExec's op_af_col; no statistical estimator op moves.
         comptime if AF_COL_CHUNK_FOLD and OP == OP_AF_COL:

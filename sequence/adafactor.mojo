@@ -256,6 +256,76 @@ def op_af_apply(t: Int, a: Args):
     st(a.p0, t, fma3(ld(a.p1, t), ld(a.p2, 3), ld(a.p0, t)))
 
 
+# ------------------------------------------------------------------ IDN_AF_VEC_FUSED
+#: lane neural-io-2 (2026-10-09; read ~/mojolearn-evidence/neural-gaps-20261009/
+#: read.md section 1, adafactor). An IDENTICAL vector step of more than
+#: AF_NORM_BLOCK values was six launches (blk_sumsq(p), alpha on one thread,
+#: vec over n, blk_sumsq(u), denom on one thread, apply over n), two of them
+#: one-thread launches that serialize the stream, and p and u each read once
+#: more just for their norms. Fused (-D MOJOLEARN_IDN_AF_VEC_FUSED, default
+#: OFF until its A/B and ID check): ONE pass per block of AF_NORM_BLOCK values
+#: does the block's `op_af_vec` cells, then p's and u's block partials (the
+#: same `sumsq_fold` chain over the same words, ascending from zero), and ONE
+#: launch adds each partial list ascending (`af_fold_parts`) and runs the alpha
+#: and denom tails; the apply is unchanged. Same chains, same order, same
+#: words: the bits are expected unchanged (the ID check decides), and the host
+#: column runs these item bodies (sequence/dispatch.mojo), the same chains.
+#: Launches 6 -> 3, memory passes 9 n -> 8 n words. Args of OP_AF_VFUSE:
+#: p0 param, p1 grad, p2 variance, p3 update (out), p4 p's partials (out),
+#: p5 u's partials (out), i0 numel, i1 AF_NORM_BLOCK, f0 the lerp weight,
+#: f1 eps1^2. Of OP_AF_VFIN: p0 p's partials, p1 the scalars, p2 u's
+#: partials, i0 numel, i1 the partial count, f0 eps2, f1 rho, f2 d.
+comptime IDN_AF_VEC_FUSED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_AF_VEC_FUSED"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def op_af_vfuse(t: Int, a: Args):
+    """Block t of AF_NORM_BLOCK values: `op_af_vec` on each, then p4[t] =
+    `op_af_blk_sumsq`'s partial of p0 and p5[t] = that of the updated p3."""
+    var B = a.i1
+    var lo = t * B
+    var cnt = min(B, a.i0 - lo)
+    var v = Args()
+    v.p0 = a.p1
+    v.p1 = a.p2
+    v.p2 = a.p3
+    v.f0 = a.f0
+    v.f1 = a.f1
+    for i in range(cnt):
+        op_af_vec(lo + i, v)
+    st(a.p4, t, sumsq_fold(a.p0, lo, cnt, 1))
+    st(a.p5, t, sumsq_fold(a.p3, lo, cnt, 1))
+
+
+def af_vfin_alpha(a: Args, ss: Float32):
+    """`op_af_alpha`'s tail from p's ||p||^2 = ss into the scalars p1."""
+    var al = Args()
+    al.p1 = a.p1
+    al.i0 = a.i0
+    al.f0 = a.f0
+    al.f1 = a.f1
+    af_alpha_tail(al, ss)
+
+
+def af_vfin_denom(a: Args, ss: Float32):
+    """`op_af_denom`'s tail from u's ||u||^2 = ss (reads the alpha in p1[1])."""
+    var dn = Args()
+    dn.p1 = a.p1
+    dn.i0 = a.i0
+    dn.f0 = a.f2
+    af_denom_tail(dn, ss)
+
+
+def op_af_vfin(t: Int, a: Args):
+    """One cell: both partial lists added ascending (`af_fold_parts`, the
+    IDENTICAL `_sumsq_or_parts`), then the alpha tail, then the denom tail."""
+    af_vfin_alpha(a, af_fold_parts(a.p0, a.i1))
+    af_vfin_denom(a, af_fold_parts(a.p2, a.i1))
+
+
 # ------------------------------------------------------------------ LAMB
 def op_seg_sumsq(t: Int, a: Args):
     """Segment t of p0 (offsets p1[t] .. p1[t + 1], as floats):

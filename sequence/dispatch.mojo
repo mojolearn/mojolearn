@@ -2,6 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`apply[OP]`: the one table from an operation code to its element body, read
 by both executors (`sequence/exec.mojo`, `sequence/exec_device.mojo`)."""
+from sequence.ops import OP_AF_VFUSE, OP_AF_VFIN
+from sequence.adafactor import op_af_vfuse, op_af_vfin
 from sequence.ops import (
     Args,
     OP_GEMM,
@@ -245,6 +247,10 @@ def apply[OP: Int](t: Int, a: Args):
         op_chunk_sumsq(t, a)
     elif OP == OP_AF_BLK_SUMSQ:
         op_af_blk_sumsq(t, a)
+    elif OP == OP_AF_VFUSE:
+        op_af_vfuse(t, a)
+    elif OP == OP_AF_VFIN:
+        op_af_vfin(t, a)
     elif OP == OP_LAMB_UPD:
         op_lamb_upd(t, a)
     elif OP == OP_LAMB_RATIO:
