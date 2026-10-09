@@ -133,8 +133,10 @@ def upload_ranges_host(
     """G3 (lane fg-knn-nb, 2026-10-09; x_prep/device.mojo XPREP_NO_SLOT_HOP):
     `upload_ranges` where a triple's src = -2 - j names entry j of the Int64
     host address table at `host_tab_addr` (`n_host` entries): that input's
-    host words go STRAIGHT into the arena range, through the store's pinned
-    stage (G1, `DeviceStore.stage_upload`), instead of into a store slot
+    host words go STRAIGHT into the arena range, through
+    `DeviceStore.stage_upload` (one copy from the host pointer; TOMBSTONE: the
+    G1 pinned stage was deleted 2026-10-09, lane postmerge-act-1, slower on
+    both vendors, core/device_store.mojo), instead of into a store slot
     first and then device to device into the arena. Same words in the same
     places. `check_in_ranges(..., n_host)` must have passed."""
     var r = ArenaIP(unsafe_from_address=ins_addr)
