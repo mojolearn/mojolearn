@@ -6907,28 +6907,6 @@
    "configs": [
     {
      "assignment": {
-      "xprep_pinned_upload_off": "on"
-     },
-     "bindings": [
-      "_mojolearn_x_prep"
-     ],
-     "defines": [
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on",
-     "pack": "P292",
-     "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2"
-     ],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
       "xprep_arena_pool_off": "on"
      },
      "bindings": [
@@ -6939,12 +6917,12 @@
      ],
      "global_reach": [],
      "id": "G.expanded:gaussian-nb.xprep_arena_pool_off=on",
-     "pack": "P293",
+     "pack": "P292",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4"
+      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
+      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2"
      ],
-     "priority": 2,
+     "priority": 1,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -6961,12 +6939,12 @@
      ],
      "global_reach": [],
      "id": "G.expanded:gaussian-nb.xprep_no_slot_hop=on",
-     "pack": "P294",
+     "pack": "P293",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
-      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
+      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
+      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4"
      ],
-     "priority": 3,
+     "priority": 2,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -6983,11 +6961,12 @@
      ],
      "global_reach": [],
      "id": "G.expanded:gaussian-nb.xprep_device_codes=on",
-     "pack": "P295",
+     "pack": "P294",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
+      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
+      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
-     "priority": 4,
+     "priority": 3,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -6996,8 +6975,7 @@
      "assignment": {
       "xprep_arena_pool_off": "on",
       "xprep_device_codes": "on",
-      "xprep_no_slot_hop": "on",
-      "xprep_pinned_upload_off": "on"
+      "xprep_no_slot_hop": "on"
      },
      "bindings": [
       "_mojolearn_x_prep"
@@ -7005,21 +6983,15 @@
      "defines": [
       "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
       "MOJOLEARN_XPREP_DEVICE_CODES=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "global_reach": [],
      "id": "G.expanded:gaussian-nb.all_on",
-     "pack": "P296",
+     "pack": "P295",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
-      "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
-      "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
-      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
-      "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1"
+      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
      ],
-     "priority": 5,
+     "priority": 4,
      "queued": true,
      "tier": "all_on",
      "vendor_default_equivalent": []
@@ -7038,85 +7010,16 @@
      ],
      "global_reach": [],
      "id": "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on",
-     "pack": "P297",
+     "pack": "P296",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
+      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
+      "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
+      "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
+      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
+      "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1"
      ],
-     "priority": 6,
-     "queued": true,
-     "tier": "cross",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "xprep_no_slot_hop": "on",
-      "xprep_pinned_upload_off": "on"
-     },
-     "bindings": [
-      "_mojolearn_x_prep"
-     ],
-     "defines": [
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_no_slot_hop=on",
-     "pack": "P298",
-     "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"
-     ],
-     "priority": 7,
-     "queued": true,
-     "tier": "cross",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "xprep_arena_pool_off": "on",
-      "xprep_pinned_upload_off": "on"
-     },
-     "bindings": [
-      "_mojolearn_x_prep"
-     ],
-     "defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on",
-     "pack": "P299",
-     "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
-     ],
-     "priority": 8,
-     "queued": true,
-     "tier": "cross",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "xprep_arena_pool_off": "on",
-      "xprep_no_slot_hop": "on",
-      "xprep_pinned_upload_off": "on"
-     },
-     "bindings": [
-      "_mojolearn_x_prep"
-     ],
-     "defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on+xprep_no_slot_hop=on",
-     "pack": "P300",
-     "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1"
-     ],
-     "priority": 9,
+     "priority": 5,
      "queued": true,
      "tier": "cross",
      "vendor_default_equivalent": []
@@ -7126,17 +7029,15 @@
     {
      "duplicates": 0,
      "members": [
-      "xprep_pinned_upload_off",
       "xprep_arena_pool_off",
       "xprep_no_slot_hop"
      ],
-     "new_configs": 4,
+     "new_configs": 1,
      "note": null,
-     "product": 8
+     "product": 4
     }
    ],
    "declared_controls": [
-    "xprep_pinned_upload_off",
     "xprep_arena_pool_off",
     "xprep_no_slot_hop",
     "xprep_device_codes"
@@ -7146,7 +7047,6 @@
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [
-    "xprep_pinned_upload_off",
     "xprep_arena_pool_off",
     "xprep_no_slot_hop",
     "xprep_device_codes"
@@ -7158,7 +7058,6 @@
    ],
    "interaction_groups": [
     [
-     "xprep_pinned_upload_off",
      "xprep_arena_pool_off",
      "xprep_no_slot_hop"
     ]
@@ -7178,8 +7077,7 @@
    "representative_arms": {
     "xprep_arena_pool_off": "on",
     "xprep_device_codes": "on",
-    "xprep_no_slot_hop": "on",
-    "xprep_pinned_upload_off": "on"
+    "xprep_no_slot_hop": "on"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [],
@@ -7234,14 +7132,14 @@
    "configs": [
     {
      "assignment": {
-      "idn_pq_device_codebooks": "on"
+      "idn_pq_device_codebooks": "off"
      },
      "bindings": null,
      "defines": [
-      "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS=1"
+      "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.expanded:ivf-pq.idn_pq_device_codebooks=on",
+     "id": "G.expanded:ivf-pq.idn_pq_device_codebooks=off",
      "pack": null,
      "packed_extra_defines": [],
      "priority": 1,
@@ -7405,7 +7303,7 @@
     {
      "assignment": {
       "ann_coarse_tiled": "off",
-      "idn_pq_device_codebooks": "on",
+      "idn_pq_device_codebooks": "off",
       "idn_pq_lut_tiled_off": "on",
       "idn_pq_scan_fused": "on",
       "ivf_idn_recluster_cap_off": "on",
@@ -7418,7 +7316,7 @@
      "bindings": null,
      "defines": [
       "MOJOLEARN_ANN_COARSE_TILED_OFF=1",
-      "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS=1",
+      "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF=1",
       "MOJOLEARN_IDN_PQ_LUT_TILED_OFF=1",
       "MOJOLEARN_IDN_PQ_SCAN_FUSED=1",
       "MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF=1",
@@ -7439,16 +7337,16 @@
     },
     {
      "assignment": {
-      "idn_pq_device_codebooks": "on",
+      "idn_pq_device_codebooks": "off",
       "kmeans_live_cores_off": "on"
      },
      "bindings": null,
      "defines": [
-      "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS=1",
+      "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF=1",
       "MOJOLEARN_KMEANS_LIVE_CORES_OFF=1"
      ],
      "global_reach": [],
-     "id": "G.expanded:ivf-pq.idn_pq_device_codebooks=on+kmeans_live_cores_off=on",
+     "id": "G.expanded:ivf-pq.idn_pq_device_codebooks=off+kmeans_live_cores_off=on",
      "pack": null,
      "packed_extra_defines": [],
      "priority": 12,
@@ -7616,7 +7514,7 @@
    ],
    "representative_arms": {
     "ann_coarse_tiled": "off",
-    "idn_pq_device_codebooks": "on",
+    "idn_pq_device_codebooks": "off",
     "idn_pq_lut_tiled_off": "on",
     "idn_pq_scan_fused": "on",
     "ivf_idn_recluster_cap_off": "on",
@@ -7651,7 +7549,7 @@
      "pack": "P292",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
      ],
      "priority": 1,
      "queued": true,
@@ -7673,7 +7571,7 @@
      "pack": "P293",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 2,
      "queued": true,
@@ -7695,7 +7593,7 @@
      "pack": "P294",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+      "MOJOLEARN_XPREP_DEVICE_CODES=1"
      ],
      "priority": 3,
      "queued": true,
@@ -7716,7 +7614,9 @@
      "id": "G.expanded:kbins.c07_radix_rows=4096",
      "pack": "P295",
      "packed_extra_defines": [
-      "MOJOLEARN_XPREP_DEVICE_CODES=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
+      "MOJOLEARN_XPREP_DEVICE_CODES=1",
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 4,
      "queued": true,
@@ -7744,9 +7644,7 @@
       "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
       "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1",
       "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_DEVICE_CODES=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 5,
      "queued": true,
@@ -7768,10 +7666,7 @@
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096",
      "pack": "P297",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
      "tier": "cross",
@@ -7792,10 +7687,7 @@
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=1024",
      "pack": "P298",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
      "tier": "cross",
@@ -7816,10 +7708,7 @@
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096",
      "pack": "P299",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
      "tier": "cross",
@@ -8932,7 +8821,7 @@
      "pack": "P292",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
      ],
      "priority": 1,
      "queued": true,
@@ -8954,7 +8843,7 @@
      "pack": "P293",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 2,
      "queued": true,
@@ -8976,7 +8865,7 @@
      "pack": "P294",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+      "MOJOLEARN_XPREP_DEVICE_CODES=1"
      ],
      "priority": 3,
      "queued": true,
@@ -8997,7 +8886,9 @@
      "id": "G.expanded:onehot.c07_radix_rows=4096",
      "pack": "P295",
      "packed_extra_defines": [
-      "MOJOLEARN_XPREP_DEVICE_CODES=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
+      "MOJOLEARN_XPREP_DEVICE_CODES=1",
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 4,
      "queued": true,
@@ -9017,11 +8908,7 @@
      "global_reach": [],
      "id": "G.expanded:onehot.c08_unique_scan=off",
      "pack": "P300",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
      "tier": "single",
@@ -9071,9 +8958,7 @@
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
       "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1",
       "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_DEVICE_CODES=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 7,
      "queued": true,
@@ -9116,10 +9001,7 @@
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096",
      "pack": "P297",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
      "tier": "cross",
@@ -9140,10 +9022,7 @@
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=1024",
      "pack": "P298",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
      "tier": "cross",
@@ -9164,10 +9043,7 @@
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=4096",
      "pack": "P299",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
      "tier": "cross",
@@ -9288,7 +9164,7 @@
      "pack": "P292",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
      ],
      "priority": 1,
      "queued": true,
@@ -9310,7 +9186,7 @@
      "pack": "P293",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 2,
      "queued": true,
@@ -9332,7 +9208,7 @@
      "pack": "P294",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+      "MOJOLEARN_XPREP_DEVICE_CODES=1"
      ],
      "priority": 3,
      "queued": true,
@@ -9353,7 +9229,9 @@
      "id": "G.expanded:ordinal.c07_radix_rows=4096",
      "pack": "P295",
      "packed_extra_defines": [
-      "MOJOLEARN_XPREP_DEVICE_CODES=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
+      "MOJOLEARN_XPREP_DEVICE_CODES=1",
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 4,
      "queued": true,
@@ -9373,11 +9251,7 @@
      "global_reach": [],
      "id": "G.expanded:ordinal.c08_unique_scan=off",
      "pack": "P300",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
      "tier": "single",
@@ -9405,9 +9279,7 @@
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
       "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1",
       "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_DEVICE_CODES=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 6,
      "queued": true,
@@ -9450,10 +9322,7 @@
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=4096",
      "pack": "P297",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
      "tier": "cross",
@@ -9474,10 +9343,7 @@
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=1024",
      "pack": "P298",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
      "tier": "cross",
@@ -9498,10 +9364,7 @@
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=4096",
      "pack": "P299",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
      "tier": "cross",
@@ -9694,7 +9557,7 @@
      "pack": "P292",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
      ],
      "priority": 1,
      "queued": true,
@@ -9716,7 +9579,7 @@
      "pack": "P293",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 2,
      "queued": true,
@@ -9738,7 +9601,7 @@
      "pack": "P294",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+      "MOJOLEARN_XPREP_DEVICE_CODES=1"
      ],
      "priority": 3,
      "queued": true,
@@ -9803,7 +9666,7 @@
      "pack": "P292",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
      ],
      "priority": 1,
      "queued": true,
@@ -9825,7 +9688,7 @@
      "pack": "P293",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 2,
      "queued": true,
@@ -9847,7 +9710,7 @@
      "pack": "P294",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+      "MOJOLEARN_XPREP_DEVICE_CODES=1"
      ],
      "priority": 3,
      "queued": true,
@@ -9868,7 +9731,9 @@
      "id": "G.expanded:quantile-transformer.c07_radix_rows=4096",
      "pack": "P295",
      "packed_extra_defines": [
-      "MOJOLEARN_XPREP_DEVICE_CODES=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
+      "MOJOLEARN_XPREP_DEVICE_CODES=1",
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 4,
      "queued": true,
@@ -9896,9 +9761,7 @@
       "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
       "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1",
       "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_DEVICE_CODES=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 5,
      "queued": true,
@@ -9920,10 +9783,7 @@
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=6+c07_radix_rows=4096",
      "pack": "P297",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
      "tier": "cross",
@@ -9944,10 +9804,7 @@
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=1024",
      "pack": "P298",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
      "tier": "cross",
@@ -9968,10 +9825,7 @@
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=4096",
      "pack": "P299",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
      "tier": "cross",
@@ -10886,7 +10740,7 @@
      "pack": "P292",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
      ],
      "priority": 1,
      "queued": true,
@@ -10908,7 +10762,7 @@
      "pack": "P293",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 2,
      "queued": true,
@@ -10930,7 +10784,7 @@
      "pack": "P294",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+      "MOJOLEARN_XPREP_DEVICE_CODES=1"
      ],
      "priority": 3,
      "queued": true,
@@ -10951,7 +10805,9 @@
      "id": "G.expanded:target-encoder.c07_radix_rows=4096",
      "pack": "P295",
      "packed_extra_defines": [
-      "MOJOLEARN_XPREP_DEVICE_CODES=1"
+      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
+      "MOJOLEARN_XPREP_DEVICE_CODES=1",
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 4,
      "queued": true,
@@ -10971,11 +10827,7 @@
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_unique_scan=off",
      "pack": "P300",
-     "packed_extra_defines": [
-      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
      "tier": "single",
@@ -11045,9 +10897,7 @@
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
       "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-      "MOJOLEARN_XPREP_DEVICE_CODES=1",
-      "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+      "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
      ],
      "priority": 8,
      "queued": true,
@@ -36079,7 +35929,7 @@
  "all_switches": "NOT MEASURED until each config has an A/A floor, scored A/B on NVIDIA and AMD, identity and quality evidence",
  "builds": {
   "after_packing": 788,
-  "before_packing": 968,
+  "before_packing": 960,
   "packs": [
    {
     "algorithms": [
@@ -41597,12 +41447,12 @@
     "defines": [
      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
-     "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+     "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
     ],
     "global_reach": false,
     "id": "P292",
     "members": [
-     "G.expanded:gaussian-nb.xprep_pinned_upload_off=on",
+     "G.expanded:gaussian-nb.xprep_arena_pool_off=on",
      "G.expanded:kbins.c07_radix_bits=6",
      "G.expanded:onehot.c07_radix_bits=6",
      "G.expanded:ordinal.c07_radix_bits=6",
@@ -41627,12 +41477,12 @@
     "defines": [
      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
-     "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
+     "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
     ],
     "global_reach": false,
     "id": "P293",
     "members": [
-     "G.expanded:gaussian-nb.xprep_arena_pool_off=on",
+     "G.expanded:gaussian-nb.xprep_no_slot_hop=on",
      "G.expanded:kbins.c07_radix_bits=4",
      "G.expanded:onehot.c07_radix_bits=4",
      "G.expanded:ordinal.c07_radix_bits=4",
@@ -41657,12 +41507,12 @@
     "defines": [
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
-     "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+     "MOJOLEARN_XPREP_DEVICE_CODES=1"
     ],
     "global_reach": false,
     "id": "P294",
     "members": [
-     "G.expanded:gaussian-nb.xprep_no_slot_hop=on",
+     "G.expanded:gaussian-nb.xprep_device_codes=on",
      "G.expanded:kbins.c07_radix_rows=1024",
      "G.expanded:onehot.c07_radix_rows=1024",
      "G.expanded:ordinal.c07_radix_rows=1024",
@@ -41685,12 +41535,14 @@
     ],
     "defines": [
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
-     "MOJOLEARN_XPREP_DEVICE_CODES=1"
+     "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
+     "MOJOLEARN_XPREP_DEVICE_CODES=1",
+     "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
     ],
     "global_reach": false,
     "id": "P295",
     "members": [
-     "G.expanded:gaussian-nb.xprep_device_codes=on",
+     "G.expanded:gaussian-nb.all_on",
      "G.expanded:kbins.c07_radix_rows=4096",
      "G.expanded:onehot.c07_radix_rows=4096",
      "G.expanded:ordinal.c07_radix_rows=4096",
@@ -41718,14 +41570,12 @@
      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
      "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1",
      "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-     "MOJOLEARN_XPREP_DEVICE_CODES=1",
-     "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-     "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+     "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
     ],
     "global_reach": false,
     "id": "P296",
     "members": [
-     "G.expanded:gaussian-nb.all_on",
+     "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on",
      "G.expanded:kbins.all_on",
      "G.expanded:onehot.all_on",
      "G.expanded:ordinal.all_on",
@@ -41735,7 +41585,6 @@
    },
    {
     "algorithms": [
-     "expanded:gaussian-nb",
      "expanded:kbins",
      "expanded:onehot",
      "expanded:ordinal",
@@ -41746,14 +41595,11 @@
     ],
     "defines": [
      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
-     "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-     "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
     ],
     "global_reach": false,
     "id": "P297",
     "members": [
-     "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on",
      "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096",
      "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096",
      "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=4096",
@@ -41762,7 +41608,6 @@
    },
    {
     "algorithms": [
-     "expanded:gaussian-nb",
      "expanded:kbins",
      "expanded:onehot",
      "expanded:ordinal",
@@ -41773,14 +41618,11 @@
     ],
     "defines": [
      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
-     "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-     "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"
     ],
     "global_reach": false,
     "id": "P298",
     "members": [
-     "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_no_slot_hop=on",
      "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=1024",
      "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=1024",
      "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=1024",
@@ -41789,7 +41631,6 @@
    },
    {
     "algorithms": [
-     "expanded:gaussian-nb",
      "expanded:kbins",
      "expanded:onehot",
      "expanded:ordinal",
@@ -41800,14 +41641,11 @@
     ],
     "defines": [
      "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
-     "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-     "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
     ],
     "global_reach": false,
     "id": "P299",
     "members": [
-     "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on",
      "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096",
      "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=4096",
      "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=4096",
@@ -41816,7 +41654,6 @@
    },
    {
     "algorithms": [
-     "expanded:gaussian-nb",
      "expanded:onehot",
      "expanded:ordinal",
      "expanded:target-encoder"
@@ -41825,15 +41662,11 @@
      "_mojolearn_x_prep"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
-     "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-     "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-     "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+     "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1"
     ],
     "global_reach": false,
     "id": "P300",
     "members": [
-     "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on+xprep_no_slot_hop=on",
      "G.expanded:onehot.c08_unique_scan=off",
      "G.expanded:ordinal.c08_unique_scan=off",
      "G.expanded:target-encoder.c08_unique_scan=off"
@@ -42943,14 +42776,14 @@
     "head": "1c24f289b",
     "lane": "fg-ivf",
     "path": "experiments/six_lane_integration/grid_controls/fg-ivf.json",
-    "sha256": "8be1265377916360fe275a88599910b461c9c6b83a434f418c538ceff4ae1e71"
+    "sha256": "f867ee58734d23aade4c386e9187e2485802d15ac8dcdadbee7c7b055cf1aee0"
    },
    "fg-knn-nb": {
     "branch": "lane/fg-knn-nb",
     "head": "3b59db56a",
     "lane": "fg-knn-nb",
     "path": "experiments/six_lane_integration/grid_controls/fg-knn-nb.json",
-    "sha256": "51d9dad7ad24d2794781cad336e304dc02817a8b044d0e57ae54e2d026d838ef"
+    "sha256": "b9dc081e9bbfc275699dcd094b94ae5903def61427c9ff13c5a9aade3a4803dc"
    },
    "fg-linear": {
     "branch": "lane/fg-linear",
@@ -43108,9 +42941,9 @@
    }
   },
   "guards": {
-   "asserts": 170,
+   "asserts": 172,
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "9ebd8cde069f99a4e212a7c94864f07ef7ab526831a0632a2dfac110be543f72"
+   "sha256": "95b8453d50f1ada203882065765e8f09b7cf109d0413d40b1bbbcd0ab2213166"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -43230,7 +43063,7 @@
   "classical-te-gmm": 1,
   "fg-gbdt-ordered": 0,
   "fg-ivf": 0,
-  "fg-knn-nb": 0,
+  "fg-knn-nb": 1,
   "fg-linear": 0,
   "fg-pca": 0,
   "fg-tsne-dbscan": 0,
@@ -43258,7 +43091,7 @@
  "status": "PLANNED_NOT_RUN",
  "summary": {
   "a_builds_after_packing": 738,
-  "a_builds_before_packing": 918,
+  "a_builds_before_packing": 910,
   "aa_pairs": 294,
   "algorithms": 107,
   "algorithms_with_configs": 70,
@@ -43291,17 +43124,17 @@
    "_mojolearn_x_prep"
   ],
   "builds_after_packing": 788,
-  "builds_before_packing": 968,
+  "builds_before_packing": 960,
   "cap": 16,
-  "cells": 2664,
-  "configs": 588,
-  "configs_per_vendor": 588,
-  "controls": 274,
+  "cells": 2648,
+  "configs": 584,
+  "configs_per_vendor": 584,
+  "controls": 273,
   "deferred_configs": 132,
   "deferred_cross_configs": 3175,
   "deferred_cross_groups": 78,
   "excluded_controls": 75,
-  "guard_asserts": 170,
+  "guard_asserts": 172,
   "mapped_algorithms": 89,
   "packed_multi_member": 112,
   "packs": 306,

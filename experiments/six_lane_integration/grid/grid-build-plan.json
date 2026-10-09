@@ -11518,6 +11518,85 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.expanded:gaussian-nb.xprep_device_codes=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:kbins.c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:onehot.c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ordinal.c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:qda.c56_qda_project=8"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:quantile-transformer.c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:target-encoder.c07_radix_rows=1024"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
+    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_XPREP_DEVICE_CODES=1"
+   ],
+   "key": "00b89f64b23015e6714c",
+   "mode": "identical",
+   "pack": "P294",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_prep.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=1024"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
+    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "07596c82da19d677fc8e",
+   "mode": "identical",
+   "pack": "P298",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_prep.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.expanded:target-encoder.te_blocked_fold=on"
     }
    ],
@@ -11538,7 +11617,7 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_device_codes=on"
+     "configuration": "G.expanded:gaussian-nb.all_on"
     },
     {
      "arm": "A",
@@ -11564,50 +11643,13 @@
    "defines": [
     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_DEVICE_CODES=1"
-   ],
-   "key": "3347d7d38a246c7d2362",
-   "mode": "identical",
-   "pack": "P295",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_prep.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=4096"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6+c07_radix_rows=4096"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
     "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
+    "MOJOLEARN_XPREP_DEVICE_CODES=1",
     "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
    ],
-   "key": "3a8e7ab02113d1408278",
+   "key": "1a487ebb5634e2929187",
    "mode": "identical",
-   "pack": "P297",
+   "pack": "P295",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -11686,10 +11728,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on"
-    },
-    {
-     "arm": "A",
      "configuration": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096"
     },
     {
@@ -11708,11 +11746,9 @@
    "defines": [
     "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "703b314538c391b9a282",
+   "key": "5c7c27b79060aa0cf70f",
    "mode": "identical",
    "pack": "P299",
    "runtime_reach": "NOT_VERIFIED",
@@ -11724,8 +11760,54 @@
    "binding": "bindings/_mojolearn_x_prep.mojo",
    "configurations": [
     {
+     "arm": "A",
+     "configuration": "G.expanded:gaussian-nb.xprep_no_slot_hop=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:kbins.c07_radix_bits=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:onehot.c07_radix_bits=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ordinal.c07_radix_bits=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:qda.c56_qda_project=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:target-encoder.c07_radix_bits=4"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
+    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+   ],
+   "key": "78240fb115cefaf33db9",
+   "mode": "identical",
+   "pack": "P293",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_prep.mojo",
+   "configurations": [
+    {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on"
+     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on"
     },
     {
      "arm": "B",
@@ -11753,7 +11835,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on"
+     "configuration": "G.expanded:gaussian-nb.xprep_no_slot_hop=on"
     },
     {
      "arm": "B",
@@ -11781,7 +11863,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_no_slot_hop=on"
+     "configuration": "G.expanded:gaussian-nb.xprep_device_codes=on"
     },
     {
      "arm": "B",
@@ -11809,7 +11891,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_device_codes=on"
+     "configuration": "G.expanded:gaussian-nb.all_on"
     },
     {
      "arm": "B",
@@ -11833,7 +11915,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.all_on"
+     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on"
     },
     {
      "arm": "B",
@@ -11857,10 +11939,6 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on"
-    },
-    {
-     "arm": "B",
      "configuration": "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096"
     },
     {
@@ -11874,10 +11952,6 @@
     {
      "arm": "B",
      "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6+c07_radix_rows=4096"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_no_slot_hop=on"
     },
     {
      "arm": "B",
@@ -11897,10 +11971,6 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on"
-    },
-    {
-     "arm": "B",
      "configuration": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096"
     },
     {
@@ -11914,10 +11984,6 @@
     {
      "arm": "B",
      "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=4096"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on+xprep_no_slot_hop=on"
     },
     {
      "arm": "B",
@@ -11980,7 +12046,53 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.all_on"
+     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:kbins.c07_radix_bits=6"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:onehot.c07_radix_bits=6"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ordinal.c07_radix_bits=6"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:qda.c56_qda_project=2"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:target-encoder.c07_radix_bits=6"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
+    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
+   ],
+   "key": "98a7b4b22a8a578afa84",
+   "mode": "identical",
+   "pack": "P292",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_prep.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on"
     },
     {
      "arm": "A",
@@ -12012,140 +12124,11 @@
     "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
     "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-    "MOJOLEARN_XPREP_DEVICE_CODES=1",
-    "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-   ],
-   "key": "93c919a8a932992d2a84",
-   "mode": "identical",
-   "pack": "P296",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_prep.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_no_slot_hop=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:qda.c56_qda_project=8"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:target-encoder.c07_radix_rows=1024"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
-    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
     "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
    ],
-   "key": "9aec84eec7df5efeb14a",
+   "key": "bbe7439aa6fbf066db65",
    "mode": "identical",
-   "pack": "P294",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_prep.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_bits=6"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_bits=6"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_bits=6"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:qda.c56_qda_project=2"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:target-encoder.c07_radix_bits=6"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-   ],
-   "key": "b6b88a75d9a092c0c890",
-   "mode": "identical",
-   "pack": "P292",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_prep.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on+xprep_no_slot_hop=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:onehot.c08_unique_scan=off"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c08_unique_scan=off"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:target-encoder.c08_unique_scan=off"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-    "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-   ],
-   "key": "c47efe2a5238ba853b37",
-   "mode": "identical",
-   "pack": "P300",
+   "pack": "P296",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -12177,35 +12160,57 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_no_slot_hop=on"
+     "configuration": "G.expanded:onehot.c08_unique_scan=off"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=1024"
+     "configuration": "G.expanded:ordinal.c08_unique_scan=off"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=1024"
+     "configuration": "G.expanded:target-encoder.c08_unique_scan=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+    "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "d0f303c426b316a345de",
+   "key": "d0f1ecbf4ae3b1536f23",
    "mode": "identical",
-   "pack": "P298",
+   "pack": "P300",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_prep.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=4096"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6+c07_radix_rows=4096"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
+    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "d45dd883dac2f3513e22",
+   "mode": "identical",
+   "pack": "P297",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -12231,52 +12236,6 @@
    "key": "d78f98c2034a15bc848c",
    "mode": "identical",
    "pack": "P301",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_prep.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_bits=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_bits=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_bits=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:qda.c56_qda_project=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:target-encoder.c07_radix_bits=4"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
-   ],
-   "key": "fb6753346368fadd4b9b",
-   "mode": "identical",
-   "pack": "P293",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -23799,53 +23758,7 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_bits=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_bits=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_bits=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:qda.c56_qda_project=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:target-encoder.c07_radix_bits=4"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
-   ],
-   "key": "1bd9b58603f9465a13d3",
-   "mode": "identical",
-   "pack": "P293",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_prep.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_device_codes=on"
+     "configuration": "G.expanded:gaussian-nb.all_on"
     },
     {
      "arm": "A",
@@ -23871,9 +23784,11 @@
    "defines": [
     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_DEVICE_CODES=1"
+    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
+    "MOJOLEARN_XPREP_DEVICE_CODES=1",
+    "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
    ],
-   "key": "3569afb54b9cbff74ed8",
+   "key": "07936e23c60898dd57d6",
    "mode": "identical",
    "pack": "P295",
    "runtime_reach": "NOT_VERIFIED",
@@ -23886,35 +23801,70 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on"
+     "configuration": "G.expanded:onehot.c08_unique_scan=off"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096"
+     "configuration": "G.expanded:ordinal.c08_unique_scan=off"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=4096"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=4096"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=4096"
+     "configuration": "G.expanded:target-encoder.c08_unique_scan=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
-    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+    "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "480a6444949f1bbc5d69",
+   "key": "1e2c3c73d1386f4038eb",
    "mode": "identical",
-   "pack": "P299",
+   "pack": "P300",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_prep.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:gaussian-nb.xprep_device_codes=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:kbins.c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:onehot.c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ordinal.c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:qda.c56_qda_project=8"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:quantile-transformer.c07_radix_rows=1024"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:target-encoder.c07_radix_rows=1024"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
+    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_XPREP_DEVICE_CODES=1"
+   ],
+   "key": "28c46161d34097dbdf8b",
+   "mode": "identical",
+   "pack": "P294",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -23936,45 +23886,6 @@
    "key": "48c06b7ee17ad6283ca8",
    "mode": "identical",
    "pack": "P305",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_prep.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=4096"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6+c07_radix_rows=4096"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-    "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
-   ],
-   "key": "4a22c1560d1071ec3c86",
-   "mode": "identical",
-   "pack": "P297",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -24010,8 +23921,96 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_no_slot_hop=on"
+     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on"
     },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:kbins.c07_radix_bits=6"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:onehot.c07_radix_bits=6"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ordinal.c07_radix_bits=6"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:qda.c56_qda_project=2"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:target-encoder.c07_radix_bits=6"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
+    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1"
+   ],
+   "key": "5573dcb03fb90c941d12",
+   "mode": "identical",
+   "pack": "P292",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_prep.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:gaussian-nb.xprep_no_slot_hop=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:kbins.c07_radix_bits=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:onehot.c07_radix_bits=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ordinal.c07_radix_bits=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:qda.c56_qda_project=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:target-encoder.c07_radix_bits=4"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
+    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+   ],
+   "key": "69ddd4aeabda9ca8d43f",
+   "mode": "identical",
+   "pack": "P293",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_prep.mojo",
+   "configurations": [
     {
      "arm": "A",
      "configuration": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=1024"
@@ -24032,11 +24031,9 @@
    "defines": [
     "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "5fdb1f16c58180471db1",
+   "key": "83311806e891d60d846d",
    "mode": "identical",
    "pack": "P298",
    "runtime_reach": "NOT_VERIFIED",
@@ -24049,45 +24046,29 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.all_on"
+     "configuration": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:kbins.all_on"
+     "configuration": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=4096"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:onehot.all_on"
+     "configuration": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=4096"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:ordinal.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:target-encoder.all_on"
+     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=4096"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
-    "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
-    "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
-    "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
-    "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-    "MOJOLEARN_XPREP_DEVICE_CODES=1",
-    "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
+    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "83b90d02ac4165e6a845",
+   "key": "993a86a8114bddb53377",
    "mode": "identical",
-   "pack": "P296",
+   "pack": "P299",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -24098,7 +24079,7 @@
    "configurations": [
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on"
+     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on"
     },
     {
      "arm": "B",
@@ -24126,7 +24107,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on"
+     "configuration": "G.expanded:gaussian-nb.xprep_no_slot_hop=on"
     },
     {
      "arm": "B",
@@ -24154,7 +24135,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_no_slot_hop=on"
+     "configuration": "G.expanded:gaussian-nb.xprep_device_codes=on"
     },
     {
      "arm": "B",
@@ -24182,7 +24163,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_device_codes=on"
+     "configuration": "G.expanded:gaussian-nb.all_on"
     },
     {
      "arm": "B",
@@ -24206,7 +24187,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.all_on"
+     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on"
     },
     {
      "arm": "B",
@@ -24230,10 +24211,6 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on"
-    },
-    {
-     "arm": "B",
      "configuration": "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096"
     },
     {
@@ -24247,10 +24224,6 @@
     {
      "arm": "B",
      "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6+c07_radix_rows=4096"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_no_slot_hop=on"
     },
     {
      "arm": "B",
@@ -24270,10 +24243,6 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on"
-    },
-    {
-     "arm": "B",
      "configuration": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096"
     },
     {
@@ -24287,10 +24256,6 @@
     {
      "arm": "B",
      "configuration": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=4096"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on+xprep_no_slot_hop=on"
     },
     {
      "arm": "B",
@@ -24353,123 +24318,29 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on"
+     "configuration": "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_bits=6"
+     "configuration": "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_bits=6"
+     "configuration": "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=4096"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_bits=6"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:qda.c56_qda_project=2"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:target-encoder.c07_radix_bits=6"
+     "configuration": "G.expanded:quantile-transformer.c07_radix_bits=6+c07_radix_rows=4096"
     }
    ],
    "defines": [
     "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
-    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
+    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "a9e390c4a4639a84c1a3",
+   "key": "caf6229fb6708aa56621",
    "mode": "identical",
-   "pack": "P292",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_prep.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_no_slot_hop=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:kbins.c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:onehot.c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:qda.c56_qda_project=8"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:quantile-transformer.c07_radix_rows=1024"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:target-encoder.c07_radix_rows=1024"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
-    "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
-   ],
-   "key": "b573550c250bb5dc12cd",
-   "mode": "identical",
-   "pack": "P294",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_prep.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:gaussian-nb.xprep_pinned_upload_off=on+xprep_arena_pool_off=on+xprep_no_slot_hop=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:onehot.c08_unique_scan=off"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ordinal.c08_unique_scan=off"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:target-encoder.c08_unique_scan=off"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
-    "MOJOLEARN_XPREP_NO_SLOT_HOP=1",
-    "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1"
-   ],
-   "key": "ba01f9ad57e458118fd5",
-   "mode": "identical",
-   "pack": "P300",
+   "pack": "P297",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -24558,6 +24429,53 @@
    "key": "fd071eb17c6468a420d2",
    "mode": "identical",
    "pack": "P306",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_prep.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:gaussian-nb.xprep_arena_pool_off=on+xprep_no_slot_hop=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:kbins.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:onehot.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ordinal.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:quantile-transformer.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:target-encoder.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
+    "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024",
+    "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
+    "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
+    "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF=1",
+    "MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_XPREP_ARENA_POOL_OFF=1",
+    "MOJOLEARN_XPREP_NO_SLOT_HOP=1"
+   ],
+   "key": "fe176513432d12acac38",
+   "mode": "identical",
+   "pack": "P296",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
