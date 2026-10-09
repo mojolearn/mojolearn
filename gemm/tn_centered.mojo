@@ -50,7 +50,6 @@ from gemm.checks.gemm_identical import (
     GEMM_BODY_KPACK_HG,
     GEMM_KSPLIT_DEFAULT_ON,
     GEMM_KSPLIT_DEFAULT_S,
-    NI02_STREAM_PARTIALS,
     SPLITK_FOLD_TPB,
     SPLIT_BLOCK_FOLD_MAX_CELLS,
     _is_split_plan,
@@ -62,7 +61,6 @@ from gemm.checks.gemm_identical import (
     gemm_default_ksplit_leaves_at,
     identical_gemm_fold_kernel,
     identical_gemm_fold_stack_kernel,
-    identical_gemm_streaming_applies,
 )
 
 comptime TNC_BM = 64
@@ -84,9 +82,6 @@ def tn_centered_applies(m: Int, k: Int) raises -> Bool:
         return False
     comptime if GEMM_ARM_TRIAL:
         return False
-    comptime if NI02_STREAM_PARTIALS:
-        if identical_gemm_streaming_applies(m, m, k):
-            return False
     comptime if GEMM_KSPLIT_DEFAULT_ON and not GEMM_BODY_KPACK_HG:
         if gemm_default_ksplit_leaves_at(m, m, k, GEMM_KSPLIT_DEFAULT_S) > 0:
             return False
