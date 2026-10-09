@@ -119,7 +119,7 @@
    "source": [
     "decomposition/pca_rr_switch.mojo:77",
     "decomposition/impl/linalg/detail/pca.mojo:863",
-    "decomposition/impl/linalg/detail/pca.mojo:980",
+    "decomposition/impl/linalg/detail/pca.mojo:1005",
     "decomposition/host/pca_oracle.mojo:641",
     "decomposition/host/pca_oracle.mojo:736"
    ],
