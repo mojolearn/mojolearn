@@ -2,7 +2,7 @@
  "schema": "mojolearn.grid-controls/1",
  "lane": "fg-knn-nb",
  "branch": "lane/fg-knn-nb",
- "head": "HEAD",
+ "head": "3b59db56a",
  "controls": {
   "knn_amd_legacy_schedule": {
    "define": "MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE",
