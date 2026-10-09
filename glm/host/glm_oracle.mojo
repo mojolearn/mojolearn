@@ -220,7 +220,7 @@ def host_lstsq_eig(
 
     # Q S Q* <- covA.
     # lane fg-linear L1: the cyclic replay, or the round-robin rounds under
-    # -D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN (decomposition/host/jacobi_select_host.mojo)
+    # IDN_JACOBI_ROUND_ROBIN, default on (_OFF: cyclic; decomposition/host/jacobi_select_host.mojo)
     var jac = host_symmetric_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
     var q = jac.vectors.copy()
     var s_vec = _diagonal(cov, n_cols)
@@ -300,7 +300,7 @@ def host_svd_eig(
     # the device's power-of-two range scale (x_decomp/eigh_scale.mojo)
     var fac = host_es_scale(cov, n_cols)
     # lane fg-linear L1: the cyclic replay, or the round-robin rounds under
-    # -D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN (decomposition/host/jacobi_select_host.mojo)
+    # IDN_JACOBI_ROUND_ROBIN, default on (_OFF: cyclic; decomposition/host/jacobi_select_host.mojo)
     var jac = host_symmetric_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
     var v_raw = jac.vectors.copy()
     var s_raw = _diagonal(cov, n_cols)

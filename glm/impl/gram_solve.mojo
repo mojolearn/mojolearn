@@ -206,7 +206,7 @@ def _p(buf: DeviceBuffer[DType.float32]) -> F32Ptr:
 
 
 # ---------------------------------------------------------------------------
-# Lane fg-linear L3 (IDN_GRAM_FF_FALLBACK, default off): the float-float
+# Lane fg-linear L3 (IDN_GRAM_FF_FALLBACK, default ON 2026-10-09; _OFF restores): the float-float
 # second chance of a rejected Ridge Gram (glm/impl/gram_ff_cells.mojo).
 # ---------------------------------------------------------------------------
 comptime _U64Ptr = MutPointer[UInt64, MutAnyOrigin]
@@ -570,7 +570,7 @@ def linear_gram_fit_host(
         ctx.synchronize()
         status = 0
     comptime if IDN_GRAM_FF_FALLBACK:
-        # lane fg-linear L3 (default off): a rejected Ridge Gram first tries
+        # lane fg-linear L3 (default ON 2026-10-09, -D MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF restores): a rejected Ridge Gram first tries
         # the float-float Gram + Cholesky on the resident X (no Jacobi).
         if status != 0 and alpha > Float32(0.0):
             status = _gs_ff_fit(ctx, d_x, d_y, d_m64, center, coef_ptr, n_rows, d, alpha)

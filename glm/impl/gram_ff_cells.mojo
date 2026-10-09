@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Lane fg-linear L3 (-D MOJOLEARN_IDN_GRAM_FF_FALLBACK, default off): the
+"""Lane fg-linear L3 (default ON 2026-10-09, -D MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF restores the eig fallback): the
 float-float cells of the resident Gram solve's second chance. Shared by the
 device kernels (glm/impl/gram_solve.mojo) and the host column
 (glm/host/gram_solve_host.mojo); no GPU import.

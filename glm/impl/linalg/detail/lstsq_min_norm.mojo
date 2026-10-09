@@ -269,7 +269,7 @@ def lstsq_min_norm_traced(
     enqueue_fill(ctx, info_buf, JACOBI_INFO_UNWRITTEN)
     ctx.synchronize()
     comptime if IDN_JACOBI_ROUND_ROBIN:
-        # lane fg-linear L1 (-D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN, default off;
+        # lane fg-linear L1 (default ON 2026-10-09, -D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF for the cyclic block;
         # experiments/classical_identical_ideas/fg_linear_controls.mojo): the
         # round-robin rounds, every rotation of a round in parallel, the same
         # layout out (gram diagonal = eigenvalues, q columns = vectors,

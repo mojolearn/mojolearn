@@ -6,8 +6,8 @@ Gram routes (glm/host/glm_oracle.mojo `host_lstsq_eig`, `host_svd_eig`),
 switched by lane fg-linear's L1 flag together with the device sites
 (glm/impl/linalg/detail/svd.mojo, lstsq.mojo, lstsq_min_norm.mojo).
 
-Off (the default): `host_jacobi_eigh`, the cyclic replay of
-`jacobi_eigh_kernel`, unchanged. On (-D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN):
+Off (-D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF): `host_jacobi_eigh`, the cyclic replay of
+`jacobi_eigh_kernel`, unchanged. On (the IDENTICAL default since 2026-10-09):
 `host_eigh_rr` (x_decomp/rr.mojo), the host replay of the device
 round-robin driver `_eig_rr_device`: the same rounds, the same test, the
 same budget (RR_EIGH_SWEEPS). `rel` then carries the last off-diagonal sum

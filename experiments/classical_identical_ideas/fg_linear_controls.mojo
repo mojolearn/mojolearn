@@ -35,7 +35,15 @@ comptime _FGL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # reject runs the host eig route) is unchanged. ID check owed (nv == amd).
 comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_IDN_RIDGE_RESIDENT_OFF"]()
 
-# L1 (DEFAULT OFF, -D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN). The small symmetric
+# L1 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; -D
+# MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF restores the one-block cyclic Jacobi;
+# the old on-define is refused in core/six_lane_experiment_guards.mojo).
+# Post-merge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050,
+# MI325X a1161-a1190; ratio = arm / fg2.default-linear): ridge istella NV
+# 0.25x / AMD 0.14x (avg 0.20x; hash ff4ab841 -> cce6558a on BOTH vendors,
+# r2 0.328682 -> 0.328636), ridge taxi NV 0.99x / AMD 1.15x (avg 1.07x,
+# VENDOR SPLIT: taxi 1.15x slower on AMD; hash 520d0ae1 unchanged), ols
+# istella NV 1.00x / AMD 0.99x, ols taxi NV 0.99x / AMD 1.02x. The small symmetric
 # eigensolver of the linear models' Gram routes: Ridge's svdEig
 # (glm/impl/linalg/detail/svd.mojo, the eig route the Gram gate falls back
 # to), OLS's lstsqEig (glm/impl/linalg/detail/lstsq.mojo) and the
@@ -61,9 +69,17 @@ comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_ID
 # this flag through decomposition/host/jacobi_select_host.mojo). Lane fg-pca's
 # PCA-only switches (MOJOLEARN_IDN_PCA_RR_*) stay theirs: if they change the
 # inside of `_eig_rr_device` the linear models inherit it under both flags.
-comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and is_defined["MOJOLEARN_IDN_JACOBI_ROUND_ROBIN"]()
+comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and not is_defined["MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF"]()
 
-# L3 (DEFAULT OFF, -D MOJOLEARN_IDN_GRAM_FF_FALLBACK). When the float32 Gram
+# L3 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; -D
+# MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF restores the direct eig-route fallback;
+# the old on-define is refused in core/six_lane_experiment_guards.mojo).
+# Post-merge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050,
+# MI325X a1161-a1190; ratio = arm / fg2.default-linear): ridge istella NV
+# 0.96x / AMD 0.51x (avg 0.74x; hash ff4ab841 -> 5a348e50 on BOTH vendors,
+# r2 0.328682 -> 0.328674), ridge taxi NV 0.91x / AMD 0.99x (hash
+# unchanged), ols istella 1.00x / 1.00x, ols taxi NV 0.98x / AMD 1.03x.
+# Measured alone, never with L1 on: both-on is owed. When the float32 Gram
 # fails the trust gate on a RIDGE fit (alpha > 0), a second chance before the
 # eig route: the centered Gram and cross re-formed in float-float from the
 # resident X (glm/impl/gram_ff_cells.mojo: 64 row leaves folded ascending),
@@ -79,7 +95,7 @@ comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and is_defined["MOJOLEARN_IDN_JACOBI_
 # When the float-float gate fails too, the L2 / status-1 fallback runs.
 # BITS CHANGE for the fits it takes (normal equations instead of eig); the
 # host column (glm/host/gram_solve_host.mojo) runs the same cells.
-comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK"]()
+comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"]()
 
 # L4 (DEFAULT ON, -D MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF restores the
 # direct copy). The linear fits' large host uploads (the resident Gram fit's
