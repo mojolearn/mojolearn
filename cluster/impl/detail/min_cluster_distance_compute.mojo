@@ -80,8 +80,53 @@ from cluster.impl.distance.fused_distance_nn.simt_kernel import (
     fused_veclen_for,
 )
 from neighbors.impl.distance.detail.pairwise_distance_base import (
-    launch_config_generator,
+    launch_config_generator_cores,
 )
+from std.ffi import _Global
+from std.sys.compile import is_defined
+from std.sys.info import has_amd_gpu_accelerator, has_nvidia_gpu_accelerator
+from max.gpu.host import DeviceAttribute
+
+#: lane fg-ivf (read_ivf.md idea B5), DEFAULT ON on NVIDIA and AMD
+#: (`-D MOJOLEARN_KMEANS_LIVE_CORES_OFF` restores the table row): the fused
+#: assignment grid (`launch_config_generator`'s minGridSize = numSMs x
+#: blocks per SM) reads numSMs from the device (`MULTIPROCESSOR_COUNT`, once
+#: per process) instead of `gpu_cores_for`'s stand-in parts (108 for an
+#: A100, 110 for an MI250X GCD). On a part with more SMs / CUs than the row
+#: the grid under-fills the device by that ratio (an L40S has 142 SMs, an
+#: MI325X 304 CUs); on a smaller part the live count asks for fewer blocks.
+#: No bit moves: `grid.x` stays pinned to 1 and the kernel grid-strides the
+#: row tiles, each row's fold inside one block whatever `grid.y` is. Apple
+#: keeps its row (FAST is the Apple FAST peer's; the query costs ~1.3 ms per
+#: call on Metal).
+comptime KMEANS_LIVE_CORES = not is_defined["MOJOLEARN_KMEANS_LIVE_CORES_OFF"]()
+
+
+struct _LiveCores(Movable):
+    var cores: Int
+
+    def __init__(out self):
+        self.cores = 0
+
+
+comptime _KMEANS_LIVE_CORES_SLOT = _Global[
+    StorageType=_LiveCores, name="MojolearnKmeansFusedGridLiveCores", init_fn=_LiveCores.__init__
+]
+
+
+def kmeans_fused_grid_cores(ctx: DeviceContext) -> Int:
+    """The SM / CU count the fused grid is sized from: the device's (cached
+    after the first query) under `KMEANS_LIVE_CORES` on NVIDIA and AMD, else
+    0 (the table row)."""
+    comptime if KMEANS_LIVE_CORES and (has_nvidia_gpu_accelerator() or has_amd_gpu_accelerator()):
+        try:
+            var slot = _KMEANS_LIVE_CORES_SLOT.get_or_create_ptr()
+            if slot[].cores <= 0:
+                slot[].cores = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+            return slot[].cores
+        except:
+            return 0
+    return 0
 from cluster.impl.distance.unfused_distance_nn import (
     REDUCE_MIN_TPB,
     reduce_min_kernel,
@@ -175,8 +220,9 @@ def _launch_fused[
     comptime smem_stride = kblk + veclen
     comptime smem_bytes = (mblk + nblk) * smem_stride * 4 + (mblk + nblk) * 4
 
-    var cfg = launch_config_generator(
-        n_samples, n_clusters, mblk, nblk, nthreads, smem_bytes
+    # lane fg-ivf B5: numSMs from the device (`KMEANS_LIVE_CORES`; 0 = the table row)
+    var cfg = launch_config_generator_cores(
+        n_samples, n_clusters, mblk, nblk, nthreads, smem_bytes, kmeans_fused_grid_cores(ctx)
     )
     comptime kern = fused_distance_nn_kernel[veclen, kblk, tr, tc]
     ctx.enqueue_function[kern](
@@ -325,8 +371,9 @@ def _launch_fused_gated[
     comptime smem_stride = kblk + veclen
     comptime smem_bytes = (mblk + nblk) * smem_stride * 4 + (mblk + nblk) * 4
 
-    var cfg = launch_config_generator(
-        n_samples, n_clusters, mblk, nblk, nthreads, smem_bytes
+    # lane fg-ivf B5: numSMs from the device (`KMEANS_LIVE_CORES`; 0 = the table row)
+    var cfg = launch_config_generator_cores(
+        n_samples, n_clusters, mblk, nblk, nthreads, smem_bytes, kmeans_fused_grid_cores(ctx)
     )
     comptime kern = fused_distance_nn_gated_kernel[veclen, kblk, tr, tc]
     ctx.enqueue_function[kern](
