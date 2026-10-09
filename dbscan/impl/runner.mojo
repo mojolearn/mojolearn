@@ -102,6 +102,7 @@ from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from dbscan.impl.adjgraph.algo import (
@@ -141,6 +142,12 @@ from neighbors.impl.ball_cover.scan import (
     rbc_exclusive_scan_launch,
     RBC_SCAN_TPB,
     rbc_max_reduce_launch,
+)
+from neighbors.impl.ball_cover.registers import (
+    IDN_DBSCAN_ADJ_BITMAP,
+    rbc_eps_bitmap_words,
+    rbc_eps_pass_count_bitmap,
+    rbc_eps_pass_fill_bitmap,
 )
 
 
@@ -263,6 +270,74 @@ comptime EPS_NN_RBC = 1
 
 
 comptime TPB = 256
+
+
+#: fg-tsne-dbscan D4 (IDENTICAL, NVIDIA and AMD, DEFAULT OFF, lane
+#: fg-tsne-dbscan 2026-10-09): THE RANGE SIZE FROM A SAMPLED DEGREE. On the
+#: ball-cover arm the planned batch is a MEMORY figure (one batch of all rows
+#: under IDN_DBSCAN_RBC_ONE_BATCH, cuML's dense 5-bytes-per-cell estimate
+#: otherwise) that knows nothing of the edge count, and loop 1 halves a range
+#: over `edge_cap` and COUNTS IT AGAIN: a graph whose edges are many times
+#: the cap is counted once per halving level (log2(edges / cap) full count
+#: passes). Here DS_SAMPLE rows at a fixed stride (row s * n / DS_SAMPLE) are
+#: counted first (one count launch over a gathered copy, the loop's own count
+#: kernel), and the first ranges hold edge_cap / (2 x the sampled mean degree)
+#: rows, never more than the planned batch: the factor 2 is headroom for a
+#: degree spread around the mean; a range still over the cap is split as
+#: before, so the exact edge test is unchanged. 1,024 rows put the sampled
+#: mean within a few percent for a degree distribution of moderate spread at
+#: the cost of one launch over 1,024 queries. Batch boundaries are not data
+#: (the block above loop 1; `dbscan_edge_split_check`), so no label moves;
+#: n_iter_ (passes summed over batches) follows the batch count as it already
+#: follows the device's memory. -D MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.
+comptime IDN_DBSCAN_BATCH_SAMPLE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and is_defined["MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE"]()
+)
+comptime DS_SAMPLE = 1024
+
+
+def ds_gather_rows_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+    n_sample_in: Int32,
+):
+    """D4: sample row s is row s * n_rows / n_sample (one thread per cell)."""
+    var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n_cols = Int(n_cols_in)
+    var ns = Int(n_sample_in)
+    if e >= ns * n_cols:
+        return
+    var srow = e // n_cols
+    var c = e - srow * n_cols
+    var row = srow * Int(n_rows_in) // ns
+    dst.unsafe_store(e, src.unsafe_load(row * n_cols + c))
+
+
+#: fg-tsne-dbscan D2 (with D1, see `neighbors/impl/ball_cover/registers.mojo`,
+#: IDN_DBSCAN_ADJ_BITMAP): loop 1 counts each range with the bit-writing
+#: count and, when the range fits the cap, fills its columns from the bits at
+#: once into a KEPT copy (columns + offsets); loop 2, batch 0's fill and the
+#: border pass copy a kept range's CSR instead of running another distance
+#: pass. Memory: the bit matrix is `rbc_eps_bitmap_words(n, landmarks) * 8`
+#: bytes a query row (n / 8 + 8 x landmarks), so a range holds at most
+#: DB_BM_SHARE of the device's free memory over that (the cap below); the
+#: kept columns total at most `edge_cap` edges (the one-batch plan's column
+#: budget, 4 bytes an edge) and a range past it is filled as before. The
+#: columns are the D1 predicate's, canonicalized as the fill's: the same CSR.
+#: Bits none. Weighted fits keep today's loop.
+comptime DB_BM_SHARE_PCT = 25
+
+
+def _kept_find(kept_start: List[Int], start: Int) -> Int:
+    """The kept-range slot holding row range `start`, or -1."""
+    for k in range(len(kept_start)):  # small-loop(ranges: one entry per kept row range): finds a plan entry, no row data
+        if kept_start[k] == start:
+            return k
+    return -1
 
 
 def rbc_take_one_pass(
@@ -686,6 +761,64 @@ their code branches on is this Bool.
     var maxklen = List[Int]()
     var pend_start = List[Int]()
     var pend_rows = List[Int]()
+    # fg-tsne-dbscan D4: the first ranges sized from a sampled degree (see
+    # IDN_DBSCAN_BATCH_SAMPLE); `batch` only shrinks, so the caller's `vd` /
+    # `ex_scan` (batch + 1 cells) still hold a range
+    comptime if IDN_DBSCAN_BATCH_SAMPLE:
+        if sparse_rbc_mode and not has_weights and batch >= DS_SAMPLE and n_rows > DS_SAMPLE:
+            var ds_x = ctx.enqueue_create_buffer[DType.float32](DS_SAMPLE * n_features)
+            ctx.enqueue_function[ds_gather_rows_kernel](
+                x.unsafe_ptr(), ds_x.unsafe_ptr(), Int32(n_rows), Int32(n_features), Int32(DS_SAMPLE),
+                grid_dim=((DS_SAMPLE * n_features + TPB - 1) // TPB, 1, 1),
+                block_dim=(TPB, 1, 1),
+            )
+            var ds_nnz = rbc_eps_nn_query_count(
+                ctx, rbc_xr, ds_x, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                ex_scan, vd, DS_SAMPLE, n_features, n_landmarks, eps_radius,
+            )
+            ctx.synchronize()
+            _ = ds_x^
+            # rows per range = edge_cap / (2 x mean degree), mean = ds_nnz / DS_SAMPLE
+            var ds_rows = batch
+            if ds_nnz > 0:
+                ds_rows = (edge_cap * DS_SAMPLE) // (2 * ds_nnz)
+            if ds_rows < 1:
+                ds_rows = 1
+            if ds_rows < batch:
+                batch = ds_rows
+                n_batches = (n_rows + batch - 1) // batch
+            if phase_timing:
+                print(
+                    "PHASE plan.sample edges " + String(ds_nnz) + " of "
+                    + String(DS_SAMPLE) + " rows batch " + String(batch)
+                    + " n_batches " + String(n_batches)
+                )
+    # fg-tsne-dbscan D2: the bit matrix (IDN_DBSCAN_ADJ_BITMAP) caps a range
+    # at DB_BM_SHARE_PCT of the free memory over its bytes per query row
+    var use_bm = False
+    var bm_words = 1
+    comptime if IDN_DBSCAN_ADJ_BITMAP:
+        if sparse_rbc_mode and not has_weights:
+            use_bm = True
+            bm_words = rbc_eps_bitmap_words(n_rows, n_landmarks)
+            var bm_free = Int(ctx.get_memory_info()[0])
+            var bm_rows = (bm_free * DB_BM_SHARE_PCT // 100) // (bm_words * 8)
+            if bm_rows < 1:
+                bm_rows = 1
+            if bm_rows < batch:
+                batch = bm_rows
+                n_batches = (n_rows + batch - 1) // batch
+            if phase_timing:
+                print(
+                    "PHASE plan.bitmap words " + String(bm_words) + " batch "
+                    + String(batch) + " n_batches " + String(n_batches)
+                )
+    var bm_buf = ctx.enqueue_create_buffer[DType.uint64]((batch * bm_words) if use_bm else 1)
+    var kept_start = List[Int]()
+    var kept_ia = List[DeviceBuffer[DType.int32]]()
+    var kept_ja = List[DeviceBuffer[DType.int32]]()
+    var kept_nnz = List[Int]()
+    var kept_total = 0
     for b0 in range(n_batches):  # small-loop(n_batches: one pending range per row batch): builds the batch plan, a launch-argument list
         pend_start.append(b0 * batch)
         pend_rows.append(min(n_rows - b0 * batch, batch))
@@ -714,10 +847,18 @@ their code branches on is this Bool.
             var qb1 = x.create_sub_buffer[DType.float32](
                 start_vertex_id * n_features, n_points * n_features
             )
-            nnz1 = rbc_eps_nn_query_count(
-                ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
-                ex_scan, vd, n_points, n_features, n_landmarks, eps_radius,
-            )
+            if use_bm:
+                # D2: the count also writes the range's bit matrix
+                nnz1 = rbc_eps_pass_count_bitmap(
+                    ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                    ex_scan, vd, bm_buf, n_points, n_features, n_landmarks,
+                    eps_radius,
+                )
+            else:
+                nnz1 = rbc_eps_nn_query_count(
+                    ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                    ex_scan, vd, n_points, n_features, n_landmarks, eps_radius,
+                )
             # WHY cuML REQUIRES int64 ON THIS PATH, AND WHAT OURS DOES INSTEAD.
             #
             # `runner.cuh:143-150` refuses RBC for `Index_ == int32_t`, and
@@ -759,6 +900,25 @@ their code branches on is this Bool.
                         + String(Float64(perf_counter_ns() - t_vd1) / 1.0e6)
                     )
                 continue
+            # D2: the range's columns from its bits, kept for loop 2
+            if use_bm and kept_total + nnz1 <= edge_cap:
+                var kja = ctx.enqueue_create_buffer[DType.int32](nnz1 if nnz1 > 0 else 1)
+                var kia = ctx.enqueue_create_buffer[DType.int32](n_points + 1)
+                if nnz1 > 0:
+                    rbc_eps_pass_fill_bitmap(
+                        ctx, bm_buf, rbc_ip, rbc_c1, ex_scan, kja, n_points,
+                        n_landmarks, nnz1,
+                    )
+                ctx.enqueue_copy(
+                    dst_buf=kia,
+                    src_buf=ex_scan.create_sub_buffer[DType.int32](0, n_points + 1),
+                )
+                ctx.synchronize()
+                kept_start.append(start_vertex_id)
+                kept_ia.append(kia^)
+                kept_ja.append(kja^)
+                kept_nnz.append(nnz1)
+                kept_total += nnz1
             # DEVIATION 29: `need_ja_compute = sparse_rbc_mode && ((i == 0)
             # || (sample_weight != nullptr))`, `runner.cuh:257`. The count
             # pass above emitted `ia` and `vd` and NO columns, and a
@@ -913,11 +1073,20 @@ their code branches on is this Bool.
     var rbc_tmp_len = 1
     if sparse_rbc_mode:
         var np0 = plan_rows[0]
-        var qb0 = x.create_sub_buffer[DType.float32](0, np0 * n_features)
-        rbc_eps_nn_query_fill(
-            ctx, rbc_xr, qb0, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
-            ex_scan, col_ind, np0, n_features, n_landmarks, eps_radius,
-        )
+        var k0 = _kept_find(kept_start, 0)
+        if k0 >= 0:
+            # D2: batch 0's kept columns (its offsets are resident)
+            if kept_nnz[k0] > 0:
+                ctx.enqueue_copy(
+                    dst_buf=col_ind.create_sub_buffer[DType.int32](0, kept_nnz[k0]),
+                    src_buf=kept_ja[k0].create_sub_buffer[DType.int32](0, kept_nnz[k0]),
+                )
+        else:
+            var qb0 = x.create_sub_buffer[DType.float32](0, np0 * n_features)
+            rbc_eps_nn_query_fill(
+                ctx, rbc_xr, qb0, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                ex_scan, col_ind, np0, n_features, n_landmarks, eps_radius,
+            )
         ctx.synchronize()
 
         # `registers.cuh:1431` allocates the `n x max_k` scratch inside
@@ -1001,6 +1170,19 @@ their code branches on is this Bool.
                             + String(actual)
                             + "; given maximum rowsize was not sufficient"
                         )
+                elif _kept_find(kept_start, start2) >= 0:
+                    # D2: the range's kept CSR, no distance pass
+                    var k2 = _kept_find(kept_start, start2)
+                    ctx.enqueue_copy(
+                        dst_buf=ex_scan.create_sub_buffer[DType.int32](0, n_points2 + 1),
+                        src_buf=kept_ia[k2],
+                    )
+                    if kept_nnz[k2] > 0:
+                        ctx.enqueue_copy(
+                            dst_buf=col_ind.create_sub_buffer[DType.int32](0, kept_nnz[k2]),
+                            src_buf=kept_ja[k2].create_sub_buffer[DType.int32](0, kept_nnz[k2]),
+                        )
+                    ctx.synchronize()
                 else:
                     # `algo.cuh:137-163`, the two-pass arm loop 2 falls
                     # back to when the bound does not fit the spare room.
@@ -1167,7 +1349,20 @@ their code branches on is this Bool.
                 bb -= 1
                 continue
             if np_b > 0 and bb < n_batches - 1:
-                if sparse_rbc_mode:
+                var kb = _kept_find(kept_start, start_b)
+                if sparse_rbc_mode and kb >= 0:
+                    # D2: the range's kept CSR, no distance pass
+                    ctx.enqueue_copy(
+                        dst_buf=ex_scan.create_sub_buffer[DType.int32](0, np_b + 1),
+                        src_buf=kept_ia[kb],
+                    )
+                    if kept_nnz[kb] > 0:
+                        ctx.enqueue_copy(
+                            dst_buf=col_ind.create_sub_buffer[DType.int32](0, kept_nnz[kb]),
+                            src_buf=kept_ja[kb].create_sub_buffer[DType.int32](0, kept_nnz[kb]),
+                        )
+                    ctx.synchronize()
+                elif sparse_rbc_mode:
                     var qbb = x.create_sub_buffer[DType.float32](
                         start_b * n_features, np_b * n_features
                     )
