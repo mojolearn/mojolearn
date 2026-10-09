@@ -21,7 +21,7 @@ large binaries are git-ignored: `checkpoint.blm` comes from R2
 
 ## Published
 
-https://huggingface.co/ajhendel/mojolearn-162m (2026-10-08, the arXiv version). The post-publish
+https://huggingface.co/mojolearn-ai/mojolearn-162m (2026-10-08, the arXiv version). The post-publish
 check passed from an anonymous download: ~/mojolearn-evidence/hf-published-check-20261008/check.log.
 To update it, edit this folder, regenerate files.sha256.json, and upload again.
 
