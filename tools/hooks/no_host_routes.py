@@ -1537,7 +1537,14 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False, branch=False)
         mb = _git("merge-base", "refs/remotes/origin/main", ref)
         if mb.returncode != 0:
             mb = _git("merge-base", "origin/main", ref)
-        if mb.returncode == 0:
+        # main never grandfathers itself: when the merge-base IS the tree
+        # (main, or a tree at main), a late rule's findings are its own, so
+        # they are reported (lane H2, 2026-10-09: `--tree origin/main` passed
+        # with 14 Python glue findings because main's baseline has no py-* row)
+        tip = _git("rev-parse", ref + "^{commit}")
+        at_main = (own and mb.returncode == 0 and tip.returncode == 0
+                   and tip.stdout.strip() == mb.stdout.strip())
+        if mb.returncode == 0 and not at_main:
             allowed_extra = collections.Counter(k for k, _ in tree_findings(Tree(mb.stdout.strip()))
                                                 if not own or k[0] in late)
     found_keys = collections.Counter(k for k, _ in found)
