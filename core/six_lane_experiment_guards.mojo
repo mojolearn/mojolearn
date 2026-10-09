@@ -57,10 +57,9 @@ def _check_configuration() -> Bool:
     # Retired defines are refused so a stale catalog arm cannot build as a
     # silent incumbent.
     comptime S = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE",0]()
-    comptime assert S == 0 or S == 1 or S == 2 or S == 3 or S == 4 or S == 9 or S == 10 or S == 11 or S == 15 or S == 24, "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE arms: 1 geometry, 2 stream, 3 stream_all, 4 stream_exact, 9 pages, 10 cost, 11 fold_exact, 15 threadmap, 24 pages_threadmap (8 async deleted by lane/grid-prune)"
+    comptime assert S == 0 or S == 1 or S == 2 or S == 4 or S == 9 or S == 10 or S == 11 or S == 15 or S == 24, "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE arms: 1 geometry, 2 stream, 4 stream_exact, 9 pages, 10 cost, 11 fold_exact, 15 threadmap, 24 pages_threadmap (8 async deleted by lane/grid-prune; 3 stream_all removed 2026-10-08 by lane/grid-act-3: slower, gemm NV 2.07x / AMD 1.78x, lm-train-step 1.11x / 1.07x (grid ge123e6f9); see EXPERIMENTS.md)"
     comptime R = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES",7]()
     comptime assert R >= 1 and R <= 7, "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES is a mask: 1 projection, 2 head, 4 weight-grad"
-    comptime assert S != 3 or R == 7, "schedule 3 (stream_all) is a global GEMM arm; it takes no role mask"
     comptime assert S != 10 or is_defined["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS"](), "schedule 10 (cost) needs an explicit hardware fill budget"
     comptime assert S != 1 or is_defined["MOJOLEARN_GEMM_ARM_TRIAL"](), "schedule 1 (geometry) needs MOJOLEARN_GEMM_ARM_TRIAL"
     comptime LEAF = get_defined_int["MOJOLEARN_IDN_GEMM_LEAF",0]()
