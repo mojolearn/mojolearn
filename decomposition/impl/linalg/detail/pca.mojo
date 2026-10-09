@@ -70,6 +70,7 @@ from core.gram_splitk import (
     gram_splitk_scratch_covers,
 )
 from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
+from gemm.tn_centered import gemm_tn_centered_identical
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.xtdz_coalesced import column_mean_launch
 from core.column_stats import (
@@ -338,21 +339,28 @@ def compute_covariance(
             ctx.synchronize()
             return
     var fused = gram_splitk_applies(n_cols, n_cols, n_rows)
+    var centered_v1 = False
     if fused:
         gram_centered_splitk_into(
             ctx, cov, x, mu, x_alias, n_cols, n_rows
         )
     else:
-        ctx.enqueue_function[shift_columns_kernel](
-            x.unsafe_ptr(),
-            mu.unsafe_ptr(),
-            Int32(n_rows),
-            Int32(n_cols),
-            Float32(-1.0),
-            grid_dim=((cells + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-        gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
+        comptime if PCA_GRAM_TN_CENTERED:
+            # P3 (MOJOLEARN_IDN_GEMM_TN_CENTERED): the v1 split-plan Gram
+            # centers at its tile load, X read-only (gemm/tn_centered.mojo);
+            # False when the shipped dispatch would not run a split plan
+            centered_v1 = gemm_tn_centered_identical(ctx, cov, x, mu, x_alias2, n_cols, n_rows)
+        if not centered_v1:
+            ctx.enqueue_function[shift_columns_kernel](
+                x.unsafe_ptr(),
+                mu.unsafe_ptr(),
+                Int32(n_rows),
+                Int32(n_cols),
+                Float32(-1.0),
+                grid_dim=((cells + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
     ctx.enqueue_function[scale_in_place_kernel](
         cov.unsafe_ptr(),
         Int32(n_cols * n_cols),
@@ -360,7 +368,7 @@ def compute_covariance(
         grid_dim=((n_cols * n_cols + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    if restore_input and not fused:
+    if restore_input and not fused and not centered_v1:
         ctx.enqueue_function[shift_columns_kernel](
             x.unsafe_ptr(),
             mu.unsafe_ptr(),
@@ -385,6 +393,25 @@ def pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
         )
     if n_components > n_cols:
         raise Error("n_components cannot exceed n_cols")
+
+
+#: P3, lane fg-pca (2026-10-09), DEFAULT OFF (it replaces the Gram kernel
+#: of the wide route): `-D MOJOLEARN_IDN_GEMM_TN_CENTERED`. Past the split-K
+#: Gram's width the IDENTICAL covariance centered X in place (n*d read +
+#: n*d write), ran the v1 OP_TN Gram on the copy, then restored it (another
+#: read + write, gone with P2). Here the v1 SPLIT plan's arithmetic runs on
+#: operands centered at the tile load (gemm/tn_centered.mojo
+#: `gemm_tn_centered_identical`): X is read for the mean and for the Gram and
+#: never written. Cost: -2 n*d words of traffic per fit (-4 without P2) at
+#: any width past the split-K Gram. Bits: none (the staged word is
+#: `shift_columns_kernel`'s, the per-cell chain, leaf partition and fold are
+#: the split plan's); any shape the shipped dispatch serves with another plan
+#: keeps the incumbent. The host column (`centered_gram_v1_cell`) already
+#: computes the centered words: no host change.
+comptime PCA_GRAM_TN_CENTERED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_GEMM_TN_CENTERED"]()
+)
 
 
 #: P2, lane fg-pca (2026-10-09), IDENTICAL default; rollback
