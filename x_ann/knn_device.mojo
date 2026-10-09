@@ -298,12 +298,229 @@ def knn_wide_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I3
         j0 += KW_TJ
 
 
+#: fg-tsne-dbscan T1 (IDENTICAL, NVIDIA and AMD, DEFAULT OFF, lane
+#: fg-tsne-dbscan 2026-10-09): THE TILE'S TOP-K SELECT IN THREADGROUP
+#: MEMORY. `knn_wide_kernel` (and the one-thread-per-row tiled kernel) end
+#: every 64 x 64 distance tile with a serial owner phase: 64 of the block's
+#: 256 threads offer the tile's candidates one by one to the row's sorted
+#: list in DEVICE memory (`ts_knn_offer`, an insertion shift of up to k
+#: (dist, idx) pairs per accepted candidate, ~k ln(n / k) accepted offers
+#: per row over the fit, each a dependent chain of device loads and stores,
+#: divergent across the owner warp) while 192 threads wait.
+#: `knn_wide_select_kernel` keeps the distance tile (the same chain
+#: `ts_ftz_nonneg(fma(diff, diff, acc))`, c ascending over exactly d) and
+#: replaces the owner phase by three block-wide steps per tile:
+#:   A. every thread (4 per row, 16 candidates each) marks the candidates
+#:      that can enter the row's list: j < n, j != i, and the list not full
+#:      or (dist, j) before the list's last entry;
+#:   B. every marked candidate takes its RANK among the row's marked
+#:      candidates under (dist, j) (64 compares in threadgroup memory) and
+#:      writes its column to slot `rank`: the marked set sorted, in parallel;
+#:   C. the row's owner merges the sorted marked set into the list from the
+#:      back, in place, keeping the min(k, filled + m) first entries: one
+#:      pass over the list's tail per tile instead of one shift chain per
+#:      accepted candidate.
+#: The list after a tile is the first min(k, seen) entries of every
+#: candidate seen so far under (squared distance, index): a total order on
+#: finite and infinite distances (indices are distinct), so the SET and its
+#: ORDER are unique and equal the serial offers' result: the same nn_d /
+#: nn_i words, the same P, the same embedding. Bits: none. (A NaN distance
+#: has no place in the serial order, whose result then depends on offer
+#: order; here NaN sorts after every number, ties by index, the same on
+#: every vendor. A NaN can only come from a non-finite input row.)
+#: Under the switch every width d takes this kernel on NVIDIA and AMD (the
+#: d <= 64 rows took the one-thread-per-row tile: n / 128 blocks of 128
+#: threads, a quarter of the threads of the 64 x 64 tile's n / 64 blocks of
+#: 256, and the same serial offers per thread); padded features are not
+#: folded (the loop runs over exactly d), which the tiled kernel's zero
+#: padding equals (a padded step is the identity). Threadgroup memory: the
+#: wide kernel's 25 KB plus 8 KB of marks and order and 0.75 KB of row
+#: state, independent of k (the list stays in device memory). Expected:
+#: the kNN stage's insertion cost (~1.5 s at 20k x 220) to the tile's
+#: distance cost. Also the CAGRA build's exact graph (`cagra_knn_enqueue`),
+#: same bits. -D MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT turns it on.
+comptime IDN_TSNE_KNN_TILE_SELECT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and is_defined["MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT"]()
+)
+#: candidates of a row per thread in steps A and B (4 threads per row)
+comptime KS_PER = KW_TJ * KW_TI // KW_TPB
+
+
+@always_inline
+def ks_before(d1: Float32, j1: Int, d2: Float32, j2: Int) -> Bool:
+    """(d1, j1) before (d2, j2) under (squared distance, index), NaN after
+    every number (ties by index): `ts_knn_beats` on every non-NaN pair."""
+    if d1 != d1:
+        return d2 != d2 and j1 < j2
+    if d2 != d2:
+        return True
+    return d1 < d2 or (d1 == d2 and j1 < j2)
+
+
+def knn_wide_select_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I32P):
+    """`knn_wide_kernel`'s distance tile with the block-wide select and merge
+    of IDN_TSNE_KNN_TILE_SELECT: the same lists."""
+    comptime assert KW_TI * 4 == KW_TPB, "four threads per row in the select steps"
+    comptime assert KS_PER * 4 == KW_TJ, "the four threads of a row cover the tile's candidates"
+    comptime assert KW_TJ <= 256, "a column fits a UInt8"
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var tid = ty * KW_TX + tx
+    var nr = Int(n)
+    var dd = Int(d)
+    var k = Int(nn)
+    var i0 = Int(block_idx.x) * KW_TI
+    var a_s = stack_allocation[KW_KC * KW_TI, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var b_s = stack_allocation[KW_KC * KW_TJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var dist_s = stack_allocation[KW_TI * KW_DS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var ok_s = stack_allocation[KW_TI * KW_TJ, Scalar[DType.uint8], address_space=AddressSpace.SHARED]()
+    var ord_s = stack_allocation[KW_TI * KW_TJ, Scalar[DType.uint8], address_space=AddressSpace.SHARED]()
+    var rld_s = stack_allocation[KW_TI, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var rli_s = stack_allocation[KW_TI, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var rfull_s = stack_allocation[KW_TI, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    # the owner phase's row (C) and the select steps' row and quarter (A, B)
+    var i = i0 + tid
+    var owner = tid < KW_TI and i < nr
+    var base = i * k
+    var filled = 0
+    var sr = tid >> 2
+    var sq = tid & 3
+    var si = i0 + sr
+    if tid < KW_TI:
+        rld_s[tid] = Float32(0.0)
+        rli_s[tid] = Int32(0)
+        rfull_s[tid] = Int32(0)
+    var j0 = 0
+    while j0 < nr:
+        var acc = InlineArray[Float32, KW_RI * KW_RJ](fill=Float32(0.0))
+        var k0 = 0
+        while k0 < dd:
+            comptime for q in range(KW_KC * KW_TI // KW_TPB):
+                var e = tid + q * KW_TPB
+                var ii = e // KW_KC
+                var kk = e - ii * KW_KC
+                var c = k0 + kk
+                var v = Float32(0.0)
+                if c < dd and i0 + ii < nr:
+                    v = ftz(x.unsafe_load((i0 + ii) * dd + c))
+                a_s[kk * KW_TI + ii] = v
+            comptime for q in range(KW_KC * KW_TJ // KW_TPB):
+                var e = tid + q * KW_TPB
+                var jj = e // KW_KC
+                var kk = e - jj * KW_KC
+                var c = k0 + kk
+                var v = Float32(0.0)
+                if c < dd and j0 + jj < nr:
+                    v = ftz(x.unsafe_load((j0 + jj) * dd + c))
+                b_s[kk * KW_TJ + jj] = v
+            barrier()
+            var kmax = dd - k0
+            if kmax > KW_KC:
+                kmax = KW_KC
+            for kk in range(kmax):
+                var av = InlineArray[Float32, KW_RI](fill=Float32(0.0))
+                var bv = InlineArray[Float32, KW_RJ](fill=Float32(0.0))
+                comptime for r in range(KW_RI):
+                    av[r] = a_s[kk * KW_TI + ty + r * KW_TY]
+                comptime for c in range(KW_RJ):
+                    bv[c] = b_s[kk * KW_TJ + tx + c * KW_TX]
+                comptime for r in range(KW_RI):
+                    comptime for c in range(KW_RJ):
+                        var diff = ftz(av[r] - bv[c])
+                        acc[r * KW_RJ + c] = ts_ftz_nonneg(identical_mul_add(diff, diff, acc[r * KW_RJ + c]))
+            barrier()
+            k0 += KW_KC
+        comptime for r in range(KW_RI):
+            comptime for c in range(KW_RJ):
+                dist_s[(ty + r * KW_TY) * KW_DS + tx + c * KW_TX] = acc[r * KW_RJ + c]
+        barrier()
+        # A: the candidates that can enter row sr's list
+        var full = rfull_s[sr] != Int32(0)
+        var ld = rld_s[sr]
+        var li = Int(rli_s[sr])
+        comptime for u in range(KS_PER):
+            var c = sq * KS_PER + u
+            var j = j0 + c
+            var ok = si < nr and j < nr and j != si
+            if ok and full:
+                ok = ks_before(dist_s[sr * KW_DS + c], j, ld, li)
+            ok_s[sr * KW_TJ + c] = UInt8(1) if ok else UInt8(0)
+        barrier()
+        # B: each marked candidate's rank among the row's marked candidates
+        comptime for u in range(KS_PER):
+            var c = sq * KS_PER + u
+            if ok_s[sr * KW_TJ + c] != UInt8(0):
+                var dc = dist_s[sr * KW_DS + c]
+                var rank = 0
+                for c2 in range(KW_TJ):
+                    if ok_s[sr * KW_TJ + c2] != UInt8(0):
+                        if ks_before(dist_s[sr * KW_DS + c2], c2, dc, c):
+                            rank += 1
+                ord_s[sr * KW_TJ + rank] = UInt8(c)
+        barrier()
+        # C: row i's owner merges the m sorted marked candidates into its
+        # list from the back, in place (write slot p = a + b + 1 >= a, so no
+        # unread entry is overwritten), keeping the first min(k, filled + m)
+        if owner:
+            var m = 0
+            for c2 in range(KW_TJ):
+                if ok_s[tid * KW_TJ + c2] != UInt8(0):
+                    m += 1
+            if m > 0:
+                var nf = filled + m
+                if nf > k:
+                    nf = k
+                var a = filled - 1
+                var b = m - 1
+                # drop the (filled + m - nf) last entries of the union
+                var drop = filled + m - nf
+                while drop > 0:
+                    var cb = Int(ord_s[tid * KW_TJ + b])
+                    if a >= 0 and ks_before(dist_s[tid * KW_DS + cb], j0 + cb, nn_d.unsafe_load(base + a),
+                                            Int(nn_i.unsafe_load(base + a))):
+                        a -= 1
+                    else:
+                        b -= 1
+                    drop -= 1
+                var p = nf - 1
+                while b >= 0:
+                    var cb = Int(ord_s[tid * KW_TJ + b])
+                    var db = dist_s[tid * KW_DS + cb]
+                    var jb = j0 + cb
+                    if a >= 0 and ks_before(db, jb, nn_d.unsafe_load(base + a), Int(nn_i.unsafe_load(base + a))):
+                        nn_d.unsafe_store(base + p, nn_d.unsafe_load(base + a))
+                        nn_i.unsafe_store(base + p, nn_i.unsafe_load(base + a))
+                        a -= 1
+                    else:
+                        nn_d.unsafe_store(base + p, db)
+                        nn_i.unsafe_store(base + p, Int32(jb))
+                        b -= 1
+                    p -= 1
+                filled = nf
+                if filled == k:
+                    rld_s[tid] = nn_d.unsafe_load(base + k - 1)
+                    rli_s[tid] = nn_i.unsafe_load(base + k - 1)
+                    rfull_s[tid] = Int32(1)
+        barrier()
+        j0 += KW_TJ
+
+
 def knn_enqueue(
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, nn: Int,
     mut dnd: DeviceBuffer[DType.float32], mut dni: DeviceBuffer[DType.int32],
 ) raises:
     """Enqueue the k-NN graph of the n x d rows in dx (no sync)."""
     var blocks = (n + KTB - 1) // KTB
+    # fg-tsne-dbscan T1: every width d takes the block-wide select on NVIDIA
+    # and AMD (see IDN_TSNE_KNN_TILE_SELECT), the same lists
+    comptime if IDN_TSNE_KNN_TILE_SELECT:
+        ctx.enqueue_function[knn_wide_select_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn),
+                                                     dnd.unsafe_ptr(), dni.unsafe_ptr(),
+                                                     grid_dim=(n + KW_TI - 1) // KW_TI,
+                                                     block_dim=(KW_TX, KW_TY, 1))
+        return
     # lane/apple-fast-ann: the chunked arm for wide rows, FAST+Apple default since the M3 A/B (CAGRA istella -88%)
     comptime if FAST_KNN_BIGD:
         if d > 64:

@@ -58,7 +58,7 @@ from hdbscan.checks.mutual_reachability_dense import (
     mutual_reachability_dense_guarded,
     refuse_nonfinite_device,
 )
-from hdbscan.impl.cluster.detail.sparse_mr_mst import sparse_mr_mst_device
+from hdbscan.impl.cluster.detail.sparse_mr_mst import IDN_HDB_MST_SEED_KNN, sparse_mr_mst_device
 from hdbscan.impl.detail.reachability import (
     CORE_TPB,
     compute_core_dists,
@@ -249,7 +249,19 @@ def build_mr_linkage(
     var st_t = Int(perf_counter_ns())
     # lane af-hdbscan2: when the tiled core kernel runs (HDB_CORE_TILE) the
     # k-NN's m x k outputs are never written, so they are one cell each.
-    var knn_cells = m * min_samples
+    # fg-tsne-dbscan H2 (IDN_HDB_MST_SEED_KNN): the k-NN one neighbour wider
+    # on the sparse arm, so round 1 can resolve points from their lists
+    var knn_w = min_samples
+    comptime if IDN_HDB_MST_SEED_KNN:
+        if (
+            use_sparse
+            and m > min_samples + 1
+            and alpha <= Float32(1.0)
+            and sabotage == HDB_SAB_NONE
+            and not trace.enabled
+        ):
+            knn_w = min_samples + 1
+    var knn_cells = m * knn_w
     comptime if HDB_CORE_TILE:
         if (
             core_tile_applies(n, min_samples)
@@ -261,7 +273,7 @@ def build_mr_linkage(
     var knn_inds = ctx.enqueue_create_buffer[DType.int32](knn_cells)
     compute_core_dists(
         ctx, trace, x, core_dists, m, n, metric, min_samples,
-        knn_dists, knn_inds, core_tpb, sabotage,
+        knn_dists, knn_inds, core_tpb, sabotage, knn_w,
     )
     trace.record_device[DType.float32](ctx, "hdbscan.core_dists", core_dists, m)
     if st_on:
@@ -331,10 +343,20 @@ def build_mr_linkage(
     var rounds: Int
     if use_sparse:
         # DEVIATION 1620: the same tree, sorted and oriented, with no graph.
-        rounds = sparse_mr_mst_device(
-            ctx, x, core_dists, m, n, inv_alpha, mst_rows, mst_cols,
-            mst_weights, sabotage,
-        )
+        if knn_w > min_samples:
+            # H2: round 1 seeded from the wider k-NN rows
+            rounds = sparse_mr_mst_device(
+                ctx, x, core_dists, m, n, inv_alpha, mst_rows, mst_cols,
+                mst_weights, sabotage,
+                knn_d_addr=Int(knn_dists.unsafe_ptr()),
+                knn_i_addr=Int(knn_inds.unsafe_ptr()),
+                knn_k=knn_w,
+            )
+        else:
+            rounds = sparse_mr_mst_device(
+                ctx, x, core_dists, m, n, inv_alpha, mst_rows, mst_cols,
+                mst_weights, sabotage,
+            )
     elif use_fast:
         # lane af-hdbscan2 (-D MOJOLEARN_HDB_DEV_BORUVKA): the same search
         # kernels, the rounds driven on the device (fast_mr_mst_device.mojo).

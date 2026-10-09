@@ -21,6 +21,8 @@ THE GIL is released around the device call, and nothing inside the
 """
 
 from std.os import abort
+from std.memory import memcpy
+from std.sys.compile import is_defined
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -43,6 +45,14 @@ from hdbscan.estimator import (
     hdbscan_fit_host_output,
 )
 from hdbscan.impl.prediction_data import generate_prediction_data_device
+
+#: fg-tsne-dbscan H5 (every mode and column, DEFAULT ON, lane fg-tsne-dbscan
+#: 2026-10-09): the fit's host lists (labels and core distances, n each; the
+#: condensed tree's four arrays; the inverse map; the probabilities) go into
+#: the caller's arrays by one memcpy each instead of an element loop per
+#: array (5 n + 4 n_edges scalar stores). The same bytes.
+#: `-D MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF` restores the loops.
+comptime IDN_HDB_OUT_MEMCPY = not is_defined["MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF"]()
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -112,9 +122,13 @@ def _hdbscan_fit_run(
         metric,
     )
     ctx.synchronize()
-    for i in range(n):
-        lp.unsafe_store(i, out.labels[i])
-        cp.unsafe_store(i, out.core_dists[i])
+    comptime if IDN_HDB_OUT_MEMCPY:
+        memcpy(dest=lp, src=out.labels.unsafe_ptr(), count=n)
+        memcpy(dest=cp, src=out.core_dists.unsafe_ptr(), count=n)
+    else:
+        for i in range(n):
+            lp.unsafe_store(i, out.labels[i])
+            cp.unsafe_store(i, out.core_dists[i])
     ip.unsafe_store(0, Int32(out.n_clusters))
     ip.unsafe_store(1, Int32(out.n_outliers))
     ip.unsafe_store(2, Int32(out.n_boruvka_rounds))
@@ -128,16 +142,26 @@ def _hdbscan_fit_run(
                 " by name"
             )
         ip.unsafe_store(4, Int32(ne))
-        for e in range(ne):
-            tpp.unsafe_store(e, out.condensed.parents[e])
-            tcp.unsafe_store(e, out.condensed.children[e])
-            tlp.unsafe_store(e, out.condensed.lambdas[e])
-            tsp.unsafe_store(e, out.condensed.sizes[e])
-        for c in range(out.n_clusters):
-            invp.unsafe_store(c, out.inverse_label_map[c])
+        comptime if IDN_HDB_OUT_MEMCPY:
+            memcpy(dest=tpp, src=out.condensed.parents.unsafe_ptr(), count=ne)
+            memcpy(dest=tcp, src=out.condensed.children.unsafe_ptr(), count=ne)
+            memcpy(dest=tlp, src=out.condensed.lambdas.unsafe_ptr(), count=ne)
+            memcpy(dest=tsp, src=out.condensed.sizes.unsafe_ptr(), count=ne)
+            memcpy(dest=invp, src=out.inverse_label_map.unsafe_ptr(), count=out.n_clusters)
+        else:
+            for e in range(ne):
+                tpp.unsafe_store(e, out.condensed.parents[e])
+                tcp.unsafe_store(e, out.condensed.children[e])
+                tlp.unsafe_store(e, out.condensed.lambdas[e])
+                tsp.unsafe_store(e, out.condensed.sizes[e])
+            for c in range(out.n_clusters):
+                invp.unsafe_store(c, out.inverse_label_map[c])
     if want_probs:
-        for i in range(n):
-            pp.unsafe_store(i, out.probabilities[i])
+        comptime if IDN_HDB_OUT_MEMCPY:
+            memcpy(dest=pp, src=out.probabilities.unsafe_ptr(), count=n)
+        else:
+            for i in range(n):
+                pp.unsafe_store(i, out.probabilities[i])
     var n_clusters = out.n_clusters
     _ = out^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
