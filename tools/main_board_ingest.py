@@ -458,6 +458,10 @@ def previous_observations(prev):
             ob = mb.get("observation")
             if c.get("library") == "mojolearn" and isinstance(ob, dict) and ob.get("sha"):
                 out.append(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous"))
+    # the failed runs the previous board listed (FAILED table, flags), so a rotated input keeps them too
+    for ob in ((prev or {}).get("main_board") or {}).get("failed_observations") or []:
+        if isinstance(ob, dict) and ob.get("sha"):
+            out.append(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous"))
     return out
 
 
@@ -486,14 +490,23 @@ def dedupe(observations):
 
 
 def ident_group(ob):
-    kind = ob.get("prior_kind") if ob["kind"] == "previous" else ob["kind"]
+    kind = source_kind(ob)
     return "algos-race" if kind == "algos" else "board"
 
 
 def short(ob):
-    return dict(sha=ob["sha"], commit_date=iso(ob.get("ct")), box=ob["box"], job=ob["job"], kind=ob["kind"],
+    return dict(sha=ob["sha"], commit_date=iso(ob.get("ct")), box=ob["box"], job=ob["job"], kind=source_kind(ob),
                 status=ob["status"], median_ms=ob.get("median_ms"), digest=ob.get("digest"),
                 evidence=ob.get("evidence"), reason=ob.get("reason"))
+
+
+def source_kind(ob):
+    """The input an observation came from (a re-read previous-board observation keeps its first kind)."""
+    return (ob.get("prior_kind") or "previous") if ob["kind"] == "previous" else ob["kind"]
+
+
+def stored_ob(ob):
+    return dict({k: ob.get(k) for k in OB_FIELDS}, kind=source_kind(ob))
 
 
 def is_ok(ob):
@@ -653,7 +666,7 @@ def our_cell(BB, ob, ident, newer_failed=()):
         "source": tail,
         "main_board": {"sha": ob["sha"], "commit_date": iso(ob.get("ct")), "box": ob["box"], "job": ob["job"],
                        "measured": ob.get("measured"), "identity": ident, "newer_failed": flags,
-                       "observation": {k: ob.get(k) for k in OB_FIELDS}},
+                       "observation": stored_ob(ob)},
     }
 
 
@@ -788,6 +801,8 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
         "main_board": {"column": column, "label": label, "newest_sha": newest, "oldest_sha": oldest,
                        "boxes": sorted(boxes), "replaced": n_replaced, "withheld_opponents": withheld,
                        "identity": idn, "differ": differ, "failed_runs": n_failed, "inputs": inputs,
+                       "failed_observations": [stored_ob(o) for (col, _rid), obs in sorted(failures.items())
+                                               if col == column for o in obs],
                        "opponent_boards": [{"label": s["label"], "path": s["path"]} for s in sources]},
     }
     return result

@@ -4,7 +4,8 @@
 
     python3 -m unittest discover -s tools -p test_main_board_ingest.py -v
 
-The fixture holds a newer slower default race (it must replace the older one), an A/B line and a
+The fixture holds a newer slower default race (it must replace the older one), a newer failed run (a flag,
+never a cell), an error-only race (FAILED table), a DIFFER pair, an A/B line and a
 grid line (skipped), a line whose sha is not in the repo (skipped with a note), an infrastructure
 status (never replaces), a board-runner summary of a default main job and one of a grid job, the
 other vendor's digest at the same commit (identity), and stored opponent boards (copied, one of
@@ -56,6 +57,8 @@ n0005 nvidia main@ccccccccc ALGOS lane=ridge-cv dataset=istella arm=ours status=
 n0006 nvidia main@bbbbbbbbb ALGOS lane=ridge-cv dataset=taxi arm=ours status=not_ready median_ms=None quality={} digest=none
 n0007 nvidia main@bbbbbbbbb [MOJOLEARN_GRID_TAG=flips1.trees.nv.bb] CMD flips1.trees.nv.bb rc=0 builds=[libMojolearnMath rc=0 ] digest=4cce1743fce22092 last: GRIDBB-DONE tag=flips1.trees.nv.bb races=1 ok=1 bench_board_rc=0 out=/root/lq/out/n0007/bb
 n0008 nvidia main@bbbbbbbbb [MOJOLEARN_GRID_TAG=ge1234567.P002.bb MOJOLEARN_BUILD_DEFINES=MOJOLEARN_Y=1] CMD ge1234567.P002.bb rc=0 builds=[libMojolearnMath rc=0 ] digest=none last: GRIDBB-DONE tag=ge1234567.P002.bb races=1 ok=1
+n0010 nvidia main@bbbbbbbbb ALGOS lane=gaussian-nb dataset=taxi arm=ours status=error median_ms=None quality={} digest=none
+n0011 nvidia main@bbbbbbbbb ALGOS lane=ridge-cv dataset=istella arm=ours status=ok median_ms=30.0 quality={"r2": 0.8} digest=8888888888888888
 n0009 nvidia main@bbbbbbbbb IDCHECK ridge-cv taxi rows=small nvidia=2222222222222222 host=2222222222222222 MATCH
 """
 NV_GRID_LOGS = """\
@@ -66,6 +69,7 @@ NV_GRID_LOGS = """\
 """
 AMD_RESULTS = """\
 a0001 amd main@bbbbbbbbb ALGOS lane=ridge-cv dataset=taxi arm=ours status=ok median_ms=120.0 quality={"r2": 0.9} digest=2222222222222222
+a0002 amd main@bbbbbbbbb ALGOS lane=ridge-cv dataset=istella arm=ours status=ok median_ms=25.0 quality={"r2": 0.8} digest=7777777777777777
 """
 
 
@@ -148,7 +152,10 @@ class MainBoardIngest(unittest.TestCase):
         text = self.run_tool(check=True)
         self.assertFalse(os.path.exists(self.out))
         nv = next(l for l in text.splitlines() if l.startswith("MAINBOARD column=nvidia-l40s"))
-        self.assertIn("races=2 add=2 change=0 drop=0", nv)
+        self.assertIn("races=3 add=3 change=0 drop=0 failed=2", nv)
+        self.assertIn("DIFFER algos/ridge-cv/istella/rows=full main@bbbbbbbbb nv/n0011 8888888888888888 vs "
+                      "amd-mi325x amd/a0002 7777777777777777", text)
+        self.assertNotIn("gaussian-nb", text.split("MAINBOARD-SKIPS")[0])
         self.assertIn("label=main@bbbbbbbbb", nv)
         self.assertIn("ADD algos/ridge-cv/taxi/rows=full", text)
         self.assertIn("sha not in this repo", text)
@@ -156,7 +163,9 @@ class MainBoardIngest(unittest.TestCase):
     def test_board_newest_wins_skips_and_identity(self):
         self.run_tool()
         nv = self.board("nvidia-l40s")
-        self.assertEqual(sorted(nv["races"]), ["algos/ridge-cv/taxi/rows=full", "trees/gbdt-depthwise/taxi/rows=full"])
+        # a failed run is never a race: gaussian-nb has only an error run
+        self.assertEqual(sorted(nv["races"]), ["algos/ridge-cv/istella/rows=full", "algos/ridge-cv/taxi/rows=full",
+                                               "trees/gbdt-depthwise/taxi/rows=full"])
         rr = nv["races"]["algos/ridge-cv/taxi/rows=full"]
         ours = [c for c in rr["cells"] if c["library"] == "mojolearn"]
         self.assertEqual(len(ours), 1)
@@ -169,6 +178,11 @@ class MainBoardIngest(unittest.TestCase):
         self.assertEqual(c["hash"], "2222222222222222")
         self.assertEqual(c["main_board"]["identity"]["status"], "MATCH")
         self.assertIn("identity vs amd-mi325x: MATCH", c["source"])
+        # the newer not_ready run did not replace the ok cell; it flags it
+        self.assertEqual(c["main_board"]["newer_failed"], ["newer run bbbbbbbbb/n0006 failed: not_ready"])
+        self.assertIn("newer run bbbbbbbbb/n0006 failed: not_ready", c["source"])
+        self.assertEqual(nv["main_board"]["identity"], {"DIFFER": 1, "MATCH": 1, "n/a": 1})
+        self.assertEqual(nv["main_board"]["failed_runs"], 2)
         # opponent copied from the stored board, ratio recomputed from the two stored medians
         opp = next(x for x in rr["cells"] if x["arm"] == "cuml-gpu")
         self.assertEqual(opp["copied_from"]["board"], "opp-fixture-nv")
@@ -194,6 +208,15 @@ class MainBoardIngest(unittest.TestCase):
         self.assertIn("MAIN BOARD nvidia-l40s, version label main@bbbbbbbbb", md)
         self.assertIn("Unreleased: not reproducible by pip install", md)
         self.assertIsNone(re.search(r"\b(faster|slower)\b", md, re.I))
+        # Identity section above the box, DIFFER cells by name with both digests; FAILED table with the reason
+        self.assertLess(md.index("## Identity"), md.index("## Box"))
+        self.assertIn("**DIFFER: 1 cells", md)
+        self.assertIn("| algos/ridge-cv/istella/rows=full | main@bbbbbbbbb | nv/n0011 8888888888888888 | "
+                      "amd-mi325x amd/a0002 7777777777777777 |", md)
+        self.assertIn("| gaussian-nb | taxi | main@bbbbbbbbb | nv/n0010 | error | none |", md)
+        self.assertIn("| ridge-cv | taxi | main@bbbbbbbbb | nv/n0006 | not_ready | main@bbbbbbbbb nv/n0002 stays |", md)
+        self.assertTrue(any(e["replaced"]["job"] == "n0010" and e["failed"] and "FAILED table" in e["reason"]
+                            for e in led))
         # the other vendor: settings changed since its opponents were scored -> withheld
         amd = self.board("amd-mi325x")
         ar = amd["races"]["algos/ridge-cv/taxi/rows=full"]
