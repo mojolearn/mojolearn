@@ -312,6 +312,26 @@ def tsvd_fit_host(
     n_components: Int,
 ) raises:
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    tsvd_fit_device(
+        ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components
+    )
+    _ = x^
+
+
+def tsvd_fit_device(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises:
+    """`tsvd_fit_host`'s body on a caller-owned device buffer `x` of
+    n_rows * n_features floats: uploads X into it, and leaves it holding X
+    unchanged (the Gram only reads it), so T1 can run the explained tail on
+    the same buffer."""
     var gram = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
@@ -499,13 +519,39 @@ def tsvd_explained_host(
         x = pool_take[_PCA_POOL](ctx, n_rows * n_features)
     else:
         x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    _tsvd_explained_tail(
+        ctx, x, components_ptr, explained_ptr, ratio_ptr,
+        n_rows, n_features, n_components,
+    )
+    comptime if TSVD_FAST_POOL:
+        # after the final wait: no launch still reads x
+        pool_give[_PCA_POOL](x^)
+    else:
+        _ = x^
+
+
+def _tsvd_explained_tail(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises:
+    """`tsvd_explained_host` from the device copy of X on: uploads the
+    components, X V^T, both column variances (`x` is left centered and
+    squared: the caller must not read it again), the device tail, the two
+    downloads and the final wait. Shared by `tsvd_explained_host` and
+    `tsvd_fit_explained_host` (T1) so the two cannot drift."""
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
     var xt = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     var mu_t = ctx.enqueue_create_buffer[DType.float32](n_components)
     var var_t = ctx.enqueue_create_buffer[DType.float32](n_components)
     var mu_x = ctx.enqueue_create_buffer[DType.float32](n_features)
     var var_x = ctx.enqueue_create_buffer[DType.float32](n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     ctx.synchronize()
     gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
@@ -525,10 +571,58 @@ def tsvd_explained_host(
     ctx.synchronize()
     _ = d_exp^
     _ = d_rat^
-    comptime if TSVD_FAST_POOL:
-        # after the final wait: no launch still reads x
-        pool_give[_PCA_POOL](x^)
+    _ = components^
+    _ = xt^
+
+
+#: T1, lane fg-pca (2026-10-09), IDENTICAL default; rollback
+#: `-D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF`. `TruncatedSVD.fit` called
+#: `tsvd_fit` and then `tsvd_explained`, and each copied X host -> device
+#: (n*d*4 bytes each: 880 MB at 1M x 220, about 46 ms per copy at a
+#: pageable ~19 GB/s) and allocated its own n*d buffer. `tsvd_fit_explained`
+#: is one binding call that uploads X once: the Gram (`gemm_tn` reads X and
+#: never writes it), the eigensolver, then the explained-variance tail on the
+#: SAME device buffer. Cost: -1 H2D copy of X and -1 n*d allocation per fit at
+#: any shape. Bits: none (the same kernels on the same words in the same
+#: order; the components reach the tail through the same Float32 output
+#: array). The OFF arm (and FAST, which keeps its pooled pair, and
+#: TSVD_FUSED_STATS, which has its own upload) runs the two calls in order.
+comptime TSVD_ONE_UPLOAD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF"]()
+    and not TSVD_FUSED_STATS
+)
+
+
+def tsvd_fit_explained_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises:
+    """`tsvd_fit_host` then `tsvd_explained_host`, with one upload of X
+    under TSVD_ONE_UPLOAD (T1)."""
+    comptime if not TSVD_ONE_UPLOAD:
+        tsvd_fit_host(ctx, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components)
+        tsvd_explained_host(
+            ctx, x_ptr, components_ptr, explained_ptr, ratio_ptr,
+            n_rows, n_features, n_components,
+        )
     else:
+        var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+        tsvd_fit_device(
+            ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components
+        )
+        pca_validate(n_rows, n_features, n_components)
+        _tsvd_explained_tail(
+            ctx, x, components_ptr, explained_ptr, ratio_ptr,
+            n_rows, n_features, n_components,
+        )
         _ = x^
 
 
