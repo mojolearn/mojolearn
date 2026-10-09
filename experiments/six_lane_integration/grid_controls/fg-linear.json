@@ -91,26 +91,6 @@
    "status": "new",
    "notes": "L4. The resident Gram fit's, the incumbent ridge_fit_host's and qn_fit_host's X/y uploads (>= 1M floats) through a process-lifetime pinned stage of two 32 MB halves, double-buffered (memcpy of chunk i overlaps DMA of chunk i-1), instead of one pageable enqueue_copy. Not on Apple, IDENTICAL only. Transport only: no bit moves. Time it on the whole clock (the board's fit clock includes the X upload); also read upload_ms_separate."
   },
-  "sgd_epoch_kernel": {
-   "define": "MOJOLEARN_IDN_SGD_EPOCH_KERNEL",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_SGD_EPOCH_KERNEL"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_SGD_EPOCH_KERNEL",
-    "x_linear/device.mojo:_sgd_ek_applies",
-    "x_linear/device.mojo:1943"
-   ],
-   "binding": "_mojolearn_x_linear (host twin _mojolearn_x_linear_host unchanged)",
-   "bits_change": false,
-   "status": "new",
-   "notes": "S1. Batch > XG_TPB with batch x (d + 2) <= 2^17 and the host-schedule rate (dev_eta 0: optimal / invscaling / PA) runs through sgd_mb_chunk_kernel (64 consecutive batches a launch, one block of SGD_CHUNK_TPB) instead of SGD_IDN_MB_FUSE's 2 launches a batch. Same statements, same operands, same order: no bit change expected (ID check owed). sgd-clf taxi (d 11) qualifies at batch 4096; istella (d 220) keeps the grid form."
-  },
   "cd_gram_epochs_64": {
    "define": "MOJOLEARN_IDN_CD_GRAM_EPOCHS_64",
    "kind": "switch",
@@ -193,12 +173,17 @@
   },
   "expanded:sgd-clf": {
    "binding": "_mojolearn_x_linear (host twin _mojolearn_x_linear_host)",
-   "route": "fit: SGDClassifier.fit -> _sgd_fit -> x_linear_fit -> _sgd_mb_grid -> [sgd_epoch_kernel: sgd_mb_chunk_kernel] | SGD_IDN_MB_FUSE steprows + parts",
-   "controls": [
-    "sgd_epoch_kernel"
-   ],
+   "route": "fit: SGDClassifier.fit -> _sgd_fit -> x_linear_fit -> _sgd_mb_grid -> sgd_mb_chunk_kernel (batch <= XG_TPB) | SGD_IDN_MB_FUSE steprows + parts (S1 sgd_epoch_kernel deleted)",
+   "controls": [],
    "interaction_groups": [],
    "note": "the brief's algos:sgd-clf is the FAST key; the IDENTICAL catalog key is expanded:sgd-clf (classical-structural.json, catalog.json)"
   }
- }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_SGD_EPOCH_KERNEL",
+   "control": "sgd_epoch_kernel",
+   "reason": "DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found S1 noise: candidate/default sgd-clf istella NV 1588.5 -> 1576.7 ms (0.99x) / AMD 3961.9 -> 3957.3 (1.00x), taxi NV 1036.6 -> 1033.1 (1.00x) / AMD 2320.4 -> 2325.9 (1.00x) (nv n0606 -> n0615, amd a1065 -> a1074); accuracy SAME (0.92033 / 0.75533), same digests. The define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e."
+  }
+ ]
 }

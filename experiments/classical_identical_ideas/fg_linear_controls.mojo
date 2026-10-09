@@ -100,26 +100,10 @@ comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and is_defined["MOJOLEARN_IDN_
 # linear entries do not upload through a DeviceStore, so they take this one.
 comptime IDN_LINEAR_PINNED_UPLOAD = _FGL_IDN and not is_defined["MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF"]()
 
-# S1 (DEFAULT OFF, -D MOJOLEARN_IDN_SGD_EPOCH_KERNEL). Minibatch SGD at the
-# large batch (SGDClassifier / SGDRegressor, batch 4096) ran two launches a
-# batch under SGD_IDN_MB_FUSE (steprows + parts): at 1M rows 245 batches an
-# epoch, 490 launches, ~49k a 100-epoch fit, while a narrow batch's work is a
-# few us. Here the chunk kernel (`sgd_mb_chunk_kernel`, x_linear/device.mojo:
-# K = SGD_CHUNK_DEFAULT consecutive batches in ONE block of SGD_CHUNK_TPB
-# threads, each batch's rows, partials and step in order with device-ordering
-# barriers, `mb_row` / `mb_part` / `mb_step` on the same operands in the same
-# order) also serves the large batch when a batch's work is small:
-# batch x (d + 2) <= SGD_EK_MAX_WORK (2^17 words: at 1024 threads ~128 cells a
-# thread a phase, a ~10-30 us block, the scale of the two launches it
-# replaces; wider rows keep the grid form, whose many blocks then pay).
-# Rule by work per batch, not by a board width. Only where the rate is the
-# host schedule's (`dev_eta == 0`: optimal, invscaling, PA): the chunk body
-# takes eta from its constant words, the grid form from the device's
-# epoch-end state. NO BIT MOVES: the chunk body's statements are the grid
-# kernels' (lane/neural-pass134), the one-class counts are integers (exact in
-# any split), so the host column (`sgd_mb_one`) is unchanged.
-comptime IDN_SGD_EPOCH_KERNEL = _FGL_IDN and is_defined["MOJOLEARN_IDN_SGD_EPOCH_KERNEL"]()
-comptime SGD_EK_MAX_WORK = 1 << 17
+# TOMBSTONE: S1 (MOJOLEARN_IDN_SGD_EPOCH_KERNEL, large-batch SGD through the K-batch
+# chunk kernel) deleted 2026-10-09 (lane postmerge-act-2): noise, sgd-clf istella
+# NV 0.99x / AMD 1.00x, taxi 1.00x / 1.00x (nv n0606->n0615, amd a1065->a1074),
+# accuracy SAME, same digests; refused in core/six_lane_experiment_guards.mojo; main 5c137b55e.
 
 # C2 (DEFAULT OFF, -D MOJOLEARN_IDN_CD_GRAM_EPOCHS_64). Lasso / ElasticNet's
 # IDENTICAL Gram sweep (solver/impl/cd.mojo `cd_idn_gram_sweep_kernel`) runs
