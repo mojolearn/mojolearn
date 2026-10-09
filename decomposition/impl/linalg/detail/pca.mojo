@@ -62,7 +62,14 @@ from x_decomp.jacobi_par import (
 from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale_diag
 from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_vrow
-from core.gram_splitk import gram_centered_splitk_into, gram_splitk_applies
+from core.gram_splitk import (
+    gram_centered_splitk_into,
+    gram_splitk_applies,
+    gram_splitk_chunk_count,
+    gram_splitk_scratch_covers,
+)
+from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.xtdz_coalesced import column_mean_launch
 from core.column_stats import (
     STATS_TPB,
@@ -377,6 +384,49 @@ def pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
         )
     if n_components > n_cols:
         raise Error("n_components cannot exceed n_cols")
+
+
+#: P2, lane fg-pca (2026-10-09), IDENTICAL default; rollback
+#: `-D MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF`. `pca_fit_host` uploads X into a
+#: device buffer that is the fit's own and nothing reads after the Gram, so
+#: (a) the restore pass (`shift_columns_kernel` +mu: one n*d read and one
+#: n*d write, 2 x 1.8 GB at 2M x 220) is dead and is skipped, and (b) the two
+#: n*d alias buffers are sized to what the route below actually reads
+#: (`pca_cov_scratch_floats`): the split-K centered Gram reads only `x_alias`
+#: as its n_chunks*d*d partials (when `gram_splitk_scratch_covers`), the v1
+#: OP_TN Gram past the split-K width reads only `x_alias2` as the
+#: identical_gemm workspace (when that fits the old k*m contract); every other
+#: case allocated its own workspace before and still does. Cost reasoning:
+#: 2 x n*d floats of allocation and 2 x n*d words of traffic per fit at any
+#: width, against a workspace of at most n_chunks*d*d or the plan's own size.
+#: Bits: none (the words the Gram and the eigensolver read are unchanged;
+#: the restored copy was never read). IDENTICAL only: the FAST NVIDIA/AMD
+#: route (`gemm_tn_via_transpose`) reads both alias buffers at full size.
+comptime PCA_LEAN_SCRATCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF"]()
+)
+
+
+def pca_cov_scratch_floats(n_rows: Int, n_cols: Int) raises -> Tuple[Int, Int]:
+    """(x_alias, x_alias2) float counts `compute_covariance` reads on the
+    IDENTICAL default route for this shape; 1 for a buffer the route never
+    reads. Mirrors the two predicates the route itself asks
+    (`gram_splitk_applies`, then the scratch-cover tests in
+    `gram_centered_splitk_into` / `gemm_tn_identical_v1`), so a buffer is
+    either big enough for the route's reuse branch or unread."""
+    var k = n_rows
+    var m = n_cols
+    if gram_splitk_applies(m, m, k):
+        if gram_splitk_scratch_covers(m, k):
+            return (max(1, gram_splitk_chunk_count() * m * m), 1)
+        return (1, 1)
+    var need = identical_gemm_workspace_max_floats(m, m, k)
+    if need <= k * m:
+        # gemm_tn_identical_v1 tests `need <= k * m` against the buffer's
+        # nominal k*m contract; a buffer of `need` floats serves that branch
+        return (1, max(1, need))
+    return (1, 1)
 
 
 def pca_fit(

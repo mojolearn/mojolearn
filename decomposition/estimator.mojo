@@ -56,7 +56,9 @@ from core.xtdz_coalesced import column_mean_launch
 from core.gemm import gemm_nt
 from decomposition.impl.linalg.detail.pca import (
     PCA_FAST_GRAM_MMA,
+    PCA_LEAN_SCRATCH,
     compute_covariance,
+    pca_cov_scratch_floats,
     eig_and_truncate,
     pca_transform,
     pca_validate,
@@ -131,8 +133,15 @@ def pca_fit_host(
         pooled = not gram_splitk_applies(n_features, n_features, n_rows)
     var x = pool_take[_PCA_POOL](ctx, big) if pooled else ctx.enqueue_create_buffer[DType.float32](big)
     var alias_n = 1 if pooled else big
+    var alias2_n = alias_n
+    comptime if PCA_LEAN_SCRATCH:
+        # P2 (MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF restores n*d each): each
+        # alias buffer sized to what the IDENTICAL route reads, 1 if unread
+        var lean = pca_cov_scratch_floats(n_rows, n_features)
+        alias_n = lean[0]
+        alias2_n = lean[1]
     var xa = ctx.enqueue_create_buffer[DType.float32](alias_n)
-    var xa2 = ctx.enqueue_create_buffer[DType.float32](alias_n)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](alias2_n)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -151,9 +160,12 @@ def pca_fit_host(
     # (row 31). `pca.cov` is the product as the solver receives it;
     # `pca.jacobi.a` keeps its name and is the matrix the solver left.
     pca_validate(n_rows, n_features, n_components)
-    # PCA_FAST_GRAM_MMA: `x` is this fit's own device copy, never read again,
-    # so its restore pass is skipped
-    compute_covariance(ctx, x, xa, xa2, mu, cov, n_rows, n_features, not PCA_FAST_GRAM_MMA)
+    # PCA_FAST_GRAM_MMA and P2 (PCA_LEAN_SCRATCH): `x` is this fit's own
+    # device copy, never read again, so its restore pass is skipped
+    compute_covariance(
+        ctx, x, xa, xa2, mu, cov, n_rows, n_features,
+        not (PCA_FAST_GRAM_MMA or PCA_LEAN_SCRATCH),
+    )
     if trace.enabled:
         trace.record_device(ctx, "pca.mean", mu, n_features)
         trace.record_device(ctx, "pca.cov", cov, n_features * n_features)
