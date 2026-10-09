@@ -40,11 +40,17 @@ INPUTS (every path is an argument; the defaults are the grid collector's files)
 
 THE RULE: per (column, lane, dataset) the newest race wins, newest = highest
 commit date of its sha (`git log -1 --format=%ct <sha>`; a sha not in this
-repo is skipped with a note), ties by job number. A newer cell REPLACES an
-older one whatever the two times are: the board never keeps an older number
-because it was lower. An infrastructure status (not_ready, NO-RECORD,
-NO-OURS-CELL) never replaces a cell. Every replaced observation goes to
-LEDGER.json / LEDGER.md with its numbers and its replacement's.
+repo is skipped with a note), ties by job number, over the runs whose status
+is ok. A newer ok cell REPLACES an older one whatever the two times are: the
+board never keeps an older number because it was lower. A run that is not ok
+(error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL) is never a
+numeric cell and never replaces an ok cell (orchestrator, 2026-10-09): it goes
+to the board's FAILED table (lane, dataset, sha, job, the result line's reason
+text), and an older ok cell stays, flagged "newer run <sha>/<job> failed:
+<reason>". Every replaced or failed observation goes to LEDGER.json /
+LEDGER.md with its numbers and the cell that stayed. The Identity section at
+the top of BOARD.md lists every DIFFER cell by name with both digests and the
+sha.
 
 EACH CELL: lane, dataset, mode identical, our median (one scored run), the
 quality metrics, the output digest, commit sha, box/job id, commit date, and
@@ -126,7 +132,7 @@ SETTINGS_KEYS = ("params", "dataset_params", "block", "task", "kind", "stride_su
 PRIORITY = {"json": 3, "algos": 2, "gridbb": 2, "previous": 1}
 OB_FIELDS = ("column", "vendor", "box", "job", "sha", "ct", "kind", "family", "lane", "dataset", "race_id",
              "status_raw", "status", "infra", "median_ms", "quality", "digest", "comparability", "evidence",
-             "measured", "tag")
+             "measured", "tag", "reason")
 
 
 def now_utc():
@@ -337,7 +343,20 @@ def make_ob(BB, resolve, skips, *, kind, vendor, box, job, head, family, lane, d
                 lane=lane, dataset=dataset, race_id=BB.race_id(family, lane, dataset, None, shape),
                 status_raw=status_raw, status=board_status(status_raw, median_ms), infra=is_infra(status_raw),
                 median_ms=median_ms, quality=quality or {}, digest=digest, comparability=comparability or {},
-                evidence=evidence, measured=measured, tag=tag)
+                evidence=evidence, measured=measured, tag=tag, reason=failure_reason(status_raw, median_ms, quality))
+
+
+def failure_reason(status_raw, median_ms, quality):
+    """The failure text a result line carries: its status, plus any error/reason text its quality holds.
+    None for an ok run with a median."""
+    if str(status_raw) == "ok" and median_ms is not None:
+        return None
+    parts = [str(status_raw) if str(status_raw) != "ok" else "ok without a median"]
+    for k in ("error", "reason", "refused", "message"):
+        v = (quality or {}).get(k) if isinstance(quality, dict) else None
+        if isinstance(v, str) and v.strip():
+            parts.append("%s: %s" % (k, " ".join(v.split())[:240]))
+    return "; ".join(parts)
 
 
 def admit_algos(BB, rec, branch, resolve, skips):
@@ -474,39 +493,56 @@ def ident_group(ob):
 def short(ob):
     return dict(sha=ob["sha"], commit_date=iso(ob.get("ct")), box=ob["box"], job=ob["job"], kind=ob["kind"],
                 status=ob["status"], median_ms=ob.get("median_ms"), digest=ob.get("digest"),
-                evidence=ob.get("evidence"))
+                evidence=ob.get("evidence"), reason=ob.get("reason"))
+
+
+def is_ok(ob):
+    """Only an ok run with a median becomes a numeric board cell (orchestrator, 2026-10-09): error,
+    refused, timeout, not_ready, NO-RECORD and NO-OURS-CELL never do, and never replace an ok cell."""
+    return ob.get("status") == "ok" and ob.get("median_ms") is not None
 
 
 def choose(observations):
-    """-> (winners {(column, race_id): ob}, ledger entries [..])."""
+    """-> (winners {(column, race_id): newest ok ob}, failures {(column, race_id): [failed obs newer than
+    the winner, or all of them when the race has no ok run], newest first}, ledger entries [..])."""
     groups = {}
     for ob in observations:
         groups.setdefault((ob["column"], ob["race_id"]), []).append(ob)
-    winners, ledger = {}, []
+    winners, failures, ledger = {}, {}, []
     for key, group in sorted(groups.items()):
         group.sort(key=order_key, reverse=True)
-        real = [o for o in group if not o["infra"]]
-        win = real[0] if real else None
+        ok = [o for o in group if is_ok(o)]
+        win = ok[0] if ok else None
         if win is not None:
             winners[key] = win
+        newer_failed = [o for o in group if not is_ok(o) and (win is None or order_key(o) > order_key(win))]
+        if newer_failed:
+            failures[key] = newer_failed
         for o in group:
             if o is win:
                 continue
-            if o["infra"]:
-                reason = "infrastructure status %s never replaces a cell" % o["status_raw"]
+            failed = not is_ok(o)
+            if failed and o["infra"]:
+                reason = "infrastructure status %s never replaces an ok cell" % o["status_raw"]
+            elif failed:
+                reason = "failed run (%s) never replaces an ok cell" % (o.get("reason") or o["status"])
             elif o.get("ct") == win.get("ct"):
                 reason = "same commit date, earlier job"
             else:
                 reason = "older commit"
-            ledger.append(dict(column=key[0], race=key[1], reason=reason, replaced=short(o),
+            if failed and win is None:
+                reason += "; no ok run of this race: FAILED table"
+            elif failed and order_key(o) > order_key(win):
+                reason += "; flagged on the ok cell from main@%s" % win["sha"][:9]
+            ledger.append(dict(column=key[0], race=key[1], reason=reason, failed=failed, replaced=short(o),
                                replaced_by=short(win) if win else None))
-    return winners, ledger
+    return winners, failures, ledger
 
 
 def identity_index(observations):
     idx = {}
     for ob in observations:
-        if ob["status"] == "ok" and ob.get("digest") and not ob["infra"]:
+        if is_ok(ob) and ob.get("digest"):
             idx.setdefault((ob["vendor"], ob["race_id"], ob["sha"], ident_group(ob)), []).append(ob)
     return idx
 
@@ -592,10 +628,17 @@ def copy_opponents(BB, sources, family, lane, race_id):
 # Assembly: the result structure tools/bench_board.py writes and renders
 # ---------------------------------------------------------------------------
 
-def our_cell(BB, ob, ident):
+def failed_flag(o):
+    return "newer run %s/%s failed: %s" % (o["sha"][:9], o["job"], o.get("reason") or o["status"])
+
+
+def our_cell(BB, ob, ident, newer_failed=()):
     ms = ob.get("median_ms") if ob["status"] == "ok" else None
     tail = "main@%s %s/%s %s; identity vs %s: %s" % (
         ob["sha"][:9], ob["box"], ob["job"], (iso(ob.get("ct")) or "?")[:10], ident["other_column"], ident["status"])
+    flags = [failed_flag(o) for o in newer_failed]
+    if flags:
+        tail += "; " + "; ".join(flags)
     return {
         "family": ob["family"], "lane": ob["lane"], "dataset": ob["dataset"], "rows": None, "rows_tag": "full",
         "neural_shape": "full" if ob["family"] == "neural" else None,
@@ -609,18 +652,69 @@ def our_cell(BB, ob, ident):
         "peak_host_mb": None, "peak_gpu_mb": None, "memory": {},
         "source": tail,
         "main_board": {"sha": ob["sha"], "commit_date": iso(ob.get("ct")), "box": ob["box"], "job": ob["job"],
-                       "measured": ob.get("measured"), "identity": ident,
+                       "measured": ob.get("measured"), "identity": ident, "newer_failed": flags,
                        "observation": {k: ob.get(k) for k in OB_FIELDS}},
     }
 
 
-def assemble(BB, column, winners, ledger, idx, sources, inputs, generated):
+def _md(v):
+    return " ".join(str(v if v is not None else "-").split()).replace("|", "/")
+
+
+def identity_section(races):
+    """The identity table: every DIFFER cell by name first (a cross-vendor difference is the board's most
+    important fact), then the counts."""
+    differ, counts = [], {}
+    for rid in sorted(races):
+        c = next(x for x in races[rid]["cells"] if x.get("library") == "mojolearn")
+        ident = c["main_board"]["identity"]
+        counts[ident["status"]] = counts.get(ident["status"], 0) + 1
+        if ident["status"] == "DIFFER":
+            differ.append((rid, c, ident))
+    L = ["Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA "
+         "and AMD). Counts: %s." % (", ".join("%s %d" % kv for kv in sorted(counts.items())) or "none"), ""]
+    if differ:
+        L += ["**DIFFER: %d cells whose digest differs from the other vendor's at the same commit.**" % len(differ),
+              "", "| race | commit | this column: box/job, digest | other column: box/job, digest |",
+              "|---|---|---|---|"]
+        for rid, c, ident in differ:
+            mb = c["main_board"]
+            L.append("| %s | main@%s | %s/%s %s | %s %s %s |" % (
+                _md(rid), _md(mb["sha"][:9]), _md(mb["box"]), _md(mb["job"]), _md(c.get("hash")),
+                _md(ident["other_column"]), _md(ident["other_job"]), _md(ident["other_digest"])))
+    else:
+        L.append("DIFFER: none.")
+    return {"title": "Identity", "lines": L}
+
+
+def failed_section(failures, winners, column):
+    rows = []
+    for (col, rid), obs in sorted(failures.items()):
+        if col != column:
+            continue
+        win = winners.get((col, rid))
+        for o in obs:
+            rows.append("| %s | %s | main@%s | %s/%s | %s | %s |" % (
+                _md(o["lane"]), _md(o["dataset"]), _md(o["sha"][:9]), _md(o["box"]), _md(o["job"]),
+                _md(o.get("reason") or o["status"]),
+                "main@%s %s/%s stays" % (win["sha"][:9], win["box"], win["job"]) if win else "none"))
+    L = ["Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). "
+         "They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board "
+         "flagged with the failed run. %d failed runs." % len(rows), ""]
+    if rows:
+        L += ["| lane | dataset | commit | box/job | reason | ok cell on the board |",
+              "|---|---|---|---|---|---|"] + rows
+    return {"title": "FAILED", "lines": L}, len(rows)
+
+
+def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failures=None):
+    failures = failures or {}
     races, withheld, boxes, shas = {}, 0, set(), []
     for (col, rid), ob in sorted(winners.items()):
         if col != column:
             continue
         ident = identity(ob, idx)
-        cell = our_cell(BB, ob, ident)
+        cell = our_cell(BB, ob, ident, failures.get((col, rid)) or ())
         opps, src_rr, why = copy_opponents(BB, sources, ob["family"], ob["lane"], rid)
         cells = BB.add_ratios([cell] + opps)
         lane_config = copy.deepcopy((src_rr or {}).get("lane_config")) if src_rr else None
@@ -659,9 +753,11 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated):
             len(races), (oldest or "none")[:9], iso(shas[0][0]) if shas else "-", (newest or "none")[:9],
             iso(shas[-1][0]) if shas else "-", ", ".join(BOX_TEXT.get(b, b) for b in sorted(boxes)) or "none"),
         "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, "
-        "then job number). A newer cell replaces an older one whatever the two times are; %d replaced "
-        "observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid "
-        "runs) are never on this board." % n_replaced,
+        "then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times "
+        "are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an "
+        "older ok cell stays, flagged with the newer failed run). %d replaced or failed observations are in "
+        "LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on "
+        "this board." % n_replaced,
         "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column "
         "names the cell's commit, box/job, commit date and the other vendor's digest at the same commit "
         "(identity: %s)." % (", ".join("%s %d" % kv for kv in sorted(idn.items())) or "none"),
@@ -671,6 +767,13 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated):
         "upload_ms_separate. Opponents withheld for changed lane settings: %d races." % (
             ", ".join(s["label"] for s in sources) or "none found", withheld),
     ]
+    fsec, n_failed = failed_section(failures, winners, column)
+    isec = identity_section(races)
+    differ = [{"race": rid, "sha": rr["main_board"]["sha"],
+               "digest": next(c for c in rr["cells"] if c.get("library") == "mojolearn").get("hash"),
+               "job": "%s/%s" % (rr["main_board"]["box"], rr["main_board"]["job"]),
+               "other": next(c for c in rr["cells"] if c.get("library") == "mojolearn")["main_board"]["identity"]}
+              for rid, rr in sorted(races.items()) if rr["main_board"]["identity"] == "DIFFER"]
     gpu = dict(COLUMN_GPU[column])
     result = {
         "schema": BB.SCHEMA, "main_board_schema": SCHEMA_NOTE, "created": generated,
@@ -681,10 +784,10 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated):
                 "repo": {"commit": newest}},
         "config": {"vendor": COLUMN_VENDOR[column], "modes": ["identical"], "rounds": 1, "smoke": False,
                    "families": sorted({rr["family"] for rr in races.values()})},
-        "plan": sorted(races), "races": races, "board_notes": notes,
+        "plan": sorted(races), "races": races, "board_notes": notes, "board_sections": [isec, fsec],
         "main_board": {"column": column, "label": label, "newest_sha": newest, "oldest_sha": oldest,
                        "boxes": sorted(boxes), "replaced": n_replaced, "withheld_opponents": withheld,
-                       "identity": idn, "inputs": inputs,
+                       "identity": idn, "differ": differ, "failed_runs": n_failed, "inputs": inputs,
                        "opponent_boards": [{"label": s["label"], "path": s["path"]} for s in sources]},
     }
     return result
@@ -699,10 +802,12 @@ def diff_boards(prev, new):
             if c is not None:
                 mb = c.get("main_board") or {}
                 out[rid] = (str(mb.get("sha") or "")[:9], "%s/%s" % (mb.get("box"), mb.get("job")),
-                            c.get("median_ms"), c.get("status"), c.get("hash"))
+                            c.get("median_ms"), c.get("status"), c.get("hash"),
+                            "; ".join(mb.get("newer_failed") or []))
         return out
     a, b = view(prev), view(new)
-    txt = lambda v: "main@%s %s %s ms %s digest %s" % (v[0], v[1], v[2], v[3], v[4])   # noqa: E731
+    txt = lambda v: "main@%s %s %s ms %s digest %s%s" % (   # noqa: E731
+        v[0], v[1], v[2], v[3], v[4], (" [%s]" % v[5]) if v[5] else "")
     out = []
     for rid in sorted(set(a) | set(b)):
         if rid not in a:
@@ -821,24 +926,29 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
         prevs[column] = (root, BB.load_result(os.path.join(root, "board.json")))
         all_obs.extend(previous_observations(prevs[column][1]))
     obs = dedupe(all_obs)
-    winners, ledger = choose(obs)
+    winners, failures, ledger = choose(obs)
     idx = identity_index(obs)
     summary = {}
     for column in columns:
         root, prev = prevs[column]
         sources = load_opponent_sources(BB, args.opponents, column, skips)
-        result = assemble(BB, column, winners, ledger, idx, sources, inputs, generated)
+        result = assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failures)
         changes = diff_boards(prev, result)
         mine = [e for e in ledger if e["column"] == column]
         kinds = {}
         for k, _r, _a, _b in changes:
             kinds[k] = kinds.get(k, 0) + 1
         mb = result["main_board"]
-        line = ("MAINBOARD column=%s label=%s races=%d add=%d change=%d drop=%d replaced=%d withheld_opponents=%d "
-                "identity=%s" % (column, mb["label"], len(result["races"]), kinds.get("ADD", 0),
-                                 kinds.get("CHANGE", 0), kinds.get("DROP", 0), len(mine), mb["withheld_opponents"],
-                                 ",".join("%s:%d" % kv for kv in sorted(mb["identity"].items())) or "none"))
+        line = ("MAINBOARD column=%s label=%s races=%d add=%d change=%d drop=%d failed=%d ledger=%d "
+                "withheld_opponents=%d identity=%s" % (
+                    column, mb["label"], len(result["races"]), kinds.get("ADD", 0), kinds.get("CHANGE", 0),
+                    kinds.get("DROP", 0), mb["failed_runs"], len(mine), mb["withheld_opponents"],
+                    ",".join("%s:%d" % kv for kv in sorted(mb["identity"].items())) or "none"))
         print(line, file=out)
+        for d in mb["differ"]:
+            print("  DIFFER %s main@%s %s %s vs %s %s %s" % (
+                d["race"], d["sha"][:9], d["job"], d["digest"], d["other"]["other_column"],
+                d["other"]["other_job"], d["other"]["other_digest"]), file=out)
         summary[column] = line
         if args.check:
             for k, rid, a, b in changes[:args.max_lines]:
