@@ -47,11 +47,12 @@ CPython 3.10, 3.11, 3.12, 3.13 and 3.14 on both wheels.
 
 | Family | `identical` | `deterministic` | `fast` |
 |---|---|---|---|
-| Gradient boosting | yes | yes | yes |
-| Random Forest | yes | yes | yes |
-| Extra Trees | yes | yes | yes |
+| Gradient boosting | yes | yes | yes (opt-in; tuned and measured on Apple) |
+| Random Forest | yes | yes | yes (opt-in; tuned and measured on Apple) |
+| Extra Trees | yes | yes | yes (opt-in; tuned and measured on Apple) |
+| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | no | yes (opt-in; tuned and measured on Apple) |
 | Neural networks, GPU surface (LanguageModelTrainer, TransformerBlock, Mamba1/2/3Block, SambaStack, SmallMLPTrainer, Embedding, linalg GEMMs) | yes | no | Apple only (the Apple FAST neural tier, 2026-10-03; the byte LM's FAST build lands with lane afn-lm) |
-| Every other family (classical ML, expansion lanes) | yes | no | yes (opt-in; tuned and measured on Apple) |
+| Every other family (the rest of classical ML and the expansion lanes) | yes | no | yes (opt-in; tuned and measured on Apple) |
 
 Select a process mode with `mojolearn.set_numeric_mode(...)` or the
 `MOJOLEARN_NUMERIC_MODE` environment variable. Estimators that accept
