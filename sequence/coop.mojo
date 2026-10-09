@@ -221,7 +221,7 @@ def coop_ln_bwd_x(row: Int, lane: Int, a: Args):
 #: define and the cost reasoning: sequence/layernorm.mojo LN_ROW_WARP). The
 #: row's reductions on the cell's 32 lanes: lane j folds c = j, j + 32, ...
 #: ascending from +0.0 (coalesced: consecutive lanes read consecutive
-#: words), then `coop_rw_total` runs the five-level tree of `rw_tree`. Same
+#: words), then `coop_rw_total` runs the five-level tree of fold32's `tree32`. Same
 #: partials, same tree, same adds as the host twin; BITS CHANGE against the
 #: one-chain row (fold order), on every column together.
 #: blocks of LN_RW_LANES words a lane loads ahead of its chain (loads only:
@@ -231,7 +231,7 @@ comptime LN_RW_R = 8
 
 @always_inline
 def coop_rw_total(v: Float32) -> Float32:
-    """`rw_tree` on the cell: level h (16, 8, 4, 2, 1) gives lane j the sum
+    """`tree32` (sequence/fold32.mojo) on the cell: level h (16, 8, 4, 2, 1) gives lane j the sum
     add(p[j], p[j ^ h]); for j < h that is the tree's add(p[j], p[j + h]), and
     for j >= h the same two operands (an IEEE add is commutative, so the
     lane's word is bit-identical to its partner's). After five levels every
@@ -289,7 +289,7 @@ def coop_rw_sq(p: FP, base: Int, D: Int, mean: Float32, lane: Int) -> Float32:
 @always_inline
 def coop_ln_fwd_rw(row: Int, lane: Int, a: Args):
     """`op_ln_fwd`'s row under LN_ROW_WARP: the host twin's `_stats` fold on
-    the cell (`_rw_fold_sum`, `_rw_fold_sq`, `rw_tree`); elementwise outputs
+    the cell (`_rw_fold_sum`, `_rw_fold_sq`, `tree32`); elementwise outputs
     as `coop_ln_fwd`."""
     var D = a.i0
     var base = row * D
