@@ -48,7 +48,7 @@ struct NeuralLifetimeArena(Movable):
         var high = 1
         # Metadata only: each range describes a model tensor, not a data row.
         # First fit is deterministic and entirely driven by live byte intervals.
-        for i in range(len(ranges)):
+        for i in range(len(ranges)):  # small-loop(ranges: model tensor live ranges): plans arena offsets from metadata
             ref item = ranges[i]
             if item.cells < 1 or item.cells > capacity or item.first_stage < 0 or item.last_stage < item.first_stage:
                 raise Error("NN62 invalid live range or insufficient byte budget")

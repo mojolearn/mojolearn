@@ -2031,7 +2031,7 @@ def _byte_neural_group_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step
     var kinds = List[Int32]()
     var groups = len(tr.buffers.offsets) - 1
     var largest = 0
-    for j in range(groups):
+    for j in range(groups):  # small-loop(groups: optimizer parameter groups): builds per-group metadata, not data
         offsets.append(Int32(tr.buffers.offsets[j]))
         largest = max(largest, tr.buffers.offsets[j + 1] - tr.buffers.offsets[j])
         configs.append(tr.optimizer.copy())

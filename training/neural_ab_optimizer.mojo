@@ -72,7 +72,7 @@ def nn_adam_scalar_table(ctx: DeviceContext, configs: List[OptimizerConfig],
         raise Error("NN56 group/step metadata length mismatch")
     var metadata = List[Float32]()
     var counts = List[Int64]()
-    for group in range(len(configs)):
+    for group in range(len(configs)):  # small-loop(configs: optimizer groups): packs per-group config scalars for upload
         if steps[group] < 1:
             raise Error("NN56 optimizer step must be positive")
         ref cfg = configs[group]
