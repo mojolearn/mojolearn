@@ -11,14 +11,14 @@ import six_lane_mlp_variants as m
 from six_lane_register_full_mlp import facts_for
 from six_lane_full_variants import validate_variant
 from six_lane_ab import runtime_requirements
-from six_lane_matrix_io import read_matrix
 
 
 class MLPAdmission(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.matrix=read_matrix(m.ROOT/'experiments/six_lane_integration/matrix.json')
-        cls.scope=next(c for c in cls.matrix['cells'] if c['key']=='19744574fa8682fda571')
+        # The one scope cell this test needs, kept from the retired six-lane matrix (deleted 2026-10-08).
+        cls.scope=json.loads((Path(__file__).with_name('six_lane_mlp_scope_cell.json')).read_text())
+        cls.matrix={'cells':[cls.scope]}
 
     def fact(self,row):
         cell=m.variant_cell(self.scope,row)

@@ -21,7 +21,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.rtf_seam import rtf_mul_add
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats, NEURAL_GEMM_EXPERIMENT_ENABLED
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
-from gemm.checks.gemm_identical import identical_gemm_streaming_applies
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
     PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, apple_mma_applies_one_leaf, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
@@ -791,15 +790,8 @@ def device_gemm(
         var wp = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
         identical_gemm_into[False](ctx, c, a, b, wp, m, n, k, op)
         _ = wp^
-    elif identical_gemm_streaming_applies(m, n, k):
-        # NI02 must precede the CNN-only forced split/TN and Apple plan
-        # paths. Those plans bypass shipped dispatch and can require more
-        # planes than the bounded streaming workspace. A uses one public
-        # dispatcher here; B retains the original explicit-plan choices.
-        var streamed_ws = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
-        identical_gemm_into[False](ctx, c, a, b, streamed_ws, m, n, k, op)
-        _ = streamed_ws^
-        return
+    # (the NI02 stream_all pre-check, identical_gemm_streaming_applies, was deleted 2026-10-08 with that grid
+    # ge123e6f9 loser arm; recoverable at main bc10b8b56)
     # DEVIATION 5718: the shipped dispatcher (`identical_gemm_into`, the plan
     # `choose_gemm_plan` picks) on a cached workspace, instead of
     # `identical_gemm`'s allocate, run, synchronize and free per call.

@@ -201,8 +201,10 @@ def ridge_kfold_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
     # C13: one immutable compensated cache for the disjoint contiguous folds.
     # Default ON in IDENTICAL since lane/ridgecv-c13 (2026-10-07): full Taxi
     # 0.09x and full Istella 0.80-0.86x of the incumbent on NVIDIA and AMD with
-    # equal r2/rmse and equal NVIDIA/AMD output hashes; numbers and the _OFF
-    # switch in experiments/classical_identical_ideas/linear_controls.mojo.
+    # equal r2/rmse and equal NVIDIA/AMD output hashes. The _OFF switch was
+    # deleted 2026-10-08 (grid ge123e6f9: off 1.19x/1.11x istella, 19.5x/18.0x
+    # taxi slower NV/AMD, quality same; main bc10b8b56): the per-fold passes
+    # below are the FAST route only (linear_controls.mojo).
     var fold_words = List[Float32](length=k * fold_stat_words(d) if C13_FOLD_STATS else 1, fill=Float32(0))
     var fold_cache = FP(unsafe_from_address=Int(fold_words.unsafe_ptr()))
     comptime if C13_FOLD_STATS:

@@ -15,10 +15,20 @@ import subprocess
 MATRIX_PATH = 'experiments/six_lane_integration/matrix.json'
 
 
+#: The committed six-lane planning matrix was deleted on 2026-10-08 (the plan it held is done; the
+#: grid planner keeps only its workload ids, experiments/six_lane_integration/workload_ids.json).
+#: Its exact bytes are archived in R2 under RETIRED_MATRIX_R2_KEY.
+RETIRED_MATRIX_R2_KEY = ('evidence/six-lane-integration-20261006/'
+                         'matrix-9ea8a87f94ff64ec92ae1d5908474ebd1f919989.json')
+
+
 def matrix_bytes(path):
     path = Path(path)
     if not path.exists() and path.suffix == '.json':
         path = path.with_suffix('.json.gz')
+    if not path.exists() and path.as_posix().endswith(MATRIX_PATH + '.gz'):
+        raise FileNotFoundError(f'{path}: the six-lane planning matrix was retired on 2026-10-08; '
+                                f'fetch the archived copy from R2 key {RETIRED_MATRIX_R2_KEY}')
     data = path.read_bytes()
     return gzip.decompress(data) if path.suffix == '.gz' else data
 

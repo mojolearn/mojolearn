@@ -129,8 +129,6 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
     is `^`.
 """
 
-from transformer.experiments.summary_model_host import model_summary_host_backward
-from transformer.experiments.attention_summary_contract import NN20_BALANCED_SUMMARY_TREE
 from transformer.experiments.norm_profile_contract import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
@@ -1614,29 +1612,11 @@ def transformer_block_backward_oracle(
     # materialized expansion (contract DEVIATION 813). At `n_rep == 1` a
     # broken head-to-kv map is INVISIBLE, so the gates must carry both.
     # =====================================================================
-    if NN20_BALANCED_SUMMARY_TREE:
-        # Build outputs outside st so immutable input borrows never overlap
-        # mutable stage-field borrows in the host oracle.
-        var nz = List[Float32]()
-        var nq = List[Float32]()
-        var nk = List[Float32]()
-        var nv = List[Float32]()
-        var nw = List[Float32]()
-        var nm = List[Float32]()
-        var ns = List[Float32]()
-        var nc = List[Float32]()
-        model_summary_host_backward(fwd.q_rope_out,st.d_attn_ctx,fwd.kv_k_cache,fwd.kv_v_cache,
-            fwd.attn_max,fwd.attn_denom,b,l,nh,nkv,hd,s,pos0,key_lo,window,attention_scale(hd),
-            nz,nq,nk,nv,nw,nm,ns,nc)
-        st.attn_zdot = nz^
-        st.d_q_rope = nq^
-        st.d_k_cache = nk^
-        st.d_v_cache = nv^
-        st.d_attn_weights = nw^
-        st.d_attn_masked = nm^
-        st.d_attn_scores = ns^
-        st.d_qk_cell = nc^
-    elif fwd.attn_v2:
+    # Tried 2026-10-08 (MOJOLEARN_IDN_ATTN_SOFTMAX=1, the NN20 summary_tree arm, run ge123e6f9): NV/AMD lm-forward
+    # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
+    # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
+    # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
+    if fwd.attn_v2:
         var av2 = attention_v2_host_backward(
             fwd.q_rope_out, fwd.kv_k_cache, fwd.kv_v_cache, st.d_attn_ctx,
             b, l, nh, nkv, s, hd, own0, window, attention_scale(hd),

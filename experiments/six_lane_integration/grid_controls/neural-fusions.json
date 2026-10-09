@@ -49,52 +49,6 @@
    "bits_change": false,
    "status": "new",
    "notes": "tokens staged per chunk (shared memory TOK*CH*16*4 bytes); only read with m1_scan on (persistent arm; the guards refuse it with any other arm)"
-  },
-  "nn20_split_kv": {
-   "define": "MOJOLEARN_IDN_NN20_SPLIT_KV",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_NN20_SPLIT_KV=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "transformer/experiments/attention_summary_split.mojo:50",
-    "transformer/experiments/attention_summary_split.mojo:216",
-    "transformer/experiments/summary_model.mojo:155"
-   ],
-   "binding": "_mojolearn_transformer",
-   "bits_change": false,
-   "requires": [
-    "MOJOLEARN_IDN_ATTN_SOFTMAX=1"
-   ],
-   "status": "rewritten",
-   "notes": "NN20 split-KV summary forward; only read with attn_softmax on (the NN20 profile, arm summary_tree, MOJOLEARN_IDN_ATTN_SOFTMAX=1). OFF arm is main (no define); the grid adds the parent arm, so the A/B against attn_softmax=summary_tree alone isolates the split. Bits equal to NN20 (NN20 itself is a profile change vs v1). ON adds two scratch allocations and one counted completion wait."
-  },
-  "nn20_split_kv_leaves": {
-   "define": "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES",
-   "kind": "int_sweep",
-   "arms": {
-    "2": [
-     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=2"
-    ],
-    "4": [
-     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=4"
-    ],
-    "8": [
-     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8"
-    ]
-   },
-   "default": "4",
-   "source": [
-    "transformer/experiments/attention_summary_split.mojo:56"
-   ],
-   "binding": "_mojolearn_transformer",
-   "bits_change": false,
-   "status": "new",
-   "notes": "32-key leaves per split (power of two, aligned); execution plan only"
   }
  },
  "algorithms": {
@@ -122,35 +76,19 @@
   },
   "neural:transformer-forward": {
    "binding": "_mojolearn_transformer",
-   "route": "TransformerBlock.forward -> llama_decoder_layer -> eager attention (modeling_llama.mojo:4183, NN20 on) -> summary_model.model_summary_forward -> _nn20_split_forward",
+   "route": "TransformerBlock.forward -> llama_decoder_layer -> eager attention (modeling_llama.mojo eager_attention_forward; the NN20 summary route was deleted 2026-10-08, lane grid-act-3)",
    "controls": [
-    "attn_softmax",
-    "nn20_split_kv",
-    "nn20_split_kv_leaves"
+    "attn_softmax"
    ],
-   "interaction_groups": [
-    [
-     "attn_softmax",
-     "nn20_split_kv",
-     "nn20_split_kv_leaves"
-    ]
-   ]
+   "interaction_groups": []
   },
   "neural:samba-forward": {
    "binding": "_mojolearn_transformer",
-   "route": "SambaStack attention layers through the transformer binding -> same NN20 route",
+   "route": "SambaStack attention layers through the transformer binding -> eager attention (the NN20 summary route was deleted 2026-10-08, lane grid-act-3)",
    "controls": [
-    "attn_softmax",
-    "nn20_split_kv",
-    "nn20_split_kv_leaves"
+    "attn_softmax"
    ],
-   "interaction_groups": [
-    [
-     "attn_softmax",
-     "nn20_split_kv",
-     "nn20_split_kv_leaves"
-    ]
-   ]
+   "interaction_groups": []
   }
  },
  "removed": [
@@ -158,6 +96,16 @@
    "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN",
    "control": "m1_persistent_scan",
    "reason": "MERGED into m1_scan (-D MOJOLEARN_IDN_M1_SCAN=1|2|3) by lane/grid-prune 2026-10-07; old define refused in core/six_lane_experiment_guards.mojo"
+  },
+  {
+   "define": "MOJOLEARN_IDN_NN20_SPLIT_KV",
+   "control": "nn20_split_kv",
+   "reason": "DELETED 2026-10-08 (lane grid-act-3) with its parent arm attn_softmax=summary_tree (MOJOLEARN_IDN_ATTN_SOFTMAX=1, IDENTICAL grid ge123e6f9 loser, 1.6-43x slower NV/AMD): the split-KV code lived in transformer/experiments/attention_summary_split.mojo and summary_model.mojo, both deleted. Never measured on its own. Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES",
+   "control": "nn20_split_kv_leaves",
+   "reason": "DELETED 2026-10-08 (lane grid-act-3) with its parent arm attn_softmax=summary_tree (MOJOLEARN_IDN_ATTN_SOFTMAX=1, IDENTICAL grid ge123e6f9 loser, 1.6-43x slower NV/AMD): the split-KV code lived in transformer/experiments/attention_summary_split.mojo and summary_model.mojo, both deleted. Never measured on its own. Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
   }
  ],
  "ideas": [

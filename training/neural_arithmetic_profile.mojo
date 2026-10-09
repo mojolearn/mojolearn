@@ -11,8 +11,8 @@ def neural_arithmetic_suffix() -> String:
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
         comptime if NEURAL_PROFILE_CHANGED:
             result += ".nn-gemm-v2-l" + String(NEURAL_LEAF) + "-c" + String(NEURAL_CHAINS)
-        comptime if get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 1:
-            result += ".nn-attention-v2-tree"
+        # ".nn-attention-v2-tree" (MOJOLEARN_IDN_ATTN_SOFTMAX=1, summary_tree) deleted 2026-10-08: grid ge123e6f9
+        # loser, 1.6-43x slower NV/AMD; recoverable at main bc10b8b56.
         comptime if (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4):
             result += ".nn-norm-v2-lanes8"
         # State/gradient graphs also belong to the serialized arithmetic

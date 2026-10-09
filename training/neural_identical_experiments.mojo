@@ -75,8 +75,9 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED
 comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 0]() == 3
 
 # NI20: fixed tile32 online attention numerical graph on every column. Arm 2
-# of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1 is NN20,
-# transformer/experiments/attention_summary_contract.mojo).
+# of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1, the NN20
+# summary tree, was deleted 2026-10-08 as a grid ge123e6f9 loser and is refused;
+# recoverable at main bc10b8b56).
 comptime IDN_ATTENTION_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 2
 # S1 (lane/samba-resident, 2026-10-07): the Samba stack's forward and train
 # step as ONE device-resident binding call each (training/samba_resident.mojo):

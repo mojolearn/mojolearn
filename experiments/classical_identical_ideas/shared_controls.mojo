@@ -72,7 +72,16 @@ comptime C08_DICTIONARY = C08_TARGET_CODES or C08_ONEHOT_FT or C08_ORDINAL_FT
 # OneHot/Ordinal/TargetEncoder fit, LabelEncoder-style callers) as a parallel
 # chunked run scan over all columns at once (x_prep/ddict.mojo) instead of one
 # thread per column walking n sorted rows. Same words, same counts.
-comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN"]()
+# Promoted 2026-10-08 (lane grid-act-3, IDENTICAL grid ge123e6f9, one run per arm,
+# incumbent -> scan ms, istella / taxi): onehot NV 53.9 -> 46.7 / 41.7 -> 32.1,
+# AMD 75.2 -> 21.2 / 72.1 -> 18.2; ordinal NV 65.0 -> 46.2 / 49.0 -> 30.2, AMD
+# 75.2 -> 21.2 / 71.5 -> 17.5; target-encoder NV 188.3 -> 175.4 / 148.2 -> 133.0,
+# AMD 142.3 -> 88.4 / 134.3 -> 78.8 (0.525x combined); output digests equal to the
+# incumbent's, so no bit moves. The scan's work is a fixed row chunk per task
+# across every column, so it wins wherever n rows per column outgrow one
+# thread's serial walk. Default on in IDENTICAL; -D MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF
+# restores the one-thread-per-column walk.
+comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL and not is_defined["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF"]()
 comptime C09_REG_BUNDLE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C09_REG_BUNDLE"]()
 comptime C10_RANK_REUSE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C10_RANK_REUSE"]()
 comptime C11_DRAW_GATHER = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C11_DRAW_GATHER"]()
@@ -90,31 +99,10 @@ comptime C56_LDA_INPUT = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime C05_OLS_PHASE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C05_OLS_PHASE"]()
 
-# C61 (lane classical-nbda, 2026-10-07): single-pass blocked class statistics.
-# The incumbent IDENTICAL class statistics read X twice per fit: csb1_part
-# (block sums) + csb_fold, then csb1_ss (block squared deviations from the
-# folded class mean) + csb_var. C61 reads X ONCE: one unit per (XB-row block,
-# column) keeps, for every class, the block's sum (csb1_part's chain, same
-# words), count and a Welford mean / M2; one unit per (class, column) folds the
-# blocks ascending (sum and count exactly as csb_fold, so means are unchanged)
-# and merges M2 with Chan's pairwise rule in a fixed ascending block order,
-# the M2 terms summed with a compensated (two-sum) accumulator. No serial
-# chain longer than one block. Variances take a new order (bits change on
-# every vendor and the host column together).
-# Split per estimator family (Python routes by caller):
-#   C61_NB_ARM (naive Bayes; GaussianNB is the only NB fit that reads a class
-#     variance, Multinomial/Complement/Bernoulli/Categorical read sums or
-#     counts that are already one pass, so they are not reached):
-#     -D MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1  single-pass class stats
-#     -D MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2  also GaussianNB's epsilon
-#        column variance from the merged class M2 (Chan across classes), so
-#        the unweighted fit reads X once instead of four times
-#     (arms need the value; legal set {1, 2}). Bits 4-5 (arm << 4).
-#   C61_DA (discriminants): -D MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS: LDA/QDA
-#     class stats with a variance (shrinkage routes) single-pass, and LDA
-#     'svd' takes its within-class std from the pooled class M2 instead of
-#     materialising X - mean[y] and running two column-stat passes over it.
-#     Bit 6 (value 64).
-comptime C61_NB_ARM = get_defined_int["MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS", 0]() if CLASSICAL_IDENTICAL else 0
-comptime C61_DA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS"]()
-comptime C61_OPS = C61_NB_ARM != 0 or C61_DA
+# C61 (lane classical-nbda, 2026-10-07): single-pass blocked class statistics
+# (MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1|2 for GaussianNB,
+# MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS for LDA/QDA; one walk of X with
+# per-block Welford M2 and a Chan merge) tried 2026-10-08, run ge123e6f9:
+# gaussian-nb NV/AMD 1.58x/1.05x istella, 1.42x/1.08x taxi (arm 1),
+# 1.57x/1.02x, 1.37x/1.03x (arm 2); lda-clf 1.38x/1.04x, 1.54x/1.11x SLOWER,
+# quality SAME. Deleted, both defines refused; recoverable at main bc10b8b56.

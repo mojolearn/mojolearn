@@ -44,7 +44,6 @@
     [
      "samba_resident_step",
      "attn_tile_order",
-     "nn20_split_kv",
      "attn_softmax"
     ],
     [

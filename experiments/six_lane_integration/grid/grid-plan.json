@@ -41090,7 +41090,7 @@
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
-   "experiments/six_lane_integration/matrix.json.gz (define lists; workload ids only are reused)"
+   "experiments/six_lane_integration/workload_ids.json (ids of the retired six-lane matrix; its define lists are not used)"
   ]
  },
  "measurement": {

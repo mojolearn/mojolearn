@@ -66,9 +66,8 @@ EXCLUDE_TAGS = {'off_board': 'off-board', 'blocked_quality': 'blocked-quality'}
 
 # Dependencies the notes state in prose ("only read with X on", "scope of X").
 PARENT_PATTERNS = [r'only (?:read|meaningful) with (\w+)', r'[Cc]aller-class scope of (\w+)']
-EXPLICIT_PARENTS = {
-    'nn20_split_kv_leaves': ('nn20_split_kv', 'leaves are the split plan of nn20_split_kv; the NN20 split is "inert without NN20" (neural-fusions.json)'),
-}
+# (nn20_split_kv_leaves -> nn20_split_kv was the one entry; both controls were deleted 2026-10-08, lane grid-act-3.)
+EXPLICIT_PARENTS = {}
 # Arm-level reach the notes state; scope None = every algorithm.
 ARM_EXCLUSIONS = [
     ('neural_gemm_epilogue', 'cnn', None, 'note: "cnn arm is non-board (x_cnn)"'),
@@ -84,7 +83,6 @@ GLOBAL_REACH = {
     ('gemm_tile_min_blocks', '*'): 'note: "Reaches every gemm_identical tuned-tile caller in the build (classical included)"',
     ('gemm_split_min_leaves', '*'): 'note: "the split-plan floor of every gemm_identical caller (classical included)"',
     ('gemm_kpack_rpt4', '*'): 'note: "Reaches classical callers"',
-    ('neural_gemm_schedule', 'stream_all'): 'note: "stream_all (NI02) moves every GEMM caller (gemm lane, classical, neural)"',
     ('neural_gemm_ozaki_slices', '*'): 'other_reach: "non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch"',
 }
 # Notes that name a shipped default equal to an arm on one vendor (kept in the
@@ -289,11 +287,10 @@ def resolve_token(token, controls, idx):
 
 # ------------------------------------------------------------------ inventory
 def workload_inventory():
-    from six_lane_matrix_io import read_matrix
     inv = {}
-    matrix = read_matrix(ROOT / 'experiments/six_lane_integration/matrix.json.gz')
-    for cell in matrix['cells']:
-        inv.setdefault(cell['workload_id'], 'existing six-lane matrix workload inventory (ids only; its define catalog is stale)')
+    # The six-lane planning matrix was retired on 2026-10-08; its workload ids live on in workload_ids.json.
+    for wid in json.loads((ROOT / 'experiments/six_lane_integration/workload_ids.json').read_text())['workload_ids']:
+        inv.setdefault(wid, 'existing six-lane matrix workload inventory (ids only; its define catalog is stale)')
     for path, field in (('experiments/six_lane_integration/classification_full_contracts.json', 'variant_workload_id'),
                         ('experiments/six_lane_integration/mlp_full_contracts.json', 'variant_workload_id')):
         for row in json.loads((ROOT / path).read_text())['rows']:
@@ -598,8 +595,8 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP, crosses='full', phase
     rep = {k: arm_info[k]['arms'][0] for k in eligible}
 
     def with_parent(assign):
-        # Transitive: a grandchild (nn20_split_kv_leaves -> nn20_split_kv ->
-        # attn_softmax) carries every ancestor's representative arm.
+        # Transitive: a grandchild (child -> parent -> grandparent) carries
+        # every ancestor's representative arm.
         ordered = list(assign)
         while True:
             keys = {k for k, _ in ordered}
@@ -1149,7 +1146,7 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP, crosses='fu
         inputs=dict(grid_controls=files, guards=dict(path=str(Path(guards_path).relative_to(ROOT)) if Path(guards_path).is_relative_to(ROOT) else str(guards_path),
                                                        sha256=file_sha(guards_path), asserts=guards.assert_count),
                     stale_not_used=['experiments/six_lane_integration/catalog.json (define lists)',
-                                    'experiments/six_lane_integration/matrix.json.gz (define lists; workload ids only are reused)']),
+                                    'experiments/six_lane_integration/workload_ids.json (ids of the retired six-lane matrix; its define lists are not used)']),
         vendors=VENDORS, measurement=dict(excluded_warmups=1, scored_samples=1, rule='owner: one run per arm; Apple does not vote on IDENTICAL'),
         generation_rules=dict(
             cap_per_algorithm_per_vendor=cap,

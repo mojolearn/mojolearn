@@ -96,12 +96,7 @@
    "controls": [
     "ridge_ff_always"
    ],
-   "interaction_groups": [
-    [
-     "ridge_ff_always",
-     "c13_fold_stats_ridgecv"
-    ]
-   ]
+   "interaction_groups": []
   }
  },
  "removed": [

@@ -267,8 +267,6 @@ agreement with HuggingFace, PyTorch or MAX: the fold orders,
 transcendentals and division below are OURS.
 """
 
-from transformer.experiments.summary_model import model_summary_forward
-from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
 from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
@@ -4174,31 +4172,10 @@ def eager_attention_forward(
     corner says so. Returns the fused status (`FUSED_RAN` when the fused
     bits are the ones in `stages.ctxv`; -1 when the fused path was not
     attempted)."""
-    comptime if NN20_BALANCED_SUMMARY_TREE:
-        if softcap != Float32(0.0) or stages.int15_on or plant_at != PLANT_AT_NONE:
-            raise Error("NN20 summary profile refuses softcap, INT15 and legacy score plants")
-        var record_stages = materialize or trace.enabled
-        if record_stages:
-            ensure_attention_stage_capacity(ctx, stages, l, s)
-        model_summary_forward(ctx, stages.ctxv, stages.amax, stages.denom,
-            stages.scores, stages.masked, stages.aexp, stages.weights,
-            stages.q_rope, stages.k_cache, stages.v_cache, b, l,
-            dims.n_heads, dims.n_kv, dims.head_dim, s, pos0, key_lo, window,
-            llama_attention_scale(dims.head_dim), record_stages)
-        stages.attn_materialized = record_stages
-        stages.attn_estash_cells = 0
-        stages.attn_fwd_scan.clear()
-        stages.attn_forward_status = 20  # explicit new arithmetic version
-        if trace.enabled:
-            var cells = b * dims.n_heads * l * s
-            trace.record_device[DType.float32](ctx,prefix+".attn.scores",stages.scores,cells)
-            trace.record_device[DType.float32](ctx,prefix+".attn.masked",stages.masked,cells)
-            trace.record_device[DType.float32](ctx,prefix+".attn.max",stages.amax,b*dims.n_heads*l)
-            trace.record_device[DType.float32](ctx,prefix+".attn.exp",stages.aexp,cells)
-            trace.record_device[DType.float32](ctx,prefix+".attn.denom",stages.denom,b*dims.n_heads*l)
-            trace.record_device[DType.float32](ctx,prefix+".attn.weights",stages.weights,cells)
-        trace.record_device[DType.float32](ctx,prefix+".attn.ctx",stages.ctxv,b*l*dims.n_heads*dims.head_dim)
-        return 20
+    # Tried 2026-10-08 (MOJOLEARN_IDN_ATTN_SOFTMAX=1, the NN20 summary_tree arm, run ge123e6f9): NV/AMD lm-forward
+    # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
+    # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
+    # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
     stages.attn_v2 = False
     comptime if IDN_ATTENTION_V2 and not BLOCK_ANY_SABOTAGE:
         # Numeric-profile choice, independent of hardware and dimensions.

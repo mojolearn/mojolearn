@@ -60,14 +60,9 @@
    "route": "fit: _expansion_linear.py RidgeCV -> x_linear_fit ALGO_RIDGE_KFOLD -> device.mojo _ridge_kfold_grid: unit A (C13 fold cache or kf_means/kf_cells, kf_solve_kernel with trust flags), unit B (float-float stats + solve for untrusted alphas [ridgecv_ff_blocked], kf_pred, kf_ysum/kf_sq/kf_score); then Ridge refit ALGO_RIDGE -> ridge_fit_grid, _ridge_ff_grid when untrusted [ridgecv_ff_blocked; c14_group_rhs in t_ridge_solve_best]",
    "controls": [
     "ridgecv_ff_blocked",
-    "c13_fold_stats_ridgecv",
     "c14_group_rhs"
    ],
    "interaction_groups": [
-    [
-     "ridgecv_ff_blocked",
-     "c13_fold_stats_ridgecv"
-    ],
     [
      "ridgecv_ff_blocked",
      "c14_group_rhs"

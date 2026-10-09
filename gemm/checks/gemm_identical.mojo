@@ -154,7 +154,6 @@ from gemm.contract import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add, identical_mul_add_simd
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
-from gemm.experiments.neural_switches import NEURAL_GEMM_SCHEDULE, SCHED_STREAM_ALL
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
     COLUMN_AMD,
@@ -289,15 +288,10 @@ comptime GEMM_FOLD_SLOTS = 16
 # identity, quality or timing evidence was collected for this source.
 comptime _NI_GEMM_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime NI01_GEOMETRIC_WORKSPACE = _NI_GEMM_ENABLED and is_defined["MOJOLEARN_NI01_GEMM_GEOMETRIC_WORKSPACE"]()
-# NI02 is arm 3 (stream_all) of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE: the
-# neural-only stream (arm 2, NN02) and this every-caller stream are one idea
-# with a scope arm, so they can never be enabled together.
-comptime NI02_STREAM_PARTIALS = _NI_GEMM_ENABLED and NEURAL_GEMM_SCHEDULE == SCHED_STREAM_ALL
+# Tried 2026-10-08 (NI02, MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3 stream_all: bounded 16-leaf partial windows for every
+# GEMM caller, run ge123e6f9): NV/AMD gemm gaussian 2.07x/1.78x, lm-train-step 1.11x/1.07x SLOWER (quality not
+# judged). Deleted (kernels, dispatch, workspace sizing, the CNN pre-check) and =3 refused; recoverable at main bc10b8b56.
 comptime NI06_ONE_PAGE = _NI_GEMM_ENABLED and is_defined["MOJOLEARN_NI06_GEMM_ONE_PAGE"]()
-# Sixteen independent leaves provide modest K parallelism while the carry
-# stack retains at most GEMM_FOLD_LEVELS planes. The bound is scratch/work
-# reasoning, independent of any benchmark dimensions or vendor wave width.
-comptime NI02_WINDOW_LEAVES = 16
 
 
 def contract_partition(k: Int) -> Tuple[Int, Int]:
@@ -1634,100 +1628,9 @@ def _rtf_cell(
     return ftz(_fold_drain(stack, occ))
 
 
-def _ni02_leaf_window_kernel(
-    a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin],
-    ws: MutPointer[Float32, MutAnyOrigin], m_in: Int32, n_in: Int32,
-    k_in: Int32, leaf_in: Int32, count_in: Int32, start_in: Int32,
-    asi: Int32, asp: Int32, bsp: Int32, bsj: Int32,
-):
-    """Bounded leaf planes; the window never changes a logical leaf."""
-    var m = Int(m_in); var n = Int(n_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var local_leaf = Int(block_idx.y)
-    var logical_leaf = Int(start_in) + local_leaf
-    if cell >= m * n or logical_leaf >= Int(count_in):
-        return
-    var row = cell // n
-    var col = cell - row * n
-    ws.unsafe_store(local_leaf * m * n + cell, _rtf_leaf_partial(
-        a, b, row, col, logical_leaf, Int(count_in), Int(leaf_in), Int(k_in),
-        Int(asi), Int(asp), Int(bsp), Int(bsj),
-    ))
-
-
-def _ni02_window_fold_kernel(
-    c: MutPointer[Float32, MutAnyOrigin], ws: MutPointer[Float32, MutAnyOrigin],
-    cells_in: Int32, start_in: Int32, stop_in: Int32, count_in: Int32,
-):
-    """Resume the canonical stack; never fold window roots left-to-right.
-
-    After start leaves, the stack occupancy mask is exactly start. Only
-    occupied levels are loaded/stored; stale scratch is never an operand.
-    The last window drains once, preserving the canonical odd-tail carry.
-    """
-    var cells = Int(cells_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= cells:
-        return
-    var start = Int(start_in); var stop = Int(stop_in)
-    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
-    var occ = start
-    comptime for level in range(GEMM_FOLD_LEVELS):
-        if ((occ >> level) & 1) != 0:
-            stack[level] = ws.unsafe_load((NI02_WINDOW_LEAVES + level) * cells + cell)
-    for logical_leaf in range(start, stop):
-        _ = _fold_push(stack, occ, ws.unsafe_load((logical_leaf - start) * cells + cell))
-    if stop == Int(count_in):
-        c.unsafe_store(cell, ftz(_fold_drain(stack, occ)))
-    else:
-        comptime for level in range(GEMM_FOLD_LEVELS):
-            if ((occ >> level) & 1) != 0:
-                ws.unsafe_store((NI02_WINDOW_LEAVES + level) * cells + cell, stack[level])
-
-
-def identical_gemm_streaming_applies(m: Int, n: Int, k: Int) -> Bool:
-    """NI02 caller/dispatcher agreement: bounded live planes beat all leaves.
-
-    CNN's explicit plan selection must consult this before choosing a plan
-    that bypasses shipped dispatch. The threshold follows scratch planes,
-    not any dataset or benchmark dimensions.
-    """
-    comptime if NI02_STREAM_PARTIALS:
-        return m > 0 and n > 0 and contract_partition(k)[1] > NI02_WINDOW_LEAVES + GEMM_FOLD_LEVELS
-    return False
-
-
-def _ni02_stream_into(
-    ctx: DeviceContext, mut c: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32], mut b: DeviceBuffer[DType.float32],
-    mut ws: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int,
-) raises:
-    """Source-only NI02: same exact leaves/tree, bounded live planes.
-
-    The caller owns all storage on one in-order context. The first window
-    reads no carry values, so repeated calls need no scratch initialization.
-    """
-    var lp = contract_partition(k)
-    var st = gemm_operand_strides(op, m, n, k)
-    var start = 0
-    while start < lp[1]:
-        var stop = min(start + NI02_WINDOW_LEAVES, lp[1])
-        step_count_launch()
-        ctx.enqueue_function[_ni02_leaf_window_kernel](
-            a.unsafe_ptr(), b.unsafe_ptr(), ws.unsafe_ptr(),
-            Int32(m), Int32(n), Int32(k), Int32(lp[0]), Int32(lp[1]), Int32(start),
-            Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]),
-            grid_dim=((m * n + FLAT_TPB - 1) // FLAT_TPB, stop - start, 1),
-            block_dim=(FLAT_TPB, 1, 1),
-        )
-        step_count_launch()
-        ctx.enqueue_function[_ni02_window_fold_kernel](
-            c.unsafe_ptr(), ws.unsafe_ptr(), Int32(m * n), Int32(start),
-            Int32(stop), Int32(lp[1]),
-            grid_dim=((m * n + FLAT_TPB - 1) // FLAT_TPB, 1, 1),
-            block_dim=(FLAT_TPB, 1, 1),
-        )
-        start = stop
+# Tried 2026-10-08 (NI02, MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3 stream_all: bounded 16-leaf partial windows for every
+# GEMM caller, run ge123e6f9): NV/AMD gemm gaussian 2.07x/1.78x, lm-train-step 1.11x/1.07x SLOWER (quality not
+# judged). Deleted (kernels, dispatch, workspace sizing, the CNN pre-check) and =3 refused; recoverable at main bc10b8b56.
 
 
 @always_inline
@@ -7432,14 +7335,7 @@ def identical_gemm_shipped_into(
     Row above 0 (NVIDIA): `identical_gemm_shipped_at_row_into[False]` at the
     row. Row 0 (AMD until the MI300X leg decides, Apple, every other column):
     the old line, and the ksplit path is not compiled at all."""
-    comptime if NI02_STREAM_PARTIALS:
-        # Stream only when all leaf planes exceed the bounded planes plus
-        # carry stack. This crossover follows live bytes, not a board row.
-        var stream_planes = NI02_WINDOW_LEAVES + GEMM_FOLD_LEVELS
-        if identical_gemm_streaming_applies(m, n, k):
-            if len(ws) >= m * n * stream_planes:
-                _ni02_stream_into(ctx, c, a, b, ws, m, n, k, op)
-                return
+    # (NI02 stream_all dispatch deleted 2026-10-08, grid ge123e6f9 loser; recoverable at main bc10b8b56.)
     # A05 (MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE, halved per-thread row
     # accumulators) was deleted by lane/grid-prune (2026-10-07): OVN A05 was
     # slower on both vendors (AMD 4096x1024x1024 0.392 -> 0.639 ms, AMD
@@ -10014,12 +9910,6 @@ def identical_gemm_workspace_max_floats(m: Int, n: Int, k: Int) -> Int:
     Phase 3 and Phase 4 allocate with this. Never less than 1, so the buffer
     is always constructible. Older smaller buffers take the allocating path.
     """
-    comptime if NI02_STREAM_PARTIALS and not GEMM_ARM_TRIAL:
-        # Explicit legacy trial hooks can bypass shipped dispatch and may
-        # need the original plan's planes; retain its sizing in that build.
-        var stream_planes = NI02_WINDOW_LEAVES + GEMM_FOLD_LEVELS
-        if identical_gemm_streaming_applies(m, n, k):
-            return m * n * stream_planes
     var w = identical_gemm_workspace_floats(
         m, n, k, choose_gemm_plan(m, n, k)
     )
