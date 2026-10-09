@@ -80,3 +80,22 @@ comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and is_defined["MOJOLEARN_IDN_JACOBI_
 # BITS CHANGE for the fits it takes (normal equations instead of eig); the
 # host column (glm/host/gram_solve_host.mojo) runs the same cells.
 comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK"]()
+
+# L4 (DEFAULT ON, -D MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF restores the
+# direct copy). The linear fits' large host uploads (the resident Gram fit's
+# X and y, the incumbent Ridge entry's, logistic regression's X and y) go
+# through a process-lifetime PINNED stage of two 32 MB halves, chunk by
+# chunk, the host memcpy of chunk i overlapping the DMA of chunk i - 1
+# (glm/impl/pinned_upload.mojo; gemm/host_transport.mojo's double buffer),
+# instead of one enqueue_copy from the caller's pageable NumPy pointer.
+# Cost reasoning: a pageable H2D is staged by the driver through a small
+# bounce buffer (~10-12 GB/s at best on PCIe 4 x16, often far less), a pinned
+# one runs at the link rate (~25 GB/s); the added memcpy runs at host memory
+# bandwidth and overlaps the DMA. Expected: 176 MB 12-15 -> ~7-9 ms, 880 MB
+# ~70 -> ~35-45 ms. Below 1M floats (4 MB) the direct copy stays (the
+# per-chunk waits are not repaid). Not on Apple (unified memory: a second
+# host copy for nothing) and IDENTICAL only (FAST is untouched by the lane).
+# Transport only: NO bit moves. Lane fg-knn-nb's DeviceStore ring
+# (core/device_store.mojo) is the same pattern for the x_prep store; the
+# linear entries do not upload through a DeviceStore, so they take this one.
+comptime IDN_LINEAR_PINNED_UPLOAD = _FGL_IDN and not is_defined["MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF"]()
