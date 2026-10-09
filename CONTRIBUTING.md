@@ -189,6 +189,26 @@ lives. Install the hooks once per clone.
 `tools/hooks/pre-commit` refuses oversized or forbidden files, and
 `tools/hooks/pre-push` refuses a push carrying any blob over 100 MiB.
 
+`tools/hooks/pre-push` also runs the host-route fence
+(`tools/hooks/no_host_routes.py --tree`), which refuses CPU work in GPU code
+that is not in `tools/hooks/host_routes_baseline.tsv`. Which pushed refs it
+judges:
+
+| Remote ref | Host-route fence |
+|---|---|
+| `refs/heads/main` | the whole tree |
+| any other `refs/heads/*` (`lane/*`, `fix/*`, ...) | `--branch`: only what the branch adds over its merge-base with main |
+| `refs/heads/archive/*`, `refs/tags/archive-*`, `refs/tags/archive/*` | skipped, with one line saying so |
+| `refs/heads/salvage/*`, other tags, refs outside `refs/heads/` | not judged |
+
+The size fence applies to every push. The `archive/` namespace is for dead
+branches kept in git for the record, for example
+`archive/<date>/<old branch name>`. An archive ref is never merged: to revive
+one, branch a new `lane/*` from it, and the fence judges that branch as usual.
+Never use `git push --no-verify`. The installed copy in the shared hooks
+directory does not update itself, so rerun `sh tools/hooks/install.sh` after
+pulling a change to `tools/hooks/`.
+
 ### Smaller development worktrees
 
 Create a worktree that keeps recent benchmark evidence and omits older tracked
