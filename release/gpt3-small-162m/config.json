@@ -1,5 +1,5 @@
 {
-  "_comment": "MojoLearn byte-LM configuration. Not a Transformers config: there is no final norm, so LlamaForCausalLM cannot load these weights unchanged.",
+  "_comment": "Mojolearn byte-LM configuration. Not a Transformers config: there is no final norm, so LlamaForCausalLM cannot load these weights unchanged.",
   "library": "mojolearn",
   "format": "mojolearn.byte-lm",
   "profile": "mojolearn.byte-lm.b4-l2048-d768-h12-kv12-hd64-ff2048-v50257-blocks12.fp32.v3",

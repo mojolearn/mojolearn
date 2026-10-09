@@ -1,4 +1,4 @@
-# Hugging Face release preparation: MojoLearn 162M
+# Hugging Face release preparation: Mojolearn 162M
 
 `release/gpt3-small-162m/` is the Hugging Face model repository's content. Its two
 large binaries are git-ignored: `checkpoint.blm` comes from R2
@@ -13,10 +13,10 @@ large binaries are git-ignored: `checkpoint.blm` comes from R2
   byte-equal (`review/download-verification.json`).
 - `tools/verify_release.py` and `tools/check_gpt3_evidence.py` pass.
 - Inference tested with mojolearn 0.8.35 from PyPI (CPU): `results/generations.json`.
-- `reference_torch.py` agrees with MojoLearn's logits: `results/reference-agreement.json`.
-- Quality: held-out FineWeb-Edu loss (`results/heldout-loss.json`, MojoLearn CPU forward)
+- `reference_torch.py` agrees with Mojolearn's logits: `results/reference-agreement.json`.
+- Quality: held-out FineWeb-Edu loss (`results/heldout-loss.json`, Mojolearn CPU forward)
   and HellaSwag 0-shot (`results/hellaswag.json`).
-- License: Apache-2.0 for weights, tokenizer and code (MojoLearn's license);
+- License: Apache-2.0 for weights, tokenizer and code (Mojolearn's license);
   FineWeb-Edu credited under ODC-By 1.0.
 
 ## Published
@@ -41,5 +41,5 @@ bash release/gpt3-small-162m-prep/check_published.sh <namespace>/<repo>
 ```
 
 It downloads the published repository into a fresh directory, installs mojolearn from
-PyPI, and reruns the release verifier, the evidence checker, a MojoLearn generation and
+PyPI, and reruns the release verifier, the evidence checker, a Mojolearn generation and
 the PyTorch reference from the downloaded files alone.

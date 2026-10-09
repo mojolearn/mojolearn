@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Greedy generations from checkpoint.blm through MojoLearn's CPU forward pass.
+"""Greedy generations from checkpoint.blm through Mojolearn's CPU forward pass.
 
 Uses the public mojolearn package (pip install mojolearn): the checkpoint reader
 `mojolearn._byte_lm_checkpoint.load` and `LanguageModelInference.next_bytes`, whose

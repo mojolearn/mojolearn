@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Compare reference_torch.py with MojoLearn's own CPU forward pass.
+"""Compare reference_torch.py with Mojolearn's own CPU forward pass.
 
-Both read the same trained weights (checkpoint.blm for MojoLearn, model.safetensors
+Both read the same trained weights (checkpoint.blm for Mojolearn, model.safetensors
 for PyTorch) and the same held-out token windows. The script reports the largest
 absolute logit difference and how often the two pick the same greedy next token.
 Agreement here is numerical closeness, not bitwise identity.

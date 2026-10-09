@@ -4,7 +4,7 @@
 |---|---|
 | `checkpoint.blm` | The original step-5,000 training checkpoint, unmodified (SHA-256 `4129921e…02c8`) |
 | `model.safetensors` | The checkpoint's parameter array alone, cut into 110 named tensors, byte for byte |
-| `config.json` | Architecture settings (MojoLearn format, not a Transformers config) |
+| `config.json` | Architecture settings (Mojolearn format, not a Transformers config) |
 | `architecture.json`, `checkpoint-header.json` | The checkpoint's tensor registry and its full JSON header |
 | `tokenizer.json`, `ranks.tsv` | The FineWeb-Edu BPE vocabulary, as a `tokenizers` file and as the pinned ranks |
 | `reference_torch.py` | A plain PyTorch forward pass for `model.safetensors` |
@@ -29,7 +29,7 @@ as shown in the README.
 
 ## model.safetensors
 
-Tensor names are MojoLearn's: `embed` [50257, 768]; for each `block0`–`block11`,
+Tensor names are Mojolearn's: `embed` [50257, 768]; for each `block0`–`block11`,
 `norm1_w` [768], `w_q`, `w_k`, `w_v`, `w_o` [768, 768], `norm2_w` [768], `w_gate`,
 `w_up` [2048, 768], `w_down` [768, 2048]; and `lm_head` [50257, 768]. Linear weights
 are `[out_features, in_features]`. Concatenating the tensors in that order reproduces

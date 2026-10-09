@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Plain PyTorch reference forward pass for model.safetensors, for running anywhere.
 
-This is not MojoLearn and makes no bitwise claim: PyTorch's kernels fold sums in
-their own order. tools/compare_reference.py checks its logits against MojoLearn's
+This is not Mojolearn and makes no bitwise claim: PyTorch's kernels fold sums in
+their own order. tools/compare_reference.py checks its logits against Mojolearn's
 CPU forward pass on the same tokens (see results/reference-agreement.json).
 
-Architecture (MojoLearn's byte LM, Llama-style layer order): token embedding, no
+Architecture (Mojolearn's byte LM, Llama-style layer order): token embedding, no
 positional table; 12 pre-norm blocks of RMSNorm (eps 1e-6) -> multi-head causal
 attention with rotary embeddings (theta 10,000, rotate-half pairing) -> residual,
 RMSNorm -> SwiGLU MLP (down(silu(gate(x)) * up(x))) -> residual. No biases.

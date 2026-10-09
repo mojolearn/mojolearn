@@ -27,7 +27,7 @@ PARAMETERS_SHA256 = 'c50fd76eb831a5d9754c661780ece20e10fe3b42c89f8b3d4650e2aba21
 def read_parameters(path):
     with open(path, 'rb') as f:
         if f.read(len(MAGIC)) != MAGIC:
-            raise ValueError('not a MojoLearn byte-LM checkpoint')
+            raise ValueError('not a Mojolearn byte-LM checkpoint')
         length = struct.unpack('<Q', f.read(8))[0]
         raw = f.read(length)
         if hashlib.sha256(raw).digest() != f.read(32):
