@@ -161,7 +161,9 @@ def _rw_fold_bwd(a: Args, base: Int, D: Int, mean: Float32, rstd: Float32) -> Tu
             pg[j] = add(pg[j], gx[0])
             pgx[j] = fma3(gx[0], gx[1], pgx[j])
         k += LN_RW_LANES
-    return (tree32(pg), tree32(pgx))
+    var tg = tree32(pg)
+    var tgx = tree32(pgx)
+    return (tg, tgx)
 
 
 def op_ln_fwd(t: Int, a: Args):
