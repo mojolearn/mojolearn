@@ -887,16 +887,16 @@ def adafactor_core[E: Exec](mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: 
             fz.f0 = w
             fz.f1 = eps1sq
             ex.launch[OP_AF_VFUSE](fz, nb)
-            var fn = Args()
-            fn.p0 = parts
-            fn.p1 = sc
-            fn.p2 = parts_u
-            fn.i0 = n
-            fn.i1 = nb
-            fn.f0 = fval(fp, 3)
-            fn.f1 = rho
-            fn.f2 = fval(fp, 4)
-            ex.launch[OP_AF_VFIN](fn, 1)
+            var fargs = Args()
+            fargs.p0 = parts
+            fargs.p1 = sc
+            fargs.p2 = parts_u
+            fargs.i0 = n
+            fargs.i1 = nb
+            fargs.f0 = fval(fp, 3)
+            fargs.f1 = rho
+            fargs.f2 = fval(fp, 4)
+            ex.launch[OP_AF_VFIN](fargs, 1)
             # the decay after the alpha (it reads p before it), as below
             if wd != Float32(0.0):
                 var s0 = Args()
