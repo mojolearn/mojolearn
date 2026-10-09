@@ -682,18 +682,40 @@ def rms_norm_backward_binding(
     return PythonObject(count)
 
 
+def mlp_sessions_rows_binding(shapes: PythonObject, width: PythonObject) raises -> PythonObject:
+    """Output sizing for `mlp_sessions`: `shapes` is the session inputs'
+    shape tuples (metadata only, never row values) and `width` the model's
+    input width. Checks every session is a (rows, width) matrix and returns
+    the total row count, so the caller sizes the output from Mojo's number
+    (no Python `sum` over session rows)."""
+    var w = Int(py=width)
+    var n = len(shapes)
+    if n == 0:
+        raise Error("MLP sessions require at least one (rows, width) input")
+    var total = 0
+    for i in range(n):  # small-loop(n: session shape tuples): reads caller metadata, not data
+        var shape = shapes[i]
+        if len(shape) != 2 or Int(py=shape[1]) != w or Int(py=shape[0]) < 0:
+            raise Error("MLP sessions require at least one (rows, width) input")
+        total += Int(py=shape[0])
+    return PythonObject(total)
+
+
 def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
-                         row_counts: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """Native whole-model A/B: shared weights, independent session row batches."""
+                         shapes: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """Native whole-model A/B: shared weights, independent session row batches.
+    `shapes` is the session inputs' shape tuples; the rows are their first
+    entries (`mlp_sessions_rows` checked them and sized the output)."""
     var a = _addrs(addresses, 5, "mlp_sessions")
     _params(dims, 3, "mlp_sessions")
-    if len(input_addresses) != len(row_counts):
+    var n_sessions = len(shapes)
+    if len(input_addresses) != n_sessions:
         raise Error("neural MLP sessions: metadata length mismatch")
     var inputs = List[Int]()
     var rows = List[Int]()
-    for i in range(len(row_counts)):
+    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
         inputs.append(Int(py=input_addresses[i]))
-        rows.append(Int(py=row_counts[i]))
+        rows.append(Int(py=shapes[i][0]))
     var in_width = Int(py=dims[0])
     var hidden = Int(py=dims[1])
     var out_width = Int(py=dims[2])
@@ -927,6 +949,7 @@ def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
         module.def_function[linear_forward_binding]("linear_forward")
         module.def_function[neural_gemm_binding]("neural_gemm")
         module.def_function[mlp_sessions_binding]("mlp_sessions")
+        module.def_function[mlp_sessions_rows_binding]("mlp_sessions_rows")
         module.def_function[residual_dropout_binding]("residual_dropout")
         module.def_function[residual_dropout_backward_binding]("residual_dropout_backward")
         module.def_function[linear_backward_binding]("linear_backward")
