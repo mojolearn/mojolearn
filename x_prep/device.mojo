@@ -390,19 +390,11 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
 #: words reach the same arena offsets before any stage runs).
 comptime XPREP_NO_SLOT_HOP = is_defined["MOJOLEARN_XPREP_NO_SLOT_HOP"]()
 
-#: G5 (lane fg-knn-nb, 2026-10-09; `-D MOJOLEARN_XPREP_DEVICE_CODES=1`,
-#: DEFAULT OFF, an A/B arm): the binding registers `x_prep_device_codes`, and
-#: GaussianNB.fit (python/mojolearn/_expansion_prep.py `_fit_device_codes`)
-#: takes the classes and the class codes of a numeric label vector from the
-#: base binding's DEVICE `unique_inverse` (core/label_encode_device.mojo: a
-#: device sort, a flag/scan compaction and a gather) instead of the native
-#: HOST encoder (`_labels.encode_labels`: a single-threaded host sort of all
-#: n labels). Cost reasoning: the host sort is O(n log n) serial work on the
-#: fit's critical path (tens of ms at 1M labels); the device sort is a few
-#: parallel passes over 8 MB. Bits: none (the same sorted classes and dense
-#: codes by definition; `-0.0`/`0.0` one class with the first spelling kept
-#: and NaN refused on both routes).
-comptime XPREP_DEVICE_CODES = is_defined["MOJOLEARN_XPREP_DEVICE_CODES"]()
+#: TOMBSTONE: G5 (lane fg-knn-nb, MOJOLEARN_XPREP_DEVICE_CODES: GaussianNB.fit
+#: label codes from the device unique_inverse) deleted 2026-10-09 (lane
+#: postmerge-act-2): SLOWER, gaussian-nb istella NV 1.29x / AMD 1.12x, taxi NV
+#: 1.70x / AMD 1.35x (nv n0668->n0631, amd a1066->a1091), accuracy SAME, same
+#: digests; refused in core/six_lane_experiment_guards.mojo; main 5c137b55e.
 
 
 def run_program_device_ranges_host(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int,

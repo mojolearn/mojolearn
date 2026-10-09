@@ -207,28 +207,6 @@
    "bits_change": false,
    "status": "new G3 (A/B owed)",
    "note": "Large direct inputs go host -> arena in one copy from the host pointer (the G1 pinned stage was deleted 2026-10-09; no slot, no D2D, no second X allocation). Python routes by the presence of x_prep_run_ranges_host."
-  },
-  "xprep_device_codes": {
-   "define": "MOJOLEARN_XPREP_DEVICE_CODES",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_XPREP_DEVICE_CODES"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_prep/device.mojo:XPREP_DEVICE_CODES",
-    "python/mojolearn/_expansion_prep.py:_fit_device_codes"
-   ],
-   "binding": [
-    "_mojolearn_x_prep",
-    "_mojolearn (unique_inverse)"
-   ],
-   "bits_change": false,
-   "status": "new G5 (A/B owed)",
-   "note": "GaussianNB.fit classes and codes from the base binding's device unique_inverse instead of the host native encoder sort, for int/float label vectors. Python routes by the presence of x_prep_device_codes."
   }
  },
  "algorithms": {
@@ -257,11 +235,10 @@
   },
   "expanded:gaussian-nb": {
    "binding": "_mojolearn_x_prep",
-   "route": "GaussianNB.fit: (G5 device codes | encode_labels) -> _Prog.put(X) -> DeviceCache.dev_put (G2 spare slot; one pageable copy, G1 pinned stage deleted) | G3 host span -> run_ranges (G2 pooled arena) -> stages -> download_ranges",
+   "route": "GaussianNB.fit: encode_labels (G5 device codes deleted) -> _Prog.put(X) -> DeviceCache.dev_put (G2 spare slot; one pageable copy, G1 pinned stage deleted) | G3 host span -> run_ranges (G2 pooled arena) -> stages -> download_ranges",
    "controls": [
     "xprep_arena_pool_off",
-    "xprep_no_slot_hop",
-    "xprep_device_codes"
+    "xprep_no_slot_hop"
    ],
    "interaction_groups": [
     [
@@ -277,6 +254,11 @@
    "define": "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF",
    "control": "xprep_pinned_upload_off",
    "reason": "DELETED 2026-10-09 (lane postmerge-act-1): post-merge A/B (one run per arm) found the G1 pinned upload stage SLOWER than the pageable copy it replaced; default -> _OFF ms gaussian-nb istella NV 129.8 -> 88.7 (0.68x) / AMD 46.4 -> 27.9 (0.60x), taxi NV 20.9 -> 19.3 (0.92x) / AMD 14.1 -> 12.9 (0.91x) (nv n0607 -> n0628, amd a1066 -> a1088); same digests. The stage code (core/device_store.mojo STORE_PINNED_UPLOAD) is deleted, the direct copy is the only path; both MOJOLEARN_XPREP_PINNED_UPLOAD_OFF and MOJOLEARN_XPREP_PINNED_UPLOAD are refused in core/six_lane_experiment_guards.mojo:223; code recoverable at main 432d6e8ff."
+  },
+  {
+   "define": "MOJOLEARN_XPREP_DEVICE_CODES",
+   "control": "xprep_device_codes",
+   "reason": "DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found G5 (GaussianNB.fit label codes from the device unique_inverse) SLOWER: default -> on ms gaussian-nb istella NV 92.1 -> 119.1 (1.29x) / AMD 46.4 -> 52.0 (1.12x), taxi NV 20.0 -> 34.0 (1.70x) / AMD 14.1 -> 19.1 (1.35x) (nv n0668 -> n0631, amd a1066 -> a1091); accuracy SAME, same digests. The x_prep_device_codes probe and the Python route (_fit_device_codes) are deleted; the define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e."
   }
  ]
 }

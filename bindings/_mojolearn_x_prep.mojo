@@ -15,7 +15,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
-from x_prep.device import run_program_device_ranges_host, XPREP_NO_SLOT_HOP, XPREP_DEVICE_CODES
+from x_prep.device import run_program_device_ranges_host, XPREP_NO_SLOT_HOP
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py, IDN_NB_CSR, nb_csr_fit_int_py, nb_csr_jll_chk_py
 from x_prep.blocked import IDN_NB_ONEPASS, IDN_NB_CSR_DENSE
@@ -131,12 +131,6 @@ def run_ranges_host_binding(arena_addr: PythonObject, prog_addr: PythonObject, o
     with GILReleased(Python()):
         run_program_device_ranges_host(fa, n, qa, s, sc, oa, on, ia, ni, ra, no, ta, nh)
     return PythonObject(s)
-
-
-def device_codes_binding() raises -> PythonObject:
-    """G5 (`-D MOJOLEARN_XPREP_DEVICE_CODES`, x_prep/device.mojo): present only
-    when built with it; GaussianNB.fit's probe for the device label codes."""
-    return PythonObject(1)
 
 
 def dev_put_binding(addr: PythonObject, n_words: PythonObject) raises -> PythonObject:
@@ -421,9 +415,9 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         comptime if XPREP_NO_SLOT_HOP:
             # lane fg-knn-nb G3 (default off)
             m.def_function[run_ranges_host_binding]("x_prep_run_ranges_host")
-        comptime if XPREP_DEVICE_CODES:
-            # lane fg-knn-nb G5 (default off)
-            m.def_function[device_codes_binding]("x_prep_device_codes")
+        # TOMBSTONE: lane fg-knn-nb G5 `x_prep_device_codes` probe (MOJOLEARN_XPREP_DEVICE_CODES) deleted 2026-10-09
+        # (lane postmerge-act-2): SLOWER, gaussian-nb istella NV 1.29x / AMD 1.12x, taxi 1.70x / 1.35x (nv n0631, amd a1091),
+        # accuracy SAME, same digests; code recoverable at main 5c137b55e.
         m.def_function[dev_put_binding]("x_prep_dev_put")
         m.def_function[dev_free_binding]("x_prep_dev_free")
         m.def_function[dev_live_binding]("x_prep_dev_live")

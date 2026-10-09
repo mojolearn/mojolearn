@@ -2701,34 +2701,11 @@ def _partial_dev(est, y, n, walk):
     return _DevCodes(lb, cats, walk)
 
 
-#: lane fg-knn-nb G5: the label dtypes whose classes the device
-#: `unique_inverse` returns exactly as the native encoder does (bool, uint64
-#: and object labels keep `encode_labels`).
-_DEVICE_CODE_DTYPES = frozenset(("i1", "i2", "i4", "i8", "u1", "u2", "u4", "f4", "f8"))
-
-
-def _fit_device_codes(est, y, n, mode):
-    """lane fg-knn-nb G5 (-D MOJOLEARN_XPREP_DEVICE_CODES, default off; the
-    binding's `x_prep_device_codes` probe is the switch): a fit's classes and
-    int32 codes from the base binding's DEVICE `unique_inverse` instead of the
-    native host sort, for a numeric label vector of n labels; else None (the
-    caller keeps `_encode_y`). Sets `est.classes_` as `_encode_y` does."""
-    if isinstance(y, (list, tuple, str, bytes)):
-        return None
-    if _optional_prep_entry(_prep_binding(mode), "x_prep_device_codes") is None:
-        return None
-    from ._buffer import _materialize
-    try:
-        arr, _ = _materialize(y, "y")
-    except (TypeError, ValueError):
-        return None
-    dt = arr.dtype.lstrip("<>|=")
-    if dt not in _DEVICE_CODE_DTYPES or arr.size != n or arr.size == 0 or arr.size != max(arr.shape):  # glue: largest axis of the shape
-        return None
-    classes, codes = _labels.unique_inverse(arr)
-    conv = float if dt[0] == "f" else int
-    est.classes_ = [conv(v) for v in classes.tolist()]  # glue: the k class values
-    return codes
+#: TOMBSTONE: lane fg-knn-nb G5 (MOJOLEARN_XPREP_DEVICE_CODES, `_fit_device_codes`:
+#: GaussianNB.fit classes and codes from the device unique_inverse) deleted
+#: 2026-10-09 (lane postmerge-act-2): SLOWER, gaussian-nb istella NV 1.29x / AMD
+#: 1.12x, taxi NV 1.70x / AMD 1.35x (nv n0668->n0631, amd a1066->a1091), accuracy
+#: SAME, same digests; code recoverable at main 5c137b55e.
 
 
 def _stage_partial_codes(pr, codes, mode):
@@ -2828,12 +2805,9 @@ class GaussianNB(_Classifier):
     def fit(self, X, y, sample_weight=None):
         arr = _x2d(X)
         n, d = arr.shape
-        mode = _mode()
-        # lane fg-knn-nb G5 (default off): device label codes when built in
-        codes = _fit_device_codes(self, y, n, mode)
-        if codes is None:
-            codes = self._encode_y(y, n)
+        codes = self._encode_y(y, n)
         K = len(self.classes_)
+        mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
         yo = pr.put_codes(codes)
