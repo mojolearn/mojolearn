@@ -365,8 +365,7 @@
      "attn_tile_order",
      "attn_fwd_tq_rule",
      "attn_softmax",
-     "attn_scale_mask",
-     "nn20_split_kv"
+     "attn_scale_mask"
     ],
     [
      "grouped_projections_v2",
@@ -402,8 +401,7 @@
     [
      "attn_tile_order",
      "attn_fwd_tq_rule",
-     "attn_softmax",
-     "nn20_split_kv"
+     "attn_softmax"
     ],
     [
      "m3_angle_parallel",
@@ -676,7 +674,7 @@
  ],
  "notes": {
   "ozaki": "neural_gemm_ozaki_slices (neural-ozaki-gemm.json) is now declared for every neural lane whose GEMMs go through gemm/neural_dispatch (NI07 bypasses it for q/k/v when on).",
-  "nn20": "nn20_split_kv (neural-fusions.json): off arm is now main (no define); the NN20 profile comes from its parent attn_softmax (transitive parent closure in tools/six_lane_grid.py).",
+  "nn20": "nn20_split_kv and nn20_split_kv_leaves were deleted 2026-10-08 (lane grid-act-3) with their parent arm attn_softmax=summary_tree (grid ge123e6f9 loser); see neural-fusions.json removed.",
   "gemm_leaf": "gemm_leaf=all256 split into gemm_contract_leaf (neural-gemm-attn-dedupe.json), declared for gemm:gemm only; gemm_leaf keeps the neural-scope arms."
  }
 }

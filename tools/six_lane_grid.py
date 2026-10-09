@@ -66,9 +66,8 @@ EXCLUDE_TAGS = {'off_board': 'off-board', 'blocked_quality': 'blocked-quality'}
 
 # Dependencies the notes state in prose ("only read with X on", "scope of X").
 PARENT_PATTERNS = [r'only (?:read|meaningful) with (\w+)', r'[Cc]aller-class scope of (\w+)']
-EXPLICIT_PARENTS = {
-    'nn20_split_kv_leaves': ('nn20_split_kv', 'leaves are the split plan of nn20_split_kv; the NN20 split is "inert without NN20" (neural-fusions.json)'),
-}
+# (nn20_split_kv_leaves -> nn20_split_kv was the one entry; both controls were deleted 2026-10-08, lane grid-act-3.)
+EXPLICIT_PARENTS = {}
 # Arm-level reach the notes state; scope None = every algorithm.
 ARM_EXCLUSIONS = [
     ('neural_gemm_epilogue', 'cnn', None, 'note: "cnn arm is non-board (x_cnn)"'),
@@ -597,8 +596,8 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP, crosses='full', phase
     rep = {k: arm_info[k]['arms'][0] for k in eligible}
 
     def with_parent(assign):
-        # Transitive: a grandchild (nn20_split_kv_leaves -> nn20_split_kv ->
-        # attn_softmax) carries every ancestor's representative arm.
+        # Transitive: a grandchild (child -> parent -> grandparent) carries
+        # every ancestor's representative arm.
         ordered = list(assign)
         while True:
             keys = {k for k, _ in ordered}

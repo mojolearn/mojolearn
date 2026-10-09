@@ -327,21 +327,16 @@
    "kind": "arms",
    "arms": {
     "off": [],
-    "summary_tree": [
-     "MOJOLEARN_IDN_ATTN_SOFTMAX=1"
-    ],
     "online_tile32": [
      "MOJOLEARN_IDN_ATTN_SOFTMAX=2"
     ]
    },
    "default": "off",
    "source": [
-    "transformer/experiments/attention_summary_contract.mojo:14",
     "training/neural_identical_experiments.mojo:80",
-    "transformer/impl/llama/modeling_llama.mojo:4203",
     "transformer/impl/llama/attention_v2_model_device.mojo:331",
     "transformer/impl/llama/attention_v2_model_device.mojo:795",
-    "transformer/checks/transformer_backward.mojo:3628"
+    "core/six_lane_experiment_guards.mojo:77"
    ],
    "binding": [
     "_mojolearn_transformer",
@@ -354,7 +349,7 @@
     "I.N.NN20",
     "I.N.NI20"
    ],
-   "note": "online_tile32 (MOJOLEARN_IDN_ATTN_SOFTMAX=2) is the attention-online-tile32.fp32.v2 profile; since lane/attention-tiled-v2 (2026-10-07) its device kernels are the tiled ones in attention_v2_model_device.mojo (forward _forward_tiled: one QK^T and one PV sweep per query tile, 32-key device tiles in a 64-key shared ring, two running words per row; backward _prepare_tiled/_dq_tiled/_dkdv_tiled, all in the contract's fold order), not the one-thread-per-row reference, which remains for the Apple column, the trace-only diagnostic cells and head dims outside {16,32,64}. Host column: attention_v2_model_host.mojo (byte_lm_host_kernels.mojo:931, transformer_oracle.mojo:2057). Bits change vs off/summary_tree (profile), equal on NVIDIA and AMD. Its forward rows-per-block sweep is attn_v2_tq (grid_controls/attention-tiled-v2.json)."
+   "note": "online_tile32 (MOJOLEARN_IDN_ATTN_SOFTMAX=2) is the attention-online-tile32.fp32.v2 profile; since lane/attention-tiled-v2 (2026-10-07) its device kernels are the tiled ones in attention_v2_model_device.mojo (forward _forward_tiled: one QK^T and one PV sweep per query tile, 32-key device tiles in a 64-key shared ring, two running words per row; backward _prepare_tiled/_dq_tiled/_dkdv_tiled, all in the contract's fold order), not the one-thread-per-row reference, which remains for the Apple column, the trace-only diagnostic cells and head dims outside {16,32,64}. Host column: attention_v2_model_host.mojo (byte_lm_host_kernels.mojo:931, transformer_oracle.mojo:2057). Bits change vs off (profile), equal on NVIDIA and AMD. Its forward rows-per-block sweep is attn_v2_tq (grid_controls/attention-tiled-v2.json). Arm summary_tree (=1) deleted 2026-10-08 (grid ge123e6f9, 1.6-43x slower); see removed."
   },
   "attn_stash": {
    "define": "MOJOLEARN_IDN_ATTN_STASH",
@@ -1077,6 +1072,12 @@
    "control": "neural_gemm_schedule",
    "arm": "async",
    "reason": "DELETED by lane/grid-prune 2026-10-07: OVN N03 NVIDIA async pipeline 2.2x/4.2x slower than its sync control; guards refuse arm 8. Recoverable at main ab554bb4a."
+  },
+  {
+   "define": "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+   "control": "attn_softmax",
+   "arm": "summary_tree",
+   "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. summary_tree/off ms ratio NV/AMD: lm-forward 4.86/16.79 (65.8 -> 319.9 NV, 34.2 -> 574.2 AMD), lm-train-step 42.89/40.18, samba-forward 1.79/4.79, samba-train-step 1.64/1.81, transformer-forward 5.48/21.89 (7.30x combined SLOWER); mean_nll not judged. The NN20 summary tree (transformer/experiments/attention_summary_contract/tree/split.mojo, summary_model*.mojo) and its split-KV controls (nn20_split_kv, nn20_split_kv_leaves) are deleted; online_tile32 (HOLD_BROKEN) stays. Code recoverable at main bc10b8b56; =1 refused in core/six_lane_experiment_guards.mojo."
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."

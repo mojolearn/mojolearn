@@ -102,8 +102,6 @@ torch, on the `mamba/corpus/` pattern, so that the tolerance instrument is
 not our own code twice.
 """
 
-from transformer.experiments.summary_model_host import model_summary_host_forward
-from transformer.experiments.attention_summary_contract import NN20_BALANCED_SUMMARY_TREE
 from transformer.experiments.norm_profile_contract import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
@@ -2048,13 +2046,11 @@ def transformer_block_oracle(
     var actx = List[Float32]()
 
     var scale = attention_scale(hd)
-    if NN20_BALANCED_SUMMARY_TREE:
-        if opts.has_softcap() or int15 or plant.at != 0:
-            raise Error("NN20 summary profile refuses softcap, INT15 and legacy score plants")
-        model_summary_host_forward(st.q_rope_out,st.kv_k_cache,st.kv_v_cache,
-            b,l,nh,nkv,hd,s,pos0,key_lo,window,scale,
-            scores,masked,amax,aexp,adenom,aweights,actx)
-    elif IDN_ATTENTION_V2 and not int15 and not opts.has_softcap() and plant.is_empty():
+    # Tried 2026-10-08 (MOJOLEARN_IDN_ATTN_SOFTMAX=1, the NN20 summary_tree arm, run ge123e6f9): NV/AMD lm-forward
+    # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
+    # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
+    # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
+    if IDN_ATTENTION_V2 and not int15 and not opts.has_softcap() and plant.is_empty():
         var av2 = attention_v2_host_forward(
             st.q_rope_out, st.kv_k_cache, st.kv_v_cache,
             b, l, nh, nkv, s, hd, own0, window, scale,

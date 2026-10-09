@@ -700,7 +700,7 @@
     {
       "define": "MOJOLEARN_C58_FORECAST4",
       "control": "c58_forecast4",
-      "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD (istella, taxi): auto-theta 2.93/2.58, 2.81/2.13; damped-ets 2.59/2.39, 2.53/2.43; dynamic-optimized-theta 2.96/2.49, 2.66/1.81; dynamic-theta 3.15/3.00, 3.02/2.91; optimized-theta 2.72/2.60, 3.09/2.99; theta 2.93/2.86, 3.13/3.08 (2.72x combined SLOWER); quality SAME. Four series per thread cut the parallelism 4x. seq_kernel is one series per thread again (sequence/exec_device.mojo). Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
+      "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD (synthetic, taxi-hourly): auto-theta 2.93/2.58, 2.81/2.13; damped-ets 2.59/2.39, 2.53/2.43; dynamic-optimized-theta 2.96/2.49, 2.66/1.81; dynamic-theta 3.15/3.00, 3.02/2.91; optimized-theta 2.72/2.60, 3.09/2.99; theta 2.93/2.86, 3.13/3.08 (2.72x combined SLOWER); quality SAME. Four series per thread cut the parallelism 4x. seq_kernel is one series per thread again (sequence/exec_device.mojo). Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
     }
   ],
   "owed_removal_ab": [

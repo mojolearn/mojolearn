@@ -231,7 +231,7 @@ def seq_kernel[OP: Int](
     argument to its own buffer slot and has 31, so the unpacked 33-argument
     signature failed to compile on Apple."""
     # Tried 2026-10-08 (MOJOLEARN_C58_FORECAST4, four series per thread for theta/ets/garch, run ge123e6f9): NV/AMD
-    # 2.93x/2.58x istella, 2.81x/2.13x taxi on auto-theta and 2.5-3.2x on every theta/damped-ets cell, quality SAME
+    # 2.93x/2.58x synthetic, 2.81x/2.13x taxi-hourly on auto-theta and 2.5-3.2x on every theta/damped-ets cell, quality SAME
     # (4x less parallelism). Deleted, the define refused; recoverable at main bc10b8b56; row in docs/apple-fast/EXPERIMENTS.md.
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):

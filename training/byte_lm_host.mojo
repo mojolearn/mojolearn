@@ -841,8 +841,8 @@ def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch:
     `threads` threads (0: one per physical core); same arguments, same bits."""
     comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        and (get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 1
-             or (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4))):
+        and (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4)):
+        # (the MOJOLEARN_IDN_ATTN_SOFTMAX=1 summary-tree clause was deleted 2026-10-08, grid ge123e6f9 loser; main bc10b8b56)
         # The legacy packed host block materializes the v1 attention/norm
         # graph. A v2 build uses the shared host block contract, including
         # its profile-specific tapes, rather than reusing that v1 graph.
@@ -864,8 +864,8 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
     """
     comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        and (get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 1
-             or (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4))):
+        and (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4)):
+        # (the MOJOLEARN_IDN_ATTN_SOFTMAX=1 summary-tree clause was deleted 2026-10-08, grid ge123e6f9 loser; main bc10b8b56)
         var logits = byte_host_logits(params, inputs, batch, length, config)
         var chosen = List[Int32](length=batch, fill=Int32(0))
         for row in range(batch):

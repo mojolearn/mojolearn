@@ -74,7 +74,7 @@ def _check_configuration() -> Bool:
     comptime HS = get_defined_int["MOJOLEARN_IDN_ATTN_HEAD_SHARE",1]()
     comptime assert HS == 1 or HS == 4, "MOJOLEARN_IDN_ATTN_HEAD_SHARE legal set {4} (two-head I06/NI19 deleted as a loser)"
     comptime SM = get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX",0]()
-    comptime assert SM >= 0 and SM <= 2, "MOJOLEARN_IDN_ATTN_SOFTMAX arms: 1 summary_tree, 2 online_tile32"
+    comptime assert SM == 0 or SM == 2, "MOJOLEARN_IDN_ATTN_SOFTMAX arms: 2 online_tile32 (arm 1 summary_tree removed 2026-10-08: slower, NV/AMD lm-forward 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward 5.48x/21.89x (grid ge123e6f9); see EXPERIMENTS.md)"
     # lane/attention-tiled-v2 (2026-10-07): the online_tile32 forward's query rows per block.
     comptime TQ2 = get_defined_int["MOJOLEARN_IDN_ATTN_V2_TQ",32]()
     comptime assert TQ2 == 32 or TQ2 == 64, "MOJOLEARN_IDN_ATTN_V2_TQ legal set 32|64 (256 threads, 8 or 4 lanes per query row)"
@@ -192,9 +192,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-flips-1): IVF direct distance is the IDENTICAL default; drop -D MOJOLEARN_IVF_DIRECT_DISTANCE, use -D MOJOLEARN_IVF_DIRECT_DISTANCE_OFF for the old path"
     # Lane grid-act-3 (2026-10-08): IDENTICAL grid ge123e6f9 promotions and losers (docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main bc10b8b56.
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-act-3): the unique_cols run scan is the IDENTICAL default (onehot/ordinal/target-encoder 0.525x combined, same bits); drop -D MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN, use -D MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF for the old path"
-    comptime assert not is_defined["MOJOLEARN_C58_FORECAST4"](), "removed: MOJOLEARN_C58_FORECAST4 retired 2026-10-08: slower, theta/ets family NV 2.53-3.15x / AMD 1.81-3.08x on istella and taxi (2.72x combined), quality SAME (grid ge123e6f9); see EXPERIMENTS.md"
+    comptime assert not is_defined["MOJOLEARN_C58_FORECAST4"](), "removed: MOJOLEARN_C58_FORECAST4 retired 2026-10-08: slower, theta/ets family NV 2.53-3.15x / AMD 1.81-3.08x on synthetic and taxi-hourly (2.72x combined), quality SAME (grid ge123e6f9); see EXPERIMENTS.md"
     comptime assert not (is_defined["MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS"]() or is_defined["MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS"]()), "removed: MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS (=1|2) and MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS retired 2026-10-08: slower, gaussian-nb NV 1.37-1.58x / AMD 1.02-1.08x, lda-clf NV 1.38x/1.54x / AMD 1.04x/1.11x (istella/taxi), quality SAME (grid ge123e6f9); see EXPERIMENTS.md"
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF"](), "removed: MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF retired 2026-10-08: the off arm is slower, ridge-cv NV 1.19x / AMD 1.11x istella, NV 19.5x / AMD 18.0x taxi, quality SAME (grid ge123e6f9); the RidgeCV fold cache is the only IDENTICAL route; see EXPERIMENTS.md"
+    comptime assert not (is_defined["MOJOLEARN_IDN_NN20_SPLIT_KV"]() or is_defined["MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES"]()), "removed: MOJOLEARN_IDN_NN20_SPLIT_KV (and _LEAVES) retired 2026-10-08 with the summary_tree arm it split (MOJOLEARN_IDN_ATTN_SOFTMAX=1, grid ge123e6f9 loser); see EXPERIMENTS.md"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True
