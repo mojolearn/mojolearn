@@ -408,12 +408,14 @@ class SambaStack(object):
 
     def _resident(self):
         """The training binding when it carries the IDENTICAL resident Samba
-        entries (-D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP; training/samba_resident.mojo)
+        entries (the IDENTICAL default since 2026-10-08; -D
+        MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF drops them; training/samba_resident.mojo)
         and this stack can take them: no dropout (the dropout mask is the
         generator's, drawn per microbatch on the per-op route). None
         otherwise, and the per-op route below runs as before (arm B). The
-        chunked-head profile (NI34) spells a different head and is refused
-        together with the define (core/six_lane_experiment_guards.mojo);
+        chunked-head profile (NI34) spells a different head, so a
+        chunked-head build leaves the entries out
+        (training/neural_identical_experiments.mojo);
         it is re-checked here so a mixed build still takes one route."""
         cached = getattr(self, "_resident_cache", None)
         if cached is not None:
