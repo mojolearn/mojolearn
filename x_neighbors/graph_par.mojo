@@ -44,7 +44,10 @@ the order the atomics land in: the same bits on NVIDIA, AMD, Apple and
 the host column, with no sort per colour. The float total a gain or the
 modularity reads is the int64 converted once (`_lv_totf`: exact in
 double below 2^52, rounded once to float32, scaled by the exact power of
-two). NEW BITS versus the float segmented folds (lane hr-graph).
+two; on the Apple column the same two conversions run in software
+binary64, checks/soft_f64.mojo, because Metal has no float64: the same
+float32 for every total below 2^53). NEW BITS versus the float segmented
+folds (lane hr-graph).
 CSR entries (`pr_drive_csr`, `lv_drive_csr`): the caller's indptr/indices
 (and weights) go to the device as they are; PageRank sorts (column, entry)
 keys once to build its column lists (rows ascending, the dense sweep's
@@ -67,6 +70,8 @@ from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NO
 from std.atomic import Atomic
 from std.memory import bitcast
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
+from checks.soft_f64 import sf64_from_int, sf64_to_f32
 from x_neighbors.items import FP, IP, _add, _sub
 
 comptime LP = MutPointer[Int64, MutAnyOrigin]
@@ -799,8 +804,21 @@ def _lv_totf(g: GA, c: Int) -> Float32:
     the int64 (below 2^52, exact in double) rounded once to float32, times
     the exact 2^-s. Both conversions are IEEE round-to-nearest on every
     target (cvt.rn / v_cvt), so the float is a pure function of the
-    integer."""
-    var v = _lv_tot(g, c).cast[DType.float64]().cast[DType.float32]()
+    integer. Apple column (lane metal-graph-fp64, 2026-10-09): Metal has
+    no float64 (`air.convert.f.f64.s.i64` and `air.convert.f.f32.f.f64`
+    fail the Metal IR verifier), so the same two conversions run on the
+    software binary64 of checks/soft_f64.mojo (integer instructions only):
+    `sf64_from_int` is exact for |v| < 2^53 and `sf64_to_f32` is the
+    round-to-nearest-even narrowing, hence the same float32 as the
+    hardware path for every total `_lv_shift` admits (below 2^52). The
+    two paths could differ only for |v| >= 2^53 (the hardware path rounds
+    twice there), which no total reaches. NVIDIA, AMD and the host column
+    keep the hardware conversions: this branch is comptime-false there."""
+    var v: Float32
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        v = sf64_to_f32(sf64_from_int(Int(_lv_tot(g, c))))
+    else:
+        v = _lv_tot(g, c).cast[DType.float64]().cast[DType.float32]()
     return ftz(identical_mul(v, _pow2(-g.n6)))
 
 
