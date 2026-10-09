@@ -451,7 +451,8 @@ def _ivf_pq_build_impl[resident: Bool](
     var dev_cb = False
     comptime if FAST_IVFPQ_DEVICE_CODEBOOKS:
         dev_cb = pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
-    # lane fg-ivf A1 (`-D MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS`, OPT-IN, bits
+    # lane fg-ivf A1 (`IDN_PQ_DEVICE_CODEBOOKS`, IDENTICAL default since lane
+    # postmerge-act-1, `_OFF` restores the per-subspace fits; bits
     # change on every column; x_ann/switches.mojo): the same batched loop in
     # IDENTICAL on NVIDIA and AMD, with the pinned fold (`PQK_PINNED`); the
     # host twin is `_codebooks_host_batched` under the same gate and limits.

@@ -162,29 +162,6 @@
    "status": "new K5 (A/B owed)",
    "note": "AMD column only: the register tile (d<32 on AMD) admits proven tiles to the unflushed chain. Time on taxi-like narrow rows."
   },
-  "xprep_pinned_upload_off": {
-   "define": "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "core/device_store.mojo:STORE_PINNED_UPLOAD"
-   ],
-   "binding": [
-    "_mojolearn_x_prep",
-    "_mojolearn_x_metrics",
-    "_mojolearn_x_prep_host",
-    "_mojolearn_x_metrics_host"
-   ],
-   "bits_change": false,
-   "status": "new default G1",
-   "note": "Rollback arm: DeviceStore put/write copy from the caller's pageable pointer. Default (not FAST, not Apple): >=1M-word puts through a 2 x 32 MB pinned stage, memcpy overlapped with DMA. Every DeviceStore binding (x_prep, x_metrics, model selection)."
-  },
   "xprep_arena_pool_off": {
    "define": "MOJOLEARN_XPREP_ARENA_POOL_OFF",
    "kind": "switch",
@@ -229,7 +206,7 @@
    ],
    "bits_change": false,
    "status": "new G3 (A/B owed)",
-   "note": "Large direct inputs go host -> arena through the pinned stage (no slot, no D2D, no second X allocation). Python routes by the presence of x_prep_run_ranges_host."
+   "note": "Large direct inputs go host -> arena in one copy from the host pointer (the G1 pinned stage was deleted 2026-10-09; no slot, no D2D, no second X allocation). Python routes by the presence of x_prep_run_ranges_host."
   },
   "xprep_device_codes": {
    "define": "MOJOLEARN_XPREP_DEVICE_CODES",
@@ -280,16 +257,14 @@
   },
   "expanded:gaussian-nb": {
    "binding": "_mojolearn_x_prep",
-   "route": "GaussianNB.fit: (G5 device codes | encode_labels) -> _Prog.put(X) -> DeviceCache.dev_put (G1 pinned stage, G2 spare slot) | G3 host span -> run_ranges (G2 pooled arena) -> stages -> download_ranges",
+   "route": "GaussianNB.fit: (G5 device codes | encode_labels) -> _Prog.put(X) -> DeviceCache.dev_put (G2 spare slot; one pageable copy, G1 pinned stage deleted) | G3 host span -> run_ranges (G2 pooled arena) -> stages -> download_ranges",
    "controls": [
-    "xprep_pinned_upload_off",
     "xprep_arena_pool_off",
     "xprep_no_slot_hop",
     "xprep_device_codes"
    ],
    "interaction_groups": [
     [
-     "xprep_pinned_upload_off",
      "xprep_arena_pool_off",
      "xprep_no_slot_hop"
     ]
@@ -297,5 +272,11 @@
    "notes": "Diagnostic first: MOJOLEARN_XPREP_PROFILE=1 (XPPHASE upload/alloc us). G4 (C61 arm 2) is classical-nbda.json c61_nb; G6 not in this lane."
   }
  },
- "removed": []
+ "removed": [
+  {
+   "define": "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF",
+   "control": "xprep_pinned_upload_off",
+   "reason": "DELETED 2026-10-09 (lane postmerge-act-1): post-merge A/B (one run per arm) found the G1 pinned upload stage SLOWER than the pageable copy it replaced; default -> _OFF ms gaussian-nb istella NV 129.8 -> 88.7 (0.68x) / AMD 46.4 -> 27.9 (0.60x), taxi NV 20.9 -> 19.3 (0.92x) / AMD 14.1 -> 12.9 (0.91x) (nv n0607 -> n0628, amd a1066 -> a1088); same digests. The stage code (core/device_store.mojo STORE_PINNED_UPLOAD) is deleted, the direct copy is the only path; both MOJOLEARN_XPREP_PINNED_UPLOAD_OFF and MOJOLEARN_XPREP_PINNED_UPLOAD are refused in core/six_lane_experiment_guards.mojo:223; code recoverable at main 432d6e8ff."
+  }
+ ]
 }

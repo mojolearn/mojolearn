@@ -380,7 +380,9 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
 #: Python program (`_Prog.run`) sends a large direct input (the
 #: MOJOLEARN_XPREP_DIRECT case) as a host span of the range list instead of
 #: putting it into a store slot first: `upload_ranges_host` copies its host
-#: words straight into the arena range through the pinned stage. Cost
+#: words straight into the arena range (one copy from the host pointer;
+#: TOMBSTONE: the G1 pinned stage it went through was deleted 2026-10-09,
+#: lane postmerge-act-1, slower on both vendors, core/device_store.mojo). Cost
 #: reasoning: the slot route allocates a second device copy of X (~880 MB at
 #: 1M x 220), uploads into it, copies it device to device into the arena
 #: (another ~880 MB of traffic) and frees it, per fit; the host span route

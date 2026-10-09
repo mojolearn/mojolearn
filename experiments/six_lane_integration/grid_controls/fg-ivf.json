@@ -6,28 +6,30 @@
  "head_note": "code only, uncompiled (orchestrator compiles every switch on and off, NV and AMD, host twins)",
  "controls": {
   "idn_pq_device_codebooks": {
-   "define": "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS",
+   "define": "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "x_ann/switches.mojo:121",
+    "x_ann/switches.mojo:129",
     "x_ann/pq_kmeans_device.mojo:45",
-    "x_ann/ivf_pq_device.mojo",
-    "x_ann/host/ivf_pq_host.mojo:88"
+    "x_ann/ivf_pq_device.mojo:459",
+    "x_ann/host/ivf_pq_host.mojo:266",
+    "core/six_lane_experiment_guards.mojo:222"
    ],
    "binding": [
     "_mojolearn_x_ann",
     "_mojolearn_x_ann_host"
    ],
    "bits_change": true,
-   "status": "new opt-in (plan flagship-gaps-2026-10-09 read_ivf.md A1)",
-   "note": "On: IDENTICAL IVF-PQ codebooks from the batched device Lloyd loop (pq_codebooks_device: strided seeds, 3 launches per iteration, one sync) with the pinned fold (ftz partial adds, identical_div centroid), host twin _codebooks_host_batched. Bits change on NV, AMD and the host column together; recall gate vs cuVS. Expected to remove the AMD 145 s taxi codebook stage."
+   "status": "promoted:postmerge-20261009 (nv n0608->n0632, amd a1067->a1092)",
+   "note": "lane postmerge-act-1 (2026-10-09): PROMOTED to the IDENTICAL default; -D MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF restores the per-subspace k-means fits; the old on-define is refused by the guard. Post-merge A/B, one run per arm: ivf-pq taxi NV 273.1->159.2 / AMD 143,778->195.3 ms; istella NV 1,535.5->1,018.3 / AMD timeout->853.8 ms; recall@10 istella 0.555->0.749, taxi 0.968->0.981 (cuVS 0.791 / 0.977); digests NV == AMD (925740284b istella, d6bed412ed taxi). Batched device Lloyd loop (pq_codebooks_device: strided seeds, 3 launches per iteration, one sync) with the pinned fold (ftz partial adds, identical_div centroid); host twin _codebooks_host_batched follows the same switch. Bits change vs the old default on NV, AMD and the host column together.",
+   "board": "ivf-pq"
   },
   "ivf_pq_one_upload_off": {
    "define": "MOJOLEARN_IVF_PQ_ONE_UPLOAD_OFF",

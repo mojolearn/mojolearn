@@ -34,42 +34,23 @@ MOJOLEARN_XPREP_ARENA_POOL_OFF=1` makes live device memory exactly the live
 slots again. Where bytes live moves no bit.
 """
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import memcpy
-from std.sys import has_accelerator
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_zero import enqueue_fill
 
-#: G1 (lane fg-knn-nb, 2026-10-09, docs/plans/flagship-gaps-20261009/read_knn_nb.md):
-#: `put` and `write` of at least STORE_STAGE_MIN_WORDS words copy the host
-#: words through a store-lifetime PINNED stage of two STORE_STAGE_WORDS
-#: halves, chunk by chunk, the host memcpy of chunk i overlapping the DMA of
-#: chunk i - 1 (gemm/host_transport.mojo's double buffer), instead of one
-#: `enqueue_copy` from the caller's PAGEABLE pointer. Cost reasoning: a
-#: pageable H2D is staged by the driver through its own small bounce buffer
-#: (measured ~0.8 GB/s in the GaussianNB fit cell: 880 MB more X cost
-#: ~1 s more), while a pinned H2D runs at the link rate (PCIe 4 x16 ~25
-#: GB/s); the extra host memcpy runs at memory bandwidth and overlaps the
-#: DMA, so a large put becomes memcpy-bound (~10 GB/s) instead of ~1 GB/s.
-#: The stage costs 64 MB of pinned host memory per store, made on the first
-#: large put. Below 1M words (4 MB) a put keeps the direct copy (the stage's
-#: fixed waits are not repaid). Generic: every binding with a DeviceStore
-#: (x_prep, x_metrics, model selection) takes it. Not on Apple (unified
-#: memory: the stage is a second host copy for nothing) and not in FAST
-#: (untouched by this lane). DEFAULT ON (transport only, no bit moves);
-#: `-D MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1` restores the direct copy.
-comptime STORE_PINNED_UPLOAD = (
-    has_accelerator()
-    and not has_apple_gpu_accelerator()
-    and GLOBAL_NUMERIC_MODE != NUMERIC_FAST
-    and not is_defined["MOJOLEARN_XPREP_PINNED_UPLOAD_OFF"]()
-)
-#: 8M words = 32 MB per stage half.
-comptime STORE_STAGE_WORDS = 1 << 23
-comptime STORE_STAGE_MIN_WORDS = 1 << 20
+#: TOMBSTONE G1 (lane fg-knn-nb pinned upload stage, `MOJOLEARN_XPREP_PINNED_UPLOAD`;
+#: deleted 2026-10-09 by lane postmerge-act-1, code recoverable at main 432d6e8ff):
+#: `put`/`write` of >= 1M words went through a store-lifetime pinned stage of
+#: two 32 MB halves (host memcpy of chunk i overlapping the DMA of chunk
+#: i - 1). Post-merge A/B (one run per arm) found the plain pageable copy
+#: FASTER on both vendors, gaussian-nb default -> `_OFF`: istella NV 129.8 ->
+#: 88.7 ms (0.68x), AMD 46.4 -> 27.9 (0.60x); taxi NV 20.9 -> 19.3 (0.92x), AMD
+#: 14.1 -> 12.9 (0.91x); same digests. The host memcpy into the stage plus
+#: the pinned allocation cost more than the DMA gain. Every upload is one
+#: `enqueue_copy` from the caller's pointer; both defines are refused by
+#: core/six_lane_experiment_guards.mojo. No bit moves.
 
 #: G2 (lane fg-knn-nb, slot half; the arena half is x_prep/device.mojo
 #: X_PREP_POOL_ARENA): a freed slot's buffer of at least STORE_POOL_MIN_WORDS
@@ -136,9 +117,6 @@ struct DeviceStore(Defaultable, Movable):
     var words: List[Int]
     var released: List[Int]
     var live: Int
-    #: G1: the pinned upload stage (two STORE_STAGE_WORDS halves), made on
-    #: the first large put.
-    var stage: Optional[HostBuffer[DType.float32]]
     #: G2: freed slot buffers kept for a put of the same length, and their bytes.
     var spare: List[DeviceBuffer[DType.float32]]
     var spare_bytes: Int
@@ -148,7 +126,6 @@ struct DeviceStore(Defaultable, Movable):
         self.words = List[Int]()
         self.released = List[Int]()
         self.live = 0
-        self.stage = Optional[HostBuffer[DType.float32]]()
         self.spare = List[DeviceBuffer[DType.float32]]()
         self.spare_bytes = 0
 
@@ -181,34 +158,11 @@ struct DeviceStore(Defaultable, Movable):
 
     def _upload(mut self, ctx: DeviceContext, dst: DeviceBuffer[DType.float32], src_addr: Int, n_words: Int) raises:
         """The `n_words` host words at `src_addr` into `dst[0, n_words)`;
-        waits. G1: large copies go through the pinned stage."""
+        waits. One copy from the caller's pointer (the G1 pinned stage was
+        deleted 2026-10-09: slower on both vendors, see the TOMBSTONE above)."""
         if n_words <= 0:
             ctx.synchronize()
             return
-        comptime if STORE_PINNED_UPLOAD:
-            if n_words >= STORE_STAGE_MIN_WORDS:
-                if not self.stage:
-                    self.stage = ctx.enqueue_create_host_buffer[DType.float32](2 * STORE_STAGE_WORDS)
-                    ctx.synchronize()
-                var stage = StoreWP(unsafe_from_address=Int(self.stage.value().unsafe_ptr()))
-                var src = StoreWP(unsafe_from_address=src_addr)
-                # Double-buffered: chunk i is written into its half while
-                # chunk i - 1's DMA runs; the wait before DMA i retires DMA
-                # i - 1, so when chunk i + 1 refills that half nothing reads it.
-                var off = 0
-                var i = 0
-                while off < n_words:
-                    var cnt = min(STORE_STAGE_WORDS, n_words - off)
-                    var half = stage + (i % 2) * STORE_STAGE_WORDS
-                    memcpy(dest=half, src=src + off, count=cnt)
-                    if i > 0:
-                        ctx.synchronize()
-                    ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.float32](off, cnt), src_ptr=half)
-                    off += cnt
-                    i += 1
-                # the next host write into the stage needs these DMAs retired
-                ctx.synchronize()
-                return
         if n_words == len(dst):
             ctx.enqueue_copy(dst_buf=dst, src_ptr=StoreWP(unsafe_from_address=src_addr))
         else:

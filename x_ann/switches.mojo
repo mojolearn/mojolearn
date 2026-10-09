@@ -97,7 +97,15 @@ comptime ANN3_TSNE_STEP_ROWS = is_defined["MOJOLEARN_ANN3_TSNE_STEP_ROWS"]()
 comptime ANN3_CAGRA_TEAM = is_defined["MOJOLEARN_ANN3_CAGRA_TEAM"]()
 
 
-#: lane fg-ivf (plan flagship-gaps-2026-10-09, read_ivf.md idea A1), OPT-IN:
+#: lane fg-ivf (plan flagship-gaps-2026-10-09, read_ivf.md idea A1), DEFAULT ON
+#: outside FAST since lane postmerge-act-1 (2026-10-09; `-D MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF`
+#: restores the per-subspace fits; the old on-define is refused by
+#: core/six_lane_experiment_guards.mojo). Post-merge A/B, one run per arm,
+#: default (nv n0608 / amd a1067) -> this path (nv n0632 / amd a1092), ivf-pq ms:
+#: taxi NV 273.1 -> 159.2, AMD 143,778 -> 195.3; istella NV 1,535.5 -> 1,018.3,
+#: AMD timeout -> 853.8. recall@10 UP: istella 0.555 -> 0.749, taxi 0.968 ->
+#: 0.981 (cuVS 0.791 / 0.977). Digests NV == AMD (istella 925740284b, taxi
+#: d6bed412ed). Was:
 #: the IVF-PQ codebooks in IDENTICAL (every non-FAST mode) from the batched
 #: device Lloyd loop `x_ann/pq_kmeans_device.mojo::pq_codebooks_device`
 #: (Apple FAST's default since lane/apple-fast-ann), on NVIDIA, AMD and
@@ -119,7 +127,7 @@ comptime ANN3_CAGRA_TEAM = is_defined["MOJOLEARN_ANN3_CAGRA_TEAM"]()
 #: `pq_len <= PQK_LEN_MAX` and `n_codes <= PQK_CODES_MAX` take it; wider
 #: subspaces keep the per-subspace fits on every column.
 comptime IDN_PQ_DEVICE_CODEBOOKS = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and is_defined["MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS"]()
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF"]()
 )
 
 #: lane fg-ivf (read_ivf.md idea A3), DEFAULT ON outside FAST
