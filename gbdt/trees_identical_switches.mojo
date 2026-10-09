@@ -132,3 +132,94 @@ comptime LG_LEVEL_ROUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defin
 # CTR_SORTFREE_SUMS (gbdt-categorical, gbdt-ordered non-symmetric leaves):
 # per-(permutation, leaf) sums without the per-permutation radix sort.
 comptime CTR_SORTFREE_SUMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_CTR_SORTFREE_SUMS"]()
+
+# ======== lane fg-gbdt-ordered (2026-10-09): the Ordered fold-arm overhead ========
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+# Plan: docs/plans/flagship-gaps-20261009/read_gbdt_ordered.md, ideas F, C, A, E.
+# Target: the fold arm's per-tree overhead over the plain tree (taxi 35 ms/tree
+# against CatBoost's 25 ms). Every switch below is IDENTICAL-only; FAST builds
+# keep their own (Apple ORD_ALL / ORDERED_BATCH_EST) paths untouched.
+
+# F ORD_SKIP_UNSEARCHED_PERM (default ON, pure waste removal; `_OFF` restores).
+# `fit_ordered` picks the structure's learn permutation as
+# `rng % (learn_count - 1)` (CatBoost's modulus, dynamic_boosting.h:282-289),
+# so the LAST learn permutation (`learn_count - 1`, when learn_count > 1) is
+# never searched on. Its only readers are its own fold tasks, which move only
+# its own fold cursors; no derivative launch, score, structure or exported
+# leaf reads them (the exported leaves come from the estimation permutation,
+# `est_p = perm_count - 1`, whose task and cursor are untouched). The rng draws
+# are per tree, outside the tasks, so the stream is unchanged. Skipped: that
+# permutation's F fold tasks (1/L of the estimation stage: F x ~11 launches and
+# F x 3 small H2D per tree at L = 3), its partition sort (7 launches + 3 D2H a
+# tree) and settle, and its resident buffers (F cursors = ~2n floats, the
+# own-order y/w gathers = 2n floats, the partition's 2n words, F task slots).
+# Its fold-order index copy (T22) was never built: the searcher caches
+# `fold_cindex` per searched `permutation_id` only. BITS: none of the exported
+# model (output hash unchanged). A traced run keeps the tasks (trace.enabled),
+# so `*.perm.<last>.fold.*` records stay comparable with the host column; the
+# host column (`gbdt_oracle_ordered`) is untouched.
+comptime ORD_SKIP_UNSEARCHED_PERM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF"]()
+
+# C IDN_ORD_CAT_PLANES (default ON, launch removal; `_OFF` restores).
+# Each learn permutation's F fold cursors live in ONE buffer at the
+# concatenated fold offsets (sub-buffer views, as Apple's ORDERED_CAT_CURSORS),
+# and each searchable learn permutation keeps its own-order targets and weights
+# laid out the same way once per fit (2 x total floats). The per-tree fold
+# derivatives are then ONE `launch_approximate` over `total` (~2n rows) plus
+# ONE plane scatter instead of F of each (2F = 32 launches at 16 folds -> 2),
+# and the searcher's pooled per-tree fold bins are ONE
+# `fold_bins_from_table_kernel` launch from a fit-long partition-start table
+# instead of 2F (create + fill + copy) and a drain (the kernel was written for
+# Apple ORD_ALL and is un-gated here). Cost reasoning: launches and one drain
+# per tree, independent of shape; the derivative traffic is the same 2n rows.
+# BITS: none (every position runs the same per-row statement on the same
+# operands; the fold bins are the same integers). Host column untouched.
+comptime IDN_ORD_CAT_PLANES = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_ORD_CAT_PLANES_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+# A ORD_HIST_FOLD_SKIP (default OFF, a schedule change; A/B owed).
+# The fold arm's 8-bit one-byte histogram launches one block per (feature
+# block x doc split, part, fold partition): grid.z = 2F. The fold partitions
+# grow geometrically, so at depth d the smallest ones average far fewer
+# documents per part than a block has threads, and each such block still
+# zeroes its 32 KB shared Int32 histogram, reduces it and scans its writeback.
+# Under this switch the leading fold partitions z whose document count is
+# below `parts x ORD_HIST_FOLD_SKIP_DOCS` (a size rule: block fixed cost
+# against per-document global atomics) are histogrammed by a small-fold kernel
+# (`ord_small_fold_hist8_kernel`: one block per (feature block, fold
+# partition, part group), every document adds its two dithered Int32 values
+# per feature straight into the histogram cell with a global Int32 atomic),
+# then one conversion pass writes `Float32(Int(count)) / scale` with the
+# 1e-20 write guard, the one-block writeback's statement; the regular grid's
+# blocks for those z return at entry. Int32 addition is exact in any order and
+# wraps as the shared counters wrap, so every cell is the multiplier-1 cell.
+# BITS: none. Host column untouched. Reached on the device-scale route (the
+# IDENTICAL default, `submit_compute_dev`), single device, 8-bit fixed one-byte
+# policy only; binary and half-byte features keep the regular grid.
+comptime ORD_HIST_FOLD_SKIP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_ORD_HIST_FOLD_SKIP"]()
+# the per-part document budget below which a fold partition takes the small
+# kernel (default 256 = one document per thread of the 8-bit block); an int
+# sweep arm for the grid, not a shape rule
+comptime ORD_HIST_FOLD_SKIP_DOCS = get_defined_int["MOJOLEARN_ORD_HIST_FOLD_SKIP_DOCS", 256]()
+
+# E IDN_ORD_INDEX_SHARED (default OFF, a storage change; A/B owed).
+# T22 keeps, per searched learn permutation, a fold-order copy of the
+# compressed index (n_cols x 2n words: ~2n because the fold layout repeats
+# every learn prefix). Under this switch each searched permutation keeps ONE
+# permutation-order copy (n_cols x n words, half the bytes) plus one fold
+# position -> permutation index map shared by every permutation (2n words,
+# `make_fold_doc_indices_device` at the identity). Each level gathers its
+# documents through the map (the pre-T22 gather, now into permutation order,
+# so a leaf's documents stay near-contiguous), the histogram and split
+# kernels read the permutation-order index at stride n, and the dither keys
+# on `perm[i]` = the document id, which is T22's key. BITS: none (same words,
+# same dither keys, same cells). Host column untouched. Cost: memory
+# n_cols x n words less per searched permutation (istella-sized data: ~0.9 GB
+# each), one 2n-position gather per level more (12 B/position). The partition
+# readbacks (`_PermPartition` settle) are NOT dead before the batched leaf
+# estimation (idea B) lands: `task_partition` builds each task's host leaf
+# sizes from them for the oracle, so they stay.
+comptime IDN_ORD_INDEX_SHARED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_ORD_INDEX_SHARED"]()
