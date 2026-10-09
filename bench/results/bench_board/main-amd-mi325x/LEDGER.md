@@ -34,6 +34,8 @@ Every observation the newest-wins rule did not put on the board, with its number
 | algos/gru-reg/synthetic/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@89485bc96 amd/a0498 None REFUSED(error) None | - |
 | algos/gru-reg/taxi-hourly/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@89485bc96 amd/a0498 None REFUSED(error) None | - |
 | algos/ivf-pq/istella/rows=full | failed run (timeout) never replaces an ok cell; no ok run of this race: FAILED table | main@4df610f3b amd/a0871 None REFUSED(timeout) None | - |
+| algos/ivf-pq/istella/rows=full | failed run (timeout) never replaces an ok cell; no ok run of this race: FAILED table | main@8ed94710a amd/a1067 None REFUSED(timeout) None | - |
+| algos/ivf-pq/taxi/rows=full | older commit | main@4df610f3b amd/a0871 145409.49882700806 ok 2fad29422be2a444 | main@8ed94710a amd/a1067 143778.04607899452 ok 3d19e907e12926d6 |
 | algos/kernel-shap/istella/rows=full | older commit | main@de2b2b739 amd/a0535 12618.82710599457 ok 736bad090940f40f | main@03b648834 amd/a0904 8230.064083996695 ok d6bd4fd3add10e7d |
 | algos/kernel-shap/taxi/rows=full | older commit | main@de2b2b739 amd/a0535 545.3905570029747 ok 6602f8fca403b1d0 | main@03b648834 amd/a0904 252.63428800099064 ok c2031ddbce3f50ff |
 | algos/layernorm/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table | main@530498ea8 amd/a0836 None REFUSED(not_ready) None | - |
@@ -66,10 +68,13 @@ Every observation the newest-wins rule did not put on the board, with its number
 | algos/qr/istella/rows=full | older commit | main@02f7aed95 amd/a0834 683.9307439950062 ok 1d3d173fe41f1cc1 | main@4df610f3b amd/a0868 724.8383919941261 ok 0e2924e6a0b2f26d |
 | algos/qr/taxi/rows=full | older commit | main@89485bc96 amd/a0496 15.881251005339436 ok 030990126b6293c3 | main@4df610f3b amd/a0868 16.46911501302384 ok 882c05a39e7dc652 |
 | algos/qr/taxi/rows=full | older commit | main@02f7aed95 amd/a0834 16.994224992231466 ok 030990126b6293c3 | main@4df610f3b amd/a0868 16.46911501302384 ok 882c05a39e7dc652 |
-| algos/randomized-svd/istella/rows=full | same commit date, earlier job | main@89485bc96 amd/a0494 456.84024499496445 ok f77b6adbd430b6d1 | main@89485bc96 amd/a0496 438.38945899915416 ok f77b6adbd430b6d1 |
-| algos/randomized-svd/taxi/rows=full | same commit date, earlier job | main@89485bc96 amd/a0494 109.07968399988022 ok 259e42835cf88e89 | main@89485bc96 amd/a0496 108.69599299621768 ok 259e42835cf88e89 |
+| algos/randomized-svd/istella/rows=full | older commit | main@89485bc96 amd/a0496 438.38945899915416 ok f77b6adbd430b6d1 | main@8ed94710a amd/a1066 212.73524899152108 ok f77b6adbd430b6d1 |
+| algos/randomized-svd/istella/rows=full | older commit | main@89485bc96 amd/a0494 456.84024499496445 ok f77b6adbd430b6d1 | main@8ed94710a amd/a1066 212.73524899152108 ok f77b6adbd430b6d1 |
+| algos/randomized-svd/taxi/rows=full | older commit | main@89485bc96 amd/a0496 108.69599299621768 ok 259e42835cf88e89 | main@8ed94710a amd/a1066 98.17392099648714 ok 259e42835cf88e89 |
+| algos/randomized-svd/taxi/rows=full | older commit | main@89485bc96 amd/a0494 109.07968399988022 ok 259e42835cf88e89 | main@8ed94710a amd/a1066 98.17392099648714 ok 259e42835cf88e89 |
 | algos/resnet-block/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table | main@530498ea8 amd/a0836 None REFUSED(not_ready) None | - |
 | algos/resnet-block/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table | main@42d1e42c6 amd/a0875 None REFUSED(not_ready) None | - |
+| algos/ridge-cv/taxi/rows=full | older commit | main@8d8771a8e amd/a0003 138.5332649999782 ok 586b8b71a272588f | main@8ed94710a amd/a1068 288.91330999613274 ok 586b8b71a272588f |
 | algos/rmsprop/synthetic/rows=full | older commit | main@89485bc96 amd/a0497 88.76300900010392 ok 38367b9a080a852f | main@42d1e42c6 amd/a0873 3.4107329993275926 ok 38367b9a080a852f |
 | algos/rnn-clf/synthetic/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@89485bc96 amd/a0498 None REFUSED(error) None | - |
 | algos/rnn-clf/taxi-hourly/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@89485bc96 amd/a0498 None REFUSED(error) None | - |
