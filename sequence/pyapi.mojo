@@ -25,8 +25,7 @@ from sequence.moe_group import moe_group_blocks
 from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
 from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
-from sequence.adafactor import AF_NORM_BLOCK, IDN_AF_VEC_FUSED
-from sequence.ops import OP_AF_VFUSE, OP_AF_VFIN
+from sequence.adafactor import AF_NORM_BLOCK
 from std.os import getenv as _getenv_seq
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -867,48 +866,8 @@ def adafactor_core[E: Exec](mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: 
     var fast = _fast_norms() and n >= FAST_NORM_MIN
     var blocked = _blocked_norms() and n > AF_NORM_BLOCK
     var parts = ex.alloc(_PARTS if fast else ((n + AF_NORM_BLOCK - 1) // AF_NORM_BLOCK if blocked else 1))
-    comptime if IDN_AF_VEC_FUSED:
-        # lane neural-io-2: the IDENTICAL vector step of more than
-        # AF_NORM_BLOCK values as vfuse (vec + both block partials), vfin
-        # (both ascending partial folds and the two tails), the decay, the
-        # apply: the same chains in the same order (sequence/adafactor.mojo)
-        if C == 0 and blocked:
-            var nb = (n + AF_NORM_BLOCK - 1) // AF_NORM_BLOCK
-            var parts_u = ex.alloc(nb)
-            var fz = Args()
-            fz.p0 = P
-            fz.p1 = G
-            fz.p2 = S1
-            fz.p3 = U
-            fz.p4 = parts
-            fz.p5 = parts_u
-            fz.i0 = n
-            fz.i1 = AF_NORM_BLOCK
-            fz.f0 = w
-            fz.f1 = eps1sq
-            ex.launch[OP_AF_VFUSE](fz, nb)
-            var fargs = Args()
-            fargs.p0 = parts
-            fargs.p1 = sc
-            fargs.p2 = parts_u
-            fargs.i0 = n
-            fargs.i1 = nb
-            fargs.f0 = fval(fp, 3)
-            fargs.f1 = rho
-            fargs.f2 = fval(fp, 4)
-            ex.launch[OP_AF_VFIN](fargs, 1)
-            # the decay after the alpha (it reads p before it), as below
-            if wd != Float32(0.0):
-                var s0 = Args()
-                s0.p0 = P
-                s0.f0 = Float32(1.0) - ftz(identical_mul(Float32(lr), wd))
-                ex.launch[OP_SCALE](s0, n)
-            var ap0 = Args()
-            ap0.p0 = P
-            ap0.p1 = U
-            ap0.p2 = sc
-            ex.launch[OP_AF_APPLY](ap0, n)
-            return
+    # TOMBSTONE (lane/postmerge-act-5, 2026-10-09: -D MOJOLEARN_IDN_AF_VEC_FUSED (Adafactor fused vector step)):
+    # the vfuse + vfin vector step was NOISE: NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), avg 0.98x, digest aa99a3dc unchanged; recoverable at main 0a7b206f1.
     var a = Args()
     a.p0 = P
     a.p1 = sc
