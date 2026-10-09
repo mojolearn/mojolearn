@@ -171,8 +171,7 @@
     [
      "HIST_REP_SM",
      "hist_packed_gh",
-     "hist_warp_agg",
-     "hist_multistat"
+     "hist_warp_agg"
     ],
     [
      "GBDT_APPLY_WIDE",

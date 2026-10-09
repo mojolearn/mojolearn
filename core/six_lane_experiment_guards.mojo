@@ -199,6 +199,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KMEANS_DIRECT_DISTANCE"](), "removed: MOJOLEARN_KMEANS_DIRECT_DISTANCE (kmeans_assign direct arms) retired 2026-10-08: slower, kmeans direct4 NV 12.7x / AMD 6.2x istella, NV 1.78x / AMD 1.96x taxi, inertia SAME (grid ge123e6f9); MOJOLEARN_KMEANS_ROW_ASSIGN=2|4 stays; see EXPERIMENTS.md"
     comptime assert not is_defined["MOJOLEARN_GRAPH_DIRECT_DISTANCE"](), "removed: MOJOLEARN_GRAPH_DIRECT_DISTANCE retired 2026-10-08: slower, hdbscan NV 1.76x / AMD 1.70x istella, NV 1.14x / AMD 1.16x taxi (grid ge123e6f9); see EXPERIMENTS.md"
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_OZAKI_LINALG"](), "removed: MOJOLEARN_IDN_GEMM_OZAKI_LINALG retired 2026-10-08: slower, gemm S=4 NV 3.97x / AMD 2.06x, S=5 NV 7.99x / AMD 2.51x (grid ge123e6f9); the neural Ozaki profile (MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES) is separate; see EXPERIMENTS.md"
+    comptime assert get_defined_int["MOJOLEARN_TREES_HIST_MULTISTAT",0]() == 0, "removed: MOJOLEARN_TREES_HIST_MULTISTAT (=4|8) retired 2026-10-08: slower, gbdt-multiclass =4 NV 1.04x / AMD 1.41x istella, 1.07x / 1.11x taxi; =8 0.99x / 1.31x istella, 1.11x / 1.14x taxi; quality SAME (grid ge123e6f9); see EXPERIMENTS.md"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True
