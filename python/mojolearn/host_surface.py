@@ -1927,6 +1927,8 @@ FAMILIES = (
             # lane hr-small-passes (2026-10-02): the linear models' centering
             "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",
+            # lane fg-pca T1 (2026-10-09): tsvd_fit + tsvd_explained in one call
+            "tsvd_fit_explained",
             "dbscan_fit_core", "labeled_reference_predict",
             "dbscan_core_arrays", "estimators_py2mojo_cluster",
             "ols_predict", "tsvd_transform", "pca_transform",

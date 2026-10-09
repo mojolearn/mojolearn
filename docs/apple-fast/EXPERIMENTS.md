@@ -1659,3 +1659,17 @@ Code-only lane (plan `docs/plans/gaps-2026-10-08.md` section 11). Both switches 
 | `MOJOLEARN_IDN_SGD_EPOCH_KERNEL` (default off) | expanded:sgd-clf / taxi (istella keeps the grid form) | lane/fg-linear @ 0f6fc775e | owed | grid NV 1,040 / AMD 2,271-2,314 -> owed | PENDING A/B | fg-linear S1: batch x (d+2) <= 2^17 at a host-schedule rate runs through the 64-batch chunk kernel (one block) instead of 2 launches a batch; same statements, no bit change expected (ID check owed). |
 | `MOJOLEARN_IDN_CD_GRAM_EPOCHS_64` (default off) | more:lasso, more:elasticnet / taxi | lane/fg-linear @ a5101cb29 | owed | not raced since 0.8.25 | PENDING A/B | fg-linear C2: 64 CD Gram epochs a launch at n_cols <= 64 (16 otherwise); device-decided freeze, no bit change; record n_iter_. |
 | (none: read file G1 `MOJOLEARN_IDN_QN_XTDZ_ROWS`, G2 `MOJOLEARN_IDN_QN_FUSED_SMALL_D`) | more:logreg | lane/fg-linear (not written) | - | - | NOT STARTED | Already main's IDENTICAL defaults: QN_TILED row-tile X^T dZ (glm/impl/qn/glm_base.mojo:471) and QN_IDN_FUSED one-launch evaluate (:1211); the read file's d-block xty_kernel is the QN_TILED_OFF arm. |
+
+## Flagship gaps: PCA / TruncatedSVD / randomized_svd (lane/fg-pca, 2026-10-09)
+
+Code-only lane (plan `docs/plans/flagship-gaps-20261009/read_pca.md`), uncompiled. Waste removals are default on with an `_OFF` arm; the solver and kernel restructures are default off. Grid controls: `experiments/six_lane_integration/grid_controls/fg-pca.json`.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF` (default on) | classical:pca / istella, taxi | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | P2: skip the dead +mu restore pass, alias buffers sized to the route's scratch; same words |
+| `MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF` (default on) | more:tsvd / istella, taxi | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | T1: one H2D copy of X for the Gram and the explained variance (new export tsvd_fit_explained, host twin too); same words |
+| `MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF` (default on) | expanded:randomized-svd / istella, taxi | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | R1: upload from the caller's buffer on IDENTICAL, no host array copy; same words |
+| `MOJOLEARN_IDN_PCA_RR_ONE_BLOCK` (default off; knob `MOJOLEARN_IDN_PCA_RR_ONE_BLOCK_STEPS`, 64) | classical:pca, more:tsvd / istella, taxi | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | P1+P1b: the whole round-robin solve in one launch of one block (fused cs+update, in-kernel test and gate); same cells and order, no bit claimed to move |
+| `MOJOLEARN_IDN_GEMM_TN_CENTERED` (default off) | classical:pca / istella (d > 128 only) | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | P3: centered tile load on the v1 split-plan arithmetic, X read-only; no bit claimed to move (ID check settles it) |
+| `MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE` (default off) | classical:pca, more:tsvd / istella, taxi | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | P5: device order + top-k gather, k x d download; bits move only on tied eigenvalues (host column moves with it) |
+| `MOJOLEARN_IDN_COLVAR_FUSED` (default off) | more:tsvd / istella, taxi | lane/fg-pca @ 385b276e8 | owed | owed | PENDING A/B | T2: read-only fused column variance in the xty_tiled order; same words |
