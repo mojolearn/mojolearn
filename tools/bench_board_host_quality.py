@@ -1,6 +1,7 @@
 """Untimed, own-implementation host references for opponent-free boards."""
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -36,6 +37,43 @@ def compare(actual, reference):
     return {'relative_error_vs_own_host': max(errors)}
 
 
+# The two refusals a host reference prints when the race job built no host twin for a binding it loads
+# (python/mojolearn/_backend.py load_host_module: "<dir>/_mojolearn_<x>_host.so is not built. Build it with
+# bindings/build_<x>_host.sh"; _no_cpu_implementation: "no host binding covers _mojolearn_<x>").
+_NOT_BUILT_RE = re.compile(r'(_mojolearn_[A-Za-z0-9_]+?_host)\.so is not built')
+_NO_COVER_RE = re.compile(r'no host binding covers (_mojolearn_[A-Za-z0-9_]+)')
+
+
+def failure_line(log_path, width=300):
+    """The last non-empty line of a failed reference's host.log (its exception), for the quality error text."""
+    try:
+        lines = [x.strip() for x in Path(log_path).read_text(errors='replace').splitlines() if x.strip()]
+    except OSError:
+        return 'host.log unreadable'
+    return (lines[-1] if lines else 'host.log empty')[:width]
+
+
+def missing_host_bindings(log_path):
+    """Host binding basenames (`_mojolearn_<x>_host`) a failed reference could not load, in log order.
+
+    Text matching on our own refusal messages only; no data is read. The race prints one
+    `needs python/mojolearn/host/<basename>.so` line per name, the line the lq box job's retry loop
+    (overlay_race_job2.sh) reads to build `bindings/build_<x>_host.sh` and race again."""
+    try:
+        text = Path(log_path).read_text(errors='replace')
+    except OSError:
+        return []
+    out = []
+    for m in _NOT_BUILT_RE.finditer(text):
+        if m.group(1) not in out:
+            out.append(m.group(1))
+    for m in _NO_COVER_RE.finditer(text):
+        name = m.group(1) + '_host'
+        if name not in out:
+            out.append(name)
+    return out
+
+
 def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_calls=1):
     """Only replace explicitly empty quality, never an existing quality error."""
     import numpy as np
@@ -56,7 +94,8 @@ def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_ca
                                      str(data), str(ref), str(receipt), str(fit_calls)],
                                     env=env, stdout=log, stderr=subprocess.STDOUT, timeout=timeout)
         if result.returncode:
-            raise ValueError('Own host reference failed; see ' + str(root / 'host.log'))
+            raise ValueError('Own host reference failed (%s); see %s'
+                             % (failure_line(root / 'host.log'), root / 'host.log'))
         proof = json.loads(receipt.read_text())
         if proof.get('vendor') != 'cpu' or proof.get('numeric_mode') != 'identical' or not proof.get('bindings'):
             raise ValueError('Missing own host reference provenance')
