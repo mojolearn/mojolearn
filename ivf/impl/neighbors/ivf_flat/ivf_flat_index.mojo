@@ -120,8 +120,14 @@ comptime IVF_TRAINSET_STRIDE = (
 comptime IVF_IDN_RECLUSTER_CAP = (
     GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF"]()
 )
-#: lane fg-ivf (read_ivf.md idea B1), OPT-IN outside FAST
-#: (`-D MOJOLEARN_IVF_IDN_STRIDED_INIT`): the coarse quantizer starts from
+#: lane fg-ivf (read_ivf.md idea B1), DEFAULT ON outside FAST since lane
+#: postmerge-act-3 (2026-10-09; `-D MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF`
+#: restores k-means|| seeding). Post-merge A/B on main a47bd9fb2, one run per
+#: arm (default nv2 v0996 / amd a1131, arm nv2 v0993 / amd a1134): ivf-pq
+#: istella NV 1008.1 -> 756.9 ms (0.75x) / AMD 853.1 -> 542.2 ms (0.64x),
+#: recall@10 0.7489 -> 0.8021 on both; taxi NV 157.2 -> 100.0 ms (0.64x) /
+#: AMD 195.0 -> 83.9 ms (0.43x), recall@10 0.98125 equal. NV digest == AMD
+#: digest (istella 7a39a98cdca7dc6e, taxi 5c793de3ec021c64). The coarse quantizer starts from
 #: strided training rows, centre c = training row (c x n_train) // n_lists
 #: (exact integers), instead of k-means|| seeding (up to 8 rounds of
 #: distance passes with ~14 syncs plus the recluster fit). cuVS's balanced
@@ -132,7 +138,7 @@ comptime IVF_IDN_RECLUSTER_CAP = (
 #: (device + ivf/host/ivf_host.mojo); recall gate against cuVS. Applies to
 #: IVF-Flat and to IVF-PQ's coarse step (the same build). B2 is moot with it.
 comptime IVF_IDN_STRIDED_INIT = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT"]()
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"]()
 )
 
 

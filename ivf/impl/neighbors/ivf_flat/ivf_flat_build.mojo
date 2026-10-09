@@ -865,7 +865,8 @@ def _ivf_flat_build_impl[resident: Bool](
             st.host("random_init")
 
     comptime if IVF_IDN_STRIDED_INIT:
-        # lane fg-ivf B1 (OPT-IN, bits change on every column): the strided
+        # lane fg-ivf B1 (IDENTICAL default since postmerge-act-3; -D
+        # MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF rolls back): the strided
         # training rows are the start; no k-means|| rounds, no recluster. The
         # host column (ivf/host/ivf_host.mojo) starts from the same rows.
         if kp.init == INIT_KMEANS_PLUS_PLUS and n_train >= n_lists:

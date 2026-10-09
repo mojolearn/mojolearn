@@ -84,15 +84,6 @@ comptime IVF_REFINE_TEAM = VSEARCH_FAST_APPLE and is_defined["MOJOLEARN_IVF_REFI
 #: digest == the _OFF arm's.
 comptime IDN_PQ_LUT_TILED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IDN_PQ_LUT_TILED_OFF"]()
 
-#: lane fg-ivf (read_ivf.md idea A5), OPT-IN outside FAST
-#: (`-D MOJOLEARN_IDN_PQ_SCAN_FUSED`): `pq_scan_fused_kernel`
-#: (`PQ_SCAN_FUSED` above) as the IDENTICAL IVF-PQ score + top-k: one launch
-#: per chunk of queries, no mc x stride candidate buffer written and read
-#: back, no select_part / select_pair / select_merge chain. The kernel tiles
-#: the table itself (any pq_dim with n_codes <= LUT_MAX). The k results are
-#: the k least under the (distance, row id) total order (`pq_better`; ids
-#: are distinct), which does not depend on the scan order, and a NaN
-#: candidate sends the query to the cell's sequential insertion, so the
-#: outputs and `n_candidates_` are the select chain's words. Default off
-#: until the ID line and the NV/AMD A/B land (k <= SEL_KM takes it).
-comptime IDN_PQ_SCAN_FUSED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST and is_defined["MOJOLEARN_IDN_PQ_SCAN_FUSED"]()
+#: TOMBSTONE (lane postmerge-act-3, 2026-10-09): `IDN_PQ_SCAN_FUSED` (fg-ivf A5, -D MOJOLEARN_IDN_PQ_SCAN_FUSED,
+#: pq_scan_fused_kernel in IDENTICAL) removed: slower, ivf-pq istella NV 1.80x / AMD 1.00x, taxi NV 1.77x / AMD 1.00x,
+#: recall equal (post-merge A/B nv n0669-n0671, amd a1131->a1132). Recoverable at main a47bd9fb2.

@@ -33,7 +33,7 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_SCAN_SELECT
-from x_ann.vsearch_fast import IDN_PQ_LUT_TILED, IDN_PQ_SCAN_FUSED, PQ_LUT_TILED, PQ_SCAN_FUSED
+from x_ann.vsearch_fast import IDN_PQ_LUT_TILED, PQ_LUT_TILED, PQ_SCAN_FUSED
 from x_ann.ivf_pq_core import (
     F32P, I32P, ivf_row_removed, pq_better, pq_coarse_dist, pq_inf, pq_insert, pq_lut_entry, pq_probe_takes,
 )
@@ -1096,8 +1096,10 @@ def ivf_scan_search[KIND: Int](
     # the top-k in one launch per chunk; no candidate buffer, no select
     # launches (k <= SEL_KM; the table tile and the residual fit)
     var fused = False
-    # lane fg-ivf A5: the same kernel in IDENTICAL under `IDN_PQ_SCAN_FUSED` (opt-in)
-    comptime if KIND == 0 and (PQ_SCAN_FUSED or IDN_PQ_SCAN_FUSED) and not is_defined["MOJOLEARN_ANN_SERIAL_SCAN"]():
+    # TOMBSTONE (lane postmerge-act-3, 2026-10-09): fg-ivf A5 `IDN_PQ_SCAN_FUSED` (this kernel in IDENTICAL)
+    # removed: slower, ivf-pq istella NV 1.80x / AMD 1.00x, taxi NV 1.77x / AMD 1.00x, recall equal
+    # (nv n0669-n0671, amd a1131->a1132). Recoverable at main a47bd9fb2.
+    comptime if KIND == 0 and PQ_SCAN_FUSED and not is_defined["MOJOLEARN_ANN_SERIAL_SCAN"]():
         fused = k <= SEL_KM and pq_dim * pq_len <= SCORE_DIM_MAX and n_codes <= LUT_MAX
     var dcand = ctx.enqueue_create_buffer[DType.float32](1 if fused else mc * stride)
     var dws = ctx.enqueue_create_buffer[DType.float32]((mc * np * D) if KIND == 2 else 1)
@@ -1172,7 +1174,7 @@ def ivf_scan_search[KIND: Int](
             var tiled = False
             comptime if PQ_LUT_TILED or IDN_PQ_LUT_TILED:
                 tiled = (not fused) and pq_dim * pq_len <= SCORE_DIM_MAX and n_codes <= LUT_MAX
-            comptime if PQ_SCAN_FUSED or IDN_PQ_SCAN_FUSED:
+            comptime if PQ_SCAN_FUSED:
                 if fused:
                     ctx.enqueue_function[pq_scan_fused_kernel](
                         Int32(q0), Int32(np), dq, Int32(dim), dc, doff, dli, gcodes, fa, Int32(pq_dim),
