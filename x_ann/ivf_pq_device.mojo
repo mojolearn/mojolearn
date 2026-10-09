@@ -13,6 +13,7 @@ from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import (
     ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_SEED, ANN3_ROW_THREADS, IDN_PQ_DEVICE_CODEBOOKS,
+    IVF_PQ_ONE_UPLOAD,
 )
 from x_ann.kpp_seed import kpp_seed
 from x_ann.fast_env import FAST_IVFPQ_DEVICE_CODEBOOKS
@@ -23,8 +24,8 @@ from x_ann.ivf_scan_device import ivf_scan_search
 
 from cluster.estimator import kmeans_fit_rows
 from cluster.impl.kmeans_params import INIT_ARRAY, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
-from ivf.estimator import ivf_flat_build_host
-from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
+from ivf.estimator import ivf_flat_build_host, ivf_flat_build_resident_host
+from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice, ivf_trainset_rows
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add, identical_sqrt
 from std.sys.compile import is_defined
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
@@ -302,14 +303,92 @@ def _codebooks(
     return codebooks^
 
 
+def _coarse_resident(
+    ctx: DeviceContext, x: List[Float32], x_addr: Int, n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int,
+    seed: Int, mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
+    mut coarse_dev: IvfFlatBuildDevice,
+) raises:
+    """lane fg-ivf A3 (`IVF_PQ_ONE_UPLOAD`): `_coarse` through IVF-Flat's
+    RESIDENT build with `keep_rows`: the same parameters and statements
+    (`ivf_flat_build_resident_host` is `ivf_flat_build_host`'s twin), the
+    centres, offsets and carried ids on the host as before, and the uploaded
+    rows (`coarse_dev.dx`), the centres (`coarse_dev.dcenters`) and the final
+    assignment (`coarse_dev.dlabels`) LEFT ON THE DEVICE for the residuals.
+    `x` may be empty when the build reads the rows from `x_addr`
+    (`IVF_BUILD_FROM_POINTER`)."""
+    var cst = AnnStages("ivf_coarse")
+    coarse_dev.keep_rows = True
+    var flat = ivf_flat_build_resident_host(
+        ctx, x, x_addr, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed), coarse_dev
+    )
+    ctx.synchronize()
+    cst.host("flat_build_resident")
+    swap(centers, flat.centers)
+    swap(offsets, flat.list_offsets)
+    list_indices = List[Int32](length=n, fill=Int32(0))
+    if n > 0:
+        memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
+    _ = flat^
+    cst.host("convert")
+
+
+struct IvfPqDevice(Movable):
+    """lane fg-ivf A7 (`IVF_PQ_RESIDENT_FIT`): the device side a RESIDENT
+    IVF-PQ build leaves behind for `x_ann/resident.mojo`: the coarse centres,
+    the codebooks and the row-order codes (n x pq_dim), the buffers the
+    build already holds. `IvfPqDevice(ctx)` is the placeholder a
+    non-resident build passes (one-word buffers, never read)."""
+
+    var dcenters: DeviceBuffer[DType.float32]
+    var dcb: DeviceBuffer[DType.float32]
+    var dcodes: DeviceBuffer[DType.int32]
+
+    def __init__(out self, ctx: DeviceContext) raises:
+        self.dcenters = ctx.enqueue_create_buffer[DType.float32](1)
+        self.dcb = ctx.enqueue_create_buffer[DType.float32](1)
+        self.dcodes = ctx.enqueue_create_buffer[DType.int32](1)
+
+
 def ivf_pq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
-    pq_dim: Int, pq_bits: Int, pq_iters: Int, codes_addr: Int = 0,
+    pq_dim: Int, pq_bits: Int, pq_iters: Int, codes_addr: Int = 0, x_addr: Int = 0,
 ) raises -> IvfPqIndex:
     """`codes_addr` (lane ann-apple3, read under `ANN3_DIRECT_OUT` only): the
     address of the caller's n x pq_dim int32 array; the codes are downloaded
     straight into it and the returned index's `codes` is EMPTY. 0: the codes
-    come back in the index, as before."""
+    come back in the index, as before. `x_addr` (lane fg-ivf A3): the
+    caller's n x dim float32 rows, read in place by the coarse build when `x`
+    is empty (`IVF_PQ_ONE_UPLOAD` with `IVF_BUILD_FROM_POINTER`)."""
+    var ctx = x_ann_ctx()
+    var dev = IvfPqDevice(ctx)
+    var index = _ivf_pq_build_impl[False](
+        ctx, x, x_addr, n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_iters, codes_addr, dev
+    )
+    _ = dev^
+    _ = ctx^
+    return index^
+
+
+def ivf_pq_build_device_resident(
+    x: List[Float32], x_addr: Int, n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
+    pq_dim: Int, pq_bits: Int, pq_iters: Int, mut dev: IvfPqDevice,
+) raises -> IvfPqIndex:
+    """lane fg-ivf A7: `ivf_pq_build_device` with the codes, centres and
+    codebooks LEFT ON THE DEVICE in `dev` (`x_ann/resident.mojo::
+    x_ann_register_pq_built` makes the handle). The returned host index
+    carries the centres, offsets, ids and codebooks and an EMPTY `codes`."""
+    var ctx = x_ann_ctx()
+    var index = _ivf_pq_build_impl[True](
+        ctx, x, x_addr, n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_iters, 0, dev
+    )
+    _ = ctx^
+    return index^
+
+
+def _ivf_pq_build_impl[resident: Bool](
+    ctx: DeviceContext, x: List[Float32], x_addr: Int, n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int,
+    seed: Int, pq_dim: Int, pq_bits: Int, pq_iters: Int, codes_addr: Int, mut out_dev: IvfPqDevice,
+) raises -> IvfPqIndex:
     pq_validate(n, dim, n_lists, pq_dim, pq_bits, pq_iters)
     var pq_len = pq_len_of(dim, pq_dim)
     var rot_dim = pq_len * pq_dim
@@ -319,15 +398,46 @@ def ivf_pq_build_device(
     var list_indices = List[Int32]()
     var labels = List[Int32]()
     var st = AnnStages("ivf_pq_build")
-    _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
+    # lane fg-ivf A3 (`IVF_PQ_ONE_UPLOAD`, default on outside FAST; `_OFF`
+    # restores the second upload): the coarse build's own device rows,
+    # centres and labels feed the residuals
+    var coarse_dev = IvfFlatBuildDevice(ctx)
+    var one_upload = False
+    comptime if IVF_PQ_ONE_UPLOAD:
+        one_upload = True
+    if one_upload:
+        _coarse_resident(
+            ctx, x, x_addr, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, coarse_dev
+        )
+    else:
+        if len(x) != n * dim:
+            # the bindings copy the rows in whenever this arm is compiled
+            raise Error("ivf_pq_build_device: the rows must be passed as a list with IVF_PQ_ONE_UPLOAD off")
+        _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
     st.host("coarse")
-    var ctx = x_ann_ctx()
-    var dx = upload_f32(ctx, x)
-    var dc = upload_f32(ctx, centers)
-    var dl = upload_i32(ctx, labels)
+    var dx: DeviceBuffer[DType.float32]
+    var dc: DeviceBuffer[DType.float32]
+    var dl: DeviceBuffer[DType.int32]
+    if one_upload:
+        dx = ctx.enqueue_create_buffer[DType.float32](1)
+        dc = ctx.enqueue_create_buffer[DType.float32](1)
+        dl = ctx.enqueue_create_buffer[DType.int32](1)
+        swap(dx, coarse_dev.dx)
+        swap(dc, coarse_dev.dcenters)
+    else:
+        dx = upload_f32(ctx, x)
+        dc = upload_f32(ctx, centers)
+        dl = upload_i32(ctx, labels)
     var dr = ctx.enqueue_create_buffer[DType.float32](n * rot_dim)
-    _enqueue_residual(ctx, n, dim, rot_dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
+    if one_upload:
+        # the build's uint32 labels are below n_lists < 2^31: the same words as int32
+        _enqueue_residual(
+            ctx, n, dim, rot_dim, _dp(dx), _dp(dc), _dp(coarse_dev.dlabels).bitcast[Int32](), _dp(dr)
+        )
+    else:
+        _enqueue_residual(ctx, n, dim, rot_dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     ctx.synchronize()
+    st.host("residual")
     # FAST on Apple, default (off: `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF`; lane/apple-
     # fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
     # every subspace from one batched device Lloyd loop over the residuals
@@ -365,22 +475,29 @@ def ivf_pq_build_device(
     _enqueue_assign(ctx, n, _dp(dr), _dp(dcb), pq_dim, rot_dim, pq_len, n_codes, _dp(dcodes))
     ctx.synchronize()
     var codes = List[Int32]()
-    var direct = False
-    comptime if ANN3_DIRECT_OUT:
-        direct = codes_addr != 0
-    if direct:
-        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
-        ctx.synchronize()
+    comptime if resident:
+        # lane fg-ivf A7: the codes, centres and codebooks stay on the device
+        swap(out_dev.dcodes, dcodes)
+        swap(out_dev.dcb, dcb)
+        swap(out_dev.dcenters, dc)
+        st.host("encode_resident")
     else:
-        codes = download_i32(ctx, dcodes, n * pq_dim)
-    st.host("encode")
+        var direct = False
+        comptime if ANN3_DIRECT_OUT:
+            direct = codes_addr != 0
+        if direct:
+            ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
+            ctx.synchronize()
+        else:
+            codes = download_i32(ctx, dcodes, n * pq_dim)
+        st.host("encode")
     _ = dcodes^
     _ = dcb^
     _ = dr^
     _ = dl^
     _ = dc^
     _ = dx^
-    _ = ctx^
+    _ = coarse_dev^
     return IvfPqIndex(n_lists, dim, n, pq_dim, pq_len, n_codes, centers^, offsets^, list_indices^, codebooks^, codes^)
 
 

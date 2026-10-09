@@ -121,3 +121,33 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 comptime IDN_PQ_DEVICE_CODEBOOKS = (
     GLOBAL_NUMERIC_MODE != NUMERIC_FAST and is_defined["MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS"]()
 )
+
+#: lane fg-ivf (read_ivf.md idea A3), DEFAULT ON outside FAST
+#: (`-D MOJOLEARN_IVF_PQ_ONE_UPLOAD_OFF` restores the old path): IVF-PQ's
+#: coarse step is IVF-Flat's RESIDENT build (`ivf_flat_build_resident_host`
+#: with `keep_rows`), which hands back the rows it uploaded and the final
+#: assignment on the device, so `ivf_pq_build_device` no longer uploads the
+#: n x dim rows a second time nor round-trips the n labels through a host
+#: list; where the IVF build reads the caller's buffer
+#: (`IVF_BUILD_FROM_POINTER`, IDENTICAL) the binding skips the n x dim
+#: numpy -> List copy too. Cost removed: one n x dim x 4 B host copy, one
+#: n x dim x 4 B H2D and one n x 4 B D2H + H2D. A pure waste removal: the
+#: same build statements on the same rows, so no bit moves (the centres
+#: and labels are the build's own words).
+comptime IVF_PQ_ONE_UPLOAD = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_PQ_ONE_UPLOAD_OFF"]()
+)
+
+#: lane fg-ivf (read_ivf.md idea A7), DEFAULT ON outside FAST
+#: (`-D MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF` unregisters the entry, so
+#: `IVFPQIndex.fit` takes the old build and the first search prepares the
+#: handle as before): `x_ann_ivf_pq_build_resident` keeps the fitted index
+#: on the device (centres, codebooks and the n x pq_dim codes the build
+#: already holds there) as an `x_ann/resident.mojo` handle, so fit no longer
+#: downloads the n x pq_dim x 4 B codes and the first search no longer
+#: uploads them again and gathers them into list order. `codes_` is
+#: exported on first read (`x_ann_index_export_codes`, outside fit and
+#: search). No bit moves: the handle holds the words prepare would upload.
+comptime IVF_PQ_RESIDENT_FIT = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF"]()
+)

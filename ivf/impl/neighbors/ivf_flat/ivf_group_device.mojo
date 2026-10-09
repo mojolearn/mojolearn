@@ -390,11 +390,14 @@ def ivf_list_layout_device_resident(
     n_rows: Int,
     dim: Int,
     n_lists: Int,
+    with_data: Bool = True,
 ) raises -> IvfDeviceLayout:
     """`ivf_list_layout_device` with the device CSR returned instead of
     downloaded (see `IvfDeviceLayout`). A max label >= n_lists returns
     before any list is laid out; the caller refuses it by name. `n_rows >= 1`
-    (the build refuses an empty dataset first)."""
+    (the build refuses an empty dataset first). `with_data = False` (lane
+    fg-ivf, IVF-PQ's coarse step, which never reads the permuted vectors)
+    skips the n_rows x dim gather and returns a one-word `d_data`."""
     var n = n_rows
     if n < 1:
         raise Error("ivf_list_layout_device_resident: empty dataset")
@@ -416,7 +419,7 @@ def ivf_list_layout_device_resident(
     var offsets = List[Int32](length=n_lists + 1, fill=Int32(0))
     var list_indices = List[UInt32](length=n, fill=UInt32(0))
     var goff = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
-    var dd = ctx.enqueue_create_buffer[DType.float32](max(n * dim, 1))
+    var dd = ctx.enqueue_create_buffer[DType.float32](max(n * dim, 1) if with_data else 1)
     if Int(max_label) >= n_lists:
         _ = keys^
         _ = tk^
@@ -433,7 +436,7 @@ def ivf_list_layout_device_resident(
     device_exclusive_scan_total_from(ctx, gcount, goff, n_lists)
     ctx.enqueue_copy(dst_ptr=offsets.unsafe_ptr(), src_buf=goff)
     ctx.enqueue_copy(dst_ptr=list_indices.unsafe_ptr(), src_buf=vals)
-    if dim > 0:
+    if with_data and dim > 0:
         ctx.enqueue_function[_gather_rows_kernel](
             dx.unsafe_ptr(), vals.unsafe_ptr(), Int32(n), Int32(dim), dd.unsafe_ptr(),
             grid_dim=_grid(n * dim), block_dim=_TPB,

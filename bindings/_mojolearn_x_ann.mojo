@@ -14,8 +14,9 @@ from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, X_ANN_PY2MOJO, ts
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import a_int, check_search, in_f32, in_i32, out_f32, out_i32, p_int
-from x_ann.switches import ANN3_DIRECT_OUT
-from x_ann.ivf_pq_core import pq_len_of
+from x_ann.switches import ANN3_DIRECT_OUT, IVF_PQ_ONE_UPLOAD, IVF_PQ_RESIDENT_FIT
+from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER
+from x_ann.ivf_pq_core import IvfPqIndex, pq_len_of
 from x_ann.stage_timer import AnnStages
 from x_ann.cagra_device import cagra_build_device, cagra_search_device, cagra_search_on
 from x_ann.device_ctx import x_ann_ctx
@@ -23,8 +24,10 @@ from x_ann.io import upload_f32, upload_i32
 from core.abs_sum_blocked import device_any_index_out_of_range
 from x_ann.tsne_device import tsne_fit_device
 from x_ann.resident import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
+from x_ann.resident import x_ann_index_export_codes_binding, x_ann_register_pq_built
 from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, ivf_sq_build_device, ivf_sq_search_device, refine_device, ivf_rabitq_build_device, ivf_rabitq_search_device
 from x_ann.ivf_pq_device import refine_device_team
+from x_ann.ivf_pq_device import IvfPqDevice, ivf_pq_build_device_resident
 from x_ann.vsearch_fast import IVF_REFINE_TEAM
 
 
@@ -34,7 +37,12 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
     var bst = AnnStages("ivf_pq_binding")
-    var x = in_f32(addrs, 0, n * dim)
+    # lane fg-ivf A3: where the coarse build reads the caller's rows in place
+    # (IVF_PQ_ONE_UPLOAD with IVF_BUILD_FROM_POINTER) the n x dim copy is gone
+    var x_addr = a_int(addrs, 0)
+    var x = List[Float32]()
+    comptime if not (IVF_PQ_ONE_UPLOAD and IVF_BUILD_FROM_POINTER):
+        x = in_f32(addrs, 0, n * dim)
     bst.host("copy_in")
     var n_lists = p_int(params, 2)
     var iters = p_int(params, 3)
@@ -49,7 +57,9 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     comptime if ANN3_DIRECT_OUT:
         codes_addr = a_int(addrs, 5)
     with GILReleased(Python()):
-        var index = ivf_pq_build_device(x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, codes_addr)
+        var index = ivf_pq_build_device(
+            x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, codes_addr, x_addr
+        )
         bst.host("build")
         out_f32(index.centers, addrs, 1)
         out_i32(index.offsets, addrs, 2)
@@ -58,6 +68,52 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
         out_i32(index.codes, addrs, 5)
         bst.host("copy_out")
     return PythonObject(n)
+
+
+def ivf_pq_build_resident_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """lane fg-ivf A7 (`IVF_PQ_RESIDENT_FIT`, registered only when it holds):
+    `ivf_pq_build_binding` with the fitted index LEFT ON THE DEVICE as an
+    `x_ann/resident.mojo` handle (returned); the codes are not downloaded
+    (`x_ann_index_export_codes` writes them on first read of `codes_`).
+    addrs: x, centers, offsets, list_indices, codebooks.
+    params: n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters."""
+    if len(addrs) != 5 or len(params) != 8:
+        raise Error("x_ann_ivf_pq_build_resident: need 5 addresses and 8 parameters")
+    var n = p_int(params, 0)
+    var dim = p_int(params, 1)
+    var bst = AnnStages("ivf_pq_binding_resident")
+    var x_addr = a_int(addrs, 0)
+    var x = List[Float32]()
+    comptime if not (IVF_PQ_ONE_UPLOAD and IVF_BUILD_FROM_POINTER):
+        x = in_f32(addrs, 0, n * dim)
+    bst.host("copy_in")
+    var n_lists = p_int(params, 2)
+    var iters = p_int(params, 3)
+    var seed = p_int(params, 4)
+    var pq_dim = p_int(params, 5)
+    var pq_bits = p_int(params, 6)
+    var pq_iters = p_int(params, 7)
+    var ctx = x_ann_ctx()
+    var dev = IvfPqDevice(ctx)
+    # a placeholder the build below replaces (assigned inside the GIL release)
+    var index = IvfPqIndex(
+        0, 0, 0, 0, 0, 0, List[Float32](), List[Int32](), List[Int32](), List[Float32](), List[Int32]()
+    )
+    with GILReleased(Python()):
+        index = ivf_pq_build_device_resident(
+            x, x_addr, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, dev
+        )
+        bst.host("build")
+        out_f32(index.centers, addrs, 1)
+        out_i32(index.offsets, addrs, 2)
+        out_i32(index.list_indices, addrs, 3)
+        out_f32(index.codebooks, addrs, 4)
+        bst.host("copy_out")
+    _ = x^
+    var handle = x_ann_register_pq_built(index^, dev^)
+    bst.host("register")
+    _ = ctx^
+    return PythonObject(handle)
 
 
 def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -405,6 +461,12 @@ def PyInit__mojolearn_x_ann() abi("C") -> PythonObject:
         m.def_function[x_ann_index_prepare_binding]("x_ann_index_prepare")
         m.def_function[x_ann_index_search_binding]("x_ann_index_search")
         m.def_function[x_ann_index_release_binding]("x_ann_index_release")
+        comptime if IVF_PQ_RESIDENT_FIT:
+            # lane fg-ivf A7: the resident IVF-PQ fit and its codes export
+            # (absent under -D MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF: fit takes
+            # x_ann_ivf_pq_build and the first search prepares the handle)
+            m.def_function[ivf_pq_build_resident_binding]("x_ann_ivf_pq_build_resident")
+            m.def_function[x_ann_index_export_codes_binding]("x_ann_index_export_codes")
         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")
         m.def_function[vendor_binding]("x_ann_vendor")
         return m.finalize()
