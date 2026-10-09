@@ -391,6 +391,65 @@ from experiments.classical_identical_ideas.linear_controls import TSVD_FUSED_STA
 from core.blocked_moments import bm_tsvd_variances
 
 
+from core.host_tile_fold import IDN_XTY_TILED, XTY_TILE_ROWS, xty_tiles
+from core.xtdz_coalesced import XTY_TILE_TPB, xty_tile_fold_kernel
+from experiments.classical_identical_ideas.shared_controls import C01_MEAN
+from checks.numerics import identical_mul_add
+
+#: T2, lane fg-pca (2026-10-09), DEFAULT OFF: `-D MOJOLEARN_IDN_COLVAR_FUSED`.
+#: `_column_variance` (TruncatedSVD's explained variance, on X and on X V^T)
+#: ran the mean pass, the centering pass (n*c read + write), the square pass
+#: (read + write) and the mean of the squares (read): 5 n*c words. Here the
+#: second mean pass folds `ftz(identical_mul(c, c))` with
+#: `c = ftz(identical_mul_add(-1, ftz(mu), ftz(x)))` formed in registers:
+#: the words `shift_columns_kernel` then `square_in_place_kernel` stored, in
+#: the SAME tile order and chain as `xty_tiled` (`xty_tile_partial_kernel`'s
+#: `ftz(acc + v)` over the tile's rows ascending from 0.0, then the unchanged
+#: `xty_tile_fold_kernel` with its quotient), and `m` is left untouched. Cost:
+#: -2 read/write passes over the matrix (-4 n*c words) at any shape. Bits:
+#: none (the same words into the same fold); the host column is unchanged.
+#: Taken only where the mean pass is `xty_tiled` (IDENTICAL's IDN_XTY_TILED,
+#: no C01_MEAN arm, no FAST column-variance switch).
+comptime IDN_COLVAR_FUSED = (
+    IDN_XTY_TILED
+    and IDN_DECOMP_MEAN_LAUNCH
+    and not C01_MEAN
+    and not TSVD_FAST_COLVAR
+    and is_defined["MOJOLEARN_IDN_COLVAR_FUSED"]()
+)
+
+
+def colvar_tile_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    mu: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+):
+    """`xty_tile_partial_kernel`'s mean arm over the centered squares: thread
+    (k, j), j fastest, column j's chain `acc = ftz(acc + sq)` over tile k's
+    rows ascending from 0.0, sq the word the shift and square passes stored;
+    `part[j * tiles + k]`."""
+    var n = Int(n_in)
+    var D = Int(d_in)
+    var tiles = Int(tiles_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = gid // D
+    var j = gid - k * D
+    if k >= tiles:
+        return
+    var r0 = k * XTY_TILE_ROWS
+    var r1 = min(n, r0 + XTY_TILE_ROWS)
+    var mv = ftz(mu.unsafe_load(j))
+    var acc = Float32(0.0)
+    for r in range(r0, r1):
+        var xv = ftz(x.unsafe_load(r * D + j))
+        var c = ftz(identical_mul_add(Float32(-1.0), mv, xv))
+        acc = ftz(acc + ftz(identical_mul(c, c)))
+    part.unsafe_store(j * tiles + k, acc)
+
+
 def _column_variance(
     ctx: DeviceContext,
     mut m: DeviceBuffer[DType.float32],
@@ -403,6 +462,31 @@ def _column_variance(
     mean (`column_mean_kernel`), the centering (`shift_columns_kernel`),
     the pinned square, then the column mean of the squares."""
     var cells = n_rows * n_cols
+    comptime if IDN_COLVAR_FUSED:
+        # T2: the mean (xty_tiled), then the centered squares' mean in the
+        # same tile order, `m` read-only
+        column_mean_launch(ctx, mu, m, n_rows, n_cols)
+        var tiles = xty_tiles(n_rows)
+        var tcells = tiles * n_cols
+        var ws = ctx.enqueue_create_buffer[DType.float32](max(tcells, 1))
+        ctx.enqueue_function[colvar_tile_partial_kernel](
+            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            m.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_rows), Int32(n_cols), Int32(tiles),
+            grid_dim=((tcells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
+            block_dim=(XTY_TILE_TPB, 1, 1),
+        )
+        ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
+            var_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(tiles), Int32(n_rows), Int32(1),
+            grid_dim=(n_cols, 1, 1),
+            block_dim=(STATS_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        _ = ws^
+        return
     comptime if TSVD_FAST_COLVAR:
         column_mean_launch[True](ctx, mu, m, n_rows, n_cols)
     elif IDN_DECOMP_MEAN_LAUNCH:
