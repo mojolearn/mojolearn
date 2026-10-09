@@ -590,21 +590,17 @@
     "off": [],
     "on": [
      "MOJOLEARN_TREES_T29"
-    ],
-    "versioned": [
-     "MOJOLEARN_TREES_T29",
-     "MOJOLEARN_TREES_T29_VERSIONED"
     ]
    },
    "default": "off",
    "source": [
-    "gbdt/trees_identical_switches.mojo:49",
-    "gbdt/targets/kernel/pair_logit_group.mojo:633"
+    "gbdt/trees_identical_switches.mojo:69",
+    "gbdt/targets/kernel/pair_logit_group.mojo:630"
    ],
    "binding": "_mojolearn_gbdt",
-   "bits_change": true,
+   "bits_change": false,
    "status": "kept",
-   "note": "'versioned' changes bits (host oracle gbdt_oracle_pair.mojo:216 together); 'on' does not"
+   "note": "'on' does not change bits. The 'versioned' arm (MOJOLEARN_TREES_T29_VERSIONED, generated V1 PairLogit objective with its host oracle) was deleted 2026-10-08 by lane/grid-act-2 (grid ge123e6f9 loser, see removed)."
   },
   "T30": {
    "define": "MOJOLEARN_TREES_T30",
@@ -1347,6 +1343,12 @@
    "define": "MOJOLEARN_TREES_T19",
    "control": "T19",
    "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 quality loss, a loser despite the speed. on/off ms ratio NV/AMD: gbdt-depthwise taxi 0.470/0.692 (1964 vs 4180 ms NV, 2708 vs 3912 ms AMD), istella 0.826/0.813 (7495 vs 9070 ms NV, 6123 vs 7530 ms AMD); quality: istella AUC 0.97908 vs 0.98330 (-0.43%), logloss 0.18838 vs 0.15607 (+20.7%), taxi AUC 0.63023 vs 0.63221 (-0.31%), logloss +0.16%; all WORSE. gbdt-lossguide unaffected (T19 does not reach Lossguide: lossguide AUC/logloss SAME, timing noise NV 1.100/0.910, AMD 1.041/1.074). Revisit only with a design that keeps the IDENTICAL partition stats (the fused chain ran with PROPAGATE_STATS off). T19_DEFER is independent and kept. Code recoverable at main ad7ed2370; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_TREES_T29_VERSIONED",
+   "control": "T29",
+   "arm": "versioned",
+   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. versioned/off ms ratio NV/AMD: gbdt-rank-pairlogit istella 3.429/3.757 (2985.4 -> 10235.7 NV, 1655.7 -> 6219.9 AMD); 3.59x combined SLOWER. Deleted gbdt/targets/kernel/tree_t29_pair.mojo, gbdt/targets/tree_t29_units.mojo, the versioned launch in pair_logit_group.mojo and the host _group_values_t29 path in gbdt_oracle_pair.mojo; T29 'on' (unmeasured) stays. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
   }
  ],
  "stage0_build": {

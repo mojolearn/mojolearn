@@ -72,9 +72,7 @@ from checks.numerics import (
     identical_mul,
 )
 from gbdt.data.pairs import IDN_PAIRLOGIT_GROUP
-from gbdt.trees_identical_switches import T29, T29_VERSIONED
-from gbdt.targets.tree_t29_units import T29_GROUP_LANES
-from gbdt.targets.kernel.tree_t29_pair import pair_logit_group_versioned_kernel
+from gbdt.trees_identical_switches import T29
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     pinned_block_sum,
@@ -630,24 +628,10 @@ def launch_pair_logit_group[
     given offsets, passed as ONE pointer plus offsets (two pointers
     derived from `acc` are refused as aliasing; the accumulators are
     written only under `store_acc`)."""
-    comptime if T29_VERSIONED:
-        comptime for class_slot in range(2 if T29 else 1):
-            ctx.enqueue_function[
-                pair_logit_group_versioned_kernel[
-                    estimation, second_order, store_acc, class_slot + 1 if T29 else 0
-                ]
-            ](
-                point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
-                acc.unsafe_ptr(), Int32(group_w_at), row_weights.unsafe_ptr(), Int32(n_rows),
-                write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
-                stats.unsafe_ptr(), function_value.unsafe_ptr(),
-                Int32(1) if compute_fv else Int32(0),
-                plane_magnitudes.unsafe_ptr(),
-                Int32(1) if compute_magnitudes else Int32(0),
-                Int32(der_acc_at), Int32(der2_acc_at), Int32(fv_acc_at),
-                grid_dim=(n_groups, 1, 1), block_dim=(T29_GROUP_LANES, 1, 1),
-            )
-    elif T29:
+    # Tried 2026-10-08 (MOJOLEARN_TREES_T29_VERSIONED, the 'versioned' arm of T29, run ge123e6f9): the generated V1 PairLogit
+    # objective (gbdt/targets/kernel/tree_t29_pair.mojo + tree_t29_units.mojo, host _group_values_t29); NV/AMD gbdt-rank-pairlogit
+    # istella 3.43x/3.76x SLOWER -> deleted (T29 'on' stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+    comptime if T29:
         comptime for wc in range(1, 3):
             ctx.enqueue_function[
                 pair_logit_group_kernel[
