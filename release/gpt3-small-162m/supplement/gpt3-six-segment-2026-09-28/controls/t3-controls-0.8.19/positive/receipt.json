@@ -1,0 +1,32 @@
+{
+  "schema": "mojolearn.lm-segment.run.v1",
+  "route": "A",
+  "segment": "controls-positive",
+  "label": "nvidia-controls-positive",
+  "from_checkpoint": {
+    "file": "ckpt_00000100.blm",
+    "sha256": "80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114",
+    "step": 100
+  },
+  "first_step": 100,
+  "last_step": 102,
+  "devices": [
+    0
+  ],
+  "logical_shards": 64,
+  "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+  "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "verdict": "PASS",
+  "disagreements": [],
+  "steps_completed": 2,
+  "last_completed": 102,
+  "checkpoints": [],
+  "zero_moments": false,
+  "box": {
+    "machine": "x86_64",
+    "system": "Linux",
+    "python": "3.11.10",
+    "nvidia-smi": "NVIDIA H100 80GB HBM3, GPU-4eebe4c6-1015-92e2-57b6-ec5b8e724691, 580.126.09"
+  }
+}

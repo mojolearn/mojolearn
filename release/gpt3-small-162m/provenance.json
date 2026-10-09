@@ -1,0 +1,35 @@
+{
+  "prepared_date": "2026-10-08",
+  "publication_status": "unpublished; ready pending namespace, token and owner go-ahead",
+  "evidence_source": "supplement/gpt3-six-segment-2026-09-28 (copied unchanged from the paper's supplement)",
+  "checker_source": "tools/check_gpt3_evidence.py (copied unchanged)",
+  "mojolearn_repository": "https://github.com/mojolearn/mojolearn",
+  "mojolearn_source_inspected": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
+  "training_versions": {
+    "A": [
+      "0.8.15",
+      "0.8.15",
+      "0.8.17",
+      "0.8.18",
+      "0.8.19",
+      "0.8.24"
+    ],
+    "B": [
+      "0.8.18",
+      "0.8.22",
+      "0.8.22",
+      "0.8.22",
+      "0.8.22",
+      "0.8.22"
+    ]
+  },
+  "quality_evaluation": "results/heldout-loss.json (mojolearn CPU forward), results/hellaswag.json (reference_torch.py)",
+  "inference_smoke_test": "results/generations.json (mojolearn 0.8.35 from PyPI, macOS arm64, CPU)",
+  "source_location": "https://github.com/mojolearn/mojolearn/tree/main/release/gpt3-small-162m",
+  "checkpoint_r2_keys": [
+    "runs/t3/2026-09-22/A/6/ckpt_00005000.blm",
+    "runs/t3/2026-09-22/B/6/ckpt_00005000.blm"
+  ],
+  "reference_agreement": "results/reference-agreement.json",
+  "license": "Apache-2.0 (weights, tokenizer, code); training data FineWeb-Edu under ODC-By 1.0"
+}

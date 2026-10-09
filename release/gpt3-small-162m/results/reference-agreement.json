@@ -1,0 +1,9 @@
+{
+  "rows": 2,
+  "length": 256,
+  "max_abs_logit_diff": 3.814697265625e-05,
+  "mean_abs_logit_diff": 2.877967972381157e-06,
+  "max_abs_logit": 23.08995246887207,
+  "greedy_token_agreement": 1.0,
+  "torch_version": "2.14.1"
+}

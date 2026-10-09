@@ -1,0 +1,46 @@
+{
+  "schema": "mojolearn.lm-segment.run.v1",
+  "route": "A",
+  "segment": "6",
+  "label": "apple-A-6",
+  "from_checkpoint": {
+    "file": "ckpt_00004900.blm",
+    "sha256": "8142c3eaec17f883cf6a8f72bbe12c7171a392e65438ac9542a0c55e5a1473da",
+    "step": 4900
+  },
+  "first_step": 4900,
+  "last_step": 5000,
+  "devices": [
+    0
+  ],
+  "logical_shards": 64,
+  "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+  "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "verdict": "PASS",
+  "disagreements": [],
+  "steps_completed": 100,
+  "last_completed": 5000,
+  "checkpoints": [
+    {
+      "step": 4998,
+      "file": "ckpt_00004998.blm",
+      "bytes": 1945780169,
+      "sha256": "2b1b48a0bbc99ae07c276c61ab3524bbeb2f1e90c766117420fbdbbf6dc0fe86",
+      "save_seconds": 3.588
+    },
+    {
+      "step": 5000,
+      "file": "ckpt_00005000.blm",
+      "bytes": 1945780169,
+      "sha256": "4129921e99ed404db1ca4b7b94ebc43c0bee18e7711deb326b31ec89e0b402c8",
+      "save_seconds": 3.584
+    }
+  ],
+  "zero_moments": false,
+  "box": {
+    "machine": "arm64",
+    "system": "Darwin",
+    "python": "3.12.14"
+  }
+}

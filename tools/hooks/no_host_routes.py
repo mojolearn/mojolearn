@@ -16,6 +16,10 @@ Modes:
         branch's, and are reported but not refused. A push to main is always
         judged on the whole tree (Andrew, 2026-10-07: 15 findings that reached
         main refused every unrelated lane push for hours).
+        The pre-push hook does not run --tree at all for archive refs
+        (refs/heads/archive/*, refs/tags/archive-*, refs/tags/archive/*,
+        2026-10-09) or salvage/* refs: they are never merged. See the ref
+        table in tools/hooks/pre-push.
     no_host_routes.py --prune-baseline [REF]
         Rewrite REF's baseline (default HEAD, the worktree file) without its
         stale rows, and flip in-flight rows whose code is now in the tree to

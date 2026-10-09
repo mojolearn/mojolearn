@@ -1,0 +1,55 @@
+{
+  "schema": "mojolearn.lm-segment.run.v1",
+  "route": "A",
+  "segment": "4",
+  "label": "amd-A-4",
+  "from_checkpoint": {
+    "file": "ckpt_00003700.blm",
+    "sha256": "239523eeb8792c3496dced27ca6e53e176743e006317591033d0988fe79ba89e",
+    "step": 3700
+  },
+  "first_step": 3700,
+  "last_step": 3900,
+  "devices": [
+    0,
+    1
+  ],
+  "logical_shards": 64,
+  "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+  "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "verdict": "PASS",
+  "disagreements": [],
+  "steps_completed": 200,
+  "last_completed": 3900,
+  "checkpoints": [
+    {
+      "step": 3800,
+      "file": "ckpt_00003800.blm",
+      "bytes": 1945780170,
+      "sha256": "ad966fe4168a8e7066c53e7052656eedbb51a1b1687a3a442cf23ea6ff3c7799",
+      "save_seconds": 7.761
+    },
+    {
+      "step": 3898,
+      "file": "ckpt_00003898.blm",
+      "bytes": 1945780170,
+      "sha256": "813f1e2303029c1fcc29b2be823b3e433f90640e1eb42719b9835e0794925894",
+      "save_seconds": 7.662
+    },
+    {
+      "step": 3900,
+      "file": "ckpt_00003900.blm",
+      "bytes": 1945780170,
+      "sha256": "d935aba7cb29e09a336d87e23b4c81f6ae32710e545cea53ccda73a8952e59a2",
+      "save_seconds": 7.94
+    }
+  ],
+  "zero_moments": false,
+  "box": {
+    "machine": "x86_64",
+    "system": "Linux",
+    "python": "3.10.12",
+    "rocm-smi": "device,Unique ID,Card Series,Card Model,Card Vendor,Card SKU,Subsystem ID,Device Rev,Node ID,GUID,GFX Version\ncard0,0x594afe08e1ab3ae6,AMD Instinct MI300X VF,0x74b5,Advanced Micro Devices Inc. [AMD/ATI],M3000108,0x74a1,0x00,2,54554,gfx942\ncard1,0x25a594c05f2eb594,AMD Instinct MI300X VF,0x74b5,Advanced Micro Devices Inc. [AMD/ATI],M3000108,0x74a1,0x00,3,46235,gfx942"
+  }
+}

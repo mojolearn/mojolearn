@@ -1,0 +1,13 @@
+{
+  "local_package_prepared": true,
+  "published": false,
+  "committed_or_pushed": false,
+  "final_checkpoint_payloads_byte_equal": true,
+  "tokenizer_pins_verified": true,
+  "evidence_checker": "PASS",
+  "pending_before_publication": [
+    "distribution license and destination",
+    "tested inference entry point or export",
+    "held-out quality and generation examples"
+  ]
+}

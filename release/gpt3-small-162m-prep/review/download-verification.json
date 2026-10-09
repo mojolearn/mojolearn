@@ -1,0 +1,35 @@
+{
+  "checked_at_utc": "2026-10-08T23:57:54.073596+00:00",
+  "objects": [
+    {
+      "key": "runs/t3/2026-09-22/A/6/ckpt_00005000.blm",
+      "status": "verified",
+      "sha256": "4129921e99ed404db1ca4b7b94ebc43c0bee18e7711deb326b31ec89e0b402c8",
+      "bytes": 1945780169,
+      "path": "hub/checkpoint.blm"
+    },
+    {
+      "key": "runs/t3/2026-09-22/B/6/ckpt_00005000.blm",
+      "status": "verified",
+      "sha256": "4129921e99ed404db1ca4b7b94ebc43c0bee18e7711deb326b31ec89e0b402c8",
+      "bytes": 1945780169,
+      "path": "review/route-b-checkpoint.blm"
+    },
+    {
+      "key": "vocab/mojolearn-bpe-fineweb-edu-50257-v1/ranks.tsv",
+      "status": "verified",
+      "sha256": "bfe4a401789e734c139ee6d872848833d0058b1b274757334c955236a57d9b24",
+      "bytes": 1017366,
+      "path": "hub/ranks.tsv"
+    },
+    {
+      "key": "vocab/mojolearn-bpe-fineweb-edu-50257-v1/tokenizer.json",
+      "status": "verified",
+      "sha256": "e5004bb72cb1ce67bc1517b7a20f513efce7e3b6b9e081abe974db805546bc12",
+      "bytes": 1981334,
+      "path": "hub/tokenizer.json"
+    }
+  ],
+  "final_checkpoints_byte_equal": true,
+  "duplicate_route_b_payload_removed_after_comparison": true
+}

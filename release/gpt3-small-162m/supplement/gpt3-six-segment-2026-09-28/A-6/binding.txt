@@ -1,0 +1,1 @@
+mojolearn 0.8.24 /Users/ec2-user/lmbox/lm-venv/lib/python3.12/site-packages/mojolearn/__init__.py vendor metal set_lr True device_fold True

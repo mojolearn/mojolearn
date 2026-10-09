@@ -1,0 +1,379 @@
+{
+  "schema": "mlsys.gpt3-six-segment-audit.v1",
+  "compared_fields": [
+    "state_sha256",
+    "gradient_sha256",
+    "losses_f32_hex",
+    "lr_f32_hex",
+    "hash_scheme",
+    "batch_index"
+  ],
+  "pairs": [
+    {
+      "segment": 1,
+      "first_step": 1,
+      "last_step": 1000,
+      "equal_steps": 1000,
+      "divergent_steps": 0,
+      "equal_checkpoint_digests": 11,
+      "endpoint_sha256": "ce8c6b98e45bd42dd9cfb400c376e0b25c2eea1f2e4acc17f4df304241540f03"
+    },
+    {
+      "segment": 2,
+      "first_step": 1001,
+      "last_step": 2000,
+      "equal_steps": 1000,
+      "divergent_steps": 0,
+      "equal_checkpoint_digests": 11,
+      "endpoint_sha256": "f03471f9afa90120d84788f4ac980b133b25c2d8f48b485d593d189e551b3c97"
+    },
+    {
+      "segment": 3,
+      "first_step": 2001,
+      "last_step": 2400,
+      "equal_steps": 400,
+      "divergent_steps": 0,
+      "equal_checkpoint_digests": 5,
+      "endpoint_sha256": "82249517f68c8e0dd7997869e4bd649136434a7105e970fecf928e39bb726598"
+    },
+    {
+      "segment": 4,
+      "first_step": 2401,
+      "last_step": 3900,
+      "equal_steps": 1500,
+      "divergent_steps": 0,
+      "equal_checkpoint_digests": 16,
+      "endpoint_sha256": "d935aba7cb29e09a336d87e23b4c81f6ae32710e545cea53ccda73a8952e59a2"
+    },
+    {
+      "segment": 5,
+      "first_step": 3901,
+      "last_step": 4900,
+      "equal_steps": 1000,
+      "divergent_steps": 0,
+      "equal_checkpoint_digests": 11,
+      "endpoint_sha256": "8142c3eaec17f883cf6a8f72bbe12c7171a392e65438ac9542a0c55e5a1473da"
+    },
+    {
+      "segment": 6,
+      "first_step": 4901,
+      "last_step": 5000,
+      "equal_steps": 100,
+      "divergent_steps": 0,
+      "equal_checkpoint_digests": 2,
+      "endpoint_sha256": "4129921e99ed404db1ca4b7b94ebc43c0bee18e7711deb326b31ec89e0b402c8"
+    }
+  ],
+  "segments": [
+    {
+      "segment": "A/1",
+      "steps": 1000,
+      "devices": [
+        0,
+        1
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "A/2",
+      "steps": 1000,
+      "devices": [
+        0,
+        1
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "A/3",
+      "steps": 400,
+      "devices": [
+        0
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "A/4",
+      "steps": 1500,
+      "devices": [
+        0,
+        1
+      ],
+      "overlap_steps_checked": 21,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "A/5",
+      "steps": 1000,
+      "devices": [
+        0,
+        1
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "A/6",
+      "steps": 100,
+      "devices": [
+        0
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "B/1",
+      "steps": 1000,
+      "devices": [
+        0
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "B/2",
+      "steps": 1000,
+      "devices": [
+        0,
+        1
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "B/3",
+      "steps": 400,
+      "devices": [
+        0
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "B/4",
+      "steps": 1500,
+      "devices": [
+        0,
+        1
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "B/5",
+      "steps": 1000,
+      "devices": [
+        0,
+        1
+      ],
+      "overlap_steps_checked": 1,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    },
+    {
+      "segment": "B/6",
+      "steps": 100,
+      "devices": [
+        0
+      ],
+      "overlap_steps_checked": 0,
+      "token_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d"
+    }
+  ],
+  "arrival_replays_checked": [
+    {
+      "segment": "A/2",
+      "steps": [
+        999,
+        1000
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "segment": "A/3",
+      "steps": [
+        1999,
+        2000
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "segment": "A/5",
+      "steps": [
+        3899,
+        3900
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "segment": "A/6",
+      "steps": [
+        4899,
+        4900
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "segment": "B/2",
+      "steps": [
+        999,
+        1000
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "segment": "B/3",
+      "steps": [
+        1999,
+        2000
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "segment": "B/4",
+      "steps": [
+        2399,
+        2400
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "segment": "B/6",
+      "steps": [
+        4899,
+        4900
+      ],
+      "verdict": "PASS"
+    }
+  ],
+  "live_worker_equal_steps": 400,
+  "controls": [
+    {
+      "control": "t3-controls/zero-moments",
+      "verdict": "FAIL",
+      "steps": [
+        101
+      ],
+      "differences": [
+        {
+          "step": 101,
+          "fields": [
+            "state_sha256"
+          ]
+        }
+      ]
+    },
+    {
+      "control": "t3-controls/k63",
+      "verdict": "FAIL",
+      "steps": [
+        101
+      ],
+      "differences": [
+        {
+          "step": 101,
+          "fields": [
+            "state_sha256",
+            "gradient_sha256",
+            "losses_f32_hex"
+          ]
+        }
+      ]
+    },
+    {
+      "control": "t3-controls/swap-5-40",
+      "verdict": "FAIL",
+      "steps": [
+        101
+      ],
+      "differences": [
+        {
+          "step": 101,
+          "fields": [
+            "state_sha256",
+            "gradient_sha256",
+            "losses_f32_hex"
+          ]
+        }
+      ]
+    },
+    {
+      "control": "t3-controls/swap-0-1",
+      "verdict": "FAIL",
+      "steps": [
+        101
+      ],
+      "differences": [
+        {
+          "step": 101,
+          "fields": [
+            "losses_f32_hex"
+          ]
+        }
+      ]
+    },
+    {
+      "control": "t3-controls-0.8.19/positive",
+      "verdict": "PASS",
+      "steps": [
+        101,
+        102
+      ],
+      "differences": []
+    },
+    {
+      "control": "t3-controls-0.8.19/split",
+      "verdict": "PASS",
+      "steps": [
+        101,
+        102
+      ],
+      "differences": []
+    },
+    {
+      "control": "t3-controls-0.8.19/ulp",
+      "verdict": "FAIL",
+      "steps": [
+        101
+      ],
+      "differences": [
+        {
+          "step": 101,
+          "fields": [
+            "state_sha256",
+            "gradient_sha256"
+          ]
+        }
+      ]
+    },
+    {
+      "control": "t3-controls-amd-0.8.19/positive",
+      "verdict": "PASS",
+      "steps": [
+        101,
+        102
+      ],
+      "differences": []
+    },
+    {
+      "control": "t3-controls-amd-0.8.19/ulp",
+      "verdict": "FAIL",
+      "steps": [
+        101
+      ],
+      "differences": [
+        {
+          "step": 101,
+          "fields": [
+            "state_sha256",
+            "gradient_sha256"
+          ]
+        }
+      ]
+    }
+  ],
+  "equal_steps": 5000,
+  "tokens_per_route": 2621440000,
+  "final_checkpoint_sha256": "4129921e99ed404db1ca4b7b94ebc43c0bee18e7711deb326b31ec89e0b402c8"
+}

@@ -1,0 +1,375 @@
+{
+  "segments": {
+    "A/1": {
+      "chains": [
+        "A-1/chain.jsonl.gz"
+      ],
+      "receipt": "A-1/receipt.json",
+      "checkpoints": {
+        "ckpt_00000100.blm": "80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114",
+        "ckpt_00000200.blm": "b6ee073bee7848dfe9ca3e1f8333bcf789e496e617afaa7fe69a6362bca22052",
+        "ckpt_00000300.blm": "3454c9f72f61be387fc70e7a671b5d46da935d254cc0a057397a52d0882234a3",
+        "ckpt_00000400.blm": "0e8bc80b0573243d1f14557a22dcffcb388979b0ada532e8de171aa62f3a2ea8",
+        "ckpt_00000500.blm": "f726b31336066b98dea80ae5023868089c1d9f5604533c1643ae06c32381e238",
+        "ckpt_00000600.blm": "62f81aab55a2e3e1e23f410b83efbc79b209ba3cb001cf4d7839dc4fd4380ab0",
+        "ckpt_00000700.blm": "e08d0b5d603ade72f73622cf75f4184cf8b14ca674b676395f4b6c49c4e7f24f",
+        "ckpt_00000800.blm": "5573991c8dc07e94844ba07648894b9553815a36a49bfe8fb31b7b11d6084b8b",
+        "ckpt_00000900.blm": "79db5ab5efc724f47461ed94d11694280456a4bebbb182f7f69e54ed5aa36cc4",
+        "ckpt_00000998.blm": "8e9f857595c005cc0155fa932ec1735b9093d567a1a773359fd4a53e4097dd8a",
+        "ckpt_00001000.blm": "ce8c6b98e45bd42dd9cfb400c376e0b25c2eea1f2e4acc17f4df304241540f03",
+        "ckpt_00000000.blm": "2b03554d50e7aa0027db27afdc13472b5eb4d5a5297068d1f2fb457d0bba1143"
+      },
+      "arrival_verdict": null,
+      "steps_completed": 1000,
+      "verdict": "PASS",
+      "environment_files": [
+        "A-1/gpu.txt",
+        "A-1/binding.txt",
+        "A-1/wheel.sha256"
+      ]
+    },
+    "A/2": {
+      "chains": [
+        "A-2/chain.jsonl.gz"
+      ],
+      "receipt": "A-2/receipt.json",
+      "checkpoints": {
+        "ckpt_00001100.blm": "d531a79126c8b27cb6a252d86c24b7ea61f05aecb6b4fa7ea61b845c2773e71d",
+        "ckpt_00001200.blm": "7024c24a7d5c64ebeace158e232683e6d7601f64550cc4231269b3c9c612faa1",
+        "ckpt_00001300.blm": "3d8e7c5cca2d7a0b920ea4c0bdc27003473fb75322e22f3179378b48260434b1",
+        "ckpt_00001400.blm": "acef02d5c48c8ec30d6ae9908e47d3855ea06587ba8849843febe9c8acf226d0",
+        "ckpt_00001500.blm": "30cb33d798989375e7b244294729a6267a05dc5439727290c52e95a8c6c4ee5f",
+        "ckpt_00001600.blm": "95b40c6f3c5ed22d43f4d0eea2c8e385323cbeb559b39499958a1fba344f6ead",
+        "ckpt_00001700.blm": "470213b170c7662c847603148dfffa7ac869a82e5dd8244370b71842700f43bf",
+        "ckpt_00001800.blm": "0bd3c265a678ac041d230512473fec427a0a12d5ca419c1df680fff316da4725",
+        "ckpt_00001900.blm": "013f9543c0cd90843d1d44eed10b32aad971d9fea2dd3b82b019ec3b3aa09b01",
+        "ckpt_00001998.blm": "b8d980905332fa84006ac9ea82b6559195b87545b31062af2c288d7af14901d4",
+        "ckpt_00002000.blm": "f03471f9afa90120d84788f4ac980b133b25c2d8f48b485d593d189e551b3c97"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 1000,
+      "verdict": "PASS",
+      "environment_files": [
+        "A-2/gpu.txt",
+        "A-2/binding.txt",
+        "A-2/wheel.sha256"
+      ],
+      "arrival_receipt": "A-2/arrival.json",
+      "arrival_chain": "A-2/arrival.jsonl.gz"
+    },
+    "A/3": {
+      "chains": [
+        "A-3/chain.jsonl.gz"
+      ],
+      "receipt": "A-3/receipt.json",
+      "checkpoints": {
+        "ckpt_00002100.blm": "11a93b068544418d76704349b477843a05d9395b44fbd8935cfe83546f2adce6",
+        "ckpt_00002200.blm": "bc7d7b3ba22b4a3c7cd9ba5e95624a6250367e078ce6e4851457840968216cf9",
+        "ckpt_00002300.blm": "58a0287fe77df4d0a45a95f2c4a740d30940fd138390dfbb92867efcc3c1ed8f",
+        "ckpt_00002398.blm": "218eaa64e5275ec4175eb1374a05a10638f8d3feaa9166b80c84edd2cb312626",
+        "ckpt_00002400.blm": "82249517f68c8e0dd7997869e4bd649136434a7105e970fecf928e39bb726598"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 400,
+      "verdict": "PASS",
+      "environment_files": [
+        "A-3/gpu.txt",
+        "A-3/binding.txt",
+        "A-3/wheel.sha256"
+      ],
+      "arrival_receipt": "A-3/arrival.json",
+      "arrival_chain": "A-3/arrival.jsonl.gz",
+      "worker_chain": "A-3/worker.jsonl.gz",
+      "worker_receipt": "A-3/worker.json"
+    },
+    "A/4": {
+      "chains": [
+        "A-4/attempt-1.jsonl.gz",
+        "A-4/chain.jsonl.gz"
+      ],
+      "receipt": "A-4/receipt.json",
+      "checkpoints": {
+        "ckpt_00002500.blm": "374ec7a1a408e22f616ad787eddf1dd4a91326d3e42d995e05fe001518d98cc0",
+        "ckpt_00002600.blm": "756b0c9f0fbc0a8cdda63833dbcfd470ce82573ece29da34e64c6bccefac4605",
+        "ckpt_00002700.blm": "1ac0f97c0c0d0fc4e11c9bbdafe51a29096bb30e1f2dd5704d8fa9bac4b42b0f",
+        "ckpt_00002800.blm": "e2ab3729535121466be021851806b0b5372a3a02fc17769bec5df051fa3451b8",
+        "ckpt_00002900.blm": "aeb9e091273b93ceeb502545d5da85e430081785ea02028326445d972f33fa84",
+        "ckpt_00003000.blm": "ec314e7eb40685cc308a8550fdc1955bbac99f6c5bd1035b8a532eda5b247b55",
+        "ckpt_00003100.blm": "c10d9e0b9e2935d37004d9e66129c3c13d18c4ec22c7ff2f78c95cb61fcb97a6",
+        "ckpt_00003200.blm": "b337b9c59ba5fc98cda53a9925fba957966fb2d58ade94d0d4f97f918537f104",
+        "ckpt_00003300.blm": "32367a324a4d88cca30be7eb7dfcfd9b4cf7e8e59fd6303cca6674a0221a2e87",
+        "ckpt_00003400.blm": "8cf99ed5889a155cf3835bb5ae27f7e5cac41cd131d7d15a73c2587d42a3293d",
+        "ckpt_00003500.blm": "62249dc566ab0fb473f1e7284ba470e6d79755eaefda840dd71053f445cb0a31",
+        "ckpt_00003600.blm": "4a15af1057e45b1f6d7b32e807c393bd0f29846925cd68347fe2593ce87b76b3",
+        "ckpt_00003700.blm": "239523eeb8792c3496dced27ca6e53e176743e006317591033d0988fe79ba89e",
+        "ckpt_00003800.blm": "ad966fe4168a8e7066c53e7052656eedbb51a1b1687a3a442cf23ea6ff3c7799",
+        "ckpt_00003898.blm": "813f1e2303029c1fcc29b2be823b3e433f90640e1eb42719b9835e0794925894",
+        "ckpt_00003900.blm": "d935aba7cb29e09a336d87e23b4c81f6ae32710e545cea53ccda73a8952e59a2"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 1500,
+      "verdict": "PASS",
+      "environment_files": [
+        "A-4/gpu.txt",
+        "A-4/binding.txt",
+        "A-4/wheel.sha256"
+      ],
+      "initial_checkpoint_refs": "A-4/initial-checkpoint-refs.json"
+    },
+    "A/5": {
+      "chains": [
+        "A-5/chain.jsonl.gz"
+      ],
+      "receipt": "A-5/receipt.json",
+      "checkpoints": {
+        "ckpt_00004000.blm": "f43e76d6804d6b9439b487c9a7940c5c314841630cc97fe595e574cef12ffc23",
+        "ckpt_00004100.blm": "3d4cf529890317205deffe320db75330a113138cd798f30b9679bebf0d1d8649",
+        "ckpt_00004200.blm": "0992295df668df227642194041f762ea4735b6f0eaad6f48d6cb4ce2d49ad057",
+        "ckpt_00004300.blm": "e4dbe4e1bb054f82b38b5d67825abdaf67dd3ace36ecba4aaddb35aeeb074a09",
+        "ckpt_00004400.blm": "6b2a59cc69269c97cab24ca9fdc323765e3edee44f3888248355bed14a95b77f",
+        "ckpt_00004500.blm": "eed8253f1594e5fa3934c35dbd208f3c73110864e56564741d6e6ac83914d245",
+        "ckpt_00004600.blm": "a95d99158cf425f142a38cf43cd6da89edccdc66580fe483f513211ae6d34a26",
+        "ckpt_00004700.blm": "db93389c2a98162e55ccc63ed21594d211fd76207ffa407d8f565046f2436fa8",
+        "ckpt_00004800.blm": "2af2e6c85ba33e3fff9a5b8524bbd138c108524f838809cae042250f131dd8aa",
+        "ckpt_00004898.blm": "7fc7ae38e127cdb7edf2bf8d74b2e4b4272b498643b2d6dfd61719864c56eaa4",
+        "ckpt_00004900.blm": "8142c3eaec17f883cf6a8f72bbe12c7171a392e65438ac9542a0c55e5a1473da"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 1000,
+      "verdict": "PASS",
+      "environment_files": [
+        "A-5/gpu.txt",
+        "A-5/binding.txt",
+        "A-5/wheel.sha256"
+      ],
+      "arrival_receipt": "A-5/arrival.json",
+      "arrival_chain": "A-5/arrival.jsonl.gz"
+    },
+    "A/6": {
+      "chains": [
+        "A-6/chain.jsonl.gz"
+      ],
+      "receipt": "A-6/receipt.json",
+      "checkpoints": {
+        "ckpt_00004998.blm": "2b1b48a0bbc99ae07c276c61ab3524bbeb2f1e90c766117420fbdbbf6dc0fe86",
+        "ckpt_00005000.blm": "4129921e99ed404db1ca4b7b94ebc43c0bee18e7711deb326b31ec89e0b402c8"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 100,
+      "verdict": "PASS",
+      "environment_files": [
+        "A-6/gpu.txt",
+        "A-6/binding.txt",
+        "A-6/wheel.sha256"
+      ],
+      "arrival_receipt": "A-6/arrival.json",
+      "arrival_chain": "A-6/arrival.jsonl.gz"
+    },
+    "B/1": {
+      "chains": [
+        "B-1/chain.jsonl.gz"
+      ],
+      "receipt": "B-1/receipt.json",
+      "checkpoints": {
+        "ckpt_00000100.blm": "80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114",
+        "ckpt_00000200.blm": "b6ee073bee7848dfe9ca3e1f8333bcf789e496e617afaa7fe69a6362bca22052",
+        "ckpt_00000300.blm": "3454c9f72f61be387fc70e7a671b5d46da935d254cc0a057397a52d0882234a3",
+        "ckpt_00000400.blm": "0e8bc80b0573243d1f14557a22dcffcb388979b0ada532e8de171aa62f3a2ea8",
+        "ckpt_00000500.blm": "f726b31336066b98dea80ae5023868089c1d9f5604533c1643ae06c32381e238",
+        "ckpt_00000600.blm": "62f81aab55a2e3e1e23f410b83efbc79b209ba3cb001cf4d7839dc4fd4380ab0",
+        "ckpt_00000700.blm": "e08d0b5d603ade72f73622cf75f4184cf8b14ca674b676395f4b6c49c4e7f24f",
+        "ckpt_00000800.blm": "5573991c8dc07e94844ba07648894b9553815a36a49bfe8fb31b7b11d6084b8b",
+        "ckpt_00000900.blm": "79db5ab5efc724f47461ed94d11694280456a4bebbb182f7f69e54ed5aa36cc4",
+        "ckpt_00000998.blm": "8e9f857595c005cc0155fa932ec1735b9093d567a1a773359fd4a53e4097dd8a",
+        "ckpt_00001000.blm": "ce8c6b98e45bd42dd9cfb400c376e0b25c2eea1f2e4acc17f4df304241540f03"
+      },
+      "arrival_verdict": null,
+      "steps_completed": 1000,
+      "verdict": "PASS",
+      "environment_files": [
+        "B-1/gpu.txt",
+        "B-1/binding.txt",
+        "B-1/wheel.sha256"
+      ],
+      "checkpoint_source": "B-1/checkpoint-source.json"
+    },
+    "B/2": {
+      "chains": [
+        "B-2/chain.jsonl.gz"
+      ],
+      "receipt": "B-2/receipt.json",
+      "checkpoints": {
+        "ckpt_00001100.blm": "d531a79126c8b27cb6a252d86c24b7ea61f05aecb6b4fa7ea61b845c2773e71d",
+        "ckpt_00001200.blm": "7024c24a7d5c64ebeace158e232683e6d7601f64550cc4231269b3c9c612faa1",
+        "ckpt_00001300.blm": "3d8e7c5cca2d7a0b920ea4c0bdc27003473fb75322e22f3179378b48260434b1",
+        "ckpt_00001400.blm": "acef02d5c48c8ec30d6ae9908e47d3855ea06587ba8849843febe9c8acf226d0",
+        "ckpt_00001500.blm": "30cb33d798989375e7b244294729a6267a05dc5439727290c52e95a8c6c4ee5f",
+        "ckpt_00001600.blm": "95b40c6f3c5ed22d43f4d0eea2c8e385323cbeb559b39499958a1fba344f6ead",
+        "ckpt_00001700.blm": "470213b170c7662c847603148dfffa7ac869a82e5dd8244370b71842700f43bf",
+        "ckpt_00001800.blm": "0bd3c265a678ac041d230512473fec427a0a12d5ca419c1df680fff316da4725",
+        "ckpt_00001900.blm": "013f9543c0cd90843d1d44eed10b32aad971d9fea2dd3b82b019ec3b3aa09b01",
+        "ckpt_00001998.blm": "b8d980905332fa84006ac9ea82b6559195b87545b31062af2c288d7af14901d4",
+        "ckpt_00002000.blm": "f03471f9afa90120d84788f4ac980b133b25c2d8f48b485d593d189e551b3c97"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 1000,
+      "verdict": "PASS",
+      "environment_files": [
+        "B-2/gpu.txt",
+        "B-2/binding.txt",
+        "B-2/wheel.sha256"
+      ],
+      "arrival_receipt": "B-2/arrival.json",
+      "arrival_chain": "B-2/arrival.jsonl.gz",
+      "checkpoint_source": "B-2/checkpoint-source.json"
+    },
+    "B/3": {
+      "chains": [
+        "B-3/chain.jsonl.gz"
+      ],
+      "receipt": "B-3/receipt.json",
+      "checkpoints": {
+        "ckpt_00002100.blm": "11a93b068544418d76704349b477843a05d9395b44fbd8935cfe83546f2adce6",
+        "ckpt_00002200.blm": "bc7d7b3ba22b4a3c7cd9ba5e95624a6250367e078ce6e4851457840968216cf9",
+        "ckpt_00002300.blm": "58a0287fe77df4d0a45a95f2c4a740d30940fd138390dfbb92867efcc3c1ed8f",
+        "ckpt_00002398.blm": "218eaa64e5275ec4175eb1374a05a10638f8d3feaa9166b80c84edd2cb312626",
+        "ckpt_00002400.blm": "82249517f68c8e0dd7997869e4bd649136434a7105e970fecf928e39bb726598"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 400,
+      "verdict": "PASS",
+      "environment_files": [
+        "B-3/gpu.txt",
+        "B-3/binding.txt",
+        "B-3/wheel.sha256"
+      ],
+      "arrival_receipt": "B-3/arrival.json",
+      "arrival_chain": "B-3/arrival.jsonl.gz",
+      "checkpoint_source": "B-3/checkpoint-source.json"
+    },
+    "B/4": {
+      "chains": [
+        "B-4/chain.jsonl.gz"
+      ],
+      "receipt": "B-4/receipt.json",
+      "checkpoints": {
+        "ckpt_00002500.blm": "374ec7a1a408e22f616ad787eddf1dd4a91326d3e42d995e05fe001518d98cc0",
+        "ckpt_00002600.blm": "756b0c9f0fbc0a8cdda63833dbcfd470ce82573ece29da34e64c6bccefac4605",
+        "ckpt_00002700.blm": "1ac0f97c0c0d0fc4e11c9bbdafe51a29096bb30e1f2dd5704d8fa9bac4b42b0f",
+        "ckpt_00002800.blm": "e2ab3729535121466be021851806b0b5372a3a02fc17769bec5df051fa3451b8",
+        "ckpt_00002900.blm": "aeb9e091273b93ceeb502545d5da85e430081785ea02028326445d972f33fa84",
+        "ckpt_00003000.blm": "ec314e7eb40685cc308a8550fdc1955bbac99f6c5bd1035b8a532eda5b247b55",
+        "ckpt_00003100.blm": "c10d9e0b9e2935d37004d9e66129c3c13d18c4ec22c7ff2f78c95cb61fcb97a6",
+        "ckpt_00003200.blm": "b337b9c59ba5fc98cda53a9925fba957966fb2d58ade94d0d4f97f918537f104",
+        "ckpt_00003300.blm": "32367a324a4d88cca30be7eb7dfcfd9b4cf7e8e59fd6303cca6674a0221a2e87",
+        "ckpt_00003400.blm": "8cf99ed5889a155cf3835bb5ae27f7e5cac41cd131d7d15a73c2587d42a3293d",
+        "ckpt_00003500.blm": "62249dc566ab0fb473f1e7284ba470e6d79755eaefda840dd71053f445cb0a31",
+        "ckpt_00003600.blm": "4a15af1057e45b1f6d7b32e807c393bd0f29846925cd68347fe2593ce87b76b3",
+        "ckpt_00003700.blm": "239523eeb8792c3496dced27ca6e53e176743e006317591033d0988fe79ba89e",
+        "ckpt_00003800.blm": "ad966fe4168a8e7066c53e7052656eedbb51a1b1687a3a442cf23ea6ff3c7799",
+        "ckpt_00003898.blm": "813f1e2303029c1fcc29b2be823b3e433f90640e1eb42719b9835e0794925894",
+        "ckpt_00003900.blm": "d935aba7cb29e09a336d87e23b4c81f6ae32710e545cea53ccda73a8952e59a2"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 1500,
+      "verdict": "PASS",
+      "environment_files": [
+        "B-4/gpu.txt",
+        "B-4/binding.txt",
+        "B-4/wheel.sha256"
+      ],
+      "arrival_receipt": "B-4/arrival.json",
+      "arrival_chain": "B-4/arrival.jsonl.gz",
+      "checkpoint_source": "B-4/checkpoint-source.json"
+    },
+    "B/5": {
+      "chains": [
+        "B-5/attempt-1.jsonl.gz",
+        "B-5/chain.jsonl.gz"
+      ],
+      "receipt": "B-5/receipt.json",
+      "checkpoints": {
+        "ckpt_00004000.blm": "f43e76d6804d6b9439b487c9a7940c5c314841630cc97fe595e574cef12ffc23",
+        "ckpt_00004100.blm": "3d4cf529890317205deffe320db75330a113138cd798f30b9679bebf0d1d8649",
+        "ckpt_00004200.blm": "0992295df668df227642194041f762ea4735b6f0eaad6f48d6cb4ce2d49ad057",
+        "ckpt_00004300.blm": "e4dbe4e1bb054f82b38b5d67825abdaf67dd3ace36ecba4aaddb35aeeb074a09",
+        "ckpt_00004400.blm": "6b2a59cc69269c97cab24ca9fdc323765e3edee44f3888248355bed14a95b77f",
+        "ckpt_00004500.blm": "eed8253f1594e5fa3934c35dbd208f3c73110864e56564741d6e6ac83914d245",
+        "ckpt_00004600.blm": "a95d99158cf425f142a38cf43cd6da89edccdc66580fe483f513211ae6d34a26",
+        "ckpt_00004700.blm": "db93389c2a98162e55ccc63ed21594d211fd76207ffa407d8f565046f2436fa8",
+        "ckpt_00004800.blm": "2af2e6c85ba33e3fff9a5b8524bbd138c108524f838809cae042250f131dd8aa",
+        "ckpt_00004898.blm": "7fc7ae38e127cdb7edf2bf8d74b2e4b4272b498643b2d6dfd61719864c56eaa4",
+        "ckpt_00004900.blm": "8142c3eaec17f883cf6a8f72bbe12c7171a392e65438ac9542a0c55e5a1473da"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 1000,
+      "verdict": "PASS",
+      "environment_files": [
+        "B-5/gpu.txt",
+        "B-5/binding.txt",
+        "B-5/wheel.sha256"
+      ],
+      "initial_checkpoint_refs": "B-5/initial-checkpoint-refs.json",
+      "checkpoint_source": "B-5/checkpoint-source.json"
+    },
+    "B/6": {
+      "chains": [
+        "B-6/chain.jsonl.gz"
+      ],
+      "receipt": "B-6/receipt.json",
+      "checkpoints": {
+        "ckpt_00004998.blm": "2b1b48a0bbc99ae07c276c61ab3524bbeb2f1e90c766117420fbdbbf6dc0fe86",
+        "ckpt_00005000.blm": "4129921e99ed404db1ca4b7b94ebc43c0bee18e7711deb326b31ec89e0b402c8"
+      },
+      "arrival_verdict": "PASS",
+      "steps_completed": 100,
+      "verdict": "PASS",
+      "environment_files": [
+        "B-6/gpu.txt",
+        "B-6/binding.txt",
+        "B-6/wheel.sha256"
+      ],
+      "arrival_receipt": "B-6/arrival.json",
+      "arrival_chain": "B-6/arrival.jsonl.gz",
+      "checkpoint_source": "B-6/checkpoint-source.json"
+    }
+  },
+  "controls": {
+    "t3-controls/zero-moments": {
+      "receipt": "controls/t3-controls/zero-moments/receipt.json",
+      "chain": "controls/t3-controls/zero-moments/chain.jsonl.gz"
+    },
+    "t3-controls/k63": {
+      "receipt": "controls/t3-controls/k63/receipt.json",
+      "chain": "controls/t3-controls/k63/chain.jsonl.gz"
+    },
+    "t3-controls/swap-5-40": {
+      "receipt": "controls/t3-controls/swap-5-40/receipt.json",
+      "chain": "controls/t3-controls/swap-5-40/chain.jsonl.gz"
+    },
+    "t3-controls/swap-0-1": {
+      "receipt": "controls/t3-controls/swap-0-1/receipt.json",
+      "chain": "controls/t3-controls/swap-0-1/chain.jsonl.gz"
+    },
+    "t3-controls-0.8.19/positive": {
+      "receipt": "controls/t3-controls-0.8.19/positive/receipt.json",
+      "chain": "controls/t3-controls-0.8.19/positive/chain.jsonl.gz"
+    },
+    "t3-controls-0.8.19/split": {
+      "receipt": "controls/t3-controls-0.8.19/split/receipt.json",
+      "chain": "controls/t3-controls-0.8.19/split/chain.jsonl.gz"
+    },
+    "t3-controls-0.8.19/ulp": {
+      "receipt": "controls/t3-controls-0.8.19/ulp/receipt.json",
+      "chain": "controls/t3-controls-0.8.19/ulp/chain.jsonl.gz"
+    },
+    "t3-controls-amd-0.8.19/positive": {
+      "receipt": "controls/t3-controls-amd-0.8.19/positive/receipt.json",
+      "chain": "controls/t3-controls-amd-0.8.19/positive/chain.jsonl.gz"
+    },
+    "t3-controls-amd-0.8.19/ulp": {
+      "receipt": "controls/t3-controls-amd-0.8.19/ulp/receipt.json",
+      "chain": "controls/t3-controls-amd-0.8.19/ulp/chain.jsonl.gz"
+    }
+  }
+}

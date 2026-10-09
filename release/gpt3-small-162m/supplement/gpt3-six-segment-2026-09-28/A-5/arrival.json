@@ -1,0 +1,32 @@
+{
+  "schema": "mojolearn.lm-segment.run.v1",
+  "route": "A",
+  "segment": "5-arrival",
+  "label": "nvidia-A-5",
+  "from_checkpoint": {
+    "file": "ckpt_00003898.blm",
+    "sha256": "813f1e2303029c1fcc29b2be823b3e433f90640e1eb42719b9835e0794925894",
+    "step": 3898
+  },
+  "first_step": 3898,
+  "last_step": 3900,
+  "devices": [
+    0
+  ],
+  "logical_shards": 64,
+  "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+  "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "verdict": "PASS",
+  "disagreements": [],
+  "steps_completed": 2,
+  "last_completed": 3900,
+  "checkpoints": [],
+  "zero_moments": false,
+  "box": {
+    "machine": "x86_64",
+    "system": "Linux",
+    "python": "3.11.10",
+    "nvidia-smi": "NVIDIA H100 80GB HBM3, GPU-0fb39fc3-2367-6b66-a3dd-d203e619493a, 580.126.09\nNVIDIA H100 80GB HBM3, GPU-e941a7f6-bf9d-03b1-4a8d-db753af5e00f, 580.126.09"
+  }
+}
