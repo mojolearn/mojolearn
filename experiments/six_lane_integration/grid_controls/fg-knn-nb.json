@@ -206,7 +206,7 @@
    ],
    "bits_change": false,
    "status": "new G3 (A/B owed)",
-   "note": "Large direct inputs go host -> arena through the pinned stage (no slot, no D2D, no second X allocation). Python routes by the presence of x_prep_run_ranges_host."
+   "note": "Large direct inputs go host -> arena in one copy from the host pointer (the G1 pinned stage was deleted 2026-10-09; no slot, no D2D, no second X allocation). Python routes by the presence of x_prep_run_ranges_host."
   },
   "xprep_device_codes": {
    "define": "MOJOLEARN_XPREP_DEVICE_CODES",
