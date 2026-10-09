@@ -334,7 +334,7 @@ comptime DB_BM_SHARE_PCT = 25
 
 def _kept_find(kept_start: List[Int], start: Int) -> Int:
     """The kept-range slot holding row range `start`, or -1."""
-    for k in range(len(kept_start)):  # small-loop(ranges: one entry per kept row range): finds a plan entry, no row data
+    for k in range(len(kept_start)):  # small-loop(kept_start: one entry per kept row range, at most the batch count): finds a plan entry, no row data
         if kept_start[k] == start:
             return k
     return -1
