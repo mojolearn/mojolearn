@@ -52,7 +52,8 @@ comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_PCA_FA
 comptime PCA_GRAM_BLOCK_TARGET = 640
 from checks.numerics import ftz, identical_div, identical_mul
 from core.device_zero import enqueue_fill
-from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_FLAG_TEST, PCA_RR_SWEEPS
+from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_FLAG_TEST, PCA_RR_ONE_BLOCK, PCA_RR_SWEEPS
+from x_decomp.rr_one_block import RR_ONE_TPB, rr_eigh_one_block_kernel, rr_one_block_applies
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_off_fold_kernel,
@@ -61,7 +62,7 @@ from x_decomp.jacobi_par import (
 )
 from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale_diag
-from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_vrow
+from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_gate_state, rr_vrow
 from core.gram_splitk import (
     gram_centered_splitk_into,
     gram_splitk_applies,
@@ -585,20 +586,9 @@ def pca_rr_gate_kernel(fold: F32Ptr, state: F32Ptr, tol: Float32):
     started. `host_eigh_rr` (x_decomp/rr.mojo) decides the same from the
     same sums. One thread."""
     if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
-        if state.unsafe_load(0) == Float32(0.0):
-            var off = fold.unsafe_load(0)
-            var dg = fold.unsafe_load(1)
-            if not (fold.unsafe_load(2) >= Float32(0.0)):
-                state.unsafe_store(4, Float32(-1.0))
-            var fro = ftz(off + dg)
-            state.unsafe_store(1, off)
-            state.unsafe_store(3, fro)
-            if state.unsafe_load(2) < Float32(0.0):
-                state.unsafe_store(2, fro)
-            if rr_converged(off, dg, tol):
-                state.unsafe_store(0, Float32(1.0))
-            else:
-                state.unsafe_store(5, state.unsafe_load(5) + Float32(1.0))
+        # x_decomp/rr.mojo `rr_gate_state`: these statements, moved there
+        # unchanged so the one-block sweep (PCA_RR_ONE_BLOCK) runs the same
+        rr_gate_state(fold.unsafe_load(0), fold.unsafe_load(1), fold.unsafe_load(2), state, tol)
 
 
 def pca_rr_cs_kernel(a: F32Ptr, cs: F32Ptr, state: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
@@ -701,7 +691,22 @@ def _eig_rr_device(
     )
     var hstate = ctx.enqueue_create_host_buffer[DType.float32](PCA_RR_STATE)
     var launched = 0
+    var one_block = False
+    comptime if PCA_RR_ONE_BLOCK:
+        one_block = rr_one_block_applies(n)
+    if one_block:
+        # P1 + P1b (MOJOLEARN_IDN_PCA_RR_ONE_BLOCK): every sweep, its test,
+        # gate and rounds in one launch of one block; the same cells, the
+        # same order, the same state words as the loop below
+        ctx.enqueue_function[rr_eigh_one_block_kernel](
+            cov.unsafe_ptr(), vec_buf.unsafe_ptr(), dcs.unsafe_ptr(), doff.unsafe_ptr(),
+            dpart.unsafe_ptr(), dfold.unsafe_ptr(), dstate.unsafe_ptr(),
+            Int32(n), Int32(PCA_RR_SWEEPS), Float32(JACOBI_TOL),
+            grid_dim=1, block_dim=RR_ONE_TPB,
+        )
     for sweep in range(PCA_RR_SWEEPS + 1):
+        if one_block:
+            break
         ctx.enqueue_function[eigh_par_off_part_kernel](
             cov.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n),
             grid_dim=nb, block_dim=RR_OFF_TPB,
