@@ -4017,7 +4017,16 @@ def _build_layer(lane, arm, D):
         # y is read back in outputs(), outside the clock, as torch's .cpu() is.
         # MOJOLEARN_XCNN_DEVICE_IO_OFF=1 keeps host arrays (the before arm).
         to_dev = None
-        if getattr(layer, "_device_io", False):
+        if getattr(layer, "_seq_device_io", False):
+            # lane neural-io-2: a sequence-binding layer (MoEBlock) takes x as a resident
+            # SequenceDeviceTensor and returns y as one (read back in outputs(), outside the
+            # clock). MOJOLEARN_SEQ_DEVICE_IO_OFF=1, or a binding built with
+            # -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF, keeps the host-array entry (the before arm).
+            to_dev = layer.to_device
+            x = to_dev(x)
+            if getattr(x, "_device_tensor", False):
+                info["input_home"] = "device"
+        elif getattr(layer, "_device_io", False):
             from mojolearn._expansion_cnn import to_device as to_dev
             x = to_dev(x)
             if getattr(x, "_device_tensor", False):

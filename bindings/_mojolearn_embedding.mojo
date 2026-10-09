@@ -39,7 +39,28 @@ from core.device_zero import enqueue_fill
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
-from core.device_scan import device_first_nonfinite
+from core.device_scan import device_first_nonfinite, nonfinite_partial_kernel, _fold_partials, _scan_blocks, SCAN_TPB
+from core.scratch_pool import give_dev_i32, give_host_i32, take_dev_i32, take_host_i32
+
+#: lane neural-io-2 (MOJOLEARN_IDN_EMB_SCAN_DEFERRED, read
+#: ~/mojolearn-evidence/neural-gaps-20261009/read.md section 2, embedding): the
+#: resident backward's non-finite refusals of dY and of the carried dW each ran a
+#: device scan and then WAITED for its partials before the fold was queued (one
+#: host round trip per call in front of ~10 small launches, the cell's dominant
+#: cost is fixed per-call latency, not bytes). Deferred for a fresh gradient (no
+#: carry): the dY scan's kernel and its partials' copy are queued first, the fold
+#: behind them, and the partials are read after the call's one final wait. A hit
+#: raises the same message from the same word (the fold never writes dY); the dW
+#: tensor of a refused call is the call's own fresh tensor
+#: (embedding.py::_backward_dev), dropped with the raise, so nothing the caller
+#: holds changes. A carried dW keeps the eager scans. No bit moves. IDENTICAL
+#: default; -D MOJOLEARN_IDN_EMB_SCAN_DEFERRED_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the eager scans.
+comptime EMB_SCAN_DEFERRED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_EMB_SCAN_DEFERRED_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 from core.staged_download import download_f32_into
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralEmbeddingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralEmbeddingContextFast"
@@ -909,6 +930,14 @@ def _backward_dev_run(
     var ctx = neural_ctx[_NEURAL_CTX]()
     var ty = n_positions * cfg.width
     var r_dw = _tensor_view(dw_h, cells, "dw")
+    comptime if EMB_SCAN_DEFERRED:
+        # a carried dW keeps the eager scans: the fold overwrites the carried
+        # words, and the refusals' order (dY, then the carry) is the host's
+        if not cfg.accumulate:
+            _backward_dev_deferred(ctx, ids, n_positions, cfg, dy_h, r_dw, ty, plan)
+            _ = r_dw^
+            _ = ctx^
+            return
     # dY first, then the carried dW: the host refusals' order
     if ty > 0:
         var r_dy0 = _tensor_view(dy_h, ty, "dy")
@@ -943,6 +972,109 @@ def _backward_dev_run(
     _ = r_dy^
     _ = r_dw^
     _ = ctx^
+
+
+def _scan_enqueue(
+    ctx: DeviceContext,
+    mut buf: DeviceBuffer[DType.float32],
+    n: Int,
+    mut part: DeviceBuffer[DType.int32],
+    mut host: HostBuffer[DType.int32],
+) raises -> Int:
+    """`device_first_nonfinite` without its wait (EMB_SCAN_DEFERRED): the
+    partials kernel and the copy of its `blocks` words into `host`, queued
+    on the one in-order context. Returns `blocks`; the caller folds
+    `host` with `_fold_partials` after its own wait."""
+    if n <= 0:
+        return 0
+    var blocks = _scan_blocks(n)
+    ctx.enqueue_function[nonfinite_partial_kernel](
+        part.unsafe_ptr(), buf.unsafe_ptr(), Int32(n),
+        grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    # a pooled `part` may be longer than `blocks`: copy only the words written
+    var head = part.create_sub_buffer[DType.int32](0, blocks)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=head)
+    _ = head^
+    return blocks
+
+
+def _refuse_scanned(
+    ctx: DeviceContext, name: String, mut host: HostBuffer[DType.int32], blocks: Int,
+    mut buf: DeviceBuffer[DType.float32],
+) raises:
+    """The tail of `_refuse_nonfinite_resident` on deferred partials (read
+    after the caller's wait): on a hit, the one offending word read back for
+    the oracle's message. `buf` must still hold the scanned words (dY: the
+    fold does not write it)."""
+    if blocks <= 0:
+        return
+    var idx = _fold_partials(host, blocks)
+    if idx < 0:
+        return
+    var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var one = buf.create_sub_buffer[DType.float32](idx, 1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=one)
+    ctx.synchronize()
+    var v = h.unsafe_ptr().unsafe_load(0)
+    _ = one^
+    _ = h^
+    nonfinite_refusal(name, idx, v)
+    raise Error(
+        String("embedding: the device scan found a non-finite value in ") + name
+        + " at flat index " + String(idx) + " that the word read back is not (a scan defect)"
+    )
+
+
+def _backward_dev_deferred(
+    ctx: DeviceContext,
+    ids: List[Int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+    dy_h: Int,
+    mut r_dw: DeviceBuffer[DType.float32],
+    ty: Int,
+    plan: Int,
+) raises:
+    """`_backward_dev_run` for a fresh gradient (no carry) with the dY
+    refusal scan deferred to the one final wait (EMB_SCAN_DEFERRED; the
+    reasoning at the switch). Queue order: the dY scan and its partials'
+    copy, the ids copy, the backward; one wait; then the refusal (the fold
+    does not write dY, so the offending word is still there to read)."""
+    var nb = _scan_blocks(ty) if ty > 0 else 1
+    var part = take_dev_i32(ctx, nb)
+    var host = take_host_i32(ctx, nb)
+    var blocks = 0
+    var r_dy: DeviceBuffer[DType.float32]
+    if ty > 0:
+        r_dy = _tensor_view(dy_h, ty, "dy")
+        blocks = _scan_enqueue(ctx, r_dy, ty, part, host)
+    else:
+        # a zero-position call reads no dY (one placeholder cell)
+        r_dy = _pool_f32(ctx, 1)
+    var r_ids = _pool_i32(ctx, n_positions)
+    if n_positions > 0:
+        ctx.enqueue_copy(dst_buf=r_ids, src_ptr=ids.unsafe_ptr())
+    comptime if EMB_ATOMIC_BWD:
+        fast_embedding_backward_into(ctx, r_dw, r_dy, r_ids, n_positions, cfg)
+        ctx.synchronize()
+    else:
+        var r_counts = _pool_i32(ctx, cfg.vocab)
+        var r_begin = _pool_i32(ctx, cfg.vocab + 1)
+        var r_perm = _pool_i32(ctx, n_positions)
+        identical_embedding_backward_prerefused_into(
+            ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
+        )
+        # the one wait: the backward, and the scan's partials on the host
+        ctx.synchronize()
+        _give_i32(r_counts^, cfg.vocab)
+        _give_i32(r_begin^, cfg.vocab + 1)
+        _give_i32(r_perm^, n_positions)
+    _give_i32(r_ids^, n_positions)
+    give_dev_i32(ctx, part^)
+    _refuse_scanned(ctx, String("dY"), host, blocks, r_dy)
+    give_host_i32(ctx, host^)
+    _ = r_dy^
 
 
 def embedding_forward_dev_binding(

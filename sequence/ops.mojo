@@ -216,6 +216,12 @@ comptime OP_SEQ_IOTA = 95
 #: lane cpu4-python: ProphetForecaster's scaled time and seasonal phases on the
 #: executor (soft binary64, `sequence/prophet.mojo` op_prophet_prep).
 comptime OP_PROPHET_PREP = 96
+#: lane neural-io-2 (MOJOLEARN_IDN_AF_VEC_FUSED, sequence/af_fused.mojo):
+#: Adafactor's vector step, the second-moment update, the update and BOTH
+#: blocked norm partials in one pass per AF_NORM_BLOCK block, and both norm
+#: tails in one launch
+comptime OP_AF_VFUSE = 97
+comptime OP_AF_VFIN = 98
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

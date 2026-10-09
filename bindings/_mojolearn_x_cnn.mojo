@@ -21,7 +21,7 @@ from x_cnn.device import (
     linear_forward_into, linear_backward_into, softmax_xent_into, sgd_into, adam_into,
     batchnorm_forward_into, batchnorm_backward_into, dropout2d_into, spmm_into, pad2d_forward_into,
     pad2d_backward_into, conv_block_forward_into, conv_block_backward_into,
-    res_alloc, res_free, res_upload, res_download, res_argmax, res_gather, res_gather_pair, opt_many_resident,
+    res_alloc, res_alloc_nofill, res_free, res_upload, res_download, res_argmax, res_gather, res_gather_pair, opt_many_resident,
     gemm_m, conv2d_forward_m, conv2d_backward_m, maxpool2d_forward_m, maxpool2d_backward_m,
     avgpool2d_forward_m, avgpool2d_backward_m, map2_m, linear_forward_m, linear_backward_m,
     batchnorm_forward_m, batchnorm_backward_m, dropout2d_m, spmm_m,
@@ -743,6 +743,12 @@ def adam_binding[resident: Bool = False](w_addr: PythonObject, g_addr: PythonObj
 
 def res_alloc_binding(n: PythonObject) raises -> PythonObject:
     return PythonObject(res_alloc(Int(py=n)))
+
+
+def res_alloc_nofill_binding(n: PythonObject) raises -> PythonObject:
+    """lane neural-io-2 (XCNN_RES_NEW_NOZERO, x_cnn/device.mojo): a resident
+    array for an output whose every word the op stores, unfilled."""
+    return PythonObject(res_alloc_nofill(Int(py=n)))
 
 
 def res_free_binding(h: PythonObject) raises -> PythonObject:
@@ -1584,6 +1590,7 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[numeric_mode_binding]("x_cnn_numeric_mode")
         m.def_function[vendor_binding]("x_cnn_vendor")
         m.def_function[res_alloc_binding]("x_cnn_res_alloc")
+        m.def_function[res_alloc_nofill_binding]("x_cnn_res_alloc_nofill")
         m.def_function[res_free_binding]("x_cnn_res_free")
         m.def_function[res_upload_binding]("x_cnn_res_upload")
         m.def_function[res_download_binding]("x_cnn_res_download")

@@ -25,7 +25,8 @@ from sequence.moe_group import moe_group_blocks
 from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
 from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
-from sequence.adafactor import AF_NORM_BLOCK
+from sequence.adafactor import AF_NORM_BLOCK, IDN_AF_VEC_FUSED
+from sequence.ops import OP_AF_VFUSE, OP_AF_VFIN
 from std.os import getenv as _getenv_seq
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -866,6 +867,48 @@ def adafactor_core[E: Exec](mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: 
     var fast = _fast_norms() and n >= FAST_NORM_MIN
     var blocked = _blocked_norms() and n > AF_NORM_BLOCK
     var parts = ex.alloc(_PARTS if fast else ((n + AF_NORM_BLOCK - 1) // AF_NORM_BLOCK if blocked else 1))
+    comptime if IDN_AF_VEC_FUSED:
+        # lane neural-io-2: the IDENTICAL vector step of more than
+        # AF_NORM_BLOCK values as vfuse (vec + both block partials), vfin
+        # (both ascending partial folds and the two tails), the decay, the
+        # apply: the same chains in the same order (sequence/adafactor.mojo)
+        if C == 0 and blocked:
+            var nb = (n + AF_NORM_BLOCK - 1) // AF_NORM_BLOCK
+            var parts_u = ex.alloc(nb)
+            var fz = Args()
+            fz.p0 = P
+            fz.p1 = G
+            fz.p2 = S1
+            fz.p3 = U
+            fz.p4 = parts
+            fz.p5 = parts_u
+            fz.i0 = n
+            fz.i1 = AF_NORM_BLOCK
+            fz.f0 = w
+            fz.f1 = eps1sq
+            ex.launch[OP_AF_VFUSE](fz, nb)
+            var fn = Args()
+            fn.p0 = parts
+            fn.p1 = sc
+            fn.p2 = parts_u
+            fn.i0 = n
+            fn.i1 = nb
+            fn.f0 = fval(fp, 3)
+            fn.f1 = rho
+            fn.f2 = fval(fp, 4)
+            ex.launch[OP_AF_VFIN](fn, 1)
+            # the decay after the alpha (it reads p before it), as below
+            if wd != Float32(0.0):
+                var s0 = Args()
+                s0.p0 = P
+                s0.f0 = Float32(1.0) - ftz(identical_mul(Float32(lr), wd))
+                ex.launch[OP_SCALE](s0, n)
+            var ap0 = Args()
+            ap0.p0 = P
+            ap0.p1 = U
+            ap0.p2 = sc
+            ex.launch[OP_AF_APPLY](ap0, n)
+            return
     var a = Args()
     a.p0 = P
     a.p1 = sc
@@ -1864,11 +1907,13 @@ def moe_forward_check(addrs: PythonObject, ip: PythonObject, n_ip: Int) raises -
 
 
 def _moe_devgroup_rest[E: Exec](
-    mut ex: E, addrs: PythonObject, T: Int, D: Int, F: Int, En: Int, k: Int,
-    X: FP, Gu: FP, Dn: FP, Sel: FP, W: FP, Y: FP, L: FP, H: FP,
-) raises -> PythonObject:
-    """`moe_forward_run` after the route with the grouping on the device
-    (MOJOLEARN_MOE_DEVGROUP): the same launches, the same words."""
+    mut ex: E, T: Int, D: Int, F: Int, En: Int, k: Int,
+    X: FP, Gu: FP, Dn: FP, Sel: FP, W: FP, Y: FP, H: FP,
+) raises:
+    """`moe_forward_core` after the route with the grouping on the device
+    (MOJOLEARN_MOE_DEVGROUP): the same launches, the same words. Ends on a
+    sync; the caller reads the outputs (lane neural-io-2: the downloads moved
+    to `moe_forward_run`, so the resident entry can skip them)."""
     if En > 127:
         raise Error("moe_forward devgroup: E <= 127 (the grouping kernels' one block)")
     var Order = ex.alloc(T * k)
@@ -1907,11 +1952,6 @@ def _moe_devgroup_rest[E: Exec](
     c.i6 = 1  # grouped on the device (moe_mma's out product reads this)
     ex.launch[OP_MOE_OUT](c, T * D)
     ex.sync()
-    ex.download(fptr(addrs[4], "y"), Y, T * D)
-    ex.download(fptr(addrs[5], "logits"), L, T * En)
-    ex.download(fptr(addrs[6], "selected"), Sel, T * k)
-    ex.download(fptr(addrs[7], "weights"), W, T * k)
-    return PythonObject(T * D)
 
 
 def moe_forward_run[E: Exec](
@@ -1928,6 +1968,28 @@ def moe_forward_run[E: Exec](
     var L = ex.alloc(T * En)
     var Sel = ex.alloc(T * k)
     var W = ex.alloc(T * k)
+    moe_forward_core(ex, X, Y, L, Sel, W, T, D, F, En, k, renorm, Wg, Gu, Dn)
+    ex.download(fptr(addrs[4], "y"), Y, T * D)
+    ex.download(fptr(addrs[5], "logits"), L, T * En)
+    ex.download(fptr(addrs[6], "selected"), Sel, T * k)
+    ex.download(fptr(addrs[7], "weights"), W, T * k)
+    return PythonObject(T * D)
+
+
+def moe_forward_core[E: Exec](
+    mut ex: E, X: FP, Y: FP, L: FP, Sel: FP, W: FP,
+    T: Int, D: Int, F: Int, En: Int, k: Int, renorm: Int, Wg: FP, Gu: FP, Dn: FP,
+) raises:
+    """The MoE forward's launches from x at `X` into y (T, D) at `Y`, the
+    router logits (T, E) at `L`, the picks (T, k, as floats) at `Sel` and
+    their weights (T, k) at `W`, ending on a sync. Every output cell is
+    stored by the route (L, Sel, W: `op_moe_route` and its tiled twins store
+    each token's E logits and k picks) and the combine (Y: every (tok, d)
+    from +0.0), so the outputs need no fill. Lane neural-io-2 split it out of
+    `moe_forward_run` (the host-array entry: upload x, this, download the
+    four outputs) for `sequence/moe_dev.mojo` (the outputs are resident
+    sequence tensors, nothing crosses the bus): the same launches on the
+    same words, no bit moves."""
     var Pr = ex.alloc(T * En)
     var H = ex.alloc(T * k * F)
     var a = Args()
@@ -1947,7 +2009,8 @@ def moe_forward_run[E: Exec](
         # (sequence/moe_reg.mojo); no host round trip. The host executor
         # runs the items and reads none of Order, Poff, Cnt.
         if En <= 127:
-            return _moe_devgroup_rest(ex, addrs, T, D, F, En, k, X, Gu, Dn, Sel, W, Y, L, H)
+            _moe_devgroup_rest(ex, T, D, F, En, k, X, Gu, Dn, Sel, W, Y, H)
+            return
     # The pairs (token, pick) grouped by expert for the tiled device
     # products (lane neural-pass29, sequence/moe_tiled.mojo): `order` the
     # pair indices grouped by expert, `poff` each expert's first pair,
@@ -2002,8 +2065,3 @@ def moe_forward_run[E: Exec](
     c.i5 = n_dtiles
     ex.launch[OP_MOE_OUT](c, T * D)
     ex.sync()
-    ex.download(fptr(addrs[4], "y"), Y, T * D)
-    ex.download(fptr(addrs[5], "logits"), L, T * En)
-    ex.download(fptr(addrs[6], "selected"), Sel, T * k)
-    ex.download(fptr(addrs[7], "weights"), W, T * k)
-    return PythonObject(T * D)
