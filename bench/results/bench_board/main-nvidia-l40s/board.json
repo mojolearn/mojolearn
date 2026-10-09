@@ -4,7 +4,8 @@
     "Cells: 139 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@444f0b96e (2026-10-09T14:31:44Z). Boxes: nv (RunPod L40S), nv2 (RunPod L40S).",
     "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 149 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
     "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 42, n/a 97).",
-    "Opponents: copied from the stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 2 races."
+    "Opponents: copied from the stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 2 races.",
+    "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax. A cell of ours whose output hash equals a copied opponent's shows quality identical_to=<arm> (the same bits) where the own-host reference gave none."
   ],
   "board_sections": [
     {
@@ -108,7 +109,7 @@
     "smoke": false,
     "vendor": "nvidia"
   },
-  "created": "2026-10-09T15:40:51Z",
+  "created": "2026-10-09T19:45:54Z",
   "main_board": {
     "boxes": [
       "nv",
@@ -1277,7 +1278,7 @@
     },
     "inputs": {
       "branch": "main",
-      "generated": "2026-10-09T15:40:51Z",
+      "generated": "2026-10-09T19:45:54Z",
       "grid_logs": [
         "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
         "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -1799,6 +1800,16 @@
         "job": "n0526",
         "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6"
       },
+      "neural_headline": {
+        "bf16": null,
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 15.256904065608978,
+          "ratio": 1.1368584595655615
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 17.344940453767776
+      },
       "opponent_source": {
         "boards": [
           "opponents-specific-20261006"
@@ -2137,6 +2148,16 @@
         "identity": "MATCH",
         "job": "n0526",
         "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6"
+      },
+      "neural_headline": {
+        "bf16": null,
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 14.866570010781288,
+          "ratio": 0.7291735602734799
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 10.840309783816338
       },
       "opponent_source": {
         "boards": [
@@ -2490,6 +2511,16 @@
         "identity": "MATCH",
         "job": "n0526",
         "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6"
+      },
+      "neural_headline": {
+        "bf16": null,
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 20.16078121960163,
+          "ratio": 0.6891671979834691
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 13.894149102270603
       },
       "opponent_source": {
         "boards": [
@@ -3248,6 +3279,20 @@
         "identity": "n/a",
         "job": "n0666",
         "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa"
+      },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 1.3591647148132324,
+          "ratio": 1.2078523110994168
+        },
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 1.3334527611732483,
+          "ratio": 1.231142406955239
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 1.6416702419519424
       },
       "opponent_source": {
         "boards": [
@@ -6136,6 +6181,20 @@
         "job": "n0666",
         "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 1.332983374595642,
+          "ratio": 7.24870186127103
+        },
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 2.3035723716020584,
+          "ratio": 4.194528111029084
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 9.66239906847477
+      },
       "opponent_source": {
         "boards": [
           "opponents-specific-20261006"
@@ -7325,6 +7384,16 @@
         "job": "n0666",
         "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa"
       },
+      "neural_headline": {
+        "bf16": null,
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 0.981329008936882,
+          "ratio": 1.385080488263196
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 1.3592196628451347
+      },
       "opponent_source": {
         "boards": [
           "opponents-specific-20261006"
@@ -7824,6 +7893,10 @@
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
+            "identical_to": "torch-eager-fp32"
+          },
+          "quality_source": "output hash 2753e61a6dde36e3 equals the stored torch-eager-fp32 output hash: the same bits",
+          "quality_superseded": {
             "error": "Own host reference failed; see /root/lq/out/n0666/work-embedding-synthetic-def/embedding-synthetic-host-quality/host.log"
           },
           "ratio_ours_fast_over": null,
@@ -8094,6 +8167,16 @@
         "identity": "n/a",
         "job": "n0666",
         "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa"
+      },
+      "neural_headline": {
+        "bf16": null,
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 1.878654584288597,
+          "ratio": 1.410559243303804
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 2.6499535888433456
       },
       "opponent_source": {
         "boards": [
@@ -15868,6 +15951,12 @@
         "job": "n0526",
         "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6"
       },
+      "neural_headline": {
+        "bf16": null,
+        "fp32": null,
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 23.841598071157932
+      },
       "opponent_source": {
         "boards": []
       },
@@ -17841,6 +17930,20 @@
         "job": "n0666",
         "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 1.8718130886554718,
+          "ratio": 27.039201549971043
+        },
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 3.445463255047798,
+          "ratio": 14.68955772315354
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 50.61233136802912
+      },
       "opponent_source": {
         "boards": [
           "opponents-default-20261006"
@@ -18438,6 +18541,12 @@
         "identity": "MATCH",
         "job": "n0526",
         "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6"
+      },
+      "neural_headline": {
+        "bf16": null,
+        "fp32": null,
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 10.974929668009281
       },
       "opponent_source": {
         "boards": []
@@ -22202,6 +22311,20 @@
         "job": "n0666",
         "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 4.342915490269661,
+          "ratio": 7.476001303834087
+        },
+        "fp32": {
+          "arm": "torch-compile-fp32",
+          "ms": 11.925064027309418,
+          "ratio": 2.7226387877954834
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 32.46764186769724
+      },
       "opponent_source": {
         "boards": [
           "opponents-specific-20261006"
@@ -22918,6 +23041,16 @@
         "identity": "MATCH",
         "job": "n0526",
         "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6"
+      },
+      "neural_headline": {
+        "bf16": null,
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 20.780572667717934,
+          "ratio": 0.6249783421929039
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 12.987407855689526
       },
       "opponent_source": {
         "boards": [
@@ -30396,6 +30529,20 @@
         "job": "n0666",
         "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 2.8467047959566116,
+          "ratio": 7.36160393846025
+        },
+        "fp32": {
+          "arm": "torch-compile-fp32",
+          "ms": 5.273830145597458,
+          "ratio": 3.973642051221919
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 20.956313237547874
+      },
       "opponent_source": {
         "boards": [
           "opponents-default-20261006"
@@ -31251,6 +31398,16 @@
         "identity": "MATCH",
         "job": "n0526",
         "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6"
+      },
+      "neural_headline": {
+        "bf16": null,
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 13.264128938317299,
+          "ratio": 0.8029156207762116
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 10.649976320564747
       },
       "opponent_source": {
         "boards": [
@@ -42807,6 +42964,20 @@
         "job": "v0999",
         "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-compile-bf16",
+          "ms": 42.45234839618206,
+          "ratio": 1.1436312182416277
+        },
+        "fp32": {
+          "arm": "torch-compile-fp32",
+          "ms": 45.831263065338135,
+          "ratio": 1.0593168869103589
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 48.5498309135437
+      },
       "opponent_source": {
         "boards": [
           "opponents-default-20261006"
@@ -43620,6 +43791,20 @@
         "job": "v0999",
         "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-compile-bf16",
+          "ms": 10.769540444016457,
+          "ratio": 3.3900789245247154
+        },
+        "fp32": {
+          "arm": "torch-compile-fp32",
+          "ms": 21.570412442088127,
+          "ratio": 1.6925773757964555
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 36.50959208607674
+      },
       "opponent_source": {
         "boards": [
           "opponents-specific-20261006"
@@ -44209,6 +44394,20 @@
         "identity": "n/a",
         "job": "v0999",
         "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da"
+      },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 193.20273026823997,
+          "ratio": 0.06737439369202346
+        },
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 150.88544599711895,
+          "ratio": 0.08627019475234719
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 13.016916811466217
       },
       "opponent_source": {
         "boards": [
@@ -45098,6 +45297,20 @@
         "job": "v0999",
         "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 21.152963861823082,
+          "ratio": 0.6211233460993971
+        },
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 25.929467752575874,
+          "ratio": 0.5067053369219261
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 13.138599693775177
+      },
       "opponent_source": {
         "boards": [
           "opponents-specific-20261006",
@@ -45978,6 +46191,20 @@
         "job": "v0999",
         "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-compile-bf16",
+          "ms": 16.33116602897644,
+          "ratio": 0.250714894440156
+        },
+        "fp32": {
+          "arm": "torch-compile-fp32",
+          "ms": 12.383831664919853,
+          "ratio": 0.3306300245212505
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 4.09446656703949
+      },
       "opponent_source": {
         "boards": [
           "opponents-default-20261006",
@@ -46792,6 +47019,20 @@
         "job": "n0664",
         "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 1.9644740968942642,
+          "ratio": 1.2391726693398593
+        },
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 1.4686677604913712,
+          "ratio": 1.6575039474435151
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 2.4343226104974747
+      },
       "opponent_source": {
         "boards": [
           "opponents-specific-20261006"
@@ -47522,6 +47763,20 @@
         "identity": "n/a",
         "job": "v0999",
         "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da"
+      },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-compile-bf16",
+          "ms": 5.483532324433327,
+          "ratio": 1.015203048694118
+        },
+        "fp32": {
+          "arm": "torch-compile-fp32",
+          "ms": 12.082098051905632,
+          "ratio": 0.46075596386170903
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 5.566898733377457
       },
       "opponent_source": {
         "boards": [
@@ -48342,6 +48597,20 @@
         "job": "v0999",
         "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da"
       },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 165.9052073955536,
+          "ratio": 0.23859665825677157
+        },
+        "fp32": {
+          "arm": "torch-compile-fp32",
+          "ms": 46.308865770697594,
+          "ratio": 0.8547915698903418
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 39.58442807197571
+      },
       "opponent_source": {
         "boards": [
           "opponents-specific-20261006"
@@ -49038,6 +49307,20 @@
         "identity": "n/a",
         "job": "v0999",
         "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da"
+      },
+      "neural_headline": {
+        "bf16": {
+          "arm": "torch-eager-bf16",
+          "ms": 3.42591293156147,
+          "ratio": 3.7653029213172813
+        },
+        "fp32": {
+          "arm": "torch-eager-fp32",
+          "ms": 3.587637096643448,
+          "ratio": 3.5955699035043907
+        },
+        "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
+        "ours_ms": 12.899599969387054
       },
       "opponent_source": {
         "boards": [
@@ -56204,5 +56487,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-09T15:40:51Z"
+  "updated": "2026-10-09T19:45:54Z"
 }

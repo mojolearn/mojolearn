@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-09T15:40:51Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-09T19:45:54Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 > MAIN BOARD nvidia-l40s, version label main@444f0b96e. Unreleased: not reproducible by pip install; the release boards are the reference.
 
@@ -11,6 +11,8 @@ Generated 2026-10-09T15:40:51Z from `board.json` (schema `mojolearn-bench-board/
 > Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 42, n/a 97).
 
 > Opponents: copied from the stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 2 races.
+
+> Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax. A cell of ours whose output hash equals a copied opponent's shows quality identical_to=<arm> (the same bits) where the own-host reference gave none.
 
 ## Identity
 
@@ -297,6 +299,37 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | trees | rf | istella | logloss (lower is better) | - | 0.182017 | cuml-rf-gpu 0.182069 |
 | trees | rf | taxi | auc (higher is better) | - | 0.617838 | cuml-rf-gpu 0.617836 |
 | trees | rf | taxi | logloss (lower is better) | - | 0.525953 | cuml-rf-gpu 0.525954 |
+
+
+## Neural headline: ours IDENTICAL against torch bf16
+
+What customers run is torch in bf16. The headline divides our IDENTICAL median by torch's fastest bf16 arm (eager or compile, the lower stored median); the fp32 twin (torch's fastest fp32 arm) is the second column. Per-arm ratios stay in each race's table below.
+
+| lane | dataset | ours IDENTICAL ms | torch bf16 ms (fastest arm) | ours / torch bf16 | torch fp32 twin ms (fastest arm) | ours / torch fp32 | note |
+|---|---|---|---|---|---|---|---|
+| adafactor | synthetic | 17.3 | - | - | 15.3 (torch-eager-fp32) | 1.137 | no torch bf16 arm on this lane |
+| adagrad | synthetic | 10.8 | - | - | 14.9 (torch-eager-fp32) | 0.729 | no torch bf16 arm on this lane |
+| adamax | synthetic | 13.9 | - | - | 20.2 (torch-eager-fp32) | 0.689 | no torch bf16 arm on this lane |
+| batchnorm2d | synthetic | 1.6 | 1.4 (torch-eager-bf16) | 1.208 | 1.3 (torch-eager-fp32) | 1.231 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| conv2d | synthetic | 9.7 | 1.3 (torch-eager-bf16) | 7.249 | 2.3 (torch-eager-fp32) | 4.195 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| dropout2d | synthetic | 1.4 | - | - | 1.0 (torch-eager-fp32) | 1.385 | no torch bf16 arm on this lane |
+| embedding | synthetic | 2.6 | - | - | 1.9 (torch-eager-fp32) | 1.411 | no torch bf16 arm on this lane |
+| lamb | synthetic | 23.8 | - | - | - | - | no torch bf16 arm on this lane |
+| layernorm | synthetic | 50.6 | 1.9 (torch-eager-bf16) | 27.039 | 3.4 (torch-eager-fp32) | 14.690 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| lion | synthetic | 11.0 | - | - | - | - | no torch bf16 arm on this lane |
+| moe | synthetic | 32.5 | 4.3 (torch-eager-bf16) | 7.476 | 11.9 (torch-compile-fp32) | 2.723 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| nadam | synthetic | 13.0 | - | - | 20.8 (torch-eager-fp32) | 0.625 | no torch bf16 arm on this lane |
+| resnet-block | synthetic | 21.0 | 2.8 (torch-eager-bf16) | 7.362 | 5.3 (torch-compile-fp32) | 3.974 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| rmsprop | synthetic | 10.6 | - | - | 13.3 (torch-eager-fp32) | 0.803 | no torch bf16 arm on this lane |
+| lm-forward | bytes | 48.5 | 42.5 (torch-compile-bf16) | 1.144 | 45.8 (torch-compile-fp32) | 1.059 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| lm-train-step | bytes | 36.5 | 10.8 (torch-compile-bf16) | 3.390 | 21.6 (torch-compile-fp32) | 1.693 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| mamba1-forward | gaussian | 13.0 | 193.2 (torch-eager-bf16) | 0.067 | 150.9 (torch-eager-fp32) | 0.086 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| mamba2-forward | gaussian | 13.1 | 21.2 (torch-eager-bf16) | 0.621 | 25.9 (torch-eager-fp32) | 0.507 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| mamba3-forward | gaussian | 4.1 | 16.3 (torch-compile-bf16) | 0.251 | 12.4 (torch-compile-fp32) | 0.331 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| mlp-train-step | gaussian | 2.4 | 2.0 (torch-eager-bf16) | 1.239 | 1.5 (torch-eager-fp32) | 1.658 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| samba-forward | bytes | 5.6 | 5.5 (torch-compile-bf16) | 1.015 | 12.1 (torch-compile-fp32) | 0.461 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| samba-train-step | bytes | 39.6 | 165.9 (torch-eager-bf16) | 0.239 | 46.3 (torch-compile-fp32) | 0.855 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| transformer-forward | gaussian | 12.9 | 3.4 (torch-eager-bf16) | 3.765 | 3.6 (torch-eager-fp32) | 3.596 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 
 ## Trees
 
@@ -836,6 +869,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v0999)`, ran on nv2 (RunPod L40S) job v0999
 
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 42.5 ms) = 1.144; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 45.8 ms) = 1.059. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 48.5 | 48.5..48.5 | 1 | - | - | 48.5 | - | - (stored whole) | - | - | - | - | mean_nll=9.018733 | - | main board, one scored run | - | ok (main@444f0b96e nv2/v0999 2026-10-09; identity vs amd-mi325x: n/a) |
@@ -857,6 +892,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 ### lm-train-step / bytes (neural shape full: B1 L2048 DM384 H6 KV6 HD64 FF1024 layers8 V8192)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v0999)`, ran on nv2 (RunPod L40S) job v0999
+
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 10.8 ms) = 3.390; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 21.6 ms) = 1.693. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -880,6 +917,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v0999)`, ran on nv2 (RunPod L40S) job v0999
 
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 193.2 ms) = 0.067; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 150.9 ms) = 0.086. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 13.0 | 13.0..13.0 | 1 | - | - | 13.0 | - | - (stored whole) | - | - | - | - | - | - | main board, one scored run | - | ok (main@444f0b96e nv2/v0999 2026-10-09; identity vs amd-mi325x: n/a) |
@@ -900,6 +939,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 ### mamba2-forward / gaussian (neural shape full: B1 L2048 DM384)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v0999)`, ran on nv2 (RunPod L40S) job v0999
+
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 21.2 ms) = 0.621; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 25.9 ms) = 0.507. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -925,6 +966,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v0999)`, ran on nv2 (RunPod L40S) job v0999
 
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 16.3 ms) = 0.251; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 12.4 ms) = 0.331. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 4.1 | 4.1..4.1 | 1 | - | - | 4.1 | - | - (stored whole) | - | - | - | - | - | - | main board, one scored run | - | ok (main@444f0b96e nv2/v0999 2026-10-09; identity vs amd-mi325x: n/a) |
@@ -949,6 +992,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt (nv/n0664)`, ran on nv (RunPod L40S) job n0664
 
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 2.0 ms) = 1.239; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 1.5 ms) = 1.658. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 2.4 | 2.4..2.4 | 1 | - | - | 2.4 | - | - (stored whole) | - | - | - | - | loss_first_step=1.160401, loss_last_step=1.123361, steps=2 | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0664 2026-10-09; identity vs amd-mi325x: n/a) |
@@ -970,6 +1015,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 ### samba-forward / bytes (neural shape full: B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v0999)`, ran on nv2 (RunPod L40S) job v0999
+
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 5.5 ms) = 1.015; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 12.1 ms) = 0.461. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -993,6 +1040,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v0999)`, ran on nv2 (RunPod L40S) job v0999
 
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 165.9 ms) = 0.239; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 46.3 ms) = 0.855. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 39.6 | 39.6..39.6 | 1 | - | - | 39.6 | - | - (stored whole) | - | - | - | - | loss_first_step=5.635910, loss_last_step=4.833934, steps=2 | - | main board, one scored run | - | ok (main@444f0b96e nv2/v0999 2026-10-09; identity vs amd-mi325x: n/a) |
@@ -1014,6 +1063,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 ### transformer-forward / gaussian (neural shape full: B1 L2048 DM384 H6 KV6 HD64 FF1024)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v0999)`, ran on nv2 (RunPod L40S) job v0999
+
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 3.4 ms) = 3.765; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 3.6 ms) = 3.596. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1039,6 +1090,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
 
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 15.3 ms) = 1.137. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 17.3 | 17.3..17.3 | 1 | - | - | 17.3 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0526/work-adafactor-synthetic-def/adafactor-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH) |
@@ -1058,6 +1111,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 ### adagrad / synthetic (rows full, shape -)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
+
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 14.9 ms) = 0.729. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1079,6 +1134,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
 
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 20.2 ms) = 0.689. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 13.9 | 13.9..13.9 | 1 | - | - | 13.9 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0526/work-adamax-synthetic-def/adamax-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH) |
@@ -1098,6 +1155,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 ### batchnorm2d / synthetic (rows full, shape -)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0666)`, ran on nv (RunPod L40S) job n0666
+
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.4 ms) = 1.208; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 1.3 ms) = 1.231. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1262,6 +1321,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0666)`, ran on nv (RunPod L40S) job n0666
 
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.3 ms) = 7.249; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 2.3 ms) = 4.195. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 9.7 | 9.7..9.7 | 1 | - | - | 9.7 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-conv2d-synthetic-def/conv2d-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 444f0b96e/v1002 failed: not_ready) |
@@ -1326,6 +1387,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0666)`, ran on nv (RunPod L40S) job n0666
 
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 1.0 ms) = 1.385. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1.4 | 1.4..1.4 | 1 | - | - | 1.4 | - | - (stored whole) | - | - | - | - | - | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a) |
@@ -1373,9 +1436,11 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0666)`, ran on nv (RunPod L40S) job n0666
 
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 1.9 ms) = 1.411. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 2.6 | 2.6..2.6 | 1 | - | - | 2.6 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-embedding-synthetic-def/embedding-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 2.6 | 2.6..2.6 | 1 | - | - | 2.6 | - | - (stored whole) | - | - | - | - | identical_to=torch-eager-fp32 | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a) |
 | torch-eager-fp32 | torch | gpu | opponent | 1.9 | 1.9..1.9 | 1 | 1.411 | - | - | 1.9 | - (stored kernel) | 1.411 (MIXED ours whole / arm kernel) | - | 838.7 | 782.6 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-compile-fp32 | torch | gpu | opponent | 2.1 | 2.1..2.1 | 1 | 1.278 | - | - | 2.1 | - (stored kernel) | 1.278 (MIXED ours whole / arm kernel) | - | 1167.7 | 640.2 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 
@@ -1883,6 +1948,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
 
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 23.8 | 23.8..23.8 | 1 | - | - | 23.8 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0526/work-lamb-synthetic-def/lamb-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH) |
@@ -1977,6 +2044,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0666)`, ran on nv (RunPod L40S) job n0666
 
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.9 ms) = 27.039; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 3.4 ms) = 14.690. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 50.6 | 50.6..50.6 | 1 | - | - | 50.6 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-layernorm-synthetic-def/layernorm-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a) |
@@ -2038,6 +2107,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 ### lion / synthetic (rows full, shape -)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
+
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -2247,6 +2318,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0666)`, ran on nv (RunPod L40S) job n0666
 
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 4.3 ms) = 7.476; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 11.9 ms) = 2.723. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 32.5 | 32.5..32.5 | 1 | - | - | 32.5 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-moe-synthetic-def/moe-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 444f0b96e/v1002 failed: not_ready) |
@@ -2292,6 +2365,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 ### nadam / synthetic (rows full, shape -)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
+
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 20.8 ms) = 0.625. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -2775,6 +2850,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0666)`, ran on nv (RunPod L40S) job n0666
 
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 2.8 ms) = 7.362; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 5.3 ms) = 3.974. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 21.0 | 21.0..21.0 | 1 | - | - | 21.0 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-resnet-block-synthetic-def/resnet-block-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 444f0b96e/v1002 failed: not_ready) |
@@ -2836,6 +2913,8 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 ### rmsprop / synthetic (rows full, shape -)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
+
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 13.3 ms) = 0.803. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
