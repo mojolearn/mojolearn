@@ -22,18 +22,27 @@ from sequence.seq_tensor import seq_tensor_ptr
 def layer_norm_dev_py(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
                       fp: PythonObject) raises -> PythonObject:
     """handles = [x (M, D), y (M, D) out or 0, dy (M, D) or 0, dx (M, D) out
-    or 0] (seq_tensor handles); addrs = [weight (D) or 0, bias (D) or 0,
-    dweight (D) out or 0, dbias (D) out or 0] (host arrays); ip = [M, D,
-    has_weight, has_bias, backward]; fp = [eps]. A forward writes y; a
-    backward (dy and dx given) writes dx and, when present, dweight / dbias,
-    and y only when a y handle is passed. Returns M * D."""
-    if len(handles) != 4 or len(addrs) != 4 or len(ip) != 5 or len(fp) != 1:
-        raise Error("layer_norm_dev: requires 4 handles, 4 addresses, 5 integer and 1 float parameters")
+    or 0, (mean (M), rstd (M))] (seq_tensor handles); addrs = [weight (D) or
+    0, bias (D) or 0, dweight (D) out or 0, dbias (D) out or 0] (host
+    arrays); ip = [M, D, has_weight, has_bias, backward, (stats)]; fp =
+    [eps]. A forward writes y; a backward (dy and dx given) writes dx and,
+    when present, dweight / dbias, and y only when a y handle is passed.
+    Returns M * D.
+
+    Kept stats (lane layernorm-idn N3, 2026-10-09; the Python shell's
+    `MOJOLEARN_LN_KEEP_STATS_OFF=1` is the before arm): with six handles and
+    ip[5] = 1 the forward stores the row mean and rstd into the two M-float
+    tensors, and a backward READS them instead of recomputing the whole
+    forward (one OP_LN_FWD launch over M x D plus an M x D scratch y fewer
+    per backward). The words are the forward's own stores: no bit moves."""
+    if (len(handles) != 4 and len(handles) != 6) or len(addrs) != 4 or (len(ip) != 5 and len(ip) != 6) or len(fp) != 1:
+        raise Error("layer_norm_dev: requires 4 or 6 handles, 4 addresses, 5 or 6 integer and 1 float parameters")
     var M = ival(ip, 0)
     var D = ival(ip, 1)
     var hw = ival(ip, 2) != 0
     var hb = ival(ip, 3) != 0
     var bwd = ival(ip, 4) != 0
+    var stats = len(handles) == 6 and len(ip) == 6 and ival(ip, 5) != 0
     if M < 1 or D < 1:
         raise Error("layer_norm_dev: M and D must be >= 1")
     var n = M * D
@@ -49,14 +58,22 @@ def layer_norm_dev_py(handles: PythonObject, addrs: PythonObject, ip: PythonObje
     if hb:
         ex.upload(Bb, fptr(addrs[1], "bias"), D)
     # OP_LN_FWD stores every y, mean and rstd cell: no fill
-    var Y: FP
-    if has_y:
-        Y = seq_tensor_ptr(handles[1], n, "y")
+    var mean: FP
+    var rstd: FP
+    if stats:
+        mean = seq_tensor_ptr(handles[4], M, "mean")
+        rstd = seq_tensor_ptr(handles[5], M, "rstd")
     else:
-        Y = ex._alloc(n, False)
-    var mean = ex._alloc(M, False)
-    var rstd = ex._alloc(M, False)
-    layer_norm_fwd_core(ex, X, W, Bb, Y, mean, rstd, M, D, hw, hb, fval(fp, 0))
+        mean = ex._alloc(M, False)
+        rstd = ex._alloc(M, False)
+    # a backward with kept stats and no y handle has nothing to recompute
+    if has_y or not (bwd and stats):
+        var Y: FP
+        if has_y:
+            Y = seq_tensor_ptr(handles[1], n, "y")
+        else:
+            Y = ex._alloc(n, False)
+        layer_norm_fwd_core(ex, X, W, Bb, Y, mean, rstd, M, D, hw, hb, fval(fp, 0))
     if bwd:
         var DY = seq_tensor_ptr(handles[2], n, "dy")
         var DX = seq_tensor_ptr(handles[3], n, "dx")
