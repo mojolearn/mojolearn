@@ -267,11 +267,14 @@ from neighbors.impl.ball_cover.ball_cover import (
 
 # Measured NVIDIA IDENTICAL query batching; row arithmetic is unchanged.
 # Other columns retain 256 unless explicitly opting into qualification.
-from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, knn_query_tile_for
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, knn_query_tile_for, knn_nvidia_schedule_column
+# K1 (lane fg-knn-nb): the AMD column takes NVIDIA's scope too
+# (`knn_nvidia_schedule_column`; `-D MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE=1`
+# restores AMD's 256). Query tiling never moves a bit.
 comptime QUERY_TILE_512_CANDIDATE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_KNN_LEGACY_QUERY_TILE"]()
-    and (TARGET_COLUMN == COLUMN_NVIDIA or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
+    and (knn_nvidia_schedule_column(TARGET_COLUMN) or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
 )
 # DEVIATION 2631 (kernel-matrix row `knn_query_tile_for`): the row's tile
 # replaces the 512 candidate where it is set; 0 keeps the historical rule.

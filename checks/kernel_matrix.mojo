@@ -1396,6 +1396,38 @@ def knn_distance_register_tile_for[column: Int, identical: Bool]() -> Bool:
     return knn_transposed_index_for[column, identical]()
 
 
+def knn_nvidia_schedule_column(column: Int) -> Bool:
+    """K1 (lane fg-knn-nb, 2026-10-09, docs/plans/flagship-gaps-20261009/read_knn_nb.md):
+    the columns that take NVIDIA's measured IDENTICAL k-NN SCHEDULING rows
+    (query tile 4096 with the radix scratch shrink, the resident derived
+    cache, the specialized common-k selector, the warp-bound guard, the
+    bound-and-compact selector for k >= 17, eight register rows). Every one
+    of those rows is documented bit-neutral in its own A/B (same composite
+    keys, same per-cell chains, tiling and caching never reach arithmetic),
+    and the AMD column was left out only because it had not been timed.
+    Leaving it out costs AMD, per call at a 400,000 x 220 index and 4,000
+    queries: a 352 MB transposed-layout allocation and transpose, the index
+    norms over 352 MB, two 102 MB radix scratch allocations, 112 instead of 7
+    query x column tile iterations, and the k-deep per-thread list selector
+    at k = 64 (a 64 x u64 runtime-indexed list, which AMDGPU spills to
+    scratch). AMD therefore takes the schedule by DEFAULT (a waste removal,
+    no bit change; identity NV == AMD is unaffected because the rows move no
+    bit). `-D MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE=1` restores AMD's old rows for
+    the A/B. Rows NOT moved, with their reasons: the hardware FTZ FMA
+    (`knn_distance_hardware_flush_for`) is the NVVM `fma.rn` + `mul.rn.ftz`
+    instruction pair, which has no AMD spelling (AMD already flushes with the
+    one-instruction `v_cmp_class` select in `checks/numerics.mojo::ftz`); the
+    shared-memory tile's d >= 32 gate on AMD (`knn_smem_min_features_for`) is
+    an AMD MEASUREMENT (the all-width arm lost 1.39x on MI325X narrow rows)
+    and stays, with `MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE` as its A/B arm.
+    The CPU column never takes it (scheduling; the host twin has its own)."""
+    if column == COLUMN_NVIDIA:
+        return True
+    if column == COLUMN_AMD:
+        return not is_defined["MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE"]()
+    return False
+
+
 def knn_selector_specialize_common_for[column: Int, identical: Bool]() -> Bool:
     """Compile-time K (every k <= 16 since Oct 4; k=10/15 only before, now
     behind MOJOLEARN_LEGACY_SHAPE_KNN_K10_15) removes dynamic insertion guards
@@ -1415,7 +1447,8 @@ def knn_selector_specialize_common_for[column: Int, identical: Bool]() -> Bool:
     # Apple M4 Pro 2026-09-28 (lane/neighbors-apple, bench/x_neighbors_ab.sh,
     # 200k x 10k x d8, k 10, taxi and HIGGS, forward and reverse): request
     # 0.49 -> 0.37 s, every digest equal.
-    return column == COLUMN_NVIDIA or column == COLUMN_APPLE
+    # K1: AMD takes it unless MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE.
+    return knn_nvidia_schedule_column(column) or column == COLUMN_APPLE
 
 
 def knn_selector_shuffle_for[column: Int, identical: Bool]() -> Bool:
@@ -1444,7 +1477,8 @@ def knn_selector_warpbound_guard_for[column: Int, identical: Bool]() -> Bool:
         return False  # NVIDIA's schedule, never the host's
     # Apple M4 Pro 2026-09-28 (lane/neighbors-apple, forward and reverse
     # arms): request 0.49 -> 0.46-0.48 s, every digest equal.
-    return column == COLUMN_NVIDIA or column == COLUMN_APPLE
+    # K1: AMD takes it unless MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE.
+    return knn_nvidia_schedule_column(column) or column == COLUMN_APPLE
 
 
 def umap_device_optimizer_for[column: Int, identical: Bool]() -> Bool:
@@ -1528,7 +1562,10 @@ def knn_distance_rows_for[column: Int, identical: Bool]() -> Int:
         return 4
     if column == COLUMN_CPU:
         return 4  # scheduling; NVIDIA's eight-row tile is NVIDIA's
-    return 8 if identical and column == COLUMN_NVIDIA else 4
+    # K1: AMD takes the eight-row tile (32 accumulators; CDNA has 512 VGPRs
+    # per lane, no capacity reason to stay at four) unless
+    # MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE.
+    return 8 if identical and knn_nvidia_schedule_column(column) else 4
 
 
 @always_inline
@@ -1576,7 +1613,10 @@ def knn_query_tile_for[column: Int, identical: Bool]() -> Int:
         return 4096
     if column == COLUMN_CPU:
         return 0  # scheduling; the measured tile is NVIDIA's
-    return KNN_IDENTICAL_WIDE_QUERY_TILE if column == COLUMN_NVIDIA else 0
+    # K1: AMD takes the 4096 tile (1 GiB distance tile at a 65,536-column
+    # index tile, under the estimator's bounded workspace cap) unless
+    # MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE.
+    return KNN_IDENTICAL_WIDE_QUERY_TILE if knn_nvidia_schedule_column(column) else 0
 
 
 @always_inline
@@ -1588,7 +1628,8 @@ def knn_radix_scratch_shrink_for[column: Int, identical: Bool]() -> Bool:
         return False
     if column == COLUMN_CPU:
         return False  # scheduling; NVIDIA's
-    return column == COLUMN_NVIDIA
+    # K1: AMD with its query tile row.
+    return knn_nvidia_schedule_column(column)
 
 
 @always_inline
@@ -1732,7 +1773,11 @@ def knn_selector_bound_compact_for[column: Int, identical: Bool]() -> Bool:
     # block top-k (DEVIATION 3001) serves the L2 metrics and this selector
     # is level with the small-k selector (7.7 to 8.1 against 7.1 to 13.6 ms),
     # so the bound stays at 17. Apple and AMD are owed at the next release.
-    return column == COLUMN_NVIDIA and knn_smallk_select_for[column, identical]()
+    # K1: AMD takes it unless MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE. The kernel
+    # is shared-memory only (no warp primitive, no lane-width assumption),
+    # and it replaces AMD's k = 64 per-thread 64-deep list for every
+    # unflagged row.
+    return knn_nvidia_schedule_column(column) and knn_smallk_select_for[column, identical]()
 
 
 #: The smallest k the bound-and-compact selector (DEVIATION 3060) serves;
@@ -1810,7 +1855,9 @@ def knn_resident_derived_cache_for[column: Int, identical: Bool]() -> Bool:
     # one query and 53.7 to 47.7 ms at 4,000 queries (k 10), taxi 1.77 to
     # 1.13 and 26.9 to 24.3 ms, every digest equal. Apple and AMD are owed
     # at the next release.
-    return column == COLUMN_NVIDIA
+    # K1: AMD takes it unless MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE (the cache
+    # is built by the same kernels on the first search and only read after).
+    return knn_nvidia_schedule_column(column)
 
 
 @always_inline

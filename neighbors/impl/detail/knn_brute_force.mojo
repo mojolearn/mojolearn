@@ -84,6 +84,7 @@ from checks.kernel_matrix import (
     K_LIB_SELECT_WARPSORT,
     TARGET_COLUMN,
     COLUMN_NVIDIA,
+    knn_nvidia_schedule_column,
     knn_auto_follows_their_dispatch_for,
     knn_distance_register_tile_for,
     knn_distance_metadata_for,
@@ -1009,7 +1010,10 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     # bench/results/knn_vector_request_2026-09-10. Scope: `knn_large_request`
     # (size rule; was the exact benchmark row). Per-partition alignment is
     # checked below, so any n_index that is not a multiple of 4 stays scalar.
-    var use_vector = TARGET_COLUMN == COLUMN_NVIDIA and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries, n_features, k)
+    # K1 (lane fg-knn-nb): the AMD column takes NVIDIA's vector index
+    # transport too (`knn_nvidia_schedule_column`, same chain, same bits);
+    # `-D MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE=1` restores the scalar loads.
+    var use_vector = knn_nvidia_schedule_column(TARGET_COLUMN) and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries, n_features, k)
     comptime if is_defined["MOJOLEARN_KNN_VECTOR_REQUEST_CHECK"]():
         # Named same-process check exercises scalar, vector and actual default.
         var vector_override = String(getenv("MOJOLEARN_KNN_VECTOR_TRIAL"))
