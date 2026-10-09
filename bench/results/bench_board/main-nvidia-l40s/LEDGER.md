@@ -31,6 +31,7 @@ Every observation the newest-wins rule did not put on the board, with its number
 | algos/conv1d/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table | main@de2b2b739 nv/n0316 None REFUSED(not_ready) None | - |
 | algos/conv2d/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@de2b2b739 nv/n0316 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 9.66239906847477 ok 9782257b7436241b |
 | algos/conv2d/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@42d1e42c6 nv/n0528 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 9.66239906847477 ok 9782257b7436241b |
+| algos/conv2d/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell; flagged on the ok cell from main@432d6e8ff | main@444f0b96e nv2/v1002 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 9.66239906847477 ok 9782257b7436241b |
 | algos/dropout2d/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@de2b2b739 nv/n0316 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 1.3592196628451347 ok None |
 | algos/dropout2d/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@4303e1bfb nv/n0490 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 1.3592196628451347 ok None |
 | algos/dropout2d/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@42d1e42c6 nv/n0526 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 1.3592196628451347 ok None |
@@ -41,8 +42,10 @@ Every observation the newest-wins rule did not put on the board, with its number
 | algos/embedding/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@4303e1bfb nv/n0490 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 2.6499535888433456 ok 2753e61a6dde36e3 |
 | algos/embedding/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@42d1e42c6 nv/n0526 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 2.6499535888433456 ok 2753e61a6dde36e3 |
 | algos/embedding/synthetic/rows=full | infrastructure status REFUSED(not_ready:_{"error":_"ModuleNotFoundError(\"No_module_named_'torch'\")",_"event":_"error",_"stage":_"ready"}) never replaces an ok cell | main@483b0db6d nv/n0568 None REFUSED(not_ready:_{"error":_"ModuleNotFoundError(\"No_module_named_'torch'\")",_"event":_"error",_"stage":_"ready"}) None | main@432d6e8ff nv/n0666 2.6499535888433456 ok 2753e61a6dde36e3 |
-| algos/gaussian-nb/istella/rows=full | failed run (error) never replaces an ok cell | main@89485bc96 nv/n0314 None REFUSED(error) None | main@d3c0fd72b nv/n0607 129.76214941591024 ok 2eab934c8d42fe8f |
-| algos/gaussian-nb/taxi/rows=full | failed run (error) never replaces an ok cell | main@89485bc96 nv/n0314 None REFUSED(error) None | main@d3c0fd72b nv/n0607 20.91031987220049 ok 6c24b800ea7164e3 |
+| algos/gaussian-nb/istella/rows=full | failed run (error) never replaces an ok cell | main@89485bc96 nv/n0314 None REFUSED(error) None | main@6b882cf81 nv/n0668 92.08561573177576 ok 2eab934c8d42fe8f |
+| algos/gaussian-nb/istella/rows=full | older commit | main@d3c0fd72b nv/n0607 129.76214941591024 ok 2eab934c8d42fe8f | main@6b882cf81 nv/n0668 92.08561573177576 ok 2eab934c8d42fe8f |
+| algos/gaussian-nb/taxi/rows=full | failed run (error) never replaces an ok cell | main@89485bc96 nv/n0314 None REFUSED(error) None | main@6b882cf81 nv/n0668 19.97852511703968 ok 6c24b800ea7164e3 |
+| algos/gaussian-nb/taxi/rows=full | older commit | main@d3c0fd72b nv/n0607 20.91031987220049 ok 6c24b800ea7164e3 | main@6b882cf81 nv/n0668 19.97852511703968 ok 6c24b800ea7164e3 |
 | algos/gcn/istella/rows=full | infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table | main@89485bc96 nv/n0314 None REFUSED(not_ready) None | - |
 | algos/gcn/istella/rows=full | infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table | main@4303e1bfb nv/n0491 None REFUSED(not_ready) None | - |
 | algos/gcn/taxi/rows=full | infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table | main@89485bc96 nv/n0314 None REFUSED(not_ready) None | - |
@@ -57,10 +60,14 @@ Every observation the newest-wins rule did not put on the board, with its number
 | algos/gru-clf/taxi-hourly/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@de2b2b739 nv/n0317 None REFUSED(error) None | - |
 | algos/gru-reg/synthetic/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@de2b2b739 nv/n0317 None REFUSED(error) None | - |
 | algos/gru-reg/taxi-hourly/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@de2b2b739 nv/n0317 None REFUSED(error) None | - |
-| algos/ivf-pq/istella/rows=full | older commit | main@89485bc96 nv/n0314 2309.0907372534275 ok e3278463f9c08a67 | main@d3c0fd72b nv/n0608 1535.5451283976436 ok d3042f75c9c3cccc |
-| algos/ivf-pq/istella/rows=full | older commit | main@4df610f3b nv/n0524 2328.306815586984 ok 1754e40d0fd6e78b | main@d3c0fd72b nv/n0608 1535.5451283976436 ok d3042f75c9c3cccc |
-| algos/ivf-pq/taxi/rows=full | older commit | main@89485bc96 nv/n0314 343.26258301734924 ok c405d42fd032ab59 | main@d3c0fd72b nv/n0608 273.12488202005625 ok 3d19e907e12926d6 |
-| algos/ivf-pq/taxi/rows=full | older commit | main@4df610f3b nv/n0524 300.6295785307884 ok 2fad29422be2a444 | main@d3c0fd72b nv/n0608 273.12488202005625 ok 3d19e907e12926d6 |
+| algos/ivf-pq/istella/rows=full | older commit | main@89485bc96 nv/n0314 2309.0907372534275 ok e3278463f9c08a67 | main@17edad642 nv2/v0996 1008.1291757524014 ok 925740284b3e3e9a |
+| algos/ivf-pq/istella/rows=full | older commit | main@4df610f3b nv/n0524 2328.306815586984 ok 1754e40d0fd6e78b | main@17edad642 nv2/v0996 1008.1291757524014 ok 925740284b3e3e9a |
+| algos/ivf-pq/istella/rows=full | older commit | main@d3c0fd72b nv/n0608 1535.5451283976436 ok d3042f75c9c3cccc | main@17edad642 nv2/v0996 1008.1291757524014 ok 925740284b3e3e9a |
+| algos/ivf-pq/istella/rows=full | older commit | main@6b882cf81 nv/n0668 1030.7804392650723 ok 925740284b3e3e9a | main@17edad642 nv2/v0996 1008.1291757524014 ok 925740284b3e3e9a |
+| algos/ivf-pq/taxi/rows=full | older commit | main@89485bc96 nv/n0314 343.26258301734924 ok c405d42fd032ab59 | main@17edad642 nv2/v0996 157.1621410548687 ok d6bed412edbb89f1 |
+| algos/ivf-pq/taxi/rows=full | older commit | main@4df610f3b nv/n0524 300.6295785307884 ok 2fad29422be2a444 | main@17edad642 nv2/v0996 157.1621410548687 ok d6bed412edbb89f1 |
+| algos/ivf-pq/taxi/rows=full | older commit | main@d3c0fd72b nv/n0608 273.12488202005625 ok 3d19e907e12926d6 | main@17edad642 nv2/v0996 157.1621410548687 ok d6bed412edbb89f1 |
+| algos/ivf-pq/taxi/rows=full | older commit | main@6b882cf81 nv/n0668 159.22733675688505 ok d6bed412edbb89f1 | main@17edad642 nv2/v0996 157.1621410548687 ok d6bed412edbb89f1 |
 | algos/kernel-shap/istella/rows=full | older commit | main@de2b2b739 nv/n0328 20408.90190936625 ok ac8e825f311b759f | main@03b648834 nv/n0583 5302.061404101551 ok d6bd4fd3add10e7d |
 | algos/kernel-shap/taxi/rows=full | older commit | main@de2b2b739 nv/n0328 1695.3709498047829 ok bef9729a6a3e3a8d | main@03b648834 nv/n0583 319.4928225129843 ok c2031ddbce3f50ff |
 | algos/layernorm/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@de2b2b739 nv/n0316 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 50.61233136802912 ok 5fe9165ce22888e6 |
@@ -87,6 +94,7 @@ Every observation the newest-wins rule did not put on the board, with its number
 | algos/moe/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@de2b2b739 nv/n0316 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 32.46764186769724 ok 393fefe91af8350f |
 | algos/moe/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@4303e1bfb nv/n0490 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 32.46764186769724 ok 393fefe91af8350f |
 | algos/moe/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@42d1e42c6 nv/n0528 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 32.46764186769724 ok 393fefe91af8350f |
+| algos/moe/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell; flagged on the ok cell from main@432d6e8ff | main@444f0b96e nv2/v1002 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 32.46764186769724 ok 393fefe91af8350f |
 | algos/multinomial-nb/istella/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@de2b2b739 nv/n0315 None REFUSED(error) None | - |
 | algos/multinomial-nb/taxi/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@de2b2b739 nv/n0315 None REFUSED(error) None | - |
 | algos/multinomial-nb/text/rows=full | failed run (error) never replaces an ok cell | main@de2b2b739 nv/n0315 None REFUSED(error) None | main@42d1e42c6 nv/n0532 56.188120506703854 ok 812596d5ea9242ac |
@@ -109,6 +117,7 @@ Every observation the newest-wins rule did not put on the board, with its number
 | algos/resnet-block/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@de2b2b739 nv/n0316 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 20.956313237547874 ok 263c26c1c15e1170 |
 | algos/resnet-block/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@4303e1bfb nv/n0490 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 20.956313237547874 ok 263c26c1c15e1170 |
 | algos/resnet-block/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell | main@42d1e42c6 nv/n0528 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 20.956313237547874 ok 263c26c1c15e1170 |
+| algos/resnet-block/synthetic/rows=full | infrastructure status not_ready never replaces an ok cell; flagged on the ok cell from main@432d6e8ff | main@444f0b96e nv2/v1002 None REFUSED(not_ready) None | main@432d6e8ff nv/n0666 20.956313237547874 ok 263c26c1c15e1170 |
 | algos/ridge-cv/taxi/rows=full | older commit | main@8d8771a8e nv/n0004 5849.812244065106 ok 586b8b71a272588f | main@d3c0fd72b nv/n0609 162.4872824177146 ok 586b8b71a272588f |
 | algos/rmsprop/synthetic/rows=full | older commit | main@de2b2b739 nv/n0316 248.09471610933542 ok 38367b9a080a852f | main@42d1e42c6 nv/n0526 10.649976320564747 ok 38367b9a080a852f |
 | algos/rnn-clf/synthetic/rows=full | failed run (error) never replaces an ok cell; no ok run of this race: FAILED table | main@de2b2b739 nv/n0317 None REFUSED(error) None | - |
@@ -136,7 +145,11 @@ Every observation the newest-wins rule did not put on the board, with its number
 | neural/resnet-block/synthetic/shape=full | infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table | main@e5f3f2ed8 nv/n0570 None REFUSED(NO-RECORD) None | - |
 | trees/gbdt-categorical/istella/rows=full | infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table | main@de2b2b739 nv/n0320 None REFUSED(NO-RECORD) None | - |
 | trees/gbdt-categorical/taxi/rows=full | failed run (REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)) never replaces an ok cell; no ok run of this race: FAILED table | main@de2b2b739 nv/n0320 None REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO) None | - |
+| trees/gbdt-depthwise/istella/rows=full | older commit | main@de2b2b739 nv/n0320 8797.599 ok a3f5997ac2bf84e5 | main@444f0b96e nv2/v1007 7232.555 ok a3f5997ac2bf84e5 |
+| trees/gbdt-depthwise/taxi/rows=full | older commit | main@de2b2b739 nv/n0320 4061.735 ok 4cce1743fce22092 | main@444f0b96e nv2/v1007 3692.365 ok 4cce1743fce22092 |
 | trees/gbdt-multiclass/istella/rows=full | older commit | main@de2b2b739 nv/n0320 14659.025 ok 426b03991d755bde | main@9499046fa nv/n0653 14667.822 ok 426b03991d755bde |
 | trees/gbdt-multiclass/taxi/rows=full | older commit | main@de2b2b739 nv/n0320 6926.391 ok 5d9a1c9bd461a1af | main@9499046fa nv/n0653 7044.482 ok 5d9a1c9bd461a1af |
 | trees/gbdt-ordered/istella/rows=full | older commit | main@de2b2b739 nv/n0320 36587.007 ok 0e5986be1df21f54 | main@9499046fa nv/n0653 35369.99 ok 0e5986be1df21f54 |
 | trees/gbdt-ordered/taxi/rows=full | older commit | main@de2b2b739 nv/n0320 21192.47 ok 16bd87ff27b4893a | main@9499046fa nv/n0653 19986.411 ok 16bd87ff27b4893a |
+| trees/gbdt-symmetric/istella/rows=full | older commit | main@de2b2b739 nv/n0320 6712.447 ok 122fecb29932da5f | main@444f0b96e nv2/v1007 6137.361 ok 122fecb29932da5f |
+| trees/gbdt-symmetric/taxi/rows=full | older commit | main@de2b2b739 nv/n0320 3631.456 ok 15b6a69ee9318ecd | main@444f0b96e nv2/v1007 3503.188 ok 15b6a69ee9318ecd |

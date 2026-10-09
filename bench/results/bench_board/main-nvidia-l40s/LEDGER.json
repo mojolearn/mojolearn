@@ -634,6 +634,36 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/conv2d/synthetic/rows=full",
+   "reason": "infrastructure status not_ready never replaces an ok cell; flagged on the ok cell from main@432d6e8ff",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T14:31:44Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v1002",
+    "kind": "algos",
+    "median_ms": null,
+    "reason": "not_ready",
+    "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da",
+    "status": "REFUSED(not_ready)"
+   },
+   "replaced_by": {
+    "box": "nv",
+    "commit_date": "2026-10-09T11:24:56Z",
+    "digest": "9782257b7436241b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0666",
+    "kind": "algos",
+    "median_ms": 9.66239906847477,
+    "reason": null,
+    "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": true,
+   "race": "algos/conv2d/synthetic/rows=full",
    "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
@@ -992,6 +1022,36 @@
   },
   {
    "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/gaussian-nb/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T05:48:36Z",
+    "digest": "2eab934c8d42fe8f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0607",
+    "kind": "algos",
+    "median_ms": 129.76214941591024,
+    "reason": null,
+    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv",
+    "commit_date": "2026-10-09T12:46:17Z",
+    "digest": "2eab934c8d42fe8f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0668",
+    "kind": "algos",
+    "median_ms": 92.08561573177576,
+    "reason": null,
+    "sha": "6b882cf8151232df582f4aa74d331d507318d0c2",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/gaussian-nb/istella/rows=full",
    "reason": "failed run (error) never replaces an ok cell",
@@ -1009,14 +1069,44 @@
    },
    "replaced_by": {
     "box": "nv",
-    "commit_date": "2026-10-09T05:48:36Z",
+    "commit_date": "2026-10-09T12:46:17Z",
     "digest": "2eab934c8d42fe8f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0668",
+    "kind": "algos",
+    "median_ms": 92.08561573177576,
+    "reason": null,
+    "sha": "6b882cf8151232df582f4aa74d331d507318d0c2",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/gaussian-nb/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T05:48:36Z",
+    "digest": "6c24b800ea7164e3",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
     "job": "n0607",
     "kind": "algos",
-    "median_ms": 129.76214941591024,
+    "median_ms": 20.91031987220049,
     "reason": null,
     "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv",
+    "commit_date": "2026-10-09T12:46:17Z",
+    "digest": "6c24b800ea7164e3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0668",
+    "kind": "algos",
+    "median_ms": 19.97852511703968,
+    "reason": null,
+    "sha": "6b882cf8151232df582f4aa74d331d507318d0c2",
     "status": "ok"
    }
   },
@@ -1039,14 +1129,14 @@
    },
    "replaced_by": {
     "box": "nv",
-    "commit_date": "2026-10-09T05:48:36Z",
+    "commit_date": "2026-10-09T12:46:17Z",
     "digest": "6c24b800ea7164e3",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
-    "job": "n0607",
+    "job": "n0668",
     "kind": "algos",
-    "median_ms": 20.91031987220049,
+    "median_ms": 19.97852511703968,
     "reason": null,
-    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "sha": "6b882cf8151232df582f4aa74d331d507318d0c2",
     "status": "ok"
    }
   },
@@ -1323,6 +1413,66 @@
    "reason": "older commit",
    "replaced": {
     "box": "nv",
+    "commit_date": "2026-10-09T12:46:17Z",
+    "digest": "925740284b3e3e9a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0668",
+    "kind": "algos",
+    "median_ms": 1030.7804392650723,
+    "reason": null,
+    "sha": "6b882cf8151232df582f4aa74d331d507318d0c2",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T13:59:49Z",
+    "digest": "925740284b3e3e9a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v0996",
+    "kind": "algos",
+    "median_ms": 1008.1291757524014,
+    "reason": null,
+    "sha": "17edad6429af805ecc7c87239b4b421fe1f4bb9e",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/ivf-pq/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T05:48:36Z",
+    "digest": "d3042f75c9c3cccc",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0608",
+    "kind": "algos",
+    "median_ms": 1535.5451283976436,
+    "reason": null,
+    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T13:59:49Z",
+    "digest": "925740284b3e3e9a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v0996",
+    "kind": "algos",
+    "median_ms": 1008.1291757524014,
+    "reason": null,
+    "sha": "17edad6429af805ecc7c87239b4b421fe1f4bb9e",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/ivf-pq/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
     "commit_date": "2026-10-08T20:52:50Z",
     "digest": "1754e40d0fd6e78b",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
@@ -1334,15 +1484,15 @@
     "status": "ok"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-09T05:48:36Z",
-    "digest": "d3042f75c9c3cccc",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
-    "job": "n0608",
+    "box": "nv2",
+    "commit_date": "2026-10-09T13:59:49Z",
+    "digest": "925740284b3e3e9a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v0996",
     "kind": "algos",
-    "median_ms": 1535.5451283976436,
+    "median_ms": 1008.1291757524014,
     "reason": null,
-    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "sha": "17edad6429af805ecc7c87239b4b421fe1f4bb9e",
     "status": "ok"
    }
   },
@@ -1364,15 +1514,75 @@
     "status": "ok"
    },
    "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T13:59:49Z",
+    "digest": "925740284b3e3e9a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v0996",
+    "kind": "algos",
+    "median_ms": 1008.1291757524014,
+    "reason": null,
+    "sha": "17edad6429af805ecc7c87239b4b421fe1f4bb9e",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/ivf-pq/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T12:46:17Z",
+    "digest": "d6bed412edbb89f1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0668",
+    "kind": "algos",
+    "median_ms": 159.22733675688505,
+    "reason": null,
+    "sha": "6b882cf8151232df582f4aa74d331d507318d0c2",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T13:59:49Z",
+    "digest": "d6bed412edbb89f1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v0996",
+    "kind": "algos",
+    "median_ms": 157.1621410548687,
+    "reason": null,
+    "sha": "17edad6429af805ecc7c87239b4b421fe1f4bb9e",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/ivf-pq/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
     "box": "nv",
     "commit_date": "2026-10-09T05:48:36Z",
-    "digest": "d3042f75c9c3cccc",
+    "digest": "3d19e907e12926d6",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
     "job": "n0608",
     "kind": "algos",
-    "median_ms": 1535.5451283976436,
+    "median_ms": 273.12488202005625,
     "reason": null,
     "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T13:59:49Z",
+    "digest": "d6bed412edbb89f1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v0996",
+    "kind": "algos",
+    "median_ms": 157.1621410548687,
+    "reason": null,
+    "sha": "17edad6429af805ecc7c87239b4b421fe1f4bb9e",
     "status": "ok"
    }
   },
@@ -1394,15 +1604,15 @@
     "status": "ok"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-09T05:48:36Z",
-    "digest": "3d19e907e12926d6",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
-    "job": "n0608",
+    "box": "nv2",
+    "commit_date": "2026-10-09T13:59:49Z",
+    "digest": "d6bed412edbb89f1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v0996",
     "kind": "algos",
-    "median_ms": 273.12488202005625,
+    "median_ms": 157.1621410548687,
     "reason": null,
-    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "sha": "17edad6429af805ecc7c87239b4b421fe1f4bb9e",
     "status": "ok"
    }
   },
@@ -1424,15 +1634,15 @@
     "status": "ok"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-09T05:48:36Z",
-    "digest": "3d19e907e12926d6",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
-    "job": "n0608",
+    "box": "nv2",
+    "commit_date": "2026-10-09T13:59:49Z",
+    "digest": "d6bed412edbb89f1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v0996",
     "kind": "algos",
-    "median_ms": 273.12488202005625,
+    "median_ms": 157.1621410548687,
     "reason": null,
-    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "sha": "17edad6429af805ecc7c87239b4b421fe1f4bb9e",
     "status": "ok"
    }
   },
@@ -2048,6 +2258,36 @@
     "status": "REFUSED(not_ready)"
    },
    "replaced_by": null
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": true,
+   "race": "algos/moe/synthetic/rows=full",
+   "reason": "infrastructure status not_ready never replaces an ok cell; flagged on the ok cell from main@432d6e8ff",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T14:31:44Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v1002",
+    "kind": "algos",
+    "median_ms": null,
+    "reason": "not_ready",
+    "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da",
+    "status": "REFUSED(not_ready)"
+   },
+   "replaced_by": {
+    "box": "nv",
+    "commit_date": "2026-10-09T11:24:56Z",
+    "digest": "393fefe91af8350f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0666",
+    "kind": "algos",
+    "median_ms": 32.46764186769724,
+    "reason": null,
+    "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa",
+    "status": "ok"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -2684,6 +2924,36 @@
     "median_ms": 88.24122603982687,
     "reason": null,
     "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": true,
+   "race": "algos/resnet-block/synthetic/rows=full",
+   "reason": "infrastructure status not_ready never replaces an ok cell; flagged on the ok cell from main@432d6e8ff",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T14:31:44Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "job": "v1002",
+    "kind": "algos",
+    "median_ms": null,
+    "reason": "not_ready",
+    "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da",
+    "status": "REFUSED(not_ready)"
+   },
+   "replaced_by": {
+    "box": "nv",
+    "commit_date": "2026-10-09T11:24:56Z",
+    "digest": "263c26c1c15e1170",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "job": "n0666",
+    "kind": "algos",
+    "median_ms": 20.956313237547874,
+    "reason": null,
+    "sha": "432d6e8ffbccd0ecc6406bd404dad2ef2f5053aa",
     "status": "ok"
    }
   },
@@ -3469,6 +3739,66 @@
   {
    "column": "nvidia-l40s",
    "failed": false,
+   "race": "trees/gbdt-depthwise/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "a3f5997ac2bf84e5",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "job": "n0320",
+    "kind": "gridbb",
+    "median_ms": 8797.599,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T14:31:44Z",
+    "digest": "a3f5997ac2bf84e5",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "job": "v1007",
+    "kind": "gridbb",
+    "median_ms": 7232.555,
+    "reason": null,
+    "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "trees/gbdt-depthwise/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "4cce1743fce22092",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "job": "n0320",
+    "kind": "gridbb",
+    "median_ms": 4061.735,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T14:31:44Z",
+    "digest": "4cce1743fce22092",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "job": "v1007",
+    "kind": "gridbb",
+    "median_ms": 3692.365,
+    "reason": null,
+    "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
    "race": "trees/gbdt-multiclass/istella/rows=full",
    "reason": "older commit",
    "replaced": {
@@ -3585,8 +3915,68 @@
     "sha": "9499046faec9ed0d190ca6f5ed0d99bf7bc82a54",
     "status": "ok"
    }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "trees/gbdt-symmetric/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "122fecb29932da5f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "job": "n0320",
+    "kind": "gridbb",
+    "median_ms": 6712.447,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T14:31:44Z",
+    "digest": "122fecb29932da5f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "job": "v1007",
+    "kind": "gridbb",
+    "median_ms": 6137.361,
+    "reason": null,
+    "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "trees/gbdt-symmetric/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "15b6a69ee9318ecd",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "job": "n0320",
+    "kind": "gridbb",
+    "median_ms": 3631.456,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T14:31:44Z",
+    "digest": "15b6a69ee9318ecd",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "job": "v1007",
+    "kind": "gridbb",
+    "median_ms": 3503.188,
+    "reason": null,
+    "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da",
+    "status": "ok"
+   }
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-09T12:40:29Z"
+ "updated": "2026-10-09T15:40:51Z"
 }

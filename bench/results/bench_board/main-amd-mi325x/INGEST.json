@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-09T12:40:29Z",
+ "generated": "2026-10-09T15:40:51Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-09T12:40:29Z",
+  "generated": "2026-10-09T15:40:51Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -218,7 +218,7 @@
   "GRIDBB: branch freeze-20261007: nv/n0095 ge123e6f9.P004.bb"
  ],
  "skipped": {
-  "ALGOS: A/B or grid arm (MOJOLEARN_BUILD_DEFINES)": 94,
+  "ALGOS: A/B or grid arm (MOJOLEARN_BUILD_DEFINES)": 135,
   "ALGOS: branch other than main": 2061,
   "GRIDBB: A/B or switched build": 29,
   "GRIDBB: branch freeze-20261007": 4344,
