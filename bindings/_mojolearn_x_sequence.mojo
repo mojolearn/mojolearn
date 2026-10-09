@@ -36,6 +36,14 @@ comptime SCHED_FAST_TABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_g
                              and not is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]())
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
+from sequence.moe_dev import moe_forward_dev_py
+
+#: lane neural-io-2: MoEBlock's forward on resident tensors (sequence/moe_dev.mojo):
+#: x, y and the routing outputs stay on the device (2 x 4 T D bytes over PCIe and four
+#: host zero-filled outputs per call removed; same launches, no bit moves). Default on;
+#: -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF leaves the entry out, so MoEBlock takes the
+#: host-array entry again (the grid's before arm).
+comptime SEQ_MOE_DEVICE_IO = not is_defined["MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF"]()
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -260,6 +268,10 @@ def moe_weights_put_binding(addrs: PythonObject, ip: PythonObject) raises -> Pyt
     ))
 
 
+def moe_forward_dev_binding(handles: PythonObject, ip: PythonObject) raises -> PythonObject:
+    return moe_forward_dev_py(handles, ip)
+
+
 def moe_weights_free_binding(h: PythonObject) raises -> PythonObject:
     moe_weights_free(Int(py=h))
     return PythonObject(0)
@@ -324,6 +336,8 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[moe_forward_binding]("moe_forward")
         m.def_function[moe_weights_put_binding]("moe_weights_put")
         m.def_function[moe_weights_free_binding]("moe_weights_free")
+        comptime if SEQ_MOE_DEVICE_IO:
+            m.def_function[moe_forward_dev_binding]("moe_forward_dev")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence: ", e))

@@ -1864,11 +1864,13 @@ def moe_forward_check(addrs: PythonObject, ip: PythonObject, n_ip: Int) raises -
 
 
 def _moe_devgroup_rest[E: Exec](
-    mut ex: E, addrs: PythonObject, T: Int, D: Int, F: Int, En: Int, k: Int,
-    X: FP, Gu: FP, Dn: FP, Sel: FP, W: FP, Y: FP, L: FP, H: FP,
-) raises -> PythonObject:
-    """`moe_forward_run` after the route with the grouping on the device
-    (MOJOLEARN_MOE_DEVGROUP): the same launches, the same words."""
+    mut ex: E, T: Int, D: Int, F: Int, En: Int, k: Int,
+    X: FP, Gu: FP, Dn: FP, Sel: FP, W: FP, Y: FP, H: FP,
+) raises:
+    """`moe_forward_core` after the route with the grouping on the device
+    (MOJOLEARN_MOE_DEVGROUP): the same launches, the same words. Ends on a
+    sync; the caller reads the outputs (lane neural-io-2: the downloads moved
+    to `moe_forward_run`, so the resident entry can skip them)."""
     if En > 127:
         raise Error("moe_forward devgroup: E <= 127 (the grouping kernels' one block)")
     var Order = ex.alloc(T * k)
@@ -1907,11 +1909,6 @@ def _moe_devgroup_rest[E: Exec](
     c.i6 = 1  # grouped on the device (moe_mma's out product reads this)
     ex.launch[OP_MOE_OUT](c, T * D)
     ex.sync()
-    ex.download(fptr(addrs[4], "y"), Y, T * D)
-    ex.download(fptr(addrs[5], "logits"), L, T * En)
-    ex.download(fptr(addrs[6], "selected"), Sel, T * k)
-    ex.download(fptr(addrs[7], "weights"), W, T * k)
-    return PythonObject(T * D)
 
 
 def moe_forward_run[E: Exec](
@@ -1928,6 +1925,28 @@ def moe_forward_run[E: Exec](
     var L = ex.alloc(T * En)
     var Sel = ex.alloc(T * k)
     var W = ex.alloc(T * k)
+    moe_forward_core(ex, X, Y, L, Sel, W, T, D, F, En, k, renorm, Wg, Gu, Dn)
+    ex.download(fptr(addrs[4], "y"), Y, T * D)
+    ex.download(fptr(addrs[5], "logits"), L, T * En)
+    ex.download(fptr(addrs[6], "selected"), Sel, T * k)
+    ex.download(fptr(addrs[7], "weights"), W, T * k)
+    return PythonObject(T * D)
+
+
+def moe_forward_core[E: Exec](
+    mut ex: E, X: FP, Y: FP, L: FP, Sel: FP, W: FP,
+    T: Int, D: Int, F: Int, En: Int, k: Int, renorm: Int, Wg: FP, Gu: FP, Dn: FP,
+) raises:
+    """The MoE forward's launches from x at `X` into y (T, D) at `Y`, the
+    router logits (T, E) at `L`, the picks (T, k, as floats) at `Sel` and
+    their weights (T, k) at `W`, ending on a sync. Every output cell is
+    stored by the route (L, Sel, W: `op_moe_route` and its tiled twins store
+    each token's E logits and k picks) and the combine (Y: every (tok, d)
+    from +0.0), so the outputs need no fill. Lane neural-io-2 split it out of
+    `moe_forward_run` (the host-array entry: upload x, this, download the
+    four outputs) for `sequence/moe_dev.mojo` (the outputs are resident
+    sequence tensors, nothing crosses the bus): the same launches on the
+    same words, no bit moves."""
     var Pr = ex.alloc(T * En)
     var H = ex.alloc(T * k * F)
     var a = Args()
@@ -1947,7 +1966,8 @@ def moe_forward_run[E: Exec](
         # (sequence/moe_reg.mojo); no host round trip. The host executor
         # runs the items and reads none of Order, Poff, Cnt.
         if En <= 127:
-            return _moe_devgroup_rest(ex, addrs, T, D, F, En, k, X, Gu, Dn, Sel, W, Y, L, H)
+            _moe_devgroup_rest(ex, T, D, F, En, k, X, Gu, Dn, Sel, W, Y, H)
+            return
     # The pairs (token, pick) grouped by expert for the tiled device
     # products (lane neural-pass29, sequence/moe_tiled.mojo): `order` the
     # pair indices grouped by expert, `poff` each expert's first pair,
@@ -2002,8 +2022,3 @@ def moe_forward_run[E: Exec](
     c.i5 = n_dtiles
     ex.launch[OP_MOE_OUT](c, T * D)
     ex.sync()
-    ex.download(fptr(addrs[4], "y"), Y, T * D)
-    ex.download(fptr(addrs[5], "logits"), L, T * En)
-    ex.download(fptr(addrs[6], "selected"), Sel, T * k)
-    ex.download(fptr(addrs[7], "weights"), W, T * k)
-    return PythonObject(T * D)
