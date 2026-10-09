@@ -7437,26 +7437,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.neural:mlp-train-step.neural_gemm_epilogue=mlp"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "3f0dea43e0cdc6fef0ae",
-   "mode": "identical",
-   "pack": "P224",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_training.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.neural:samba-train-step.neural_gemm_schedule=pages"
     },
     {
@@ -7609,6 +7589,26 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "8fef037a6e7ec6f8f569",
+   "mode": "identical",
+   "pack": "P222",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32"
     },
     {
@@ -7624,30 +7624,6 @@
    "key": "9559d6dc964981591c1f",
    "mode": "identical",
    "pack": "P139",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_training.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.neural:mlp-train-step.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_GEMM_LEAF=1",
-    "MOJOLEARN_IDN_NEURAL_CHAINS=2",
-    "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1",
-    "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2",
-    "MOJOLEARN_IDN_TRAIN_SCRATCH=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "95f3500d2eb10001c6e6",
-   "mode": "identical",
-   "pack": "P226",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7789,6 +7765,29 @@
    "key": "bd66d1978e91079735f3",
    "mode": "identical",
    "pack": "P141",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:mlp-train-step.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_GEMM_LEAF=1",
+    "MOJOLEARN_IDN_NEURAL_CHAINS=2",
+    "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2",
+    "MOJOLEARN_IDN_TRAIN_SCRATCH=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "c9a84c2c444b8cb03c5a",
+   "mode": "identical",
+   "pack": "P226",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8100,15 +8099,15 @@
     },
     {
      "arm": "B",
+     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
+    },
+    {
+     "arm": "B",
      "configuration": "G.neural:mlp-train-step.neural_gemm_chains=2"
     },
     {
      "arm": "B",
      "configuration": "G.neural:mlp-train-step.neural_gemm_chains=4"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:mlp-train-step.neural_gemm_epilogue=mlp"
     },
     {
      "arm": "B",
@@ -19809,30 +19808,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.neural:mlp-train-step.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_GEMM_LEAF=1",
-    "MOJOLEARN_IDN_NEURAL_CHAINS=2",
-    "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1",
-    "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2",
-    "MOJOLEARN_IDN_TRAIN_SCRATCH=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "5196a1abb14d7347dfe9",
-   "mode": "identical",
-   "pack": "P226",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_training.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.neural:samba-train-step.attn_stash=recompute"
     }
    ],
@@ -19873,16 +19848,16 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.neural:mlp-train-step.neural_gemm_epilogue=mlp"
+     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
     }
    ],
    "defines": [
-    "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1",
+    "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "8169b0e40151f0b3d120",
+   "key": "605e776b14ab534ed808",
    "mode": "identical",
-   "pack": "P224",
+   "pack": "P222",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19995,6 +19970,29 @@
    "key": "a2935a91916730875de2",
    "mode": "identical",
    "pack": "P152",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:mlp-train-step.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_GEMM_LEAF=1",
+    "MOJOLEARN_IDN_NEURAL_CHAINS=2",
+    "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2",
+    "MOJOLEARN_IDN_TRAIN_SCRATCH=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "a5bd58379092cade48f8",
+   "mode": "identical",
+   "pack": "P226",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20386,15 +20384,15 @@
     },
     {
      "arm": "B",
+     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
+    },
+    {
+     "arm": "B",
      "configuration": "G.neural:mlp-train-step.neural_gemm_chains=2"
     },
     {
      "arm": "B",
      "configuration": "G.neural:mlp-train-step.neural_gemm_chains=4"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:mlp-train-step.neural_gemm_epilogue=mlp"
     },
     {
      "arm": "B",

@@ -21810,6 +21810,25 @@
     },
     {
      "assignment": {
+      "mlp_gemm_leaf128": "off"
+     },
+     "bindings": [
+      "_mojolearn_training"
+     ],
+     "defines": [
+      "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1"
+     ],
+     "global_reach": [],
+     "id": "G.neural:mlp-train-step.mlp_gemm_leaf128=off",
+     "pack": "P222",
+     "packed_extra_defines": [],
+     "priority": 7,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "neural_gemm_chains": "2"
      },
      "bindings": [
@@ -21820,9 +21839,9 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.neural_gemm_chains=2",
-     "pack": "P222",
+     "pack": "P223",
      "packed_extra_defines": [],
-     "priority": 7,
+     "priority": 8,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -21839,25 +21858,6 @@
      ],
      "global_reach": [],
      "id": "G.neural:mlp-train-step.neural_gemm_chains=4",
-     "pack": "P223",
-     "packed_extra_defines": [],
-     "priority": 8,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "neural_gemm_epilogue": "mlp"
-     },
-     "bindings": [
-      "_mojolearn_training"
-     ],
-     "defines": [
-      "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1"
-     ],
-     "global_reach": [],
-     "id": "G.neural:mlp-train-step.neural_gemm_epilogue=mlp",
      "pack": "P224",
      "packed_extra_defines": [],
      "priority": 9,
@@ -21932,7 +21932,6 @@
      "assignment": {
       "gemm_leaf": "neural128",
       "neural_gemm_chains": "2",
-      "neural_gemm_epilogue": "mlp",
       "neural_gemm_schedule": "stream",
       "train_scratch": "1"
      },
@@ -21942,7 +21941,6 @@
      "defines": [
       "MOJOLEARN_IDN_GEMM_LEAF=1",
       "MOJOLEARN_IDN_NEURAL_CHAINS=2",
-      "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1",
       "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2",
       "MOJOLEARN_IDN_TRAIN_SCRATCH=1"
      ],
@@ -21962,19 +21960,19 @@
      "members": [
       "neural_gemm_schedule",
       "gemm_leaf",
-      "neural_gemm_chains",
-      "neural_gemm_epilogue"
+      "mlp_gemm_leaf128",
+      "neural_gemm_chains"
      ],
-     "new_configs": 80,
+     "new_configs": 50,
      "note": null,
      "product": 90
     },
     {
-     "duplicates": 22,
+     "duplicates": 12,
      "members": [
       "gemm_leaf",
-      "neural_gemm_schedule",
-      "neural_gemm_epilogue"
+      "mlp_gemm_leaf128",
+      "neural_gemm_schedule"
      ],
      "new_configs": 0,
      "note": null,
@@ -21985,8 +21983,8 @@
     "neural_gemm_schedule",
     "neural_gemm_schedule_roles",
     "gemm_leaf",
+    "mlp_gemm_leaf128",
     "neural_gemm_chains",
-    "neural_gemm_epilogue",
     "train_scratch",
     "nn59_dropout_residual",
     "neural_gemm_ozaki_slices",
@@ -21997,28 +21995,21 @@
    "deferred": [],
    "deferred_groups": [
     {
-     "configs": 80,
+     "configs": 50,
      "listed": [
       {
        "assignment": {
-        "neural_gemm_chains": "2",
-        "neural_gemm_epilogue": "mlp"
+        "mlp_gemm_leaf128": "off",
+        "neural_gemm_chains": "2"
        },
-       "id": "G.neural:mlp-train-step.neural_gemm_chains=2+neural_gemm_epilogue=mlp"
+       "id": "G.neural:mlp-train-step.mlp_gemm_leaf128=off+neural_gemm_chains=2"
       },
       {
        "assignment": {
-        "neural_gemm_chains": "4",
-        "neural_gemm_epilogue": "mlp"
+        "mlp_gemm_leaf128": "off",
+        "neural_gemm_chains": "4"
        },
-       "id": "G.neural:mlp-train-step.neural_gemm_chains=4+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_epilogue": "mlp"
-       },
-       "id": "G.neural:mlp-train-step.gemm_leaf=neural128+neural_gemm_epilogue=mlp"
+       "id": "G.neural:mlp-train-step.mlp_gemm_leaf128=off+neural_gemm_chains=4"
       },
       {
        "assignment": {
@@ -22030,32 +22021,9 @@
       {
        "assignment": {
         "gemm_leaf": "neural128",
-        "neural_gemm_chains": "2",
-        "neural_gemm_epilogue": "mlp"
-       },
-       "id": "G.neural:mlp-train-step.gemm_leaf=neural128+neural_gemm_chains=2+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
         "neural_gemm_chains": "4"
        },
        "id": "G.neural:mlp-train-step.gemm_leaf=neural128+neural_gemm_chains=4"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_chains": "4",
-        "neural_gemm_epilogue": "mlp"
-       },
-       "id": "G.neural:mlp-train-step.gemm_leaf=neural128+neural_gemm_chains=4+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_epilogue": "mlp"
-       },
-       "id": "G.neural:mlp-train-step.gemm_leaf=neural256+neural_gemm_epilogue=mlp"
       },
       {
        "assignment": {
@@ -22067,32 +22035,9 @@
       {
        "assignment": {
         "gemm_leaf": "neural256",
-        "neural_gemm_chains": "2",
-        "neural_gemm_epilogue": "mlp"
-       },
-       "id": "G.neural:mlp-train-step.gemm_leaf=neural256+neural_gemm_chains=2+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
         "neural_gemm_chains": "4"
        },
        "id": "G.neural:mlp-train-step.gemm_leaf=neural256+neural_gemm_chains=4"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_chains": "4",
-        "neural_gemm_epilogue": "mlp"
-       },
-       "id": "G.neural:mlp-train-step.gemm_leaf=neural256+neural_gemm_chains=4+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
-        "neural_gemm_epilogue": "mlp",
-        "neural_gemm_schedule": "stream"
-       },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+neural_gemm_epilogue=mlp"
       },
       {
        "assignment": {
@@ -22103,14 +22048,6 @@
       },
       {
        "assignment": {
-        "neural_gemm_chains": "2",
-        "neural_gemm_epilogue": "mlp",
-        "neural_gemm_schedule": "stream"
-       },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+neural_gemm_chains=2+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
         "neural_gemm_chains": "4",
         "neural_gemm_schedule": "stream"
        },
@@ -22118,11 +22055,26 @@
       },
       {
        "assignment": {
-        "neural_gemm_chains": "4",
-        "neural_gemm_epilogue": "mlp",
+        "mlp_gemm_leaf128": "off",
         "neural_gemm_schedule": "stream"
        },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+neural_gemm_chains=4+neural_gemm_epilogue=mlp"
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+mlp_gemm_leaf128=off"
+      },
+      {
+       "assignment": {
+        "mlp_gemm_leaf128": "off",
+        "neural_gemm_chains": "2",
+        "neural_gemm_schedule": "stream"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+mlp_gemm_leaf128=off+neural_gemm_chains=2"
+      },
+      {
+       "assignment": {
+        "mlp_gemm_leaf128": "off",
+        "neural_gemm_chains": "4",
+        "neural_gemm_schedule": "stream"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+mlp_gemm_leaf128=off+neural_gemm_chains=4"
       },
       {
        "assignment": {
@@ -22130,14 +22082,6 @@
         "neural_gemm_schedule": "stream"
        },
        "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+gemm_leaf=neural128"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_epilogue": "mlp",
-        "neural_gemm_schedule": "stream"
-       },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+gemm_leaf=neural128+neural_gemm_epilogue=mlp"
       },
       {
        "assignment": {
@@ -22150,15 +22094,6 @@
       {
        "assignment": {
         "gemm_leaf": "neural128",
-        "neural_gemm_chains": "2",
-        "neural_gemm_epilogue": "mlp",
-        "neural_gemm_schedule": "stream"
-       },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+gemm_leaf=neural128+neural_gemm_chains=2+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
         "neural_gemm_chains": "4",
         "neural_gemm_schedule": "stream"
        },
@@ -22166,27 +22101,10 @@
       },
       {
        "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_chains": "4",
-        "neural_gemm_epilogue": "mlp",
-        "neural_gemm_schedule": "stream"
-       },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+gemm_leaf=neural128+neural_gemm_chains=4+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
         "gemm_leaf": "neural256",
         "neural_gemm_schedule": "stream"
        },
        "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+gemm_leaf=neural256"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_epilogue": "mlp",
-        "neural_gemm_schedule": "stream"
-       },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+gemm_leaf=neural256+neural_gemm_epilogue=mlp"
       },
       {
        "assignment": {
@@ -22199,35 +22117,10 @@
       {
        "assignment": {
         "gemm_leaf": "neural256",
-        "neural_gemm_chains": "2",
-        "neural_gemm_epilogue": "mlp",
-        "neural_gemm_schedule": "stream"
-       },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+gemm_leaf=neural256+neural_gemm_chains=2+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
         "neural_gemm_chains": "4",
         "neural_gemm_schedule": "stream"
        },
        "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+gemm_leaf=neural256+neural_gemm_chains=4"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_chains": "4",
-        "neural_gemm_epilogue": "mlp",
-        "neural_gemm_schedule": "stream"
-       },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=stream+gemm_leaf=neural256+neural_gemm_chains=4+neural_gemm_epilogue=mlp"
-      },
-      {
-       "assignment": {
-        "neural_gemm_epilogue": "mlp",
-        "neural_gemm_schedule": "pages"
-       },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+neural_gemm_epilogue=mlp"
       },
       {
        "assignment": {
@@ -22238,31 +22131,122 @@
       },
       {
        "assignment": {
-        "neural_gemm_chains": "2",
-        "neural_gemm_epilogue": "mlp",
+        "neural_gemm_chains": "4",
         "neural_gemm_schedule": "pages"
        },
-       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+neural_gemm_chains=2+neural_gemm_epilogue=mlp"
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+neural_gemm_chains=4"
+      },
+      {
+       "assignment": {
+        "mlp_gemm_leaf128": "off",
+        "neural_gemm_schedule": "pages"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+mlp_gemm_leaf128=off"
+      },
+      {
+       "assignment": {
+        "mlp_gemm_leaf128": "off",
+        "neural_gemm_chains": "2",
+        "neural_gemm_schedule": "pages"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+mlp_gemm_leaf128=off+neural_gemm_chains=2"
+      },
+      {
+       "assignment": {
+        "mlp_gemm_leaf128": "off",
+        "neural_gemm_chains": "4",
+        "neural_gemm_schedule": "pages"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+mlp_gemm_leaf128=off+neural_gemm_chains=4"
+      },
+      {
+       "assignment": {
+        "gemm_leaf": "neural128",
+        "neural_gemm_schedule": "pages"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+gemm_leaf=neural128"
+      },
+      {
+       "assignment": {
+        "gemm_leaf": "neural128",
+        "neural_gemm_chains": "2",
+        "neural_gemm_schedule": "pages"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+gemm_leaf=neural128+neural_gemm_chains=2"
+      },
+      {
+       "assignment": {
+        "gemm_leaf": "neural128",
+        "neural_gemm_chains": "4",
+        "neural_gemm_schedule": "pages"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+gemm_leaf=neural128+neural_gemm_chains=4"
+      },
+      {
+       "assignment": {
+        "gemm_leaf": "neural256",
+        "neural_gemm_schedule": "pages"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+gemm_leaf=neural256"
+      },
+      {
+       "assignment": {
+        "gemm_leaf": "neural256",
+        "neural_gemm_chains": "2",
+        "neural_gemm_schedule": "pages"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+gemm_leaf=neural256+neural_gemm_chains=2"
+      },
+      {
+       "assignment": {
+        "gemm_leaf": "neural256",
+        "neural_gemm_chains": "4",
+        "neural_gemm_schedule": "pages"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=pages+gemm_leaf=neural256+neural_gemm_chains=4"
+      },
+      {
+       "assignment": {
+        "neural_gemm_chains": "2",
+        "neural_gemm_schedule": "fold_exact"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=fold_exact+neural_gemm_chains=2"
+      },
+      {
+       "assignment": {
+        "neural_gemm_chains": "4",
+        "neural_gemm_schedule": "fold_exact"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=fold_exact+neural_gemm_chains=4"
+      },
+      {
+       "assignment": {
+        "mlp_gemm_leaf128": "off",
+        "neural_gemm_schedule": "fold_exact"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=fold_exact+mlp_gemm_leaf128=off"
+      },
+      {
+       "assignment": {
+        "mlp_gemm_leaf128": "off",
+        "neural_gemm_chains": "2",
+        "neural_gemm_schedule": "fold_exact"
+       },
+       "id": "G.neural:mlp-train-step.neural_gemm_schedule=fold_exact+mlp_gemm_leaf128=off+neural_gemm_chains=2"
       }
      ],
      "listed_truncated": true,
      "members": [
       "neural_gemm_schedule",
       "gemm_leaf",
-      "neural_gemm_chains",
-      "neural_gemm_epilogue"
+      "mlp_gemm_leaf128",
+      "neural_gemm_chains"
      ],
      "product": 90,
-     "reason": "group cross (80 configs) does not fit the remaining cap (3); generate after one-at-a-time results"
+     "reason": "group cross (50 configs) does not fit the remaining cap (3); generate after one-at-a-time results"
     }
    ],
    "dropped_arms": {
-    "neural_gemm_epilogue": [
-     {
-      "arm": "cnn",
-      "reason": "note: \"cnn arm is non-board (x_cnn)\""
-     }
-    ],
     "neural_gemm_schedule": [
      {
       "arm": "geometry",
@@ -22286,6 +22270,13 @@
    },
    "dropped_from_all_on": [
     {
+     "arm": "off",
+     "control": "mlp_gemm_leaf128",
+     "problems": [
+      "split 2026-10-08 (grid ge123e6f9, lane/grid-act-5): gemm_leaf=neural128 is the IDENTICAL default for the MLP training step only (mlp-train-step 0.886x, same bits; every other neural model slower, lm-train-step 13.6x); MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF has no effect with MOJOLEARN_IDN_GEMM_LEAF=1|2, which routes every neural caller to the profile"
+     ]
+    },
+    {
      "arm": "4",
      "control": "neural_gemm_ozaki_slices",
      "problems": [
@@ -22298,8 +22289,8 @@
    "eligible_controls": [
     "neural_gemm_schedule",
     "gemm_leaf",
+    "mlp_gemm_leaf128",
     "neural_gemm_chains",
-    "neural_gemm_epilogue",
     "train_scratch",
     "neural_gemm_ozaki_slices"
    ],
@@ -22350,19 +22341,32 @@
      "neural_gemm_schedule",
      "neural_gemm_schedule_roles",
      "gemm_leaf",
-     "neural_gemm_chains",
-     "neural_gemm_epilogue"
+     "mlp_gemm_leaf128",
+     "neural_gemm_chains"
     ],
     [
      "gemm_tile_min_blocks",
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
      "gemm_leaf",
-     "neural_gemm_schedule",
-     "neural_gemm_epilogue"
+     "mlp_gemm_leaf128",
+     "neural_gemm_schedule"
     ]
    ],
-   "invalid": [],
+   "invalid": [
+    {
+     "count": 40,
+     "examples": [
+      "gemm_leaf=neural128+mlp_gemm_leaf128=off",
+      "gemm_leaf=neural128+mlp_gemm_leaf128=off+neural_gemm_chains=2",
+      "gemm_leaf=neural128+mlp_gemm_leaf128=off+neural_gemm_chains=4"
+     ],
+     "problem": "split 2026-10-08 (grid ge123e6f9, lane/grid-act-5): gemm_leaf=neural128 is the IDENTICAL default for the MLP training step only (mlp-train-step 0.886x, same bits; every other neural model slower, lm-train-step 13.6x); MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF has no effect with MOJOLEARN_IDN_GEMM_LEAF=1|2, which routes every neural caller to the profile",
+     "tiers": [
+      "cross"
+     ]
+    }
+   ],
    "mapping_notes": [],
    "notes": [
     "neural-gemm-attn-dedupe: Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=1 reach this lane."
@@ -22373,8 +22377,8 @@
    ],
    "representative_arms": {
     "gemm_leaf": "neural128",
+    "mlp_gemm_leaf128": "off",
     "neural_gemm_chains": "2",
-    "neural_gemm_epilogue": "mlp",
     "neural_gemm_ozaki_slices": "4",
     "neural_gemm_schedule": "stream",
     "train_scratch": "1"
@@ -40334,10 +40338,26 @@
      "_mojolearn_training"
     ],
     "defines": [
-     "MOJOLEARN_IDN_NEURAL_CHAINS=2"
+     "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1"
     ],
     "global_reach": false,
     "id": "P222",
+    "members": [
+     "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:mlp-train-step"
+    ],
+    "bindings": [
+     "_mojolearn_training"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_NEURAL_CHAINS=2"
+    ],
+    "global_reach": false,
+    "id": "P223",
     "members": [
      "G.neural:mlp-train-step.neural_gemm_chains=2"
     ]
@@ -40353,25 +40373,9 @@
      "MOJOLEARN_IDN_NEURAL_CHAINS=4"
     ],
     "global_reach": false,
-    "id": "P223",
-    "members": [
-     "G.neural:mlp-train-step.neural_gemm_chains=4"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:mlp-train-step"
-    ],
-    "bindings": [
-     "_mojolearn_training"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1"
-    ],
-    "global_reach": false,
     "id": "P224",
     "members": [
-     "G.neural:mlp-train-step.neural_gemm_epilogue=mlp"
+     "G.neural:mlp-train-step.neural_gemm_chains=4"
     ]
    },
    {
@@ -40400,7 +40404,6 @@
     "defines": [
      "MOJOLEARN_IDN_GEMM_LEAF=1",
      "MOJOLEARN_IDN_NEURAL_CHAINS=2",
-     "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1",
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2",
      "MOJOLEARN_IDN_TRAIN_SCRATCH=1"
     ],
@@ -42158,6 +42161,15 @@
    ]
   },
   {
+   "algorithms": [],
+   "control": "neural_gemm_epilogue",
+   "define": "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE",
+   "file": "neural-gemm-attn-dedupe",
+   "reasons": [
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
    "algorithms": [
     "gemm:gemm"
    ],
@@ -43029,7 +43041,7 @@
     "head": "d0b538fa7",
     "lane": "neural-gemm-attn-dedupe",
     "path": "experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json",
-    "sha256": "5808a257fccb282554365bac2eb066ab1ed2ce26332e502896737cda43366a84"
+    "sha256": "92adf797dc46cc0192c5fb9e7f187a313955c5a830b103045ae649326be46df4"
    },
    "neural-ozaki-gemm": {
     "branch": "lane/neural-ozaki-gemm",
@@ -43050,7 +43062,7 @@
     "head": "a7b55a97b",
     "lane": "neural-small",
     "path": "experiments/six_lane_integration/grid_controls/neural-small.json",
-    "sha256": "3aefcab2b7d2f952c4bd8e6459c9b9cb0d8585587bf2f5ff05074e3445756f2a"
+    "sha256": "b50f47e93c8fa10642ac1de71bd285cdbca31d50b5b5af17a522a48f7f6a5ed8"
    },
    "samba-resident": {
     "branch": "lane/samba-resident",
@@ -43096,9 +43108,9 @@
    }
   },
   "guards": {
-   "asserts": 168,
+   "asserts": 170,
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "bbe28a5fce89646c82646a8b8668e7e10448133286cfd0d119e43fd4a6666bfa"
+   "sha256": "9ebd8cde069f99a4e212a7c94864f07ef7ab526831a0632a2dfac110be543f72"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -43231,7 +43243,7 @@
   "gap-tsqr": 0,
   "neural-ce-denom": 0,
   "neural-fusions": 3,
-  "neural-gemm-attn-dedupe": 37,
+  "neural-gemm-attn-dedupe": 38,
   "neural-ozaki-gemm": 0,
   "neural-seq-train-dedupe": 34,
   "neural-small": 7,
@@ -43284,12 +43296,12 @@
   "cells": 2664,
   "configs": 588,
   "configs_per_vendor": 588,
-  "controls": 273,
+  "controls": 274,
   "deferred_configs": 132,
-  "deferred_cross_configs": 3205,
+  "deferred_cross_configs": 3175,
   "deferred_cross_groups": 78,
-  "excluded_controls": 74,
-  "guard_asserts": 168,
+  "excluded_controls": 75,
+  "guard_asserts": 170,
   "mapped_algorithms": 89,
   "packed_multi_member": 112,
   "packs": 306,
