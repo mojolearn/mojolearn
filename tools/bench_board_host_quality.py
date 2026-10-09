@@ -88,6 +88,12 @@ def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_ca
     for key in ('PYTHONPATH', 'MOJOLEARN_CUDA_PATH', 'MOJOLEARN_EXPERIMENTAL_PTX',
                 'MOJOLEARN_GPU_ARCH', 'MOJOLEARN_BOARD_ARTIFACT_MANIFEST', 'MOJOLEARN_BOARD_RECEIPTS'):
         env.pop(key, None)
+    # The race tree imports mojolearn through PYTHONPATH (not an installed wheel), so the host child gets the parent's
+    # package root back, and only that (2026-10-09: every optimizer cell on AMD a1141 failed 'No module named mojolearn').
+    import importlib.util
+    spec = importlib.util.find_spec('mojolearn')
+    if spec is not None and spec.origin:
+        env['PYTHONPATH'] = str(Path(spec.origin).resolve().parent.parent)
     try:
         with (root / 'host.log').open('w') as log:
             result = subprocess.run([python, str(Path(__file__).resolve()), lane,
