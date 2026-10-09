@@ -563,6 +563,39 @@ comptime KNN_SELECTOR_BOUND = (
 )
 
 
+# K2 (lane fg-knn-nb, 2026-10-09; `-D MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX=1`,
+# DEFAULT OFF, an A/B arm): on a 64-lane column (CDNA), a column tile's
+# top-k for k >= KNN_WIDEK_RADIX_MIN_K is taken by the block-cooperative
+# radix selector (`radix_topk_identical_kernel`, the small-k selector's own
+# fallback) instead of the small-k selector or the bound-and-compact
+# selector. Cost reasoning: the small-k selector keeps a k-deep per-thread
+# UInt64 list indexed with a runtime k, which on AMDGPU lives in scratch
+# memory once k passes the register file's comfortable size (64 keys are
+# 128 VGPRs before the batch, heads and indices), so every insert is a
+# scratch round trip; the radix rounds keep their state in LDS and their
+# cost does not grow with k. The bound 17 is the first k the block top-k
+# (KNN_BLOCK_TOPK_MAX_K = 16) does not serve and the bound-and-compact
+# selector's own lower bound (KNN_SELECTOR_BOUND_MIN_K), not a board k.
+# Bits: none. Both selectors return the k smallest composite (distance,
+# index) keys ascending, a total order, so the same set in the same order
+# (the reason the two selectors coexist; the four-arm dispatch check gates
+# it). The radix needs its historical scratch, so the shrink (DEVIATION 2631)
+# is skipped for these k (`tiled_radix_scratch_len`).
+comptime KNN_WIDEK_RADIX = (
+    is_defined["MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX"]()
+    and IDENTICAL_BUILD
+    and lib_lane_width_for[TARGET_COLUMN]() == 64
+)
+comptime KNN_WIDEK_RADIX_MIN_K = 17
+
+
+def knn_widek_radix_applies(k: Int) -> Bool:
+    """Whether K2's radix route takes this k's column-tile selection."""
+    comptime if KNN_WIDEK_RADIX:
+        return k >= KNN_WIDEK_RADIX_MIN_K
+    return False
+
+
 # DEVIATION 3062 (kernel-matrix row `knn_block_topk_bounded_for`): the block
 # top-k's rank loop bounded by the running top-k on every column tile after
 # the first, its lists sentinel-terminated, and every 1 <= k <= 64 served.
@@ -646,7 +679,8 @@ def tiled_radix_scratch_len(n_index: Int, k: Int) -> Int:
     if buf_len < k:
         buf_len = k
     comptime if KNN_RADIX_SCRATCH_SHRINK:
-        if k >= 1 and k <= SMALLK_MAX_K and k <= n_index:
+        # K2: the radix route reads the scratch, so it keeps it.
+        if k >= 1 and k <= SMALLK_MAX_K and k <= n_index and not knn_widek_radix_applies(k):
             return k
     return buf_len
 
@@ -1683,6 +1717,10 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                             # DEVIATION 2667 / 3001: the launch above already
                             # wrote this tile's top-k.
                             selected_smallk = True
+                        elif knn_widek_radix_applies(k):
+                            # K2: the radix launch below (selected_smallk
+                            # stays False).
+                            pass
                         elif cols >= k and k <= SMALLK_MAX_K and cols <= 2147483647:
                             var bound_compact = False
                             comptime if KNN_SELECTOR_BOUND:
