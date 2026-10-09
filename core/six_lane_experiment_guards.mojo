@@ -202,6 +202,7 @@ def _check_configuration() -> Bool:
     comptime assert get_defined_int["MOJOLEARN_TREES_HIST_MULTISTAT",0]() == 0, "removed: MOJOLEARN_TREES_HIST_MULTISTAT (=4|8) retired 2026-10-08: slower, gbdt-multiclass =4 NV 1.04x / AMD 1.41x istella, 1.07x / 1.11x taxi; =8 0.99x / 1.31x istella, 1.11x / 1.14x taxi; quality SAME (grid ge123e6f9); see EXPERIMENTS.md"
     comptime assert not is_defined["MOJOLEARN_TREES_T29_VERSIONED"](), "removed: MOJOLEARN_TREES_T29_VERSIONED (T29 arm 'versioned') retired 2026-10-08: slower, gbdt-rank-pairlogit istella NV 3.43x / AMD 3.76x (grid ge123e6f9); MOJOLEARN_TREES_T29 alone stays; see EXPERIMENTS.md"
     comptime assert get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV",0]() != 23, "removed: MOJOLEARN_CLASSICAL_PCA_COV=23 (C23 one-pass covariance) retired 2026-10-08: slower, pca NV 2.28x / AMD 1.27x istella, NV 0.90x / AMD 0.78x taxi, combined 1.195x (grid ge123e6f9); =4 (c04) stays; see EXPERIMENTS.md"
+    comptime assert not is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"](), "removed: MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF retired 2026-10-08: the off arm is slower, ols NV 2.97x / AMD 1.74x istella, NV 6.17x / AMD 3.83x taxi, r2 SAME (grid ge123e6f9); the one-entry route is the only IDENTICAL OLS route; see EXPERIMENTS.md"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True

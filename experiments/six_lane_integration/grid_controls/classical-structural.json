@@ -114,21 +114,17 @@
   },
   "classical:ols": {
    "binding": "_mojolearn_estimators + _mojolearn_x_decomp (host columns _mojolearn_estimators_host, _mojolearn_x_decomp_host)",
-   "route": "fit: LinearRegression.fit -> [linear_gram_solve: linear_gram_fit (status 0 ends the fit)] -> else _ols_tsqr_centered -> x_decomp_ols_tsqr_r (ols_one_entry, C24_TSQR) -> _tsqr_lstsq_core",
+   "route": "fit: LinearRegression.fit -> [linear_gram_solve: linear_gram_fit (status 0 ends the fit)] -> else _ols_tsqr_centered -> x_decomp_ols_tsqr_r (C24_TSQR) -> _tsqr_lstsq_core",
    "controls": [
     "linear_gram_solve"
    ],
    "interaction_groups": [
     [
      "linear_gram_solve",
-     "ols_one_entry"
-    ],
-    [
-     "linear_gram_solve",
      "C24_TSQR"
     ]
    ],
-   "note": "with linear_gram_solve on and the Gram trusted, ols_one_entry and C24_TSQR are inert (fallback path only); the crossing records that"
+   "note": "with linear_gram_solve on and the Gram trusted, C24_TSQR is inert (fallback path only); the crossing records that"
   },
   "more:ridge": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",

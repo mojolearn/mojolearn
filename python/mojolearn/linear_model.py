@@ -555,8 +555,10 @@ def _ols_tsqr_centered(x, y, rows, cols, mode):
     [X - mu | y - mean] read the resident buffers, then `_ols_tsqr`'s solve
     on the small R. The same words as `_column_means` + `_center` +
     `_ols_tsqr`, which crossed X four times. None when the binding does not
-    route here (an older binding, a FAST build, or one built with -D
-    MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF): the caller keeps that sequence."""
+    route here (an older binding or a FAST build): the caller keeps that
+    sequence. The IDENTICAL off arm (MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF) was
+    deleted 2026-10-08 (grid ge123e6f9: 2.97x/1.74x istella, 6.17x/3.83x
+    taxi slower on NV/AMD); recoverable at main 42d1e42c6."""
     from ._expansion_decomp import _F32_EPS, _Kit, _M, _mode, _tsqr_lstsq_core
     k = _Kit(_mode(mode))
     flags = _optional_export(k._raw(), "x_decomp_idn_flags")
