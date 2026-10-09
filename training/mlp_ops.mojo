@@ -26,11 +26,13 @@ from gemm.checks.gemm_identical import _fast_vendor_gemm
 from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
+    neural_model_leaf_into,
+    NEURAL_GEMM_EXPERIMENT_ENABLED,
 )
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.experiments.neural_epilogue import NN06
 from gemm.experiments.neural_switches import ROLE_PROJECTION, ROLE_WGRAD
-from gemm.experiments.neural_profile import NEURAL_LEAF,NEURAL_CHAINS,neural_partition,neural_cell
+from gemm.experiments.neural_profile import NEURAL_LEAF,NEURAL_CHAINS,NEURAL_EXPERIMENTS_ALLOWED,neural_partition,neural_cell
 from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN
 from core.device_scan import device_first_nonfinite
 from training.checks.optimizer import (
@@ -94,6 +96,28 @@ def _add(left: Float32, right: Float32) -> Float32:
 
 
 comptime MLP_NN06 = NN06 and not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_CONTROL"]()
+# gemm_leaf=neural128 for THE MLP TRAINING STEP ONLY (lane grid-act-5,
+# 2026-10-08; IDENTICAL grid ge123e6f9, docs/apple-fast/EXPERIMENTS.md). The
+# build-wide arm (-D MOJOLEARN_IDN_GEMM_LEAF=1) was a SPLIT: mlp-train-step
+# FASTER, NV 2.0 -> 1.7 ms / AMD 3.5 -> 3.1 ms (0.886x combined), but every
+# other neural model SLOWER: lm-forward 7.2x, lm-train-step 13.6x,
+# mamba1/2/3-forward 3.0/3.8/5.2x, samba-train-step 1.73x,
+# transformer-forward 7.6x. Output hashes equal to the incumbent on both
+# vendors (no bits change: at leaf 128 the profile's partition is the
+# contract's, contract_leaf_size). So the choice is keyed on the MODEL KIND
+# (this file's GEMMs are the small MLP's and nobody else's), never on a
+# dimension: every MLP step product takes the NN03 profile body at leaf 128
+# through gemm.neural_dispatch.neural_model_leaf_into, the same body the
+# measured arm ran, and every other neural model keeps the incumbent.
+# -D MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF restores the incumbent dispatch here.
+# Any build-wide neural GEMM arm (gemm_leaf=neural128|neural256, a schedule,
+# chains, Ozaki) routes the MLP through identical_gemm_into like every other
+# caller, so the grid's gemm_leaf arms keep their meaning.
+comptime MLP_GEMM_LEAF128 = (
+    NEURAL_EXPERIMENTS_ALLOWED
+    and not NEURAL_GEMM_EXPERIMENT_ENABLED
+    and not is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"]()
+)
 
 
 def _mlp_gemm_epilogue_kernel[ACTIVATE: Bool](
@@ -271,10 +295,18 @@ def _gemm[ROLE: Int = ROLE_PROJECTION](
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
+    comptime if MLP_GEMM_LEAF128:
+        # The MLP step's own leaf (MLP_GEMM_LEAF128 above); ROLE is only a
+        # schedule-arm mask and no schedule arm is on in this build.
+        neural_model_leaf_into[128](ctx, c, a, b, m, n, k, op)
+        return
     identical_gemm_into[ROLE=ROLE](ctx, c, a, b, ws, m, n, k, op)
 
 
 def _max_ws(mut ws_n: Int, m: Int, n: Int, k: Int):
+    comptime if MLP_GEMM_LEAF128:
+        # The profile body reads no workspace (the measured arm sized it 1).
+        return
     var w = identical_gemm_workspace_max_floats(m, n, k)
     if w > ws_n:
         ws_n = w

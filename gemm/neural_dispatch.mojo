@@ -206,6 +206,29 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
         _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
 
 
+def neural_model_leaf_into[MIN_LEAF: Int](ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
+) raises:
+    """A MODEL call site's own leaf choice (lane grid-act-5, 2026-10-08): the
+    NN03 neural profile body at MIN_LEAF for one model's products, in a build
+    whose other neural callers keep the incumbent. This is the body
+    identical_gemm_into reaches under -D MOJOLEARN_IDN_GEMM_LEAF=1|2 with no
+    schedule arm (the last `elif NEURAL_PROFILE_CHANGED` branch), with the
+    same validation and overlap refusals; the profile kernel reads no
+    workspace, so none is taken. First caller: the MLP training step
+    (training/mlp_ops.mojo::MLP_GEMM_LEAF128)."""
+    comptime assert MIN_LEAF == 128 or MIN_LEAF == 256, "neural profile leaf 128|256 (leaf 64 deleted: I04 loser)"
+    neural_validate(m,n,k,op)
+    if len(c)<m*n or len(a)<m*k or len(b)<n*k:
+        raise Error("neural GEMM operand storage too short")
+    if _overlaps(c,m*n,a,m*k) or _overlaps(c,m*n,b,n*k):
+        raise Error("neural GEMM output must not overlap inputs")
+    if m==0 or n==0:
+        return
+    neural_profile_device[MIN_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
+
+
 def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,

@@ -153,12 +153,37 @@
     "_mojolearn_linalg"
    ],
    "bits_change": true,
-   "status": "rewritten",
+   "status": "rewritten; split:ge123e6f9 (neural128 promoted for the MLP training step only, as mlp_gemm_leaf128)",
    "merged_from": [
     "I.N.NN03",
     "I.N.NI08"
    ],
-   "note": "Scope arm: neural128/neural256 switch the neural callers to the NN03 profile body. The all256 contract-leaf arm (every GEMM, classical too) is split out as gemm_contract_leaf. Leaf 64 deleted (I04 loser). Bit version: ID check per arm."
+   "note": "Scope arm: neural128/neural256 switch the neural callers to the NN03 profile body. The all256 contract-leaf arm (every GEMM, classical too) is split out as gemm_contract_leaf. Leaf 64 deleted (I04 loser). Bit version: ID check per arm. grid ge123e6f9 (lane grid-act-5, 2026-10-08): neural128 SPLIT, mlp-train-step FASTER NV 2.0->1.7 / AMD 3.5->3.1 ms (0.886x) but lm-forward 7.2x, lm-train-step 13.6x, mamba1/2/3-forward 3.0/3.8/5.2x, samba-train-step 1.73x, transformer-forward 7.6x SLOWER, same bits; the MLP step now takes leaf128 by default (mlp_gemm_leaf128), the build-wide default stays off. The arms stay for the grid; with neural128|neural256 the MLP follows the build-wide arm."
+  },
+  "mlp_gemm_leaf128": {
+   "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "training/mlp_ops.mojo:116",
+    "training/mlp_ops.mojo:298",
+    "gemm/neural_dispatch.mojo:209",
+    "core/six_lane_experiment_guards.mojo:219"
+   ],
+   "binding": [
+    "_mojolearn_training"
+   ],
+   "bits_change": false,
+   "status": "promoted:ge123e6f9 (split from gemm_leaf=neural128)",
+   "board": "mlp-train-step",
+   "tags": [],
+   "note": "lane grid-act-5 (2026-10-08): the MLP training step's GEMMs (training/mlp_ops.mojo _gemm) take the NN03 neural profile body at leaf 128 (gemm.neural_dispatch.neural_model_leaf_into), keyed on the model kind, never a dimension; grid ge123e6f9 mlp-train-step NV 2.0->1.7 / AMD 3.5->3.1 ms (0.886x), hashes equal to the incumbent on both vendors. Off arm = the incumbent dispatch. Inert (the build-wide dispatch decides) under any neural GEMM experiment arm; _OFF with gemm_leaf=neural128|neural256 is refused by the guard."
   },
   "neural_gemm_chains": {
    "define": "MOJOLEARN_IDN_NEURAL_CHAINS",
@@ -886,11 +911,12 @@
   },
   "neural:mlp-train-step": {
    "binding": "_mojolearn_training",
-   "route": "training binding -> training.mlp_ops _gemm (forward/dInput ROLE_PROJECTION, dW ROLE_WGRAD) + fused epilogue (NN06)",
+   "route": "training binding -> training.mlp_ops _gemm (forward/dInput ROLE_PROJECTION, dW ROLE_WGRAD) -> neural_dispatch.neural_model_leaf_into[128] (mlp_gemm_leaf128 default) | identical_gemm_into (_OFF or any neural GEMM arm) + fused epilogue (NN06)",
    "controls": [
     "neural_gemm_schedule",
     "neural_gemm_schedule_roles",
     "gemm_leaf",
+    "mlp_gemm_leaf128",
     "neural_gemm_chains",
     "neural_gemm_epilogue"
    ],
@@ -899,6 +925,7 @@
      "neural_gemm_schedule",
      "neural_gemm_schedule_roles",
      "gemm_leaf",
+     "mlp_gemm_leaf128",
      "neural_gemm_chains",
      "neural_gemm_epilogue"
     ]
@@ -1081,8 +1108,8 @@
    "control": "neural_gemm_schedule",
    "arm": "stream_all",
    "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. stream_all/off ms ratio NV/AMD: gemm gaussian 2.07/1.78 (61.9 -> 128.4 NV, 28.5 -> 50.7 AMD), lm-train-step 1.11/1.07 (36.0 -> 40.0 NV, 42.7 -> 45.7 AMD); 1.45x combined SLOWER; quality not judged. NI02 (gemm/checks/gemm_identical.mojo _ni02_* kernels, dispatch, workspace sizing, identical_gemm_streaming_applies and the x_cnn pre-check) deleted; geometry, stream, stream_exact, pages, cost, fold_exact, threadmap, pages_threadmap stay. Code recoverable at main bc10b8b56; =3 refused in core/six_lane_experiment_guards.mojo."
-   },
-   {
+  },
+  {
    "define": "MOJOLEARN_IDN_NEURAL_NN05=1",
    "control": "neural_gemm_pair",
    "arm": "nn05",
