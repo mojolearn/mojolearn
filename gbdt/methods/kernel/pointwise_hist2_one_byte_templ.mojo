@@ -247,7 +247,7 @@ def compute_split_properties_nb_kernel[
     total_feature_count_in: Int32,
     fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
     int_slot: Int32,
-    z_skip: Int32,
+    z_skip: Int32 = 0,
     dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ):
     """`ComputeSplitPropertiesNBImpl` (`:153-187`) with
