@@ -193,7 +193,7 @@ def _save(fixdir, rel, a):
     import numpy as np
     path = os.path.join(fixdir, rel)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    a = np.ascontiguousarray(a)
+    a = np.array(a, order="C")  # np.ascontiguousarray makes a 0-d tensor (num_batches_tracked) 1-d
     tmp = path + ".tmp.npy"
     np.save(tmp, a, allow_pickle=False)
     os.replace(tmp, path)
