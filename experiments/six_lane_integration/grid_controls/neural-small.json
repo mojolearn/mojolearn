@@ -440,8 +440,8 @@
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
      "gemm_leaf",
-     "neural_gemm_schedule",
-     "neural_gemm_epilogue"
+     "mlp_gemm_leaf128",
+     "neural_gemm_schedule"
     ]
    ],
    "not_reached": [

@@ -21,8 +21,12 @@ from gemm.checks.gemm_identical import (
 
 comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime NI07_GROUPED_PROJECTIONS = _NEURAL_ARMS and is_defined["MOJOLEARN_NI07_GROUPED_PROJECTIONS"]()
-# NI09 = the CNN arm (mask bit 2) of MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE; the
-# MLP arm (bit 1) is NN06 in gemm/experiments/neural_epilogue.mojo.
+# NI09 = the CNN arm (mask bit 2) of MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE, now
+# its only arm. TOMBSTONE (lane grid-act-5, 2026-10-08): the MLP arm (bit 1,
+# NN06, gemm/experiments/neural_epilogue.mojo + training/mlp_ops.mojo's fused
+# projection) was DELETED as an IDENTICAL grid ge123e6f9 loser, mlp-train-step
+# NV 2.0 -> 3.8 / AMD 3.5 -> 3.4 ms (1.367x slower), same bits; recoverable at
+# main 8ed94710a. core/six_lane_experiment_guards.mojo refuses bit 1.
 comptime NI09_TILED_BIAS = _NEURAL_ARMS and (get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE", 0]() & 2) != 0
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime BiasFn = def(Float32, Float32) thin -> Float32

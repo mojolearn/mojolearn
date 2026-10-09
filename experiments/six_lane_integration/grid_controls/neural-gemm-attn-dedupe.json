@@ -171,8 +171,8 @@
    },
    "default": "on",
    "source": [
-    "training/mlp_ops.mojo:116",
-    "training/mlp_ops.mojo:298",
+    "training/mlp_ops.mojo:121",
+    "training/mlp_ops.mojo:275",
     "gemm/neural_dispatch.mojo:209",
     "core/six_lane_experiment_guards.mojo:219"
    ],
@@ -219,31 +219,26 @@
    "kind": "arms",
    "arms": {
     "off": [],
-    "mlp": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1"
-    ],
     "cnn": [
      "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=2"
     ]
    },
    "default": "off",
    "source": [
-    "gemm/experiments/neural_epilogue.mojo:28",
-    "gemm/experiments/neural_tiled_v2.mojo:26",
-    "training/mlp_ops.mojo:96",
-    "x_cnn/device.mojo:1449"
+    "gemm/experiments/neural_tiled_v2.mojo:30",
+    "x_cnn/device.mojo:1699",
+    "core/six_lane_experiment_guards.mojo:220"
    ],
    "binding": [
-    "_mojolearn_training",
     "_mojolearn_cnn"
    ],
    "bits_change": true,
-   "status": "rewritten",
+   "status": "kept (mlp arm removed 2026-10-08)",
    "merged_from": [
     "I.N.NN06",
     "I.N.NI09"
    ],
-   "note": "mlp arm reaches mlp-train-step; cnn arm is non-board (x_cnn)."
+   "note": "mlp arm (MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1, NN06) DELETED 2026-10-08 by lane grid-act-5 (grid ge123e6f9 loser: mlp-train-step NV 2.0->3.8 / AMD 3.5->3.4 ms, 1.367x slower, same bits; see removed); bit 1 refused by the guard. The cnn arm (=2, NI09) is non-board (x_cnn) and stays."
   },
   "neural_gemm_pair": {
    "define": "MOJOLEARN_IDN_NEURAL_NN07",
@@ -911,14 +906,13 @@
   },
   "neural:mlp-train-step": {
    "binding": "_mojolearn_training",
-   "route": "training binding -> training.mlp_ops _gemm (forward/dInput ROLE_PROJECTION, dW ROLE_WGRAD) -> neural_dispatch.neural_model_leaf_into[128] (mlp_gemm_leaf128 default) | identical_gemm_into (_OFF or any neural GEMM arm) + fused epilogue (NN06)",
+   "route": "training binding -> training.mlp_ops _gemm (forward/dInput ROLE_PROJECTION, dW ROLE_WGRAD) -> neural_dispatch.neural_model_leaf_into[128] (mlp_gemm_leaf128 default) | identical_gemm_into (_OFF or any neural GEMM arm)",
    "controls": [
     "neural_gemm_schedule",
     "neural_gemm_schedule_roles",
     "gemm_leaf",
     "mlp_gemm_leaf128",
-    "neural_gemm_chains",
-    "neural_gemm_epilogue"
+    "neural_gemm_chains"
    ],
    "interaction_groups": [
     [
@@ -926,8 +920,7 @@
      "neural_gemm_schedule_roles",
      "gemm_leaf",
      "mlp_gemm_leaf128",
-     "neural_gemm_chains",
-     "neural_gemm_epilogue"
+     "neural_gemm_chains"
     ]
    ],
    "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=1 reach this lane."
@@ -1114,6 +1107,10 @@
    "control": "neural_gemm_pair",
    "arm": "nn05",
    "reason": "DELETED 2026-10-08 (lane grid-act-4): IDENTICAL grid ge123e6f9 loser. nn05/off ms NV/AMD: lm-forward 65.8 -> 144.4 / 34.2 -> 95.9 (2.19x / 2.80x), lm-train-step 36.0 -> 134.1 / 42.7 -> 104.2 (3.72x / 2.44x), transformer-forward 7.3 -> 28.1 / 3.2 -> 11.1 (3.85x / 3.47x); 3.0x combined SLOWER; hashes equal to the incumbent (no bits). _neural_pair_kernel (gemm/neural_dispatch.mojo) and neural_grouped_ab's shared-left / grouped arms (gemm/experiments/neural_grouped.mojo) deleted; nn07 stays. Code recoverable at main 4e3da4282; the define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1",
+   "reason": "removed 2026-10-08 (lane grid-act-5): neural_gemm_epilogue=mlp (NN06 fused MLP GEMM + bias/ReLU, gemm/experiments/neural_epilogue.mojo and training/mlp_ops.mojo _mlp_fused_projection) grid ge123e6f9 loser, mlp-train-step NV 2.0->3.8 / AMD 3.5->3.4 ms (1.367x combined slower), same bits; guard refuses bit 1; EXPERIMENTS.md row; code at main 8ed94710a"
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."
