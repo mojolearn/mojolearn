@@ -13,6 +13,7 @@ Build an arm with `MOJOLEARN_MOJO_BUILD_FLAGS="-D <name>"` (every
 bindings/build_*.sh passes it to `mojo build`); tools/ann_apple2_ab.sh takes
 `<commit>+<name>[+<name>...]` as an arm."""
 from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: IVF build host passes: list layout by memcpy and without the permuted
 #: vectors for the x_ann indexes, lists moved instead of copied, downloads
@@ -95,7 +96,6 @@ comptime ANN3_TSNE_STEP_ROWS = is_defined["MOJOLEARN_ANN3_TSNE_STEP_ROWS"]()
 #: insertions in the same order). Expected to move no bit.
 comptime ANN3_CAGRA_TEAM = is_defined["MOJOLEARN_ANN3_CAGRA_TEAM"]()
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: lane fg-ivf (plan flagship-gaps-2026-10-09, read_ivf.md idea A1), OPT-IN:
 #: the IVF-PQ codebooks in IDENTICAL (every non-FAST mode) from the batched
