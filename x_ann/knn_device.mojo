@@ -338,11 +338,26 @@ def knn_wide_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I3
 #: state, independent of k (the list stays in device memory). Expected:
 #: the kNN stage's insertion cost (~1.5 s at 20k x 220) to the tile's
 #: distance cost. Also the CAGRA build's exact graph (`cagra_knn_enqueue`),
-#: same bits. -D MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT turns it on.
+#: same bits. IDENTICAL default on NVIDIA and AMD since 2026-10-09
+#: (lane/postmerge-act-4; post-merge A/B, one run per arm, ratios arm /
+#: default, nv L40S n0608 -> v0979..v0981, amd MI325X a1067 -> a1104..a1106):
+#: alone istella NV 1389.9 -> 1342 ms (0.97x) / AMD 1957.9 -> 2000 (1.02x),
+#: taxi NV 1563.6 -> 1368 (0.87x) / AMD 1902.7 -> 1831 (0.96x); with
+#: IDN_TSNE_REP_TILE (both promoted together) istella NV 1191 (0.86x) / AMD
+#: 1219 (0.62x), avg 0.74x; taxi NV 1831 (1.17x) / AMD 1048 (0.55x), avg
+#: 0.86x. Vendor split: NV taxi 1.17x slower with both on (the average of
+#: the two vendors decides). Trustworthiness@15 equal and digests identical
+#: in every arm on both vendors (istella ce69cdffd6f889b6, taxi
+#: cee32a8a52defb1c): no bit change. -D MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF
+#: (or MOJOLEARN_IDN_ALL_OFF) restores the serial owner insertion (and the
+#: one-thread-per-row tile for d <= 64).
 comptime IDN_TSNE_KNN_TILE_SELECT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and is_defined["MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT"]()
+    and not (
+        is_defined["MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
 )
 #: candidates of a row per thread in steps A and B (4 threads per row)
 comptime KS_PER = KW_TJ * KW_TI // KW_TPB

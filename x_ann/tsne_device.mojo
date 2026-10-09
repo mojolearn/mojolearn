@@ -466,9 +466,24 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
 #: kernel: more of the GPU busy at a few tens of thousands of rows). The
 #: division and the flushes stay. Expected ~2x on the iteration stage.
 #: Requires TS_LANE_FOLD (the single-chain arm keeps the split kernel).
-#: -D MOJOLEARN_IDN_TSNE_REP_TILE turns it on.
+#: Default on (NVIDIA and AMD, wherever TS_SPLIT and TS_LANE_FOLD hold)
+#: since 2026-10-09 (lane/postmerge-act-4; post-merge A/B, one run per arm,
+#: ratios arm / default, nv L40S n0608 -> v0979..v0981, amd MI325X a1067 ->
+#: a1104..a1106): alone istella NV 1.42x / AMD 0.60x, taxi NV 1.20x / AMD
+#: 0.59x; with IDN_TSNE_KNN_TILE_SELECT (both promoted together) istella NV
+#: 1191 ms (0.86x) / AMD 1219 (0.62x), avg 0.74x; taxi NV 1831 (1.17x) / AMD
+#: 1048 (0.55x), avg 0.86x. Vendor split: NV taxi 1.17x slower with both on
+#: (the average of the two vendors decides). Trustworthiness@15 equal and
+#: digests identical in every arm on both vendors (istella ce69cdffd6f889b6,
+#: taxi cee32a8a52defb1c): no bit change.
+#: -D MOJOLEARN_IDN_TSNE_REP_TILE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the split kernel.
 comptime IDN_TSNE_REP_TILE = (
-    TS_SPLIT and TS_LANE_FOLD and is_defined["MOJOLEARN_IDN_TSNE_REP_TILE"]()
+    TS_SPLIT
+    and TS_LANE_FOLD
+    and not (
+        is_defined["MOJOLEARN_IDN_TSNE_REP_TILE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
 )
 #: threads per row, lanes per thread, rows per block, candidates per tile
 comptime RT2_LQ = 16
