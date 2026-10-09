@@ -798,7 +798,10 @@ PIPELINES["nvidia"]["checks"].append("gpu-column-nvidia-hopper")
 AFTER["linux-joint-diff"].append("gpu-column-nvidia-hopper")
 AFTER["publish-nvidia"] = ["gpu-column-nvidia-hopper"]
 #: where --smoke-via lq runs each column: the lq box and the column's tag stem
-LQ_COLUMN_BOX = {"nvidia": "nv", "amd": "amd"}
+#: the held lq box per GPU column; MOJOLEARN_RELEASE_NV_BOX / _AMD_BOX pick another held box of the same
+#: hardware (e.g. nv2, the second L40S, when nv is released)
+LQ_COLUMN_BOX = {"nvidia": os.environ.get("MOJOLEARN_RELEASE_NV_BOX", "nv"),
+                 "amd": os.environ.get("MOJOLEARN_RELEASE_AMD_BOX", "amd")}
 #: the sm_90a set's line when no Hopper box is held
 HOPPER_NOT_RUN = "not run (no Hopper box held)"
 PUBLISH_STEPS = tuple(pipeline["publish"] for pipeline in PIPELINES.values())

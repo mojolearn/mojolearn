@@ -49,7 +49,7 @@ FILE_OPTS = ("--plugin", "--column", "--ref-column", "--cpu-column")
 #: smoke options release.py's rented route passed that mean nothing on a held box
 DROP_FLAGS = ("--rent",)
 DROP_OPTS = ("--gpu", "--provider", "--out", "--ssh")
-BOXES = {"nv": "NV", "amd": "AMD"}
+BOXES = {"nv": "NV", "nv2": "NV2", "amd": "AMD"}  # nv2: the second RunPod L40S (lq NV2=)
 
 
 def say(msg):
