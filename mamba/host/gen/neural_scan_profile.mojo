@@ -204,7 +204,7 @@ def nn34_prefill_prefix_cell(cell: Int, a: NN34FP, b: NN34FP,
 
 
 @always_inline
-def nn34_prefill_boundary_chain(chain: Int, prefix_a: NN34FP, prefix_b: NN34FP,
+def nn34_prefill_boundary_chain(chain: Int, prefix_a: NN34FP, prefix_b: NN34FP,  # device-helper: one chain per thread of nn34_boundary_kernel
     in_boundary: NN34FP, chunk_boundaries: NN34FP, out_boundary: NN34FP,
     chains: Int, tokens: Int, absolute_start: Int):
     """Parallel over independent state chains, ordered over completed
