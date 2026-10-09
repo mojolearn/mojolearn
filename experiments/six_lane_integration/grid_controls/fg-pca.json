@@ -2,7 +2,7 @@
  "schema": "mojolearn.grid-controls/1",
  "lane": "fg-pca",
  "branch": "lane/fg-pca",
- "head": "5c8738666",
+ "head": "385b276e8",
  "controls": {
   "pca_lean_scratch": {
    "define": "MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF",
