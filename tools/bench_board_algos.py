@@ -2413,6 +2413,82 @@ _READBACK_BINDING = {"resample": "_mojolearn_resample", "model_selection": "_moj
                      "training": "_mojolearn_training", "embedding": "_mojolearn_embedding"}
 
 
+# THE BINDINGS A RACE NEEDS (2026-10-09, lane/board-quality-bf16). A race of `ours` loads the lane's device binding;
+# when the race holds no torch-eager-fp32 arm (the board default ARMS=ours: opponents are stored, never re-raced),
+# the layer and optimizer lanes' quality is the untimed own-host reference (bench_board_host_quality.enrich), which
+# loads the lane's HOST twin under MOJOLEARN_VENDOR=cpu. An lq RACE of main builds only the bindings a branch changed
+# (none), and the box's retry loop builds a binding only when the RACE LOG names it, so before this table no
+# x_sequence / x_cnn / embedding / training host twin was ever built and all 17 neural-lane cells carried "Own host
+# reference failed". The race now names a missing host twin in its log BEFORE the timed rounds
+# (`host_reference_preflight`), and names any further one the reference refused after them.
+# `python3 tools/bench_board_algos.py builds --lanes a,b [--arms ours]` prints the BUILDS= list a caller passes.
+HOST_REFERENCE_KINDS = ("layer", "optim")   # quality_kind values whose ours-only quality is the host reference
+QUALITY_REFERENCE_ARM = "torch-eager-fp32"  # with this arm in the race, quality() compares against it instead
+
+
+def lane_binding(lane):
+    """The lane's device binding basename (`_mojolearn_x_cnn`, `_mojolearn_embedding`, ...)."""
+    s = LANES[lane]
+    return s.get("binding") or _READBACK_BINDING.get(s["xlane"], "_mojolearn_x_" + s["xlane"])
+
+
+def needs_host_reference(lane, arms):
+    """True when this race's quality for ours can only come from the own-host reference."""
+    arms = list(arms)
+    return (any(a in OURS_ARMS for a in arms) and QUALITY_REFERENCE_ARM not in arms
+            and LANES[lane]["kind"] != "extra" and quality_kind(lane) in HOST_REFERENCE_KINDS)
+
+
+def race_builds(lane, arms=("ours",), repo=REPO):
+    """bindings/build_*.sh basenames (no .sh) a race of `lane` with `arms` needs: the device binding, plus its
+    host twin when the quality is the own-host reference. Scripts the tree does not hold are left out."""
+    base = lane_binding(lane)[len("_mojolearn_"):]
+    want = ["build_" + base]
+    if needs_host_reference(lane, arms):
+        want.append("build_%s_host" % base)
+    return [b for b in want if os.path.exists(os.path.join(repo, "bindings", b + ".sh"))]
+
+
+def _host_binding_path(basename):
+    """Where the ours interpreter's loader looks for a host binding (python/mojolearn/_backend.py
+    host_module_path: $MOJOLEARN_HOST_DIR, else <package>/host)."""
+    d = os.environ.get("MOJOLEARN_HOST_DIR", "").strip() or os.path.join(REPO, "python", "mojolearn", "host")
+    return os.path.join(d, basename + ".so")
+
+
+def _say_needs_host(lane, ds, basename, when):
+    # The exact phrase the box retry loop greps: "needs python/mojolearn/<...>_mojolearn_<x>.so"
+    print("ALGOS-HOST-REFERENCE lane=%s dataset=%s %s: needs python/mojolearn/host/%s.so "
+          "(bindings/build_%s.sh; the untimed own-host quality reference)"
+          % (lane, ds, when, basename, basename[len("_mojolearn_"):]), flush=True)
+
+
+def host_reference_preflight(lane, ds, arms, work):
+    """Before any worker starts: when the quality needs the host twin and it is not built, name it in the log and
+    stop (exit 4) so the box job builds it and races again; nothing is timed twice. Asked once per work dir: when
+    the twin is still missing on the next try (its build failed), the race runs and the quality says why.
+    MOJOLEARN_ALGOS_HOST_PREFLIGHT=0 turns it off; an installed-wheel race (MOJOLEARN_BENCH_INSTALLED=1) skips it,
+    the wheel's host directory is not the tree's."""
+    if os.environ.get("MOJOLEARN_ALGOS_HOST_PREFLIGHT", "1") == "0" or os.environ.get("MOJOLEARN_BENCH_INSTALLED") == "1":
+        return None
+    if not needs_host_reference(lane, arms):
+        return None
+    basename = lane_binding(lane) + "_host"
+    if not os.path.exists(os.path.join(REPO, "bindings", "build_%s.sh" % basename[len("_mojolearn_"):])):
+        return None
+    if os.path.exists(_host_binding_path(basename)):
+        return None
+    marker = os.path.join(work, "host-preflight-%s.asked" % basename)
+    if os.path.exists(marker):
+        print("ALGOS-HOST-REFERENCE lane=%s dataset=%s %s still missing after one ask; racing without it"
+              % (lane, ds, basename), flush=True)
+        return None
+    with open(marker, "w") as fh:
+        fh.write(now_utc() + "\n")
+    _say_needs_host(lane, ds, basename, "preflight")
+    return 4
+
+
 def _ours_info(lane, est=None):
     import mojolearn as ml
     more = _tool("bench_board_more")
@@ -5387,6 +5463,10 @@ def race(args):
     _tool("bench_board_probe").refuse_our_cpu_arms(arms, "bench_board_algos")
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
+    if not getattr(args, "params_only", False):
+        rc = host_reference_preflight(args.lane, args.dataset, arms, args.work)
+        if rc is not None:
+            return rc
     frozen_config = None
     if ab_config is not None:
         frozen_config = os.path.abspath(os.path.join(args.out, "neural-ab-config.json"))
@@ -5539,10 +5619,17 @@ def race(args):
             w.close()
     try:
         result["quality"] = quality(lane, D, outs)
-        result["host_quality_receipt"] = _tool("bench_board_host_quality").enrich(
-            lane, D, outs, result["quality"], args.ours_python,
-            os.path.join(args.work, tag + "-host-quality"), args.round_seconds,
+        hq = _tool("bench_board_host_quality")
+        hq_dir = os.path.join(args.work, tag + "-host-quality")
+        result["host_quality_receipt"] = hq.enrich(
+            lane, D, outs, result["quality"], args.ours_python, hq_dir, args.round_seconds,
             fit_calls=args.rounds + (0 if external_warmup else 1))
+        # a host twin the reference could not load (one beyond the preflight's, e.g. a second binding the
+        # lane's class imports): name it so the box job builds it and races again
+        if any("Own host reference failed" in str((result["quality"].get(a) or {}).get("error", ""))
+               for a in arms if a in OURS_ARMS):
+            for basename in hq.missing_host_bindings(os.path.join(hq_dir, "host.log")):
+                _say_needs_host(lane, ds, basename, "after the timed rounds")
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
@@ -5660,6 +5747,10 @@ def build_parser():
     w.add_argument("--neural-fixtures", default=None, help="the layer lanes' fixture dir (from the conductor)")
     w.add_argument("--full-tree-workload", action="store_true")
     sub.add_parser("table")
+    b = sub.add_parser("builds", help="print the BUILDS= list (bindings/build_*.sh, device + host twins) a race "
+                                      "of these lanes needs, e.g. for `lq add nv RACE main <lanes> <ds> BUILDS=...`")
+    b.add_argument("--lanes", required=True, help="comma list of lanes")
+    b.add_argument("--arms", default="ours", help="the race's arms (default ours: the board default)")
     return p
 
 
@@ -5680,6 +5771,16 @@ def main(argv=None):
         return worker(args)
     if args.cmd == "table":
         print(json.dumps({l: lane_config(l) for l in LANE_ORDER}, indent=1, sort_keys=True))
+        return 0
+    if args.cmd == "builds":
+        out = []
+        for lane in [x for x in args.lanes.split(",") if x]:
+            if lane not in LANES:
+                raise SystemExit("unknown lane %r" % lane)
+            for bname in race_builds(lane, [a for a in args.arms.split(",") if a]):
+                if bname not in out:
+                    out.append(bname)
+        print("BUILDS=" + ",".join(out))
         return 0
     if args.rounds < 1:
         raise SystemExit("--rounds must be >= 1")

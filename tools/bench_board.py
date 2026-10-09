@@ -1996,6 +1996,89 @@ def add_ratios(cells):
     return cells
 
 
+HASH_MATCH_CHARS = 16   # box_job.sh / main_board_ingest keep the first 16 hex characters of an output digest
+
+
+def _hash_key(h):
+    h = str(h or "").strip().lower()
+    return h[:HASH_MATCH_CHARS] if len(h) >= HASH_MATCH_CHARS and all(ch in "0123456789abcdef" for ch in h) else None
+
+
+def stored_identity_quality(cells):
+    """Our cell with no quality (empty, or a refusal such as "Own host reference failed") whose output hash
+    equals a completed opponent cell's output hash gets quality {"identical_to": <arm>}: the outputs are the
+    same bits, so the quality is proven without any reference (lane/board-quality-bf16, 2026-10-09; the
+    embedding lane's stored torch hash equals ours). A string compare of the two stored digests, nothing
+    recomputed. A cell with a numeric quality is left alone; the replaced refusal is kept in
+    `quality_superseded`. Returns the cells."""
+    opps = [c for c in cells if c.get("library") != "mojolearn" and c.get("status") == "ok" and _hash_key(c.get("hash"))]
+    for c in cells:
+        if c.get("library") != "mojolearn" or c.get("status") != "ok":
+            continue
+        q = c.get("quality") or {}
+        if q and set(q) != {"error"}:
+            continue
+        mine = _hash_key(c.get("hash"))
+        twin = next((o for o in opps if mine and _hash_key(o.get("hash")) == mine), None)
+        if twin is None:
+            continue
+        if q:
+            c["quality_superseded"] = q
+        c["quality"] = {"identical_to": twin["arm"]}
+        c["quality_source"] = ("output hash %s equals the stored %s output hash: the same bits"
+                               % (mine, twin["arm"]))
+    return cells
+
+
+# The neural headline (Andrew 2026-10-09): what customers run is torch in bf16, so for a neural lane the
+# headline ratio is ours IDENTICAL over torch's FASTEST bf16 arm (eager or compile); the fp32 twin (torch's
+# fastest fp32 arm) stays beside it. The per-arm ratio columns are unchanged, and a race with no neural
+# kind gets no headline, so release boards' classical columns keep their meaning.
+NEURAL_ALGOS_KINDS = ("layer", "optim", "seqmodel", "cnnclf")
+IDENTITY_TAX_NOTE = ("torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical "
+                     "across vendors): the gap is the identity tax")
+
+
+def is_neural_race(rr):
+    fam = rr.get("family")
+    if fam == "neural":
+        return True
+    if fam != "algos":
+        return False
+    try:
+        return ALGOS.LANES[rr.get("lane")]["kind"] in NEURAL_ALGOS_KINDS
+    except (KeyError, TypeError):
+        return False
+
+
+def _torch_gpu_precision(arm):
+    """'torch-eager-bf16' -> 'bf16', 'torch-compile-fp32' -> 'fp32'; None for CPU torch and other arms."""
+    arm = str(arm or "")
+    if not arm.startswith("torch-") or arm.startswith("torch-cpu"):
+        return None
+    tail = arm.rsplit("-", 1)[-1]
+    return tail if tail in ("bf16", "fp32") and arm.split("-")[1] in ("eager", "compile") else None
+
+
+def neural_headline(rr):
+    """-> None for a race that is not neural, else {ours_ms, bf16: {arm, ms, ratio} | None, fp32: {...} | None,
+    note}. Only completed cells with a median count; the fastest arm of each precision is the one with the
+    lowest stored median."""
+    if not is_neural_race(rr):
+        return None
+    cells = rr.get("cells") or []
+    ok = [c for c in cells if c.get("status") == "ok" and c.get("median_ms")]
+    ours = ours_of(ok, "identical")
+    out = {"ours_ms": ours["median_ms"] if ours else None, "note": IDENTITY_TAX_NOTE}
+    for prec in ("bf16", "fp32"):
+        arms = [c for c in ok if c.get("library") != "mojolearn" and _torch_gpu_precision(c.get("arm")) == prec]
+        best = min(arms, key=lambda c: c["median_ms"]) if arms else None
+        out[prec] = None if best is None else {
+            "arm": best["arm"], "ms": best["median_ms"],
+            "ratio": (ours["median_ms"] / best["median_ms"]) if ours else None}
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Running
 # ---------------------------------------------------------------------------
@@ -2451,7 +2534,7 @@ def run_race(ctx, race):
             for ic in r["infer_cells"]:
                 ic = dict(ic, source=STORE.source_text(r))
                 rec["infer_cells"].append(ic)
-    rec["cells"] = add_ratios(rec["cells"])
+    rec["cells"] = add_ratios(stored_identity_quality(rec["cells"]))
     if ctx.get("opponents_only"):
         cells = {c["arm"]: c for c in rec["cells"]}
         rec["status"] = "done" if rec["rc"] == 0 and all(successful_opponent_cell(cells.get(a, {})) for a in full["opponents"]) and (not ctx.get("infer") or successful_opponent_inference(full, full["opponents"], rec.get("infer_cells") or [])) else "failed"
@@ -2897,6 +2980,7 @@ def render_board(result):
                 "; ".join("%s %s" % (c["arm"], q(c)) for c in opps) or "-"))
     L.append("")
     L.extend(INFER.render_glance(_bb(), races))
+    L.extend(render_neural_headline(races))
 
     for fam in FAMILIES:
         fam_races = [races[r] for r in sorted(races) if races[r]["family"] == fam]
@@ -2921,6 +3005,10 @@ def render_board(result):
                 rr.get("status"), rr.get("rc"), rr.get("log"), _f(rh.get("hostname")),
                 " (pod %s)" % rh["pod_id"] if rh.get("pod_id") else ""))
             L.append("")
+            hl = neural_headline(rr)
+            if hl is not None:
+                L.append("headline: %s" % headline_text(hl))
+                L.append("")
             L.append("| arm | library | device | mode | median ms | min..max ms | rounds | "
                      "ours IDENTICAL / arm | ours FAST / arm | " + CLOCK_HEADER + " | peak host MB | "
                      "peak GPU MB | quality | hash stable | comparability | installed_wheel | "
@@ -2987,6 +3075,41 @@ def render_board(result):
         L.append("- Neural, not planned on this vendor: %s" % clean(why))
     L.append("")
     return "\n".join(L) + "\n"
+
+
+def headline_text(hl):
+    def side(prec):
+        h = hl.get(prec)
+        if not h:
+            return "ours IDENTICAL / torch %s: - (no completed torch %s arm)" % (prec, prec)
+        return "ours IDENTICAL / torch %s (%s, %s ms) = %s" % (prec, h["arm"], _f(h["ms"]), _f(h["ratio"], 3))
+    return clean("%s; fp32 twin: %s. Note: %s." % (side("bf16"), side("fp32"), hl["note"]))
+
+
+def render_neural_headline(races):
+    """The neural headline table: one row per neural race, ours IDENTICAL against torch's fastest bf16 arm
+    (the headline) and its fastest fp32 arm (the fp32 twin, the second column). Empty for a board with no
+    neural race."""
+    rows = []
+    for rid in sorted(races):
+        hl = neural_headline(races[rid])
+        if hl is None:
+            continue
+        b, f = hl.get("bf16") or {}, hl.get("fp32") or {}
+        rows.append("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            clean(races[rid].get("lane")), clean(races[rid].get("dataset")), _f(hl.get("ours_ms")),
+            "%s (%s)" % (_f(b.get("ms")), clean(b["arm"])) if b else "-", _f(b.get("ratio"), 3),
+            "%s (%s)" % (_f(f.get("ms")), clean(f["arm"])) if f else "-", _f(f.get("ratio"), 3),
+            clean(IDENTITY_TAX_NOTE) if b else "no torch bf16 arm on this lane"))
+    if not rows:
+        return []
+    return ["", "## Neural headline: ours IDENTICAL against torch bf16", "",
+            "What customers run is torch in bf16. The headline divides our IDENTICAL median by torch's fastest "
+            "bf16 arm (eager or compile, the lower stored median); the fp32 twin (torch's fastest fp32 arm) is "
+            "the second column. Per-arm ratios stay in each race's table below.", "",
+            "| lane | dataset | ours IDENTICAL ms | torch bf16 ms (fastest arm) | ours / torch bf16 | "
+            "torch fp32 twin ms (fastest arm) | ours / torch fp32 | note |",
+            "|---|---|---|---|---|---|---|---|"] + rows + [""]
 
 
 def render_memory_methods(cells):
