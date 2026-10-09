@@ -1353,6 +1353,9 @@ def init_scalable_kmeans_plus_plus(
         inner.init = INIT_ARRAY
         # not a cuVS field: the caller's lazy-shift request reaches the recluster
         inner.lazy_shift = params.lazy_shift
+        # not a cuVS field (lane fg-ivf B2): the caller's recluster cap
+        if params.recluster_max_iter > 0:
+            inner.max_iter = params.recluster_max_iter
         var inner_res = kmeans_fit_main_traced(
             ctx,
             cand_buf,

@@ -1004,10 +1004,14 @@ def host_init_scalable(
     mut trace: KMeansHostTrace,
     tag_prefix: String,
     lazy_shift: Bool = False,
+    recluster_max_iter: Int = 0,
 ) raises:
     """`init_scalable_kmeans_plus_plus` (module docstring). `lazy_shift` is
     the caller's `KMeansParams.lazy_shift`, handed to the recluster as the
-    device's `inner.lazy_shift = params.lazy_shift` does."""
+    device's `inner.lazy_shift = params.lazy_shift` does.
+    `recluster_max_iter` (lane fg-ivf B2): the caller's
+    `KMeansParams.recluster_max_iter`; > 0 caps the recluster's Lloyd
+    iterations as the device's `inner.max_iter` does."""
     if n >= SCALABLE_ROW_LIMIT:
         raise Error(
             "scalable k-means++ selection scan counts in Float32 and is"
@@ -1115,7 +1119,7 @@ def host_init_scalable(
             INIT_ARRAY,
             UInt64(0),
             1,
-            DEFAULT_MAX_ITER,
+            recluster_max_iter if recluster_max_iter > 0 else DEFAULT_MAX_ITER,
             DEFAULT_TOL,
             METRIC_L2_EXPANDED,
             DEFAULT_OVERSAMPLING,
@@ -1249,6 +1253,7 @@ def host_fit_main[with_init: Bool = True](
     mut trace: KMeansHostTrace,
     tag_prefix: String,
     lazy_shift: Bool = False,
+    recluster_max_iter: Int = 0,
 ) raises -> KMeansHostFit:
     """`kmeans_fit_main_traced` (module docstring). `centroids` is in-out:
     read as the start on INIT_ARRAY, the best restart on return.
@@ -1297,7 +1302,7 @@ def host_fit_main[with_init: Bool = True](
                 elif init == INIT_KMEANS_PLUS_PLUS and oversampling_factor != 0.0:
                     host_init_scalable(
                         x, x_norm, n, d, k, metric, oversampling_factor, cur, rng,
-                        trace, restart_tag, lazy_shift,
+                        trace, restart_tag, lazy_shift, recluster_max_iter,
                     )
                 else:
                     host_kmeans_plus_plus(x, x_norm, n, d, k, is_sqrt, cur, rng)
