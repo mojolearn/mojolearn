@@ -1,0 +1,40 @@
+diff --git a/sequence/moe_mma.mojo b/sequence/moe_mma.mojo
+index 1098b6368..8368ea52c 100644
+--- a/sequence/moe_mma.mojo
++++ b/sequence/moe_mma.mojo
+@@ -17,7 +17,7 @@ KB reduction words staged k-major for the pairs and row-major for the
+ weights. Each cell is still one fma chain over the reduction index
+ ascending (the matrix unit's per-cell order), with no per-step flush; FAST
+ only, quality on the board's rel_fro / max_rel_diff column.
+-  (_KB32, 32-word slabs, was deleted 2026-10-09: see the TOMBSTONE below.)
++  _KB32: 32-word slabs (half the barriers per reduction).
+   _WIDE: the hidden product 64 pairs x 64 features (gate and up 32 fragments
+          a simdgroup) instead of 64 x 32.
+   _PF:   the next slab's global words read into registers before the current
+@@ -38,22 +38,20 @@ from sequence.moe_reg import MOE_DEVGROUP
+ 
+ #: MOE_FAST_MMA is the FAST + Apple default since M3 A/B rab10-moemma (2026-10-05, afc_ab_def, full board
+ #: size, 1 run per arm): moe synthetic 71.39 -> 53.48 ms (-25.1%), output digest identical.
+-#: `-D MOJOLEARN_MOE_FAST_MMA_OFF` turns it off. WIDE/PF geometry variants stay opt-in:
++#: `-D MOJOLEARN_MOE_FAST_MMA_OFF` turns it off. KB32/WIDE/PF geometry variants stay opt-in:
+ #: the bundle KB32 + WIDE + PF (rab10-moemmaall, same A/B setup) was slower, moe 71.3 -> 146.8 ms;
+ #: recorded as a bundle loss (no single-variant A/B yet).
+ # See docs/apple-fast/EXPERIMENTS.md (MOE_FAST_MMA); neural lane owns validation.
+-# TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_KB32 (DROPPED-slower as the bundle KB32 + WIDE + PF: M3 rab10-moemmaall moe synthetic
+-# 71.3 -> 146.8 ms; never A/B-ed alone) deleted 2026-10-09 on lane/owed-deletions-D2: the 32-word slab; MM_KB is 16;
+-# code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_KB32.patch
++comptime MM_KB32 = is_defined["MOJOLEARN_MOE_FAST_MMA_KB32"]()
+ comptime MM_WIDE = is_defined["MOJOLEARN_MOE_FAST_MMA_WIDE"]()
+ comptime MM_PF = is_defined["MOJOLEARN_MOE_FAST_MMA_PF"]()
+ # Apple simdgroup intrinsics only: an NVIDIA/AMD target cannot link them
+ # (gfx942 lld: undefined air.simdgroup_matrix_*; box-run-2 compile fix).
+ comptime MOE_MMA = has_apple_gpu_accelerator() and MOE_DEVGROUP and (
+-    (not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()) or MM_WIDE or MM_PF
++    (not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()) or MM_KB32 or MM_WIDE or MM_PF
+ )
+ 
+-comptime MM_KB = 16
++comptime MM_KB = 32 if MM_KB32 else 16
+ comptime MM_SGM = 2
+ comptime MM_SGN = 2
+ comptime MM_FM = 4

@@ -124,31 +124,19 @@ comptime SEQ_PIPE_DOWN = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST
 #: the pipelined chunk, floats (8 MB; lane apple-fast-gap-optim:
 #: -D MOJOLEARN_SEQ_FAST_PIPE_CH=<floats> for the A/B)
 comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
-#: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
-#: default OFF, FAST + Apple only: the pipelined downloads' read-back.
-#:  MOJOLEARN_SEQ_FAST_MAP_DOWN: each deferred download is read through
-#:    `DeviceBuffer.map_to_host` (the runtime's own mapping) and one memcpy,
-#:    instead of the two pinned (write-combined) halves.
-#:  MOJOLEARN_SEQ_FAST_RAW_DOWN: each deferred download is DMAd straight
-#:    into the caller's array in SEQ_PIPE_CH chunks, all queued, one wait
-#:    (no stage and no host read).
-#: Copies only: the same bytes.
-#: SEQ_FAST_MAP_DOWN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
-#: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 50.2 -> 79.8 ms.
-#: DROPPED-slower: stays off.
-comptime SEQ_MAP_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()
+#: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md):
+#: its two read-back candidates for the pipelined downloads (map_to_host,
+#: raw chunked DMA) were deleted 2026-10-09 as losers (TOMBSTONES below).
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_MAP_DOWN (DROPPED-slower: M3 afc_ab_def 2026-10-04 layernorm 50.2 -> 79.8 ms; rab2-seqmapdown
+# +58.7%) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_MAP_DOWN.patch
 #: SEQ_FAST_VAR_COOP (sequence/ops.mojo): VAR's long folds as coop cells, routed in `launch`.
-#: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (FAST + Apple, default off, READY-AB): every
-#: binding call's DeviceExec drains the queue again in __deinit__, a second
-#: synchronize after the call's own final wait. VAR's fit and forecast end on
-#: a sync with nothing queued after it, so they mark the executor drained
-#: (`mark_drained`) and __deinit__ skips the empty wait: one Metal wait fewer
-#: per call, two per board fit + forecast.
-#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
-#: verdicts batch 6): mixed, var taxi-hourly +10.6% slower. DROPPED: stays
-#: off (opt-in only).
-comptime SEQ_FAST_VAR_NODRAIN = _SEQ_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_VAR_NODRAIN"]()
-comptime SEQ_RAW_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (DROPPED-slower: M3 afc_ab_def verdicts batch 6, 2026-10-05, mixed, var taxi-hourly
+# +10.6%) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_RAW_DOWN (DROPPED-slower: M3 rab7-seqrawdown layernorm 48.99 -> 73.68 ms, +50.4%) deleted
+# 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_RAW_DOWN.patch
 
 
 struct _SeqContext(Defaultable, Movable):
@@ -446,8 +434,6 @@ struct DeviceExec(Exec):
     #: lane gap-gemm-layers: the pair offsets of the MoE grouping, on the host
     #: (MOE_GROUPED_GEMM: the hidden op downloads them, the out op reuses them)
     var moe_poff: List[Int]
-    #: SEQ_FAST_VAR_NODRAIN: the caller ended on a sync and queued nothing after
-    var drained: Bool
 
     def __init__(out self) raises:
         self.ctx = sequence_ctx()
@@ -466,12 +452,6 @@ struct DeviceExec(Exec):
         self.pipe_src = List[Int]()
         self.pipe_n = List[Int]()
         self.moe_poff = List[Int]()
-        self.drained = False
-
-    def mark_drained(mut self):
-        """SEQ_FAST_VAR_NODRAIN: the last call on this executor was a sync and
-        nothing has been queued since, so __deinit__ need not wait again."""
-        self.drained = True
 
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
@@ -507,14 +487,13 @@ struct DeviceExec(Exec):
     def __deinit__(deinit self):
         # The context outlives this Exec: drain its queue before the buffers
         # go, so no queued kernel reads a freed buffer.
-        var drain = True
-        comptime if SEQ_FAST_VAR_NODRAIN:
-            drain = not self.drained
-        if drain:
-            try:
-                self.ctx.synchronize()
-            except:
-                pass
+        # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (DROPPED-slower, var taxi-hourly +10.6%) deleted 2026-10-09 on
+        # lane/owed-deletions-D2: the drained flag; code recoverable at b639a2bd2.
+        # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
         try:
             for i in range(len(self.pstaged)):
                 _pool_release_host(self.pstaged[i])
@@ -982,35 +961,12 @@ struct DeviceExec(Exec):
         chunk i - 1 is read out of the other. Each chunk's wait comes before
         its half is reused (that half was last read for chunk i - 2, before
         the previous wait). Returns with every byte in place."""
-        comptime if SEQ_MAP_DOWN:
-            for j in range(len(self.pipe_n)):  # small-loop(pipe_n: deferred download chunks): one mapped DMA copy per chunk into caller memory
-                var nj = self.pipe_n[j]
-                var f = self._find(FP(unsafe_from_address=self.pipe_src[j]), nj)
-                var v = self._sub(f[0], f[1], nj)
-                with v.map_to_host() as h:
-                    memcpy(dest=FP(unsafe_from_address=self.pipe_dst[j]),
-                           src=FP(unsafe_from_address=Int(h.unsafe_ptr())), count=nj)
-                _ = v^
-            self.pipe_dst.clear()
-            self.pipe_src.clear()
-            self.pipe_n.clear()
-            return
-        comptime if SEQ_RAW_DOWN:
-            for j in range(len(self.pipe_n)):
-                var nj = self.pipe_n[j]
-                var done = 0
-                while done < nj:
-                    var cnt = min(SEQ_PIPE_CH, nj - done)
-                    var f = self._find(FP(unsafe_from_address=self.pipe_src[j] + done * 4), cnt)
-                    var v = self._sub(f[0], f[1], cnt)
-                    self.ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=self.pipe_dst[j] + done * 4), src_buf=v)
-                    _ = v^
-                    done += cnt
-            self.ctx.synchronize()
-            self.pipe_dst.clear()
-            self.pipe_src.clear()
-            self.pipe_n.clear()
-            return
+        # TOMBSTONE: MOJOLEARN_SEQ_FAST_MAP_DOWN (DROPPED-slower: M3 afc_ab_def 2026-10-04 layernorm 50.2 -> 79.8 ms; rab2-seqmapdown
+        # +58.7%) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+        # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_MAP_DOWN.patch
+        # TOMBSTONE: MOJOLEARN_SEQ_FAST_RAW_DOWN (DROPPED-slower: M3 rab7-seqrawdown layernorm 48.99 -> 73.68 ms, +50.4%) deleted
+        # 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+        # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_RAW_DOWN.patch
         var h0 = _pool_host(self.ctx, SEQ_PIPE_CH)
         var h1 = _pool_host(self.ctx, SEQ_PIPE_CH)
         var pool = X_SEQUENCE_POOL.get_or_create_ptr()

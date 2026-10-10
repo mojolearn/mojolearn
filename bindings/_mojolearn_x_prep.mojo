@@ -285,8 +285,8 @@ def pool_arena_binding() raises -> PythonObject:
 
 def ptimpute_flags_binding() raises -> PythonObject:
     """Lane af-ptimpute (FAST + Apple, each switch its own define, default off):
-    the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 PT_SPEC,
-    4 PT_FUSED_TRANSFORM, 8 SI_ONEPASS, 16 PT_FOLD_NOX); registered only
+    the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 unused
+    (PT_SPEC, deleted), 4 unused (PT_FUSED_TRANSFORM, deleted), 8 SI_ONEPASS, 16 unused (PT_FOLD_NOX, deleted), 32 PT_SCORE_STABLE); registered only
     when one is on, so the Python layer's probe is the switch."""
     return PythonObject(PTIMPUTE_FLAGS)
 

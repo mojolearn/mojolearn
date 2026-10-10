@@ -44,10 +44,10 @@ from x_prep.idn_blocked import IDN_TE_BLOCKED, te_blocked_scratch_words, te_bloc
 #: lane af-ptimpute (2026-10-03), FAST + Apple + define only (x_prep/fastpt.mojo): the import
 #: instantiates nothing; every launch below sits inside `comptime if PT_* / SI_*`
 from x_prep.fastpt import (
-    PT_COLBATCH, PT_SPEC, PT_FUSED_TRANSFORM, SI_ONEPASS, OP_PT_MAP, OP_PT_SMAP, OP_PT_SFOLD, OP_PT_APPLY,
-    pt_colbatch_fold, pt_spec_fold, cs_tile_stats, ptimpute_part_words, fused_tail_pair,
+    PT_COLBATCH, SI_ONEPASS, OP_PT_MAP,
+    pt_colbatch_fold, cs_tile_stats, ptimpute_part_words,
 )
-from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank, mi_colscale_fast_kernel, mi_reduce_fast_kernel, TGF
+from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.staged_download import download_f32_into
 from core.device_pool import pool_take, pool_give
@@ -185,43 +185,36 @@ comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accele
 comptime EIGH_CYCLIC_Q = 5
 
 #: lane/apple-fast-mi (2026-10-03): FAST + Apple only, default OFF, one `-D MOJOLEARN_MI_<NAME>`
-#: each (docs/apple-fast/ab/mi.md; MOJOLEARN_MI_ALL turns every one on). x_prep/dmi_fast.mojo:
+#: each (docs/apple-fast/ab/mi.md). x_prep/dmi_fast.mojo:
 #: REG_SORTCOUNT: op 68 (`mi_cc`, mutual_info_regression) as the sorted Kraskov search (the
 #: host's argument, x_prep/host/mutual_info.mojo `_cc_column`) instead of the brute-force
 #: unit; REG_TIES: its tie-aware form (implies SORTCOUNT); REG_RANKMAJOR: its point kernel
-#: one thread per (column, sorted rank) (implies SORTCOUNT); FAST_FOLDS: ops 66 / 70
-#: (`mi_colscale`, `mi_reduce`) as threadgroup folds; CLF_RANKMAJOR: op 69's point kernel
+#: one thread per (column, sorted rank) (implies SORTCOUNT); CLF_RANKMAJOR: op 69's point kernel
 #: one thread per (column, sorted rank). Every launch is inside these guards; IDENTICAL and
 #: the other vendors compile main's code unchanged.
 comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-# DROP-quality, M3 miv-reg-all-* / miv-clf-all-* (istella, taxi):
-# regression 46430 -> 1151 / 2316 -> 81 ms, but includes FAST_FOLDS.
-# M2 30k x 48 tie-heavy fixture: score shift up to 3.2% of scale and
-# selected-set symmetric difference 2. See docs/apple-fast/EXPERIMENTS.md.
-comptime MI_ALL = is_defined["MOJOLEARN_MI_ALL"]()
+# TOMBSTONE: MOJOLEARN_MI_ALL (DROP-quality: M3 miv-reg-all-* reg istella 46,430 -> 1,151 ms, taxi 2,316 -> 81, but
+# it includes FAST_FOLDS, which fails the selected-set gate) deleted 2026-10-09 on lane/owed-deletions-D2: the
+# bundle alias only, each member keeps its own define; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_MI_ALL.patch
 #: MI_REG_TIES: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
 #: select-mutual-info-reg istella 46,465 -> 1,340 ms, taxi 2,339 -> 160 ms (n_selected 110 / 5
 #: both arms; main's istella arm swings 46-70 s run to run, far inside the gap). Quality
 #: (tools/miv_quality.sh, M2): scores bit-identical to main's FAST route on a tie-heavy fixture.
 #: -D MOJOLEARN_MI_REG_TIES_OFF: main's search.
-comptime MI_REG_TIES = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_TIES"]()
+comptime MI_REG_TIES = _MI_FA and (is_defined["MOJOLEARN_MI_REG_TIES"]()
                                    or not is_defined["MOJOLEARN_MI_REG_TIES_OFF"]())
-comptime MI_REG_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_RANKMAJOR"]())
+comptime MI_REG_RANKMAJOR = _MI_FA and is_defined["MOJOLEARN_MI_REG_RANKMAJOR"]()
 comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or MI_REG_RANKMAJOR or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
-#: MI_FAST_FOLDS stays opt-in (lane/apple-fast-miv): its scores move up to 3% of the largest
-#: score and the selected set changes on the tools/miv_quality.py fixture.
-# DROP-quality / INCONCLUSIVE-speed: mi-reg-folds-istella-x was -0.2%
-# on the old base; M2 quality showed 3.2% score shift and selected-set
-# symmetric difference 2. See docs/apple-fast/EXPERIMENTS.md.
-comptime MI_FAST_FOLDS = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_FAST_FOLDS"]())
+# TOMBSTONE: MOJOLEARN_MI_FAST_FOLDS (DROP speed + quality: mi-reg-folds-istella-x -0.2%; M2 tie-heavy fixture scores
+# move up to 3.2% of scale, selected-set symmetric difference 2) deleted 2026-10-09 on lane/owed-deletions-D2: ops 66 / 70
+# as threadgroup folds; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_MI_FAST_FOLDS.patch
 #: MI_CLF_RANKMAJOR: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
 #: select-mutual-info istella 715.2 -> 645.2 ms, taxi 202.2 -> 196.4 ms (n_selected identical);
 #: scores bit-identical (tools/miv_quality.sh, M2). -D MOJOLEARN_MI_CLF_RANKMAJOR_OFF: main's layout.
-comptime MI_CLF_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]()
+comptime MI_CLF_RANKMAJOR = _MI_FA and (is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]()
                                         or not is_defined["MOJOLEARN_MI_CLF_RANKMAJOR_OFF"]())
 comptime OP_MI_CC = 68
-comptime OP_MI_COLSCALE = 66
-comptime OP_MI_REDUCE = 70
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)
@@ -500,7 +493,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     rre_scr = max(rre_scr, rre_words(en, eb))
     # lane af-ptimpute: the row-tiled folds' per-(chunk, column) partials, sized over the program
     var ptw = 1
-    comptime if PT_COLBATCH or PT_FUSED_TRANSFORM or SI_ONEPASS:
+    comptime if PT_COLBATCH or SI_ONEPASS:
         ptw = ptimpute_part_words(host_q, stages)
     var ctx = x_prep_ctx()
     var dpt = ctx.enqueue_create_buffer[DType.float32](ptw)
@@ -571,13 +564,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                                                             Int(hq[2]), Int(hq[0]), Int(hq[6]), Int(hq[3]),
                                                             Int(hq[7]))
                 continue
-        comptime if MI_FAST_FOLDS:
-            if op == OP_MI_COLSCALE:
-                ctx.enqueue_function[mi_colscale_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGF)
-                continue
-            if op == OP_MI_REDUCE:
-                ctx.enqueue_function[mi_reduce_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGF)
-                continue
+        # TOMBSTONE: MOJOLEARN_MI_FAST_FOLDS (DROP speed + quality) deleted 2026-10-09 on lane/owed-deletions-D2;
+        # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_MI_FAST_FOLDS.patch
         if mi_sorted and op == OP_MI_CD:
             var hq = host_q + (s * STAGE_INTS + 2)
             mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]),
@@ -715,27 +703,10 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                                  FP(unsafe_from_address=Int(dpt.unsafe_ptr())), host_q + (s * STAGE_INTS + 2),
                                  IP(unsafe_from_address=Int(dq.unsafe_ptr())) + (s * STAGE_INTS + 2))
                 continue
-        comptime if PT_SPEC:
-            # the speculated round's (pt_smap, pt_sfold) likewise; pt_spts and pt_sres stay units
-            if op == OP_PT_SMAP:
-                continue
-            if op == OP_PT_SFOLD:
-                pt_spec_fold(ctx, FP(unsafe_from_address=Int(df.unsafe_ptr())),
-                             FP(unsafe_from_address=Int(dpt.unsafe_ptr())), host_q + (s * STAGE_INTS + 2),
-                             IP(unsafe_from_address=Int(dq.unsafe_ptr())) + (s * STAGE_INTS + 2))
-                continue
-        comptime if PT_FUSED_TRANSFORM:
-            # the standardize tail: pt_apply whose output only feeds the next col_stats runs as the
-            # tiled stats of the transform (no TX block), and that col_stats stage is skipped
-            if op == OP_PT_APPLY and fused_tail_pair(host_q, s, stages):
-                var hq = host_q + (s * STAGE_INTS + 2)
-                var hq2 = host_q + ((s + 1) * STAGE_INTS + 2)
-                cs_tile_stats(ctx, FP(unsafe_from_address=Int(df.unsafe_ptr())),
-                              FP(unsafe_from_address=Int(dpt.unsafe_ptr())), Int(hq[0]), Int(hq[1]), Int(hq[2]),
-                              Int(hq[3]), Int(hq[4]), Int(hq2[3]))
-                continue
-            if op == OP_COL_STATS and s > 0 and fused_tail_pair(host_q, s - 1, stages):
-                continue
+        # TOMBSTONE: MOJOLEARN_PT_SPEC (DROP: +10% vs COLBATCH) deleted 2026-10-09 on lane/owed-deletions-D2;
+        # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_SPEC.patch
+        # TOMBSTONE: MOJOLEARN_PT_FUSED_TRANSFORM (DROP quality, with COLBATCH) deleted 2026-10-09 on lane/owed-deletions-D2;
+        # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch
         comptime if SI_ONEPASS:
             # every col_stats as the one-pass tiled fold (the imputer's statistics, the power
             # transformer's opening col_stats)
@@ -743,7 +714,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 var hq = host_q + (s * STAGE_INTS + 2)
                 cs_tile_stats(ctx, FP(unsafe_from_address=Int(df.unsafe_ptr())),
                               FP(unsafe_from_address=Int(dpt.unsafe_ptr())), Int(hq[0]), Int(hq[1]), Int(hq[2]),
-                              -1, 0, Int(hq[3]))
+                              Int(hq[3]))
                 continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if cov_grid and op == OP_QDA_COV:

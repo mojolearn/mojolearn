@@ -283,15 +283,13 @@ def _col_stats(pr, xo, n, d, out, var=True):
 
 #: lane af-ptimpute (2026-10-03): binding -> the bits of `x_prep_ptimpute_flags`
 #: (bindings/_mojolearn_x_prep.mojo, x_prep/fastpt.mojo PTIMPUTE_FLAGS: 1
-#: PT_COLBATCH, 2 PT_SPEC, 4 PT_FUSED_TRANSFORM, 8 SI_ONEPASS, 16 PT_FOLD_NOX),
+#: PT_COLBATCH, 8 SI_ONEPASS, 32 PT_SCORE_STABLE),
 #: probed once per binding; 0 on a build without them (every other tier and
 #: vendor, and the host). The device's own comptime switches do the fusing;
 #: a program only shrinks the arena blocks the device no longer touches.
 _PTIMPUTE_FLAGS = {}
-#: PT_SPEC: the FAST search speculates this many golden steps a round (2^3 - 1
-#: = 7 candidates, x_prep/fastpt.mojo PT_MAXM); no candidates' buffer exists,
-#: so `_pt_spec_depth`'s 2^28-word cap does not apply. Fixed: no env read.
-_PT_FAST_SPEC = 3
+# TOMBSTONE: MOJOLEARN_PT_SPEC (DROP: +10% vs COLBATCH) deleted 2026-10-09 on lane/owed-deletions-D2: flag bit 2 and
+# _PT_FAST_SPEC; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_SPEC.patch
 
 
 def _ptimpute_flags(mode):
@@ -3831,14 +3829,11 @@ class PowerTransformer(_PrepBase):
             # lane af-ptimpute (FAST + Apple builds with the defines, `_ptimpute_flags`): the
             # device folds each evaluation as a row-tiled grid with the transform in registers
             # (x_prep/fastpt.mojo), so the T and LG blocks are never read or written: they shrink
-            # to a word and `pt_log` is not staged. PT_SPEC (bit 2) runs that fold over the
-            # speculated search's candidates; PT_COLBATCH (bit 1) over the staged search.
+            # to a word and `pt_log` is not staged. PT_COLBATCH (bit 1) runs that fold over the
+            # staged search.
             flags = _ptimpute_flags(mode)
             tiled = bool(flags & 1)
-            if flags & 2:
-                spec = _PT_FAST_SPEC
-            else:
-                spec = _pt_spec_depth(n, d) if mode == "identical" else 0
+            spec = _pt_spec_depth(n, d) if mode == "identical" else 0
             if spec:
                 # the search speculated `spec` evaluations deep (transform.mojo pt_spts ..
                 # pt_sres): the same points, values and decisions, fewer dependent folds
@@ -3896,11 +3891,9 @@ class PowerTransformer(_PrepBase):
                         pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
-            # PT_FUSED_TRANSFORM (bit 4, FAST + Apple): the device folds col_stats of the transform
-            # straight from X (x_prep/fastpt.mojo cs_tile_kernel) and skips this col_stats stage, so
-            # the transformed block is never written: a word
-            fused = bool(_ptimpute_flags(mode) & 4)
-            tx, st2 = pr.alloc(1) if fused else pr.alloc(n * d), pr.alloc(6 * d)
+            # TOMBSTONE: MOJOLEARN_PT_FUSED_TRANSFORM (DROP quality) deleted 2026-10-09 on lane/owed-deletions-D2: flag
+            # bit 4 shrank tx to a word; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch
+            tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
             pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx, anchor, anchor_kind)
             _cs(pr, mode, tx, n, d, st2)
             pr.stage("std_params", d, st2, d, mean, scale)

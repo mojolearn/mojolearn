@@ -1,0 +1,36 @@
+diff --git a/sequence/opt_resident.mojo b/sequence/opt_resident.mojo
+index 05ecb0194..b33e3ccf4 100644
+--- a/sequence/opt_resident.mojo
++++ b/sequence/opt_resident.mojo
+@@ -22,6 +22,7 @@ handle indexes the pool and a closed handle's slot is reused."""
+ from std.ffi import _Global
+ from std.memory import bitcast, memcpy
+ from std.sys.compile import is_defined
++from std.sys.defines import get_defined_int
+ from std.sys.info import has_apple_gpu_accelerator
+ from std.python import Python, PythonObject
+ from max.gpu.host import DeviceBuffer
+@@ -76,11 +77,9 @@ comptime OPT_PIPE_DOWN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE
+ comptime OPT_ZERO_OPEN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()) or (
+     _OPT_IDN and not (is_defined["MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+-#: the pipelined download's chunk, floats (8 MB), a transfer granularity.
+-# TOMBSTONE: MOJOLEARN_OPT_FAST_PIPE_CH (=524288 arm; the rab7 optimizer read-back batch DROPPED-slower, this arm untried)
+-# deleted 2026-10-09 on lane/owed-deletions-D2: the -D override of the chunk; the default 1 << 21 is unchanged;
+-# code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_OPT_FAST_PIPE_CH.patch
+-comptime OPT_PIPE_CH = 1 << 21
++#: the pipelined download's chunk, floats (8 MB; lane apple-fast-gap-optim:
++#: -D MOJOLEARN_OPT_FAST_PIPE_CH=<floats> for the A/B)
++comptime OPT_PIPE_CH = get_defined_int["MOJOLEARN_OPT_FAST_PIPE_CH", 1 << 21]()
+ #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md): its two
+ #: parameter read-back candidates were deleted as losers.
+ # TOMBSTONE: MOJOLEARN_OPT_FAST_MAP_DOWN (DROPPED-slower: M3 rab7-optfastmapdo rmsprop/adagrad/adamax/nadam +81% .. +86%)
+@@ -122,7 +121,7 @@ comptime AF_RESIDENT = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_RE
+ #: a ~20 ms step at the board's 16,777,216 floats, docs/apple-fast/notes/
+ #: gap-optim.md); here only the first chunk's GPU work is exposed. `op_opt` is
+ #: per element (sequence/ops.mojo), so a chunked launch computes the same bits.
+-#: Chunk = OPT_PIPE_CH (8 MB): a transfer
++#: Chunk = OPT_PIPE_CH (8 MB; -D MOJOLEARN_OPT_FAST_PIPE_CH sets it): a transfer
+ #: granularity, not a board-size window. Uploads follow OPT_RAW_UP (raw host
+ #: pointers) when that is named, else a memcpy into two pinned stage pairs.
+ #: Prior: none (new). Source: this branch.

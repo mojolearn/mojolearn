@@ -1,0 +1,91 @@
+diff --git a/tools/batchv_quality.py b/tools/batchv_quality.py
+index b8aaf1641..b8b642a57 100644
+--- a/tools/batchv_quality.py
++++ b/tools/batchv_quality.py
+@@ -1,7 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """batchv_quality.py: quality-only check for the lane/apple-fast-batchv
+-defines (SI_ONEPASS, KDE_DIMTILE; PTIMPUTE_ALL deleted 2026-10-09). It times nothing.
++defines (PTIMPUTE_ALL, SI_ONEPASS, KDE_DIMTILE). It times nothing.
+ 
+   python tools/batchv_quality.py dump prep|kde <out.npz>   fit on seeded data with the installed .so
+   python tools/batchv_quality.py cmp <off.npz> <on.npz> <label>   one BATCHV-Q line per output
+diff --git a/tools/batchv_quality.sh b/tools/batchv_quality.sh
+index 4f5d3e74d..0e1ecaaaf 100755
+--- a/tools/batchv_quality.sh
++++ b/tools/batchv_quality.sh
+@@ -2,7 +2,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ # batchv_quality.sh: QUALITY ONLY (times nothing) for the lane/apple-fast-batchv
+-# defines on an Apple box. Builds FAST x_prep arms (none,
++# defines on an Apple box. Builds FAST x_prep arms (none, PTIMPUTE_ALL,
+ # SI_ONEPASS, PT no-spec set) and FAST estimators arms (none, KDE_DIMTILE),
+ # dumps tools/batchv_quality.py outputs with each arm's .so installed, then
+ # prints BATCHV-Q lines (define on vs off). The tree's original .so files are
+@@ -34,11 +34,12 @@ dump() {  # $1 binding, $2 arm, $3 prep|kde
+   [ $rc = 0 ] || tail -n 15 "$out/dump_$3_$2.log"
+ }
+ build x_prep off "" && dump x_prep off prep
++build x_prep pt "-D MOJOLEARN_PTIMPUTE_ALL" && dump x_prep pt prep
+ build x_prep si "-D MOJOLEARN_SI_ONEPASS" && dump x_prep si prep
+ build x_prep ptns "-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_PT_FUSED_TRANSFORM -D MOJOLEARN_SI_ONEPASS" && dump x_prep ptns prep
+ build estimators off "" && dump estimators off kde
+ build estimators kdt "-D MOJOLEARN_KDE_DIMTILE" && dump estimators kdt kde
+-for a in si ptns; do
++for a in pt si ptns; do
+   [ -f "$out/prep_off.npz" ] && [ -f "$out/prep_$a.npz" ] && $PY tools/batchv_quality.py cmp "$out/prep_off.npz" "$out/prep_$a.npz" "$a"
+ done
+ [ -f "$out/kde_off.npz" ] && [ -f "$out/kde_kdt.npz" ] && $PY tools/batchv_quality.py cmp "$out/kde_off.npz" "$out/kde_kdt.npz" kdt
+diff --git a/x_prep/fastpt.mojo b/x_prep/fastpt.mojo
+index a68bd8643..364c2bd89 100644
+--- a/x_prep/fastpt.mojo
++++ b/x_prep/fastpt.mojo
+@@ -21,8 +21,7 @@ _OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
+   -D MOJOLEARN_SI_ONEPASS         every col_stats stage as `cs_tile_kernel` +
+                                   `cs_tile_finish_kernel`: one coalesced pass
+                                   instead of two strided ones.
+-  (-D MOJOLEARN_PTIMPUTE_ALL, all of the above, was deleted 2026-10-09:
+-   DROP quality; see the TOMBSTONE at the guards below.)
++  -D MOJOLEARN_PTIMPUTE_ALL       all of the above.
+ 
+ Why (docs/apple-fast/notes/ptimpute.md): the FAST fold gives a block ONE
+ column, so its 256 threads read words d apart, a cache line each, for every
+@@ -67,14 +66,16 @@ comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
+ # See docs/apple-fast/PT_SCORE.md; diagnostics preserve all thresholds.
+ # Explicitly disables speculation, whose objective tree is incompatible.
+ comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SCORE_STABLE)
+-# TOMBSTONE: MOJOLEARN_PTIMPUTE_ALL (DROP quality: M3 batchv-pt-all-istella 2,258 -> 512 ms, but M2 lambda max relative
+-# shift 9.5e-3, sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate) deleted 2026-10-09 on lane/owed-deletions-D2:
+-# the bundle alias; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch
+-comptime PT_FOLD_NOX = _FAST_APPLE and is_defined["MOJOLEARN_PT_FOLD_NOX"]()
++# DROP-quality (2026-10-03), M3 batchv-pt-all-istella: 2258 -> 512 ms.
++# M2 quality (100k x 220 / x 11): lambda max relative shift 9.5e-3;
++# sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate.
++# Opt-in only; see docs/apple-fast/EXPERIMENTS.md (PTIMPUTE_ALL).
++comptime PTIMPUTE_ALL = _FAST_APPLE and is_defined["MOJOLEARN_PTIMPUTE_ALL"]()
++comptime PT_FOLD_NOX = _FAST_APPLE and (is_defined["MOJOLEARN_PT_FOLD_NOX"]() or PTIMPUTE_ALL)
+ # DROP-speed, M3 ptimpute-pt-spec-vs-colbatch-istella: adding SPEC to
+ # COLBATCH on the old base costs 910 -> 1012 ms (+11%); not a standalone
+ # comparison with current main. See docs/apple-fast/EXPERIMENTS.md.
+-comptime PT_SPEC = _FAST_APPLE and not PT_SCORE and is_defined["MOJOLEARN_PT_SPEC"]()
++comptime PT_SPEC = _FAST_APPLE and not PT_SCORE and (is_defined["MOJOLEARN_PT_SPEC"]() or PTIMPUTE_ALL)
+ #: PT_SPEC runs COLBATCH's kernels, so it turns COLBATCH on
+ # DROP-quality, M3 batchv-pt-nospec-istella / batchv-pt-nospec-taxi2:
+ # COLBATCH + FUSED_TRANSFORM + SI_ONEPASS: 2262 -> 425 / 305 -> 54.5 ms.
+@@ -84,12 +85,12 @@ comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or
+ # HOLD: failed quality only in the COLBATCH bundle (batchv-pt-nospec-*);
+ # no isolated A/B vs main establishes a failure of this transform itself.
+ # Keep opt-in; see docs/apple-fast/EXPERIMENTS.md (PT_FUSED_TRANSFORM).
+-comptime PT_FUSED_TRANSFORM = _FAST_APPLE and not PT_SCORE_STABLE and is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]()
++comptime PT_FUSED_TRANSFORM = _FAST_APPLE and not PT_SCORE_STABLE and (is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]() or PTIMPUTE_ALL)
+ #: SI_ONEPASS: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03), M3 A/B vs main:
+ #: simple-imputer istella 303.7 -> 273.7 ms, taxi 26.4 -> 21.0 ms; quality (tools/batchv_quality.sh,
+ #: M2): median statistics exact, mean statistics within 1.2e-7 absolute (one float32 ulp).
+ #: -D MOJOLEARN_SI_ONEPASS_OFF: main's two-pass col_stats.
+-comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]()
++comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]() or PTIMPUTE_ALL
+                                        or not is_defined["MOJOLEARN_SI_ONEPASS_OFF"]())
+ #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
+ #: the Python layer shrinks the buffers the device no longer touches by them

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # batchv_quality.sh: QUALITY ONLY (times nothing) for the lane/apple-fast-batchv
-# defines on an Apple box. Builds FAST x_prep arms (none, PTIMPUTE_ALL,
+# defines on an Apple box. Builds FAST x_prep arms (none,
 # SI_ONEPASS, PT no-spec set) and FAST estimators arms (none, KDE_DIMTILE),
 # dumps tools/batchv_quality.py outputs with each arm's .so installed, then
 # prints BATCHV-Q lines (define on vs off). The tree's original .so files are
@@ -34,12 +34,11 @@ dump() {  # $1 binding, $2 arm, $3 prep|kde
   [ $rc = 0 ] || tail -n 15 "$out/dump_$3_$2.log"
 }
 build x_prep off "" && dump x_prep off prep
-build x_prep pt "-D MOJOLEARN_PTIMPUTE_ALL" && dump x_prep pt prep
 build x_prep si "-D MOJOLEARN_SI_ONEPASS" && dump x_prep si prep
-build x_prep ptns "-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_PT_FUSED_TRANSFORM -D MOJOLEARN_SI_ONEPASS" && dump x_prep ptns prep
+build x_prep ptns "-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_SI_ONEPASS" && dump x_prep ptns prep
 build estimators off "" && dump estimators off kde
 build estimators kdt "-D MOJOLEARN_KDE_DIMTILE" && dump estimators kdt kde
-for a in pt si ptns; do
+for a in si ptns; do
   [ -f "$out/prep_off.npz" ] && [ -f "$out/prep_$a.npz" ] && $PY tools/batchv_quality.py cmp "$out/prep_off.npz" "$out/prep_$a.npz" "$a"
 done
 [ -f "$out/kde_off.npz" ] && [ -f "$out/kde_kdt.npz" ] && $PY tools/batchv_quality.py cmp "$out/kde_off.npz" "$out/kde_kdt.npz" kdt

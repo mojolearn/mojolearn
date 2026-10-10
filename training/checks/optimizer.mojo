@@ -163,7 +163,6 @@ from checks.numerics import (
 from training.afn_optim import (
     AFN_OPT_ANY,
     AFN_OPT_CLIP_FUSE,
-    AFN_OPT_FUSE_SCAN,
     afn_optimizer_step,
 )
 # lane nr-small D4/D12 (IDENTICAL): the gated refusal scan, the SGD
@@ -1810,14 +1809,15 @@ def identical_optimizer_step(
     # the rest of the step as `step.optimizer` (this entry waits before it
     # returns, so that tick's wait is a no-op).
     # lane afn-optim: FAST + Apple + a MOJOLEARN_AFN_OPT_* define. Main's
-    # refusal scan and main's clip still run here when their fused forms
-    # are not named; the candidates' device half is `afn_optimizer_step`.
+    # refusal scan always runs here, and main's clip when its fused form
+    # is not named; the candidates' device half is `afn_optimizer_step`.
     # Sabotage and recording builds take main's path below.
+    # TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+    # lane/owed-deletions-D2; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
     comptime if AFN_OPT_ANY and not ANY_SABOTAGE and not OPT_RECORD_INTERMEDIATES:
-        comptime if not AFN_OPT_FUSE_SCAN:
-            opt_refuse_device_inputs(
-                ctx, param, grad, m_state, v_state, offsets, cfg
-            )
+        opt_refuse_device_inputs(
+            ctx, param, grad, m_state, v_state, offsets, cfg
+        )
         var afn_j = len(offsets) - 1
         if afn_j <= 0:
             return

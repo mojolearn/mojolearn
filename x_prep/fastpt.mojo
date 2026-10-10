@@ -5,23 +5,20 @@
 own define (default off except SI_ONEPASS, a FAST + Apple default with
 _OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
 
-  -D MOJOLEARN_PT_FOLD_NOX        x_prep/fastred.mojo pt_fold_fast_kernel reads X
-                                  only at K = 0 (the unit's rule); later
-                                  evaluations fold T alone.
+  (-D MOJOLEARN_PT_FOLD_NOX, pt_fold_fast_kernel reading X only at K = 0,
+   was deleted 2026-10-09: DROP; see the TOMBSTONE below.)
   -D MOJOLEARN_PT_COLBATCH        the (pt_map, pt_fold) pair as `pt_tile_kernel`
                                   + `pt_tile_finish_kernel`: no T block, no LG
                                   block, one coalesced read of X per evaluation.
-  -D MOJOLEARN_PT_SPEC            COLBATCH's kernel over the IDENTICAL search's
-                                  speculated points (pt_smap + pt_sfold fused,
-                                  up to PT_MAXM candidates a thread), `pt_spts`
-                                  and `pt_sres` unchanged.
-  -D MOJOLEARN_PT_FUSED_TRANSFORM the standardize tail's pt_apply + col_stats as
-                                  `cs_tile_kernel` with the transform in
-                                  registers: no TX block.
+  (-D MOJOLEARN_PT_SPEC, COLBATCH's kernel over the speculated search, was
+   deleted 2026-10-09: DROP; see the TOMBSTONE at the guards below.)
+  (-D MOJOLEARN_PT_FUSED_TRANSFORM, the standardize tail fused into
+   `cs_tile_kernel`, was deleted 2026-10-09: DROP; see the TOMBSTONE below.)
   -D MOJOLEARN_SI_ONEPASS         every col_stats stage as `cs_tile_kernel` +
                                   `cs_tile_finish_kernel`: one coalesced pass
                                   instead of two strided ones.
-  -D MOJOLEARN_PTIMPUTE_ALL       all of the above.
+  (-D MOJOLEARN_PTIMPUTE_ALL, all of the above, was deleted 2026-10-09:
+   DROP quality; see the TOMBSTONE at the guards below.)
 
 Why (docs/apple-fast/notes/ptimpute.md): the FAST fold gives a block ONE
 column, so its 256 threads read words d apart, a cache line each, for every
@@ -66,36 +63,34 @@ comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
 # See docs/apple-fast/PT_SCORE.md; diagnostics preserve all thresholds.
 # Explicitly disables speculation, whose objective tree is incompatible.
 comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SCORE_STABLE)
-# DROP-quality (2026-10-03), M3 batchv-pt-all-istella: 2258 -> 512 ms.
-# M2 quality (100k x 220 / x 11): lambda max relative shift 9.5e-3;
-# sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate.
-# Opt-in only; see docs/apple-fast/EXPERIMENTS.md (PTIMPUTE_ALL).
-comptime PTIMPUTE_ALL = _FAST_APPLE and is_defined["MOJOLEARN_PTIMPUTE_ALL"]()
-comptime PT_FOLD_NOX = _FAST_APPLE and (is_defined["MOJOLEARN_PT_FOLD_NOX"]() or PTIMPUTE_ALL)
-# DROP-speed, M3 ptimpute-pt-spec-vs-colbatch-istella: adding SPEC to
-# COLBATCH on the old base costs 910 -> 1012 ms (+11%); not a standalone
-# comparison with current main. See docs/apple-fast/EXPERIMENTS.md.
-comptime PT_SPEC = _FAST_APPLE and not PT_SCORE and (is_defined["MOJOLEARN_PT_SPEC"]() or PTIMPUTE_ALL)
-#: PT_SPEC runs COLBATCH's kernels, so it turns COLBATCH on
+# TOMBSTONE: MOJOLEARN_PTIMPUTE_ALL (DROP quality: M3 batchv-pt-all-istella 2,258 -> 512 ms, but M2 lambda max relative
+# shift 9.5e-3, sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate) deleted 2026-10-09 on lane/owed-deletions-D2:
+# the bundle alias; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch
+# TOMBSTONE: MOJOLEARN_PT_FOLD_NOX (DROP: moot under COLBATCH, notes/ptimpute.md; ptimpute-pt-nox-* no recorded gain)
+# deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_PT_FOLD_NOX.patch
+# TOMBSTONE: MOJOLEARN_PT_SPEC (DROP: M3 ptimpute-pt-spec-istella +10% vs COLBATCH, ptimpute-pt-spec-vs-colbatch-istella
+# 910 -> 1,012 ms) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_PT_SPEC.patch
 # DROP-quality, M3 batchv-pt-nospec-istella / batchv-pt-nospec-taxi2:
 # COLBATCH + FUSED_TRANSFORM + SI_ONEPASS: 2262 -> 425 / 305 -> 54.5 ms.
 # M2 quality attributes the 9.5e-3 relative lambda shift to COLBATCH;
 # SI alone keeps lambdas exact. See docs/apple-fast/EXPERIMENTS.md.
-comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or PT_SPEC or PT_SCORE)
-# HOLD: failed quality only in the COLBATCH bundle (batchv-pt-nospec-*);
-# no isolated A/B vs main establishes a failure of this transform itself.
-# Keep opt-in; see docs/apple-fast/EXPERIMENTS.md (PT_FUSED_TRANSFORM).
-comptime PT_FUSED_TRANSFORM = _FAST_APPLE and not PT_SCORE_STABLE and (is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]() or PTIMPUTE_ALL)
+comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or PT_SCORE)
+# TOMBSTONE: MOJOLEARN_PT_FUSED_TRANSFORM (DROP quality, with COLBATCH: batchv-pt-nospec-* lambda shift 9.5e-3; never A/B-ed
+# alone; off under the default PT_SCORE_STABLE) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at
+# b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch
 #: SI_ONEPASS: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03), M3 A/B vs main:
 #: simple-imputer istella 303.7 -> 273.7 ms, taxi 26.4 -> 21.0 ms; quality (tools/batchv_quality.sh,
 #: M2): median statistics exact, mean statistics within 1.2e-7 absolute (one float32 ulp).
 #: -D MOJOLEARN_SI_ONEPASS_OFF: main's two-pass col_stats.
-comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]() or PTIMPUTE_ALL
+comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]()
                                        or not is_defined["MOJOLEARN_SI_ONEPASS_OFF"]())
 #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
 #: the Python layer shrinks the buffers the device no longer touches by them
-comptime PTIMPUTE_FLAGS = ((1 if PT_COLBATCH else 0) + (2 if PT_SPEC else 0) + (4 if PT_FUSED_TRANSFORM else 0)
-                           + (8 if SI_ONEPASS else 0) + (16 if PT_FOLD_NOX else 0) + (32 if PT_SCORE_STABLE else 0))
+#: (bit 2 was PT_SPEC, bit 4 PT_FUSED_TRANSFORM and bit 16 PT_FOLD_NOX, all deleted 2026-10-09)
+comptime PTIMPUTE_FLAGS = ((1 if PT_COLBATCH else 0)
+                           + (8 if SI_ONEPASS else 0) + (32 if PT_SCORE_STABLE else 0))
 
 #: threads per block of the finish kernels (a block a column, a tree)
 comptime TGR = 256
@@ -112,11 +107,8 @@ comptime ROWS_NARROW = 64
 comptime PT_MAXM = 7
 
 comptime OP_COL_STATS = 1
-comptime OP_PT_APPLY = 45
 comptime OP_PT_MAP = 105
 comptime OP_PT_FOLD = 106
-comptime OP_PT_SMAP = 111
-comptime OP_PT_SFOLD = 112
 
 
 #: lane apple-fast-no-narrow-2 (2026-10-04): the cut was d >= 64, measured
@@ -297,75 +289,18 @@ def pt_tile_finish_kernel(f: FP, pp: FP, q: IP, chunks: Int32):
         pt_finish(c, f, q, Int(total), sj, sh_s[0])
 
 
-def pt_stile_finish_kernel(f: FP, pp: FP, q: IP, chunks: Int32):
-    """`pt_sfold_unit`'s value for block t = c*M + j from `pt_tile_kernel`'s
-    partials over M candidates. q = pt_sfold's [X, n, d, METHOD, T, M, STATE,
-    SPL, VALS, FIRST, IL]: VALS[t] = n/2 log var - (lambda - 1) sum J at
-    candidate j's point SPL[t]; the FIRST round's candidate 0 keeps sum J and
-    the count in the column's state. `pt_sres_unit` then walks the tree."""
-    var t = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var dd = p(q, 2)
-    var M = p(q, 5)
-    var c = t // M
-    var j = t % M
-    var S = p(q, 6) + c * PT_STATE
-    if f[S + 7] != Float32(0):
-        return
-    var first = p(q, 9) != 0
-    var W = 2 + 2 * M
-    var sh_n = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var sh_m = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var sh_s = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var sh_j = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var cn = Float32(0)
-    var cm = Float32(0)
-    var cs = Float32(0)
-    var cj = Float32(0)
-    for k in range(tid, Int(chunks), TGR):
-        var o = (k * dd + c) * W
-        _chan(cn, cm, cs, pp[o], pp[o + 2 + 2 * j], pp[o + 3 + 2 * j])
-        cj += pp[o + 1]
-    sh_n[tid] = cn
-    sh_m[tid] = cm
-    sh_s[tid] = cs
-    sh_j[tid] = cj
-    barrier()
-    var w = TGR // 2
-    while w >= 1:
-        if tid < w:
-            var na = sh_n[tid]
-            var ma = sh_m[tid]
-            var sa = sh_s[tid]
-            _chan(na, ma, sa, sh_n[tid + w], sh_m[tid + w], sh_s[tid + w])
-            sh_n[tid] = na
-            sh_m[tid] = ma
-            sh_s[tid] = sa
-            sh_j[tid] = sh_j[tid] + sh_j[tid + w]
-        barrier()
-        w //= 2
-    if tid == 0:
-        var total = sh_n[0]
-        var sj = sh_j[0] if first else f[S + 8]
-        if first and j == 0:
-            f[S + 8] = sj
-            sti(f, S + 9, Int(total))
-        var lam = f[p(q, 7) + t]
-        var val = Float32(0)
-        if total > Float32(0):
-            var var_ = sh_s[0] / total
-            val = sub(mul(mul(Float32(0.5), total), logf(var_)), mul(sub(lam, Float32(1)), sj))
-        f[p(q, 8) + t] = val
+# TOMBSTONE: MOJOLEARN_PT_SPEC (DROP: M3 ptimpute-pt-spec-istella +10% vs COLBATCH, ptimpute-pt-spec-vs-colbatch-istella
+# 910 -> 1,012 ms) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_PT_SPEC.patch
 
 
-def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, LAM: Int32, method: Int32, rows: Int32,
-                   tpb: Int32):
+def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, rows: Int32, tpb: Int32):
     """`col_stats_unit`'s folds for block (chunk, column group), one pass: per
     non-NaN value count, mean, M2 (Welford), min, max, maxabs into pp[(chunk*d
-    + c) * 6 ..]. LAM >= 0 (the standardize tail, `pt_apply` + `col_stats`
-    fused): the value folded is the power transform of x at LAM[c] (a NaN
-    transform, box-cox of x <= 0, is skipped as the unit skips the NaN word
-    `pt_apply` would have written)."""
+    + c) * 6 ..]."""
+    # TOMBSTONE: MOJOLEARN_PT_FUSED_TRANSFORM (DROP quality, with COLBATCH: batchv-pt-nospec-* lambda shift 9.5e-3; never A/B-ed
+    # alone; off under the default PT_SCORE_STABLE) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at
+    # b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch
     var c = Int(block_idx.y) * Int(tpb) + Int(thread_idx.x)
     var dd = Int(d)
     if c >= dd:
@@ -373,11 +308,6 @@ def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, LAM: Int32, meth
     var chunk = Int(block_idx.x)
     var row0 = chunk * Int(rows)
     var row1 = min(row0 + Int(rows), Int(n))
-    var pw = Int(LAM) >= 0
-    var meth = Int(method)
-    var lam = Float32(0)
-    if pw:
-        lam = f[Int(LAM) + c]
     var inf = Float32(3.4028235e38)
     var cnt = Float32(0)
     var mean = Float32(0)
@@ -394,10 +324,6 @@ def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, LAM: Int32, meth
         if is_nan(x):
             continue
         var v = x
-        if pw:
-            v = power_from_log(power_log(x, meth), x >= Float32(0), lam, meth)
-            if is_nan(v):
-                continue
         comptime if AFCL_P01:
             if (i - row0) % 2 == 0:
                 cnt += Float32(1)
@@ -514,33 +440,15 @@ def pt_colbatch_fold(mut ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) rais
     ctx.enqueue_function[pt_tile_finish_kernel](f, pp, qp, Int32(chunks), grid_dim=d, block_dim=TGR)
 
 
-def pt_spec_fold(mut ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) raises:
-    """A `pt_sfold` stage as the tiled evaluation over its M candidates and
-    the per-candidate finish; the `pt_smap` stage before it is skipped."""
-    var n = Int(hq[1])
-    var d = Int(hq[2])
-    var m = Int(hq[5])
-    if m < 1 or m > PT_MAXM:
-        raise Error(String("x_prep: PT_SPEC candidates per round must be 1 .. ", PT_MAXM, ", got ", m))
-    var chunks = tile_chunks(n, d)
-    var tpb = tile_tpb(d)
-    ctx.enqueue_function[pt_tile_kernel](
-        f, pp, hq[0], hq[1], hq[2], hq[3], hq[7], hq[5], hq[5], hq[6], hq[9], Int32(tile_rows(d)), Int32(tpb),
-        grid_dim=(chunks, tile_cgroups(d)), block_dim=tpb,
-    )
-    ctx.enqueue_function[pt_stile_finish_kernel](f, pp, qp, Int32(chunks), grid_dim=d * m, block_dim=TGR)
-
-
-def cs_tile_stats(mut ctx: DeviceContext, f: FP, pp: FP, X: Int, n: Int, d: Int, LAM: Int, method: Int, O: Int) raises:
+def cs_tile_stats(mut ctx: DeviceContext, f: FP, pp: FP, X: Int, n: Int, d: Int, O: Int) raises:
     """`col_stats` of the n x d block at X into the six rows at O, one tiled
-    pass; LAM >= 0 folds the power transform of X at LAM instead (the fused
-    standardize tail)."""
+    pass."""
     if n <= 0 or d <= 0:
         return
     var chunks = tile_chunks(n, d)
     var tpb = tile_tpb(d)
     ctx.enqueue_function[cs_tile_kernel](
-        f, pp, Int32(X), Int32(n), Int32(d), Int32(LAM), Int32(method), Int32(tile_rows(d)), Int32(tpb),
+        f, pp, Int32(X), Int32(n), Int32(d), Int32(tile_rows(d)), Int32(tpb),
         grid_dim=(chunks, tile_cgroups(d)), block_dim=tpb,
     )
     ctx.enqueue_function[cs_tile_finish_kernel](f, pp, Int32(chunks), Int32(d), Int32(O), grid_dim=d, block_dim=TGR)
@@ -555,24 +463,12 @@ def ptimpute_part_words(host_q: IP, stages: Int) -> Int:
         comptime if PT_COLBATCH:
             if op == OP_PT_FOLD:
                 words = max(words, pt_part_words(Int(hq[1]), Int(hq[2]), 1))
-        comptime if PT_SPEC:
-            if op == OP_PT_SFOLD:
-                words = max(words, pt_part_words(Int(hq[1]), Int(hq[2]), min(max(Int(hq[5]), 1), PT_MAXM)))
-        comptime if PT_FUSED_TRANSFORM or SI_ONEPASS:
+        comptime if SI_ONEPASS:
             if op == OP_COL_STATS:
                 words = max(words, cs_part_words(Int(hq[1]), Int(hq[2])))
     return words
 
 
-@always_inline
-def fused_tail_pair(host_q: IP, s: Int, stages: Int) -> Bool:
-    """Whether stage s is a `pt_apply` without standardisation whose output
-    only feeds the `col_stats` of stage s + 1 (PowerTransformer.fit's
-    standardize tail): the pair the fused kernel replaces."""
-    if s + 1 >= stages:
-        return False
-    if Int(host_q.unsafe_load(s * STAGE_INTS)) != OP_PT_APPLY or Int(host_q.unsafe_load((s + 1) * STAGE_INTS)) != OP_COL_STATS:
-        return False
-    var a = host_q + (s * STAGE_INTS + 2)
-    var b = host_q + ((s + 1) * STAGE_INTS + 2)
-    return Int(a[7]) == Int(b[0]) and Int(a[5]) < 0 and Int(a[1]) == Int(b[1]) and Int(a[2]) == Int(b[2])
+# TOMBSTONE: MOJOLEARN_PT_FUSED_TRANSFORM (DROP quality, with COLBATCH: batchv-pt-nospec-* lambda shift 9.5e-3; never A/B-ed
+# alone; off under the default PT_SCORE_STABLE) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at
+# b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch
