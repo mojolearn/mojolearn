@@ -2726,7 +2726,6 @@ def kde_score_samples_fused_identical(
 # main's code unchanged: nothing below is reachable unless `_KDE2_FAST_APPLE`.
 #
 # The sibling defines compose on top of it (each also turns it on):
-#   MOJOLEARN_KDE_LSE_FUSED       merge + normalization in one launch, no lse buffer
 #   MOJOLEARN_KDE_NORM_FUSED      euclidean as |q|^2 + |t|^2 - 2 q.t, one FMA per feature
 #   MOJOLEARN_KDE_SAMPLE_FUSED    the resident score call drains once (kde/resident_fit.mojo)
 comptime _KDE2_FAST_APPLE = (
@@ -2735,12 +2734,9 @@ comptime _KDE2_FAST_APPLE = (
 # TOMBSTONE: MOJOLEARN_KDE2_ALL (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: every kde2 define at once; istella no gain over DIMTILE alone (-0.6%), includes SAMPLE_FUSED (taxi +354%).
 # Restore: git apply experiments/removed/MOJOLEARN_KDE2_ALL.patch; record in docs/TOMBSTONES.md.
-# INCONCLUSIVE, M3 kde2-lse-istella / -taxi with DIMTILE: no istella
-# gain over DIMTILE; taxi jitter-dominated, quality unchanged.
-# See docs/apple-fast/EXPERIMENTS.md (KDE_DIMTILE + KDE_LSE_FUSED).
-comptime KDE2_LSE_FUSED = _KDE2_FAST_APPLE and (
-    is_defined["MOJOLEARN_KDE_LSE_FUSED"]()
-)
+# TOMBSTONE: MOJOLEARN_KDE_LSE_FUSED (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the kde2 chunk merge and the score normalization in one launch (kde2_merge_kernel[True], no lse buffer); with DIMTILE no istella gain, taxi jitter-dominated (kde2-lse-*).
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_LSE_FUSED.patch; record in docs/TOMBSTONES.md.
 # INCONCLUSIVE, M3 kde2-norm-istella / -taxi with DIMTILE: no istella
 # gain over DIMTILE; taxi jitter-dominated, quality unchanged.
 # See docs/apple-fast/EXPERIMENTS.md (KDE_DIMTILE + KDE_NORM_FUSED).
@@ -2758,7 +2754,7 @@ comptime KDE2_SAMPLE_FUSED = _KDE2_FAST_APPLE and (
 )
 #: KDE2_DIMTILE_ANY_D: the explicit defines take the tile pass at every d.
 comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and (
-    KDE2_LSE_FUSED or KDE2_NORM_FUSED
+    KDE2_NORM_FUSED
     or is_defined["MOJOLEARN_KDE_DIMTILE"]()
 )
 #: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03) for
@@ -3383,41 +3379,31 @@ def _kde2_enqueue(
     # Tried: the per-metric _kde2_launch_tile instantiations here; the run-time-metric [-1, -1] instantiation stays.
     # Restore: git apply experiments/removed/MOJOLEARN_KDE_KERNEL_VARIANTS.patch; record in docs/TOMBSTONES.md.
     _kde2_launch_tile[-1, -1](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
-    comptime if KDE2_LSE_FUSED:
-        ctx.enqueue_function[kde2_merge_kernel[True]](
-            scores.unsafe_ptr(),
-            part_m.unsafe_ptr(),
-            part_s.unsafe_ptr(),
-            Int32(n_query),
-            Int32(n_chunks),
-            log_sw,
-            norm,
-            grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
-            block_dim=(elem_tpb, 1, 1),
-        )
-    else:
-        var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
-        ctx.enqueue_function[kde2_merge_kernel[False]](
-            lse.unsafe_ptr(),
-            part_m.unsafe_ptr(),
-            part_s.unsafe_ptr(),
-            Int32(n_query),
-            Int32(n_chunks),
-            Float32(0.0),
-            Float32(0.0),
-            grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
-            block_dim=(elem_tpb, 1, 1),
-        )
-        ctx.enqueue_function[normalize_scores_kernel](
-            scores.unsafe_ptr(),
-            lse.unsafe_ptr(),
-            Int32(n_query),
-            log_sw,
-            norm,
-            grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
-            block_dim=(elem_tpb, 1, 1),
-        )
-        keep.append(lse^)
+    # TOMBSTONE: MOJOLEARN_KDE_LSE_FUSED (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: kde2_merge_kernel[True] (merge + normalization fused) here.
+    # Restore: git apply experiments/removed/MOJOLEARN_KDE_LSE_FUSED.patch; record in docs/TOMBSTONES.md.
+    var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
+    ctx.enqueue_function[kde2_merge_kernel[False]](
+        lse.unsafe_ptr(),
+        part_m.unsafe_ptr(),
+        part_s.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_chunks),
+        Float32(0.0),
+        Float32(0.0),
+        grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.enqueue_function[normalize_scores_kernel](
+        scores.unsafe_ptr(),
+        lse.unsafe_ptr(),
+        Int32(n_query),
+        log_sw,
+        norm,
+        grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    keep.append(lse^)
     keep.append(part_m^)
     keep.append(part_s^)
 

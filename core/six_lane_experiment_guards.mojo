@@ -258,6 +258,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SPARSE_RP_DEVICE"](), "removed 2026-10-09 (lane/owed-deletions-D3): SPARSE_RP_DEVICE (one-launch SparseRandomProjection draw) LOST quality: mean_abs_distortion .147 -> .236; code deleted 2026-10-03 by e58326562; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_KDE2_ALL"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE2_ALL (every kde2 FAST Apple define at once) was DROPPED: kde istella 139.5 -> 63.1 ms but -0.6% vs KDE_DIMTILE alone (the gain is DIMTILE, now the default); it includes SAMPLE_FUSED (taxi +354%); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_KDE_KERNEL_VARIANTS"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE_KERNEL_VARIANTS (kde2 tile kernel instantiated per metric at compile time) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated (~10 ms), quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_KDE_LSE_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE_LSE_FUSED (kde2 chunk merge and score normalization in one launch) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated, quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
