@@ -1,0 +1,479 @@
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+index 8672dbc46..0d92e0a17 100644
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -41,8 +41,11 @@ from gbdt.methods.leaves_estimation.descent_helpers import (
+ )
+ from gbdt.methods.leaves_estimation.apple_fast_est import (
+     EST_APPLE_ANY,
++    EST_SHRINK_FUSED,
+     AppleEstScratch,
++    EstDerivsHook,
+     apple_est_ensure,
++    apple_est_fuses_derivs,
+     apple_est_handles,
+     apple_fast_estimate_and_apply,
+ )
+@@ -1288,8 +1291,9 @@ def _estimate_and_apply(
+     # other path ignores it and drains as before.
+     defer_tail: Bool = False,
+     tail_drain: Bool = True,
+-    # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the
+-    # `derivs_hook` argument); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch.
++    # lane/apple-fast-sym-est (`EST_SHRINK_FUSED`): the loop head's
++    # derivative pass, for the task to leave done; None everywhere else
++    var derivs_hook: Optional[EstDerivsHook] = None,
+ ) raises:
+     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
+     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
+@@ -1375,6 +1379,7 @@ def _estimate_and_apply(
+                 leaf_estimation_method, iters, learning_rate,
+                 leaf_values, trace, stage_times, leaf_tag,
+                 a_gt, a_gw, a_gc, a_po, a_ps, a_hpo, a_hps, a_s,
++                derivs_hook^,
+             )
+             return
+     # DEVIATION 3041: the oracle's device buffers from the fit's pool (keyed
+@@ -3123,8 +3128,10 @@ def fit_with_test(
+     # tree's search, or after the loop)
+     var deferred_splits = List[TBinarySplit]()
+     var has_deferred_tree = False
+-    # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the
+-    # fused next-tree derivative pass); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch.
++    # lane/apple-fast-sym-est (`EST_SHRINK_FUSED`): True when the previous
++    # tree's estimation task left this iteration's search planes and value
++    # partials in `stats` / `fv_part` / `mag_part`; never set otherwise
++    var derivs_ready = False
+     for iteration in range(n_estimators):
+         var t_grad = loop_times.start()
+         # ---- which permutation the STRUCTURE is searched on ----------
+@@ -3213,6 +3220,10 @@ def fit_with_test(
+         comptime if SYM_DERIV_FUSED:
+             sym_skip_grad = sym_grad_prefetched
+             sym_grad_prefetched = False
++        var skip_derivs = False
++        comptime if EST_SHRINK_FUSED:
++            skip_derivs = derivs_ready
++            derivs_ready = False
+         # under bootstrap the magnitudes must bound the BOOTSTRAPPED
+         # planes (a Bayesian weight reaches ~46 at the tail), so the
+         # bootstrap kernel computes them AFTER its multiply instead
+@@ -3298,6 +3309,10 @@ def fit_with_test(
+                     yeti_rand.next_uniform_l(),
+                     stats, fv_part, True, mag_part, mags_in_mse,
+                 )
++            elif skip_derivs:
++                # lane/apple-fast-sym-est: the planes are already this cursor's
++                # (`apple_fast_est._launch_apply_derivs`, the same kernels)
++                pass
+             elif second_order:
+                 # `secondDerAsWeights=true`: plane 0 becomes `weight * der2`
+                 # (`pointwise_target_impl.h:193-201`); plane 1 stays
+@@ -4260,6 +4275,30 @@ def fit_with_test(
+                         y_est = Optional(yeti_buffers.value().handles())
+                         # this tree's second draw: the estimation stream's seed
+                         y_seed = yeti_rand.next_uniform_l()
++                    var d_hook = Optional[EstDerivsHook]()
++                    comptime if EST_SHRINK_FUSED:
++                        # the learn permutation's cursor is the one the next
++                        # loop head differentiates: hand the task that pass
++                        # (one permutation only: with more, the next
++                        # tree's learn permutation is a fresh draw)
++                        # (never with SYM_DERIV_FUSED's prefetch this
++                        # tree: that tail already enqueues the same pass)
++                        if (
++                            perm_count == 1 and not sym_fuse
++                        ) and apple_est_fuses_derivs(
++                            objective, leaf_estimation_method, approx_dim,
++                            leaf_estimation_iterations,
++                            is_querywise or is_pair_logit or is_yeti_rank,
++                        ):
++                            d_hook = Optional(
++                                EstDerivsHook(
++                                    stats.copy(), fv_part.copy(),
++                                    mag_part.copy(),
++                                    _needs_magnitudes and not bootstrap_on,
++                                    second_order,
++                                )
++                            )
++                            derivs_ready = True
+                     _estimate_and_apply(
+                         ctx, n_rows, approx_dim, len(sizes), sizes,
+                         leaf_offsets,
+@@ -4282,6 +4321,7 @@ def fit_with_test(
+                         # set, so nothing below needs the values this tree
+                         defer_tail=sym_defer_est,
+                         tail_drain=not sym_fuse,
++                        derivs_hook=d_hook^,
+                     )
+                 else:
+                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
+diff --git a/gbdt/methods/leaves_estimation/apple_fast_est.mojo b/gbdt/methods/leaves_estimation/apple_fast_est.mojo
+index 541a14676..c200beb69 100644
+--- a/gbdt/methods/leaves_estimation/apple_fast_est.mojo
++++ b/gbdt/methods/leaves_estimation/apple_fast_est.mojo
+@@ -24,8 +24,11 @@ family and the ranking targets keep main's path.
+                               on the device, one `est_walk_kernel` launch per
+                               evaluation deciding accept / halve / stop; one
+                               drain per tree instead of one per evaluation.
+-  MOJOLEARN_EST_SHRINK_FUSED  (deleted 2026-10-09, DROPPED-inconclusive;
+-                              see docs/TOMBSTONES.md)
++  MOJOLEARN_EST_SHRINK_FUSED  the cursor add (`AppendModels`) is fused with
++                              the NEXT iteration's derivative pass: one
++                              full-row kernel writes the new cursor, the two
++                              search planes and the value partials the loop
++                              head would otherwise recompute.
+   MOJOLEARN_SYM_EST_ALL       EST_STATS_FUSED + EST_ITERS_DEVICE (REUSE_PART
+                               and SHRINK_FUSED are recorded DROPs). The FAST
+                               + Apple default since 2026-10-04 (rab4-symest);
+@@ -131,11 +134,19 @@ comptime EST_ITERS_DEVICE = _APPLE_FAST and (
+ # TOMBSTONE: MOJOLEARN_EST_REUSE_PART (DROPPED-BUG: istella auc .980 -> .930, logloss .186 -> 2.15) deleted 2026-10-09 on
+ # lane/owed-deletions-D1 (row-order evaluation over the searcher's partition); code recoverable at b639a2bd2.
+ # Restore: git apply experiments/removed/MOJOLEARN_EST_REUSE_PART.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive: sym-est-sh-1k istella -2.8%, old base) deleted 2026-10-09 on
+-# lane/owed-deletions-D1 (cursor add fused with the next tree's derivative pass); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch; record in docs/TOMBSTONES.md.
++#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
++#: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
++#: unstarted), never timed. Port: stands down on a tree where
++#: SYM_DERIV_FUSED already enqueues the next gradient pass
++#: (doc_parallel_boosting `not sym_fuse`).
++#: apple-fast LEDGER 2026-10-04: sym-est-sh-1k istella -2.8% (old base, auc
++#: up), judged inconclusive and not worth a main verify;
++#: recorded loser, OUT of SYM_EST_ALL, not in the A/B table.
++comptime EST_SHRINK_FUSED = _APPLE_FAST and (
++    is_defined["MOJOLEARN_EST_SHRINK_FUSED"]()
++)
+ comptime EST_APPLE_ANY = (
+-    EST_STATS_FUSED or EST_ITERS_DEVICE
++    EST_STATS_FUSED or EST_ITERS_DEVICE or EST_SHRINK_FUSED
+ )
+ 
+ #: one block, one thread per leaf (looping past 256 leaves)
+@@ -190,13 +201,50 @@ def apple_est_handles(
+     ):
+         return False
+     if iterations == 1:
+-        return EST_STATS_FUSED
++        return EST_STATS_FUSED or EST_SHRINK_FUSED
+     return EST_ITERS_DEVICE
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive: sym-est-sh-1k istella -2.8%, old base) deleted 2026-10-09 on
+-# lane/owed-deletions-D1 (cursor add fused with the next tree's derivative pass); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch; record in docs/TOMBSTONES.md.
++def apple_est_fuses_derivs(
++    objective: Int,
++    estimation_method: Int,
++    approx_dim: Int,
++    iterations: Int,
++    has_group: Bool,
++) -> Bool:
++    """Whether the task leaves the NEXT iteration's search planes and value
++    partials in the hook's buffers (`EST_SHRINK_FUSED`), so the loop head
++    skips its derivative pass. The call site and the task consult the same
++    predicate."""
++    return EST_SHRINK_FUSED and apple_est_handles(
++        objective, estimation_method, approx_dim, iterations, has_group
++    )
++
++
++struct EstDerivsHook(Movable):
++    """The loop head's derivative pass, as the task restates it
++    (`EST_SHRINK_FUSED`): handle views of the fit's `stats`, `fv_part` and
++    `mag_part`, and the two flags its launch takes."""
++
++    var stats: DeviceBuffer[DType.float32]
++    var fv_part: DeviceBuffer[DType.float32]
++    var mag_part: DeviceBuffer[DType.float32]
++    var compute_magnitudes: Bool
++    var second_order: Bool
++
++    def __init__(
++        out self,
++        var stats: DeviceBuffer[DType.float32],
++        var fv_part: DeviceBuffer[DType.float32],
++        var mag_part: DeviceBuffer[DType.float32],
++        compute_magnitudes: Bool,
++        second_order: Bool,
++    ):
++        self.stats = stats^
++        self.fv_part = fv_part^
++        self.mag_part = mag_part^
++        self.compute_magnitudes = compute_magnitudes
++        self.second_order = second_order
+ 
+ 
+ struct AppleEstScratch(Movable):
+@@ -352,6 +400,27 @@ def apple_est_ensure(
+ # ------------------------------------------------------------------ kernels
+ 
+ 
++def est_leaf_of_row_kernel(
++    part_offset: MutPointer[UInt32, MutAnyOrigin],
++    part_size: MutPointer[UInt32, MutAnyOrigin],
++    row_index: MutPointer[UInt32, MutAnyOrigin],
++    leaf_of_row: MutPointer[UInt32, MutAnyOrigin],
++):
++    """`leaf_of_row[row_index[offset + i]] = leaf`: the partition read as a
++    row -> leaf map. Grid y is the leaf, x strides its rows (the
++    `fill_bins_from_partition_kernel` shape). Integer only."""
++    var leaf = Int(block_idx.y)
++    var offset = Int(part_offset.unsafe_load(leaf))
++    var size = Int(part_size.unsafe_load(leaf))
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var stride = Int(grid_dim.x) * Int(block_dim.x)
++    while i < size:
++        leaf_of_row.unsafe_store(
++            Int(row_index.unsafe_load(offset + i)), UInt32(leaf)
++        )
++        i += stride
++
++
+ def est_walk_kernel(
+     part_stats: MutPointer[Float32, MutAnyOrigin],
+     wsum_stats: MutPointer[Float32, MutAnyOrigin],
+@@ -539,9 +608,189 @@ def est_walk_kernel(
+ # Restore: git apply experiments/removed/MOJOLEARN_EST_REUSE_PART.patch; record in docs/TOMBSTONES.md.
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive: sym-est-sh-1k istella -2.8%, old base) deleted 2026-10-09 on
+-# lane/owed-deletions-D1 (cursor add fused with the next tree's derivative pass); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch; record in docs/TOMBSTONES.md.
++def est_apply_derivs_xent_kernel[
++    has_border: Bool,
++    second_der_as_weights: Bool,
++](
++    leaf_of_row: MutPointer[UInt32, MutAnyOrigin],
++    est: MutPointer[Float32, MutAnyOrigin],
++    walk: MutPointer[Float32, MutAnyOrigin],
++    cap_in: Int32,
++    learning_rate: Float32,
++    use_cursor_point: Int32,
++    walk_i: MutPointer[Int32, MutAnyOrigin],
++    slot_in: Int32,
++    target_classes: MutPointer[Float32, MutAnyOrigin],
++    weights: MutPointer[Float32, MutAnyOrigin],
++    size_in: Int32,
++    predictions: MutPointer[Float32, MutAnyOrigin],
++    has_weights: Int32,
++    border: Float32,
++    stats: MutPointer[Float32, MutAnyOrigin],
++    function_value: MutPointer[Float32, MutAnyOrigin],
++    compute_fv: Int32,
++    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
++    compute_magnitudes: Int32,
++):
++    """`EST_SHRINK_FUSED`: the cursor add, then `cross_entropy_kernel`'s
++    search body (the loop head's launch) on the just-stored value, the
++    DEVIATION 2030 shape. The add is `add_model_value_kernel`'s
++    `identical_mul_add(raw, rate, cursor)` on a cursor the walk left
++    alone, or the fix-up form on one it shifted (`use_cursor_point`).
++    Skipped (planes still written, overwritten later) while unfinished."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(size_in) and walk_i.unsafe_load(4 * Int(slot_in) + 2) != Int32(0):
++        var leaf = Int(leaf_of_row.unsafe_load(i))
++        var raw = est.unsafe_load(leaf)
++        if use_cursor_point != Int32(0):
++            var delta = raw * learning_rate - walk.unsafe_load(
++                Int(cap_in) + leaf
++            )
++            predictions.unsafe_store(i, predictions.unsafe_load(i) + delta)
++        else:
++            predictions.unsafe_store(
++                i, identical_mul_add(raw, learning_rate, predictions.unsafe_load(i))
++            )
++    cross_entropy_kernel[has_border, False, second_der_as_weights](
++        target_classes, weights, size_in, predictions, has_weights,
++        border, stats, function_value, compute_fv,
++        plane_magnitudes, compute_magnitudes,
++    )
++
++
++def est_apply_derivs_pointwise_kernel[
++    objective: Int,
++    second_der_as_weights: Bool,
++](
++    leaf_of_row: MutPointer[UInt32, MutAnyOrigin],
++    est: MutPointer[Float32, MutAnyOrigin],
++    walk: MutPointer[Float32, MutAnyOrigin],
++    cap_in: Int32,
++    learning_rate: Float32,
++    use_cursor_point: Int32,
++    walk_i: MutPointer[Int32, MutAnyOrigin],
++    slot_in: Int32,
++    relevs: MutPointer[Float32, MutAnyOrigin],
++    weights: MutPointer[Float32, MutAnyOrigin],
++    size_in: Int32,
++    predictions: MutPointer[Float32, MutAnyOrigin],
++    has_weights: Int32,
++    alpha: Float32,
++    stats: MutPointer[Float32, MutAnyOrigin],
++    function_value: MutPointer[Float32, MutAnyOrigin],
++    compute_fv: Int32,
++    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
++    compute_magnitudes: Int32,
++):
++    """The twin of `est_apply_derivs_xent_kernel` for
++    `pointwise_target_kernel`'s losses."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(size_in) and walk_i.unsafe_load(4 * Int(slot_in) + 2) != Int32(0):
++        var leaf = Int(leaf_of_row.unsafe_load(i))
++        var raw = est.unsafe_load(leaf)
++        if use_cursor_point != Int32(0):
++            var delta = raw * learning_rate - walk.unsafe_load(
++                Int(cap_in) + leaf
++            )
++            predictions.unsafe_store(i, predictions.unsafe_load(i) + delta)
++        else:
++            predictions.unsafe_store(
++                i, identical_mul_add(raw, learning_rate, predictions.unsafe_load(i))
++            )
++    pointwise_target_kernel[objective, False, second_der_as_weights](
++        relevs, weights, size_in, predictions, has_weights, alpha,
++        stats, function_value, compute_fv,
++        plane_magnitudes, compute_magnitudes,
++    )
++
++
++def _launch_apply_derivs(
++    ctx: DeviceContext,
++    objective: Int,
++    second_order: Bool,
++    mut leaf_of_row: DeviceBuffer[DType.uint32],
++    mut est: DeviceBuffer[DType.float32],
++    mut walk: DeviceBuffer[DType.float32],
++    cap: Int,
++    learning_rate: Float32,
++    use_cursor_point: Int32,
++    mut walk_i: DeviceBuffer[DType.int32],
++    slot_in: Int32,
++    mut targets: DeviceBuffer[DType.float32],
++    mut weights: DeviceBuffer[DType.float32],
++    n_rows: Int,
++    mut cursor: DeviceBuffer[DType.float32],
++    has_weights: Int32,
++    alpha: Float32,
++    border: Float32,
++    mut stats: DeviceBuffer[DType.float32],
++    mut fv_part: DeviceBuffer[DType.float32],
++    mut mag_part: DeviceBuffer[DType.float32],
++    compute_magnitudes: Int32,
++    blocks: Int,
++) raises:
++    """`launch_approximate[False, second_order]`'s dispatch (the loop
++    head's), fused kernels; `UseBorder()` is Logloss, the generic arm in
++    `launch_pointwise_target_kernel`'s case order."""
++
++    @parameter
++    def _xent[has_border: Bool, so: Bool]() raises:
++        ctx.enqueue_function[est_apply_derivs_xent_kernel[has_border, so]](
++            leaf_of_row, est, walk, Int32(cap), learning_rate,
++            use_cursor_point, walk_i, slot_in,
++            targets, weights, Int32(n_rows), cursor, has_weights, border,
++            stats, fv_part, Int32(1), mag_part, compute_magnitudes,
++            grid_dim=(blocks, 1, 1),
++            block_dim=(MSE_BLOCK_SIZE, 1, 1),
++        )
++
++    @parameter
++    def _go[obj: Int, so: Bool]() raises:
++        ctx.enqueue_function[est_apply_derivs_pointwise_kernel[obj, so]](
++            leaf_of_row, est, walk, Int32(cap), learning_rate,
++            use_cursor_point, walk_i, slot_in,
++            targets, weights, Int32(n_rows), cursor, has_weights, alpha,
++            stats, fv_part, Int32(1), mag_part, compute_magnitudes,
++            grid_dim=(blocks, 1, 1),
++            block_dim=(MSE_BLOCK_SIZE, 1, 1),
++        )
++
++    @parameter
++    def _dispatch[so: Bool]() raises:
++        if objective == OBJECTIVE_LOGLOSS:
++            _xent[True, so]()
++        elif objective == OBJECTIVE_CROSSENTROPY:
++            _xent[False, so]()
++        elif objective == OBJECTIVE_EXPECTILE:
++            _go[OBJECTIVE_EXPECTILE, so]()
++        elif objective == OBJECTIVE_QUANTILE:
++            _go[OBJECTIVE_QUANTILE, so]()
++        elif objective == OBJECTIVE_MAE:
++            _go[OBJECTIVE_MAE, so]()
++        elif objective == OBJECTIVE_LOGLINQUANTILE:
++            _go[OBJECTIVE_LOGLINQUANTILE, so]()
++        elif objective == OBJECTIVE_MAPE:
++            _go[OBJECTIVE_MAPE, so]()
++        elif objective == OBJECTIVE_POISSON:
++            _go[OBJECTIVE_POISSON, so]()
++        elif objective == OBJECTIVE_LQ:
++            _go[OBJECTIVE_LQ, so]()
++        elif objective == OBJECTIVE_RMSE:
++            _go[OBJECTIVE_RMSE, so]()
++        elif objective == OBJECTIVE_TWEEDIE:
++            _go[OBJECTIVE_TWEEDIE, so]()
++        elif objective == OBJECTIVE_HUBER:
++            _go[OBJECTIVE_HUBER, so]()
++        else:
++            raise Error(
++                "apple_fast_est: objective " + String(objective)
++                + " does not reach the fused derivative pass"
++            )
++
++    if second_order:
++        _dispatch[True]()
++    else:
++        _dispatch[False]()
+ 
+ 
+ # --------------------------------------------------------------- the task
+@@ -578,6 +827,7 @@ def apple_fast_estimate_and_apply(
+     mut h_po: HostBuffer[DType.uint32],
+     mut h_ps: HostBuffer[DType.uint32],
+     mut s: AppleEstScratch,
++    var hook: Optional[EstDerivsHook],
+ ) raises:
+     """`_estimate_and_apply` for a task `apple_est_handles` accepts: the
+     same estimate (`TNewtonLikeWalker::Estimate`, then `AppendModels`) with
+@@ -589,6 +839,7 @@ def apple_fast_estimate_and_apply(
+     in the common case; a walk that has accepted nothing after
+     `iterations` tries continues in device chunks, one drain each, up to
+     the walker's cap of 100 tries."""
++    var fuse_derivs = EST_SHRINK_FUSED and hook.__bool__()
+     var newton = estimation_method == LEAF_ESTIMATION_NEWTON
+     var sm = est_sm
+     if sm < 0:
+@@ -692,8 +943,27 @@ def apple_fast_estimate_and_apply(
+     @parameter
+     def _apply(slot: Int) raises:
+         # `AppendModels`: the rescaled estimate onto the real cursor
+-        # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the
+-        # fused add + derivative branch here); code recoverable at b639a2bd2.
++        if fuse_derivs:
++            ref h = hook.value()
++            # the bins buffer is free once the walk is done: the row ->
++            # leaf map goes there now (stream order covers the walk)
++            ctx.enqueue_function[est_leaf_of_row_kernel](
++                d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(),
++                row_index.unsafe_ptr(), s.d_bins.unsafe_ptr(),
++                grid_dim=(gx, n_leaves, 1),
++                block_dim=(256, 1, 1),
++            )
++            _launch_apply_derivs(
++                ctx, objective, h.second_order,
++                s.d_bins, s.d_est, s.d_walk, s.leaves_cap, learning_rate,
++                Int32(0),
++                s.d_walk_i, Int32(slot),
++                targets, weights, n_rows, cursor, hw, alpha, logloss_border,
++                h.stats, h.fv_part, h.mag_part,
++                Int32(1) if h.compute_magnitudes else Int32(0),
++                mse_blocks,
++            )
++            return
+         # `est` is 0 while the walk is unfinished, so this adds nothing
+         # early; the gathered copy took the shifts, the live cursor
+         # takes the estimate
+@@ -757,3 +1027,4 @@ def apple_fast_estimate_and_apply(
+     for i in range(n_leaves):
+         leaf_values.append(s.h_est.unsafe_ptr().unsafe_load(i))
+     trace.record_list_f32(leaf_tag, leaf_values)
++    _ = hook.__bool__()

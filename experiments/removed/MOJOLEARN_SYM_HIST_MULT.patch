@@ -1,0 +1,58 @@
+diff --git a/gbdt/methods/kernel/sym_fast.mojo b/gbdt/methods/kernel/sym_fast.mojo
+index af3cdef8e..07105f120 100644
+--- a/gbdt/methods/kernel/sym_fast.mojo
++++ b/gbdt/methods/kernel/sym_fast.mojo
+@@ -74,7 +74,17 @@ comptime SYM_SCAN_SUB_FUSED = SYM_FAST_APPLE and (
+     is_defined["MOJOLEARN_SYM_SCAN_SUB_FUSED"]()
+ )
+ 
+-#: TOMBSTONE: MOJOLEARN_SYM_HIST_MULT (DROPPED-noise: symhist-hist-mult istella/taxi noise, old base) deleted 2026-10-09 on
+-#: lane/owed-deletions-D1 (2x the SM count's worth of histogram blocks); code recoverable at b639a2bd2.
+-#: Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_MULT.patch; record in docs/TOMBSTONES.md.
++#: the pointwise histogram launchers ask CatBoost's document multiplier for
++#: `SYM_HIST_MULT_FACTOR` times as many blocks as the SM heuristic would
++#: (`pointwise_kernels.mojo::pw_block_multiplier`), still capped at 64 and
++#: at >= 10k rows per block.
++#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
++#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
++#: arms never reached the queue).
++#: apple-fast LEDGER 2026-10-03: symhist hist-mult noise DROP, old base;
++#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
++comptime SYM_HIST_MULT = SYM_FAST_APPLE and (
++    is_defined["MOJOLEARN_SYM_HIST_MULT"]()
++)
++comptime SYM_HIST_MULT_FACTOR = 2
+ 
+diff --git a/gbdt/methods/pointwise_kernels.mojo b/gbdt/methods/pointwise_kernels.mojo
+index 1f4596ce2..879862c7e 100644
+--- a/gbdt/methods/pointwise_kernels.mojo
++++ b/gbdt/methods/pointwise_kernels.mojo
+@@ -194,6 +194,8 @@ from gbdt.gpu_data.grid_policy import (
+     POLICY_ONE_BYTE,
+ )
+ from gbdt.methods.kernel.sym_fast import (
++    SYM_HIST_MULT,
++    SYM_HIST_MULT_FACTOR,
+     SYM_SCAN_SUB_FUSED,
+ )
+ from gbdt.methods.kernel.split_properties_helpers import (
+@@ -357,9 +359,16 @@ def pw_block_multiplier(
+         ):
+             multiplier *= 2
+         return multiplier
+-    # TOMBSTONE: MOJOLEARN_SYM_HIST_MULT (DROPPED-noise: symhist-hist-mult istella/taxi noise, old base) deleted 2026-10-09 on
+-    # lane/owed-deletions-D1 (2x the SM count's worth of histogram blocks); code recoverable at b639a2bd2.
+-    # Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_MULT.patch; record in docs/TOMBSTONES.md.
++    comptime if SYM_HIST_MULT:
++        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_HIST_MULT` (FAST +
++        # Apple only): the same ladder asked for SYM_HIST_MULT_FACTOR
++        # times the SM count's worth of blocks; cap and row floor stand.
++        var scaled = estimate_block_per_feature_multiplier(
++            nx, ny, nz, size, sm_count * SYM_HIST_MULT_FACTOR
++        )
++        if scaled > PW_MAX_MULTIPLIER:
++            scaled = PW_MAX_MULTIPLIER
++        return scaled
+     comptime if not pointwise_doc_split_for[
+         TARGET_COLUMN, HIST_BUILD_MODE != NUMERIC_FAST
+     ]():

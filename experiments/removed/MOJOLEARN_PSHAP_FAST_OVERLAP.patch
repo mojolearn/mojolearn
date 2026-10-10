@@ -1,0 +1,240 @@
+diff --git a/python/mojolearn/_expansion_trees.py b/python/mojolearn/_expansion_trees.py
+index f70a5d584..f9dccf0d5 100644
+--- a/python/mojolearn/_expansion_trees.py
++++ b/python/mojolearn/_expansion_trees.py
+@@ -507,9 +507,13 @@ _PSHAP_DELTA = 32
+ #     Bit 128 since the 2026-10-05 merge (was 32 on the IDENTICAL branch;
+ #     main took 32 for PSHAP_DELTA; xtrees/api.mojo XTREES_FAST_SWITCHES).
+ _IDN_ADA_SESSION = 128
+-# TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
+-# on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
++#   MOJOLEARN_PSHAP_FAST_OVERLAP (lane apple-fast-s-shap, opt-in, needs
++#     SHAP_PERM_CACHE): PermutationExplainer's delta path enqueues the next
++#     chunk's compacted rows and their download into a second host buffer
++#     (`x_trees_pshap_dsynth_async`) before the model runs on the current
++#     chunk; the same words. Bit 512 since the 2026-10-05 merge (was 128;
++#     main took 128 for IDN_ADA_SESSION).
++_PSHAP_FAST_OVERLAP = 512
+ 
+ 
+ def _trees_fast_tier(est):
+@@ -3461,8 +3465,9 @@ class PermutationExplainer(_AgnosticExplainer):
+         # bound them as if d were at least 16 (a narrow X would else index
+         # up to the whole synthetic budget in Int64 triples)
+         R = min(R, self._chunk(mm * nb * max(d, 16), n))
+-        # TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1
+-        # (`_delta_overlapped`); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch.
++        if n > R and _trees_switch(self, _PSHAP_FAST_OVERLAP):
++            self._delta_overlapped(b, x0, bg0, p0, n, d, k, nb, npm, seed, R, mm)
++            return
+         tot = zeros((1,), "<i8")
+         t0 = addr(tot, name="count")
+         syn = empty((R * mm * nb * d,), "<f4")
+@@ -3478,3 +3483,39 @@ class PermutationExplainer(_AgnosticExplainer):
+             b.x_trees_pshap_dvalues(x0 + 4 * r0 * d, bg0, addr_ro(out, name="y"), p0 + 8 * r0 * d * k, t0,
+                                     params + [k])
+             del out
++
++    def _delta_overlapped(self, b, x0, bg0, p0, n, d, k, nb, npm, seed, R, mm):
++        """MOJOLEARN_PSHAP_FAST_OVERLAP: `_delta`'s chunk loop with two host
++        buffers (and two counts): chunk r + 1's varying rows are enqueued
++        (`x_trees_pshap_dsynth_async`) before the model runs on chunk r;
++        chunk r's `x_trees_pshap_dvalues` finds its cached state, and
++        `x_trees_pshap_dsynth_wait` hands chunk r + 1's over. The same calls
++        on the same words as `_delta`."""
++        tots = [zeros((1,), "<i8"), zeros((1,), "<i8")]
++        bufs = [empty((R * mm * nb * d,), "<f4"), empty((R * mm * nb * d,), "<f4")]
++
++        def start(r0, j):
++            rows = min(R, n - r0)
++            b.x_trees_pshap_dsynth_async(x0 + 4 * r0 * d, bg0, addr(bufs[j], name="synthetic"),
++                                         addr(tots[j], name="count"), [rows, nb, d, npm, r0, seed])
++
++        try:
++            start(0, 0)
++            b.x_trees_pshap_dsynth_wait()
++            cur = 0
++            for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
++                rows = min(R, n - r0)
++                nv = int(tots[cur].tolist()[0])
++                if r0 + R < n:
++                    start(r0 + R, 1 - cur)              # in flight while the model runs
++                front = memory_at(addr(bufs[cur], name="synthetic"), 4 * nv * d, writable=True).cast("f")
++                out = self._eval(Array.from_buffer(front).reshape((nv, d)))
++                del front
++                b.x_trees_pshap_dvalues(x0 + 4 * r0 * d, bg0, addr_ro(out, name="y"), p0 + 8 * r0 * d * k,
++                                        addr(tots[cur], name="count"), [rows, nb, d, npm, r0, seed, k])
++                del out
++                b.x_trees_pshap_dsynth_wait()
++                cur = 1 - cur
++        finally:
++            b.x_trees_pshap_dsynth_wait()       # never leave a download aimed at a freed buffer
++        del bufs
+diff --git a/python/mojolearn/_surface_trees.py b/python/mojolearn/_surface_trees.py
+index 5eb9174da..1c1f63c04 100644
+--- a/python/mojolearn/_surface_trees.py
++++ b/python/mojolearn/_surface_trees.py
+@@ -108,7 +108,8 @@ FAMILIES = (
+             "x_trees_device_folds", "x_trees_class_priors", "x_trees_dart_thresholds",
+             "x_trees_dart_rescale", "x_trees_kshap_schedule", "x_trees_normalized_weights",
+             "x_trees_agn_pool_release",
+-            "x_trees_pshap_dsynth", "x_trees_pshap_dvalues",
++            "x_trees_pshap_dsynth", "x_trees_pshap_dvalues", "x_trees_pshap_dsynth_async",
++            "x_trees_pshap_dsynth_wait",
+         ),
+         gate="tools/algos_lane_check.sh",
+         wheel_note="Ships: the trees expansion lane's ensemble glue (pass 1, PENDING).",
+diff --git a/xtrees/agnostic_device.mojo b/xtrees/agnostic_device.mojo
+index 2241b3948..3d7561e93 100644
+--- a/xtrees/agnostic_device.mojo
++++ b/xtrees/agnostic_device.mojo
+@@ -130,9 +130,21 @@ comptime SHAP_PERM_CACHE = PSHAP_DELTA and not is_defined["MOJOLEARN_SHAP_PERM_C
+ #: TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise: kernel-shap istella neutral, verdicts batch 6) deleted 2026-10-09
+ #: on lane/owed-deletions-D1 (next chunk's synthetic rows + download overlapped with the model); code recoverable at b639a2bd2.
+ #: Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
+-#: TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
+-#: on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
+-#: Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
++#: PSHAP_FAST_OVERLAP (lane apple-fast-s-shap, 2026-10-04; READY-AB, opt-in
++#: `-D MOJOLEARN_PSHAP_FAST_OVERLAP`, needs SHAP_PERM_CACHE): the same overlap
++#: for PermutationExplainer istella (~150 ms a row vs shap-cpu's ~123): each
++#: row's varying synthetic rows (up to 441,000 x 220 floats, 388 MB) come
++#: down by a raw host-pointer copy (~3 GB/s) with the model idle. Here
++#: `pshap_dsynth_async` builds chunk r + 1's `_Delta` (its one count sync,
++#: with the stream otherwise idle), enqueues its compaction and download into
++#: the caller's other host buffer and returns; the model runs on chunk r
++#: meanwhile; chunk r's `pshap_dvalues` takes chunk r's cached `_Delta`
++#: (SHAP_PERM_CACHE's slot), and `pshap_dsynth_wait` then moves chunk r + 1's
++#: into that slot. The same kernels on the same words: no bit moves.
++#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
++#: verdicts batch 6): permutation-shap taxi +26.6% slower. DROPPED: stays off
++#: (opt-in only).
++comptime PSHAP_FAST_OVERLAP = SHAP_PERM_CACHE and is_defined["MOJOLEARN_PSHAP_FAST_OVERLAP"]()
+ comptime AGN_MAX_BLOCKS = 65535 * 16
+ comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
+ 
+@@ -1136,9 +1148,62 @@ def pshap_dsynth(x: Int, bg: Int, syn: Int, tot: Int, R: Int, nb: Int, d: Int, n
+         _ = dl^
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
+-# on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
++struct _DeltaPend(Defaultable, Movable):
++    """PSHAP_FAST_OVERLAP: the chunk whose compacted rows are in flight, and
++    its SHAP_PERM_CACHE key."""
++    var dl: Optional[_Delta]
++    var key: List[Int]
++
++    def __init__(out self):
++        self.dl = Optional[_Delta]()
++        self.key = List[Int]()
++
++
++comptime AGN_DELTA_PEND = _Global[StorageType=_DeltaPend, name="MojoXTreesAgnosticDeltaPendFast",
++                                  init_fn=_DeltaPend.__init__]
++
++
++def pshap_dsynth_wait() raises:
++    """PSHAP_FAST_OVERLAP: wait for the chunk `pshap_dsynth_async` left in
++    flight (its rows are then at the caller's host address) and move its
++    `_Delta` into SHAP_PERM_CACHE's slot for its `pshap_dvalues`. A no-op
++    with nothing in flight."""
++    var pend = AGN_DELTA_PEND.get_or_create_ptr()
++    if pend[].dl:
++        _ctx().synchronize()
++        var slot = AGN_DELTA_SLOT.get_or_create_ptr()
++        slot[].dl = Optional[_Delta](pend[].dl.take())
++        slot[].key = pend[].key.copy()
++        pend[].dl = Optional[_Delta]()
++        pend[].key = List[Int]()
++
++
++def pshap_dsynth_async(x: Int, bg: Int, syn: Int, tot: Int, R: Int, nb: Int, d: Int, np: Int, seed: Int,
++                       row0: Int) raises:
++    """PSHAP_FAST_OVERLAP: `pshap_dsynth` whose compaction and download are
++    enqueued WITHOUT the final wait (the count at tot is final on return;
++    the rows reach syn by `pshap_dsynth_wait`, or by the next call that
++    synchronizes the stream). Leaves SHAP_PERM_CACHE's slot alone (it may
++    hold the previous chunk's `_Delta` for its `pshap_dvalues`). Until the
++    wait the caller must not read or free syn, and keeps x and bg alive and
++    unchanged."""
++    if R * np * (2 * d + 1) * nb * d <= 0:
++        return
++    var pend = AGN_DELTA_PEND.get_or_create_ptr()
++    if pend[].dl:
++        raise Error("x_trees_pshap_dsynth_async: a chunk is already in flight")
++    var ctx = _ctx()
++    var dl = _Delta(ctx, x, bg, tot, R, nb, d, np, seed, row0)
++    var total = dl.total * d
++    if total > 0:
++        var ps = _pool_syn(ctx, total)
++        ctx.enqueue_function[dsynth_kernel](
++            Int64(total), Int32(nb), Int32(d), Int32(np), dl.dx.unsafe_ptr(), dl.dbg.unsafe_ptr(),
++            dl.inv.unsafe_ptr(), dl.src.unsafe_ptr(), ps, grid_dim=_blocks(total), block_dim=AGN_TPB,
++        )
++        _pool_down(ctx, syn, total)
++    pend[].dl = Optional[_Delta](dl^)
++    pend[].key = _delta_key(x, bg, tot, R, nb, d, np, seed, row0)
+ 
+ 
+ def pshap_dvalues(x: Int, bg: Int, yout: Int, phi: Int, tot: Int, R: Int, nb: Int, d: Int, k: Int, np: Int,
+diff --git a/xtrees/api.mojo b/xtrees/api.mojo
+index 4cf3d047a..9892acf35 100644
+--- a/xtrees/api.mojo
++++ b/xtrees/api.mojo
+@@ -1183,6 +1183,7 @@ comptime XTREES_FAST_SWITCHES = (
+     + (32 if agn_dev.PSHAP_DELTA else 0)
+     + (64 if _XT_AGN_DEVICE_MODEL else 0)
+     + (128 if _XT_IDN_ADA_SESSION else 0)
++    + (512 if agn_dev.PSHAP_FAST_OVERLAP else 0)
+     + (1024 if _XT_KSHAP_FAST_DEVICE_MODEL else 0)
+     + (2048 if _XT_PSHAP_FAST_DEVICE_MODEL else 0)
+ )
+@@ -1198,7 +1199,7 @@ def fast_switches_binding() raises -> PythonObject:
+     128 `_XT_IDN_ADA_SESSION` (an IDENTICAL build's switch; was bit 32 on
+     the IDENTICAL integration branch, renumbered at the 2026-10-05 merge
+     because main took 32 for PSHAP_DELTA), bit 256 the deleted
+-    MOJOLEARN_KSHAP_FAST_OVERLAP (always 0), bit 512 the deleted MOJOLEARN_PSHAP_FAST_OVERLAP (always 0)
++    MOJOLEARN_KSHAP_FAST_OVERLAP (always 0), bit 512 MOJOLEARN_PSHAP_FAST_OVERLAP
+     (xtrees/agnostic_device.mojo; were 64 and 128 before the 2026-10-05 merge),
+     bit 1024 MOJOLEARN_KSHAP_FAST_DEVICE_MODEL, bit 2048
+     MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (FAST + Apple experiments)."""
+@@ -1664,9 +1665,27 @@ def pshap_dsynth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, t
+     return PythonObject(p[0])
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
+-# on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
++def pshap_dsynth_async_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, tot: PythonObject,
++                               params: PythonObject) raises -> PythonObject:
++    """MOJOLEARN_PSHAP_FAST_OVERLAP: `x_trees_pshap_dsynth` whose rows reach
++    syn by `x_trees_pshap_dsynth_wait` (tot is final on return); the same
++    params. Refused in a build without the define (switches bit 128)."""
++    var p = _agn_ints(params, 6, "x_trees_pshap_dsynth_async")
++    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
++        raise Error("x_trees_pshap_dsynth_async: bad counts")
++    comptime if agn_dev.PSHAP_FAST_OVERLAP:
++        agn_dev.pshap_dsynth_async(Int(py=x), Int(py=bg), Int(py=syn), Int(py=tot), p[0], p[1], p[2], p[3], p[5],
++                                   p[4])
++    else:
++        raise Error("x_trees_pshap_dsynth_async: built without MOJOLEARN_PSHAP_FAST_OVERLAP")
++    return PythonObject(p[0])
++
++
++def pshap_dsynth_wait_binding() raises -> PythonObject:
++    """MOJOLEARN_PSHAP_FAST_OVERLAP: wait for the chunk in flight."""
++    comptime if agn_dev.PSHAP_FAST_OVERLAP:
++        agn_dev.pshap_dsynth_wait()
++    return PythonObject(0)
+ 
+ 
+ def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject, phi: PythonObject,
+@@ -1918,3 +1937,5 @@ def register(mut m: PythonModuleBuilder) raises:
+     m.def_function[pshap_values_model_binding]("x_trees_pshap_values_model")
+     m.def_function[pshap_dsynth_binding]("x_trees_pshap_dsynth")
+     m.def_function[pshap_dvalues_binding]("x_trees_pshap_dvalues")
++    m.def_function[pshap_dsynth_async_binding]("x_trees_pshap_dsynth_async")
++    m.def_function[pshap_dsynth_wait_binding]("x_trees_pshap_dsynth_wait")

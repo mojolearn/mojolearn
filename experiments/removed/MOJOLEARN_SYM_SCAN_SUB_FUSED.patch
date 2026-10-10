@@ -1,0 +1,162 @@
+diff --git a/gbdt/methods/kernel/split_properties_helpers.mojo b/gbdt/methods/kernel/split_properties_helpers.mojo
+index 3f346e4ce..49dc036b9 100644
+--- a/gbdt/methods/kernel/split_properties_helpers.mojo
++++ b/gbdt/methods/kernel/split_properties_helpers.mojo
+@@ -471,6 +471,71 @@ def aft_cooperative_scan_kernel(
+             tile += AFT_SCAN_LANES
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_SYM_SCAN_SUB_FUSED (DROPPED-noise: symhist-scan-sub istella/taxi noise, old base) deleted 2026-10-09
+-# on lane/owed-deletions-D1 (fold scan + sibling subtraction in one launch); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_SYM_SCAN_SUB_FUSED.patch; record in docs/TOMBSTONES.md.
++def scan_sub_pointwise_histograms_kernel(
++    feature_first_fold_index: MutPointer[UInt32, MutAnyOrigin],
++    feature_folds: MutPointer[UInt32, MutAnyOrigin],
++    feature_one_hot: MutPointer[UInt8, MutAnyOrigin],
++    feature_count_in: Int32,
++    hist_line_size_in: Int32,
++    parts: MutPointer[UInt32, MutAnyOrigin],
++    histogram: MutPointer[Float32, MutAnyOrigin],
++):
++    """lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_SCAN_SUB_FUSED` (FAST +
++    Apple only): `scan_pointwise_histograms_kernel` and
++    `update_pointwise_histograms_kernel[2]` as ONE launch, for the PARTIAL
++    pass at `fold_count == 1` and the whole bin-feature line.
++
++    Grid (ceil(features / block), partCount / 2, 1), one thread per
++    (feature, sibling pair). `histogram` is the UNSHIFTED buffer: the
++    computed child sits at part `blockIdx.y | gridDim.y`, its parent at
++    part `blockIdx.y` (`shift_part_and_bin_sums_ptr`'s partial arm). Per
++    stat, the thread runs the scan's serial inclusive sum over the
++    feature's folds in the computed child's row (skipped for one-hot and
++    single-fold features, as the scan kernel skips them) and, cell by cell,
++    the subtraction kernel's `complement = parent - calc` with
++    `isLeftCalculated = leftPart.Size < rightPart.Size` deciding which
++    slot gets which, exactly the arithmetic the two kernels do in sequence.
++    A bin feature belongs to exactly one feature's fold range, so the
++    union of the threads' ranges is the subtraction kernel's whole line.
++    At `fold_count == 1` both offset helpers are the identity, which is
++    why the caller restricts the fusion to it."""
++    var feature_count = Int(feature_count_in)
++    var hist_line_size = Int(hist_line_size_in)
++
++    var feature_id = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if feature_id >= feature_count:
++        return
++    var folds = Int(feature_folds.unsafe_load(feature_id))
++    if folds <= 0:
++        return
++
++    var half = Int(grid_dim.y)
++    var left_part = Int(block_idx.y)
++    var right_part = left_part | half
++    var first_fold = Int(feature_first_fold_index.unsafe_load(feature_id))
++    var left_base = (left_part * hist_line_size + first_fold) * 2
++    var right_base = (right_part * hist_line_size + first_fold) * 2
++
++    var left_size = parts.unsafe_load(2 * left_part + 1)
++    var right_size = parts.unsafe_load(2 * right_part + 1)
++    var is_left_calculated = left_size < right_size
++    var do_scan = (
++        feature_one_hot.unsafe_load(feature_id) == UInt8(0) and folds > 1
++    )
++
++    for hist_id in range(2):
++        var running = Float32(0.0)
++        for b in range(folds):
++            var at_r = right_base + b * 2 + hist_id
++            var at_l = left_base + b * 2 + hist_id
++            var calc = histogram.unsafe_load(at_r)
++            if do_scan:
++                running += calc
++                calc = running
++            var complement = histogram.unsafe_load(at_l) - calc
++            if is_left_calculated:
++                histogram.unsafe_store(at_l, calc)
++                histogram.unsafe_store(at_r, complement)
++            else:
++                histogram.unsafe_store(at_l, complement)
++                histogram.unsafe_store(at_r, calc)
+diff --git a/gbdt/methods/kernel/sym_fast.mojo b/gbdt/methods/kernel/sym_fast.mojo
+index 3310b1347..af3cdef8e 100644
+--- a/gbdt/methods/kernel/sym_fast.mojo
++++ b/gbdt/methods/kernel/sym_fast.mojo
+@@ -61,9 +61,19 @@ comptime SYM_RESOLVE_BLOCK = SYM_FAST_APPLE and (
+ #: on lane/owed-deletions-D1 (per-partition sums on a partitions x chunks grid with atomics); code recoverable at b639a2bd2.
+ #: Restore: git apply experiments/removed/MOJOLEARN_SYM_PART_STATS_PAR.patch; record in docs/TOMBSTONES.md.
+ 
+-#: TOMBSTONE: MOJOLEARN_SYM_SCAN_SUB_FUSED (DROPPED-noise: symhist-scan-sub istella/taxi noise, old base) deleted 2026-10-09
+-#: on lane/owed-deletions-D1 (fold scan + sibling subtraction in one launch); code recoverable at b639a2bd2.
+-#: Restore: git apply experiments/removed/MOJOLEARN_SYM_SCAN_SUB_FUSED.patch; record in docs/TOMBSTONES.md.
++#: on a partial pass the fold scan and the sibling subtraction are one
++#: launch: the thread that scans a feature's folds for the computed child
++#: also writes parent - child for the sibling
++#: (`split_properties_helpers.mojo::scan_sub_pointwise_histograms_kernel`).
++#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
++#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
++#: arms never reached the queue).
++#: apple-fast LEDGER 2026-10-03 batchv: DROP symhist scan-sub (noise), old base;
++#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
++comptime SYM_SCAN_SUB_FUSED = SYM_FAST_APPLE and (
++    is_defined["MOJOLEARN_SYM_SCAN_SUB_FUSED"]()
++)
++
+ #: TOMBSTONE: MOJOLEARN_SYM_HIST_MULT (DROPPED-noise: symhist-hist-mult istella/taxi noise, old base) deleted 2026-10-09 on
+ #: lane/owed-deletions-D1 (2x the SM count's worth of histogram blocks); code recoverable at b639a2bd2.
+ #: Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_MULT.patch; record in docs/TOMBSTONES.md.
+diff --git a/gbdt/methods/pointwise_kernels.mojo b/gbdt/methods/pointwise_kernels.mojo
+index 5921390bc..1f4596ce2 100644
+--- a/gbdt/methods/pointwise_kernels.mojo
++++ b/gbdt/methods/pointwise_kernels.mojo
+@@ -193,9 +193,13 @@ from gbdt.gpu_data.grid_policy import (
+     POLICY_HALF_BYTE,
+     POLICY_ONE_BYTE,
+ )
++from gbdt.methods.kernel.sym_fast import (
++    SYM_SCAN_SUB_FUSED,
++)
+ from gbdt.methods.kernel.split_properties_helpers import (
+     AFT_SCAN_LANES,
+     aft_cooperative_scan_kernel,
++    scan_sub_pointwise_histograms_kernel,
+     PW_PRIVATE_DOC_SLOTS,
+     PointwisePartOffsetsHelper,
+     estimate_block_per_feature_multiplier,
+@@ -2176,9 +2180,34 @@ def compute_hist2_dev[
+             + String(policy)
+         )
+ 
+-    # TOMBSTONE: MOJOLEARN_SYM_SCAN_SUB_FUSED (DROPPED-noise: symhist-scan-sub istella/taxi noise, old base) deleted 2026-10-09
+-    # on lane/owed-deletions-D1 (fold scan + sibling subtraction in one launch); code recoverable at b639a2bd2.
+-    # Restore: git apply experiments/removed/MOJOLEARN_SYM_SCAN_SUB_FUSED.patch; record in docs/TOMBSTONES.md.
++    comptime if SYM_SCAN_SUB_FUSED:
++        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_SCAN_SUB_FUSED` (FAST +
++        # Apple only): on a partial pass at one fold over the whole line,
++        # the scan and the sibling subtraction are one launch
++        # (`scan_sub_pointwise_histograms_kernel`); every other case keeps
++        # the two launches below.
++        if (
++            policy != POLICY_BINARY
++            and not full_pass
++            and fold_count == 1
++            and bin_features_slice_left == 0
++            and bin_features_slice_size == hist_line_size
++        ):
++            var fx = (feature_count + PW_SCAN_BLOCK - 1) // PW_SCAN_BLOCK
++            var fy = part_count // 2
++            if not is_grid_empty(fx, fy, 1):
++                ctx.enqueue_function[scan_sub_pointwise_histograms_kernel](
++                    feature_first_fold_index,
++                    feature_folds,
++                    feature_one_hot,
++                    Int32(feature_count),
++                    Int32(hist_line_size),
++                    partition,
++                    bin_sums,
++                    grid_dim=(fx, fy, 1),
++                    block_dim=(PW_SCAN_BLOCK, 1, 1),
++                )
++            return
+ 
+     if policy != POLICY_BINARY:
+         scan_pointwise_histograms(

@@ -1,0 +1,208 @@
+diff --git a/gbdt/targets/kernel/pair_logit_group.mojo b/gbdt/targets/kernel/pair_logit_group.mojo
+index 66440d98e..2690c88f5 100644
+--- a/gbdt/targets/kernel/pair_logit_group.mojo
++++ b/gbdt/targets/kernel/pair_logit_group.mojo
+@@ -126,9 +126,28 @@ comptime PAIRLOGIT_GROUP_FUSED = pairlogit_group_fused_for[TARGET_COLUMN]()
+ comptime PAIRLOGIT_EST_REUSE = pairlogit_est_reuse_for[TARGET_COLUMN]()
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_PL_PAIRS_ONCE (DROPPED-noise: symmulti-pl-once istella within +-2.4%, same quality) deleted 2026-10-09
+-# on lane/owed-deletions-D1 (each unordered pair evaluated once per one-block group); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_PL_PAIRS_ONCE.patch; record in docs/TOMBSTONES.md.
++def pl_pairs_once_for[column: Int]() -> Bool:
++    """Lane af-sym-multi (2026-10-03), `-D MOJOLEARN_PL_PAIRS_ONCE` (not in
++    `SYM_MULTI_ALL`: a recorded DROP), FAST + Apple, on top of the group kernel:
++    a group that fits one block evaluates every unordered pair ONCE. The
++    group kernel's thread `i` loops over every `j` of the group, so each
++    pair's exp, divide, clamp (and the winner's log) run twice, once from
++    each endpoint. The once path runs `floor((size - 1) / 2)` rounds; in
++    round `r` thread `i` pairs with `j = (i + r) mod size`, a permutation of
++    the threads, so every unordered pair appears in exactly one (round,
++    thread) (plus the `size / 2` half round when `size` is even, taken by
++    the threads below `size / 2`). The computing thread folds its own side
++    into its registers and hands the other side's `der` / `der2` term to
++    `j` through a shared slot that only it writes in that round; a barrier
++    later `j` folds it in. Half the transcendental work of the dominant
++    kernel; the per-document fold order changes (FAST bits move, fixed and
++    repeatable), the terms are the same. Groups wider than the block keep
++    the chunked loop."""
++    comptime if (
++        is_defined["MOJOLEARN_PL_PAIRS_ONCE"]()
++    ):
++        return pairlogit_group_fused_for[column]()
++    return False
+ 
+ 
+ def pl_group_narrow_for[column: Int]() -> Bool:
+@@ -148,6 +167,12 @@ def pl_group_narrow_for[column: Int]() -> Bool:
+     return False
+ 
+ 
++#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
++#: lane/apple-fast-sym-multi@d2c832da0. `-D MOJOLEARN_PL_PAIRS_ONCE`.
++#: apple-fast LEDGER 2026-10-03: DROP symmulti pl-once and
++#: pl-both (within +-2.4%, identical quality), old base; recorded loser,
++#: OUT of SYM_MULTI_ALL, not in the A/B table.
++comptime PL_PAIRS_ONCE = pl_pairs_once_for[TARGET_COLUMN]()
+ #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+ #: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
+ #: unchecked). `-D MOJOLEARN_PL_GROUP_NARROW` (or SYM_MULTI_ALL) until
+@@ -245,6 +270,7 @@ def pair_logit_group_kernel[
+     second_order: Bool,
+     store_acc: Bool,
+     threads: Int = PLG_THREADS,
++    pairs_once: Bool = False,
+     work_class: Int = 0,
+ ](
+     point: MutPointer[Float32, MutAnyOrigin],
+@@ -276,8 +302,9 @@ def pair_logit_group_kernel[
+     three accumulators are regions of the ONE `acc` buffer, passed once
+     with offsets: `enqueue_function` refuses two mutable arguments derived
+     from one allocation as aliasing. `threads` is the block
+-    (`PLG_LAUNCH_THREADS`, lane af-sym-multi `PL_GROUP_NARROW`); at its
+-    default this is the kernel as merged."""
++    (`PLG_LAUNCH_THREADS`, lane af-sym-multi `PL_GROUP_NARROW`) and
++    `pairs_once` the each-pair-once path for groups that fit one block
++    (`PL_PAIRS_ONCE`); at their defaults this is the kernel as merged."""
+     var group_w = acc + Int(group_w_at)
+     var der_acc = acc + Int(der_acc_at)
+     var der2_acc = acc + Int(der2_acc_at)
+@@ -311,10 +338,117 @@ def pair_logit_group_kernel[
+     var fv_local = Float32(0.0)
+     var w_abs = Float32(0.0)
+     var g_abs = Float32(0.0)
+-    # TOMBSTONE: MOJOLEARN_PL_PAIRS_ONCE (DROPPED-noise: symmulti-pl-once istella within +-2.4%, same quality) deleted 2026-10-09
+-    # on lane/owed-deletions-D1 (each unordered pair evaluated once per one-block group); code recoverable at b639a2bd2.
+-    # Restore: git apply experiments/removed/MOJOLEARN_PL_PAIRS_ONCE.patch; record in docs/TOMBSTONES.md.
++    # `PL_PAIRS_ONCE`: a group that fits the block, every pair once
++    var once_done = False
++    comptime if pairs_once:
++        if size <= threads:
++            var sh_o_der = stack_allocation[
++                threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
++            ]()
++            var sh_o_der2 = stack_allocation[
++                threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
++            ]()
++            var in_range = tid < size
++            var i = begin + tid
++            var p_i = Float32(0.0)
++            var g_i = Float32(0.0)
++            if in_range:
++                p_i = point.unsafe_load(i)
++                g_i = grades.unsafe_load(i)
++                sh_point.unsafe_store(tid, p_i)
++                sh_grade.unsafe_store(tid, g_i)
++            barrier()
++            var acc_der = Float32(0.0)
++            var acc_der2 = Float32(0.0)
++            var half = (size - 1) // 2
++            # rounds 1..half, then the half round of an even size: the
++            # loop bound is uniform over the block
++            var n_rounds = half
++            if size % 2 == 0 and size >= 2:
++                n_rounds = half + 1
++            for r in range(1, n_rounds + 1):
++                var full_round = r <= half
++                # the half round pairs only the threads below size / 2
++                var active = in_range and (full_round or tid < r)
++                var j = tid + r
++                if j >= size:
++                    j -= size
++                var o_der = Float32(0.0)
++                var o_der2 = Float32(0.0)
++                if active:
++                    var g_j = sh_grade.unsafe_load(j)
++                    if g_j != g_i:
++                        # `pair_logit.cu:25-40` for the pair (winner, loser)
++                        var winner_side = g_i > g_j
++                        var p_j = sh_point.unsafe_load(j)
++                        var diff = p_i - p_j
++                        if not winner_side:
++                            diff = p_j - p_i
++                        var exp_diff = routed_exp(diff)
++                        var p = Float32(1.0)
++                        if isfinite(Float32(1.0) + exp_diff):
++                            p = exp_diff / (Float32(1.0) + exp_diff)
++                        p = max(
++                            min(p, Float32(1.0) - Float32(1e-40)),
++                            Float32(1e-40),
++                        )
++                        var direction = Float32(1.0) - p
++                        var scale = ftz(p * (Float32(1.0) - p))
++                        var wd = ftz(w * direction)
++                        var ws = ftz(w * scale)
++                        if winner_side:
++                            acc_der = acc_der + wd
++                            o_der = -wd
++                        else:
++                            acc_der = acc_der + (-wd)
++                            o_der = wd
++                        acc_der2 = acc_der2 + ws
++                        o_der2 = ws
++                        if compute_fv != Int32(0):
++                            var log_exp_val_plus_one = diff
++                            if isfinite(Float32(1.0) + exp_diff):
++                                log_exp_val_plus_one = routed_log(
++                                    Float32(1.0) + exp_diff
++                                )
++                            fv_local += w * (diff - log_exp_val_plus_one)
++                # the previous round's reads of the slots are done
++                barrier()
++                if active:
++                    sh_o_der.unsafe_store(j, o_der)
++                    sh_o_der2.unsafe_store(j, o_der2)
++                barrier()
++                # the other side: in a full round every thread was a target
++                # once; in the half round only the threads from size / 2 up
++                if in_range and (full_round or tid >= r):
++                    acc_der = acc_der + sh_o_der.unsafe_load(tid)
++                    acc_der2 = acc_der2 + sh_o_der2.unsafe_load(tid)
++            var der = ftz(acc_der)
++            var der2 = ftz(acc_der2)
++            var weight = Float32(0.0)
++            if in_range:
++                weight = row_weights.unsafe_load(i)
++            var plane0 = weight
++            comptime if second_order:
++                plane0 = der2
++            if in_range:
++                comptime if estimation:
++                    var dst = i
++                    if has_write_map != Int32(0):
++                        dst = Int(write_map.unsafe_load(i))
++                    stats.unsafe_store(dst, der)
++                    stats.unsafe_store(n_rows + dst, der2)
++                else:
++                    stats.unsafe_store(i, plane0)
++                    stats.unsafe_store(n_rows + i, der)
++                comptime if store_acc:
++                    der_acc.unsafe_store(i, der)
++                    der2_acc.unsafe_store(i, der2)
++                w_abs += abs(plane0)
++                g_abs += abs(der)
++            once_done = True
+     for c in range(n_chunks):
++        if once_done:
++            break
+         var i = begin + c * threads + tid
+         var in_range = i < end
+         var p_i = Float32(0.0)
+@@ -501,7 +635,7 @@ def launch_pair_logit_group[
+         comptime for wc in range(1, 3):
+             ctx.enqueue_function[
+                 pair_logit_group_kernel[
+-                    estimation, second_order, store_acc, PLG_LAUNCH_THREADS, wc
++                    estimation, second_order, store_acc, PLG_LAUNCH_THREADS, PL_PAIRS_ONCE, wc
+                 ]
+             ](
+                 point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
+@@ -520,7 +654,7 @@ def launch_pair_logit_group[
+     else:
+         ctx.enqueue_function[
+             pair_logit_group_kernel[
+-                estimation, second_order, store_acc, PLG_LAUNCH_THREADS
++                estimation, second_order, store_acc, PLG_LAUNCH_THREADS, PL_PAIRS_ONCE
+             ]
+         ](
+             point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),

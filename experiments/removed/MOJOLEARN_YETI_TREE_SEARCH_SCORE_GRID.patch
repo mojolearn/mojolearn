@@ -1,0 +1,81 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+index 2866bcfc2..677aefbc4 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+@@ -563,7 +563,7 @@ comptime SYM_LEVEL_QUANT_2580 = (
+ # defines: `checks/sym_arms_check.mojo` `check_2581_off` / `check_2581_on`.
+ # `MOJOLEARN_GBDT_PATH=1` prints each fit's per-width group counts.
+ # ====================================================
+-from checks.numerics import GLOBAL_NUMERIC_MODE
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ 
+ comptime SYM_GROUP_WIDTH_2581 = is_defined["MOJOLEARN_2581_GROUP_WIDTH"]() or (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+@@ -2651,13 +2651,63 @@ def feature_groups_for(policy: Int, n_features: Int) -> Int:
+ 
+ 
+ 
++def sym_score_grid_fast_for[column: Int]() -> Bool:
++    """SCHEDULING row (lane/apple-fast-yetirank, 2026-10-02): whether the
++    symmetric level's score launch (`compute_optimal_splits_kernel`, the
++    `sym.score` stage of `tree_search`) runs one thread per bin feature
++    instead of CatBoost's grid-strided 64 blocks. `-D
++    MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID=1`, FAST on Apple only, default
++    off; `sym_argmax_blocks_for` reads it.
++
++    CAUSE. The reference grid is `min(64, ceil(binFeatures / 256))` blocks
++    of `SCORE_BLOCK_SIZE` (128) threads: 8192 threads for Istella's ~56k
++    bin features, each walking 7 bin features x every live leaf (64 at
++    depth 6) x the stat planes through dependent global loads. On the
++    M3 Ultra's 80 cores that is a tenth of one wave, and the stage is
++    latency bound. With one thread per bin feature the same per-thread
++    walk runs once, on `ceil(binFeatures / 128)` blocks (440 for Istella,
++    capped at `SYM_SCORE_GRID_FAST_CAP`).
++
++    SAME BITS. A bin feature's score is computed by exactly one thread
++    in the same order (leaves in `part_ids` order, stats in order) on
++    either grid; the noise draw is seeded by the feature id alone. The
++    block argmax and the level resolve (`resolve_and_pack_kernel`,
++    `sym_resolve_split_count_kernel`, both loop over `argmax_blocks`)
++    apply one total order, higher gain then the smaller bin feature, so
++    the winner does not depend on how the bin features are partitioned
++    into blocks. The one corner where a partition could matter is a
++    block every one of whose bin features is skipped or scores `-inf`
++    (a feature weight above 1 on a degenerate denominator): its sentinel
++    `(-FLOAT32_MAX, 0xFFFFFFFF)` outranks a `-inf` gain; the reference
++    grid has the same corner with its own partition. `aft_ab.sh` prints
++    the model hashes, which must agree."""
++    comptime if is_defined["MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID"]():
++        return column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    return False
++
++
++comptime SYM_SCORE_GRID_FAST = sym_score_grid_fast_for[TARGET_COLUMN]()
++#: the FAST grid's block cap: the resolve kernels loop over the block
++#: winners sequentially on every thread, so the cap bounds that loop
++comptime SYM_SCORE_GRID_FAST_CAP = 1024
++
++
+ def sym_argmax_blocks_for(hist_cells_per_leaf: Int) -> Int:
+     """The symmetric score launch's grid (and the `out_score`/`out_bin`
+     partials it writes): `min(64, ceil(cells / 256))`, at least 1, the
+-    reference sizing. The workspace allocation and the level loop both size
+-    through here so the partials always fit. (The FAST one-thread-per-bin-
+-    feature grid, `-D MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID`, was
+-    DROPPED-noise; lane/apple-fast-yetirank @ c7b35fd7c.)"""
++    reference sizing; under `SYM_SCORE_GRID_FAST` one `SCORE_BLOCK_SIZE`
++    block per `SCORE_BLOCK_SIZE` bin features, capped (the docstring
++    above). The workspace allocation and the level loop both size through
++    here so the partials always fit."""
++    comptime if SYM_SCORE_GRID_FAST:
++        var fast_blocks = (
++            hist_cells_per_leaf + SCORE_BLOCK_SIZE - 1
++        ) // SCORE_BLOCK_SIZE
++        if fast_blocks > SYM_SCORE_GRID_FAST_CAP:
++            fast_blocks = SYM_SCORE_GRID_FAST_CAP
++        if fast_blocks < 1:
++            fast_blocks = 1
++        return fast_blocks
+     var argmax_blocks = (hist_cells_per_leaf + 255) // 256
+     if argmax_blocks > 64:
+         argmax_blocks = 64

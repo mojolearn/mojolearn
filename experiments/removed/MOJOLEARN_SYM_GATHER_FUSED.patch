@@ -1,0 +1,197 @@
+diff --git a/gbdt/methods/kernel/sym_fast.mojo b/gbdt/methods/kernel/sym_fast.mojo
+index 8f88af8e4..949205a14 100644
+--- a/gbdt/methods/kernel/sym_fast.mojo
++++ b/gbdt/methods/kernel/sym_fast.mojo
+@@ -53,9 +53,17 @@ comptime SYM_RESOLVE_BLOCK = SYM_FAST_APPLE and (
+     SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_RESOLVE_BLOCK"]()
+ )
+ 
+-#: TOMBSTONE: MOJOLEARN_SYM_GATHER_FUSED (DROPPED-noise: symhist-gather istella/taxi noise, old base) deleted 2026-10-09 on
+-#: lane/owed-deletions-D1 (sizes + both gathers in one launch); code recoverable at b639a2bd2.
+-#: Restore: git apply experiments/removed/MOJOLEARN_SYM_GATHER_FUSED.patch; record in docs/TOMBSTONES.md.
++#: after the sort, ONE launch gathers weights and targets by the new
++#: `indices` and writes the partition sizes, replacing the sizes kernel and
++#: the two gathers (`pointwise_optimization_subsets.mojo::update_subsets_stats`).
++#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
++#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
++#: arms never reached the queue).
++#: apple-fast LEDGER 2026-10-03 batchv: DROP symhist gather (noise), old base;
++#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
++comptime SYM_GATHER_FUSED = SYM_FAST_APPLE and (
++    is_defined["MOJOLEARN_SYM_GATHER_FUSED"]()
++)
+ 
+ #: the per-partition weight / target sums run on a (partitions x chunks)
+ #: grid with a shared-memory reduce per block and a global float atomic
+diff --git a/gbdt/methods/pointwise_optimization_subsets.mojo b/gbdt/methods/pointwise_optimization_subsets.mojo
+index 640dd2fa7..bcc7564e8 100644
+--- a/gbdt/methods/pointwise_optimization_subsets.mojo
++++ b/gbdt/methods/pointwise_optimization_subsets.mojo
+@@ -12,6 +12,7 @@ from gbdt.gpu_util.kernel.fill import launch_make_sequence
+ from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins, _radix_pass
+ from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
+ from gbdt.methods.kernel.sym_fast import (
++    SYM_GATHER_FUSED,
+     SYM_PART_STATS_PAR,
+     SYM_SORT_SWAP,
+ )
+@@ -335,9 +336,64 @@ def pack_partition_stats_kernel(
+         i += stride
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_SYM_GATHER_FUSED (DROPPED-noise: symhist-gather istella/taxi noise, old base) deleted 2026-10-09 on
+-# lane/owed-deletions-D1 (sizes + both gathers in one launch); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_SYM_GATHER_FUSED.patch; record in docs/TOMBSTONES.md.
++def gather_pair_sizes_kernel(
++    dst_weight: MutPointer[Float32, MutAnyOrigin],
++    src_weight: MutPointer[Float32, MutAnyOrigin],
++    dst_target: MutPointer[Float32, MutAnyOrigin],
++    src_target: MutPointer[Float32, MutAnyOrigin],
++    map_ptr: MutPointer[UInt32, MutAnyOrigin],
++    sorted_bins: MutPointer[UInt32, MutAnyOrigin],
++    partitions: MutPointer[UInt32, MutAnyOrigin],
++    part_count_in: Int32,
++    size_in: Int32,
++):
++    """lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_GATHER_FUSED` (FAST +
++    Apple only): `update_partition_sizes_kernel` and the two
++    `gather_with_mask_f32_kernel` launches of `update_subsets_stats` as ONE
++    grid-stride pass over the sorted rows. Row `i` gathers its weight and
++    target through `indices[i]` (the `GATHER_NO_MASK` gather, mask dropped)
++    and runs the sizes kernel's boundary test on `sorted_bins[i]` /
++    `sorted_bins[i - 1]` unchanged; the offsets kernel has run before this
++    launch, as it must for the sizes kernel."""
++    var size = Int(size_in)
++    var part_count = UInt32(Int(part_count_in))
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var stride = Int(block_dim.x) * Int(grid_dim.x)
++    while i < size:
++        var m = Int(map_ptr.unsafe_load(i))
++        dst_weight.unsafe_store(i, src_weight.unsafe_load(m))
++        dst_target.unsafe_store(i, src_target.unsafe_load(m))
++
++        var bin0 = sorted_bins.unsafe_load(i)
++        var bin1: UInt32
++        if i > 0:
++            bin1 = sorted_bins.unsafe_load(i - 1)
++        else:
++            bin1 = UInt32(0)
++        if bin0 != bin1:
++            var b = bin1
++            while b < bin0:
++                var off = partitions.unsafe_load(
++                    Int(b) * PARTITION_RECORD + PART_OFFSET
++                )
++                partitions.unsafe_store(
++                    Int(b) * PARTITION_RECORD + PART_SIZE, UInt32(i) - off
++                )
++                b += 1
++        if (i + 1) == size:
++            var off0 = partitions.unsafe_load(
++                Int(bin0) * PARTITION_RECORD + PART_OFFSET
++            )
++            partitions.unsafe_store(
++                Int(bin0) * PARTITION_RECORD + PART_SIZE, UInt32(size) - off0
++            )
++            var b = bin0 + 1
++            while b < part_count:
++                partitions.unsafe_store(
++                    Int(b) * PARTITION_RECORD + PART_SIZE, UInt32(0)
++                )
++                b += 1
++        i += stride
+ 
+ 
+ def launch_update_partition_dimensions(
+@@ -494,33 +550,65 @@ def update_subsets_stats(
+     if adapt_blocks < 1:
+         adapt_blocks = 1
+ 
+-    # TOMBSTONE: MOJOLEARN_SYM_GATHER_FUSED (DROPPED-noise: symhist-gather istella/taxi noise, old base) deleted 2026-10-09 on
+-    # lane/owed-deletions-D1 (sizes + both gathers in one launch); code recoverable at b639a2bd2.
+-    # Restore: git apply experiments/removed/MOJOLEARN_SYM_GATHER_FUSED.patch; record in docs/TOMBSTONES.md.
+-    launch_update_partition_dimensions(
+-        ctx,
+-        subsets.partitions,
+-        part_count,
+-        subsets.bins,
+-        subsets.doc_count,
+-    )
++    var fused_gather = False
++    comptime if SYM_GATHER_FUSED:
++        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_GATHER_FUSED` (FAST +
++        # Apple only): offsets kernel, then ONE launch for the sizes and
++        # both gathers (`gather_pair_sizes_kernel`). The empty-row case
++        # keeps main's path (its `zero_partitions_kernel` arm).
++        var fused_blocks = (
++            subsets.doc_count + SPLIT_BLOCK_SIZE - 1
++        ) // SPLIT_BLOCK_SIZE
++        if fused_blocks > SPLIT_MAX_BLOCKS:
++            fused_blocks = SPLIT_MAX_BLOCKS
++        if fused_blocks > 0:
++            fused_gather = True
++            ctx.enqueue_function[update_partition_offsets_kernel](
++                subsets.partitions.unsafe_ptr(),
++                Int32(part_count),
++                subsets.bins.unsafe_ptr(),
++                Int32(subsets.doc_count),
++                grid_dim=(fused_blocks, 1, 1),
++                block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
++            )
++            ctx.enqueue_function[gather_pair_sizes_kernel](
++                subsets.gathered_weight.unsafe_ptr(),
++                source.weights.unsafe_ptr(),
++                subsets.gathered_target.unsafe_ptr(),
++                source.weighted_target.unsafe_ptr(),
++                subsets.indices.unsafe_ptr(),
++                subsets.bins.unsafe_ptr(),
++                subsets.partitions.unsafe_ptr(),
++                Int32(part_count),
++                Int32(subsets.doc_count),
++                grid_dim=(fused_blocks, 1, 1),
++                block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
++            )
++    if not fused_gather:
++        launch_update_partition_dimensions(
++            ctx,
++            subsets.partitions,
++            part_count,
++            subsets.bins,
++            subsets.doc_count,
++        )
+ 
+-    launch_gather_with_mask_f32(
+-        ctx,
+-        subsets.gathered_weight,
+-        source.weights,
+-        subsets.indices,
+-        subsets.doc_count,
+-        GATHER_NO_MASK,
+-    )
+-    launch_gather_with_mask_f32(
+-        ctx,
+-        subsets.gathered_target,
+-        source.weighted_target,
+-        subsets.indices,
+-        subsets.doc_count,
+-        GATHER_NO_MASK,
+-    )
++        launch_gather_with_mask_f32(
++            ctx,
++            subsets.gathered_weight,
++            source.weights,
++            subsets.indices,
++            subsets.doc_count,
++            GATHER_NO_MASK,
++        )
++        launch_gather_with_mask_f32(
++            ctx,
++            subsets.gathered_target,
++            source.weighted_target,
++            subsets.indices,
++            subsets.doc_count,
++            GATHER_NO_MASK,
++        )
+ 
+     comptime if SYM_PART_STATS_PAR:
+         # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_PART_STATS_PAR` (FAST +

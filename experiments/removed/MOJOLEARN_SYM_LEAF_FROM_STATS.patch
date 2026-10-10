@@ -1,0 +1,370 @@
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+index a1aa424d4..03279837f 100644
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -83,9 +83,12 @@ from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
+ from gbdt.methods.sym_iter_fast import (
+     SYM_BUF_ARENA,
+     SYM_ITER_ANY,
++    SYM_LEAF_FROM_STATS,
+     SYM_REUSE_PARTITION,
+     SymIterPool,
+     sym_compute_bins_pooled,
++    sym_estimate_leaves_device,
++    sym_leaf_from_stats_ok,
+     sym_objective_is_pointwise,
+     sym_pool_get,
+     sym_scale_from_mags,
+@@ -3463,9 +3466,11 @@ def fit_with_test(
+         var ns_trees = List[TNonSymmetricTree]()
+         # lane/apple-fast-sym-iter, per-tree state (constant False / a
+         # handle onto `row_index` under every build without the defines):
+-        # `sym_rows`: the estimator's row order. (`sym_fuse` / `sym_fv_now`
+-        # and `sym_leaf_device`: the deleted MOJOLEARN_SYM_DERIV_FUSED and
+-        # MOJOLEARN_SYM_LEAF_FROM_STATS, 2026-10-09.)
++        # `sym_leaf_device`: the leaves came from the searcher's statistics
++        # (SYM_LEAF_FROM_STATS) and are read back at the tail; `sym_rows`:
++        # the estimator's row order. (`sym_fuse` / `sym_fv_now`: the deleted
++        # MOJOLEARN_SYM_DERIV_FUSED, 2026-10-09.)
++        var sym_leaf_device = False
+         var sym_rows = row_index.copy()
+ 
+         if non_symmetric:
+@@ -4052,10 +4057,29 @@ def fit_with_test(
+                     leaf_offsets = part.offsets.copy()
+                     row_index = part.row_index.copy()
+                 sym_rows = row_index.copy()
+-            # TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (one
+-            # Newton step from the searcher's statistics); code recoverable at b639a2bd2.
+-            # Restore: git apply experiments/removed/MOJOLEARN_SYM_LEAF_FROM_STATS.patch.
+-            if not need_estimation:
++            # SYM_LEAF_FROM_STATS: one Newton step from the searcher's own
++            # partition statistics, on the device, applied through its
++            # partition; the leaf values ride the tail drain back
++            comptime if SYM_LEAF_FROM_STATS:
++                if (
++                    sym_reuse and perm_count == 1
++                    and sym_leaf_from_stats_ok(
++                        objective, leaf_estimation_method,
++                        leaf_estimation_iterations, approx_dim,
++                    )
++                ):
++                    sym_estimate_leaves_device(
++                        ctx, objective, 1 << max_depth,
++                        pw_pool[0].subsets.partitions,
++                        pw_pool[0].subsets.partition_stats,
++                        pw_pool[0].subsets.indices,
++                        weights, has_weights, lcur,
++                        l2_leaf_reg, learning_rate,
++                        est_sm if est_sm > 0 else 1,
++                        sym_pool[0],
++                    )
++                    sym_leaf_device = True
++            if not need_estimation and not sym_leaf_device:
+                 # the greedy arm estimates and applies INSIDE
+                 # `run_tree_layout` when the method is Simple; this arm has
+                 # to do it explicitly, through the same estimator.
+@@ -4135,7 +4159,12 @@ def fit_with_test(
+                 sym_defer_est = perm_count == 1 and not has_test
+             for p in range(perm_count):
+                 var pv = List[Float32]()
+-                if p == learn_p:
++                if sym_leaf_device and p == learn_p:
++                    # lane/apple-fast-sym-iter, SYM_LEAF_FROM_STATS: the
++                    # learn permutation's leaves are already on the device;
++                    # `leaf_values` is filled from the tail readback below
++                    pass
++                elif p == learn_p:
+                     var q_est = Optional[QuerywiseTargetBuffers]()
+                     if is_querywise:
+                         q_est = Optional(query_buffers.value().handles())
+@@ -4207,9 +4236,22 @@ def fit_with_test(
+                     leaf_values.clear()
+                     for i in range(len(pv)):
+                         leaf_values.append(pv[i])
+-        # TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED and MOJOLEARN_SYM_LEAF_FROM_STATS (both DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
+-        # tree's fused tail: the next gradient pass and the stats-leaf readback); code recoverable at b639a2bd2.
+-        # Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch / MOJOLEARN_SYM_LEAF_FROM_STATS.patch.
++        # lane/apple-fast-sym-iter: THE TREE'S TAIL. Under SYM_LEAF_FROM_STATS
++        # one drain delivers the 2^depth leaf values for the model.
++        # TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the next
++        # tree's gradient pass enqueued here); code recoverable at b639a2bd2.
++        # Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch.
++        comptime if SYM_ITER_ANY:
++            if sym_leaf_device:
++                ctx.synchronize()
++                leaf_values.clear()
++                var sym_he = sym_pool[0].h_est.unsafe_ptr()
++                for i in range(1 << max_depth):
++                    leaf_values.append(sym_he.unsafe_load(i))
++                trace.record_list_f32(
++                    _tree_tag(iteration) + ".leaves.estimated",
++                    leaf_values,
++                )
+         loop_times.stop_host("iter_symmetric_estimate", t_sym_est)
+         _ = len(sizes)
+ 
+diff --git a/gbdt/methods/sym_iter_fast.mojo b/gbdt/methods/sym_iter_fast.mojo
+index 37e6ea405..9e0561a43 100644
+--- a/gbdt/methods/sym_iter_fast.mojo
++++ b/gbdt/methods/sym_iter_fast.mojo
+@@ -29,8 +29,15 @@ turns on SYM_BUF_ARENA only; the other three are recorded DROPs):
+   subsets' bins carry a redundant bit).
+ - `MOJOLEARN_SYM_DERIV_FUSED`: deleted 2026-10-09 (DROPPED-noise;
+   docs/TOMBSTONES.md).
+-- `MOJOLEARN_SYM_LEAF_FROM_STATS`: deleted 2026-10-09 (DROPPED-noise;
+-  docs/TOMBSTONES.md).
++- `MOJOLEARN_SYM_LEAF_FROM_STATS` (`SYM_LEAF_FROM_STATS`, implies
++  `SYM_REUSE_PARTITION`): DEVIATION 64 for the pointwise arm. Under Newton
++  with one iteration the leaf is `sum(der) / (sum(der2) + l2)` over the
++  leaf's rows at the current cursor, and `subsets.partition_stats` already
++  holds `sum(weight * der)` per leaf from the search planes; one block per
++  leaf reduces the Hessian plane (`weight` for RMSE, `weight * p * (1 - p)`
++  for Logloss), writes the leaf, and a second launch applies it through the
++  searcher's partition. No gathers, no oracle, no walker drain; the 2^depth
++  leaf values ride the tail drain back to the host for the model.
+ 
+ FAST only: the leaf value from the stats is the Newton step over the SNAPPED
+ gradient plane (`enqueue_snap_plane`, the fixed-point grid the histogram
+@@ -118,9 +125,21 @@ comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
+ # Compilation/identity reused. No combined-toggle/full-board claim.
+     is_defined["MOJOLEARN_SYM_BUF_ARENA"]() or SYM_ITER_ALL
+ )
+-#: TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise: sym-iter-leaf istella/taxi -0.2%, old base) deleted 2026-10-09 on
+-#: lane/owed-deletions-D1 (one Newton step from the searcher's partition stats, on the device); code recoverable at b639a2bd2.
+-#: Restore: git apply experiments/removed/MOJOLEARN_SYM_LEAF_FROM_STATS.patch; record in docs/TOMBSTONES.md.
++#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
++#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
++#: laptop 2026-10-03, singles never built, never timed.
++#: apple-fast LEDGER 2026-10-03: DROP sym-iter leaf-1000 (-0.2%, noise), old base;
++#: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
++comptime SYM_LEAF_FROM_STATS = SYM_ITER_FAST_APPLE and (
++    # MEASURED M3 FAST; broader workload evidence remains separate.
++# F12/leaf-inputs M3 2026-10-06: 6 scored caller times; B/A
++# 0.9627..1.0146 (mixed/regressing); FAST candidate remains OFF.
++# Scored FAST quality 3/3 within existing bands; PASS.
++# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
++# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/leaf-inputs.
++# Compilation/identity reused. No combined-toggle/full-board claim.
++    is_defined["MOJOLEARN_SYM_LEAF_FROM_STATS"]()
++)
+ #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+ #: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
+ #: laptop 2026-10-03, singles never built, never timed.
+@@ -146,15 +165,19 @@ comptime SYM_REUSE_PARTITION = SYM_ITER_FAST_APPLE and (
+ # One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+ # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/ranking.
+ # Compilation/identity reused. No combined-toggle/full-board claim.
+-    is_defined["MOJOLEARN_SYM_REUSE_PARTITION"]()
++    is_defined["MOJOLEARN_SYM_REUSE_PARTITION"]() or SYM_LEAF_FROM_STATS
+ )
+ #: TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise: sym-iter-fused istella/taxi -0.1%, old base) deleted 2026-10-09 on
+ #: lane/owed-deletions-D1 (the next tree's gradient pass behind this tree's tail drain); code recoverable at b639a2bd2.
+ #: Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch; record in docs/TOMBSTONES.md.
+ comptime SYM_ITER_ANY = (
+-    SYM_BUF_ARENA or SYM_REUSE_PARTITION
++    SYM_BUF_ARENA or SYM_REUSE_PARTITION or SYM_LEAF_FROM_STATS
+ )
+ 
++#: the one-block-per-leaf Hessian reduce
++comptime SYM_LEAF_BLOCK = 256
++#: the leaf-apply kernel's block
++comptime SYM_APPLY_BLOCK = 256
+ 
+ 
+ struct SymIterPool(Movable):
+@@ -188,6 +211,9 @@ struct SymIterPool(Movable):
+     #: SYM_REUSE_PARTITION: the searcher's `subsets.partitions` on the host,
+     #: filled by the searcher's own tail drain
+     var h_parts: HostBuffer[DType.uint32]
++    #: SYM_LEAF_FROM_STATS: the leaf values, device and host
++    var d_est: DeviceBuffer[DType.float32]
++    var h_est: HostBuffer[DType.float32]
+ 
+     def __init__(
+         out self,
+@@ -225,6 +251,11 @@ struct SymIterPool(Movable):
+         self.h_parts = ctx.enqueue_create_host_buffer[DType.uint32](
+             parts_reuse
+         )
++        var leaves_stats = n_leaves if SYM_LEAF_FROM_STATS else 1
++        self.d_est = ctx.enqueue_create_buffer[DType.float32](leaves_stats)
++        self.h_est = ctx.enqueue_create_host_buffer[DType.float32](
++            leaves_stats
++        )
+         ctx.synchronize()
+ 
+ 
+@@ -347,9 +378,169 @@ def sym_objective_is_pointwise(objective: Int) -> Bool:
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise: sym-iter-leaf istella/taxi -0.2%, old base) deleted 2026-10-09 on
+-# lane/owed-deletions-D1 (one Newton step from the searcher's partition stats, on the device); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_SYM_LEAF_FROM_STATS.patch; record in docs/TOMBSTONES.md.
++def sym_leaf_from_stats_ok(
++    objective: Int,
++    leaf_estimation_method: Int,
++    leaf_estimation_iterations: Int,
++    approx_dim: Int,
++) -> Bool:
++    """The closed form holds for one Newton step of a single-dimensional
++    pointwise loss whose Hessian plane the kernel knows: RMSE (`der2 = 1`)
++    and Logloss (`der2 = p (1 - p)`)."""
++    return (
++        (objective == OBJECTIVE_RMSE or objective == OBJECTIVE_LOGLOSS)
++        and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
++        and leaf_estimation_iterations == 1
++        and approx_dim == 1
++    )
++
++
++def sym_leaves_from_stats_kernel[
++    objective: Int, block_size: Int
++](
++    partitions: MutPointer[UInt32, MutAnyOrigin],
++    part_stats: MutPointer[Float32, MutAnyOrigin],
++    indices: MutPointer[UInt32, MutAnyOrigin],
++    weights: MutPointer[Float32, MutAnyOrigin],
++    has_weights: Int32,
++    cursor: MutPointer[Float32, MutAnyOrigin],
++    l2: Float32,
++    est: MutPointer[Float32, MutAnyOrigin],
++):
++    """ONE BLOCK PER LEAF. The Newton step from zero,
++    `gradient / (hessian + lambda + 1e-20)` (`_diagonal_direction`), with
++    the gradient `sum(weight * der)` read from the searcher's partition
++    statistics (`PART_STAT_SUM`, the snapped gradient plane) and the
++    Hessian `sum(weight * der2)` reduced here over the leaf's rows at the
++    current cursor: `weight` for RMSE, `weight * p * (1 - p)` for Logloss
++    with `cross_entropy_kernel`'s `p`. An empty leaf is zero
++    (`regularize`'s MinLeafWeight arm). Float32 throughout (FAST)."""
++    var leaf = Int(block_idx.x)
++    var tid = Int(thread_idx.x)
++    var offset = Int(partitions.unsafe_load(leaf * PARTITION_RECORD + PART_OFFSET))
++    var size = Int(partitions.unsafe_load(leaf * PARTITION_RECORD + PART_SIZE))
++    var buf = stack_allocation[
++        block_size,
++        Scalar[DType.float32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var hsum = Float32(0.0)
++    var i = tid
++    while i < size:
++        var row = Int(indices.unsafe_load(offset + i))
++        var weight = Float32(1.0)
++        if has_weights != Int32(0):
++            weight = weights.unsafe_load(row)
++
++        @parameter
++        if objective == OBJECTIVE_LOGLOSS:
++            var exp_val = routed_exp(cursor.unsafe_load(row))
++            var p = Float32(1.0)
++            if isfinite(exp_val):
++                p = exp_val / (Float32(1.0) + exp_val)
++            p = max(min(p, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
++            hsum += weight * (p * (Float32(1.0) - p))
++        else:
++            hsum += weight
++        i += block_size
++    buf[unsafe_offset=tid] = hsum
++    barrier()
++    var hess = _block_reduce_sum[block_size](buf, tid)
++    if tid == 0:
++        var value = Float32(0.0)
++        if size > 0:
++            var grad = part_stats.unsafe_load(
++                leaf * PARTITION_STAT_STRIDE + PART_STAT_SUM
++            )
++            var denom = hess + l2
++            if denom > Float32(0.0):
++                value = grad / (denom + Float32(1e-20))
++        est.unsafe_store(leaf, value)
++
++
++def sym_add_leaves_kernel(
++    partitions: MutPointer[UInt32, MutAnyOrigin],
++    indices: MutPointer[UInt32, MutAnyOrigin],
++    est: MutPointer[Float32, MutAnyOrigin],
++    learning_rate: Float32,
++    cursor: MutPointer[Float32, MutAnyOrigin],
++):
++    """`add_model_value_kernel`'s single-dimensional arithmetic over the
++    searcher's interleaved (offset, size) partition records: grid y the
++    leaf, x strides its rows."""
++    var leaf = Int(block_idx.y)
++    var offset = Int(partitions.unsafe_load(leaf * PARTITION_RECORD + PART_OFFSET))
++    var size = Int(partitions.unsafe_load(leaf * PARTITION_RECORD + PART_SIZE))
++    var raw = est.unsafe_load(leaf)
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var stride = Int(grid_dim.x) * Int(block_dim.x)
++    while i < size:
++        var row = Int(indices.unsafe_load(offset + i))
++        cursor.unsafe_store(
++            row, identical_mul_add(raw, learning_rate, cursor.unsafe_load(row))
++        )
++        i += stride
++
++
++def sym_estimate_leaves_device(
++    ctx: DeviceContext,
++    objective: Int,
++    n_leaves: Int,
++    mut partitions: DeviceBuffer[DType.uint32],
++    mut part_stats: DeviceBuffer[DType.float32],
++    mut indices: DeviceBuffer[DType.uint32],
++    mut weights: DeviceBuffer[DType.float32],
++    has_weights: Bool,
++    mut cursor: DeviceBuffer[DType.float32],
++    l2_leaf_reg: Float32,
++    learning_rate: Float32,
++    sm_count: Int,
++    mut pool: SymIterPool,
++) raises:
++    """The leaves from the searcher's statistics, applied to the cursor,
++    and their readback ENQUEUED into `pool.h_est`: the caller's tail drain
++    settles it and the model reads the values after."""
++    if n_leaves != pool.n_leaves_cap:
++        raise Error(
++            "sym_estimate_leaves_device: " + String(n_leaves)
++            + " leaves for a pool of " + String(pool.n_leaves_cap)
++        )
++    var hw = Int32(1) if has_weights else Int32(0)
++    if objective == OBJECTIVE_LOGLOSS:
++        ctx.enqueue_function[
++            sym_leaves_from_stats_kernel[OBJECTIVE_LOGLOSS, SYM_LEAF_BLOCK]
++        ](
++            partitions.unsafe_ptr(), part_stats.unsafe_ptr(),
++            indices.unsafe_ptr(), weights.unsafe_ptr(), hw,
++            cursor.unsafe_ptr(), l2_leaf_reg, pool.d_est.unsafe_ptr(),
++            grid_dim=(n_leaves, 1, 1),
++            block_dim=(SYM_LEAF_BLOCK, 1, 1),
++        )
++    elif objective == OBJECTIVE_RMSE:
++        ctx.enqueue_function[
++            sym_leaves_from_stats_kernel[OBJECTIVE_RMSE, SYM_LEAF_BLOCK]
++        ](
++            partitions.unsafe_ptr(), part_stats.unsafe_ptr(),
++            indices.unsafe_ptr(), weights.unsafe_ptr(), hw,
++            cursor.unsafe_ptr(), l2_leaf_reg, pool.d_est.unsafe_ptr(),
++            grid_dim=(n_leaves, 1, 1),
++            block_dim=(SYM_LEAF_BLOCK, 1, 1),
++        )
++    else:
++        raise Error(
++            "sym_estimate_leaves_device: objective " + String(objective)
++            + " has no stats-based leaf (gate with sym_leaf_from_stats_ok)"
++        )
++    var gx = 2 * sm_count
++    if gx < 1:
++        gx = 1
++    ctx.enqueue_function[sym_add_leaves_kernel](
++        partitions.unsafe_ptr(), indices.unsafe_ptr(),
++        pool.d_est.unsafe_ptr(), learning_rate, cursor.unsafe_ptr(),
++        grid_dim=(gx, n_leaves, 1),
++        block_dim=(SYM_APPLY_BLOCK, 1, 1),
++    )
++    ctx.enqueue_copy(dst_buf=pool.h_est, src_buf=pool.d_est)
+ 
+ 
+ # TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise: sym-iter-fused istella/taxi -0.1%, old base) deleted 2026-10-09 on

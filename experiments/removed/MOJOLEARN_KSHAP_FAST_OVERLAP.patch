@@ -1,0 +1,269 @@
+diff --git a/python/mojolearn/_expansion_trees.py b/python/mojolearn/_expansion_trees.py
+index f9dccf0d5..3d5162b93 100644
+--- a/python/mojolearn/_expansion_trees.py
++++ b/python/mojolearn/_expansion_trees.py
+@@ -493,9 +493,13 @@ _KSHAP_FAST_BATCH = 8
+ #     SHAP hand every chunk the same host buffer for the synthetic rows (the
+ #     device side builds them in one pooled buffer). Moves no bit.
+ _AGN_IDN_SYN_POOL = 16
+-# TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise: kernel-shap istella neutral, verdicts batch 6) deleted 2026-10-09
+-# on lane/owed-deletions-D1 (next chunk's synthetic rows + download overlapped with the model); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
++#   MOJOLEARN_KSHAP_FAST_OVERLAP (lane apple-fast-s-shap, opt-in, needs
++#     KSHAP_FAST_BATCH): KernelExplainer enqueues the next chunk's synthetic
++#     rows and their download into a second host buffer
++#     (`x_trees_kshap_synth_async`) before the model runs on the current
++#     chunk, so the download overlaps the model; the same words. Bit 256
++#     since the 2026-10-05 merge (was 64; main took 64 for IDN_SHAP_DEVICE_MODEL).
++_KSHAP_FAST_OVERLAP = 256
+ #   MOJOLEARN_PSHAP_DELTA (FAST Apple default; _OFF rollback): the
+ #     PermutationExplainer model runs only on the synthetic rows that differ
+ #     from the previous coalition's (`x_trees_pshap_dsynth` +
+@@ -3372,19 +3376,20 @@ class KernelExplainer(_AgnosticExplainer):
+         ey = zeros((n * m * k,), "<f8")
+         e0 = addr(ey, name="ey")
+         x0, bg0 = addr_ro(Xa, name="X"), addr_ro(self._bg, name="data")
+-        # TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (`_overlapped`);
+-        # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch.
+-        syn = empty((R * m * nb * d,), "<f4")
+-        for r0 in range(0, n, R):  # glue: one binding call per row chunk
+-            rows = min(R, n - r0)
+-            if rows < R:
+-                syn = empty((rows * m * nb * d,), "<f4")
+-            b.x_trees_kshap_synth(x0 + 4 * r0 * d, bg0, taddr, addr(syn, name="synthetic"),
+-                                  [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits])
+-            out = self._model_rows(syn, rows * m * nb, d)
+-            b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
+-            del out
+-        del syn
++        if n > R and _trees_switch(self, _KSHAP_FAST_OVERLAP):
++            self._overlapped(b, x0, bg0, taddr, e0, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R, link)
++        else:
++            syn = empty((R * m * nb * d,), "<f4")
++            for r0 in range(0, n, R):  # glue: one binding call per row chunk
++                rows = min(R, n - r0)
++                if rows < R:
++                    syn = empty((rows * m * nb * d,), "<f4")
++                b.x_trees_kshap_synth(x0 + 4 * r0 * d, bg0, taddr, addr(syn, name="synthetic"),
++                                      [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits])
++                out = self._model_rows(syn, rows * m * nb, d)
++                b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
++                del out
++            del syn
+         f0, p0 = addr_ro(fx, name="fx"), addr(phi, name="phi")
+         nl = addr_ro(self._fnull, name="fnull")
+         S = self._chunk(m * d, n)
+@@ -3394,6 +3399,43 @@ class KernelExplainer(_AgnosticExplainer):
+                                      [rows, nb, d, nfixed, m, nfull, L, npaired, s0, seed, wbits, k, link])
+ 
+ 
++    def _overlapped(self, b, x0, bg0, taddr, e0, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R, link):
++        """MOJOLEARN_KSHAP_FAST_OVERLAP: `_batched`'s chunk loop with two host
++        buffers: chunk r + 1's synthetic rows are enqueued (device build and
++        download into the other buffer, no wait) before the model runs on
++        chunk r; `x_trees_kshap_means` (the same stream) and
++        `x_trees_kshap_synth_wait` then find them in place. The same calls on
++        the same words as `_batched`."""
++        bufs = [empty((R * m * nb * d,), "<f4"), empty((R * m * nb * d,), "<f4")]
++
++        def start(r0, buf):
++            rows = min(R, n - r0)
++            b.x_trees_kshap_synth_async(x0 + 4 * r0 * d, bg0, taddr, addr(buf, name="synthetic"),
++                                        [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits])
++
++        try:
++            start(0, bufs[0])
++            b.x_trees_kshap_synth_wait()
++            cur = 0
++            for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
++                rows = min(R, n - r0)
++                if r0 + R < n:
++                    start(r0 + R, bufs[1 - cur])        # in flight while the model runs
++                syn = bufs[cur]
++                if rows < R:
++                    syn = memory_at(addr(syn, name="synthetic"), 4 * rows * m * nb * d, writable=True).cast("f")
++                    syn = Array.from_buffer(syn)
++                out = self._model_rows(syn, rows * m * nb, d)
++                del syn
++                b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
++                del out
++                b.x_trees_kshap_synth_wait()
++                cur = 1 - cur
++        finally:
++            b.x_trees_kshap_synth_wait()        # never leave a download aimed at a freed buffer
++        del bufs
++
++
+ class PermutationExplainer(_AgnosticExplainer):
+     """Permutation SHAP (shap `PermutationExplainer`, cuML
+     `permutation_shap.cu`): each permutation adds the features one by one
+diff --git a/python/mojolearn/_surface_trees.py b/python/mojolearn/_surface_trees.py
+index 1c1f63c04..789e6a6ca 100644
+--- a/python/mojolearn/_surface_trees.py
++++ b/python/mojolearn/_surface_trees.py
+@@ -107,7 +107,7 @@ FAMILIES = (
+             "x_trees_tree_shap_cache_enabled", "x_trees_forest_auxiliary", "x_trees_fast_switches",
+             "x_trees_device_folds", "x_trees_class_priors", "x_trees_dart_thresholds",
+             "x_trees_dart_rescale", "x_trees_kshap_schedule", "x_trees_normalized_weights",
+-            "x_trees_agn_pool_release",
++            "x_trees_agn_pool_release", "x_trees_kshap_synth_async", "x_trees_kshap_synth_wait",
+             "x_trees_pshap_dsynth", "x_trees_pshap_dvalues", "x_trees_pshap_dsynth_async",
+             "x_trees_pshap_dsynth_wait",
+         ),
+diff --git a/xtrees/agnostic_device.mojo b/xtrees/agnostic_device.mojo
+index 3d7561e93..72a519f5f 100644
+--- a/xtrees/agnostic_device.mojo
++++ b/xtrees/agnostic_device.mojo
+@@ -127,9 +127,22 @@ comptime PSHAP_DELTA = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_PSHAP_DELTA
+ #: idea, caching the per-chunk device state, is re-aimed at the work
+ #: PSHAP_DELTA still does twice per chunk.
+ comptime SHAP_PERM_CACHE = PSHAP_DELTA and not is_defined["MOJOLEARN_SHAP_PERM_CACHE_OFF"]()
+-#: TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise: kernel-shap istella neutral, verdicts batch 6) deleted 2026-10-09
+-#: on lane/owed-deletions-D1 (next chunk's synthetic rows + download overlapped with the model); code recoverable at b639a2bd2.
+-#: Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
++#: KSHAP_FAST_OVERLAP (lane apple-fast-s-shap, 2026-10-04; READY-AB, opt-in
++#: `-D MOJOLEARN_KSHAP_FAST_OVERLAP`, needs KSHAP_FAST_BATCH): KernelExplainer
++#: istella spends ~153 ms a row (15,325 ms / 100 rows) where shap-cpu spends
++#: ~77: a row's chunk is 2,048 coalitions x 100 background rows x 220 = 45M
++#: floats (180 MB), and `kshap_synth` downloads it with a raw host-pointer
++#: copy (~3 GB/s on Apple, ~60 ms) and waits, then the caller's model reads
++#: it, then the next chunk starts: the download and the model never overlap.
++#: Here `kshap_synth_async` enqueues the NEXT chunk's masks, synthetic rows
++#: and download into the caller's other host buffer without waiting, the
++#: caller runs the model on the current chunk meanwhile, and
++#: `kshap_synth_wait` (or the next call on the stream) waits. The chunk's
++#: device buffers wait in KS_PEND until then. The same kernels on the same
++#: words in the same order: no bit moves (phi byte-identical expected).
++#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
++#: verdicts batch 6): kernel-shap neutral. DROPPED: stays off (opt-in only).
++comptime KSHAP_FAST_OVERLAP = KSHAP_FAST_BATCH and is_defined["MOJOLEARN_KSHAP_FAST_OVERLAP"]()
+ #: PSHAP_FAST_OVERLAP (lane apple-fast-s-shap, 2026-10-04; READY-AB, opt-in
+ #: `-D MOJOLEARN_PSHAP_FAST_OVERLAP`, needs SHAP_PERM_CACHE): the same overlap
+ #: for PermutationExplainer istella (~150 ms a row vs shap-cpu's ~123): each
+@@ -441,9 +454,60 @@ def kshap_synth(x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int,
+     _ = dbg^
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise: kernel-shap istella neutral, verdicts batch 6) deleted 2026-10-09
+-# on lane/owed-deletions-D1 (next chunk's synthetic rows + download overlapped with the model); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
++struct _KsPend(Defaultable, Movable):
++    """KSHAP_FAST_OVERLAP: the one chunk whose synthetic rows are still in
++    flight (its masks and uploads stay alive until `kshap_synth_wait`)."""
++    var mk: Optional[_Masks]
++    var dx: Optional[DeviceBuffer[DType.float32]]
++    var dbg: Optional[DeviceBuffer[DType.float32]]
++
++    def __init__(out self):
++        self.mk = Optional[_Masks]()
++        self.dx = Optional[DeviceBuffer[DType.float32]]()
++        self.dbg = Optional[DeviceBuffer[DType.float32]]()
++
++
++comptime KS_PEND = _Global[StorageType=_KsPend, name="MojoXTreesKshapPendingFast", init_fn=_KsPend.__init__]
++
++
++def kshap_synth_wait() raises:
++    """KSHAP_FAST_OVERLAP: wait for the chunk `kshap_synth_async` left in
++    flight (its rows are then in the caller's host buffer) and release its
++    device buffers. A no-op with nothing in flight."""
++    var slot = KS_PEND.get_or_create_ptr()
++    if slot[].mk:
++        _ctx().synchronize()
++        slot[].mk = Optional[_Masks]()
++        slot[].dx = Optional[DeviceBuffer[DType.float32]]()
++        slot[].dbg = Optional[DeviceBuffer[DType.float32]]()
++
++
++def kshap_synth_async(x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int, R: Int, nb: Int, d: Int,
++                      m: Int, nfixed: Int, nfull: Int, npaired: Int, L: Int, seed: Int, row0: Int,
++                      wrand: UInt64) raises:
++    """KSHAP_FAST_OVERLAP: `kshap_synth`'s launches and download (the same
++    kernels, the pooled device buffer), enqueued WITHOUT the final wait: the
++    rows reach the host address syn by `kshap_synth_wait`. Until then the
++    caller must not read or free syn, and keeps x, bg and the tables alive
++    and unchanged (the uploads are enqueued on the same stream)."""
++    var total = R * m * nb * d
++    kshap_synth_wait()              # one chunk in flight: the pooled buffer may regrow
++    if total <= 0:
++        return
++    var ctx = _ctx()
++    var mk = _Masks(ctx, size_off, size_w, cdf, R, d, m, nfixed, nfull, npaired, L, seed, row0, wrand)
++    var dx = _up_f32(ctx, x, R * d)
++    var dbg = _up_f32(ctx, bg, nb * d)
++    var ps = _pool_syn(ctx, total)
++    ctx.enqueue_function[ksynth_kernel](
++        Int64(total), Int32(nb), Int32(d), Int32(m), dx.unsafe_ptr(), dbg.unsafe_ptr(), mk.masks.unsafe_ptr(),
++        ps, grid_dim=_blocks(total), block_dim=AGN_TPB,
++    )
++    _pool_down(ctx, syn, total)
++    var slot = KS_PEND.get_or_create_ptr()
++    slot[].mk = Optional[_Masks](mk^)
++    slot[].dx = Optional[DeviceBuffer[DType.float32]](dx^)
++    slot[].dbg = Optional[DeviceBuffer[DType.float32]](dbg^)
+ 
+ 
+ def _ksolve_core(ctx: DeviceContext, mut mk: _Masks, ey: U64P, dfx: U64P, dnull: U64P, phi: Int, R: Int, d: Int,
+diff --git a/xtrees/api.mojo b/xtrees/api.mojo
+index 9892acf35..d05b10bd9 100644
+--- a/xtrees/api.mojo
++++ b/xtrees/api.mojo
+@@ -1183,6 +1183,7 @@ comptime XTREES_FAST_SWITCHES = (
+     + (32 if agn_dev.PSHAP_DELTA else 0)
+     + (64 if _XT_AGN_DEVICE_MODEL else 0)
+     + (128 if _XT_IDN_ADA_SESSION else 0)
++    + (256 if agn_dev.KSHAP_FAST_OVERLAP else 0)
+     + (512 if agn_dev.PSHAP_FAST_OVERLAP else 0)
+     + (1024 if _XT_KSHAP_FAST_DEVICE_MODEL else 0)
+     + (2048 if _XT_PSHAP_FAST_DEVICE_MODEL else 0)
+@@ -1198,8 +1199,8 @@ def fast_switches_binding() raises -> PythonObject:
+     MOJOLEARN_IDN_SHAP_DEVICE_MODEL (an IDENTICAL GPU build's switch), bit
+     128 `_XT_IDN_ADA_SESSION` (an IDENTICAL build's switch; was bit 32 on
+     the IDENTICAL integration branch, renumbered at the 2026-10-05 merge
+-    because main took 32 for PSHAP_DELTA), bit 256 the deleted
+-    MOJOLEARN_KSHAP_FAST_OVERLAP (always 0), bit 512 MOJOLEARN_PSHAP_FAST_OVERLAP
++    because main took 32 for PSHAP_DELTA), bit 256
++    MOJOLEARN_KSHAP_FAST_OVERLAP, bit 512 MOJOLEARN_PSHAP_FAST_OVERLAP
+     (xtrees/agnostic_device.mojo; were 64 and 128 before the 2026-10-05 merge),
+     bit 1024 MOJOLEARN_KSHAP_FAST_DEVICE_MODEL, bit 2048
+     MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (FAST + Apple experiments)."""
+@@ -1534,9 +1535,27 @@ def kshap_means_binding(yout: PythonObject, ey: PythonObject, params: PythonObje
+     return PythonObject(p[0])
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise: kernel-shap istella neutral, verdicts batch 6) deleted 2026-10-09
+-# on lane/owed-deletions-D1 (next chunk's synthetic rows + download overlapped with the model); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
++def kshap_synth_async_binding(x: PythonObject, bg: PythonObject, tables: PythonObject, syn: PythonObject,
++                              params: PythonObject) raises -> PythonObject:
++    """MOJOLEARN_KSHAP_FAST_OVERLAP: `x_trees_kshap_synth` without the final
++    wait (the rows reach syn by `x_trees_kshap_synth_wait`); the same params.
++    Refused in a build without the define (x_trees_fast_switches bit 64)."""
++    var p = _agn_ints(params, 11, "x_trees_kshap_synth_async")
++    _kshap_check(p, "x_trees_kshap_synth_async")
++    comptime if agn_dev.KSHAP_FAST_OVERLAP:
++        agn_dev.kshap_synth_async(Int(py=x), Int(py=bg), Int(py=tables[0]), Int(py=tables[1]), Int(py=tables[2]),
++                                  Int(py=syn), p[0], p[1], p[2], p[4], p[3], p[5], p[7], p[6], p[9], p[8],
++                                  UInt64(p[10]))
++    else:
++        raise Error("x_trees_kshap_synth_async: built without MOJOLEARN_KSHAP_FAST_OVERLAP")
++    return PythonObject(p[0])
++
++
++def kshap_synth_wait_binding() raises -> PythonObject:
++    """MOJOLEARN_KSHAP_FAST_OVERLAP: wait for the chunk in flight."""
++    comptime if agn_dev.KSHAP_FAST_OVERLAP:
++        agn_dev.kshap_synth_wait()
++    return PythonObject(0)
+ 
+ 
+ def kshap_solve_ey_binding(ey: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
+@@ -1929,6 +1948,8 @@ def register(mut m: PythonModuleBuilder) raises:
+     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
+     m.def_function[kshap_means_binding]("x_trees_kshap_means")
+     m.def_function[kshap_solve_ey_binding]("x_trees_kshap_solve_ey")
++    m.def_function[kshap_synth_async_binding]("x_trees_kshap_synth_async")
++    m.def_function[kshap_synth_wait_binding]("x_trees_kshap_synth_wait")
+     m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
+     m.def_function[pshap_values_binding]("x_trees_pshap_values")
+     m.def_function[agn_model_load_binding]("x_trees_agn_model_load")

@@ -1,0 +1,275 @@
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+index 383663b63..a1aa424d4 100644
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -83,6 +83,7 @@ from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
+ from gbdt.methods.sym_iter_fast import (
+     SYM_BUF_ARENA,
+     SYM_ITER_ANY,
++    SYM_REUSE_PARTITION,
+     SymIterPool,
+     sym_compute_bins_pooled,
+     sym_objective_is_pointwise,
+@@ -90,6 +91,11 @@ from gbdt.methods.sym_iter_fast import (
+     sym_scale_from_mags,
+     sym_split_planes,
+ )
++from gbdt.methods.pointwise_optimization_subsets import (
++    PARTITION_RECORD as SYM_PARTITION_RECORD,
++    PART_OFFSET as SYM_PART_OFFSET,
++    PART_SIZE as SYM_PART_SIZE,
++)
+ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+     run_sequential_two_level_feature_freq_tree,
+     enqueue_snap_plane,
+@@ -3958,6 +3964,11 @@ def fit_with_test(
+                 planes = sym_split_planes(ctx, stats, n_rows, sym_pool[0])
+             else:
+                 planes = split_stat_planes(ctx, stats, n_rows)
++            # SYM_REUSE_PARTITION: the searcher's final partition records
++            # come back in its tail drain
++            var sym_parts_opt = Optional[HostBuffer[DType.uint32]]()
++            comptime if SYM_REUSE_PARTITION:
++                sym_parts_opt = Optional(sym_pool[0].h_parts.copy())
+             # lane/sym-quality: the gradient plane onto the tree's grid, as
+             # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
+             # only where the scale above is a real one
+@@ -3979,39 +3990,68 @@ def fit_with_test(
+                 score_std_dev=pointwise_score_std_dev,
+                 seed=tree_seed,
+                 one_hot=one_hot,
++                sym_parts_out=sym_parts_opt^,
+             )
+-            # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (a
+-            # full-depth tree's final subsets as the partition); code recoverable at b639a2bd2.
+-            # Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch.
+-            var sym_pooled_partition = False
+-            comptime if SYM_BUF_ARENA:
+-                # the pool's partitioner: the bins land in its `bins`,
+-                # one drain (the bounds readback), no allocation and no
+-                # keep-alive drain
+-                sym_pooled_partition = True
+-                sym_compute_bins_pooled(
+-                    ctx, layout_for_test, splits, len(splits), lc,
+-                    n_rows, sym_pool[0],
+-                )
+-                var sym_part = sym_pool[0].parts.partition(
+-                    ctx, n_rows, 1 << len(splits)
+-                )
+-                sizes = sym_part.sizes.copy()
+-                leaf_offsets = sym_part.offsets.copy()
+-                row_index = sym_part.row_index.copy()
+-            if not sym_pooled_partition:
+-                var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+-                compute_bins_for_model(
+-                    ctx, layout_for_test, splits, len(splits), lc, n_rows,
+-                    d_bins,
+-                )
+-                var part = partition_from_bins(
+-                    ctx, d_bins, n_rows, 1 << len(splits)
+-                )
+-                sizes = part.sizes.copy()
+-                leaf_offsets = part.offsets.copy()
+-                row_index = part.row_index.copy()
+-            sym_rows = row_index.copy()
++            # SYM_REUSE_PARTITION: a full-depth tree's final subsets ARE the
++            # partition -- `indices` grouped by leaf, (offset, size) per
++            # leaf in `h_parts` -- so the bins pass and the radix sort are
++            # skipped. A tree that stopped early (repeated split) keeps
++            # main's path: its subsets carry one redundant bit per repeat.
++            var sym_reuse = False
++            comptime if SYM_REUSE_PARTITION:
++                if len(splits) == max_depth and max_depth > 0:
++                    sym_reuse = True
++                    var sym_hp = sym_pool[0].h_parts.unsafe_ptr()
++                    sizes.clear()
++                    leaf_offsets.clear()
++                    for leaf in range(1 << max_depth):
++                        leaf_offsets.append(
++                            Int(
++                                sym_hp.unsafe_load(
++                                    leaf * SYM_PARTITION_RECORD
++                                    + SYM_PART_OFFSET
++                                )
++                            )
++                        )
++                        sizes.append(
++                            Int(
++                                sym_hp.unsafe_load(
++                                    leaf * SYM_PARTITION_RECORD
++                                    + SYM_PART_SIZE
++                                )
++                            )
++                        )
++                    sym_rows = pw_pool[0].subsets.indices.copy()
++            if not sym_reuse:
++                var sym_pooled_partition = False
++                comptime if SYM_BUF_ARENA:
++                    # the pool's partitioner: the bins land in its `bins`,
++                    # one drain (the bounds readback), no allocation and no
++                    # keep-alive drain
++                    sym_pooled_partition = True
++                    sym_compute_bins_pooled(
++                        ctx, layout_for_test, splits, len(splits), lc,
++                        n_rows, sym_pool[0],
++                    )
++                    var sym_part = sym_pool[0].parts.partition(
++                        ctx, n_rows, 1 << len(splits)
++                    )
++                    sizes = sym_part.sizes.copy()
++                    leaf_offsets = sym_part.offsets.copy()
++                    row_index = sym_part.row_index.copy()
++                if not sym_pooled_partition:
++                    var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
++                    compute_bins_for_model(
++                        ctx, layout_for_test, splits, len(splits), lc, n_rows,
++                        d_bins,
++                    )
++                    var part = partition_from_bins(
++                        ctx, d_bins, n_rows, 1 << len(splits)
++                    )
++                    sizes = part.sizes.copy()
++                    leaf_offsets = part.offsets.copy()
++                    row_index = part.row_index.copy()
++                sym_rows = row_index.copy()
+             # TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (one
+             # Newton step from the searcher's statistics); code recoverable at b639a2bd2.
+             # Restore: git apply experiments/removed/MOJOLEARN_SYM_LEAF_FROM_STATS.patch.
+diff --git a/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo b/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo
+index feeefcef2..64217eb6a 100644
+--- a/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo
++++ b/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo
+@@ -124,7 +124,7 @@ from gbdt.gpu_util.kernel.transform import (
+ from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
+ #: lane/apple-fast-sym-iter: FAST + Apple aliases, default OFF
+ #: (`gbdt/methods/sym_iter_fast.mojo`); every use below sits under one
+-from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA
++from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA, SYM_REUSE_PARTITION
+ from gbdt.methods.dynamic_boosting_folds import TFold
+ from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
+ from gbdt.trees_identical_switches import (
+@@ -413,8 +413,7 @@ def fit_oblivious_tree_structure_traced(
+     std_scale_word: List[DeviceBuffer[DType.float32]] = List[
+         DeviceBuffer[DType.float32]
+     ](),
+-    # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
+-    # `sym_parts_out` argument); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch.
++    var sym_parts_out: Optional[HostBuffer[DType.uint32]] = None,
+ ) raises -> List[TBinarySplit]:
+     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
+     structure half.
+@@ -425,6 +424,12 @@ def fit_oblivious_tree_structure_traced(
+     kernels read those device words; `fixed_scale` and `score_std_dev` are
+     then unread. Same values, same arithmetic, no drain to fetch them.
+ 
++    `sym_parts_out` (lane/apple-fast-sym-iter, read under
++    `SYM_REUSE_PARTITION` only): a host buffer of `2 * max_part_count`
++    words that receives `subsets.partitions` (offset, size per leaf) in
++    the tree's one tail drain, so the caller can reuse the searcher's
++    final partition for leaf estimation. Ignored on every other build.
++
+     `permutation_id` (fold arm only): a caller id for `permutation`, fixed
+     for the span of `pool`; with it the fold doc ids are built once per id
+     and kept in the pool. -1 builds them every call.
+@@ -1128,8 +1133,13 @@ def fit_oblivious_tree_structure_traced(
+     ctx.enqueue_copy(
+         dst_buf=pool[0].h_winners_scores, src_buf=pool[0].d_winners_scores
+     )
+-    # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the final
+-    # partition's records on this drain); code recoverable at b639a2bd2.
++    # lane/apple-fast-sym-iter, SYM_REUSE_PARTITION: the final partition's
++    # (offset, size) records ride the same drain back to the caller
++    comptime if SYM_REUSE_PARTITION:
++        if sym_parts_out.__bool__():
++            ctx.enqueue_copy(
++                dst_buf=sym_parts_out.value(), src_buf=subsets.partitions
++            )
+     ctx.synchronize()
+     times.end(ctx, "pw.drain")
+ 
+diff --git a/gbdt/methods/sym_iter_fast.mojo b/gbdt/methods/sym_iter_fast.mojo
+index 5c92474b1..37e6ea405 100644
+--- a/gbdt/methods/sym_iter_fast.mojo
++++ b/gbdt/methods/sym_iter_fast.mojo
+@@ -18,8 +18,15 @@ turns on SYM_BUF_ARENA only; the other three are recorded DROPs):
+   existing `h_mags`. The two drains whose only job was to keep a per-call
+   buffer alive (`compute_bins_for_model`'s, `partition_from_bins`' outer one)
+   go with the buffers.
+-- `MOJOLEARN_SYM_REUSE_PARTITION`: deleted 2026-10-09 (DROPPED-noise;
+-  docs/TOMBSTONES.md).
++- `MOJOLEARN_SYM_REUSE_PARTITION` (`SYM_REUSE_PARTITION`): the searcher's own
++  final partition is the estimator's partition. After the last level
++  `subsets.indices` is the row order grouped by leaf and `subsets.partitions`
++  the (offset, size) per leaf; the searcher's single tail drain carries the
++  partitions back to the host (`sym_parts_out`), and `compute_bins_for_model`
++  + `partition_from_bins` (one bins launch, a 2^depth-way radix sort, two or
++  three drains) are skipped. Falls back to main's path when the tree stopped
++  early (a repeated split: the structure is shorter than `max_depth` and the
++  subsets' bins carry a redundant bit).
+ - `MOJOLEARN_SYM_DERIV_FUSED`: deleted 2026-10-09 (DROPPED-noise;
+   docs/TOMBSTONES.md).
+ - `MOJOLEARN_SYM_LEAF_FROM_STATS`: deleted 2026-10-09 (DROPPED-noise;
+@@ -114,14 +121,38 @@ comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
+ #: TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise: sym-iter-leaf istella/taxi -0.2%, old base) deleted 2026-10-09 on
+ #: lane/owed-deletions-D1 (one Newton step from the searcher's partition stats, on the device); code recoverable at b639a2bd2.
+ #: Restore: git apply experiments/removed/MOJOLEARN_SYM_LEAF_FROM_STATS.patch; record in docs/TOMBSTONES.md.
+-#: TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise: sym-iter-reuse taxi +0.3%, old base; F12 2026-10-06 B/A 0.94..1.03 mixed)
+-#: deleted 2026-10-09 on lane/owed-deletions-D1 (the searcher's final partition as the estimator's); code recoverable at
+-#: b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch; record in docs/TOMBSTONES.md.
++#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
++#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
++#: laptop 2026-10-03, singles never built, never timed.
++#: apple-fast LEDGER 2026-10-03: DROP sym-iter reuse-1000 (+0.3%, noise), old base;
++#: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
++comptime SYM_REUSE_PARTITION = SYM_ITER_FAST_APPLE and (
++    # MEASURED M3 FAST; broader workload evidence remains separate.
++# F12/categorical M3 2026-10-06: 4 scored caller times; B/A
++# 0.9445..1.0349 (mixed/regressing); FAST candidate remains OFF.
++# Scored FAST quality 2/2 within existing bands; PASS.
++# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
++# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/categorical.
++# Compilation/identity reused. No combined-toggle/full-board claim.
++# F12/default M3 2026-10-06: 6 scored caller times; B/A
++# 0.9547..1.0050 (mixed/regressing); FAST candidate remains OFF.
++# Scored FAST quality 3/3 within existing bands; PASS.
++# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
++# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/default.
++# Compilation/identity reused. No combined-toggle/full-board claim.
++# F12/ranking M3 2026-10-06: 4 scored caller times; B/A
++# 0.9972..1.0304 (mixed/regressing); FAST candidate remains OFF.
++# Scored FAST quality 2/2 within existing bands; PASS.
++# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
++# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/ranking.
++# Compilation/identity reused. No combined-toggle/full-board claim.
++    is_defined["MOJOLEARN_SYM_REUSE_PARTITION"]()
++)
+ #: TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise: sym-iter-fused istella/taxi -0.1%, old base) deleted 2026-10-09 on
+ #: lane/owed-deletions-D1 (the next tree's gradient pass behind this tree's tail drain); code recoverable at b639a2bd2.
+ #: Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch; record in docs/TOMBSTONES.md.
+ comptime SYM_ITER_ANY = (
+-    SYM_BUF_ARENA
++    SYM_BUF_ARENA or SYM_REUSE_PARTITION
+ )
+ 
+ 
+@@ -154,6 +185,9 @@ struct SymIterPool(Movable):
+     #: SYM_BUF_ARENA: the leaf partitioner (`partition_from_bins` built one
+     #: per call: eight n_rows-sized buffers); its `bins` is the bins target
+     var parts: DeviceLeafPartitioner
++    #: SYM_REUSE_PARTITION: the searcher's `subsets.partitions` on the host,
++    #: filled by the searcher's own tail drain
++    var h_parts: HostBuffer[DType.uint32]
+ 
+     def __init__(
+         out self,
+@@ -187,6 +221,10 @@ struct SymIterPool(Movable):
+         self.d_bin = ctx.enqueue_create_buffer[DType.uint32](depth_arena)
+         self.d_eq = ctx.enqueue_create_buffer[DType.uint8](depth_arena)
+         self.parts = DeviceLeafPartitioner(ctx, rows_arena, leaves_arena)
++        var parts_reuse = 2 * n_leaves if SYM_REUSE_PARTITION else 1
++        self.h_parts = ctx.enqueue_create_host_buffer[DType.uint32](
++            parts_reuse
++        )
+         ctx.synchronize()
+ 
+ 

@@ -1,0 +1,231 @@
+diff --git a/tsa/estimator.mojo b/tsa/estimator.mojo
+index 6c354db77..3fbb14ab5 100644
+--- a/tsa/estimator.mojo
++++ b/tsa/estimator.mojo
+@@ -52,7 +52,7 @@ comptime _DEVCTX_SLOT = "MojoTsaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDE
+ 
+ from tsa.impl.timeSeries.stationarity import KPSS_ELEM_TPB, download_results
+ from tsa.impl.timeSeries.kpss_fused import (
+-    KPSS_FUSED_MAX_N, KPSS_PACK_W, TSA_KPSS_PACK, TSA_SELD_FUSED, kpss_rounds,
++    KPSS_FUSED_MAX_N, KPSS_PACK_W, TSA2_KPSS, TSA_KPSS_PACK, TSA_SELD_FUSED, kpss_fused, kpss_rounds,
+ )
+ from tsa.impl.auto_arima import select_d
+ from tsa.impl.stationarity import kpss_test
+@@ -127,6 +127,23 @@ def kpss_test_host(
+                 flags_ptr.unsafe_store(b, Int32(1) if res[b * KPSS_PACK_W + 1] != Float32(0.0) else Int32(0))
+             _ = ctx^
+             return batch_size
++    comptime if TSA2_KPSS:
++        # lane/apple-fast-tsa2 (-D MOJOLEARN_TSA2_KPSS, FAST + Apple): the
++        # undifferenced test as one launch, one block per series
++        # (tsa/impl/timeSeries/kpss_fused.mojo); the upload is queued, not
++        # waited for (its staging buffer lives past the one wait inside),
++        # and the finite check rides in the kernel. Differenced tests and
++        # series past the threadgroup's words take main's path below.
++        if d == 0 and D == 0 and n_obs <= KPSS_FUSED_MAX_N:
++            var total = batch_size * n_obs
++            var ybuf = ctx.enqueue_create_buffer[DType.float32](total)
++            var host = ctx.enqueue_create_host_buffer[DType.float32](total)
++            copy_f32(y_ptr, host.unsafe_ptr(), total)
++            ctx.enqueue_copy(dst_buf=ybuf, src_ptr=host.unsafe_ptr())
++            kpss_fused(ctx, ybuf, flags_ptr, stat_ptr, batch_size, n_obs, pval_threshold)
++            _ = host^
++            _ = ybuf^
++            return batch_size
+     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
+     var res = kpss_test(
+         ctx, y, batch_size, n_obs, d, D, s, pval_threshold, KPSS_ELEM_TPB
+diff --git a/tsa/impl/timeSeries/kpss_fused.mojo b/tsa/impl/timeSeries/kpss_fused.mojo
+index e6d1cc0e5..1a509c343 100644
+--- a/tsa/impl/timeSeries/kpss_fused.mojo
++++ b/tsa/impl/timeSeries/kpss_fused.mojo
+@@ -1,11 +1,9 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The KPSS test of a batch as ONE LAUNCH (lane/apple-fast-tsa2, then
+-lane/apple-fast-gap-tsa's packed `kpss_rounds`; FAST + Apple only, reached
+-from `tsa/estimator.mojo::kpss_test_host` for d = D = 0 and
+-n_obs <= KPSS_FUSED_MAX_N). The first form, `kpss_fused` behind
+-`-D MOJOLEARN_TSA2_KPSS`, was DROPPED-noise; its code is on
+-lane/apple-fast-gap-tsa @ e9da47064.
++"""The KPSS test of a batch as ONE LAUNCH (lane/apple-fast-tsa2,
++`-D MOJOLEARN_TSA2_KPSS`; FAST + Apple only, reached from
++`tsa/estimator.mojo::kpss_test_host` under that define, for d = D = 0 and
++n_obs <= KPSS_FUSED_MAX_N).
+ 
+ `stationarity.mojo::_kpss_test` is eight launches over eight buffers with a
+ wait, after an upload that waits and a host scan of the input for
+@@ -37,7 +35,7 @@ from std.math import isfinite
+ from std.memory import stack_allocation
+ from std.sys.compile import is_defined
+ from std.sys.info import has_apple_gpu_accelerator
+-from max.gpu.host import DeviceContext
++from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ 
+@@ -46,6 +44,11 @@ from core.pinned_reduce import pinned_block_min, pinned_block_prefix_sum, pinned
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+ from tsa.impl.timeSeries.stationarity import kpss_lags, kpss_pvalue, kpss_s2B_coefficients, kpss_stat_from_sums
+ 
++#: the switch (default OFF; FAST + Apple only)
++comptime TSA2_KPSS = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_TSA2_KPSS"]()
++)
+ #: lane/apple-fast-gap-tsa: the KPSS test as one launch over ONE device
+ #: buffer (input and packed outputs) and ONE host stage, one download
+ #: (`kpss_rounds`); FAST + Apple only. Default since the M3 A/B (n=1,
+@@ -76,6 +79,152 @@ comptime KPSS_FUSED_TPB = 256
+ comptime KPSS_FUSED_MAX_N = 4096
+ 
+ 
++def kpss_fused_kernel(
++    results: MutPointer[UInt8, MutAnyOrigin],
++    stat_out: MutPointer[Float32, MutAnyOrigin],
++    bad: MutPointer[Int32, MutAnyOrigin],
++    y: MutPointer[Float32, MutAnyOrigin],
++    n_obs_in: Int32,
++    lags_in: Int32,
++    ratio: Float32,
++    coeff_a: Float32,
++    coeff_b: Float32,
++    pval_threshold: Float32,
++):
++    """One block per series b = block_idx.x; the five stages above.
++    `ratio` is the host's `1 / n_obs_f` (`_kpss_test`'s mean scale)."""
++    var n = Int(n_obs_in)
++    var lags = Int(lags_in)
++    var b = Int(block_idx.x)
++    var tid = Int(thread_idx.x)
++    var base = b * n
++    var sh = stack_allocation[KPSS_FUSED_MAX_N, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var mean_w = stack_allocation[1, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var bad_w = stack_allocation[1, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
++    if tid == 0:
++        bad_w[0] = Int32(-1)
++    barrier()
++    # 1. the sum and the finite scan
++    var acc = Float32(0.0)
++    var first_bad = -1
++    var t = tid
++    while t < n:
++        var raw = y.unsafe_load(base + t)
++        if first_bad < 0 and not isfinite(raw):
++            first_bad = t
++        var x = ftz(raw)
++        sh[t] = x
++        acc = ftz(acc + x)
++        t += KPSS_FUSED_TPB
++    if first_bad >= 0:
++        bad_w[0] = Int32(first_bad)
++    var s0 = ftz(pinned_block_sum[KPSS_FUSED_TPB](acc))
++    if tid == 0:
++        mean_w[0] = ftz(s0 * ratio)
++    barrier()
++    var mean = ftz(mean_w[0])
++    # 2. centring in place and s2A
++    acc = Float32(0.0)
++    t = tid
++    while t < n:
++        var c = ftz(ftz(sh[t]) - mean)
++        sh[t] = c
++        acc = ftz(identical_mul_add(c, c, acc))
++        t += KPSS_FUSED_TPB
++    var s2A = ftz(pinned_block_sum[KPSS_FUSED_TPB](acc))
++    barrier()
++    # 3. the lagged products and s2B
++    acc = Float32(0.0)
++    t = tid
++    while t < n:
++        var x0 = ftz(sh[t])
++        var cell = Float32(0.0)
++        var k = 1
++        while k <= lags and t < n - k:
++            var xk = ftz(sh[t + k])
++            var dp = ftz(x0 * xk)
++            var coeff = ftz(identical_mul_add(coeff_a, Float32(k), coeff_b))
++            cell = ftz(identical_mul_add(coeff, dp, cell))
++            k += 1
++        acc = ftz(acc + cell)
++        t += KPSS_FUSED_TPB
++    var s2B = ftz(pinned_block_sum[KPSS_FUSED_TPB](acc))
++    barrier()
++    # 4. the scan in contiguous chunks and eta
++    var per = (n + KPSS_FUSED_TPB - 1) // KPSS_FUSED_TPB
++    var begin = min(tid * per, n)
++    var end = min(begin + per, n)
++    var local = Float32(0.0)
++    var i = begin
++    while i < end:
++        local = ftz(local + ftz(sh[i]))
++        i += 1
++    var running = ftz(pinned_block_prefix_sum[KPSS_FUSED_TPB, exclusive=True](local))
++    acc = Float32(0.0)
++    i = begin
++    while i < end:
++        running = ftz(running + ftz(sh[i]))
++        acc = ftz(identical_mul_add(running, running, acc))
++        i += 1
++    var eta = ftz(pinned_block_sum[KPSS_FUSED_TPB](acc))
++    # 5. the statistic and the flag
++    if tid == 0:
++        var stat = kpss_stat_from_sums(s2A, s2B, eta, Float32(n))
++        var pvalue = kpss_pvalue(stat)
++        stat_out.unsafe_store(b, stat)
++        results.unsafe_store(b, UInt8(1) if pvalue > pval_threshold else UInt8(0))
++        bad.unsafe_store(b, bad_w[0])
++
++
++def kpss_fused(
++    ctx: DeviceContext,
++    mut y: DeviceBuffer[DType.float32],
++    flags_ptr: MutPointer[Int32, MutUntrackedOrigin],
++    stat_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    batch_size: Int,
++    n_obs: Int,
++    pval_threshold: Float32,
++) raises:
++    """`kpss_test_host`'s body under the define: the one launch over the
++    queued upload `y`, three downloads sharing one wait, the non-finite
++    refusal (by name, with the flat index, as `_refuse_non_finite`), and
++    the flags and statistics written to the caller's arrays."""
++    var results = ctx.enqueue_create_buffer[DType.uint8](batch_size)
++    var stat = ctx.enqueue_create_buffer[DType.float32](batch_size)
++    var bad = ctx.enqueue_create_buffer[DType.int32](batch_size)
++    var lags = kpss_lags(n_obs)
++    var coeffs = kpss_s2B_coefficients(n_obs, lags)
++    var ratio = Float32(1.0) / Float32(n_obs)
++    ctx.enqueue_function[kpss_fused_kernel](
++        results.unsafe_ptr(), stat.unsafe_ptr(), bad.unsafe_ptr(), y.unsafe_ptr(),
++        Int32(n_obs), Int32(lags), ratio, coeffs[0], coeffs[1], pval_threshold,
++        grid_dim=(batch_size, 1, 1), block_dim=(KPSS_FUSED_TPB, 1, 1),
++    )
++    var hr = ctx.enqueue_create_host_buffer[DType.uint8](batch_size)
++    var hs = ctx.enqueue_create_host_buffer[DType.float32](batch_size)
++    var hb = ctx.enqueue_create_host_buffer[DType.int32](batch_size)
++    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=results)
++    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=stat)
++    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=bad)
++    ctx.synchronize()
++    for i in range(batch_size):
++        var at = Int(hb.unsafe_ptr().unsafe_load(i))
++        if at >= 0:
++            raise Error(
++                "kpss_test: y contains a non-finite value at index "
++                + String(i * n_obs + at) + "; missing or infinite observations are refused by name"
++            )
++    for i in range(batch_size):
++        flags_ptr.unsafe_store(i, Int32(1) if hr.unsafe_ptr().unsafe_load(i) != 0 else Int32(0))
++        stat_ptr.unsafe_store(i, hs.unsafe_ptr().unsafe_load(i))
++    _ = hr^
++    _ = hs^
++    _ = hb^
++    _ = results^
++    _ = stat^
++    _ = bad^
++
++
+ def kpss_rounds_kernel(
+     out_v: MutPointer[Float32, MutAnyOrigin],
+     y: MutPointer[Float32, MutAnyOrigin],

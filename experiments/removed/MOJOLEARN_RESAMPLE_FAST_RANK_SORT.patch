@@ -1,0 +1,210 @@
+diff --git a/resample/estimator.mojo b/resample/estimator.mojo
+index d61b7c6fe..1c40b9d5d 100644
+--- a/resample/estimator.mojo
++++ b/resample/estimator.mojo
+@@ -40,6 +40,7 @@ from resample.fast_apple import (
+     RESAMPLE_FAST_APPLE,
+     bootstrap_mean_fast,
+     perm_select_fast,
++    rank_sort_f32,
+ )
+ from std.math import ceildiv
+ from std.os import getenv
+@@ -186,9 +187,23 @@ comptime RESAMPLE_MAP_TPB = 256
+ # and RESAMPLE_FAST_GATHER (main carries its own recovery, RESAMPLE_GPU_GATHER).
+ # ===========================================================================
+ 
+-#: TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower: bootstrap taxi 14.38 -> 13.64 ms but istella 11.59 -> 14.46)
+-#: deleted 2026-10-09 on lane/owed-deletions-D1 (the bootstrap distribution sorted by one rank launch); code recoverable at
+-#: b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch; record in docs/TOMBSTONES.md.
++#: `-D MOJOLEARN_RESAMPLE_FAST_RANK_SORT` (bootstrap, bootstrap_unpaired):
++#: the sorted distribution by ONE rank launch (fast_apple.mojo
++#: rank_sort_f32_kernel, the same total order `(float_to_sortable(theta), r)`
++#: and so the same bits at every rank) instead of `_sort_segments`' 32
++#: one-bit radix passes x 4 launches over a single segment of n_resamples
++#: keys. Source lane/apple-fast-resample@50b96e795. Known: never compiled,
++#: never measured (EXPERIMENTS row OPEN); the old cause also named a
++#: one-thread `seg_scan_block_sums_kernel`, which main's SEG_SUMS_BLOCK_SCAN
++#: (KEPT) has since replaced, so the remaining gain is launch count only.
++#: Fixed here: the kernel's own bound RANK_SORT_MAX (= 256^2; O(n^2) work)
++#: above which the radix sort stays; old code had no bound.
++#: DROPPED-slower, stays OFF (M3 afc_ab_def, full board size, 1 run per arm,
++#: 2026-10-04): bootstrap taxi 14.38 -> 13.64 ms, istella 11.59 -> 14.46 ms
++#: (mixed: slower on istella).
++comptime RESAMPLE_FAST_RANK_SORT = (
++    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_RANK_SORT"]()
++)
+ 
+ #: `-D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` (bootstrap, _bootstrap_theta):
+ #: mean / diff_means replicates folded once per block (each thread's draws in
+@@ -266,14 +281,15 @@ comptime CV_FAST_TRUST_FOLDS = (
+ 
+ def resample_fast_defines() -> Int:
+     """The FAST + Apple candidate defines this build was compiled with, as a
+-    bit mask (0 on every IDENTICAL and every non-Apple build): 1 RANK_SORT (deleted),
++    bit mask (0 on every IDENTICAL and every non-Apple build): 1 RANK_SORT,
+     2 ONE_FOLD, 4 PERM_SELECT, 32 CV_SLICE, 64 CV_TRUST_FOLDS, 128
+     GATHER_NARROW (8 and 16 were
+     the old branch's IDX_BULK and GATHER, not ported). Read by the
+     `resample_fast_defines` binding; python/mojolearn/model_selection.py
+     switches on it instead of an environment variable."""
+     var m = 0
+-    # bit 1 (RESAMPLE_FAST_RANK_SORT) is always 0 since its deletion (2026-10-09)
++    comptime if RESAMPLE_FAST_RANK_SORT:
++        m |= 1
+     comptime if RESAMPLE_FAST_ONE_FOLD:
+         m |= 2
+     comptime if RESAMPLE_FAST_PERM_SELECT:
+@@ -1534,9 +1550,13 @@ def bootstrap_host(
+ 
+     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+     ctx.synchronize()
+-    # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
+-    # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch.
+-    _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
++    # -D MOJOLEARN_RESAMPLE_FAST_RANK_SORT (FAST + Apple, default OFF): one
++    # rank launch, same order and bits, up to RANK_SORT_MAX keys.
++    var rank_sorted = False
++    comptime if RESAMPLE_FAST_RANK_SORT:
++        rank_sorted = rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
++    if not rank_sorted:
++        _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
+     trace.record_device(ctx, "resample.sorted", sorted_buf, n_resamples)
+     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
+ 
+@@ -1697,8 +1717,12 @@ def bootstrap_unpaired_host(
+     var dist = _download_f32(ctx, theta, n_resamples)
+     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+     ctx.synchronize()
+-    # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1: see bootstrap_host.
+-    _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
++    # -D MOJOLEARN_RESAMPLE_FAST_RANK_SORT: see bootstrap_host.
++    var rank_sorted = False
++    comptime if RESAMPLE_FAST_RANK_SORT:
++        rank_sorted = rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
++    if not rank_sorted:
++        _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
+     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
+ 
+     var mx = point_estimate_device(ctx, dxb, n_x, 1, STAT_MEAN, Float32(0.5))
+diff --git a/resample/fast_apple.mojo b/resample/fast_apple.mojo
+index 14f4aef0b..6e7eb9652 100644
+--- a/resample/fast_apple.mojo
++++ b/resample/fast_apple.mojo
+@@ -9,8 +9,11 @@ never move.
+ 
+ Three kernels, all one launch, all parallel, no host step:
+ 
+-  * (`rank_sort_f32_kernel`, -D MOJOLEARN_RESAMPLE_FAST_RANK_SORT, was
+-    deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
++  * `rank_sort_f32_kernel` (-D MOJOLEARN_RESAMPLE_FAST_RANK_SORT): the
++    sorted bootstrap distribution by RANK (one thread per replicate, the keys
++    staged 256 at a time in threadgroup memory) in the same total order
++    `(float_to_sortable(theta_r), r)` the LSD radix of
++    `core/segmented_sort.mojo` produces, so the same bits at every rank.
+   * `bootstrap_mean_fast_kernel` (-D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD): mean
+     / diff_means replicates with ONE block fold per replicate (each thread
+     folds its own draws in registers, then `block.sum`) instead of one
+@@ -61,6 +64,13 @@ comptime RESAMPLE_FAST_APPLE = (
+ #: Threads per block of every kernel here.
+ comptime FAST_TPB = 256
+ 
++#: The rank sort is O(n) compares per thread (O(n^2) in all). Its bound is
++#: the kernel's own shape, not a benchmark size: at most FAST_TPB staged
++#: slabs per thread (n <= FAST_TPB^2 = 65,536), past which the radix sort's
++#: O(n log n) work wins and a single Metal launch grows toward macOS's
++#: command-buffer watchdog. Above it the caller keeps `_sort_segments`.
++comptime RANK_SORT_MAX = FAST_TPB * FAST_TPB
++
+ #: The radix select's digit: 4 bits, 16 bins, 16 counters per thread.
+ #: Threadgroup memory: PERM_BINS * FAST_TPB * 4 B = 16 KB + 64 B, inside
+ #: Apple's 32 KB per threadgroup.
+@@ -68,9 +78,85 @@ comptime PERM_DIGIT_BITS = 4
+ comptime PERM_BINS = 16
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower: bootstrap taxi 14.38 -> 13.64 ms but istella 11.59 -> 14.46)
+-# deleted 2026-10-09 on lane/owed-deletions-D1 (the bootstrap distribution sorted by one rank launch); code recoverable at
+-# b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch; record in docs/TOMBSTONES.md.
++# ===========================================================================
++# 1. The sorted distribution by rank (one launch)
++# ===========================================================================
++
++
++def rank_sort_f32_kernel(
++    src: MutPointer[Float32, MutAnyOrigin],
++    dst: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++):
++    """`dst[rank(i)] = src[i]` with `rank(i)` the number of positions below
++    `i` in the total order `(float_to_sortable(bits), position)`: the order
++    `core/segmented_sort.mojo` pins (`-0.0` below `+0.0`, equal bits in
++    ascending position order), so every rank carries the same bits the
++    radix sort would put there. One thread per position; the keys are
++    staged `FAST_TPB` at a time in threadgroup memory. Every thread of the
++    block reaches both barriers on every chunk."""
++    var n = Int(n_in)
++    var tid = Int(thread_idx.x)
++    var i = Int(block_idx.x) * FAST_TPB + tid
++    var slab = stack_allocation[
++        FAST_TPB,
++        Scalar[DType.uint32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var mine = UInt32(0)
++    var value = Float32(0.0)
++    if i < n:
++        value = src.unsafe_load(i)
++        mine = float_to_sortable(bitcast[DType.uint32](value))
++    var rank = 0
++    var base = 0
++    while base < n:
++        var j = base + tid
++        barrier()
++        if j < n:
++            slab[unsafe_offset=tid] = float_to_sortable(
++                bitcast[DType.uint32](src.unsafe_load(j))
++            )
++        barrier()
++        var limit = n - base
++        if limit > FAST_TPB:
++            limit = FAST_TPB
++        if i < n:
++            for t in range(limit):
++                var kj = slab[unsafe_offset=t]
++                if kj < mine or (kj == mine and base + t < i):
++                    rank += 1
++        base += FAST_TPB
++    if i < n:
++        dst.unsafe_store(rank, value)
++
++
++def rank_sort_f32(
++    ctx: DeviceContext,
++    mut src: DeviceBuffer[DType.float32],
++    mut dst: DeviceBuffer[DType.float32],
++    n: Int,
++) raises -> Bool:
++    """`dst` = `src` sorted by `rank_sort_f32_kernel`, one launch, drained.
++    False (nothing enqueued): n is past `RANK_SORT_MAX`, the caller sorts."""
++    comptime if RESAMPLE_FAST_APPLE:
++        if n > RANK_SORT_MAX:
++            return False
++        if n <= 0:
++            return True
++        ctx.enqueue_function[rank_sort_f32_kernel](
++            src.unsafe_ptr(),
++            dst.unsafe_ptr(),
++            Int32(n),
++            grid_dim=(ceildiv(n, FAST_TPB), 1, 1),
++            block_dim=(FAST_TPB, 1, 1),
++        )
++        _ = src.unsafe_ptr()
++        _ = dst.unsafe_ptr()
++        ctx.synchronize()
++        return True
++    else:
++        return False
+ 
+ 
+ # ===========================================================================
