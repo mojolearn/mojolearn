@@ -350,7 +350,8 @@ def b_groups(workloads, info, group_size):
     return out
 
 
-def render(plan_dir, vendor, branch='main', b_repeats=3, only_lanes=None, phase=None, budget_hours=None,
+# Andrew 2026-10-10: everything runs once; the noise floor comes from stored runs (collect --stored-floors).
+def render(plan_dir, vendor, branch='main', b_repeats=1, only_lanes=None, phase=None, budget_hours=None,
            lanes=None, b_group_size=8, run_id=None, board=None, prebuilt=None, only_cells=None, race_seconds=None,
            only_workloads=None, models=None):
     plan, matrix = load_plan(plan_dir)
@@ -968,11 +969,89 @@ def box_of(o):
     return o.get('vendor')
 
 
+DEFAULT_FLOOR = math.log(1.05)  # Andrew 2026-10-10: no stored floor for the workload, its lane or its algorithm -> 5%
+
+
+def _lane_of(wid, lanes, board):
+    try:
+        return route(wid, lanes, board)['lane']
+    except ValueError:
+        return None
+
+
+def stored_floor(doc, wid, vendor, box, algorithm, lane):
+    """(log floor, source text) from a stored-floors doc: the workload on this box, the workload on its vendor (another
+    box of the same vendor), the lane's median floor on the vendor, the algorithm's median floor on the vendor, else
+    the 5% default. The source text says which, so the decision shows where the floor came from."""
+    w = doc.get('workloads') or {}
+    box = box or vendor
+    for key, what in ((floor_key(wid, vendor, box), 'workload, box %s' % box), (wid + '|' + vendor, 'workload, %s' % vendor)):
+        e = w.get(key)
+        if e and e.get('floor') is not None:
+            return e['floor'], 'stored (%s: %d samples, %s)' % (what, e.get('samples') or 0, e.get('source') or '?')
+    for table, name, what in (('lanes', lane, 'lane'), ('algorithms', algorithm, 'algorithm')):
+        e = (doc.get(table) or {}).get('%s|%s' % (name, vendor)) if name else None
+        if e and e.get('floor') is not None:
+            return e['floor'], 'stored (%s %s median of %d workload floors on %s)' % (what, name, e.get('workloads') or 0, vendor)
+    return DEFAULT_FLOOR, 'default 5%% (no stored floor for the workload, lane %s or algorithm %s on %s)' % (lane, algorithm, vendor)
+
+
+def build_stored_floors(floor_docs, plan_dir, lanes=None, board=None):
+    """Stored floors from earlier floors.json docs (collect outputs, the Oct 6 pair floors): per workload|vendor[|box],
+    the entry with the most samples wins; lane and algorithm medians per vendor for the fallbacks."""
+    lanes = lanes if lanes is not None else load_lanes()
+    board = board if board is not None else load_board('nvidia')
+    _, matrix = load_plan(plan_dir)
+    algo_of = {}
+    for c in matrix['configurations']:
+        for wv in c.get('workloads') or []:
+            algo_of.setdefault(wv, (c.get('grid') or {}).get('algorithm'))
+    work = {}
+    for path in floor_docs:
+        d = json.loads(Path(path).read_text())
+        for k, v in (d.get('floors') or {}).items():
+            f = (v.get('floor') or {}).get('scored')
+            if f is None:
+                continue
+            vendor = v.get('vendor'); wid = v.get('workload_id')
+            box = v.get('box') or vendor
+            key = floor_key(wid, vendor, box)
+            e = dict(workload_id=wid, vendor=vendor, box=box, floor=max(f, FLOOR_MIN), samples=v.get('samples') or 0,
+                     source=str(path))
+            if key not in work or e['samples'] > work[key]['samples']:
+                work[key] = e
+    for e in list(work.values()):  # the workload on its vendor (any box): the box with the most samples
+        vk = e['workload_id'] + '|' + e['vendor']
+        if vk not in work or e['samples'] > work[vk]['samples']:
+            work[vk] = dict(e)
+    def med(xs):
+        xs = sorted(xs)
+        return xs[len(xs) // 2] if xs else None
+    by_lane, by_algo = {}, {}
+    for k, e in work.items():
+        if k.count('|') != 1:
+            continue
+        ln = _lane_of(e['workload_id'], lanes, board)
+        if ln:
+            by_lane.setdefault('%s|%s' % (ln, e['vendor']), []).append(e['floor'])
+        al = algo_of.get(e['workload_id'])
+        if al:
+            by_algo.setdefault('%s|%s' % (al, e['vendor']), []).append(e['floor'])
+    return dict(schema='mojolearn.six-lane-grid-stored-floors/1',
+                policy='Andrew 2026-10-10: everything runs once; the noise floor comes from stored runs. Workload floors '
+                       '(log spread of incumbent repeats, at least 5%) from earlier floors.json docs; lane / algorithm '
+                       'entries are the median workload floor per vendor; no entry -> 5% default.',
+                sources=[str(p) for p in floor_docs], workloads=work,
+                lanes={k: dict(floor=med(v), workloads=len(v)) for k, v in sorted(by_lane.items())},
+                algorithms={k: dict(floor=med(v), workloads=len(v)) for k, v in sorted(by_algo.items())})
+
+
 def floor_key(wid, vendor, box):
     return wid + '|' + vendor + ('' if box in (None, vendor) else '|' + box)
 
 
-def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_samples=2, board=None, repair_runs=()):
+def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_samples=2, board=None, repair_runs=(),
+            stored_floors=None):
     """run_id: one run or several passes (list or comma list). Each pass' A is judged against the same pass' B
     median; a cell's log ratio is the mean over its passes; floors pool the incumbent repeats of every pass.
     repair_runs: passes that re-ran cells whose earlier race failed for a tooling reason (render --only-workloads, e.g.
@@ -1078,11 +1157,26 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
     # the decision stays PARTIAL until the real floor replaces it (six_lane_grid_decide gates flips on completeness).
     measured_floors = sorted(v['floor']['scored'] for v in floors.values() if v['floor'] and v['floor'].get('scored') is not None)
     provisional = measured_floors[len(measured_floors) // 2] if len(measured_floors) >= 5 else math.log(1.25)
+    # Andrew 2026-10-10: everything runs once; the noise floor comes from stored runs. A workload with fewer than
+    # min_samples incumbent repeats in these passes takes its stored floor (stored_floor: workload on this box, the
+    # workload on its vendor, its lane, its algorithm), else the 5% default, named in floor_source either way.
+    if stored_floors:
+        sf = json.loads(Path(stored_floors).read_text())
+        algo_of = {}
+        for c in configs.values():
+            for w in c.get('workloads') or []:
+                algo_of.setdefault(w, (c.get('grid') or {}).get('algorithm'))
+        for k, v in floors.items():
+            if v['floor'] is None:
+                f, src = stored_floor(sf, v['workload_id'], v['vendor'], v.get('box'), algo_of.get(v['workload_id']),
+                                      _lane_of(v['workload_id'], lanes, board))
+                v['floor'] = {p: (f if p == 'scored' else None) for p in T.PHASES}
+                v['floor_source'] = src
     for k, v in floors.items():
         if v['floor'] is None:
             v['floor'] = {p: (provisional if p == 'scored' else None) for p in T.PHASES}
             v['floor_source'] = 'provisional (%s)' % ('run median of %d floors' % len(measured_floors) if len(measured_floors) >= 5 else 'log 1.25 default')
-        else:
+        elif not v.get('floor_source'):
             v['floor_source'] = 'incumbent repeats'
     floor_doc = dict(schema='mojolearn.six-lane-aa-floors/1',
                      floors={k: v for k, v in floors.items() if v['floor'] is not None},
@@ -1345,7 +1439,8 @@ def main(argv=None):
     r.add_argument('--plan-dir', type=Path, required=True, help='dir with grid-plan.json + grid-matrix.json.gz')
     r.add_argument('--vendor', choices=sorted(BOX), required=True)
     r.add_argument('--branch', default='main', help='pushed branch both arms build (freeze one commit per round)')
-    r.add_argument('--b-repeats', type=int, help='incumbent repeats per workload group (default 3; 1 with --rerun-undecided)')
+    r.add_argument('--b-repeats', type=int, help='incumbent repeats per workload group (default 1: Andrew 2026-10-10, everything runs once; the noise floor '
+                        'comes from stored runs, collect --stored-floors)')
     r.add_argument('--b-group-size', type=int, default=8, help='workloads per incumbent line (one build covers them)')
     r.add_argument('--only-lanes', help='comma list of bench_board_algos lanes')
     r.add_argument('--phase', choices=sorted(REGIME_RANK))
@@ -1366,6 +1461,12 @@ def main(argv=None):
     add_redo_parser(s)
     r.add_argument('--only-workloads', help='comma list of workload ids or family prefixes ending in ":" (e.g. neural:): '
                    'render only those cells (a one-shot redo; give it its own --run-id so fed tags do not collide)')
+    fl = s.add_parser('floors', help='build the stored-floors file (collect --stored-floors) from earlier floors.json docs')
+    fl.add_argument('--plan-dir', type=Path, required=True)
+    fl.add_argument('--from', dest='sources', nargs='+', required=True, help='floors.json docs (collect outputs, pair floors)')
+    fl.add_argument('--out', type=Path, required=True)
+    fl.add_argument('--lanes-json')
+    fl.add_argument('--board-json')
     c = s.add_parser('collect', help='lq results + race logs -> verdicts, identity summary, quality rows')
     c.add_argument('--results', nargs='+', required=True, help='results.txt copies (one per box)')
     c.add_argument('--logs', nargs='*', default=[], help='lq out dirs (race-*.log under <id>/) or `grep -H` dumps of them')
@@ -1375,6 +1476,9 @@ def main(argv=None):
     c.add_argument('--repair-runs', help='comma list of repair passes (e.g. <run>r1n from render --only-workloads): a cell '
                    'they measured drops the FAIL verdicts of earlier passes (tooling failures), kept as evidence')
     c.add_argument('--min-samples', type=int, default=2)
+    c.add_argument('--stored-floors', help='stored per-box noise floors (tools/six_lane_grid_lq.py floors, schema '
+                   'mojolearn.six-lane-grid-stored-floors/1): used where a workload has fewer than --min-samples '
+                   'incumbent repeats (Andrew 2026-10-10: everything runs once; the noise floor comes from stored runs)')
     c.add_argument('--lanes-json')
     c.add_argument('--board-json')
     c.add_argument('--out', type=Path, required=True)
@@ -1386,6 +1490,13 @@ def main(argv=None):
     if args.board_json:
         board = json.loads(Path(args.board_json).read_text())
         board['races'] = {tuple(r) for r in board['races']}
+    if args.cmd == 'floors':
+        doc = build_stored_floors(args.sources, args.plan_dir, lanes, board)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(doc, indent=1, sort_keys=True))
+        print(json.dumps(dict(out=str(args.out), workload_entries=len(doc['workloads']), lanes=len(doc['lanes']),
+                              algorithms=len(doc['algorithms']))))
+        return 0
     if args.cmd == 'render':
         only = {x for x in (args.only_lanes or '').split(',') if x} or None
         only_wl = [x for x in (args.only_workloads or '').split(',') if x] or None
@@ -1403,7 +1514,7 @@ def main(argv=None):
         else:
             if args.rerun_id or args.first_pass or args.skip_controls or args.skip_broken_controls:
                 p.error('--rerun-id, --first-pass, --skip-controls and --skip-broken-controls need --rerun-undecided')
-            lines, manifest = render(args.plan_dir, args.vendor, args.branch, 3 if args.b_repeats is None else args.b_repeats,
+            lines, manifest = render(args.plan_dir, args.vendor, args.branch, 1 if args.b_repeats is None else args.b_repeats,  # Andrew 2026-10-10: everything runs once; the noise floor comes from stored runs
                                      only, args.phase, args.budget_hours, lanes, args.b_group_size, args.run_id, board, args.prebuilt,
                                      only_workloads=only_wl)
         args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -1424,7 +1535,7 @@ def main(argv=None):
         return 0
     runs = list(args.run_id or []) + [x for x in (args.runs or '').split(',') if x]
     report = collect(args.results, args.logs, args.plan_dir, args.out, lanes, runs or None, args.min_samples, board,
-                     [x for x in (args.repair_runs or '').split(',') if x])
+                     [x for x in (args.repair_runs or '').split(',') if x], args.stored_floors)
     print(json.dumps({k: report[k] for k in ('run_id', 'passes_per_cell', 'observations', 'a_cells', 'coverage', 'verdict_counts',
                                              'identity_counts', 'quality_counts', 'ignored', 'truncated_without_log',
                                              'jobs_without_algos', 'cmd_jobs_without_gridbb')}))

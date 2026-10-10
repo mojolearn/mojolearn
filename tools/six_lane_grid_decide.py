@@ -108,8 +108,12 @@ def timing_index(verdict_docs, voters=None):
                 effects = [abs((row.get('log_ratio') or {}).get('scored') or 0.0) for row in vendors.values()]
                 if not effects or min(effects) < math.log(2.0):
                     verdict = 'INCOMPLETE'
+            # Andrew 2026-10-10: everything runs once; the noise floor comes from stored runs. The floor's source
+            # (incumbent repeats, stored workload/lane/algorithm floor, or the 5% default) is carried into the row.
+            floor_sources = {v: row.get('floor_source') for v, row in vendors.items() if row.get('floor_source')}
             out[(case['configuration'], case['workload_id'])] = dict(verdict=verdict, reasons=reasons,
-                                                                       ratios=ratios, evidence=[v.get('evidence') for v in vendors.values()])
+                                                                       ratios=ratios, evidence=[v.get('evidence') for v in vendors.values()],
+                                                                       floor_sources=floor_sources)
     return out
 
 
@@ -176,6 +180,10 @@ def cell_rows(config, tidx, iidx, qidx, identity_required=True):
                          ratios=t['ratios'] if t else {},
                          identity=iidx.get((config['id'], wid), 'UNMEASURED') if identity_required else 'NOT_REQUIRED',
                          quality=quality_for(qidx, config['id'], wid)))
+        if t and t.get('floor_sources'):
+            rows[-1]['floor_sources'] = t['floor_sources']
+            if any(str(x).startswith('default 5%') for x in t['floor_sources'].values()):
+                rows[-1]['floor_note'] = 'judged against the 5% default floor: no stored floor for this workload, its lane or its algorithm'
     return rows
 
 
@@ -263,6 +271,9 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
         evidence[c['id']] = dict(configuration=c['id'], algorithm=c['grid']['algorithm'], tier=c['grid'].get('tier'),
                                  assignment=c['grid'].get('assignment', {}), rows=rows,
                                  verdict=algorithm_verdict(rows), combined_ratio=geo_mean(ratios))
+        notes = sorted({r['workload_id'] for r in rows if r.get('floor_note')})
+        if notes:  # Andrew 2026-10-10: the 5% default floor is named in the decision
+            evidence[c['id']]['floor_note'] = '5%% default floor (no stored floor) on: %s' % ', '.join(notes)
 
     # singles per (control, arm) per algorithm
     single_by_arm = defaultdict(dict)  # (control, arm) -> {algorithm: evidence}
