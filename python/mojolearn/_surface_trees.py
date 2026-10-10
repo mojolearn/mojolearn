@@ -107,7 +107,7 @@ FAMILIES = (
             "x_trees_tree_shap_cache_enabled", "x_trees_forest_auxiliary", "x_trees_fast_switches",
             "x_trees_device_folds", "x_trees_class_priors", "x_trees_dart_thresholds",
             "x_trees_dart_rescale", "x_trees_kshap_schedule", "x_trees_normalized_weights",
-            "x_trees_agn_pool_release", "x_trees_kshap_synth_async", "x_trees_kshap_synth_wait",
+            "x_trees_agn_pool_release",
             "x_trees_pshap_dsynth", "x_trees_pshap_dvalues", "x_trees_pshap_dsynth_async",
             "x_trees_pshap_dsynth_wait",
         ),
