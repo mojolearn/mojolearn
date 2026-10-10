@@ -1035,15 +1035,15 @@ def fast_defines_py() raises -> PythonObject:
     """The recovered Apple FAST switches the Python linalg doors read
     (lane/apple-fast-rec-decomp, 2026-10-04; from
     lane/apple-fast-decomp-linalg@74d52352b), comma-joined: the build's
-    `-D MOJOLEARN_QR_FAST_DEV` / `-D MOJOLEARN_SVD_FAST_CHOLQR` under FAST, so
-    `linalg.qr` / `linalg.svd` pick the FAST kit route with no env read
+    `-D MOJOLEARN_SVD_FAST_CHOLQR` under FAST (MOJOLEARN_QR_FAST_DEV deleted
+    2026-10-09), so `linalg.svd` picks the FAST kit route with no env read
     (`_kit_fast_define` in python/mojolearn/_expansion_decomp.py, which also
     requires the Metal vendor). Empty for an IDENTICAL build and for a FAST
     build with neither."""
     var s = String("")
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
-        comptime if is_defined["MOJOLEARN_QR_FAST_DEV"]():
-            s += "MOJOLEARN_QR_FAST_DEV,"
+        # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
+        # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch.
         comptime if is_defined["MOJOLEARN_SVD_FAST_CHOLQR"]():
             s += "MOJOLEARN_SVD_FAST_CHOLQR,"
     return PythonObject(s)

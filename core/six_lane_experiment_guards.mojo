@@ -249,6 +249,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_MC_CLASS_BATCH_DERIV"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple MultiClass softmax in registers was DROPPED-noise: symmulti-mc-deriv istella/taxi within +-2.4%, identical quality (old base); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_MC_CLASS_BATCH_EST"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple MultiClass leaf-oracle value, der and der2 in one launch was DROPPED-noise: symmulti-mc-est istella/taxi within +-2.4%, with MC_CLASS_BATCH_DERIV -1.2% (old base), quality identical; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_PL_PAIRS_ONCE"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple PairLogit each-pair-once group kernel was DROPPED-noise: symmulti-pl-once / pl-both istella within +-2.4%, identical quality (old base); code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not (is_defined["MOJOLEARN_QR_FAST_DEV"]() or is_defined["MOJOLEARN_AFCL_L09"]()), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple grid-fold geqrf / orgqr (x_decomp/fast_qr.mojo) was DROPPED-slower: rab3-qrdev istella 1628.1 -> 7319.9 ms (+349.6%), taxi 47.6 -> 91.7 (+92.5%); MOJOLEARN_AFCL_L09 (its 128-row reflector schedule, never run, needed QR_FAST_DEV in both arms) went with it; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

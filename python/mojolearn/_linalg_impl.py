@@ -1245,13 +1245,12 @@ def _qr_q(a, mode):
     lane's sliced order (x_decomp/qr_sliced.mojo, DEVIATION 5320;
     lane/algos-decomp, 2026-09-27; sliced by lane hr-qr, 2026-10-02). Any shape, wide included."""
     a_arr, rows, cols = _two_d(a, "a")
-    # -D MOJOLEARN_QR_FAST_DEV (default off, FAST on Apple; x_decomp/fast_qr.mojo):
-    # the FAST kit's geqrf / orgqr take the grid-fold route there, ahead of
-    # the blocked TSQR (the A/B's A arm)
-    kf = _fast_apple_kit("MOJOLEARN_QR_FAST_DEV")
-    if kf is None and mode == "reduced" and _tsqr_on(rows, cols):
+    # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
+    # grid-fold geqrf / orgqr ahead of the TSQR); code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
+    if mode == "reduced" and _tsqr_on(rows, cols):
         return _qr_tsqr(a_arr, rows, cols)
-    k = kf or _xd_kit()
+    k = _xd_kit()
     h, tau = k.geqrf(_xd_matrix(a_arr, rows, cols))
     kk = min(rows, cols)
     if mode == "raw":

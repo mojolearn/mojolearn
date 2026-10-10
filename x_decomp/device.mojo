@@ -47,20 +47,9 @@ from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp
 from x_decomp.fast_chol import CHOL_FAST_BLOCKED, CH_NB, launch_chol_blocked
 from x_decomp.omp_block import DECOMP_FAST_OMP_BLOCK, OMP_TPB, omp_block_fits, omp_block_kernel
 from x_decomp.fast_gemm import DECOMP_FAST_GEMM_TILED, FG_TPB, fg_gemm_tiled_kernel, fg_tiles
-from x_decomp.fast_qr import (
-    FQ_TPB,
-    QR_FAST_DEV,
-    fq_dot_blocks,
-    fq_geqrf_dot_kernel,
-    fq_head_blocks,
-    fq_head_finish_kernel,
-    fq_head_part_kernel,
-    fq_orgqr_dot_kernel,
-    geqrf_scale_kernel,
-    geqrf_update_kernel,
-    orgqr_init_kernel,
-    orgqr_update_kernel,
-)
+# TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower: rab3-qrdev istella 1628.1 -> 7319.9 ms, taxi 47.6 -> 91.7) deleted 2026-10-09
+# on lane/owed-deletions-D1 (x_decomp/fast_qr.mojo grid-fold geqrf / orgqr, with its sub-arm MOJOLEARN_AFCL_L09); code
+# recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
 from x_decomp.cells import (
     IDN_LU_NB128,
     LUB_NB,
@@ -4031,134 +4020,34 @@ struct DevExec(Exec):
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
         """Every fold over slices of rows, a fixed tree (x_decomp/
         qr_sliced.mojo; lane hr-qr), on every column at every size."""
-        comptime if QR_FAST_DEV:
-            # -D MOJOLEARN_QR_FAST_DEV (x_decomp/fast_qr.mojo, default off,
-            # FAST + Apple): the grid-fold route instead of the sliced one.
-            DevExec._geqrf_fast(a, tau, m, n)
-        else:
-            var ctx = xd_ctx()
-            var kk = m if m < n else n
-            var da = _up(ctx, a, m * n)
-            var dt = ctx.enqueue_create_buffer[DType.float32](kk if kk > 0 else 1)
-            qs_geqrf_device(ctx, da, dt, m, n)
-            _down(ctx, da, a, m * n)
-            _down(ctx, dt, tau, kk)
-            ctx.synchronize()
-            _ = da^
-            _ = dt^
-            _ = ctx^
-
-    @staticmethod
-    def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
-        comptime if QR_FAST_DEV:
-            # -D MOJOLEARN_QR_FAST_DEV: see geqrf.
-            DevExec._orgqr_fast(h, tau, q, m, n, kk, qc)
-        else:
-            var ctx = xd_ctx()
-            var dh = _up(ctx, h, m * n)
-            var dt = _up(ctx, tau, kk if kk > 0 else 1)
-            var dq = ctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
-            qs_orgqr_device(ctx, dh, dt, dq, m, n, kk, qc)
-            _down(ctx, dq, q, m * qc)
-            ctx.synchronize()
-            _ = dh^
-            _ = dt^
-            _ = dq^
-            _ = ctx^
-
-    @staticmethod
-    def _geqrf_fast(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
-        """`geqrf` with every fold a grid reduction (x_decomp/fast_qr.mojo;
-        QR_FAST_DEV, recovered from lane/apple-fast-decomp-linalg@74d52352b).
-        Step k: the norm's (scale, ssq) pairs over `fq_head_blocks` blocks and
-        a one-block fold of those pairs (dlarfg's tau and beta on its thread
-        0), the scale kernel, the reflector products as row-chunk partials
-        folded by `fold_kernel`, then the elementwise update: 5 launches a
-        column, no host step."""
+        # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower: rab3-qrdev istella 1628.1 -> 7319.9 ms, taxi 47.6 -> 91.7) deleted 2026-10-09
+        # on lane/owed-deletions-D1 (x_decomp/fast_qr.mojo grid-fold geqrf / orgqr, with its sub-arm MOJOLEARN_AFCL_L09); code
+        # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
         var ctx = xd_ctx()
         var kk = m if m < n else n
         var da = _up(ctx, a, m * n)
         var dt = ctx.enqueue_create_buffer[DType.float32](kk if kk > 0 else 1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](2)
-        var dw = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        var nbh = fq_head_blocks(m)
-        var dph = ctx.enqueue_create_buffer[DType.float32](2 * nbh)
-        var nbd = fq_dot_blocks(m, 0)
-        var dpd = ctx.enqueue_create_buffer[DType.float32](nbd * n if n > 0 else 1)
-        for k in range(kk):
-            ctx.enqueue_function[fq_head_part_kernel](
-                da.unsafe_ptr(), dph.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(nbh),
-                grid_dim=nbh, block_dim=FQ_TPB,
-            )
-            ctx.enqueue_function[fq_head_finish_kernel](  # small-launch(nbh: norm partials): at most FQ_MAX_BLOCKS pairs, a fixed cap
-                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dph.unsafe_ptr(), Int32(k), Int32(k * n + k), Int32(nbh),
-                grid_dim=1, block_dim=FQ_TPB,
-            )
-            if m - k - 1 > 0:
-                ctx.enqueue_function[geqrf_scale_kernel](
-                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=_blocks(m - k - 1), block_dim=TPB
-                )
-            if n - k - 1 > 0:
-                var nb = fq_dot_blocks(m, k)
-                ctx.enqueue_function[fq_geqrf_dot_kernel](
-                    da.unsafe_ptr(), ds.unsafe_ptr(), dpd.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
-                    grid_dim=nb, block_dim=FQ_TPB,
-                )
-                ctx.enqueue_function[fold_kernel](
-                    dpd.unsafe_ptr(), dw.unsafe_ptr(), Int32(n), Int32(nb), grid_dim=_blocks(n), block_dim=TPB
-                )
-                ctx.enqueue_function[geqrf_update_kernel](
-                    da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
-                    grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
-                )
+        qs_geqrf_device(ctx, da, dt, m, n)
         _down(ctx, da, a, m * n)
         _down(ctx, dt, tau, kk)
         ctx.synchronize()
         _ = da^
         _ = dt^
-        _ = ds^
-        _ = dw^
-        _ = dph^
-        _ = dpd^
-        ctx.synchronize()
         _ = ctx^
 
     @staticmethod
-    def _orgqr_fast(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
-        """`orgqr` with the reflector products as row-chunk grid partials
-        (`fq_orgqr_dot_kernel` + `fold_kernel`); the init and update kernels
-        are elementwise. QR_FAST_DEV; cause as `_geqrf_fast`."""
+    def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1: see geqrf.
         var ctx = xd_ctx()
         var dh = _up(ctx, h, m * n)
         var dt = _up(ctx, tau, kk if kk > 0 else 1)
         var dq = ctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
-        var dw = ctx.enqueue_create_buffer[DType.float32](qc if qc > 0 else 1)
-        var nbd = fq_dot_blocks(m, 0)
-        var dpd = ctx.enqueue_create_buffer[DType.float32](nbd * qc if qc > 0 else 1)
-        ctx.enqueue_function[orgqr_init_kernel](dq.unsafe_ptr(), Int32(m), Int32(qc), grid_dim=_blocks(m * qc), block_dim=TPB)
-        for r in range(kk):
-            var k = kk - 1 - r
-            if qc > 0:
-                var nb = fq_dot_blocks(m, k)
-                ctx.enqueue_function[fq_orgqr_dot_kernel](
-                    dh.unsafe_ptr(), dq.unsafe_ptr(), dpd.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
-                    grid_dim=nb, block_dim=FQ_TPB,
-                )
-                ctx.enqueue_function[fold_kernel](
-                    dpd.unsafe_ptr(), dw.unsafe_ptr(), Int32(qc), Int32(nb), grid_dim=_blocks(qc), block_dim=TPB
-                )
-            ctx.enqueue_function[orgqr_update_kernel](
-                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
-                grid_dim=_blocks((m - k) * qc), block_dim=TPB,
-            )
+        qs_orgqr_device(ctx, dh, dt, dq, m, n, kk, qc)
         _down(ctx, dq, q, m * qc)
         ctx.synchronize()
         _ = dh^
         _ = dt^
         _ = dq^
-        _ = dw^
-        _ = dpd^
-        ctx.synchronize()
         _ = ctx^
 
     @staticmethod
