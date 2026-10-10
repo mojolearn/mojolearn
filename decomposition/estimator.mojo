@@ -396,7 +396,14 @@ from core.xtdz_coalesced import XTY_TILE_TPB, xty_tile_fold_kernel
 from experiments.classical_identical_ideas.shared_controls import C01_MEAN
 from checks.numerics import identical_mul_add
 
-#: T2, lane fg-pca (2026-10-09), DEFAULT OFF: `-D MOJOLEARN_IDN_COLVAR_FUSED`.
+#: T2, lane fg-pca (2026-10-09), MOJOLEARN_IDN_COLVAR_FUSED: the IDENTICAL
+#: DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D
+#: MOJOLEARN_IDN_COLVAR_FUSED_OFF` restores the shift + square passes; the old
+#: on-define is refused in core/six_lane_experiment_guards.mojo). fg2 A/B on
+#: main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, MI325X a1161-a1190;
+#: ratio = arm / fg2 default): tsvd taxi NV 0.76x / AMD 0.97x, tsvd istella NV
+#: 0.97x / AMD 0.97x, pca istella 1.00x / 1.00x, pca taxi NV 1.03x / AMD 1.00x;
+#: hashes unchanged (tsvd 8e8dc2a1 / 3747911d, pca 187a68d3 / 3cc2b456).
 #: `_column_variance` (TruncatedSVD's explained variance, on X and on X V^T)
 #: ran the mean pass, the centering pass (n*c read + write), the square pass
 #: (read + write) and the mean of the squares (read): 5 n*c words. Here the
@@ -415,7 +422,7 @@ comptime IDN_COLVAR_FUSED = (
     and IDN_DECOMP_MEAN_LAUNCH
     and not C01_MEAN
     and not TSVD_FAST_COLVAR
-    and is_defined["MOJOLEARN_IDN_COLVAR_FUSED"]()
+    and not is_defined["MOJOLEARN_IDN_COLVAR_FUSED_OFF"]()
 )
 
 

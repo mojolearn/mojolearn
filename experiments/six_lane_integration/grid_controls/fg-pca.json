@@ -108,15 +108,15 @@
    "note": "P5: spectrum order (spectrum_rank_desc, ties to the lower index) and top-k component gather on the device; only k x n components + 2 n words cross. Bits move only on tied eigenvalues (the old exchange sort's tie order); the host column reads the same switch: build the host binding with it too."
   },
   "colvar_fused": {
-   "define": "MOJOLEARN_IDN_COLVAR_FUSED",
+   "define": "MOJOLEARN_IDN_COLVAR_FUSED_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_COLVAR_FUSED"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_COLVAR_FUSED_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "decomposition/estimator.mojo:413",
     "decomposition/estimator.mojo:422",
@@ -124,8 +124,8 @@
    ],
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "bits_change": false,
-   "status": "new",
-   "note": "T2: _column_variance's second pass folds the centered squares in registers in xty_tiled's tile order and chain, X read-only (-2 read/write passes over X and over X V^T). Same words into the same fold."
+   "status": "promoted 2026-10-10 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "note": "T2: _column_variance's second pass folds the centered squares in registers in xty_tiled's tile order and chain, X read-only (-2 read/write passes over X and over X V^T). Same words into the same fold. PROMOTED: tsvd taxi NV 0.76x / AMD 0.97x, tsvd istella NV 0.97x / AMD 0.97x, pca istella 1.00x / 1.00x, pca taxi NV 1.03x / AMD 1.00x; hashes unchanged. The off arm restores the shift + square passes."
   }
  },
  "algorithms": {
