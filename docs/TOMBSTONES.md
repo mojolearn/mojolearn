@@ -1911,7 +1911,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
-| `MOJOLEARN_HDB_SELECT_DEVICE` | EXPERIMENTS.md:495 DROPPED-noise (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/detail/fast_apple.mojo:95` |
 | `MOJOLEARN_IVF_COARSE_FAISS_INIT` | EXPERIMENTS.md:1219 DROPPED-quality (lane/apple-fast-q-misc @ ab9acf0e8) | `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:183` |
 | `MOJOLEARN_IVF_COARSE_INIT_QOLD` | EXPERIMENTS.md:1219 DROPPED-quality (lane/apple-fast-q-misc @ ab9acf0e8) | `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:186` |
 | `MOJOLEARN_IVF_REFINE_TEAM` | EXPERIMENTS.md:326 DROPPED-noise (lane/apple-fast-batch @ 3150d75c1) | `x_ann/vsearch_fast.mojo:69` |
@@ -1977,3 +1976,4 @@ A DROP row was listed as owed, but the define stays: the reason is in each row.
 | define | DROP row | why it stays |
 |---|---|---|
 | `MOJOLEARN_HDB_ONE_SYNC` | EXPERIMENTS.md:494 | its route (one wait per output download set, extract.mojo / runner.mojo) is the IDENTICAL default through IDN_HDB_ONE_SYNC (hdbscan/impl/detail/idn_switches.mojo), and a later FAST Apple measurement (F15/hdbscan-downloads, M3 2026-10-06) was faster: cold B/A 0.95 / 0.92 / 0.89, repeated 0.90 / 0.94 / 0.87, quality equal; combined timing with the promoted linkage is owed |
+| `MOJOLEARN_HDB_SELECT_DEVICE` | EXPERIMENTS.md:495 | the code it selects (extract.mojo _extract_one_read) is the IDENTICAL default through IDN_HDB_SELECT_ONE_READ (hdbscan/impl/detail/idn_switches.mojo, the same comptime if); the define is only the FAST Apple switch of that default route, so no loser code can be removed; F15/hdbscan-selection (M3 2026-10-06) B/A 0.917-1.030, mixed |
