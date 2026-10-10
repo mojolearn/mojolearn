@@ -77,7 +77,8 @@ REGISTER_CALL = re.compile(r"^\s+register\(\s*(?:module|m)\s*\)", re.M)
 
 def _exports_in_source(name):
     text = _read(host_surface.binding_source(name))
-    names = DEF_FUNCTION.findall(text)
+    # a registration under a FAST-only PROBA64 / NC_PROBA64 gate never exists in an IDENTICAL host build
+    names = DEF_FUNCTION.findall(re.sub(r'comptime if (?:NC_)?PROBA64:\n\s+m\.def_function\[[^\n]*\n', '', text))
     if REGISTER_CALL.search(text):
         for mod in REGISTER_IMPORT.findall(text):
             names += DEF_FUNCTION.findall(_read(mod.replace(".", "/") + ".mojo"))

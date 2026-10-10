@@ -102,7 +102,9 @@ FAMILIES = (
             "x_prep_label_present", "x_prep_idn_int",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_prep_idn_fam", "x_prep_classical_shared", "x_prep_c08_routes",
-            "x_prep_idn_fam2", "x_prep_proba64",
+            "x_prep_idn_fam2",
+            # x_prep_proba64 is not listed: bindings/_mojolearn_x_prep_host.mojo:269 registers it only under the
+            # FAST-only PROBA64 gate, and a host binding is IDENTICAL (0.8.37 macOS wheel qualification).
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the prep lane's CPU route (preprocessing additions, naive Bayes, discriminant analysis).",
