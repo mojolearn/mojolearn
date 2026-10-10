@@ -17,7 +17,7 @@ How to restore a deleted experiment:
 
 Patches are the reverse of the deletion commit restricted to code files (`.mojo`, `.py`, `.sh` outside `tools/`, `bench/` and
 `docs/`; the guard file and the grid JSON are left out). A patch marked "all code hunks" is the whole deletion commit; the
-others keep only the hunks that name the define. Patches generated 2026-10-09 against main `4f2bd7e76`.
+others keep only the hunks that name the define. Patches generated 2026-10-09 against main `7f501620d`.
 
 Sources: the `removed` refusals in `core/six_lane_experiment_guards.mojo`, the `removed` lists in
 `experiments/six_lane_integration/grid_controls/*.json`, and the DROPPED / DELETED rows of `docs/apple-fast/EXPERIMENTS.md`.
@@ -221,28 +221,28 @@ in the tables after the sections.
 ### MOJOLEARN_ET_DEVICE_BATCH_65536
 
 - Verdict: DROPPED-slower. Deleted 2026-10-03 by `e242fb001` (extratrees: remove dropped ET_DEVICE_BATCH_65536 (DROPPED-slower; recover lane/apple-fast@269ffa57a)).
-- Recoverable at `dd47c5df0` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch` (applies cleanly to main at this commit).
+- Recoverable at `dd47c5df0` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `extratrees/estimator.mojo`
 - EXPERIMENTS.md:120 (Trees (101)): `ET_DEVICE_BATCH_65536` on et / taxi, lane/apple-fast @ 269ffa57a, A/B aft-ab-etb64, aft-ab-etb64b, on PART_ROWS: taxi 3,041 -> 3,080 ms, **DROPPED-slower**: +1.3%; code removed from main e242fb001; recover at lane/apple-fast@269ffa57a
 
 ### MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF
 
 - Verdict: removed. Deleted 2026-10-07 by `d631a057c` (trees: delete duplicate/loser defines (IDN_RF_ROWS_SORTED, IDN_RF_TASK_ROWS256, IDN_RF_DEVICE_LOOP_K*, IDN_ET_BINNED_U16 + host column, T29_YETI no-op)).
-- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-d631a057c.patch`.
+- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-d631a057c.patch`.
 - Files the patch restores: `extratrees/impl/decisiontree/batched_levelalgo/builder.mojo`
 - grid_controls/trees-small.json removed: sub-arm of deleted IDN_ET_BINNED_U16
 
 ### MOJOLEARN_ET_TPB_256
 
 - Verdict: DROPPED-slower. Deleted 2026-10-03 by `4a78e109a` (extratrees: remove dropped ET_TPB_256 (DROPPED-slower; recover lane/apple-fast@269ffa57a)).
-- Recoverable at `e242fb001` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_ET_TPB_256.patch` (applies cleanly to main at this commit).
+- Recoverable at `e242fb001` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_ET_TPB_256.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `extratrees/impl/decisiontree/batched_levelalgo/builder.mojo`
 - EXPERIMENTS.md:121 (Trees (101)): `ET_TPB_256` on et / taxi, istella, lane/apple-fast @ 269ffa57a, A/B aft-ab-ettpb, aft-ab-ettpb2, on PART_ROWS: taxi 3,030 -> 3,072; istella 4,133 -> 4,379 ms, **DROPPED-slower**: +1.4% / +6% (alone it was mixed); code removed from main 4a78e109a; recover at lane/apple-fast@269ffa57a
 
 ### MOJOLEARN_GBDT_CTR_FAST_SCAN
 
 - Verdict: DROPPED-noise. Deleted 2026-10-03 by `afda7b9ce` (gbdt scan: remove dropped GBDT_CTR_FAST_SCAN (DROPPED-noise; recover lane/apple-fast-trees-depthwise@f743edd60)).
-- Recoverable at `4a78e109a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_GBDT_CTR_FAST_SCAN.patch` (applies cleanly to main at this commit).
+- Recoverable at `4a78e109a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_GBDT_CTR_FAST_SCAN.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `gbdt/gpu_util/kernel/scan.mojo`, `gbdt/gpu_util/kernel/segmented_scan.mojo`
 - EXPERIMENTS.md:122 (Trees (101)): `GBDT_CTR_FAST_FREQ + GBDT_CTR_FAST_SCAN` on categorical, lane/apple-fast-trees-depthwise @ f743edd60, A/B tdw-cat-both, categorical 32,739 -> 27,662 ms, **DROPPED-noise**: same as FREQ alone; SCAN adds nothing; code removed from main afda7b9ce; recover at lane/apple-fast-trees-depthwise@f743edd60
 - EXPERIMENTS.md:123 (Trees (101)): `GBDT_CTR_FAST_SCAN` on categorical, lane/apple-fast-trees-depthwise @ f743edd60, A/B tdw-cat-scan, categorical 32,892 -> 33,044 ms, **DROPPED-noise**: +0.5%, overlap; code removed from main afda7b9ce; recover at lane/apple-fast-trees-depthwise@f743edd60
@@ -310,7 +310,7 @@ in the tables after the sections.
 ### MOJOLEARN_GBDT_SEG_SUMS_BLOCK
 
 - Verdict: DROPPED-noise. Deleted 2026-10-03 by `7ca37fd0b` (gbdt segmented sort: remove dropped GBDT_SEG_SUMS_BLOCK (DROPPED-noise; recover lane/apple-fast-rfet-scan@500168cfe)).
-- Recoverable at `eccc9be7e` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_GBDT_SEG_SUMS_BLOCK.patch` (applies cleanly to main at this commit).
+- Recoverable at `eccc9be7e` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_GBDT_SEG_SUMS_BLOCK.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `core/segmented_sort.mojo`, `gbdt/gpu_util/kernel/segmented_sort.mojo`
 - EXPERIMENTS.md:132 (Trees (101)): `GBDT_SEG_SUMS_BLOCK` on depthwise / taxi, lane/apple-fast-rfet-scan @ 500168cfe, A/B aft-ab-gbseg, 10,325 -> 10,293 ms, **DROPPED-noise**: -0.3%, overlap; stays opt-in; code removed from main 7ca37fd0b; recover at lane/apple-fast-rfet-scan@500168cfe
 
@@ -324,7 +324,7 @@ in the tables after the sections.
 ### MOJOLEARN_GBDT_SM_X8
 
 - Verdict: DROPPED-slower. Deleted 2026-10-03 by `eccc9be7e` (gbdt depthwise: remove dropped GBDT_SM_X8 (DROPPED-slower; recover lane/apple-fast-trees2@50dfdcca0)).
-- Recoverable at `e1b520e88` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_GBDT_SM_X8.patch` (applies cleanly to main at this commit).
+- Recoverable at `e1b520e88` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_GBDT_SM_X8.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo`
 - EXPERIMENTS.md:134 (Trees (101)): `GBDT_SM_X8` on lossguide / taxi, lane/apple-fast-trees2 @ 50dfdcca0, A/B aft-ab-smx8, taxi 16,483 -> 19,577 ms, **DROPPED-slower**: +19%; code removed from main eccc9be7e; recover at lane/apple-fast-trees2@50dfdcca0
 
@@ -339,14 +339,14 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT
 
 - Verdict: DROPPED. Deleted 2026-10-07 by `359df2d05` (trees: delete T16/I17 resident frontier (lost on NV+AMD) and duplicate T20; T17 batch and T21 streams become int sweeps).
-- Recoverable at `bad9c74ce` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-359df2d05.patch`.
+- Recoverable at `bad9c74ce` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-359df2d05.patch`.
 - Files the patch restores: `gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo`
 - EXPERIMENTS.md:1484 (IDENTICAL tree switch cleanup (lane/trees-cleanup, 2026-10-0): `MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT` on gbdt-lossguide, 10000x17, 10001x18, 32769x9, 10 trees, main @ 5b467815b, A/B I17 overnight-ab-20261006, AMD candidate/base 1.041, 1.292, 1.083; NVIDIA 1.114, 1.111, 1.116 ms, **DROP, code deleted**: slower on both vendors
 
 ### MOJOLEARN_IDN_RF_DEVICE_LOOP_K1
 
 - Verdict: noise. Deleted 2026-10-07 by `d631a057c` (trees: delete duplicate/loser defines (IDN_RF_ROWS_SORTED, IDN_RF_TASK_ROWS256, IDN_RF_DEVICE_LOOP_K*, IDN_ET_BINNED_U16 + host column, T29_YETI no-op)).
-- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K1.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-d631a057c.patch`.
+- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K1.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-d631a057c.patch`.
 - Files the patch restores: `ensemble/decisiontree/batched_levelalgo/builder.mojo`
 - grid_controls/trees-small.json removed: no gain (forest-final-decisions 2026-10-05); sweep is MOJOLEARN_TREES_T11_LEVELS; deleted
 - EXPERIMENTS.md:1565 (IDENTICAL tree switch dedupe and losers (lane/trees-small, 2): `MOJOLEARN_IDN_RF_DEVICE_LOOP_K1` on rf device level loop, Taxi + Istella, lane/trees-small @ 2394e18e1, A/B forest-final-decisions 2026-10-05, combined ratio K1 1.002993, K2 1.002050, K8 1.002461 ms, **DROP, defines deleted (no gain + duplicate)**: `MOJOLEARN_TREES_T11_LEVELS=1\
@@ -354,7 +354,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_RF_DEVICE_LOOP_K2
 
 - Verdict: noise. Deleted 2026-10-07 by `d631a057c` (trees: delete duplicate/loser defines (IDN_RF_ROWS_SORTED, IDN_RF_TASK_ROWS256, IDN_RF_DEVICE_LOOP_K*, IDN_ET_BINNED_U16 + host column, T29_YETI no-op)).
-- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-d631a057c.patch`.
+- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-d631a057c.patch`.
 - Files the patch restores: `ensemble/decisiontree/batched_levelalgo/builder.mojo`
 - grid_controls/trees-small.json removed: no gain (forest-final-decisions 2026-10-05); sweep is MOJOLEARN_TREES_T11_LEVELS; deleted
 
@@ -368,14 +368,14 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_RF_STREAM_REPLICAS
 
 - Verdict: DROPPED. Deleted 2026-10-07 by `e5ad4d891` (trees: delete T01/N07 streamed histogram replicas (lost on NV+AMD) and its experiment code).
-- Recoverable at `359df2d05` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_RF_STREAM_REPLICAS.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-e5ad4d891.patch`.
+- Recoverable at `359df2d05` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_RF_STREAM_REPLICAS.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-e5ad4d891.patch`.
 - Files the patch restores: `ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo`, `experiments/performance_ideas/N07/production_check.mojo`
 - EXPERIMENTS.md:1483 (IDENTICAL tree switch cleanup (lane/trees-cleanup, 2026-10-0): `MOJOLEARN_IDN_RF_STREAM_REPLICAS` on rf fit, generated 100000x32 and 131071x17, main @ cbcc8dcd3303 (source of the measurement), A/B N07 2026-10-06 (measurements/20261006/index.json), AMD 335.85 -> 347.28 (1.034); NVIDIA L40S 124.76 -> 161.31 (1.293); NVIDIA 131071x17 107.52 -> 131.88 (1.227) ms, **DROP, code deleted**: slower on both vendors; T01_ROWS (task rows) is covered by T02's cost rule
 
 ### MOJOLEARN_IDN_RF_TASK_ROWS256
 
 - Verdict: noise. Deleted 2026-10-07 by `d631a057c` (trees: delete duplicate/loser defines (IDN_RF_ROWS_SORTED, IDN_RF_TASK_ROWS256, IDN_RF_DEVICE_LOOP_K*, IDN_ET_BINNED_U16 + host column, T29_YETI no-op)).
-- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_RF_TASK_ROWS256.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-d631a057c.patch`.
+- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_RF_TASK_ROWS256.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-d631a057c.patch`.
 - Files the patch restores: `ensemble/decisiontree/batched_levelalgo/builder.mojo`, `experiments/performance_ideas/A07/production_check.mojo`
 - grid_controls/trees-small.json removed: measured neutral on NVIDIA and AMD (A07, overnight-ab-20261006); task rows are MOJOLEARN_TREES_T02; define deleted
 - EXPERIMENTS.md:1564 (IDENTICAL tree switch dedupe and losers (lane/trees-small, 2): `MOJOLEARN_IDN_RF_TASK_ROWS256` on rf histogram tasks; generated 100000x32, 100001x33, 65537x17, lane/trees-small @ 2394e18e1, A/B A07 (overnight-ab-20261006), L40S 124.910/126.939/92.868 -> 123.567/125.678/92.118; MI325X ratio 0.993/0.995/0.998 ms, **DROP, define deleted (neutral + duplicate)**: neutral on both vendors (<1.1%); the task-row knob is `MOJOLEARN_TREES_T02`'s cost rule (`histogram_task_rows`). Evidence: overnight-ab-20261006 amd/live/repair-summary.json, nvidia/default-repair-normalized-measurements.json
@@ -432,7 +432,7 @@ in the tables after the sections.
 ### MOJOLEARN_RF_FAST_BATCH16K
 
 - Verdict: DROPPED-noise. Deleted 2026-10-03 by `288809ef8` (rf: remove dropped RF_FAST_BATCH16K arm and the trees-apple3 one-shot A/B job scripts that request it (DROPPED-noise; recover lane/apple-fast-trees2@bfd1d7cc6)).
-- Recoverable at `f9af6028e` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_RF_FAST_BATCH16K.patch` (applies cleanly to main at this commit).
+- Recoverable at `f9af6028e` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_RF_FAST_BATCH16K.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `bindings/_mojolearn_rf.mojo`
 - EXPERIMENTS.md:139 (Trees (101)): `RF_NODESPLIT_ZERO_AFTER_READ + RF_FAST_BATCH16K` on rf / taxi, istella, lane/apple-fast-trees2 @ bfd1d7cc6, A/B aft-ab-rf1, taxi 11,502 -> 11,485; istella 14,324 -> 14,312 ms, **DROPPED-noise**: 0.1%; RF_FAST_BATCH16K: code removed from main 288809ef8; recover at lane/apple-fast-trees2@bfd1d7cc6; RF_NODESPLIT_ZERO_AFTER_READ: code removed from main 931143bf8; recover at lane/apple-fast-trees2@bfd1d7cc6
 
@@ -506,7 +506,7 @@ in the tables after the sections.
 ### MOJOLEARN_TREES_C47_GBDT
 
 - Verdict: DROPPED. Deleted 2026-10-07 by `ec793e91c` (gbdt: delete T27 alias and C47_GBDT width cap; guards refuse both; EXPERIMENTS rows).
-- Recoverable at `eb8efb83a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_C47_GBDT.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-ec793e91c.patch`.
+- Recoverable at `eb8efb83a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_C47_GBDT.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-ec793e91c.patch`.
 - Files the patch restores: `gbdt/trees_identical_switches.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:171): removed: MOJOLEARN_TREES_C47_GBDT (width cap subsumed by MOJOLEARN_TREES_T17_BATCH)
 - grid_controls/trees-cleanup.json removed (control C47_GBDT): DELETED by lane/grid-prune 2026-10-07: width cap subsumed by T17_BATCH; guards refuse it.
@@ -515,7 +515,7 @@ in the tables after the sections.
 ### MOJOLEARN_TREES_HIST_MULTISTAT
 
 - Verdict: slower. Deleted 2026-10-08 by `9c6dccee7` (grid-act-2: delete hist_multistat (both arms; grid ge123e6f9 gbdt-multiclass 1.15x/1.13x combined slower, quality same); refuse the define; tombstones).
-- Recoverable at `22187de78` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_HIST_MULTISTAT.patch` (applies cleanly to main at this commit).
+- Recoverable at `22187de78` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_HIST_MULTISTAT.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo`, `gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit_wide.mojo`, `gbdt/trees_hist_switches.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:199): removed: MOJOLEARN_TREES_HIST_MULTISTAT (=4|8) retired 2026-10-08: slower, gbdt-multiclass =4 NV 1.04x / AMD 1.41x istella, 1.07x / 1.11x taxi; =8 0.99x / 1.31x istella, 1.11x / 1.14x taxi; quality SAME (grid ge123e6f9); see EXPERIMENTS.md
 - grid_controls/trees-hist-ideas.json removed (control hist_multistat): DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser, both arms. arm/off ms ratio NV/AMD on gbdt-multiclass: =4 istella 1.038/1.410, taxi 1.066/1.110 (1.147x combined); =8 istella 0.994/1.311, taxi 1.106/1.136 (1.131x combined); accuracy and mlogloss SAME. The MultiClass >128-bin blocks take launch_one_byte[8] again; the wide kernel stays for HIST_SYM_FEATURE_PARALLEL. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo.
@@ -524,7 +524,7 @@ in the tables after the sections.
 ### MOJOLEARN_TREES_T01
 
 - Verdict: slower. Deleted 2026-10-07 by `e5ad4d891` (trees: delete T01/N07 streamed histogram replicas (lost on NV+AMD) and its experiment code).
-- Recoverable at `359df2d05` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T01.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-e5ad4d891.patch`.
+- Recoverable at `359df2d05` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T01.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-e5ad4d891.patch`.
 - Files the patch restores: `ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo`, `ensemble/tree_identical_ideas.mojo`
 - grid_controls/trees-cleanup.json removed: N07 streamed replicas lost on NVIDIA (1.293, 1.227) and AMD (1.034); code deleted with MOJOLEARN_IDN_RF_STREAM_REPLICAS
 - EXPERIMENTS.md:1483 (IDENTICAL tree switch cleanup (lane/trees-cleanup, 2026-10-0): `MOJOLEARN_TREES_T01` on rf fit, generated 100000x32 and 131071x17, main @ cbcc8dcd3303 (source of the measurement), A/B N07 2026-10-06 (measurements/20261006/index.json), AMD 335.85 -> 347.28 (1.034); NVIDIA L40S 124.76 -> 161.31 (1.293); NVIDIA 131071x17 107.52 -> 131.88 (1.227) ms, **DROP, code deleted**: slower on both vendors; T01_ROWS (task rows) is covered by T02's cost rule
@@ -532,7 +532,7 @@ in the tables after the sections.
 ### MOJOLEARN_TREES_T01_REPLICAS
 
 - Verdict: removed. Deleted 2026-10-07 by `e5ad4d891` (trees: delete T01/N07 streamed histogram replicas (lost on NV+AMD) and its experiment code).
-- Recoverable at `359df2d05` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T01_REPLICAS.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-e5ad4d891.patch`.
+- Recoverable at `359df2d05` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T01_REPLICAS.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-e5ad4d891.patch`.
 - Files the patch restores: `ensemble/tree_identical_ideas.mojo`
 - grid_controls/trees-cleanup.json removed: sub-parameter of deleted T01
 
@@ -546,7 +546,7 @@ in the tables after the sections.
 ### MOJOLEARN_TREES_T09
 
 - Verdict: dead code. Deleted 2026-10-07 by `eb8efb83a` (trees: delete ET T09 bootstrap sort (unreachable, host sync in fit); guard refuses MOJOLEARN_TREES_T09; EXPERIMENTS row).
-- Recoverable at `225398f14` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T09.patch` (applies cleanly to main at this commit).
+- Recoverable at `225398f14` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T09.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `ensemble/tree_identical_ideas.mojo`, `extratrees/impl/decisiontree/batched_levelalgo/builder.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:169): removed: MOJOLEARN_TREES_T09 (ExtraTrees bootstrap sort: unreachable at bootstrap=False, host sync in fit)
 - grid_controls/trees-cleanup.json removed (control T09_ET): DELETED by lane/grid-prune 2026-10-07: unreachable on the board (et bootstrap=False) and a host sync inside the fit; guards refuse MOJOLEARN_TREES_T09. Recoverable at main ab554bb4a.
@@ -580,7 +580,7 @@ in the tables after the sections.
 ### MOJOLEARN_TREES_T27
 
 - Verdict: dead code. Deleted 2026-10-07 by `ec793e91c` (gbdt: delete T27 alias and C47_GBDT width cap; guards refuse both; EXPERIMENTS rows).
-- Recoverable at `eb8efb83a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T27.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-ec793e91c.patch`.
+- Recoverable at `eb8efb83a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T27.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-ec793e91c.patch`.
 - Files the patch restores: `gbdt/methods/leaves_estimation/pointwise_oracle.mojo`, `gbdt/trees_identical_switches.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:170): removed: MOJOLEARN_TREES_T27 (alias of MOJOLEARN_2030_FUSED_EST_MOVE; inert on board walks)
 - grid_controls/trees-cleanup.json removed (control T27): DELETED by lane/grid-prune 2026-10-07: alias of MOJOLEARN_2030_FUSED_EST_MOVE, inert on board walks; guards refuse it.
@@ -589,7 +589,7 @@ in the tables after the sections.
 ### MOJOLEARN_TREES_T29_VERSIONED
 
 - Verdict: slower. Deleted 2026-10-08 by `bd14ae97f` (grid-act-2: delete T29 versioned arm (MOJOLEARN_TREES_T29_VERSIONED; grid ge123e6f9 pairlogit istella 3.43x/3.76x slower); T29 on stays; refuse the define; tomb).
-- Recoverable at `9c6dccee7` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T29_VERSIONED.patch` (applies cleanly to main at this commit).
+- Recoverable at `9c6dccee7` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T29_VERSIONED.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `gbdt/host/gbdt_oracle_pair.mojo`, `gbdt/targets/kernel/pair_logit_group.mojo`, `gbdt/targets/kernel/tree_t29_pair.mojo`, `gbdt/targets/tree_t29_units.mojo`, `gbdt/trees_identical_switches.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:200): removed: MOJOLEARN_TREES_T29_VERSIONED (T29 arm 'versioned') retired 2026-10-08: slower, gbdt-rank-pairlogit istella NV 3.43x / AMD 3.76x (grid ge123e6f9); MOJOLEARN_TREES_T29 alone stays; see EXPERIMENTS.md
 - grid_controls/trees-cleanup.json removed (control T29): DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. versioned/off ms ratio NV/AMD: gbdt-rank-pairlogit istella 3.429/3.757 (2985.4 -> 10235.7 NV, 1655.7 -> 6219.9 AMD); 3.59x combined SLOWER. Deleted gbdt/targets/kernel/tree_t29_pair.mojo, gbdt/targets/tree_t29_units.mojo, the versioned launch in pair_logit_group.mojo and the host _group_values_t29 path in gbdt_oracle_pair.mojo; T29 'on' (unmeasured) stays. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo.
@@ -598,7 +598,7 @@ in the tables after the sections.
 ### MOJOLEARN_TREES_T29_YETI
 
 - Verdict: dead code. Deleted 2026-10-07 by `d631a057c` (trees: delete duplicate/loser defines (IDN_RF_ROWS_SORTED, IDN_RF_TASK_ROWS256, IDN_RF_DEVICE_LOOP_K*, IDN_ET_BINNED_U16 + host column, T29_YETI no-op)).
-- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T29_YETI.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-d631a057c.patch`.
+- Recoverable at `2394e18e1` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_TREES_T29_YETI.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-d631a057c.patch`.
 - Files the patch restores: `gbdt/trees_identical_switches.mojo`
 - grid_controls/trees-cleanup.json removed: no-op on NVIDIA and AMD (yeti_block_parallel_for already True under IDENTICAL); deleted by lane trees-small 2026-10-07
 - EXPERIMENTS.md:1567 (IDENTICAL tree switch dedupe and losers (lane/trees-small, 2): `MOJOLEARN_TREES_T29_YETI` on gbdt rank-yetirank, lane/trees-small @ 2394e18e1, A/B none, n/a ms, **DROP, define deleted (no-op)**: `yeti_block_parallel_for` already selects the block kernel on NVIDIA and AMD under IDENTICAL, so the switch changed nothing; the negative arm stays `MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF`
@@ -650,7 +650,7 @@ in the tables after the sections.
 ### MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF
 
 - Verdict: slower. Deleted 2026-10-08 by `3d12702e7` (grid-act-3: delete the c13_fold_stats_ridgecv off switch (MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF; grid ge123e6f9 off arm 1.19x/1.11x istella, 19.5x/18.0x taxi s).
-- Recoverable at `d3f096a80` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF.patch` (applies cleanly to main at this commit).
+- Recoverable at `d3f096a80` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `experiments/classical_identical_ideas/linear_controls.mojo`, `x_linear/ridgecv.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:207): removed: MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF retired 2026-10-08: the off arm is slower, ridge-cv NV 1.19x / AMD 1.11x istella, NV 19.5x / AMD 18.0x taxi, quality SAME (grid ge123e6f9); the RidgeCV fold cache is the only IDENTICAL route; see EXPERIMENTS.md
 - grid_controls/classical-cv.json removed (control c13_fold_stats_ridgecv): DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9, the off arm loses. off/on ms ratio NV/AMD: ridge-cv istella 1.19/1.11 (23110.5 -> 27500.3 NV, 62881.7 -> 69645.8 AMD), taxi 19.52/18.01 (152.2 -> 2970.3 NV, 287.9 -> 5183.8 AMD); quality SAME. The switch is gone: C13_FOLD_STATS = CLASSICAL_IDN (the fold cache is the only IDENTICAL RidgeCV route; FAST keeps the per-fold passes). Recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo.
@@ -675,7 +675,7 @@ in the tables after the sections.
 ### MOJOLEARN_CLASSICAL_C20_ROW_CACHE
 
 - Verdict: serial shape. Deleted 2026-10-07 by `fc5c573f7` (svm: delete C20_ROW_CACHE (per-row host loop + 1x1 publish kernel); refuse the define; C22_TRIANGLE and C20_PAIR_LOAD square tile reachable again).
-- Recoverable at `608a7cf4a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_C20_ROW_CACHE.patch` (applies cleanly to main at this commit).
+- Recoverable at `608a7cf4a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_C20_ROW_CACHE.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `experiments/classical_identical_ideas/linear_controls.mojo`, `svm/impl/classical_kernel_device.mojo`, `svm/impl/kernelcache.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:45): removed: C20_ROW_CACHE was a host loop of 3 launches per working-set row (one 1x1); forbidden serial shape, incumbent square tile is parallel
 - grid_controls/classical-misc.json removed: forbidden serial shape; incumbent parallel. Host loop over n_ws working-set rows, 3 launches per row incl. a 1x1 publish kernel (kernelcache.mojo:327-338). Incumbent square tile is gather + identical GEMM. Code, kernels and slot buffers deleted; guard rejects the define; recoverable at origin/integration/switches-20261007 608a7cf4a (lane serial-cleanup, 2026-10-07)
@@ -684,7 +684,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF
 
 - Verdict: slower. Deleted 2026-10-08 by `37b572c78` (grid-act-2: delete the ols_one_entry off switch (MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF; grid ge123e6f9 off arm 2.97x/1.74x istella, 6.17x/3.83x taxi slower, r2 same);).
-- Recoverable at `3df299f27` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF.patch` (applies cleanly to main at this commit).
+- Recoverable at `3df299f27` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `python/mojolearn/linear_model.py`, `x_decomp/api.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:202): removed: MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF retired 2026-10-08: the off arm is slower, ols NV 2.97x / AMD 1.74x istella, NV 6.17x / AMD 3.83x taxi, r2 SAME (grid ge123e6f9); the one-entry route is the only IDENTICAL OLS route; see EXPERIMENTS.md
 - grid_controls/classical-fixes.json removed (control ols_one_entry): DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser (the OFF arm). off/on ms ratio NV/AMD on ols: istella 2.968/1.738 (816.2 -> 2422.8 NV, 468.9 -> 815.1 AMD), taxi 6.165/3.828 (34.0 -> 209.9 NV, 14.5 -> 55.4 AMD); r2 SAME. The one-entry resident TSQR is the only IDENTICAL OLS route (x_decomp/api.mojo IDN_OLS_ONE_ENTRY = IDENTICAL; MOJOLEARN_IDN_ALL_OFF no longer clears it); the Python four-crossing sequence stays only for FAST builds and older bindings. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo.
@@ -693,7 +693,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_SGD_EPOCH_KERNEL
 
 - Verdict: noise. Deleted 2026-10-09 by `0c5b780af` (postmerge-act-2: delete fg-linear S1 (MOJOLEARN_IDN_SGD_EPOCH_KERNEL; post-merge A/B nv n0606->n0615, amd a1065->a1074: sgd-clf istella NV 0.99x / AMD 1.00x, ta).
-- Recoverable at `5c137b55e` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_SGD_EPOCH_KERNEL.patch` (applies cleanly to main at this commit).
+- Recoverable at `5c137b55e` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_SGD_EPOCH_KERNEL.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `experiments/classical_identical_ideas/fg_linear_controls.mojo`, `x_linear/device.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:225): removed 2026-10-09 (post-merge A/B nv n0606->n0615, amd a1065->a1074, lane/postmerge-act-2): fg-linear S1 (large-batch SGD through the K-batch chunk kernel) was NOISE: sgd-clf istella NV 0.99x / AMD 1.00x, taxi NV 1.00x / AMD 1.00x, accuracy SAME, same digests; code at main 5c137b55e; see EXPERIMENTS.md
 - grid_controls/fg-linear.json removed (control sgd_epoch_kernel): DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found S1 noise: candidate/default sgd-clf istella NV 1588.5 -> 1576.7 ms (0.99x) / AMD 3961.9 -> 3957.3 (1.00x), taxi NV 1036.6 -> 1033.1 (1.00x) / AMD 2320.4 -> 2325.9 (1.00x) (nv n0606 -> n0615, amd a1065 -> a1074); accuracy SAME (0.92033 / 0.75533), same digests. The define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e.
@@ -791,7 +791,7 @@ in the tables after the sections.
 ### MOJOLEARN_RIDGE_FAST_CLS1_PREDICT
 
 - Verdict: DROPPED-noise. Deleted 2026-10-03 by `9decae29f` (gap-cls1: BAYES/ARD CLS1 STATS/PARTS/BATCH, RIDGE CLS1 CODES, NC CLS1 LABELS FAST+Apple default (_OFF); drop RIDGE/NC PREDICT and KNN PRESEED/SLICES2).
-- Recoverable at `ebea91010` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-9decae29f.patch`.
+- Recoverable at `ebea91010` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-9decae29f.patch`.
 - Files the patch restores: `python/mojolearn/_expansion_linear.py`, `x_linear/cls1_fast.mojo`, `x_linear/device.mojo`
 - EXPERIMENTS.md:249 (Linear (46)): `RIDGE_FAST_CLS1_CODES + RIDGE_FAST_CLS1_PREDICT` on ridge-clf / taxi, lane/apple-fast-gap-cls1 @ 4e341dc41, A/B gapcls1-rcall-taxi, ridge-clf taxi 120 -> 20.2 ms, **DROPPED-noise**: no better than CODES alone
 - EXPERIMENTS.md:250 (Linear (46)): `RIDGE_FAST_CLS1_PREDICT` on ridge-clf / taxi, lane/apple-fast-gap-cls1 @ 4e341dc41, A/B gapcls1-rcpred-taxi, ridge-clf taxi -1.4% ms, **DROPPED-noise**: <5%
@@ -799,7 +799,7 @@ in the tables after the sections.
 ### MOJOLEARN_SGD_PERC_QOLD
 
 - Verdict: DROPPED-quality. Deleted 2026-10-04 by `170cbedc0` (apple-fast verdicts 4: revert SGD_PERC averaging, IVF_COARSE_FAISS_INIT, KNN_FAST_REFINE to opt-in (rab5-perc, rab5-ivfinit, rab5-knnref)).
-- Recoverable at `a0118d426` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch` (applies cleanly to main at this commit).
+- Recoverable at `a0118d426` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo`, `neighbors/estimator.mojo`, `x_linear/sgd.mojo`, `x_linear/sgd_avg.mojo`
 - EXPERIMENTS.md:1228 (Quality fixes, classifiers (lane/apple-fast-q-clf, 2026-10-0): `MOJOLEARN_SGD_PERC_QOLD` on perceptron / taxi, istella (x_linear/sgd.mojo `SGD_PERC_AVG`, x_linear/sgd_avg.mojo), lane/apple-fast-q-clf @ a3bd71a65, A/B (owed), (owed) ms, **DROPPED-quality**: reconciled 2026-10-05: rab5-perc taxi 1401.12 -> 1400.29, accuracy .76219 -> .74097, Verdicts batch 4; reverted, opt-in MOJOLEARN_SGD_PERC_AVG. Was QUALITY-FIX, READY-AB: minibatch Perceptron returns the mean of its epoch-end iterates from epoch max_iter//2 on; audit accuracy 0.465 vs sklearn 0.751; float32 numpy model of the step (taxi 1M rows): last iterate 0.543/0.774/0.668/0.757 over seeds, mean 0.771/0.769/0.774; device grid + FAST host column
 
@@ -818,7 +818,7 @@ in the tables after the sections.
 ### MOJOLEARN_C29_TILE
 
 - Verdict: serial shape. Deleted 2026-10-07 by `58146b270` (knn: delete C29_STREAM_TOPK + C29_TILE (one thread per query over every index row); KNN_DIRECT_DISTANCE keeps only the row-major direct tile (host twin unchange).
-- Recoverable at `fc5c573f7` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_C29_TILE.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-58146b270.patch`.
+- Recoverable at `fc5c573f7` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_C29_TILE.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-58146b270.patch`.
 - Files the patch restores: `experiments/classical_identical_ideas/graph_controls.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:50): removed: C29_STREAM_TOPK (and MOJOLEARN_C29_TILE) was one thread per query walking every index row; forbidden serial shape, incumbent kNN top-k is parallel
 - grid_controls/classical-misc.json removed: loop-blocking knob of the deleted C29 stream kernel only (C29_REFERENCE_TILE); guard rejects the define; recoverable at origin/integration/switches-20261007 608a7cf4a (lane serial-cleanup, 2026-10-07)
@@ -855,7 +855,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_PQ_SCAN_FUSED
 
 - Verdict: slower. Deleted 2026-10-09 by `27fa9d4b1` (postmerge-act-3: delete fg-ivf A5 MOJOLEARN_IDN_PQ_SCAN_FUSED (ivf-pq istella NV 1.80x / AMD 1.00x, taxi NV 1.77x / AMD 1.00x slower, recall equal; nv n0669-n06).
-- Recoverable at `0cc28e9bd` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_PQ_SCAN_FUSED.patch` (applies cleanly to main at this commit).
+- Recoverable at `0cc28e9bd` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_PQ_SCAN_FUSED.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `x_ann/ivf_scan_device.mojo`, `x_ann/vsearch_fast.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:230): removed 2026-10-09 (post-merge A/B nv n0669-n0671, amd a1131->a1132, lane/postmerge-act-3): fg-ivf A5 (pq_scan_fused_kernel as the IDENTICAL IVF-PQ score + top-k) was SLOWER: ivf-pq istella NV 1.80x / AMD 1.00x, taxi NV 1.77x / AMD 1.00x, recall equal; the tiled score + select chain stays (FAST Apple keeps PQ_SCAN_FUSED); see EXPERIMENTS.md, code at main a47bd9fb2
 - grid_controls/fg-ivf.json removed (control idn_pq_scan_fused): DELETED 2026-10-09 (lane postmerge-act-3): post-merge A/B on main a47bd9fb2 (one run per arm) found fg-ivf A5 slower: ivf-pq istella NV 1.80x / AMD 1.00x (AMD 853.1 -> 852.4 ms), taxi NV 1.77x / AMD 1.00x (195.0 -> 195.5), recall@10 equal (nv n0669-n0671, amd a1131 -> a1132). The IDENTICAL scan keeps the tiled score + select chain; FAST Apple keeps PQ_SCAN_FUSED. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at main a47bd9fb2.
@@ -898,7 +898,7 @@ in the tables after the sections.
 ### MOJOLEARN_IVF_LAYOUT_SCATTER
 
 - Verdict: slower. Deleted 2026-10-09 by `27fa9d4b1` (postmerge-act-3: delete fg-ivf A5 MOJOLEARN_IDN_PQ_SCAN_FUSED (ivf-pq istella NV 1.80x / AMD 1.00x, taxi NV 1.77x / AMD 1.00x slower, recall equal; nv n0669-n06).
-- Recoverable at `0cc28e9bd` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IVF_LAYOUT_SCATTER.patch` (applies cleanly to main at this commit).
+- Recoverable at `0cc28e9bd` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IVF_LAYOUT_SCATTER.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `ivf/impl/neighbors/ivf_flat/ivf_group_device.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:231): removed 2026-10-09 (post-merge A/B nv n0669-n0671, amd a1131->a1133, lane/postmerge-act-3): fg-ivf B3 (counting-sort IVF list layout) was SLOWER: ivf-pq istella NV 1.62x / AMD 1.00x, taxi NV 1.80x / AMD 1.00x, recall equal; the radix-sort layout stays; see EXPERIMENTS.md, code at main a47bd9fb2
 - grid_controls/fg-ivf.json removed (control ivf_layout_scatter): DELETED 2026-10-09 (lane postmerge-act-3): post-merge A/B on main a47bd9fb2 (one run per arm) found fg-ivf B3 slower: ivf-pq istella NV 1.62x / AMD 1.00x (AMD 853.1 -> 851.6 ms), taxi NV 1.80x / AMD 1.00x (195.0 -> 195.3), recall@10 equal (nv n0669-n0671, amd a1131 -> a1133). The radix-sort layout stays. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at main a47bd9fb2.
@@ -908,7 +908,7 @@ in the tables after the sections.
 ### MOJOLEARN_KNN_FAST_CLS1_PRESEED
 
 - Verdict: DROPPED-noise. Deleted 2026-10-03 by `9decae29f` (gap-cls1: BAYES/ARD CLS1 STATS/PARTS/BATCH, RIDGE CLS1 CODES, NC CLS1 LABELS FAST+Apple default (_OFF); drop RIDGE/NC PREDICT and KNN PRESEED/SLICES2).
-- Recoverable at `ebea91010` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-9decae29f.patch`.
+- Recoverable at `ebea91010` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-9decae29f.patch`.
 - Files the patch restores: `neighbors/impl/detail/fast_mma_knn.mojo`
 - EXPERIMENTS.md:293 (Neighbors (42)): `KNN_FAST_CLS1_PRESEED` on knn / istella, lane/apple-fast-gap-cls1 @ 4e341dc41, A/B gapcls1-knnseed-istella, knn istella 357 -> 343 ms, **DROPPED-noise**: -3.9%, n=1, marginal
 - EXPERIMENTS.md:294 (Neighbors (42)): `KNN_FAST_CLS1_PRESEED + KNN_FAST_CLS1_SLICES2` on knn / istella, lane/apple-fast-gap-cls1 @ 4e341dc41, A/B gapcls1-knnall-istella, knn istella 357 -> 385 ms, **DROPPED-slower**: slower
@@ -970,7 +970,7 @@ in the tables after the sections.
 ### MOJOLEARN_XN_PCS_SPARSE
 
 - Verdict: DROPPED-noise. Deleted 2026-10-03 by `3d1c6bd73` (x_neighbors: remove dropped XN_PCS_SPARSE and x_neighbors/pcs_sparse.mojo (DROPPED-noise; recover lane/apple-fast-neighbors2@5fb6edd3f)).
-- Recoverable at `f103d7381` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_XN_PCS_SPARSE.patch` (applies cleanly to main at this commit).
+- Recoverable at `f103d7381` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_XN_PCS_SPARSE.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `x_neighbors/iter_device.mojo`, `x_neighbors/pcs_sparse.mojo`
 - EXPERIMENTS.md:560 (Kernel / GP (11)): `XN_PCS_SPARSE` on poly-count-sketch / taxi, lane/apple-fast-neighbors2 @ 5fb6edd3f, A/B n2-pcs-sparse-taxi, poly-count-sketch taxi 0.3 -> 0.3 ms, **DROPPED-noise**: no change; code removed from main 3d1c6bd73; recover at lane/apple-fast-neighbors2@5fb6edd3f
 
@@ -994,7 +994,7 @@ in the tables after the sections.
 ### MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS
 
 - Verdict: slower. Deleted 2026-10-08 by `d3f096a80` (grid-act-3: delete c61_da and c61_nb (both arms; the shared C61 csbm_* ops 190-192; grid ge123e6f9 lda-clf NV 1.38x/1.54x AMD 1.04x/1.11x, gaussian-nb NV 1.37-1).
-- Recoverable at `c829cbe51` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch` (applies cleanly to main at this commit).
+- Recoverable at `c829cbe51` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `bindings/_mojolearn_x_prep.mojo`, `bindings/_mojolearn_x_prep_host.mojo`, `experiments/classical_identical_ideas/shared_controls.mojo`, `python/mojolearn/_expansion_prep.py`, `x_prep/blocked.mojo`, `x_prep/units.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:206): removed: MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS (=1|2) and MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS retired 2026-10-08: slower, gaussian-nb NV 1.37-1.58x / AMD 1.02-1.08x, lda-clf NV 1.38x/1.54x / AMD 1.04x/1.11x (istella/taxi), quality SAME (grid ge123e6f9); see EXPERIMENTS.md
 - grid_controls/classical-nbda.json removed (control c61_da): DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: lda-clf istella 1.38/1.04 (201.0 -> 277.3 NV, 295.6 -> 307.2 AMD), taxi 1.54/1.11 (15.2 -> 23.4 NV, 16.4 -> 18.3 AMD); 1.25x combined SLOWER; quality SAME. Shares the deleted C61 csbm_* ops 190-192 (x_prep/blocked.mojo) with c61_nb; the Python LDA/QDA routes are the blocked two-pass class stats again. Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo.
@@ -1058,7 +1058,7 @@ in the tables after the sections.
 ### MOJOLEARN_XPREP_NO_SLOT_HOP
 
 - Verdict: slower. Deleted 2026-10-09 by `dbfe642a7` (postmerge-act-2: delete fg-knn-nb G3 (MOJOLEARN_XPREP_NO_SLOT_HOP; post-merge A/B nv n0668->n0630, amd a1066->a1090: gaussian-nb istella NV 1.25x / AMD 1.00x, t).
-- Recoverable at `08b1152e6` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_XPREP_NO_SLOT_HOP.patch` (applies cleanly to main at this commit).
+- Recoverable at `08b1152e6` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_XPREP_NO_SLOT_HOP.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `bindings/_mojolearn_x_prep.mojo`, `core/arena_io.mojo`, `core/device_store.mojo`, `python/mojolearn/_arena_io.py`, `python/mojolearn/_expansion_prep.py`, `x_prep/device.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:227): removed 2026-10-09 (post-merge A/B nv n0668->n0630, amd a1066->a1090, lane/postmerge-act-2): fg-knn-nb G3 (large direct inputs as host spans straight into the x_prep arena) was SLOWER on the average: gaussian-nb istella NV 1.25x / AMD 1.00x, taxi NV 1.02x / AMD 1.03x, accuracy SAME, same digests; x_prep_run_ranges_host, upload_ranges_host and the _Prog.run glue deleted; code at main 5c137b55e; see EXPERIMENTS.md
 - grid_controls/fg-knn-nb.json removed (control xprep_no_slot_hop): DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found G3 (large direct inputs as host spans straight into the arena) slower on the average: default -> on ms gaussian-nb istella NV 92.1 -> 114.7 (1.25x) / AMD 46.4 -> 46.3 (1.00x), taxi NV 20.0 -> 20.4 (1.02x) / AMD 14.1 -> 14.5 (1.03x) (nv n0668 -> n0630, amd a1066 -> a1090); accuracy SAME, same digests. x_prep_run_ranges_host, run_program_device_ranges_host, core/arena_io.mojo upload_ranges_host, DeviceStore.stage_upload and the _Prog.run glue are deleted; the define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e.
@@ -1110,7 +1110,7 @@ in the tables after the sections.
 ### MOJOLEARN_CLASSICAL_PCA_COV=23
 
 - Verdict: slower. Deleted 2026-10-08 by `3df299f27` (grid-act-2: delete PCA_COV=23 arm (grid ge123e6f9 pca istella 2.28x/1.27x slower, taxi 0.90x/0.78x; combined 1.195x slower); c04 stays; refuse =23; tombstones).
-- Recoverable at `bd14ae97f` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm23.patch` (applies cleanly to main at this commit).
+- Recoverable at `bd14ae97f` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm23.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `core/blocked_moments.mojo`, `core/blocked_moments_host.mojo`, `decomposition/host/pca_oracle.mojo`, `decomposition/impl/linalg/detail/pca.mojo`, `experiments/classical_identical_ideas/linear_controls.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:201): removed: MOJOLEARN_CLASSICAL_PCA_COV=23 (C23 one-pass covariance) retired 2026-10-08: slower, pca NV 2.28x / AMD 1.27x istella, NV 0.90x / AMD 0.78x taxi, combined 1.195x (grid ge123e6f9); =4 (c04) stays; see EXPERIMENTS.md
 - grid_controls/classical-decomp.json removed (control PCA_COV): DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. c23/off ms ratio NV/AMD on pca: istella 2.281/1.265 (154.0 -> 351.3 NV, 53.1 -> 67.2 AMD), taxi 0.903/0.782; combined 1.195x SLOWER (dimension-dependent: the one-pass d x d leaf Gram loses at wide d; lane grid-flips-1 refused to flip it). Deleted the C23 branch in decomposition/impl/linalg/detail/pca.mojo and pca_oracle.mojo, bm_onepass_covariance (core/blocked_moments.mojo) and its host twin; c04 stays (unmeasured), C23_MCD is separate. Code recoverable at main 42d1e42c6; =23 refused in core/six_lane_experiment_guards.mojo.
@@ -1131,7 +1131,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_PCA_RR_ONE_BLOCK
 
 - Verdict: broken. Deleted 2026-10-09 by `16a2c0dd3` (postmerge-act-5: delete IDN_PCA_RR_ONE_BLOCK (broken on NVIDIA, nv2 v1030), tombstones).
-- Recoverable at `a837c5d08` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_PCA_RR_ONE_BLOCK.patch` (applies cleanly to main at this commit).
+- Recoverable at `a837c5d08` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_PCA_RR_ONE_BLOCK.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `decomposition/impl/linalg/detail/pca.mojo`, `decomposition/pca_rr_switch.mojo`, `x_decomp/rr.mojo`, `x_decomp/rr_one_block.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:238): removed 2026-10-09 (fg2 A/B nv2 v1030, lane/postmerge-act-5): fg-pca P1+P1b (one-launch one-block round-robin Jacobi, x_decomp/rr_one_block.mojo) was BROKEN on NVIDIA: pca and tsvd on taxi and istella REFUSED at decomposition/impl/linalg/detail/pca.mojo:734; code at main 0a7b206f1; see EXPERIMENTS.md
 - grid_controls/fg-pca.json removed (control pca_rr_one_block): DELETED 2026-10-09 (lane postmerge-act-5): fg2 board-bridge A/B on main 0a7b206f1 found P1+P1b BROKEN on NVIDIA (nv2 v1030): pca and tsvd on taxi and istella REFUSED at decomposition/impl/linalg/detail/pca.mojo:734:55. x_decomp/rr_one_block.mojo and the pca.mojo launch deleted; define (and _STEPS) refused in core/six_lane_experiment_guards.mojo; code recoverable at main 0a7b206f1.
@@ -1193,7 +1193,7 @@ in the tables after the sections.
 ### MOJOLEARN_BGMM_ENT
 
 - Verdict: DROPPED-noise. Deleted 2026-10-03 by `31b0cf94c` (bgmm: the k-sized float64 host updates move onto the device (float-float workspace, one scalar block per iteration); default priors on the device).
-- Recoverable at `266bf8f33` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_BGMM_ENT.patch` (applies cleanly to main at this commit).
+- Recoverable at `266bf8f33` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_BGMM_ENT.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `x_cluster/bgmm.mojo`
 - EXPERIMENTS.md:481 (Cluster (38)): `BGMM_ENT` on bayesian-gmm / taxi, lane/apple-fast-cluster2 @ ded4ea07b, A/B cluster2-bgmm-ent-taxi, - ms, **DROPPED-noise**: reconciled 2026-10-05: cluster2-bgmm-ent-taxi-b 309.8 -> 310.5 (+0.2%), mean_log_likelihood same (LEDGER 2026-10-03); deleted at deee07721. Was OPEN: A/B queued, no judged result yet
 
@@ -1257,14 +1257,14 @@ in the tables after the sections.
 ### MOJOLEARN_CC_FAST_OFF
 
 - Verdict: removed. Deleted 2026-10-08 by `2851a6627` (PageRank/Louvain accept CSR (pointer handoff to xn_pr_csr/xn_louvain_csr); connected_components batched rounds + device relabel on every vendor, C33 CC chunking).
-- Recoverable at `db707d03a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CC_FAST_OFF.patch` (applies cleanly to main at this commit).
+- Recoverable at `db707d03a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CC_FAST_OFF.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `python/mojolearn/_expansion_neighbors.py`, `x_neighbors/iter_device.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:48): removed: connected_components' batched rounds with the device relabel are the only path (lane gap-graph 2026-10-08); the per-round-wait path is gone
 
 ### MOJOLEARN_GMM_FAST_ESTEP_STACK
 
 - Verdict: DROPPED-slower. Deleted 2026-10-03 by `7b2638a38` (mixture estep: remove dropped GMM_FAST_ESTEP_STACK (DROPPED-slower; recover lane/apple-fast-linear@1c7c213f8)).
-- Recoverable at `7ca37fd0b` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_GMM_FAST_ESTEP_STACK.patch` (applies cleanly to main at this commit).
+- Recoverable at `7ca37fd0b` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_GMM_FAST_ESTEP_STACK.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `mixture/checks/estep.mojo`
 - EXPERIMENTS.md:473 (Cluster (38)): `GMM_FAST_BIG_CHOL + GMM_FAST_ESTEP_STACK + GMM_FAST_GRID_COV` on gmm / istella, lane/apple-fast-linear @ 1c7c213f8, A/B linear-gmm-all-istella, gmm istella 6,587 -> 9,046 ms, **DROPPED-slower**: +37.3%; GMM_FAST_ESTEP_STACK: code removed from main 7b2638a38; recover at lane/apple-fast-linear@1c7c213f8; GMM_FAST_GRID_COV: code removed from main dc1b4cc03; recover at lane/apple-fast-linear@1c7c213f8
 - EXPERIMENTS.md:474 (Cluster (38)): `GMM_FAST_ESTEP_STACK` on gmm / istella, lane/apple-fast-linear @ 1c7c213f8, A/B linear-gmm-es-istella, gmm istella 6,566 -> 6,886 ms, **DROPPED-slower**: +4.9%; code removed from main 7b2638a38; recover at lane/apple-fast-linear@1c7c213f8
@@ -1298,7 +1298,7 @@ in the tables after the sections.
 ### MOJOLEARN_KMEANS_DIRECT_DISTANCE
 
 - Verdict: slower. Deleted 2026-10-08 by `a5eb8a916` (grid-act-2: delete kmeans_assign direct arms (MOJOLEARN_KMEANS_DIRECT_DISTANCE; grid ge123e6f9 direct4 12.7x/6.2x istella, 1.78x/1.96x taxi slower, inertia same).
-- Recoverable at `72716663a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_KMEANS_DIRECT_DISTANCE.patch` (applies cleanly to main at this commit).
+- Recoverable at `72716663a` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_KMEANS_DIRECT_DISTANCE.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `cluster/checks/plus_plus.mojo`, `cluster/host/kmeans_oracle.mojo`, `cluster/impl/detail/classical_assignment.mojo`, `cluster/impl/detail/kmeans.mojo`, `cluster/impl/detail/kmeans_transform.mojo`, `cluster/impl/detail/min_cluster_distance_compute.mojo`, `experiments/classical_identical_ideas/graph_controls.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:196): removed: MOJOLEARN_KMEANS_DIRECT_DISTANCE (kmeans_assign direct arms) retired 2026-10-08: slower, kmeans direct4 NV 12.7x / AMD 6.2x istella, NV 1.78x / AMD 1.96x taxi, inertia SAME (grid ge123e6f9); MOJOLEARN_KMEANS_ROW_ASSIGN=2|4 stays; see EXPERIMENTS.md
 - grid_controls/classical-kmeans.json removed (control kmeans_assign): DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. direct4/tiled ms ratio NV/AMD: kmeans istella 12.695/6.192 (620.2 -> 7873.6 NV, 541.0 -> 3349.7 AMD), taxi 1.777/1.961; combined 4.07x SLOWER; inertia SAME. The direct arms (direct2 shares the code, not a grid arm) are gone from the row kernel, k-means++, k-means||, transform and the host oracle; rows2/rows4 stay. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo.
@@ -1408,7 +1408,7 @@ in the tables after the sections.
 ### MOJOLEARN_SEQ_FAST_THETA_HOIST
 
 - Verdict: DROPPED-noise. Deleted 2026-10-03 by `239fde86d` (sequence/theta: remove dropped SEQ_FAST_THETA_HOIST (DROPPED-noise on top of THETA_SPEC, gaptsa-spechoist-theta-taxi-hourly 21.8 -> 21.5; recover lane/apple-fas).
-- Recoverable at `7c0839144` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_THETA_HOIST.patch` (applies cleanly to main at this commit).
+- Recoverable at `7c0839144` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_THETA_HOIST.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `sequence/theta.mojo`
 - EXPERIMENTS.md:547 (Time series (34)): `SEQ_FAST_THETA_HOIST` on theta / taxi-hourly, lane/apple-fast-gap-tsa @ e9da47064, A/B gaptsa-thetahoist-theta-taxi-hourly, theta taxi-hourly 218 -> 58 ms, **DROPPED-noise**: -73% alone (at 976a585a0); on top of THETA_SPEC (default) gaptsa-spechoist-theta-taxi-hourly 21.8 -> 21.5 (-1%, noise); code removed from main 239fde86d; recover at lane/apple-fast-gap-tsa@e9da47064
 
@@ -1426,7 +1426,7 @@ in the tables after the sections.
 ### MOJOLEARN_KERNEL_FAST_GPR_RESIDENT
 
 - Verdict: DROPPED-semantics. Deleted 2026-10-03 by `cc300add8` (gaussian_process: remove dropped KERNEL_FAST_GPR_RESIDENT note (DROPPED-semantics, no code on main; recover lane/apple-fast-kernel@9e851777c)).
-- Recoverable at `e33bb66e0` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_KERNEL_FAST_GPR_RESIDENT.patch` (applies cleanly to main at this commit).
+- Recoverable at `e33bb66e0` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_KERNEL_FAST_GPR_RESIDENT.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `gaussian_process/estimator.mojo`
 - EXPERIMENTS.md:556 (Kernel / GP (11)): `KERNEL_FAST_GPR_RESIDENT` on gpr / istella, lane/apple-fast-kernel @ 9e851777c, A/B kernel-gpr-resident-ist, gpr istella 168 -> 133 ms, **DROPPED-semantics**: not made default: main resident GPR chain already covers it; lane arm folded on host; note removed from main cc300add8 (no code was on main); recover at lane/apple-fast-kernel@9e851777c
 
@@ -1442,7 +1442,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_AF_VEC_FUSED
 
 - Verdict: noise. Deleted 2026-10-09 by `0b7bde4ca` (postmerge-act-5: delete IDN_AF_VEC_FUSED (noise, avg 0.98x), tombstones).
-- Recoverable at `16a2c0dd3` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_AF_VEC_FUSED.patch` (applies cleanly to main at this commit).
+- Recoverable at `16a2c0dd3` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_AF_VEC_FUSED.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `sequence/adafactor.mojo`, `sequence/af_fused.mojo`, `sequence/dispatch.mojo`, `sequence/exec.mojo`, `sequence/exec_device.mojo`, `sequence/ops.mojo`, `sequence/pyapi.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:239): removed 2026-10-09 (neural A/B nv2 v1010/v1012, amd a1141/a1143, lane/postmerge-act-5): neural-io-2 Adafactor fused vector step (sequence/af_fused.mojo, OP_AF_VFUSE/OP_AF_VFIN) was NOISE: adafactor synthetic NV 13.671 -> 13.738 ms (1.00x), AMD 8.620 -> 8.186 ms (0.95x), avg 0.98x, digest aa99a3dc unchanged; code at main 0a7b206f1; see EXPERIMENTS.md
 - grid_controls/neural-io-2.json removed (control idn_af_vec_fused): DELETED 2026-10-09 (lane postmerge-act-5): post-merge A/B, one run per arm, found it NOISE: adafactor synthetic NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), vendor average 0.98x; digest aa99a3dc unchanged. sequence/af_fused.mojo, OP_AF_VFUSE/OP_AF_VFIN and the pyapi route deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 0a7b206f1.
@@ -1452,7 +1452,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE
 
 - Verdict: slower. Deleted 2026-10-07 by `52aecf2f3` (attention head share: NN17/NI19 merged into MOJOLEARN_IDN_ATTN_HEAD_SHARE=4; delete I06/NI19 two-head loser).
-- Recoverable at `f96f2f28b` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE.patch` (applies cleanly to main at this commit).
+- Recoverable at `f96f2f28b` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `experiments/performance_ideas/attention_time.mojo`, `transformer/impl/llama/fused_attention.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:104): MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE is retired: see experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json
 - grid_controls/neural-gemm-attn-dedupe.json removed: I06/NI19 two-head GQA reuse: measured loser on MI325X (1.21x) and L40S (1.15/1.11x); deleted, EXPERIMENTS.md row
@@ -1469,7 +1469,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_NEURAL_LEAF
 
 - Verdict: slower. Deleted 2026-10-07 by `870bcd1f9` (GEMM leaf: one switch MOJOLEARN_IDN_GEMM_LEAF (neural128/neural256/all256); delete I04 leaf64 loser).
-- Recoverable at `25881f493` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NEURAL_LEAF.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-870bcd1f9.patch`.
+- Recoverable at `25881f493` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NEURAL_LEAF.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-870bcd1f9.patch`.
 - Files the patch restores: `gemm/contract.mojo`, `gemm/experiments/neural_profile.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:97): MOJOLEARN_IDN_NEURAL_LEAF is retired: see experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json
 - grid_controls/neural-gemm-attn-dedupe.json removed: leaf-64 arm of NN03: same loser; legal set now 128/256
@@ -1479,7 +1479,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_NEURAL_NN05
 
 - Verdict: slower. Deleted 2026-10-08 by `ed0527dce` (grid-act-4: delete the neural_gemm_pair nn05 arm (MOJOLEARN_IDN_NEURAL_NN05; grid ge123e6f9 lm-forward 2.19x/2.80x, lm-train-step 3.72x/2.44x, transformer-forwa).
-- Recoverable at `4495dac01` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NEURAL_NN05.patch` (applies cleanly to main at this commit).
+- Recoverable at `4495dac01` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NEURAL_NN05.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `gemm/experiments/neural_grouped.mojo`, `gemm/neural_dispatch.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:217): removed 2026-10-08 (grid ge123e6f9, lane/grid-act-4): neural_gemm_pair=nn05 (fused gate/up pair kernel) was SLOWER on both vendors: lm-forward NV 2.19x / AMD 2.80x, lm-train-step 3.72x / 2.44x, transformer-forward 3.85x / 3.47x (3.0x combined); same bits; code at main 4e3da4282, see docs/apple-fast/EXPERIMENTS.md
 - grid_controls/neural-gemm-attn-dedupe.json removed (control neural_gemm_pair): DELETED 2026-10-08 (lane grid-act-4): IDENTICAL grid ge123e6f9 loser. nn05/off ms NV/AMD: lm-forward 65.8 -> 144.4 / 34.2 -> 95.9 (2.19x / 2.80x), lm-train-step 36.0 -> 134.1 / 42.7 -> 104.2 (3.72x / 2.44x), transformer-forward 7.3 -> 28.1 / 3.2 -> 11.1 (3.85x / 3.47x); 3.0x combined SLOWER; hashes equal to the incumbent (no bits). _neural_pair_kernel (gemm/neural_dispatch.mojo) and neural_grouped_ab's shared-left / grouped arms (gemm/experiments/neural_grouped.mojo) deleted; nn07 stays. Code recoverable at main 4e3da4282; the define refused in core/six_lane_experiment_guards.mojo.
@@ -1497,7 +1497,7 @@ in the tables after the sections.
 ### MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE
 
 - Verdict: dead code. Deleted 2026-10-07 by `8b90439d5` (L11: delete unreferenced rejected NI13 weight-cache helper; EXPERIMENTS row).
-- Recoverable at `8a44c9587` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE.patch` (applies cleanly to main at this commit).
+- Recoverable at `8a44c9587` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `x_cnn/neural_weight_cache.mojo`
 - grid_controls/neural-seq-train-dedupe.json removed: DELETED: rejected at source review, x_cnn/neural_weight_cache.mojo had no importer (EXPERIMENTS row)
 - EXPERIMENTS.md:1475 (IDENTICAL neural sequence/training switch dedupe (lane/neura): `NI13_CNN_WEIGHT_GENERATION_CACHE` on x_cnn (CNN forward), lane/neural-seq-train-dedupe (deleted; last present at 8be4d20d4), A/B none, - ms, **DROPPED-rejected**: rejected by source review (the shipped route performs no repack for a cache to remove); x_cnn/neural_weight_cache.mojo had no importer. Recoverable at 8be4d20d4
@@ -1505,7 +1505,7 @@ in the tables after the sections.
 ### MOJOLEARN_NN22_EAGER_DKDV_PAIR
 
 - Verdict: unmeasured. Deleted 2026-10-07 by `a1488ca2d` (attention/norm/rope/swiglu/kv-cache: one switch per idea (IDN_NORM, IDN_ROPE, IDN_TRAIN_SWIGLU, IDN_TRAIN_NO_DECODE_CACHE); delete NN22/NN23).
-- Recoverable at `8058b2554` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-a1488ca2d.patch`.
+- Recoverable at `8058b2554` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-a1488ca2d.patch`.
 - Files the patch restores: `transformer/checks/transformer_backward.mojo`, `transformer/experiments/attention_schedules.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:107): MOJOLEARN_NN22_EAGER_DKDV_PAIR is retired: see experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json
 - grid_controls/neural-gemm-attn-dedupe.json removed: eager-fallback backward only, unmeasured; deleted per brief
@@ -1514,7 +1514,7 @@ in the tables after the sections.
 ### MOJOLEARN_NN23_ROWDOT_DS
 
 - Verdict: unmeasured. Deleted 2026-10-07 by `a1488ca2d` (attention/norm/rope/swiglu/kv-cache: one switch per idea (IDN_NORM, IDN_ROPE, IDN_TRAIN_SWIGLU, IDN_TRAIN_NO_DECODE_CACHE); delete NN22/NN23).
-- Recoverable at `8058b2554` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-a1488ca2d.patch`.
+- Recoverable at `8058b2554` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch` (needs `git apply -3` (main moved on)); first apply `experiments/removed/_shared-a1488ca2d.patch`.
 - Files the patch restores: `transformer/checks/transformer_backward.mojo`, `transformer/experiments/attention_schedules.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:108): MOJOLEARN_NN23_ROWDOT_DS is retired: see experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json
 - grid_controls/neural-gemm-attn-dedupe.json removed: eager-fallback backward only, unmeasured; deleted per brief
@@ -1555,7 +1555,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_GEMM_FOLD_LEAF_64
 
 - Verdict: slower. Deleted 2026-10-07 by `870bcd1f9` (GEMM leaf: one switch MOJOLEARN_IDN_GEMM_LEAF (neural128/neural256/all256); delete I04 leaf64 loser).
-- Recoverable at `25881f493` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_GEMM_FOLD_LEAF_64.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-870bcd1f9.patch`.
+- Recoverable at `25881f493` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_GEMM_FOLD_LEAF_64.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-870bcd1f9.patch`.
 - Files the patch restores: `gemm/contract.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:101): MOJOLEARN_IDN_GEMM_FOLD_LEAF_64 is retired: see experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json
 - grid_controls/neural-gemm-attn-dedupe.json removed: I04 leaf 64: measured loser on MI325X (1.268x) and L40S; deleted, EXPERIMENTS.md row
@@ -1581,7 +1581,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_GEMM_OZAKI_LINALG
 
 - Verdict: slower. Deleted 2026-10-08 by `22187de78` (grid-act-2: delete gemm_ozaki_linalg (both arms; grid ge123e6f9 gemm S=4 3.97x/2.06x, S=5 7.99x/2.51x slower); refuse the define; tombstones).
-- Recoverable at `deae02e73` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_GEMM_OZAKI_LINALG.patch` (applies cleanly to main at this commit).
+- Recoverable at `deae02e73` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_GEMM_OZAKI_LINALG.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `gemm/host_entry.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:198): removed: MOJOLEARN_IDN_GEMM_OZAKI_LINALG retired 2026-10-08: slower, gemm S=4 NV 3.97x / AMD 2.06x, S=5 NV 7.99x / AMD 2.51x (grid ge123e6f9); the neural Ozaki profile (MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES) is separate; see EXPERIMENTS.md
 - grid_controls/neural-small.json removed (control gemm_ozaki_linalg): DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser, both arms. arm/off ms ratio NV/AMD on gemm gaussian: S=4 3.972/2.061 (69.6 -> 276.6 NV, 28.5 -> 58.8 AMD), S=5 7.986/2.510 (-> 556.2 NV, 71.6 AMD); combined 2.86x / 4.48x SLOWER. The linalg GEMM calls gemm_identical directly again (gemm/host_entry.mojo); MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES (the neural Ozaki profile) is untouched. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo.
@@ -1598,7 +1598,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1
 
 - Verdict: slower. Deleted 2026-10-09 by `d48c5eaaf` (grid-act-5: delete the neural_gemm_epilogue mlp arm (MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE bit 1, NN06; grid ge123e6f9 mlp-train-step NV 1.9x / AMD 0.97x, 1.367x c).
-- Recoverable at `f3d27d1e2` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE-arm1.patch` (applies cleanly to main at this commit).
+- Recoverable at `f3d27d1e2` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE-arm1.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `gemm/experiments/neural_epilogue.mojo`, `gemm/experiments/neural_tiled_v2.mojo`, `training/mlp_ops.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:220): removed 2026-10-08 (grid ge123e6f9, lane/grid-act-5): neural_gemm_epilogue=mlp (MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE bit 1, NN06 fused MLP GEMM + bias/ReLU) was SLOWER: mlp-train-step NV 1.9x (2.0 -> 3.8 ms) / AMD 0.97x (3.5 -> 3.4 ms), 1.367x combined; same bits; only =2 (cnn) remains; code at main 8ed94710a, see docs/apple-fast/EXPERIMENTS.md
 - grid_controls/neural-gemm-attn-dedupe.json removed: removed 2026-10-08 (lane grid-act-5): neural_gemm_epilogue=mlp (NN06 fused MLP GEMM + bias/ReLU, gemm/experiments/neural_epilogue.mojo and training/mlp_ops.mojo _mlp_fused_projection) grid ge123e6f9 loser, mlp-train-step NV 2.0->3.8 / AMD 3.5->3.4 ms (1.367x combined slower), same bits; guard refuses bit 1; EXPERIMENTS.md row; code at main 8ed94710a
@@ -1607,7 +1607,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3
 
 - Verdict: slower. Deleted 2026-10-08 by `7663b5335` (grid-act-3: delete the neural_gemm_schedule stream_all arm (MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3, NI02; grid ge123e6f9 gemm 2.07x/1.78x, lm-train-step 1.11x/1.0).
-- Recoverable at `89a183889` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm3.patch` (applies cleanly to main at this commit).
+- Recoverable at `89a183889` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm3.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `gemm/checks/gemm_identical.mojo`, `gemm/experiments/neural_switches.mojo`, `x_cnn/device.mojo`
 - What happened: stream_all arm (NI02): grid ge123e6f9 gemm NV 2.07x / AMD 1.78x slower (lane grid-act-3); see the commit message and EXPERIMENTS.md.
 - grid_controls/neural-gemm-attn-dedupe.json removed (control neural_gemm_schedule): DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. stream_all/off ms ratio NV/AMD: gemm gaussian 2.07/1.78 (61.9 -> 128.4 NV, 28.5 -> 50.7 AMD), lm-train-step 1.11/1.07 (36.0 -> 40.0 NV, 42.7 -> 45.7 AMD); 1.45x combined SLOWER; quality not judged. NI02 (gemm/checks/gemm_identical.mojo _ni02_* kernels, dispatch, workspace sizing, identical_gemm_streaming_applies and the x_cnn pre-check) deleted; geometry, stream, stream_exact, pages, cost, fold_exact, threadmap, pages_threadmap stay. Code recoverable at main bc10b8b56; =3 refused in core/six_lane_experiment_guards.mojo.
@@ -1628,7 +1628,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_NN20_SPLIT_KV
 
 - Verdict: slower. Deleted 2026-10-08 by `89a183889` (grid-act-3: delete the attn_softmax summary_tree arm (MOJOLEARN_IDN_ATTN_SOFTMAX=1, NN20, and its split-KV controls; grid ge123e6f9 lm/samba/transformer 1.6-43x).
-- Recoverable at `3d12702e7` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-89a183889.patch`.
+- Recoverable at `3d12702e7` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-89a183889.patch`.
 - Files the patch restores: `transformer/experiments/attention_summary_split.mojo`, `transformer/experiments/summary_model.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:208): removed: MOJOLEARN_IDN_NN20_SPLIT_KV (and _LEAVES) retired 2026-10-08 with the summary_tree arm it split (MOJOLEARN_IDN_ATTN_SOFTMAX=1, grid ge123e6f9 loser); see EXPERIMENTS.md
 - grid_controls/neural-fusions.json removed (control nn20_split_kv): DELETED 2026-10-08 (lane grid-act-3) with its parent arm attn_softmax=summary_tree (MOJOLEARN_IDN_ATTN_SOFTMAX=1, IDENTICAL grid ge123e6f9 loser, 1.6-43x slower NV/AMD): the split-KV code lived in transformer/experiments/attention_summary_split.mojo and summary_model.mojo, both deleted. Never measured on its own. Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo.
@@ -1637,7 +1637,7 @@ in the tables after the sections.
 ### MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES
 
 - Verdict: slower. Deleted 2026-10-08 by `89a183889` (grid-act-3: delete the attn_softmax summary_tree arm (MOJOLEARN_IDN_ATTN_SOFTMAX=1, NN20, and its split-KV controls; grid ge123e6f9 lm/samba/transformer 1.6-43x).
-- Recoverable at `3d12702e7` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES.patch` (applies cleanly to main at this commit); first apply `experiments/removed/_shared-89a183889.patch`.
+- Recoverable at `3d12702e7` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES.patch` (applies cleanly to main at the time of writing); first apply `experiments/removed/_shared-89a183889.patch`.
 - Files the patch restores: `transformer/experiments/attention_summary_split.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:208): removed: MOJOLEARN_IDN_NN20_SPLIT_KV (and _LEAVES) retired 2026-10-08 with the summary_tree arm it split (MOJOLEARN_IDN_ATTN_SOFTMAX=1, grid ge123e6f9 loser); see EXPERIMENTS.md
 - grid_controls/neural-fusions.json removed (control nn20_split_kv_leaves): DELETED 2026-10-08 (lane grid-act-3) with its parent arm attn_softmax=summary_tree (MOJOLEARN_IDN_ATTN_SOFTMAX=1, IDENTICAL grid ge123e6f9 loser, 1.6-43x slower NV/AMD): the split-KV code lived in transformer/experiments/attention_summary_split.mojo and summary_model.mojo, both deleted. Never measured on its own. Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo.
@@ -1791,9 +1791,9 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_ARIMA_FAST_D_CONCURRENT` | EXPERIMENTS.md:1409 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:140` |
 | `MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT` | EXPERIMENTS.md:1408 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:103` |
 | `MOJOLEARN_ARIMA_FAST_STEPWISE` | EXPERIMENTS.md:1417 DROPPED-slower (main a6ff25ff8) | `arima/impl/fast_order_search.mojo:201` |
-| `MOJOLEARN_BGMM_ESTEP1` | EXPERIMENTS.md:482 DROPPED-noise (lane/apple-fast-cluster2 @ ded4ea07b) | `x_cluster/bgmm.mojo:64` |
-| `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | EXPERIMENTS.md:314 DROPPED-quality (lane/apple-fast-w2-cagra (base b2b1c22bc)) | `x_ann/fast_env.mojo:78` |
-| `MOJOLEARN_CAGRA_FAST_SEEDS4` | EXPERIMENTS.md:308 DROPPED-semantics (lane/apple-fast-gap-cagra @ 2b16b4322) | `x_ann/fast_env.mojo:94` |
+| `MOJOLEARN_BGMM_ESTEP1` | EXPERIMENTS.md:482 DROPPED-noise (lane/apple-fast-cluster2 @ ded4ea07b) | `x_cluster/bgmm.mojo:66` |
+| `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | EXPERIMENTS.md:314 DROPPED-quality (lane/apple-fast-w2-cagra (base b2b1c22bc)) | `x_ann/fast_env.mojo:92` |
+| `MOJOLEARN_CAGRA_FAST_SEEDS4` | EXPERIMENTS.md:308 DROPPED-semantics (lane/apple-fast-gap-cagra @ 2b16b4322) | `x_ann/fast_env.mojo:108` |
 | `MOJOLEARN_CHOL_FAST_BLOCKED` | EXPERIMENTS.md:422 DROPPED-slower+quality 2026-10-04 (see verdicts batch 3) (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `x_decomp/fast_chol.mojo:5` |
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_DECOMP_FAST_GEMM_TILED` | EXPERIMENTS.md:425 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `x_decomp/fast_gemm.mojo:6` |
@@ -1837,7 +1837,7 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_PT_FOLD_NOX` | EXPERIMENTS.md:379 DROP (lane/apple-fast-ptimpute @ 9623cd7dc) | `x_prep/fastpt.mojo:8` |
 | `MOJOLEARN_PT_FUSED_TRANSFORM` | EXPERIMENTS.md:380 DROP (quality, with COLBATCH) (lane/apple-fast-batchv) | `x_prep/fastpt.mojo:18` |
 | `MOJOLEARN_PT_SPEC` | EXPERIMENTS.md:378 DROP (lane/apple-fast-batch @ 3150d75c1) | `x_prep/fastpt.mojo:14` |
-| `MOJOLEARN_QN_FAST_COALESCED_OFF` | EXPERIMENTS.md:247 DROPPED-slower (lane/apple-fast-linear @ 1c7c213f8) | `glm/impl/qn/glm_base.mojo:110` |
+| `MOJOLEARN_QN_FAST_COALESCED_OFF` | EXPERIMENTS.md:247 DROPPED-slower (lane/apple-fast-linear @ 1c7c213f8) | `glm/impl/qn/glm_base.mojo:112` |
 | `MOJOLEARN_QR_FAST_DEV` | EXPERIMENTS.md:453 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1251` |
 | `MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` | EXPERIMENTS.md:384 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:221` |
 | `MOJOLEARN_RESAMPLE_FAST_RANK_SORT` | EXPERIMENTS.md:386 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:205` |
@@ -1858,8 +1858,8 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_SYM_PART_STATS_PAR` | EXPERIMENTS.md:191 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/pointwise_scores.mojo:1954` |
 | `MOJOLEARN_SYM_REUSE_PARTITION` | EXPERIMENTS.md:193 DROPPED-noise (lane/apple-fast-sym-iter @ 4956a2234) | `gbdt/methods/sym_iter_fast.mojo:21` |
 | `MOJOLEARN_SYM_SCAN_SUB_FUSED` | EXPERIMENTS.md:194 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/split_properties_helpers.mojo:483` |
-| `MOJOLEARN_TREES_T29` | EXPERIMENTS.md:1710 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `gbdt/trees_identical_switches.mojo:70` |
+| `MOJOLEARN_TREES_T29` | EXPERIMENTS.md:1710 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `gbdt/trees_identical_switches.mojo:74` |
 | `MOJOLEARN_TSA2_KPSS` | EXPERIMENTS.md:544 DROPPED-noise (lane/apple-fast-gap-tsa @ e9da47064) | `tsa/impl/timeSeries/kpss_fused.mojo:7` |
 | `MOJOLEARN_TSVD_FAST_CHOLQR3` | EXPERIMENTS.md:1410 DROPPED-slower (lane/apple-fast-s-linalg) | `x_decomp/tsvd_fast.mojo:4` |
-| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | EXPERIMENTS.md:872 reconciled 2026-10-05: w2-mbk-labrg: quality PASS, istella 146.6 -> 144.0, taxi 45.3 -> 46.3 (Manager verdicts session 2: DROP-speed noise); opt-in only. Was OPEN, opt-in: Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode). ((not promoted)) | `x_cluster/minibatch_fast.mojo:156` |
+| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | EXPERIMENTS.md:872 reconciled 2026-10-05: w2-mbk-labrg: quality PASS, istella 146.6 -> 144.0, taxi 45.3 -> 46.3 (Manager verdicts session 2: DROP-speed noise); opt-in only. Was OPEN, opt-in: Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode). ((not promoted)) | `x_cluster/minibatch_fast.mojo:160` |
 | `MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID` | EXPERIMENTS.md:150 DROPPED-noise (lane/apple-fast-yetirank @ c7b35fd7c) | `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2945` |
