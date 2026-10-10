@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only shape and registry for the configured decoder language model."""
-from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2, IDN_ATTENTION_V2
+from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 from training.neural_arithmetic_profile import neural_arithmetic_suffix
@@ -171,14 +171,16 @@ def byte_lm_arithmetic_suffix() -> String:
     the CE token-tree, GEMM-leaf and online-tile32 attention tags, so a
     grid A/B arm built with MOJOLEARN_IDN_CE_TOKEN_FOLD=2 or
     MOJOLEARN_IDN_ATTN_SOFTMAX=2 (freeze 20261010, AMD CMD lines) was
-    refused with "Byte-LM requires the exact native profile". The tags stay
-    in the profile: those arms change bits, so a checkpoint must carry them
-    and a binary without them must refuse it. What identifies the binary
+    refused with "Byte-LM requires the exact native profile". (Both of those
+    arms were deleted 2026-10-10 as A/B losers, so their tags are now always
+    empty; see docs/TOMBSTONES.md.) The tags stay in the profile: an arm that
+    changes bits must be carried by a checkpoint, and a binary without it
+    must refuse it. What identifies the binary
     (base profile version, numeric mode, vendor) is still checked
     separately and still refuses a real mismatch.
 
-    The CE token-tree tag is appended for every shape, the chunked LM head
-    included (it has its own V2 loss graph and never calls CE L12): the
+    A bit-changing tag (the CE token-tree tag, while it existed) is appended
+    for every shape, the chunked LM head included (it has its own V2 loss graph and never calls CE L12): the
     same rule as `neural_arithmetic_suffix`, where a graph the binary was
     built with belongs to the serialized arithmetic version even when one
     model does not use it. A no-argument suffix keeps the loader check
@@ -188,5 +190,6 @@ def byte_lm_arithmetic_suffix() -> String:
     # NI08/I04 are new GEMM graphs on every column. Keep checkpoint
     # identity distinct from leaf128 even when architecture is unchanged.
     var gemm_version = String("") if CONTRACT_K_LEAF_MIN == 128 else String("-gemm-leaf") + String(CONTRACT_K_LEAF_MIN)
-    var attention_version = String("-attention-online-tile32-v2") if IDN_ATTENTION_V2 else String("")
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    var attention_version = String("")
     return neural_arithmetic_suffix() + loss_version + gemm_version + attention_version

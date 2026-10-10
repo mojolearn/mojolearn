@@ -843,15 +843,14 @@ def neural_rng_binding(
 # ===========================================================================
 
 
-from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2, IDN_ATTENTION_V2
+from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 
 def training_experiment_profile_binding() raises -> PythonObject:
     """Checkpoint identity for optional NI34/35/08 numerical contracts."""
     var profile = String("baseline")
-    if IDN_ATTENTION_V2:
-        profile += "+attention-online-tile32-v2"
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
     if IDN_CHUNKED_LM_HEAD_V2:
         profile += "+head-serial-logit-chunked-v2"
     # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.

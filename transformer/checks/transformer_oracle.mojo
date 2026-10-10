@@ -828,8 +828,8 @@ def stage_tag(i: Int) raises -> String:
     )
 
 
-from training.neural_identical_experiments import IDN_ATTENTION_V2
-from transformer.impl.llama.attention_v2_model_host import attention_v2_host_forward
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
 struct TransformerStages(Movable):
@@ -895,7 +895,6 @@ struct TransformerStages(Movable):
     var k_rope_out: List[Float32]
     var kv_k_cache: List[Float32]
     var kv_v_cache: List[Float32]
-    var attn_v2: Bool
     var attn_scores: List[Float32]
     var attn_masked: List[Float32]
     var attn_max: List[Float32]
@@ -928,7 +927,6 @@ struct TransformerStages(Movable):
         self.k_rope_out = List[Float32]()
         self.kv_k_cache = List[Float32]()
         self.kv_v_cache = List[Float32]()
-        self.attn_v2 = False
         self.attn_scores = List[Float32]()
         self.attn_masked = List[Float32]()
         self.attn_max = List[Float32]()
@@ -2050,325 +2048,81 @@ def transformer_block_oracle(
     # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
     # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
     # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
-    if IDN_ATTENTION_V2 and not int15 and not opts.has_softcap() and plant.is_empty():
-        var av2 = attention_v2_host_forward(
-            st.q_rope_out, st.kv_k_cache, st.kv_v_cache,
-            b, l, nh, nkv, s, hd, own0, window, scale,
-        )
-        st.attn_v2 = True
-        scores = av2.scores.copy()
-        masked = av2.masked.copy()
-        amax = av2.maxima.copy()
-        aexp = av2.exps.copy()
-        adenom = av2.denominators.copy()
-        aweights = av2.weights.copy()
-        actx = av2.output.copy()
-        host_tick(hton, htk, "fwd.attention_v2")
-    else:
-        var fused_attn = ATTN_HOST_FUSED and not int15 and not opts.has_softcap()
-        if fused_attn:
-            _plant_refuse(len(scores), plant, PLANT_AT_SCORES)
-            _plant_refuse(len(masked), plant, PLANT_AT_MASKED)
-            var pidx = plant.idx.copy()
-            var pbits = plant.bits.copy()
-            var pat = plant.at
-            var npan = ghr_panel_count(s)
-            var plen = npan * hd * GHR_G
-            var kpan = host_f32_uninit(b * nkv * plen)
-            var kp_p = _hp(kpan)
-            var kvk_f = _hp(st.kv_k_cache)
-            var punits = b * nkv * npan
-            var pk_split = _row_split(punits, hd * GHR_G)
-            var pk_tasks = pk_split[0]
-            var pk_chunk = pk_split[1]
-            def _pack_k(task: Int) {imm kp_p, imm kvk_f, imm punits, imm pk_chunk, imm npan, imm plen, imm s, imm hd}:
-                for u in range(task * pk_chunk, min((task + 1) * pk_chunk, punits)):
-                    var head = u // npan
-                    var g = u % npan
-                    ghr_pack_b(kvk_f.unsafe_offset(head * s * hd), OP_NT, s, hd, kp_p.unsafe_offset(head * plen), g, g + 1)
-            if pk_tasks <= 1:
-                _pack_k(0)
-            else:
-                host_parallelize(_pack_k, pk_tasks)
-            actx = host_f32_uninit(m * qw)
-            var q_rope_f = _hp(st.q_rope_out)
-            var vcache_f = st.kv_v_cache.copy()
-            var arows = b * nh * l
-            #: units of ATTN_HOST_RB query rows of one (batch, head): `ghr_tile`
-            #: walks a K panel once for every row of the unit; the units are
-            #: dealt round-robin (unit u to task u % tasks) since causal rows
-            #: grow in work along the query axis.
-            comptime RB = 32
-            var nqb = (l + RB - 1) // RB
-            var units = b * nh * nqb
-            var a_tasks = host_row_tasks(units, RB * (s * hd + 6 * s))
-            var mfill_f = mask_fill()
-            var ufill_f = unmasked_fill()
-            def _attn_row(task: Int) {imm q_rope_f, imm kp_p, imm vcache_f, mut scores, mut masked, mut amax, mut aexp, mut adenom, mut aweights, mut actx, imm pidx, imm pbits, imm pat, imm units, imm a_tasks, imm nqb, imm l, imm s, imm hd, imm nh, imm nkv, imm n_rep, imm qw, imm npan, imm plen, imm scale, imm own0, imm window, imm mfill_f, imm ufill_f}:
-                var qblk = host_f32_uninit(RB * hd)
-                var cblk = host_f32_uninit(RB * s)
-                var q_p = _hp(qblk)
-                var c_p = _hp(cblk)
-                var u = task
-                while u < units:
-                    var qb = u % nqb
-                    var bh = u // nqb
-                    var h = bh % nh
-                    var bb = bh // nh
-                    var kv = h // n_rep
-                    var q0 = qb * RB
-                    var rows = min(RB, l - q0)
-                    for i in range(rows):
-                        var src = (bb * l + q0 + i) * qw + h * hd
-                        for d in range(hd):
-                            q_p.unsafe_store(i * hd + d, ftz(q_rope_f.unsafe_load(src + d)))
-                    ghr_tile(q_p, kp_p.unsafe_offset((bb * nkv + kv) * plen), c_p, s, hd, 0, rows, 0, npan)
-                    for i in range(rows):
-                        var qi = q0 + i
-                        var r = bh * l + qi
-                        var base = r * s
-                        span_scale(cblk, i * s, s, scale, scores, base)
-                        _apply_plant_row(scores, pidx, pbits, pat, PLANT_AT_SCORES, base, s)
-                        var vis = _visible_keys(own0, window, qi, s)
-                        var jlo = vis[0]
-                        var jhi = vis[1]
-                        span_add_scalar(scores, base, jlo, mfill_f, masked, base)
-                        span_add_scalar(scores, base + jlo, jhi - jlo + 1, ufill_f, masked, base + jlo)
-                        span_add_scalar(scores, base + jhi + 1, s - jhi - 1, mfill_f, masked, base + jhi + 1)
-                        _apply_plant_row(masked, pidx, pbits, pat, PLANT_AT_MASKED, base, s)
-                        var mx = span_fmax_fold(masked, base, s)
-                        amax[r] = ftz(mx)
-                        for j in range(jlo):
-                            aexp[base + j] = Float32(0.0)
-                            aweights[base + j] = Float32(0.0)
-                        for j in range(jhi + 1, s):
-                            aexp[base + j] = Float32(0.0)
-                            aweights[base + j] = Float32(0.0)
-                        span_exp_shift(masked, base + jlo, jhi - jlo + 1, mx, aexp, base + jlo)
-                        var acc = Float32(0.0)
-                        for j in range(jlo, jhi + 1):
-                            acc = ftz(ftz(acc) + ftz(aexp[base + j]))
-                        acc = ftz(acc)
-                        adenom[r] = acc
-                        span_div(aexp, base + jlo, jhi - jlo + 1, acc, aweights, base + jlo)
-                        attn_value_sum_lanes(
-                            aweights, base + jlo,
-                            vcache_f, (bb * nkv + kv) * s * hd + jlo * hd,
-                            actx, (bb * l + qi) * qw + h * hd, jhi - jlo + 1, hd,
-                        )
-                    u += a_tasks
-                _ = qblk^
-                _ = cblk^
-            if a_tasks <= 1:
-                _attn_row(0)
-            else:
-                host_parallelize(_attn_row, a_tasks)
-            _ = kpan^
-            _ = vcache_f^
-            host_tick(hton, htk, "fwd.attention")
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
+    var fused_attn = ATTN_HOST_FUSED and not int15 and not opts.has_softcap()
+    if fused_attn:
+        _plant_refuse(len(scores), plant, PLANT_AT_SCORES)
+        _plant_refuse(len(masked), plant, PLANT_AT_MASKED)
+        var pidx = plant.idx.copy()
+        var pbits = plant.bits.copy()
+        var pat = plant.at
+        var npan = ghr_panel_count(s)
+        var plen = npan * hd * GHR_G
+        var kpan = host_f32_uninit(b * nkv * plen)
+        var kp_p = _hp(kpan)
+        var kvk_f = _hp(st.kv_k_cache)
+        var punits = b * nkv * npan
+        var pk_split = _row_split(punits, hd * GHR_G)
+        var pk_tasks = pk_split[0]
+        var pk_chunk = pk_split[1]
+        def _pack_k(task: Int) {imm kp_p, imm kvk_f, imm punits, imm pk_chunk, imm npan, imm plen, imm s, imm hd}:
+            for u in range(task * pk_chunk, min((task + 1) * pk_chunk, punits)):
+                var head = u // npan
+                var g = u % npan
+                ghr_pack_b(kvk_f.unsafe_offset(head * s * hd), OP_NT, s, hd, kp_p.unsafe_offset(head * plen), g, g + 1)
+        if pk_tasks <= 1:
+            _pack_k(0)
         else:
-            var q_rope_p = _hp(st.q_rope_out)
-            var kvk_p = _hp(st.kv_k_cache)
-            for bb in range(b):
-                for h in range(nh):
-                    var kv = h // n_rep
-                    # the head's query and key matrices, rows over tasks (lane
-                    # neural-pass21): copies, one source cell to one destination
-                    var qmat = host_f32_uninit(l * hd)
-                    var kmat = host_f32_uninit(s * hd)
-                    var qm_p = _hp(qmat)
-                    var km_p = _hp(kmat)
-                    var g_split = _row_split(l + s, hd)
-                    var g_tasks = g_split[0]
-                    var g_chunk = g_split[1]
-                    def _gather(task: Int) {imm q_rope_p, imm kvk_p, imm qm_p, imm km_p, imm l, imm s, imm hd, imm qw, imm nkv, imm bb, imm h, imm kv, imm g_chunk}:
-                        for r in range(task * g_chunk, min((task + 1) * g_chunk, l + s)):
-                            if r < l:
-                                var qi = r
-                                for d in range(hd):
-                                    qm_p.unsafe_store(qi * hd + d, q_rope_p.unsafe_load((bb * l + qi) * qw + h * hd + d))
-                            else:
-                                var j = r - l
-                                for d in range(hd):
-                                    km_p.unsafe_store(j * hd + d, kvk_p.unsafe_load(((bb * nkv + kv) * s + j) * hd + d))
-                    if g_tasks <= 1:
-                        _gather(0)
-                    else:
-                        host_parallelize(_gather, g_tasks)
-                    var cell = _oracle_product(qmat, kmat, l, s, hd, int15)
-                    var sbase = (bb * nh + h) * l * s
-                    if not opts.has_softcap():
-                        # the scale over query rows as spans (the same per-cell lane
-                        # statement whichever task runs the row)
-                        var sc_split = _row_split(l, s)
-                        var sc_tasks = sc_split[0]
-                        var sc_chunk = sc_split[1]
-                        def _scale_rows(task: Int) {imm cell, mut scores, imm l, imm s, imm scale, imm sbase, imm sc_chunk}:
-                            var r0 = task * sc_chunk
-                            var r1 = min((task + 1) * sc_chunk, l)
-                            if r1 > r0:
-                                span_scale(cell, r0 * s, (r1 - r0) * s, scale, scores, sbase + r0 * s)
-                        if sc_tasks <= 1:
-                            _scale_rows(0)
-                        else:
-                            host_parallelize(_scale_rows, sc_tasks)
-                        continue
-                    for qi in range(l):
-                        for j in range(s):
-                            var sc = ftz(identical_mul(ftz(cell[qi * s + j]), scale))
-                            # DEVIATION 2947, `attn_softcap` (Gemma2's
-                            # `attn_logit_softcapping`, `eager_attention_forward` in
-                            # modeling_gemma2.py: `attn_weights = attn_weights /
-                            # softcap; attn_weights = torch.tanh(attn_weights);
-                            # attn_weights = attn_weights * softcap`), AFTER the scale
-                            # and BEFORE the mask: one `identical_div`, one
-                            # `identical_tanh` (DEVIATION 821's portable tanh), one
-                            # `identical_mul`, each flushed. Recorded into
-                            # `attn.scores`.
-                            if opts.has_softcap():
-                                var cap = ftz(opts.attn_softcap)
-                                var th = ftz(identical_tanh(ftz(identical_div(sc, cap))))
-                                sc = ftz(identical_mul(th, cap))
-                            scores[sbase + qi * s + j] = sc
-            _apply_plant(scores, plant, PLANT_AT_SCORES)
-            host_tick(hton, htk, "fwd.scores")
-
-            # ---- S13: the additive causal mask (EAF:205-206) ---------------------
-            # `attn_weights = attn_weights + attention_mask`, with the mask built at
-            # masking_utils.py:601-603 as `torch.finfo(dtype).min` where False and
-            # `0.0` where True.
-            #
-            # **AN ADD, NEVER A SELECT** (DEVIATION 803, contract 4.1(a)). The
-            # `+0.0` at an unmasked cell is not a no-op: `x + (+0.0) == x` for every
-            # finite x, every infinity and every NaN EXCEPT `x = -0.0`, where it
-            # gives `+0.0`. An implementation that skips the add where the mask is
-            # true keeps a `-0.0` the reference launders, and it passes every
-            # fixture that does not PLANT a negative zero. Sabotage
-            # `S13_MASK_SELECT`, fixture `adv_score_neg_zero`.
-            #
-            # **FINITE, NEVER `-inf`** (contract 4.1(b)). With `-inf` a fully masked
-            # row gives `-inf - (-inf) = NaN` and a computed NaN's payload is
-            # vendor-shaped. The causal mask never produces a fully masked row
-            # (position t always attends to itself) so the difference is not
-            # reachable through the mask alone; it IS reachable through an extreme
-            # score, which is fixture `adv_score_extreme`. Sabotage
-            # `S13_MASK_NEG_INF`.
-            #
-            # MAX's own reference kernels are inconsistent with themselves here and
-            # it is worth knowing: `_bmm0_bs` stamps out-of-range scores with
-            # `min_or_neg_inf` (mha.mojo:6639), `softmax_kernel` seeds its max with
-            # the FINITE `Scalar[dtype].MIN` (softmax.mojo:958), and
-            # `_softmax_warp_kernel` seeds with `min_or_neg_inf` (softmax.mojo:1063).
-            # Two spellings of one reduction in one file.
-            var mfill = mask_fill()
-            var ufill = unmasked_fill()
-            # ROWS OVER HOST TASKS (lane neural-pass7): a (batch, head, query) row's
-            # cells read that row of `scores` and the row's own position; the same
-            # statement per cell whichever task runs it.
-            var mrows = b * nh * l
-            var mtasks = host_row_tasks(mrows, 3 * s)
-            var mchunk = (mrows + mtasks - 1) // mtasks
-            # Each row is three spans (lane neural-pass12): the masked keys before
-            # the window, the visible keys, the masked keys after the query, each
-            # the same per-cell statement `ftz(ftz(score) + fill)` as lanes
-            # (`span_add_scalar`), the fill the one the per-cell test picked.
-            def _mask_rows(t: Int) {imm scores, mut masked, imm mrows, imm mchunk, imm l, imm s, imm own0, imm window, imm mfill, imm ufill}:
-                for r in range(t * mchunk, min((t + 1) * mchunk, mrows)):
-                    var qi = r % l
+            host_parallelize(_pack_k, pk_tasks)
+        actx = host_f32_uninit(m * qw)
+        var q_rope_f = _hp(st.q_rope_out)
+        var vcache_f = st.kv_v_cache.copy()
+        var arows = b * nh * l
+        #: units of ATTN_HOST_RB query rows of one (batch, head): `ghr_tile`
+        #: walks a K panel once for every row of the unit; the units are
+        #: dealt round-robin (unit u to task u % tasks) since causal rows
+        #: grow in work along the query axis.
+        comptime RB = 32
+        var nqb = (l + RB - 1) // RB
+        var units = b * nh * nqb
+        var a_tasks = host_row_tasks(units, RB * (s * hd + 6 * s))
+        var mfill_f = mask_fill()
+        var ufill_f = unmasked_fill()
+        def _attn_row(task: Int) {imm q_rope_f, imm kp_p, imm vcache_f, mut scores, mut masked, mut amax, mut aexp, mut adenom, mut aweights, mut actx, imm pidx, imm pbits, imm pat, imm units, imm a_tasks, imm nqb, imm l, imm s, imm hd, imm nh, imm nkv, imm n_rep, imm qw, imm npan, imm plen, imm scale, imm own0, imm window, imm mfill_f, imm ufill_f}:
+            var qblk = host_f32_uninit(RB * hd)
+            var cblk = host_f32_uninit(RB * s)
+            var q_p = _hp(qblk)
+            var c_p = _hp(cblk)
+            var u = task
+            while u < units:
+                var qb = u % nqb
+                var bh = u // nqb
+                var h = bh % nh
+                var bb = bh // nh
+                var kv = h // n_rep
+                var q0 = qb * RB
+                var rows = min(RB, l - q0)
+                for i in range(rows):
+                    var src = (bb * l + q0 + i) * qw + h * hd
+                    for d in range(hd):
+                        q_p.unsafe_store(i * hd + d, ftz(q_rope_f.unsafe_load(src + d)))
+                ghr_tile(q_p, kp_p.unsafe_offset((bb * nkv + kv) * plen), c_p, s, hd, 0, rows, 0, npan)
+                for i in range(rows):
+                    var qi = q0 + i
+                    var r = bh * l + qi
                     var base = r * s
+                    span_scale(cblk, i * s, s, scale, scores, base)
+                    _apply_plant_row(scores, pidx, pbits, pat, PLANT_AT_SCORES, base, s)
                     var vis = _visible_keys(own0, window, qi, s)
                     var jlo = vis[0]
                     var jhi = vis[1]
-                    span_add_scalar(scores, base, jlo, mfill, masked, base)
-                    span_add_scalar(scores, base + jlo, jhi - jlo + 1, ufill, masked, base + jlo)
-                    span_add_scalar(scores, base + jhi + 1, s - jhi - 1, mfill, masked, base + jhi + 1)
-            if mtasks <= 1:
-                _mask_rows(0)
-            else:
-                host_parallelize(_mask_rows, mtasks)
-            _apply_plant(masked, plant, PLANT_AT_MASKED)
-            host_tick(hton, htk, "fwd.mask")
-
-            # ---- S14 through S18: the softmax (EAF:208) --------------------------
-            # `nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)`,
-            # whose internals are ATen's and which contract section 5.4 records as
-            # THE ONE THING THIS LANE COULD NOT READ. There is no PyTorch checkout
-            # in `/Users/andrewhendel/CascadeProjects/upstream/`, verified again on
-            # 2026-08-25, so whether ATen's CUDA softmax divides or multiplies by a
-            # reciprocal is not known here. The profile pins the DIVISION because it
-            # is the spelling with one rounding. **That is a stated gap, not a
-            # decision made on evidence**, and it is the first thing to check when a
-            # PyTorch checkout lands.
-            # The rows (batch, head, query) are independent: row r = (bb*nh + h)*l + qi
-            # owns amax[r], adenom[r] and the s entries at r*s of aexp and aweights,
-            # and reads only masked's row r. They split over host tasks
-            # (`core/host_parallel.mojo`, lane neural-cpu); each row's statements are
-            # the serial walk's.
-            var srows = b * nh * l
-            var stasks = host_row_tasks(srows, s)
-            var schunk = (srows + stasks - 1) // stasks
-
-            # THE MASKED KEYS ARE SKIPPED, AND THAT IS THE CONTRACT'S OWN THEOREM
-            # (lane neural-pass10). A masked cell is exactly `-FLT_MAX` (contract
-            # 7.1: a finite score plus the mask fill rounds to the fill), so its
-            # exponential is exactly `+0.0` (the scalar's early return below
-            # -87.33655, `expf_lanes` the same on every bit pattern), its weight
-            # is `+0.0 / denom = +0.0`, and a `+0.0` term is bitwise inert in the
-            # `+0.0`-seeded serial ascending denominator chain (section 7.2's
-            # argument for decode == prefill, and the backward's `z` fold). So the
-            # exponential, the denominator and the weights run over the visible
-            # keys `[jlo, jhi]` only, and the masked cells are WRITTEN `+0.0`,
-            # which is the value the full walk stored. The row maximum stays over
-            # EVERY element of the row (contract 5.2).
-            def _softmax_rows(t: Int) {imm masked, mut amax, mut aexp, mut adenom, mut aweights, imm s, imm l, imm own0, imm window, imm srows, imm schunk}:
-                for r in range(t * schunk, min((t + 1) * schunk, srows)):
-                    var base = r * s
-                    var vis = _visible_keys(own0, window, r % l, s)
-                    var jlo = vis[0]
-                    var jhi = vis[1]
-
-                    # S14, the row maximum, over EVERY element of the row
-                    # INCLUDING the masked ones (contract 5.2, and it is not
-                    # "the unmasked prefix" -- section 7 rests on that).
-                    #
-                    # `identical_fmax` (DEVIATION 825), which canonicalizes a
-                    # NaN, flushes both operands and then SELECTS ON A TOTAL
-                    # ORDER KEY rather than on a float compare. There is no
-                    # hardware max instruction in it.
-                    #
-                    # **`core/pinned_reduce.mojo::pinned_block_max` MAY NOT BE
-                    # USED** and that refusal is the trap in this seam, because
-                    # it is the deterministic-looking helper already in the
-                    # tree. Its fold is a plain `other > red[tid]` compare
-                    # (:159-190), which is exactly the spelling IDENTITY_PATHS
-                    # row 13 closed everywhere else, and its own block comment
-                    # tells a caller whose inputs can carry +-0.0 to say why
-                    # before using it. This caller cannot say why. The refusal
-                    # is not about determinism; `pinned_block_max` is perfectly
-                    # deterministic and computes a different answer.
-                    #
-                    # **THE FOLD SHAPE IS FREE AND IT IS THE ONLY PLACE IN THIS
-                    # PROFILE WHERE AN EXECUTION PLAN MAY CHOOSE ITS OWN TREE**
-                    # (contract 5.1), because `identical_fmax` is exactly
-                    # commutative and associative over all of Float32 including
-                    # both zeros and NaN. Not because the difference is thought
-                    # to be small. This oracle folds serial ascending with no
-                    # seed because an oracle should be the simplest legal
-                    # spelling, and a halving tree over `identical_fmax` on a
-                    # device is equally legal.
-                    # S14, the row maximum (`span_fmax_fold`: the serial
-                    # `identical_fmax` chain, or under IDENTICAL its free-shape
-                    # lanes, `fmax_fold_span`).
+                    span_add_scalar(scores, base, jlo, mfill_f, masked, base)
+                    span_add_scalar(scores, base + jlo, jhi - jlo + 1, ufill_f, masked, base + jlo)
+                    span_add_scalar(scores, base + jhi + 1, s - jhi - 1, mfill_f, masked, base + jhi + 1)
+                    _apply_plant_row(masked, pidx, pbits, pat, PLANT_AT_MASKED, base, s)
                     var mx = span_fmax_fold(masked, base, s)
-                    # The trailing `ftz` is contract section 4's preamble
-                    # ("every seam's RESULT passes ftz") and is BIT-INERT under
-                    # IDENTICAL, because `portable_fmaxf` returns one of its own
-                    # already-flushed operands. It is written anyway, because a
-                    # seam that skips the checklist unit because the author
-                    # reasoned it was inert is exactly how row 10's checklist
-                    # stops being a checklist.
                     amax[r] = ftz(mx)
-                    # S15 and S16.
                     for j in range(jlo):
                         aexp[base + j] = Float32(0.0)
                         aweights[base + j] = Float32(0.0)
@@ -2376,115 +2130,346 @@ def transformer_block_oracle(
                         aexp[base + j] = Float32(0.0)
                         aweights[base + j] = Float32(0.0)
                     span_exp_shift(masked, base + jlo, jhi - jlo + 1, mx, aexp, base + jlo)
-                    # S17, the denominator: A SERIAL ASCENDING CHAIN over the
-                    # ABSOLUTE key index, seeded `+0.0`, plain adds. There is
-                    # nothing to fuse because `e[j]` is not a product.
-                    #
-                    # **`core/pinned_reduce.mojo::pinned_block_sum` MAY NOT BE
-                    # USED** (DEVIATION 805), and saying so is the point of the
-                    # clause. It is a halving tree; its own docstring says a
-                    # halving tree and CUB's warp-then-block shape combine
-                    # different partials; and a halving tree is not a serial
-                    # ascending chain either. Reaching for the deterministic
-                    # block fold BECAUSE it is the deterministic block fold is
-                    # the single most likely way to get this wrong, and it would
-                    # be wrong in a way that passes every launch-invariance gate,
-                    # because the tree is perfectly launch-invariant. It is
-                    # simply a different sum. Sabotage `S17_DENOM_HALVING_TREE`
-                    # must move `attn.denom` at any kv length of 3 or more.
-                    #
-                    # The load-bearing reason for the chain is not tidiness. It
-                    # is that a tail of exactly-`+0.0` terms is bitwise inert in
-                    # a chain seeded `+0.0` and is NOT inert under gemm v1's
-                    # leaf-and-tree topology, where `P = f(k)`. That is what
-                    # makes decode equal prefill and makes the answer independent
-                    # of sequence length. Contract 7.1 and 7.3.
-                    #
-                    # The price, stated rather than hidden: a row's fold may not
-                    # be split across threads, so v1's kv length is bounded by
-                    # what one thread will walk. This profile is reference
-                    # quality and slow by construction.
                     var acc = Float32(0.0)
                     for j in range(jlo, jhi + 1):
                         acc = ftz(ftz(acc) + ftz(aexp[base + j]))
                     acc = ftz(acc)
                     adenom[r] = acc
-                    # S18, ONE DIVISION PER WEIGHT, never a reciprocal
-                    # multiplied in (DEVIATION 806). `e * (1/denom)` rounds
-                    # twice where `e / denom` rounds once and they differ in the
-                    # last bit on ordinary inputs. MAX's `softmax_kernel`
-                    # multiplies by a reciprocal, which is evidence about MAX
-                    # and not about the reference. Sabotage `S18_RECIPROCAL_MUL`
-                    # must move `attn.weights`.
                     span_div(aexp, base + jlo, jhi - jlo + 1, acc, aweights, base + jlo)
-
-            if stasks <= 1:
-                _softmax_rows(0)
-            else:
-                host_parallelize(_softmax_rows, stasks)
-            host_tick(hton, htk, "fwd.softmax")
-
-            # ---- S19: the attention-weighted value sum (EAF:210) -----------------
-            # `torch.matmul(attn_weights, value_states)`.
-            #
-            # **DELIBERATELY NOT A gemm v1 CALL** (DEVIATION 807), and this is the
-            # least obvious decision in the contract. Serial ascending over the
-            # ABSOLUTE key index from `+0.0`, one `fma` per term.
-            #
-            # The reason is contract 7.2 and it is structural, not aesthetic. Gemm
-            # v1's per-cell arithmetic is a pure function of the contraction length
-            # `k` and the profile: `P = ceil(k / contract_leaf_size(k))`. S11
-            # contracts over `head_dim`, whose length is the SAME in prefill and
-            # decode, so routing it through the GEMM is decode-safe. S19 contracts
-            # over the KEY axis, whose length is `t + 1` in decode and `L` in
-            # prefill, so the GEMM would build two different trees for the same row
-            # and give two different answers. Under a serial ascending chain seeded
-            # `+0.0` the masked tail is exactly `+0.0` (contract 7.1) and therefore
-            # bitwise inert, and decode equals prefill.
-            #
-            # Sabotage `S19_VALUE_SUM_VIA_GEMM` routes this through `identical_gemm`
-            # and must break clause (d) past the first 128 keys while leaving clause
-            # (a) GREEN at a fixed length. Clause (a) staying green is the point: a
-            # single-path gate cannot see this failure at all, which is why fixture
-            # `long_l257` exists and why writing clause (d) late would make the
-            # sabotage look pointless and get it deleted.
-            #
-            # FUSED, unlike S10. The reference's matmul contracts and the fold is
-            # ours; there is no two-rounding reference spelling to mirror here the
-            # way there is at `(q*cos) + (rotate_half(q)*sin)`.
-            #
-            # CPU SPEED (lane neural-cpu, 2026-09-28): the chains above, `head_dim` of
-            # them per query advanced together down the key axis, one SIMD lane per
-            # output (`attn_value_sum_lanes`). Each lane runs its output's chain: the
-            # same operands, j ascending from `+0.0`, one fused multiply-add and one
-            # flush per step. `actx` is sized once; every cell is written.
-            actx = host_f32_uninit(m * qw)
-            var vrows = b * nh * l
-            var vtasks = host_row_tasks(vrows, s * hd)
-            var vchunk = (vrows + vtasks - 1) // vtasks
-            var vcache = st.kv_v_cache.copy()
-
-            # The value sum over the visible keys only (the same theorem: a `+0.0`
-            # weight's fma term is inert in the `+0.0`-seeded chain, S19).
-            def _value_rows(t: Int) {imm aweights, imm vcache, mut actx, imm s, imm hd, imm qw, imm l, imm nh, imm nkv, imm n_rep, imm own0, imm window, imm vrows, imm vchunk}:
-                for r in range(t * vchunk, min((t + 1) * vchunk, vrows)):
-                    var qi = r % l
-                    var h = (r // l) % nh
-                    var bb = r // (l * nh)
-                    var kv = h // n_rep
-                    var vis = _visible_keys(own0, window, qi, s)
                     attn_value_sum_lanes(
-                        aweights, r * s + vis[0],
-                        vcache, (bb * nkv + kv) * s * hd + vis[0] * hd,
-                        actx, (bb * l + qi) * qw + h * hd, vis[1] - vis[0] + 1, hd,
+                        aweights, base + jlo,
+                        vcache_f, (bb * nkv + kv) * s * hd + jlo * hd,
+                        actx, (bb * l + qi) * qw + h * hd, jhi - jlo + 1, hd,
                     )
+                u += a_tasks
+            _ = qblk^
+            _ = cblk^
+        if a_tasks <= 1:
+            _attn_row(0)
+        else:
+            host_parallelize(_attn_row, a_tasks)
+        _ = kpan^
+        _ = vcache_f^
+        host_tick(hton, htk, "fwd.attention")
+    else:
+        var q_rope_p = _hp(st.q_rope_out)
+        var kvk_p = _hp(st.kv_k_cache)
+        for bb in range(b):
+            for h in range(nh):
+                var kv = h // n_rep
+                # the head's query and key matrices, rows over tasks (lane
+                # neural-pass21): copies, one source cell to one destination
+                var qmat = host_f32_uninit(l * hd)
+                var kmat = host_f32_uninit(s * hd)
+                var qm_p = _hp(qmat)
+                var km_p = _hp(kmat)
+                var g_split = _row_split(l + s, hd)
+                var g_tasks = g_split[0]
+                var g_chunk = g_split[1]
+                def _gather(task: Int) {imm q_rope_p, imm kvk_p, imm qm_p, imm km_p, imm l, imm s, imm hd, imm qw, imm nkv, imm bb, imm h, imm kv, imm g_chunk}:
+                    for r in range(task * g_chunk, min((task + 1) * g_chunk, l + s)):
+                        if r < l:
+                            var qi = r
+                            for d in range(hd):
+                                qm_p.unsafe_store(qi * hd + d, q_rope_p.unsafe_load((bb * l + qi) * qw + h * hd + d))
+                        else:
+                            var j = r - l
+                            for d in range(hd):
+                                km_p.unsafe_store(j * hd + d, kvk_p.unsafe_load(((bb * nkv + kv) * s + j) * hd + d))
+                if g_tasks <= 1:
+                    _gather(0)
+                else:
+                    host_parallelize(_gather, g_tasks)
+                var cell = _oracle_product(qmat, kmat, l, s, hd, int15)
+                var sbase = (bb * nh + h) * l * s
+                if not opts.has_softcap():
+                    # the scale over query rows as spans (the same per-cell lane
+                    # statement whichever task runs the row)
+                    var sc_split = _row_split(l, s)
+                    var sc_tasks = sc_split[0]
+                    var sc_chunk = sc_split[1]
+                    def _scale_rows(task: Int) {imm cell, mut scores, imm l, imm s, imm scale, imm sbase, imm sc_chunk}:
+                        var r0 = task * sc_chunk
+                        var r1 = min((task + 1) * sc_chunk, l)
+                        if r1 > r0:
+                            span_scale(cell, r0 * s, (r1 - r0) * s, scale, scores, sbase + r0 * s)
+                    if sc_tasks <= 1:
+                        _scale_rows(0)
+                    else:
+                        host_parallelize(_scale_rows, sc_tasks)
+                    continue
+                for qi in range(l):
+                    for j in range(s):
+                        var sc = ftz(identical_mul(ftz(cell[qi * s + j]), scale))
+                        # DEVIATION 2947, `attn_softcap` (Gemma2's
+                        # `attn_logit_softcapping`, `eager_attention_forward` in
+                        # modeling_gemma2.py: `attn_weights = attn_weights /
+                        # softcap; attn_weights = torch.tanh(attn_weights);
+                        # attn_weights = attn_weights * softcap`), AFTER the scale
+                        # and BEFORE the mask: one `identical_div`, one
+                        # `identical_tanh` (DEVIATION 821's portable tanh), one
+                        # `identical_mul`, each flushed. Recorded into
+                        # `attn.scores`.
+                        if opts.has_softcap():
+                            var cap = ftz(opts.attn_softcap)
+                            var th = ftz(identical_tanh(ftz(identical_div(sc, cap))))
+                            sc = ftz(identical_mul(th, cap))
+                        scores[sbase + qi * s + j] = sc
+        _apply_plant(scores, plant, PLANT_AT_SCORES)
+        host_tick(hton, htk, "fwd.scores")
 
-            if vtasks <= 1:
-                _value_rows(0)
-            else:
-                host_parallelize(_value_rows, vtasks)
-            _ = vcache^
-            host_tick(hton, htk, "fwd.value_sum")
+        # ---- S13: the additive causal mask (EAF:205-206) ---------------------
+        # `attn_weights = attn_weights + attention_mask`, with the mask built at
+        # masking_utils.py:601-603 as `torch.finfo(dtype).min` where False and
+        # `0.0` where True.
+        #
+        # **AN ADD, NEVER A SELECT** (DEVIATION 803, contract 4.1(a)). The
+        # `+0.0` at an unmasked cell is not a no-op: `x + (+0.0) == x` for every
+        # finite x, every infinity and every NaN EXCEPT `x = -0.0`, where it
+        # gives `+0.0`. An implementation that skips the add where the mask is
+        # true keeps a `-0.0` the reference launders, and it passes every
+        # fixture that does not PLANT a negative zero. Sabotage
+        # `S13_MASK_SELECT`, fixture `adv_score_neg_zero`.
+        #
+        # **FINITE, NEVER `-inf`** (contract 4.1(b)). With `-inf` a fully masked
+        # row gives `-inf - (-inf) = NaN` and a computed NaN's payload is
+        # vendor-shaped. The causal mask never produces a fully masked row
+        # (position t always attends to itself) so the difference is not
+        # reachable through the mask alone; it IS reachable through an extreme
+        # score, which is fixture `adv_score_extreme`. Sabotage
+        # `S13_MASK_NEG_INF`.
+        #
+        # MAX's own reference kernels are inconsistent with themselves here and
+        # it is worth knowing: `_bmm0_bs` stamps out-of-range scores with
+        # `min_or_neg_inf` (mha.mojo:6639), `softmax_kernel` seeds its max with
+        # the FINITE `Scalar[dtype].MIN` (softmax.mojo:958), and
+        # `_softmax_warp_kernel` seeds with `min_or_neg_inf` (softmax.mojo:1063).
+        # Two spellings of one reduction in one file.
+        var mfill = mask_fill()
+        var ufill = unmasked_fill()
+        # ROWS OVER HOST TASKS (lane neural-pass7): a (batch, head, query) row's
+        # cells read that row of `scores` and the row's own position; the same
+        # statement per cell whichever task runs it.
+        var mrows = b * nh * l
+        var mtasks = host_row_tasks(mrows, 3 * s)
+        var mchunk = (mrows + mtasks - 1) // mtasks
+        # Each row is three spans (lane neural-pass12): the masked keys before
+        # the window, the visible keys, the masked keys after the query, each
+        # the same per-cell statement `ftz(ftz(score) + fill)` as lanes
+        # (`span_add_scalar`), the fill the one the per-cell test picked.
+        def _mask_rows(t: Int) {imm scores, mut masked, imm mrows, imm mchunk, imm l, imm s, imm own0, imm window, imm mfill, imm ufill}:
+            for r in range(t * mchunk, min((t + 1) * mchunk, mrows)):
+                var qi = r % l
+                var base = r * s
+                var vis = _visible_keys(own0, window, qi, s)
+                var jlo = vis[0]
+                var jhi = vis[1]
+                span_add_scalar(scores, base, jlo, mfill, masked, base)
+                span_add_scalar(scores, base + jlo, jhi - jlo + 1, ufill, masked, base + jlo)
+                span_add_scalar(scores, base + jhi + 1, s - jhi - 1, mfill, masked, base + jhi + 1)
+        if mtasks <= 1:
+            _mask_rows(0)
+        else:
+            host_parallelize(_mask_rows, mtasks)
+        _apply_plant(masked, plant, PLANT_AT_MASKED)
+        host_tick(hton, htk, "fwd.mask")
+
+        # ---- S14 through S18: the softmax (EAF:208) --------------------------
+        # `nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)`,
+        # whose internals are ATen's and which contract section 5.4 records as
+        # THE ONE THING THIS LANE COULD NOT READ. There is no PyTorch checkout
+        # in `/Users/andrewhendel/CascadeProjects/upstream/`, verified again on
+        # 2026-08-25, so whether ATen's CUDA softmax divides or multiplies by a
+        # reciprocal is not known here. The profile pins the DIVISION because it
+        # is the spelling with one rounding. **That is a stated gap, not a
+        # decision made on evidence**, and it is the first thing to check when a
+        # PyTorch checkout lands.
+        # The rows (batch, head, query) are independent: row r = (bb*nh + h)*l + qi
+        # owns amax[r], adenom[r] and the s entries at r*s of aexp and aweights,
+        # and reads only masked's row r. They split over host tasks
+        # (`core/host_parallel.mojo`, lane neural-cpu); each row's statements are
+        # the serial walk's.
+        var srows = b * nh * l
+        var stasks = host_row_tasks(srows, s)
+        var schunk = (srows + stasks - 1) // stasks
+
+        # THE MASKED KEYS ARE SKIPPED, AND THAT IS THE CONTRACT'S OWN THEOREM
+        # (lane neural-pass10). A masked cell is exactly `-FLT_MAX` (contract
+        # 7.1: a finite score plus the mask fill rounds to the fill), so its
+        # exponential is exactly `+0.0` (the scalar's early return below
+        # -87.33655, `expf_lanes` the same on every bit pattern), its weight
+        # is `+0.0 / denom = +0.0`, and a `+0.0` term is bitwise inert in the
+        # `+0.0`-seeded serial ascending denominator chain (section 7.2's
+        # argument for decode == prefill, and the backward's `z` fold). So the
+        # exponential, the denominator and the weights run over the visible
+        # keys `[jlo, jhi]` only, and the masked cells are WRITTEN `+0.0`,
+        # which is the value the full walk stored. The row maximum stays over
+        # EVERY element of the row (contract 5.2).
+        def _softmax_rows(t: Int) {imm masked, mut amax, mut aexp, mut adenom, mut aweights, imm s, imm l, imm own0, imm window, imm srows, imm schunk}:
+            for r in range(t * schunk, min((t + 1) * schunk, srows)):
+                var base = r * s
+                var vis = _visible_keys(own0, window, r % l, s)
+                var jlo = vis[0]
+                var jhi = vis[1]
+
+                # S14, the row maximum, over EVERY element of the row
+                # INCLUDING the masked ones (contract 5.2, and it is not
+                # "the unmasked prefix" -- section 7 rests on that).
+                #
+                # `identical_fmax` (DEVIATION 825), which canonicalizes a
+                # NaN, flushes both operands and then SELECTS ON A TOTAL
+                # ORDER KEY rather than on a float compare. There is no
+                # hardware max instruction in it.
+                #
+                # **`core/pinned_reduce.mojo::pinned_block_max` MAY NOT BE
+                # USED** and that refusal is the trap in this seam, because
+                # it is the deterministic-looking helper already in the
+                # tree. Its fold is a plain `other > red[tid]` compare
+                # (:159-190), which is exactly the spelling IDENTITY_PATHS
+                # row 13 closed everywhere else, and its own block comment
+                # tells a caller whose inputs can carry +-0.0 to say why
+                # before using it. This caller cannot say why. The refusal
+                # is not about determinism; `pinned_block_max` is perfectly
+                # deterministic and computes a different answer.
+                #
+                # **THE FOLD SHAPE IS FREE AND IT IS THE ONLY PLACE IN THIS
+                # PROFILE WHERE AN EXECUTION PLAN MAY CHOOSE ITS OWN TREE**
+                # (contract 5.1), because `identical_fmax` is exactly
+                # commutative and associative over all of Float32 including
+                # both zeros and NaN. Not because the difference is thought
+                # to be small. This oracle folds serial ascending with no
+                # seed because an oracle should be the simplest legal
+                # spelling, and a halving tree over `identical_fmax` on a
+                # device is equally legal.
+                # S14, the row maximum (`span_fmax_fold`: the serial
+                # `identical_fmax` chain, or under IDENTICAL its free-shape
+                # lanes, `fmax_fold_span`).
+                var mx = span_fmax_fold(masked, base, s)
+                # The trailing `ftz` is contract section 4's preamble
+                # ("every seam's RESULT passes ftz") and is BIT-INERT under
+                # IDENTICAL, because `portable_fmaxf` returns one of its own
+                # already-flushed operands. It is written anyway, because a
+                # seam that skips the checklist unit because the author
+                # reasoned it was inert is exactly how row 10's checklist
+                # stops being a checklist.
+                amax[r] = ftz(mx)
+                # S15 and S16.
+                for j in range(jlo):
+                    aexp[base + j] = Float32(0.0)
+                    aweights[base + j] = Float32(0.0)
+                for j in range(jhi + 1, s):
+                    aexp[base + j] = Float32(0.0)
+                    aweights[base + j] = Float32(0.0)
+                span_exp_shift(masked, base + jlo, jhi - jlo + 1, mx, aexp, base + jlo)
+                # S17, the denominator: A SERIAL ASCENDING CHAIN over the
+                # ABSOLUTE key index, seeded `+0.0`, plain adds. There is
+                # nothing to fuse because `e[j]` is not a product.
+                #
+                # **`core/pinned_reduce.mojo::pinned_block_sum` MAY NOT BE
+                # USED** (DEVIATION 805), and saying so is the point of the
+                # clause. It is a halving tree; its own docstring says a
+                # halving tree and CUB's warp-then-block shape combine
+                # different partials; and a halving tree is not a serial
+                # ascending chain either. Reaching for the deterministic
+                # block fold BECAUSE it is the deterministic block fold is
+                # the single most likely way to get this wrong, and it would
+                # be wrong in a way that passes every launch-invariance gate,
+                # because the tree is perfectly launch-invariant. It is
+                # simply a different sum. Sabotage `S17_DENOM_HALVING_TREE`
+                # must move `attn.denom` at any kv length of 3 or more.
+                #
+                # The load-bearing reason for the chain is not tidiness. It
+                # is that a tail of exactly-`+0.0` terms is bitwise inert in
+                # a chain seeded `+0.0` and is NOT inert under gemm v1's
+                # leaf-and-tree topology, where `P = f(k)`. That is what
+                # makes decode equal prefill and makes the answer independent
+                # of sequence length. Contract 7.1 and 7.3.
+                #
+                # The price, stated rather than hidden: a row's fold may not
+                # be split across threads, so v1's kv length is bounded by
+                # what one thread will walk. This profile is reference
+                # quality and slow by construction.
+                var acc = Float32(0.0)
+                for j in range(jlo, jhi + 1):
+                    acc = ftz(ftz(acc) + ftz(aexp[base + j]))
+                acc = ftz(acc)
+                adenom[r] = acc
+                # S18, ONE DIVISION PER WEIGHT, never a reciprocal
+                # multiplied in (DEVIATION 806). `e * (1/denom)` rounds
+                # twice where `e / denom` rounds once and they differ in the
+                # last bit on ordinary inputs. MAX's `softmax_kernel`
+                # multiplies by a reciprocal, which is evidence about MAX
+                # and not about the reference. Sabotage `S18_RECIPROCAL_MUL`
+                # must move `attn.weights`.
+                span_div(aexp, base + jlo, jhi - jlo + 1, acc, aweights, base + jlo)
+
+        if stasks <= 1:
+            _softmax_rows(0)
+        else:
+            host_parallelize(_softmax_rows, stasks)
+        host_tick(hton, htk, "fwd.softmax")
+
+        # ---- S19: the attention-weighted value sum (EAF:210) -----------------
+        # `torch.matmul(attn_weights, value_states)`.
+        #
+        # **DELIBERATELY NOT A gemm v1 CALL** (DEVIATION 807), and this is the
+        # least obvious decision in the contract. Serial ascending over the
+        # ABSOLUTE key index from `+0.0`, one `fma` per term.
+        #
+        # The reason is contract 7.2 and it is structural, not aesthetic. Gemm
+        # v1's per-cell arithmetic is a pure function of the contraction length
+        # `k` and the profile: `P = ceil(k / contract_leaf_size(k))`. S11
+        # contracts over `head_dim`, whose length is the SAME in prefill and
+        # decode, so routing it through the GEMM is decode-safe. S19 contracts
+        # over the KEY axis, whose length is `t + 1` in decode and `L` in
+        # prefill, so the GEMM would build two different trees for the same row
+        # and give two different answers. Under a serial ascending chain seeded
+        # `+0.0` the masked tail is exactly `+0.0` (contract 7.1) and therefore
+        # bitwise inert, and decode equals prefill.
+        #
+        # Sabotage `S19_VALUE_SUM_VIA_GEMM` routes this through `identical_gemm`
+        # and must break clause (d) past the first 128 keys while leaving clause
+        # (a) GREEN at a fixed length. Clause (a) staying green is the point: a
+        # single-path gate cannot see this failure at all, which is why fixture
+        # `long_l257` exists and why writing clause (d) late would make the
+        # sabotage look pointless and get it deleted.
+        #
+        # FUSED, unlike S10. The reference's matmul contracts and the fold is
+        # ours; there is no two-rounding reference spelling to mirror here the
+        # way there is at `(q*cos) + (rotate_half(q)*sin)`.
+        #
+        # CPU SPEED (lane neural-cpu, 2026-09-28): the chains above, `head_dim` of
+        # them per query advanced together down the key axis, one SIMD lane per
+        # output (`attn_value_sum_lanes`). Each lane runs its output's chain: the
+        # same operands, j ascending from `+0.0`, one fused multiply-add and one
+        # flush per step. `actx` is sized once; every cell is written.
+        actx = host_f32_uninit(m * qw)
+        var vrows = b * nh * l
+        var vtasks = host_row_tasks(vrows, s * hd)
+        var vchunk = (vrows + vtasks - 1) // vtasks
+        var vcache = st.kv_v_cache.copy()
+
+        # The value sum over the visible keys only (the same theorem: a `+0.0`
+        # weight's fma term is inert in the `+0.0`-seeded chain, S19).
+        def _value_rows(t: Int) {imm aweights, imm vcache, mut actx, imm s, imm hd, imm qw, imm l, imm nh, imm nkv, imm n_rep, imm own0, imm window, imm vrows, imm vchunk}:
+            for r in range(t * vchunk, min((t + 1) * vchunk, vrows)):
+                var qi = r % l
+                var h = (r // l) % nh
+                var bb = r // (l * nh)
+                var kv = h // n_rep
+                var vis = _visible_keys(own0, window, qi, s)
+                attn_value_sum_lanes(
+                    aweights, r * s + vis[0],
+                    vcache, (bb * nkv + kv) * s * hd + vis[0] * hd,
+                    actx, (bb * l + qi) * qw + h * hd, vis[1] - vis[0] + 1, hd,
+                )
+
+        if vtasks <= 1:
+            _value_rows(0)
+        else:
+            host_parallelize(_value_rows, vtasks)
+        _ = vcache^
+        host_tick(hton, htk, "fwd.value_sum")
 
     st.attn_scores = scores^
     st.attn_masked = masked^

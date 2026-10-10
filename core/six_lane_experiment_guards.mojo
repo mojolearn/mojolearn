@@ -76,12 +76,11 @@ def _check_configuration() -> Bool:
     comptime assert EPI >= 0 and EPI <= 3, "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE is a mask: 1 mlp, 2 cnn"
     comptime HS = get_defined_int["MOJOLEARN_IDN_ATTN_HEAD_SHARE",1]()
     comptime assert HS == 1 or HS == 4, "MOJOLEARN_IDN_ATTN_HEAD_SHARE legal set {4} (two-head I06/NI19 deleted as a loser)"
-    comptime SM = get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX",0]()
-    comptime assert SM == 0 or SM == 2, "MOJOLEARN_IDN_ATTN_SOFTMAX arms: 2 online_tile32 (arm 1 summary_tree removed 2026-10-08: slower, NV/AMD lm-forward 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward 5.48x/21.89x (grid ge123e6f9); see EXPERIMENTS.md)"
-    # lane/attention-tiled-v2 (2026-10-07): the online_tile32 forward's query rows per block.
-    comptime TQ2 = get_defined_int["MOJOLEARN_IDN_ATTN_V2_TQ",32]()
-    comptime assert TQ2 == 32 or TQ2 == 64, "MOJOLEARN_IDN_ATTN_V2_TQ legal set 32|64 (256 threads, 8 or 4 lanes per query row)"
-    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_V2_TQ"]() or SM == 2, "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)"
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
+    # Both arms are gone, so the define itself is refused, with its forward rows-per-block control MOJOLEARN_IDN_ATTN_V2_TQ.
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_SOFTMAX"](), "removed: MOJOLEARN_IDN_ATTN_SOFTMAX (=2 online_tile32 attention v2) retired 2026-10-10: slower, avg 1.49x lm-train-step (NV 1.43x / AMD 1.56x), 1.01x lm-forward (NV 0.98x / AMD 1.04x), mean_nll SAME (main ca25d9321, A/B nv2 v1229/v1231/v1232, amd a1555/a1556/a1557, default v1232/a1557); arm 1 summary_tree removed 2026-10-08: slower, NV/AMD lm-forward 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward 5.48x/21.89x (grid ge123e6f9); see EXPERIMENTS.md; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_V2_TQ"](), "removed: MOJOLEARN_IDN_ATTN_V2_TQ retired 2026-10-10 with the online_tile32 arm it tuned (MOJOLEARN_IDN_ATTN_SOFTMAX=2: slower, avg 1.49x lm-train-step); see docs/TOMBSTONES.md"
     comptime ST = get_defined_int["MOJOLEARN_IDN_ATTN_STASH",0]()
     comptime assert ST >= 0 and ST <= 3, "MOJOLEARN_IDN_ATTN_STASH arms: 1 recompute, 2 packed, 3 alias_y"
     comptime NO = get_defined_int["MOJOLEARN_IDN_NORM",0]()

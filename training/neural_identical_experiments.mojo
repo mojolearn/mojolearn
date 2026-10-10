@@ -73,11 +73,12 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED
 # Arm 3 of MOJOLEARN_IDN_ACT_RETAIN (transformer/experiments/checkpoint_contract.mojo).
 comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and not is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]() and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]() == 3
 
-# NI20: fixed tile32 online attention numerical graph on every column. Arm 2
-# of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1, the NN20
-# summary tree, was deleted 2026-10-08 as a grid ge123e6f9 loser and is refused;
-# recoverable at main bc10b8b56).
-comptime IDN_ATTENTION_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 2
+# NI20 / MOJOLEARN_IDN_ATTN_SOFTMAX: both arms are gone and the define is refused
+# (arm 1, the NN20 summary tree, deleted 2026-10-08, grid ge123e6f9, recoverable at
+# main bc10b8b56).
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+# (online_tile32 attention v2; bytes lm-train-step NV/AMD 1.43x/1.56x slower, lm-forward 0.98x/1.04x, mean_nll same; nv2 v1229/v1231/v1232, amd a1555/a1556/a1557)
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 # S1 (lane/samba-resident, 2026-10-07): the Samba stack's forward and train
 # step as ONE device-resident binding call each (training/samba_resident.mojo):
 # the registry, the gradient, every block's activations and the backward

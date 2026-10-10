@@ -118,13 +118,13 @@ def transformer_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
-from training.neural_identical_experiments import IDN_ATTENTION_V2
-from transformer.impl.llama.attention_v2_model_contract import ATTENTION_MODEL_V2_PROFILE
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
 def transformer_attention_profile_binding() raises -> PythonObject:
     """Exact attention graph for this native binary's ordinary fp32 model path."""
-    return PythonObject(String(ATTENTION_MODEL_V2_PROFILE) if IDN_ATTENTION_V2 else String("attention-eager.fp32.v1"))
+    return PythonObject(String("attention-eager.fp32.v1"))
 
 
 def transformer_numeric_mode_binding() raises -> PythonObject:

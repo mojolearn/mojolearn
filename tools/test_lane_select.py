@@ -1231,8 +1231,9 @@ def test_a_directory_walk_under_tools_still_widens():
 
 
 def test_a_mojo_program_nothing_imports_is_unreachable_and_an_imported_one_is_not():
-    assert lane_select.unreachable("transformer/checks/attention_v2_forward_bench.mojo"), \
-        "a benchmark program no Mojo file imports should be unreachable"
+    # attention_v2_forward_bench.mojo was the example until MOJOLEARN_IDN_ATTN_SOFTMAX=2 was deleted 2026-10-10.
+    assert lane_select.unreachable("gemm/checks/gemm_wide_split_probe.mojo"), \
+        "a probe program no Mojo file imports should be unreachable"
     assert lane_select.unreachable("mamba/checks/mamba_fixture.mojo") is None, \
         "mamba_fixture.mojo is in lanes' closures and must never be unreachable"
     assert lane_select.unreachable("glm/host/qn_oracle.mojo") is None

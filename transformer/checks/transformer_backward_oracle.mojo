@@ -1301,7 +1301,8 @@ def _bwd_attention_chains(
         host_parallelize(_kv_rows, ktasks)
 
 
-from transformer.impl.llama.attention_v2_model_host import attention_v2_host_backward
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
 def transformer_block_backward_oracle(
@@ -1616,208 +1617,195 @@ def transformer_block_backward_oracle(
     # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
     # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
     # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
-    if fwd.attn_v2:
-        var av2 = attention_v2_host_backward(
-            fwd.q_rope_out, fwd.kv_k_cache, fwd.kv_v_cache, st.d_attn_ctx,
-            b, l, nh, nkv, s, hd, own0, window, attention_scale(hd),
-        )
-        st.d_attn_weights = av2.dw.copy()
-        st.attn_zdot = av2.zdot.copy()
-        st.d_attn_masked = av2.dmasked.copy()
-        st.d_attn_scores = av2.dscores.copy()
-        st.d_qk_cell = av2.dqk.copy()
-        st.d_q_rope = av2.dq.copy()
-        st.d_k_cache = av2.dk.copy()
-        st.d_v_cache = av2.dv.copy()
-        host_tick(hton, htk, "bwd.attention_v2")
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
+    for bb in range(b):
+        for h in range(nh):
+            var kv = h // n_rep
+            var dctx_head = host_f32_uninit(l * hd)
+            for qi in range(l):
+                for d in range(hd):
+                    dctx_head[qi * hd + d] = st.d_attn_ctx[(bb * l + qi) * qw + h * hd + d]
+            var v_head = host_f32_uninit(s * hd)
+            for j in range(s):
+                for d in range(hd):
+                    v_head[j * hd + d] = fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
+            var cell = gemm_host_rows(dctx_head, v_head, OP_NT, l, s, hd)
+            if len(st.d_attn_weights) != cells:
+                st.d_attn_weights = host_f32_uninit(cells)
+            var cbase = (bb * nh + h) * l * s
+            for i in range(l * s):
+                st.d_attn_weights[cbase + i] = cell[i]
+            _ = dctx_head^
+            _ = v_head^
+            _ = cell^
+    host_tick(hton, htk, "bwd.dctx_v_products")
+
+    # =====================================================================
+    # STAGE 18-19. The softmax backward, ONE closed form. DEVIATION 1406.
+    # =====================================================================
+    var zdot = List[Float32]()
+    var dsoft = List[Float32]()
+    softmax_backward_into(
+        st.d_attn_weights, fwd.attn_weights, b, nh, l, s, zdot, dsoft, own0, window
+    )
+    st.attn_zdot = zdot^
+    st.d_attn_masked = dsoft^
+    host_tick(hton, htk, "bwd.softmax")
+
+    # =====================================================================
+    # STAGE 20. S13's backward, an EXACT IDENTITY. DEVIATION 1414.
+    #
+    # `masked = scores + mask_value` where the mask value is a CONSTANT, so
+    # `d(masked)/d(scores)` is exactly 1 at every cell INCLUDING the masked
+    # ones, and the gradient passes through with no rounding.
+    #
+    # **THE MASKED CELLS ARE NOT ZEROED, AND THAT IS A DECISION.** They are
+    # already signed zeros -- `dS_j = identical_mul(+0.0, dy_j - z)` carries
+    # the sign of `dy_j - z` -- so forcing `+0.0` would differ only where
+    # that sign is negative, which is roughly half the masked cells and is
+    # REACHABLE WITHOUT A PLANT. Sabotage `B13_MASK_ZEROES_GRAD`, and the
+    # ORACLE must predict the exact moved count before the device is asked.
+    # =====================================================================
+    st.d_attn_scores = st.d_attn_masked.copy()
+
+    # =====================================================================
+    # STAGE 21. S12's backward. `scores = cell * scale`, so
+    # `d_cell = d_scores * scale`, ONE `pinned_mul` per score applied to the
+    # FINISHED gradient. DEVIATION 1415.
+    #
+    # Folding the scale into the `dq` chain instead is sabotage
+    # `B12_SCALE_INTO_DQ`, and it is **INERT AT EVERY POWER-OF-FOUR
+    # `head_dim`**: at 16 and 64 the scale is exactly `0.25` and `0.125`,
+    # exact scaling commutes with an fma chain bitwise, and moving it to the
+    # far side changes nothing. The `head_dim = 24` fixture that contract
+    # section 3 already requires -- for a different reason, to catch a wrong
+    # scale SPELLING -- is what makes this arm fire at all.
+    # =====================================================================
+    var scale = attention_scale(hd)
+    var dqk = host_f32_uninit(cells)
+    var ctasks = host_row_tasks(cells, 3)
+    var cchunk = (cells + ctasks - 1) // ctasks
+    var dsc = rebind[HostF32Ptr](st.d_attn_scores.unsafe_ptr())
+    def _scale_cells(task: Int) {imm dsc, mut dqk, imm cells, imm scale, imm cchunk}:
+        for i in range(task * cchunk, min((task + 1) * cchunk, cells)):
+            dqk[i] = ftz(identical_mul(ftz(dsc.unsafe_load(i)), scale))
+    if ctasks <= 1:
+        _scale_cells(0)
     else:
-        for bb in range(b):
-            for h in range(nh):
-                var kv = h // n_rep
-                var dctx_head = host_f32_uninit(l * hd)
-                for qi in range(l):
-                    for d in range(hd):
-                        dctx_head[qi * hd + d] = st.d_attn_ctx[(bb * l + qi) * qw + h * hd + d]
-                var v_head = host_f32_uninit(s * hd)
-                for j in range(s):
-                    for d in range(hd):
-                        v_head[j * hd + d] = fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
-                var cell = gemm_host_rows(dctx_head, v_head, OP_NT, l, s, hd)
-                if len(st.d_attn_weights) != cells:
-                    st.d_attn_weights = host_f32_uninit(cells)
-                var cbase = (bb * nh + h) * l * s
-                for i in range(l * s):
-                    st.d_attn_weights[cbase + i] = cell[i]
-                _ = dctx_head^
-                _ = v_head^
-                _ = cell^
-        host_tick(hton, htk, "bwd.dctx_v_products")
+        host_parallelize(_scale_cells, ctasks)
+    st.d_qk_cell = dqk^
+    host_tick(hton, htk, "bwd.scale")
 
-        # =====================================================================
-        # STAGE 18-19. The softmax backward, ONE closed form. DEVIATION 1406.
-        # =====================================================================
-        var zdot = List[Float32]()
-        var dsoft = List[Float32]()
-        softmax_backward_into(
-            st.d_attn_weights, fwd.attn_weights, b, nh, l, s, zdot, dsoft, own0, window
-        )
-        st.attn_zdot = zdot^
-        st.d_attn_masked = dsoft^
-        host_tick(hton, htk, "bwd.softmax")
-
-        # =====================================================================
-        # STAGE 20. S13's backward, an EXACT IDENTITY. DEVIATION 1414.
-        #
-        # `masked = scores + mask_value` where the mask value is a CONSTANT, so
-        # `d(masked)/d(scores)` is exactly 1 at every cell INCLUDING the masked
-        # ones, and the gradient passes through with no rounding.
-        #
-        # **THE MASKED CELLS ARE NOT ZEROED, AND THAT IS A DECISION.** They are
-        # already signed zeros -- `dS_j = identical_mul(+0.0, dy_j - z)` carries
-        # the sign of `dy_j - z` -- so forcing `+0.0` would differ only where
-        # that sign is negative, which is roughly half the masked cells and is
-        # REACHABLE WITHOUT A PLANT. Sabotage `B13_MASK_ZEROES_GRAD`, and the
-        # ORACLE must predict the exact moved count before the device is asked.
-        # =====================================================================
-        st.d_attn_scores = st.d_attn_masked.copy()
-
-        # =====================================================================
-        # STAGE 21. S12's backward. `scores = cell * scale`, so
-        # `d_cell = d_scores * scale`, ONE `pinned_mul` per score applied to the
-        # FINISHED gradient. DEVIATION 1415.
-        #
-        # Folding the scale into the `dq` chain instead is sabotage
-        # `B12_SCALE_INTO_DQ`, and it is **INERT AT EVERY POWER-OF-FOUR
-        # `head_dim`**: at 16 and 64 the scale is exactly `0.25` and `0.125`,
-        # exact scaling commutes with an fma chain bitwise, and moving it to the
-        # far side changes nothing. The `head_dim = 24` fixture that contract
-        # section 3 already requires -- for a different reason, to catch a wrong
-        # scale SPELLING -- is what makes this arm fire at all.
-        # =====================================================================
-        var scale = attention_scale(hd)
-        var dqk = host_f32_uninit(cells)
-        var ctasks = host_row_tasks(cells, 3)
-        var cchunk = (cells + ctasks - 1) // ctasks
-        var dsc = rebind[HostF32Ptr](st.d_attn_scores.unsafe_ptr())
-        def _scale_cells(task: Int) {imm dsc, mut dqk, imm cells, imm scale, imm cchunk}:
-            for i in range(task * cchunk, min((task + 1) * cchunk, cells)):
-                dqk[i] = ftz(identical_mul(ftz(dsc.unsafe_load(i)), scale))
-        if ctasks <= 1:
-            _scale_cells(0)
-        else:
-            host_parallelize(_scale_cells, ctasks)
-        st.d_qk_cell = dqk^
-        host_tick(hton, htk, "bwd.scale")
-
-        # =====================================================================
-        # STAGE 22. `dq`. **NEW ARITHMETIC, AND THE LANE'S LARGEST FINDING.**
-        # DEVIATION 1402.
-        #
-        #     dq[b,h,t,d] = sum over j ASCENDING, ABSOLUTE key index, from +0.0
-        #                   acc = ftz(fma(d_cell[b,h,t,j], k_cache[b,kv,j,d], acc))
-        #
-        # **GEMM v1 IS REFUSED HERE AND THE REASON IS NOT THE FORWARD'S
-        # REASON.** S11 was ROUTED (contract DEVIATION 808) precisely because it
-        # contracts over `head_dim`, the same integer in both paths. Its `dA`
-        # contracts over the OUTPUT WIDTH, and S11's output width is the KV
-        # AXIS. So the routed `dq` would be an `OP_NN` at `(l, hd, s)` with
-        # `k' = S`, and `P = f(S)` builds one tree at `S = 257` and a different
-        # one at `S = 200`. The masked `+0.0` tail, bitwise inert in a serial
-        # ascending chain, is NOT inert under a tree whose shape changes with
-        # the length.
-        #
-        # Under the chain it IS inert: at a masked `(t, j)` the gradient
-        # `d_cell` is a signed zero (stage 20's note), `fma(+-0.0, k, acc)` is
-        # `acc + (+-0.0)`, and a `+0.0`-seeded chain never holds `-0.0`. **So
-        # `dq` is independent of the kv length and a decode step's `dq` is the
-        # prefill's `dq` bit for bit.** That is the backward's clause (c) and
-        # clause (d), and it holds by CONSTRUCTION -- the gate exists to catch
-        # the construction being violated by an execution plan.
-        #
-        # Sabotage `B11_DQ_VIA_GEMM`, **INERT AT EVERY `S <= 128`** where
-        # `P(S) == 1` and the gemm cell IS the whole-`k` ascending chain from
-        # `+0.0`. The `L = 257` fixture is the only one that reaches it. An arm
-        # that passes clause (a) by construction and needs clause (d) to bite is
-        # exactly the shape contract section 10 warns will look inert and get
-        # deleted.
-        #
-        # The loop is (batch, query, head, depth), which IS the output's
-        # token-major `[M, qw]` order, so the cells are appended in place and no
-        # write-by-index helper is needed. Loop order is free here because every
-        # output cell owns its own chain.
-        # =====================================================================
-        # =====================================================================
-        # STAGE 23. `dk_cache`. NEW ARITHMETIC. DEVIATIONS 1403, 1424, 1417.
-        #
-        #     dk[b,kv,j,d] = for h in the kv group ASCENDING
-        #                      for t ASCENDING
-        #                        acc = ftz(fma(d_cell[b,h,t,j], q_rope[b,h,t,d], acc))
-        #
-        # **ONE CHAIN, NOT A SUM OF PER-HEAD PARTIALS** (DEVIATION 1424). With
-        # `n_rep > 1` several attention heads share one kv head, and folding
-        # each head separately and adding the partials is a different
-        # association. The head axis is OUTERMOST, matching the forward's own
-        # `(batch, head, query)` nesting.
-        #
-        # **GEMM v1 IS REFUSED**: the routed form is `OP_TN` at `(s, hd, l)`
-        # with `k' = L`, the QUERY COUNT, path dependent. Sabotage
-        # `B11_DK_VIA_GEMM`, INERT only when `L <= 128` AND `n_rep == 1`
-        # together -- at `n_rep == 2` the routed form must accumulate two
-        # per-head gemms and fires on shape alone.
-        #
-        # **THIS IS A PARTIAL AND IT IS NAMED ONE** (DEVIATION 1417). A key at
-        # slot `j` is read by every query at absolute position `>= j`, and the
-        # queries in LATER calls are not in this call. So the fold over `[0, l)`
-        # is the contribution of THIS call's queries and nothing else. The full
-        # `[0, S)` range is emitted so a multi-call assembler has a complete
-        # partial to add; assembling is out of scope. **THE FORWARD'S
-        # DECODE-EQUALS-PREFILL DOES NOT TRANSFER TO THIS OUTPUT AND THIS LANE
-        # DOES NOT PRETEND IT DOES.**
-        # =====================================================================
-        # The other operand is the FORWARD's rotated
-        # query, `q_rope.out`, token-major [M, qw]. NOT
-        # `q_proj.out`: the QK product reads the ROTATED
-        # q, so its derivative does too, and reading the
-        # pre-rotation activation here would produce a
-        # plausible gradient that is wrong by one
-        # rotation.
-        # =====================================================================
-        # STAGE 24. `dv_cache`. NEW ARITHMETIC. DEVIATION 1404, the mirror of
-        # contract DEVIATION 807.
-        #
-        #     dv[b,kv,j,d] = for h in the kv group ASCENDING
-        #                      for t ASCENDING
-        #                        acc = ftz(fma(y[b,h,t,j], d_ctx[b,h,t,d], acc))
-        #
-        # Same fold axis as stage 23, same refusal, same partial-gradient
-        # caveat. Sabotage `B19_DV_VIA_GEMM`, the backward twin of
-        # `S19_VALUE_SUM_VIA_GEMM`, and it inherits that arm's warning verbatim:
-        # without clause (d) it looks inert and gets deleted.
-        #
-        # The masked cells contribute `fma(+0.0, dctx, acc)` because `y` is
-        # exactly `+0.0` there (contract 7.1), so they are bitwise inert here
-        # too -- which is why `dv` for a key slot does not depend on how many
-        # PADDING keys were in the launch, only on how many QUERIES were.
-        # =====================================================================
-        #
-        # CPU SPEED (lane neural-cpu, 2026-09-28): the three chains below, as the
-        # serial walk writes them, with the `head_dim` outputs of one row advanced
-        # together as SIMD lanes (each lane its own output's chain: the same
-        # operands, the same ascending order, one fused multiply-add and one flush
-        # per step) and the rows split over host tasks. Each list is sized once
-        # and every entry written, in the layout the appends produced:
-        #   d_q_rope[(bb*l + qi)*qw + h*hd + d]     = chain over j of dqk[j] * k[j, d]
-        #   d_k_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of dqk[t, j] * q[t, d]
-        #   d_v_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of w[t, j] * dctx[t, d]
-        st.d_q_rope = host_f32_uninit(b * l * nh * hd)
-        st.d_k_cache = host_f32_uninit(b * nkv * s * hd)
-        st.d_v_cache = host_f32_uninit(b * nkv * s * hd)
-        _bwd_attention_chains(
-            st.d_qk_cell, fwd.kv_k_cache, fwd.q_rope_out, fwd.attn_weights,
-            st.d_attn_ctx, st.d_q_rope, st.d_k_cache, st.d_v_cache,
-            b, l, s, nh, nkv, n_rep, hd, qw, own0, window,
-        )
-        host_tick(hton, htk, "bwd.attention_chains")
+    # =====================================================================
+    # STAGE 22. `dq`. **NEW ARITHMETIC, AND THE LANE'S LARGEST FINDING.**
+    # DEVIATION 1402.
+    #
+    #     dq[b,h,t,d] = sum over j ASCENDING, ABSOLUTE key index, from +0.0
+    #                   acc = ftz(fma(d_cell[b,h,t,j], k_cache[b,kv,j,d], acc))
+    #
+    # **GEMM v1 IS REFUSED HERE AND THE REASON IS NOT THE FORWARD'S
+    # REASON.** S11 was ROUTED (contract DEVIATION 808) precisely because it
+    # contracts over `head_dim`, the same integer in both paths. Its `dA`
+    # contracts over the OUTPUT WIDTH, and S11's output width is the KV
+    # AXIS. So the routed `dq` would be an `OP_NN` at `(l, hd, s)` with
+    # `k' = S`, and `P = f(S)` builds one tree at `S = 257` and a different
+    # one at `S = 200`. The masked `+0.0` tail, bitwise inert in a serial
+    # ascending chain, is NOT inert under a tree whose shape changes with
+    # the length.
+    #
+    # Under the chain it IS inert: at a masked `(t, j)` the gradient
+    # `d_cell` is a signed zero (stage 20's note), `fma(+-0.0, k, acc)` is
+    # `acc + (+-0.0)`, and a `+0.0`-seeded chain never holds `-0.0`. **So
+    # `dq` is independent of the kv length and a decode step's `dq` is the
+    # prefill's `dq` bit for bit.** That is the backward's clause (c) and
+    # clause (d), and it holds by CONSTRUCTION -- the gate exists to catch
+    # the construction being violated by an execution plan.
+    #
+    # Sabotage `B11_DQ_VIA_GEMM`, **INERT AT EVERY `S <= 128`** where
+    # `P(S) == 1` and the gemm cell IS the whole-`k` ascending chain from
+    # `+0.0`. The `L = 257` fixture is the only one that reaches it. An arm
+    # that passes clause (a) by construction and needs clause (d) to bite is
+    # exactly the shape contract section 10 warns will look inert and get
+    # deleted.
+    #
+    # The loop is (batch, query, head, depth), which IS the output's
+    # token-major `[M, qw]` order, so the cells are appended in place and no
+    # write-by-index helper is needed. Loop order is free here because every
+    # output cell owns its own chain.
+    # =====================================================================
+    # =====================================================================
+    # STAGE 23. `dk_cache`. NEW ARITHMETIC. DEVIATIONS 1403, 1424, 1417.
+    #
+    #     dk[b,kv,j,d] = for h in the kv group ASCENDING
+    #                      for t ASCENDING
+    #                        acc = ftz(fma(d_cell[b,h,t,j], q_rope[b,h,t,d], acc))
+    #
+    # **ONE CHAIN, NOT A SUM OF PER-HEAD PARTIALS** (DEVIATION 1424). With
+    # `n_rep > 1` several attention heads share one kv head, and folding
+    # each head separately and adding the partials is a different
+    # association. The head axis is OUTERMOST, matching the forward's own
+    # `(batch, head, query)` nesting.
+    #
+    # **GEMM v1 IS REFUSED**: the routed form is `OP_TN` at `(s, hd, l)`
+    # with `k' = L`, the QUERY COUNT, path dependent. Sabotage
+    # `B11_DK_VIA_GEMM`, INERT only when `L <= 128` AND `n_rep == 1`
+    # together -- at `n_rep == 2` the routed form must accumulate two
+    # per-head gemms and fires on shape alone.
+    #
+    # **THIS IS A PARTIAL AND IT IS NAMED ONE** (DEVIATION 1417). A key at
+    # slot `j` is read by every query at absolute position `>= j`, and the
+    # queries in LATER calls are not in this call. So the fold over `[0, l)`
+    # is the contribution of THIS call's queries and nothing else. The full
+    # `[0, S)` range is emitted so a multi-call assembler has a complete
+    # partial to add; assembling is out of scope. **THE FORWARD'S
+    # DECODE-EQUALS-PREFILL DOES NOT TRANSFER TO THIS OUTPUT AND THIS LANE
+    # DOES NOT PRETEND IT DOES.**
+    # =====================================================================
+    # The other operand is the FORWARD's rotated
+    # query, `q_rope.out`, token-major [M, qw]. NOT
+    # `q_proj.out`: the QK product reads the ROTATED
+    # q, so its derivative does too, and reading the
+    # pre-rotation activation here would produce a
+    # plausible gradient that is wrong by one
+    # rotation.
+    # =====================================================================
+    # STAGE 24. `dv_cache`. NEW ARITHMETIC. DEVIATION 1404, the mirror of
+    # contract DEVIATION 807.
+    #
+    #     dv[b,kv,j,d] = for h in the kv group ASCENDING
+    #                      for t ASCENDING
+    #                        acc = ftz(fma(y[b,h,t,j], d_ctx[b,h,t,d], acc))
+    #
+    # Same fold axis as stage 23, same refusal, same partial-gradient
+    # caveat. Sabotage `B19_DV_VIA_GEMM`, the backward twin of
+    # `S19_VALUE_SUM_VIA_GEMM`, and it inherits that arm's warning verbatim:
+    # without clause (d) it looks inert and gets deleted.
+    #
+    # The masked cells contribute `fma(+0.0, dctx, acc)` because `y` is
+    # exactly `+0.0` there (contract 7.1), so they are bitwise inert here
+    # too -- which is why `dv` for a key slot does not depend on how many
+    # PADDING keys were in the launch, only on how many QUERIES were.
+    # =====================================================================
+    #
+    # CPU SPEED (lane neural-cpu, 2026-09-28): the three chains below, as the
+    # serial walk writes them, with the `head_dim` outputs of one row advanced
+    # together as SIMD lanes (each lane its own output's chain: the same
+    # operands, the same ascending order, one fused multiply-add and one flush
+    # per step) and the rows split over host tasks. Each list is sized once
+    # and every entry written, in the layout the appends produced:
+    #   d_q_rope[(bb*l + qi)*qw + h*hd + d]     = chain over j of dqk[j] * k[j, d]
+    #   d_k_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of dqk[t, j] * q[t, d]
+    #   d_v_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of w[t, j] * dctx[t, d]
+    st.d_q_rope = host_f32_uninit(b * l * nh * hd)
+    st.d_k_cache = host_f32_uninit(b * nkv * s * hd)
+    st.d_v_cache = host_f32_uninit(b * nkv * s * hd)
+    _bwd_attention_chains(
+        st.d_qk_cell, fwd.kv_k_cache, fwd.q_rope_out, fwd.attn_weights,
+        st.d_attn_ctx, st.d_q_rope, st.d_k_cache, st.d_v_cache,
+        b, l, s, nh, nkv, n_rep, hd, qw, own0, window,
+    )
+    host_tick(hton, htk, "bwd.attention_chains")
 
     # =====================================================================
     # STAGE 25-26. The KV append's backward: a SLICE, no arithmetic. This

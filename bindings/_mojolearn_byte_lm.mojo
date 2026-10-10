@@ -1999,7 +1999,7 @@ def byte_lm_arithmetic_suffix_binding() raises -> PythonObject:
     # The whole byte-LM arithmetic suffix that ByteConfig.profile() appends
     # (neural + CE token-tree + GEMM leaf + attention tags), not only the
     # neural part: the loader checks profile == PROFILE + this, so an A/B arm
-    # build (e.g. MOJOLEARN_IDN_ATTN_SOFTMAX=2) loads (bytelm-profile-harness).
+    # build (e.g. MOJOLEARN_IDN_GEMM_LEAF) loads (bytelm-profile-harness).
     return PythonObject(byte_lm_arithmetic_suffix())
 
 
