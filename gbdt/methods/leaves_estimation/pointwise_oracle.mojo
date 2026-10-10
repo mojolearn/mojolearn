@@ -110,9 +110,6 @@ from gbdt.methods.leaves_estimation.leaves_estimation import (
     f32_stash_kernel,
 )
 from gbdt.targets.kernel.multilogit import (
-    MC_CLASS_BATCH_EST,
-    MC_REG_MAX_CLASSES,
-    launch_multilogit_est_fused,
     launch_multilogit_second_der,
     launch_multilogit_second_der_all_rows,
     launch_multilogit_value_and_der,
@@ -874,13 +871,9 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 self.d_mag_dummy, False,
             )
         else:
-            comptime if MC_EST_ACTIVE:
-                if (
-                    self.estimation_method == LEAF_ESTIMATION_NEWTON
-                    and _mc_est_takes(self.single_bin_dim, self.n_rows)
-                ):
-                    self._write_multiclass_fused_evaluation(value, gradient)
-                    return
+            # TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_EST (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1
+            # (the one-launch value + der + der2 arm here); code recoverable at b639a2bd2.
+            # Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_EST.patch.
             # TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_DERIV (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1
             # (the register-softmax arm here); code recoverable at b639a2bd2.
             # Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_DERIV.patch.
@@ -1047,92 +1040,9 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         self.der_at_point.clear()
         self.cached_der2.clear()
 
-    def _write_multiclass_fused_evaluation(
-        mut self, mut value: Float64, mut gradient: List[Float64]
-    ) raises:
-        """FAST Apple (`MC_CLASS_BATCH_EST`, lane af-sym-multi): the
-        MultiClass Newton evaluation in ONE launch, one partition reduce
-        over `(K - 1) + K (K + 1) / 2` columns, one copy and one wait. The
-        der planes feed `der_at_point` and the gradient exactly as the
-        two-launch arm does; the lower-triangle planes are kept in
-        `cached_der2` (`bin_count * K (K + 1) / 2` doubles, bin-major, the
-        row-slot order of `multilogit_second_der_all_rows_kernel`) for
-        `_write_blocked_second_derivatives`, which the walker calls next
-        at the same point. `move_to` clears the cache, so a moved point can
-        never read a stale Hessian. Only compiled under `MC_EST_ACTIVE`;
-        the caller checks Newton and the class cap."""
-        comptime if MC_EST_ACTIVE:
-            var eff = self.cursor_dim
-            var hbs = self.single_bin_dim
-            var tri = hbs * (hbs + 1) // 2
-            var width = eff + tri
-            var ml_blocks = multilogit_blocks(self.n_rows)
-            # the caller opened "est.approx"
-            launch_multilogit_est_fused(
-                self.ctx, self.num_classes, self.n_rows,
-                self.d_target, self.d_weights, self.has_weights,
-                self.d_cursor, self.n_rows,
-                self.d_fv,
-                self.d_multi_der, self.n_rows,
-            )
-            self.times.end(self.ctx, "est.approx")
-            self.times.begin(self.ctx)
-            compute_partition_stats(
-                self.ctx, self.bin_count, 0, width, self.n_rows,
-                self.d_leaves, self.d_p_off, self.d_p_sz,
-                self.d_multi_der, self.d_multi_partials, self.d_multi_stats,
-                sm_count=self.sm_count,
-            )
-            self.times.end(self.ctx, "est.pstats")
-            self.times.begin(self.ctx)
-            self.ctx.enqueue_copy(
-                dst_ptr=self.h_multi_stats.unsafe_ptr(),
-                src_buf=self.d_multi_stats,
-            )
-            self.ctx.enqueue_copy(
-                dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
-            )
-            self.ctx.synchronize()
-            self.times.end(self.ctx, "est.readback")
-            # `DerAtPoint = ReadReduce(reducedDer)`: the der planes
-            self.der_at_point.clear()
-            for bin in range(self.bin_count):
-                for dim in range(eff):
-                    self.der_at_point.append(
-                        Float64(
-                            self.h_multi_stats.unsafe_ptr().unsafe_load(
-                                bin * width + dim
-                            )
-                        )
-                    )
-            # the MultiClass reconstruction of the pinned component
-            gradient.clear()
-            for _ in range(self.bin_count * hbs):
-                gradient.append(Float64(0.0))
-            for bin in range(self.bin_count):
-                var total = Float64(0.0)
-                for dim in range(eff):
-                    var val = self.der_at_point[bin * eff + dim]
-                    gradient[bin * hbs + dim] = val
-                    total += val
-                gradient[bin * hbs + eff] = -total
-            # the Hessian's lower triangle, served to the next call
-            self.cached_der2.clear()
-            for bin in range(self.bin_count):
-                for slot in range(tri):
-                    self.cached_der2.append(
-                        Float64(
-                            self.h_multi_stats.unsafe_ptr().unsafe_load(
-                                bin * width + eff + slot
-                            )
-                        )
-                    )
-            var mfv32 = Float32(0.0)
-            for b in range(ml_blocks):
-                mfv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
-            value = Float64(mfv32)
-        else:
-            raise Error("_write_multiclass_fused_evaluation is a FAST + Apple path")
+    # TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_EST (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1
+    # (`_write_multiclass_fused_evaluation`); code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_EST.patch.
 
     def write_second_derivatives(mut self, mut second_der: List[Float64]) raises:
         """`WriteSecondDerivatives` (`pointwise_oracle.cpp:114-195`).
@@ -1348,31 +1258,8 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         for _ in range(matrix_size * self.bin_count):
             second_der.append(Float64(0.0))
 
-        comptime if MC_EST_ACTIVE:
-            # FAST Apple (`MC_CLASS_BATCH_EST`): the fused evaluation at
-            # this point left the lower triangle in `cached_der2`; the
-            # same mirror, no launch, no wait
-            var tri_c = hbs * (hbs + 1) // 2
-            if (
-                self.objective == OBJECTIVE_MULTICLASS
-                and len(self.cached_der2) == tri_c * self.bin_count
-            ):
-                for row in range(hbs):
-                    var column_count = row + 1
-                    var slot = row * (row + 1) // 2
-                    for bin in range(self.bin_count):
-                        var base = bin * matrix_size
-                        for col in range(column_count):
-                            var val = self.cached_der2[bin * tri_c + slot + col]
-                            if col == row:
-                                second_der[base + row * hbs + row] = (
-                                    val + self.lambda_reg
-                                )
-                            else:
-                                second_der[base + row * hbs + col] = val
-                                second_der[base + col * hbs + row] = val
-                return
-
+        # TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_EST (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1
+        # (the cached-triangle mirror here); code recoverable at b639a2bd2.
         comptime if MULTICLASS_HESSIAN_BATCH:
             # FAST Apple: every row in one launch into the lower-triangle
             # planes the scratch was sized for (`_oracle_tri_planes`),
@@ -1670,18 +1557,9 @@ def _mc_hess_batch_takes(single_bin_dim: Int, n_rows: Int) -> Bool:
     return tri * max(n_rows, 1) * 4 <= MULTICLASS_HESSIAN_BATCH_MAX_BYTES
 
 
-def _mc_est_takes(single_bin_dim: Int, n_rows: Int) -> Bool:
-    """`MC_EST_ACTIVE`'s fused evaluation: the batched layout AND the
-    register kernels' class bound (`MC_REG_MAX_CLASSES`, K-1 approxes and
-    exps per thread)."""
-    return single_bin_dim <= MC_REG_MAX_CLASSES and _mc_hess_batch_takes(
-        single_bin_dim, n_rows
-    )
-
-
-#: `MC_CLASS_BATCH_EST` (lane af-sym-multi) rides on the batched Hessian's
-#: scratch layout, so it is active only with `MULTICLASS_HESSIAN_BATCH`
-comptime MC_EST_ACTIVE = MC_CLASS_BATCH_EST and MULTICLASS_HESSIAN_BATCH
+# TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_EST (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1
+# (`_mc_est_takes`, `MC_EST_ACTIVE`); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_EST.patch; record in docs/TOMBSTONES.md.
 
 
 def _oracle_tri_planes(objective: Int, single_bin_dim: Int, n_rows: Int) -> Int:
@@ -1699,17 +1577,9 @@ def _oracle_tri_planes(objective: Int, single_bin_dim: Int, n_rows: Int) -> Int:
 
 def _oracle_multi_planes(objective: Int, single_bin_dim: Int, n_rows: Int) -> Int:
     """The width of `d_multi_der` / `d_multi_stats`: `_oracle_tri_planes`,
-    or under `MC_EST_ACTIVE` the der planes AND the triangle,
-    `(K - 1) + K (K + 1) / 2`, for a MultiClass oracle within the cap (the
-    fused evaluation writes both in one launch). The pool's key, the
-    factory and the passes all derive it from here, so the layout allocated
-    is the layout written."""
-    comptime if MC_EST_ACTIVE:
-        if (
-            objective == OBJECTIVE_MULTICLASS
-            and _mc_est_takes(single_bin_dim, n_rows)
-        ):
-            return (single_bin_dim - 1) + single_bin_dim * (single_bin_dim + 1) // 2
+    the only layout since MOJOLEARN_MC_CLASS_BATCH_EST's deletion
+    (2026-10-09). The pool's key, the factory and the passes all derive it
+    from here, so the layout allocated is the layout written."""
     return _oracle_tri_planes(objective, single_bin_dim, n_rows)
 #: negative control for DEVIATION 3041 (default off): a task that REUSES the
 #: fit's buffers gets ONE cell of `d_bins` moved to another leaf after the
