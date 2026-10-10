@@ -908,10 +908,22 @@ def rbc_eps_pass_fill(
 
 
 # ===========================================================================
-# fg-tsne-dbscan D1 / D2 (IDENTICAL, NVIDIA and AMD, DEFAULT OFF, lane
-# fg-tsne-dbscan 2026-10-09).
+# fg-tsne-dbscan D1 / D2 (IDENTICAL, NVIDIA and AMD, lane fg-tsne-dbscan
+# 2026-10-09). PROMOTED TOGETHER to the IDENTICAL DEFAULT 2026-10-10
+# (lane/postmerge-act-7): `-D MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF` restores
+# D1's second distance pass (fill by recompute), `-D
+# MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF` restores today's warp-per-query count and
+# fill (and with it turns D2 off); the old on-defines are refused in
+# core/six_lane_experiment_guards.mojo. fg2 board-bridge A/B on main
+# 0a7b206f1, one run per arm (nv2 L40S default v1023, EPS_TILE v1042, EPS_TILE
+# + ADJ_BITMAP v1043; MI325X a1163 / a1182 / a1183; ratio = arm / fg2 default
+# on the same vendor): dbscan istella EPS_TILE + ADJ_BITMAP NV 0.20x / AMD
+# 0.20x, EPS_TILE alone NV 0.42x / AMD 0.34x; hash 7494ce8e, n_clusters 40131
+# and noise_fraction 0.219391 unchanged in every arm (no bits). dbscan taxi
+# timed out (board-bridge timeout) in every arm and in the default on both
+# vendors: no taxi number.
 #
-# D1, `-D MOJOLEARN_IDN_DBSCAN_EPS_TILE`: THE EPS COUNT AND FILL AS A
+# D1 (MOJOLEARN_IDN_DBSCAN_EPS_TILE, now default; _OFF restores): THE EPS COUNT AND FILL AS A
 # REGISTER-TILED BLOCK. `block_rbc_kernel_eps_csr_pass` walks one query per
 # warp and one candidate per lane, each lane reading its candidate's whole
 # row from device memory (rows `n_cols * 4` bytes apart, so the warp's loads
@@ -950,7 +962,7 @@ def rbc_eps_pass_fill(
 # kernel. Bits: none. Expected: the two eps passes at tile rates instead of
 # warp-per-query rates.
 #
-# D2, `-D MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP` (needs D1): the count pass also
+# D2 (MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP, now default; needs D1): the count pass also
 # writes a bit per (query, candidate slot), and the fill becomes a scan of
 # the set bits (`rbc_eps_bitscan_fill_kernel`), so a range's columns cost one
 # distance pass, not two. Layout: query q's bits for landmark L's slots
@@ -966,9 +978,9 @@ comptime IDN_DBSCAN_EPS_TILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not KNN_DIRECT_DISTANCE
-    and is_defined["MOJOLEARN_IDN_DBSCAN_EPS_TILE"]()
+    and not is_defined["MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF"]()
 )
-comptime IDN_DBSCAN_ADJ_BITMAP = IDN_DBSCAN_EPS_TILE and is_defined["MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP"]()
+comptime IDN_DBSCAN_ADJ_BITMAP = IDN_DBSCAN_EPS_TILE and not is_defined["MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF"]()
 comptime ET_TI = 64
 comptime ET_TJ = 64
 comptime ET_KC = 16

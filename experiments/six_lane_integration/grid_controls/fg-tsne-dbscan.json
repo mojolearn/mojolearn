@@ -47,17 +47,17 @@
    "note": "T2. IDENTICAL, NVIDIA+AMD, needs TS_SPLIT and TS_LANE_FOLD. 256-candidate tiles, one row per thread (16 threads x 4 lanes a row), same 64-lane fold order, same Z tree. Bits none. PROMOTED: both on istella NV 0.86x / AMD 0.62x (avg 0.74x), taxi NV 1.17x / AMD 0.55x (avg 0.86x; vendor split, NV taxi slower). Digests unchanged. The off arm (MOJOLEARN_IDN_TSNE_REP_TILE_OFF) restores the split repulsion kernel."
   },
   "dbscan_eps_tile": {
-   "define": "MOJOLEARN_IDN_DBSCAN_EPS_TILE",
+   "define": "MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_DBSCAN_EPS_TILE"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "neighbors/impl/ball_cover/registers.mojo:963"
+    "neighbors/impl/ball_cover/registers.mojo:977"
    ],
    "binding": [
     "_mojolearn_estimators",
@@ -65,31 +65,30 @@
     "_mojolearn"
    ],
    "bits_change": false,
-   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
-   "note": "D1. IDENTICAL, NVIDIA+AMD, Euclidean, not with KNN_DIRECT_DISTANCE (compiled out there). 64x64 register-tiled eps count/fill with the same three per-pair tests (landmark bound, RBC_LANES chunk-walk reach, eps_dist_sq chain); fill rows canonicalized (DEVIATION 551). Every ball-cover eps query (DBSCAN, neighbors radius)."
+   "status": "promoted 2026-10-10 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): IDENTICAL default with dbscan_adj_bitmap; the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "note": "D1. IDENTICAL, NVIDIA+AMD, Euclidean, not with KNN_DIRECT_DISTANCE (compiled out there). 64x64 register-tiled eps count/fill with the same three per-pair tests (landmark bound, RBC_LANES chunk-walk reach, eps_dist_sq chain); fill rows canonicalized (DEVIATION 551). Every ball-cover eps query (DBSCAN, neighbors radius). PROMOTED 2026-10-10: dbscan istella EPS_TILE alone NV 0.42x / AMD 0.34x (v1042 / a1182), with ADJ_BITMAP NV 0.20x / AMD 0.20x (v1043 / a1183); hash 7494ce8e, n_clusters 40131 and noise_fraction unchanged. dbscan taxi timed out in every arm and the default on both vendors. The off arm restores the warp-per-query count and fill (and turns D2 off)."
   },
   "dbscan_adj_bitmap": {
-   "define": "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP",
+   "define": "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_DBSCAN_EPS_TILE",
-     "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "neighbors/impl/ball_cover/registers.mojo:969",
-    "dbscan/impl/runner.mojo:332"
+    "neighbors/impl/ball_cover/registers.mojo:983",
+    "dbscan/impl/runner.mojo:780"
    ],
    "binding": [
     "_mojolearn_estimators",
     "_mojolearn_estimators_host"
    ],
    "bits_change": false,
-   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
-   "note": "D2, needs D1 (the on arm sets both). Count pass writes word-major bit words; loop 1 keeps each range's bit-scanned CSR (kept total <= edge_cap edges); loop 2, batch 0 and the border pass copy it. Ranges capped at 25% of free memory over n/8 + 8*landmarks bytes a row (more batches at large n)."
+   "status": "promoted 2026-10-10 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): IDENTICAL default (needs dbscan_eps_tile on); the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "note": "D2, needs D1 (the on arm sets both). Count pass writes word-major bit words; loop 1 keeps each range's bit-scanned CSR (kept total <= edge_cap edges); loop 2, batch 0 and the border pass copy it. Ranges capped at 25% of free memory over n/8 + 8*landmarks bytes a row (more batches at large n). PROMOTED 2026-10-10: dbscan istella with EPS_TILE NV 0.20x / AMD 0.20x (v1043 / a1183) against EPS_TILE alone 0.42x / 0.34x; hash 7494ce8e unchanged. The off arm keeps D1 and restores its second distance pass."
   },
   "dbscan_batch_sample": {
    "define": "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE",
