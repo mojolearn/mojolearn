@@ -149,6 +149,29 @@
    "bits_change": true,
    "status": "promoted:ge123e6f9",
    "note": "Default rows2048 (2048-row leaves) in IDENTICAL; arm rows4096 (`_ROWS2048_OFF`) is the old leaf size; panel8 and tree4 now run on top of 2048-row leaves. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
+  },
+  "C25_PROJECTION_REUSE": {
+   "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "experiments/classical_identical_ideas/linear_controls.mojo:213",
+    "kernel_methods/estimator.mojo:212",
+    "kernel_methods/estimator.mojo:2646",
+    "kernel_methods/estimator.mojo:2749",
+    "kernel_methods/rbf_fused.mojo:76",
+    "core/six_lane_experiment_guards.mojo:182"
+   ],
+   "binding": "_mojolearn_kernel_methods",
+   "bits_change": false,
+   "status": "promoted 2026-10-10 (lane/c25-restore-promote; restored from the tombstone patch after grid pass 2 ge123e6f9r2): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "note": "Deleted 2026-10-08 (lane grid-losers-1, ab4e8e543) as noise on pass 1 alone (NV 1.00-1.04x / AMD 0.88-0.98x). Grid pass 2 (NVIDIA) with pass 1, vendor-averaged scored ms on/off: nystroem istella 0.890x, taxi 0.937x; rbf-sampler istella 0.891x, taxi 0.895x; 8 vendor cells, geo-mean 0.903x, worst 0.983x, kernel_rel_error SAME -> PROMOTE (~/mojolearn-evidence/grid-lq/decisions_act_0600_c25.json). _OFF restores the d <= 64 chain (RBF_IDN_FUSED) and the identical GEMM above it. Bits expected unchanged: one leaf (the same ascending chain) at d <= CONTRACT_K_LEAF_MIN, the GEMM-v1 leaves and balanced tree above it. Reach: RBFSampler.transform only (rbf_sampler_transform_host, _rbf_transform_dev); Nystroem's transform does not call _rbf_idn_fused_launch."
   }
  },
  "algorithms": {
@@ -261,14 +284,16 @@
   },
   "more:nystroem": {
    "binding": "_mojolearn_kernel_methods",
-   "route": "kernel_methods/estimator.mojo:2639 (no control; C25 deleted)",
+   "route": "kernel_methods/estimator.mojo nystroem transform (no control: C25 does not reach Nystroem; its pass-2 cells were measured but the code path is RBFSampler's)",
    "controls": [],
    "interaction_groups": []
   },
   "more:rbf-sampler": {
    "binding": "_mojolearn_kernel_methods",
-   "route": "kernel_methods/estimator.mojo:209 (no control; C25 deleted)",
-   "controls": [],
+   "route": "kernel_methods/estimator.mojo:212 [C25]",
+   "controls": [
+    "C25_PROJECTION_REUSE"
+   ],
    "interaction_groups": []
   }
  },
@@ -288,11 +313,6 @@
   {
    "define": "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS",
    "reason": "split: PCA use is MOJOLEARN_CLASSICAL_PCA_COV=23 (one-pass Chan rewrite), MCD use is MOJOLEARN_CLASSICAL_C23_MCD; no LDA/QDA code ever read it; per-cell serial kernel deleted"
-  },
-  {
-   "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE",
-   "control": "C25_PROJECTION_REUSE",
-   "reason": "DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 noise, a loser. on/off ms ratio NV/AMD: nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884; kernel_rel_error SAME. Code recoverable at main ad7ed2370; define refused in core/six_lane_experiment_guards.mojo."
   },
   {
    "define": "MOJOLEARN_CLASSICAL_PCA_COV=23",
