@@ -18,15 +18,8 @@ turns on SYM_BUF_ARENA only; the other three are recorded DROPs):
   existing `h_mags`. The two drains whose only job was to keep a per-call
   buffer alive (`compute_bins_for_model`'s, `partition_from_bins`' outer one)
   go with the buffers.
-- `MOJOLEARN_SYM_REUSE_PARTITION` (`SYM_REUSE_PARTITION`): the searcher's own
-  final partition is the estimator's partition. After the last level
-  `subsets.indices` is the row order grouped by leaf and `subsets.partitions`
-  the (offset, size) per leaf; the searcher's single tail drain carries the
-  partitions back to the host (`sym_parts_out`), and `compute_bins_for_model`
-  + `partition_from_bins` (one bins launch, a 2^depth-way radix sort, two or
-  three drains) are skipped. Falls back to main's path when the tree stopped
-  early (a repeated split: the structure is shorter than `max_depth` and the
-  subsets' bins carry a redundant bit).
+- `MOJOLEARN_SYM_REUSE_PARTITION`: deleted 2026-10-09 (DROPPED-noise;
+  docs/TOMBSTONES.md).
 - `MOJOLEARN_SYM_DERIV_FUSED`: deleted 2026-10-09 (DROPPED-noise;
   docs/TOMBSTONES.md).
 - `MOJOLEARN_SYM_LEAF_FROM_STATS`: deleted 2026-10-09 (DROPPED-noise;
@@ -121,38 +114,14 @@ comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
 #: TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise: sym-iter-leaf istella/taxi -0.2%, old base) deleted 2026-10-09 on
 #: lane/owed-deletions-D1 (one Newton step from the searcher's partition stats, on the device); code recoverable at b639a2bd2.
 #: Restore: git apply experiments/removed/MOJOLEARN_SYM_LEAF_FROM_STATS.patch; record in docs/TOMBSTONES.md.
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
-#: laptop 2026-10-03, singles never built, never timed.
-#: apple-fast LEDGER 2026-10-03: DROP sym-iter reuse-1000 (+0.3%, noise), old base;
-#: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
-comptime SYM_REUSE_PARTITION = SYM_ITER_FAST_APPLE and (
-    # MEASURED M3 FAST; broader workload evidence remains separate.
-# F12/categorical M3 2026-10-06: 4 scored caller times; B/A
-# 0.9445..1.0349 (mixed/regressing); FAST candidate remains OFF.
-# Scored FAST quality 2/2 within existing bands; PASS.
-# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/categorical.
-# Compilation/identity reused. No combined-toggle/full-board claim.
-# F12/default M3 2026-10-06: 6 scored caller times; B/A
-# 0.9547..1.0050 (mixed/regressing); FAST candidate remains OFF.
-# Scored FAST quality 3/3 within existing bands; PASS.
-# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/default.
-# Compilation/identity reused. No combined-toggle/full-board claim.
-# F12/ranking M3 2026-10-06: 4 scored caller times; B/A
-# 0.9972..1.0304 (mixed/regressing); FAST candidate remains OFF.
-# Scored FAST quality 2/2 within existing bands; PASS.
-# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/ranking.
-# Compilation/identity reused. No combined-toggle/full-board claim.
-    is_defined["MOJOLEARN_SYM_REUSE_PARTITION"]()
-)
+#: TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise: sym-iter-reuse taxi +0.3%, old base; F12 2026-10-06 B/A 0.94..1.03 mixed)
+#: deleted 2026-10-09 on lane/owed-deletions-D1 (the searcher's final partition as the estimator's); code recoverable at
+#: b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch; record in docs/TOMBSTONES.md.
 #: TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise: sym-iter-fused istella/taxi -0.1%, old base) deleted 2026-10-09 on
 #: lane/owed-deletions-D1 (the next tree's gradient pass behind this tree's tail drain); code recoverable at b639a2bd2.
 #: Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch; record in docs/TOMBSTONES.md.
 comptime SYM_ITER_ANY = (
-    SYM_BUF_ARENA or SYM_REUSE_PARTITION
+    SYM_BUF_ARENA
 )
 
 
@@ -185,9 +154,6 @@ struct SymIterPool(Movable):
     #: SYM_BUF_ARENA: the leaf partitioner (`partition_from_bins` built one
     #: per call: eight n_rows-sized buffers); its `bins` is the bins target
     var parts: DeviceLeafPartitioner
-    #: SYM_REUSE_PARTITION: the searcher's `subsets.partitions` on the host,
-    #: filled by the searcher's own tail drain
-    var h_parts: HostBuffer[DType.uint32]
 
     def __init__(
         out self,
@@ -221,10 +187,6 @@ struct SymIterPool(Movable):
         self.d_bin = ctx.enqueue_create_buffer[DType.uint32](depth_arena)
         self.d_eq = ctx.enqueue_create_buffer[DType.uint8](depth_arena)
         self.parts = DeviceLeafPartitioner(ctx, rows_arena, leaves_arena)
-        var parts_reuse = 2 * n_leaves if SYM_REUSE_PARTITION else 1
-        self.h_parts = ctx.enqueue_create_host_buffer[DType.uint32](
-            parts_reuse
-        )
         ctx.synchronize()
 
 

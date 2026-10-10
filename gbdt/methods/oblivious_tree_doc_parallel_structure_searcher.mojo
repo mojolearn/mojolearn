@@ -124,7 +124,7 @@ from gbdt.gpu_util.kernel.transform import (
 from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
 #: lane/apple-fast-sym-iter: FAST + Apple aliases, default OFF
 #: (`gbdt/methods/sym_iter_fast.mojo`); every use below sits under one
-from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA, SYM_REUSE_PARTITION
+from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA
 from gbdt.methods.dynamic_boosting_folds import TFold
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
 from gbdt.trees_identical_switches import (
@@ -413,7 +413,8 @@ def fit_oblivious_tree_structure_traced(
     std_scale_word: List[DeviceBuffer[DType.float32]] = List[
         DeviceBuffer[DType.float32]
     ](),
-    var sym_parts_out: Optional[HostBuffer[DType.uint32]] = None,
+    # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
+    # `sym_parts_out` argument); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch.
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
@@ -423,12 +424,6 @@ def fit_oblivious_tree_structure_traced(
     fit's `_ord_std_scale_kernel` wrote them, and the histogram and score
     kernels read those device words; `fixed_scale` and `score_std_dev` are
     then unread. Same values, same arithmetic, no drain to fetch them.
-
-    `sym_parts_out` (lane/apple-fast-sym-iter, read under
-    `SYM_REUSE_PARTITION` only): a host buffer of `2 * max_part_count`
-    words that receives `subsets.partitions` (offset, size per leaf) in
-    the tree's one tail drain, so the caller can reuse the searcher's
-    final partition for leaf estimation. Ignored on every other build.
 
     `permutation_id` (fold arm only): a caller id for `permutation`, fixed
     for the span of `pool`; with it the fold doc ids are built once per id
@@ -1133,13 +1128,8 @@ def fit_oblivious_tree_structure_traced(
     ctx.enqueue_copy(
         dst_buf=pool[0].h_winners_scores, src_buf=pool[0].d_winners_scores
     )
-    # lane/apple-fast-sym-iter, SYM_REUSE_PARTITION: the final partition's
-    # (offset, size) records ride the same drain back to the caller
-    comptime if SYM_REUSE_PARTITION:
-        if sym_parts_out.__bool__():
-            ctx.enqueue_copy(
-                dst_buf=sym_parts_out.value(), src_buf=subsets.partitions
-            )
+    # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the final
+    # partition's records on this drain); code recoverable at b639a2bd2.
     ctx.synchronize()
     times.end(ctx, "pw.drain")
 

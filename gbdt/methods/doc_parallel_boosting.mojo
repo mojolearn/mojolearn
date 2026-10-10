@@ -83,18 +83,12 @@ from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
 from gbdt.methods.sym_iter_fast import (
     SYM_BUF_ARENA,
     SYM_ITER_ANY,
-    SYM_REUSE_PARTITION,
     SymIterPool,
     sym_compute_bins_pooled,
     sym_objective_is_pointwise,
     sym_pool_get,
     sym_scale_from_mags,
     sym_split_planes,
-)
-from gbdt.methods.pointwise_optimization_subsets import (
-    PARTITION_RECORD as SYM_PARTITION_RECORD,
-    PART_OFFSET as SYM_PART_OFFSET,
-    PART_SIZE as SYM_PART_SIZE,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_sequential_two_level_feature_freq_tree,
@@ -3964,11 +3958,6 @@ def fit_with_test(
                 planes = sym_split_planes(ctx, stats, n_rows, sym_pool[0])
             else:
                 planes = split_stat_planes(ctx, stats, n_rows)
-            # SYM_REUSE_PARTITION: the searcher's final partition records
-            # come back in its tail drain
-            var sym_parts_opt = Optional[HostBuffer[DType.uint32]]()
-            comptime if SYM_REUSE_PARTITION:
-                sym_parts_opt = Optional(sym_pool[0].h_parts.copy())
             # lane/sym-quality: the gradient plane onto the tree's grid, as
             # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
             # only where the scale above is a real one
@@ -3990,68 +3979,39 @@ def fit_with_test(
                 score_std_dev=pointwise_score_std_dev,
                 seed=tree_seed,
                 one_hot=one_hot,
-                sym_parts_out=sym_parts_opt^,
             )
-            # SYM_REUSE_PARTITION: a full-depth tree's final subsets ARE the
-            # partition -- `indices` grouped by leaf, (offset, size) per
-            # leaf in `h_parts` -- so the bins pass and the radix sort are
-            # skipped. A tree that stopped early (repeated split) keeps
-            # main's path: its subsets carry one redundant bit per repeat.
-            var sym_reuse = False
-            comptime if SYM_REUSE_PARTITION:
-                if len(splits) == max_depth and max_depth > 0:
-                    sym_reuse = True
-                    var sym_hp = sym_pool[0].h_parts.unsafe_ptr()
-                    sizes.clear()
-                    leaf_offsets.clear()
-                    for leaf in range(1 << max_depth):
-                        leaf_offsets.append(
-                            Int(
-                                sym_hp.unsafe_load(
-                                    leaf * SYM_PARTITION_RECORD
-                                    + SYM_PART_OFFSET
-                                )
-                            )
-                        )
-                        sizes.append(
-                            Int(
-                                sym_hp.unsafe_load(
-                                    leaf * SYM_PARTITION_RECORD
-                                    + SYM_PART_SIZE
-                                )
-                            )
-                        )
-                    sym_rows = pw_pool[0].subsets.indices.copy()
-            if not sym_reuse:
-                var sym_pooled_partition = False
-                comptime if SYM_BUF_ARENA:
-                    # the pool's partitioner: the bins land in its `bins`,
-                    # one drain (the bounds readback), no allocation and no
-                    # keep-alive drain
-                    sym_pooled_partition = True
-                    sym_compute_bins_pooled(
-                        ctx, layout_for_test, splits, len(splits), lc,
-                        n_rows, sym_pool[0],
-                    )
-                    var sym_part = sym_pool[0].parts.partition(
-                        ctx, n_rows, 1 << len(splits)
-                    )
-                    sizes = sym_part.sizes.copy()
-                    leaf_offsets = sym_part.offsets.copy()
-                    row_index = sym_part.row_index.copy()
-                if not sym_pooled_partition:
-                    var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-                    compute_bins_for_model(
-                        ctx, layout_for_test, splits, len(splits), lc, n_rows,
-                        d_bins,
-                    )
-                    var part = partition_from_bins(
-                        ctx, d_bins, n_rows, 1 << len(splits)
-                    )
-                    sizes = part.sizes.copy()
-                    leaf_offsets = part.offsets.copy()
-                    row_index = part.row_index.copy()
-                sym_rows = row_index.copy()
+            # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (a
+            # full-depth tree's final subsets as the partition); code recoverable at b639a2bd2.
+            # Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch.
+            var sym_pooled_partition = False
+            comptime if SYM_BUF_ARENA:
+                # the pool's partitioner: the bins land in its `bins`,
+                # one drain (the bounds readback), no allocation and no
+                # keep-alive drain
+                sym_pooled_partition = True
+                sym_compute_bins_pooled(
+                    ctx, layout_for_test, splits, len(splits), lc,
+                    n_rows, sym_pool[0],
+                )
+                var sym_part = sym_pool[0].parts.partition(
+                    ctx, n_rows, 1 << len(splits)
+                )
+                sizes = sym_part.sizes.copy()
+                leaf_offsets = sym_part.offsets.copy()
+                row_index = sym_part.row_index.copy()
+            if not sym_pooled_partition:
+                var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+                compute_bins_for_model(
+                    ctx, layout_for_test, splits, len(splits), lc, n_rows,
+                    d_bins,
+                )
+                var part = partition_from_bins(
+                    ctx, d_bins, n_rows, 1 << len(splits)
+                )
+                sizes = part.sizes.copy()
+                leaf_offsets = part.offsets.copy()
+                row_index = part.row_index.copy()
+            sym_rows = row_index.copy()
             # TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (one
             # Newton step from the searcher's statistics); code recoverable at b639a2bd2.
             # Restore: git apply experiments/removed/MOJOLEARN_SYM_LEAF_FROM_STATS.patch.
