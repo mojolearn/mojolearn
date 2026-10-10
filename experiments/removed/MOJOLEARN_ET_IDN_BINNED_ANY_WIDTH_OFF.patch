@@ -1,0 +1,81 @@
+Restores MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF: the reverse of d631a057c (2026-10-07, "trees: delete duplicate/loser defines (IDN_RF_ROWS_SORTED, IDN_RF_TASK_ROWS256, IDN_RF_DEVICE_LOOP_K*, IDN_ET_BINNED_U16")
+restricted to code files (hunks that name this define).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF.patch  (or git apply -3 when main has moved on).
+First apply experiments/removed/_shared-d631a057c.patch: the deletion commit's hunks that name no single define (shared by every define it deleted).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo b/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
+index d54ae18b9..e3a091fa2 100644
+--- a/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
+@@ -2334,19 +2365,63 @@ def transpose_to_row_major_kernel(
+ #: the M4 at 1M rows: istellareg 86 -> 67 s, year 23.2 -> 18.0 s, RMSE equal
+ #: to float X (8-bit codes from 1024 sampled rows, or thresholds drawn in
+ #: code space, both moved RMSE). `-D MOJOLEARN_ET_BINNED_OFF` keeps float X.
+-#: The IDENTICAL arm of this search (`MOJOLEARN_IDN_ET_BINNED_U16`, fam2-forests
+-#: 2026-10-04) was a measured loser (2026-10-05 full-harness A/B: NVIDIA 1.064x,
+-#: AMD 1.025x slower, RMSE worse on Istella and Year; evidence
+-#: experiments/identical_speed/results/20261005/forest-et-decision/board.json)
+-#: and was DELETED with its host column (`HostBins`, host_binned.mojo) by lane
+-#: trees-small 2026-10-07 (docs/apple-fast/EXPERIMENTS.md row). FAST only now.
++#: 2026-10-05 full-harness IDENTICAL A/B decision: REJECT et-u16; keep OFF.
++#: Frozen numerical source a006da73d, harness e5f3b578b; et-float baseline.
++#: Full Istella regression / Year, one excluded warmup and one scored fit each:
++#: candidate/baseline time NVIDIA 0.969901 / 1.167335; AMD 1.033972 / 1.016499.
++#: Geometric ratios: NVIDIA 1.064049, AMD 1.025198, combined 1.044443 (slower).
++#: Same-arm full model and prediction bits match NVIDIA/AMD; candidate vs float
++#: changes bits as designed. RMSE worsens: Istella .5645249225 -> .5649949313,
++#: Year 9.3233870097 -> 9.3234698986. No net performance win; not promoted.
++#: Single-sample results do not establish variance or Apple/host qualification.
++#: Evidence: experiments/identical_speed/results/20261005/forest-et-decision/board.json.
++comptime IDN_ET_BINNED = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_ET_BINNED_U16"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++"""fam2-forests (2026-10-04), CANDIDATE ARM, default OFF
++(`-D MOJOLEARN_IDN_ET_BINNED_U16=1`; dead under `MOJOLEARN_IDN_ALL_OFF`):
++the 16-bit binned regression search under IDENTICAL on every vendor. THE
++MODEL CHANGES (ranges are the borders of the node's lowest and highest
++codes, every threshold is snapped down to a border), so all four columns
++move together: the device arms are the FAST Apple ones (the range kernel's
++IDENTICAL arm already folds codes in key space and decodes the borders),
++and the host column (`train_tree_exact`, through `HostBins`) restates the
++same borders, codes, ranges, snap and stored threshold. Gate, per FIT and
++the same on the host: a regressor with `n_cols >= ET_IDN_BINNED_MIN_COLS` and
++`2k >= n_cols` (`et_identical_bins_wanted`). It turns the tiled search on
++(`ET_RANGE_TILED and ET_SCORE_TILED` include `IDN_ET_BINNED`, bit-inert)
++whatever the vendor tiled-search switches say, so the binning decision is
++the same on every column under every switch combination."""
++
+ comptime ET_BINNED_REG = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and has_apple_gpu_accelerator()
+     and not is_defined["MOJOLEARN_ET_BINNED_OFF"]()
+-)
++) or IDN_ET_BINNED
+ comptime ET_BINS = ET_QSTRIDE
+ comptime ET_CODE = DType.uint16
++#: IDENTICAL (`et_identical_bins_wanted`, device and host column).
++#: lane/no-dim-idn (2026-10-04): the old floor of 64 columns sat between the
++#: two board widths it was measured at (16 loses, 220 wins), so it was a
++#: board cut, not a cost rule. Cost reasoning at any width: the border pass
++#: reads every row of a column once per FIT, while the uint16 codes halve the
++#: bytes of every column value the range and score passes read at every
++#: level of every tree, so the saving is (trees x levels) reads per value
++#: against one: it is per value, not per row line, and does not depend on the
++#: column count. The fit-shape gate that remains is the tiled search's own
++#: `2k >= n_cols` (the sampled features cover at least half the row). This
++#: matches the FAST gate below, already moved to every width.
++#: `-D MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF` (and `MOJOLEARN_IDN_ALL_OFF`)
++#: restore the old floor of 64 (A/B arm B). Bits: the arm is a default-OFF
++#: candidate (`MOJOLEARN_IDN_ET_BINNED_U16`); under it, fits with 2..63
++#: columns now bin, and the device and the host column read this one gate,
++#: so NVIDIA, AMD, Apple and the host move together.
++comptime ET_IDN_BINNED_ANY_WIDTH = not is_defined[
++    "MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF"
++]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++comptime ET_IDN_BINNED_MIN_COLS = 1 if ET_IDN_BINNED_ANY_WIDTH else 64
+ #: FAST + Apple: LEGACY, default OFF: binning was taken only at n_cols >= 64, chosen
+ #: between taxi (16 columns, slower) and istella (220, faster). Removed as
+ #: benchmark-tuned on 2026-10-04: binning now applies at every width;

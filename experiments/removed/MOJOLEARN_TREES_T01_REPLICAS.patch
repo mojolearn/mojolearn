@@ -1,0 +1,22 @@
+Restores MOJOLEARN_TREES_T01_REPLICAS: the reverse of e5ad4d891 (2026-10-07, "trees: delete T01/N07 streamed histogram replicas (lost on NV+AMD) and its experiment code")
+restricted to code files (hunks that name this define).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_TREES_T01_REPLICAS.patch  (or git apply -3 when main has moved on).
+First apply experiments/removed/_shared-e5ad4d891.patch: the deletion commit's hunks that name no single define (shared by every define it deleted).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/ensemble/tree_identical_ideas.mojo b/ensemble/tree_identical_ideas.mojo
+index 2830c5631..e5c7fe239 100644
+--- a/ensemble/tree_identical_ideas.mojo
++++ b/ensemble/tree_identical_ideas.mojo
+@@ -10,8 +10,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+ # Every switch below is default OFF and IDENTICAL-only. The shared status above
+ # applies individually to every switch and its parameter/sub-arm.
+-# T01 (streamed exact histogram replicas, = N07) DELETED 2026-10-07: lost on
+-# NVIDIA and AMD. Its T01_ROWS task-size knob is covered by T02's cost rule.
++comptime T01 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T01"]()
++comptime T01_REPLICAS = get_defined_int["MOJOLEARN_TREES_T01_REPLICAS", 4]()
++comptime T01_ROWS = get_defined_int["MOJOLEARN_TREES_T01_ROWS", 256]()
+ comptime T02 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T02"]()
+ comptime T03 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T03"]()
+ comptime T04 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T04"]()

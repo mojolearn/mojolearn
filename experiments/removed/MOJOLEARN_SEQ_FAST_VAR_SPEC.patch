@@ -1,0 +1,314 @@
+Restores MOJOLEARN_SEQ_FAST_VAR_SPEC: the reverse of dfbdc7943 (2026-10-03, "apple-fast-gap-tsa: TSA_FAST_KPSS_PACK, TSA_FAST_SELD_FUSED, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_THETA_SPEC default on FAST+A")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_SPEC.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/bindings/_mojolearn_x_sequence.mojo b/bindings/_mojolearn_x_sequence.mojo
+index 4e41c0822..72b87daa2 100644
+--- a/bindings/_mojolearn_x_sequence.mojo
++++ b/bindings/_mojolearn_x_sequence.mojo
+@@ -14,7 +14,7 @@ from sequence.exec_device import DeviceExec
+ from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
+ from sequence.ets_team import ETS_TEAM
+ from sequence.ets_team_py import ets_team_applies, ets_team_py
+-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, prophet_predict_py, moe_forward_py
++from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, var_spec_steps_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, prophet_predict_py, moe_forward_py
+ from sequence.opt_resident import lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
+ from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
+ from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
+@@ -89,6 +89,10 @@ def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> Python
+     return var_forecast_py(ex, addrs, ip)
+ 
+ 
++def var_spec_steps_binding(ip: PythonObject) raises -> PythonObject:
++    return var_spec_steps_py(ip)
++
++
+ def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+     var ex = DeviceExec()
+     return mlp_fit_py(ex, addrs, ip, fp)
+@@ -197,6 +201,7 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
+         m.def_function[stl_binding]("stl")
+         m.def_function[var_fit_binding]("var_fit")
+         m.def_function[var_forecast_binding]("var_forecast")
++        m.def_function[var_spec_steps_binding]("var_spec_steps")
+         m.def_function[mlp_fit_binding]("mlp_fit")
+         m.def_function[mlp_predict_binding]("mlp_predict")
+         m.def_function[adafactor_step_binding]("adafactor_step")
+diff --git a/python/mojolearn/_x_sequence_var.py b/python/mojolearn/_x_sequence_var.py
+index 76c5a0b8f..da798f9f3 100644
+--- a/python/mojolearn/_x_sequence_var.py
++++ b/python/mojolearn/_x_sequence_var.py
+@@ -41,6 +41,12 @@ class VARResults:
+         y = np.ascontiguousarray(np.asarray(y, dtype=np.float32)[-self.k_ar:])
+         if y.shape != (self.k_ar, self.neqs):
+             raise ValueError(f"forecast: y needs at least {self.k_ar} rows of {self.neqs} columns")
++        spec = getattr(self, "_spec", None)
++        if (spec is not None and 1 <= int(steps) <= spec.shape[0]
++                and y.tobytes() == self.endog[-self.k_ar:].tobytes()):
++            # the rows the fit computed from the same last rows under the same
++            # params (SEQ_FAST_VAR_SPEC, lane/apple-fast-gap-tsa): the same words
++            return spec[:int(steps)].copy()
+         out = np.zeros((int(steps), self.neqs), dtype=np.float32)
+         p = np.ascontiguousarray(self.params, dtype=np.float32)
+         _backend.binding("_mojolearn_x_sequence", self._numeric_mode).var_forecast(
+@@ -76,9 +82,23 @@ class VAR:
+         params = np.zeros((m, K), dtype=np.float32)
+         sigma = np.zeros((K, K), dtype=np.float32)
+         resid = np.zeros((max(n - p, 1), K), dtype=np.float32)
+-        code = _backend.binding("_mojolearn_x_sequence", self.numeric_mode).var_fit(
+-            [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data], [n, K, p, kt])
++        mod = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
++        # SEQ_FAST_VAR_SPEC builds (lane/apple-fast-gap-tsa) also return the
++        # forecast rows from the endog's last p rows; others report 0
++        steps_fn = getattr(mod, "var_spec_steps", None)
++        spec_h = int(steps_fn([K, p])) if steps_fn is not None else 0
++        spec = None
++        if spec_h > 0:
++            spec = np.zeros((spec_h, K), dtype=np.float32)
++            code = mod.var_fit(
++                [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data,
++                 spec.ctypes.data], [n, K, p, kt, spec_h])
++        else:
++            code = mod.var_fit(
++                [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data], [n, K, p, kt])
+         if int(code):
+             raise np.linalg.LinAlgError(
+                 f"VAR.fit: the lagged design is rank deficient (Cholesky pivot of column {int(code) - 1})")
+-        return VARResults(self.endog, params, sigma, resid, p, kt, self.numeric_mode)
++        res = VARResults(self.endog, params, sigma, resid, p, kt, self.numeric_mode)
++        res._spec = spec
++        return res
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 99462f2d0..911a0a6a1 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -77,13 +77,21 @@ comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gp
+ comptime TSA2_VAR = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_VAR_OFF"]()
+ comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
+ #: lane/apple-fast-gap-tsa (docs/apple-fast/notes/gap-tsa.md), on the
+-#: TSA2_VAR fit, FAST + Apple only.
+-#: SEQ_FAST_VAR_ONECOPY: params, resid, sigma_u and the status word lie in
+-#: one span of the workspace, so one device-to-host copy replaces four.
+-#: Default since the M3 A/B (n=1, quality identical; var taxi-hourly
+-#: 5.9 -> 5.1 ms, synthetic 6.2 -> 5.0 ms); -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF
+-#: restores the four copies; the old -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY is harmless.
+-comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF"]()
++#: TSA2_VAR fit, default OFF, FAST + Apple only.
++#: SEQ_FAST_VAR_SPEC (-D MOJOLEARN_SEQ_FAST_VAR_SPEC): the fit also queues
++#: the forecast recursion from the last p rows of the bound endog under the
++#: final params (`var_spec_steps` rows) and brings it down on the fit's one
++#: wait; VARResults.forecast hands those rows back when it is asked for at
++#: most that many steps from the same last rows, bit for bit (the same
++#: kernel on the same words), else runs its own call as before.
++#: SEQ_FAST_VAR_ONECOPY (-D MOJOLEARN_SEQ_FAST_VAR_ONECOPY): params,
++#: resid, sigma_u, the status word (and the speculative rows) lie in one
++#: span of the workspace, so one device-to-host copy replaces four (five).
++comptime SEQ_FAST_VAR_SPEC = TSA2_VAR and is_defined["MOJOLEARN_SEQ_FAST_VAR_SPEC"]()
++comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY"]()
++#: the speculative horizon (rows), capped so (p + rows) K fits the
++#: threadgroup forecast kernel's 4096 words (sequence/vecar_block.mojo)
++comptime VAR_SPEC_H = 64
+ 
+ # ------------------------------------------------------------------ op codes
+ comptime OP_GEMM = 1
+diff --git a/sequence/pyapi.mojo b/sequence/pyapi.mojo
+index 687e5202c..a309f7056 100644
+--- a/sequence/pyapi.mojo
++++ b/sequence/pyapi.mojo
+@@ -11,7 +11,7 @@ from std.math import sqrt
+ from std.memory import bitcast, memcpy
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
+ from sequence.exec_trait import Exec
+-from sequence.ops import SEQ_FAST_VAR_ONECOPY, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
++from sequence.ops import SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_SPEC, VAR_SPEC_H, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
+ from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+ from sequence.recurrent import gemm
+ from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
+@@ -418,7 +418,15 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
+     sigma_u (K, K), resid (n - p, K)], each output written; ip = [n, K, p,
+     k_trend]. Returns 0, or 1 + the design column whose Cholesky pivot was
+     not positive (nothing is written then)."""
+-    if len(addrs) != 4 or len(ip) != 4:
++    var spec_h = 0
++    comptime if SEQ_FAST_VAR_SPEC:
++        # lane/apple-fast-gap-tsa: a fifth address and integer ask for the
++        # speculative forecast rows (var_spec_steps)
++        if len(addrs) == 5 and len(ip) == 5:
++            spec_h = ival(ip, 4)
++            if spec_h < 1 or spec_h > VAR_SPEC_H:
++                raise Error("var_fit: the speculative horizon must be 1 .. " + String(VAR_SPEC_H))
++    if spec_h == 0 and (len(addrs) != 4 or len(ip) != 4):
+         raise Error("var_fit: requires 4 addresses and 4 integer parameters")
+     var n = ival(ip, 0)
+     var K = ival(ip, 1)
+@@ -431,7 +439,7 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
+     if R - m < 1:
+         raise Error("var_fit: too few observations for the lag order (need n - p > k_trend + K p)")
+     comptime if TSA2_VAR:
+-        return _var_fit_queued(ex, addrs, n, K, p, kt, R, m)
++        return _var_fit_queued(ex, addrs, n, K, p, kt, R, m, spec_h)
+     var y = ex.alloc(n * K)
+     ex.upload(y, fptr(addrs[0], "y"), n * K)
+     var Z = ex.alloc(R * m)
+@@ -499,7 +507,7 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
+ 
+ 
+ def _var_fit_queued[E: Exec](
+-    mut ex: E, addrs: PythonObject, n: Int, K: Int, p: Int, kt: Int, R: Int, m: Int,
++    mut ex: E, addrs: PythonObject, n: Int, K: Int, p: Int, kt: Int, R: Int, m: Int, spec_h: Int = 0,
+ ) raises -> PythonObject:
+     """`var_fit_py` under -D MOJOLEARN_TSA2_VAR (FAST + Apple): one upload (no
+     zero fill), one workspace (one fill for nine), eight launches queued
+@@ -512,7 +520,7 @@ def _var_fit_queued[E: Exec](
+     main's untouched zeros). The residual and sigma_u products fuse their
+     epilogues (`op_var_resid`, `op_var_sigma`: the same chains)."""
+     var y = ex.bind(fptr(addrs[0], "y"), n * K)
+-    var ws = ex.alloc(R * m + R * K + m + m * m + m * K + R * K + K * K + 1)
++    var ws = ex.alloc(R * m + R * K + m + m * m + m * K + R * K + K * K + 1 + spec_h * K)
+     var Z = ws
+     var Ys = Z + R * m
+     var sc = Ys + R * K
+@@ -565,10 +573,22 @@ def _var_fit_queued[E: Exec](
+     f.p1 = sc
+     f.i1 = K
+     ex.launch[OP_ROWSCALE](f, m * K)
++    # lane/apple-fast-gap-tsa SEQ_FAST_VAR_SPEC: the forecast recursion from
++    # the bound endog's last p rows under the final params, queued here
++    var Fs = status + 1
++    if spec_h > 0:
++        var g = Args()
++        g.p0 = y + (n - p) * K
++        g.p1 = Bm
++        g.p2 = Fs
++        g.i0 = K
++        g.i1 = p
++        g.i2 = kt
++        g.i3 = spec_h
++        ex.launch[OP_VAR_FORECAST](g, 1)
+     comptime if SEQ_FAST_VAR_ONECOPY:
+-        # lane/apple-fast-gap-tsa: params | resid | sigma_u | status lie in one
+-        # span of the workspace: one device-to-host copy replaces four
+-        var span = m * K + R * K + K * K + 1
++        # params | resid | sigma_u | status | speculative rows: one span, one copy
++        var span = m * K + R * K + K * K + 1 + spec_h * K
+         var tmp = List[Float32](length=span, fill=Float32(0.0))
+         var tp = FP(unsafe_from_address=Int(tmp.unsafe_ptr()))
+         ex.download_async(tp, Bm, span)
+@@ -577,8 +597,12 @@ def _var_fit_queued[E: Exec](
+         memcpy(dest=fptr(addrs[3], "resid"), src=tp + m * K, count=R * K)
+         memcpy(dest=fptr(addrs[2], "sigma_u"), src=tp + m * K + R * K, count=K * K)
+         var code = Int(tp.unsafe_load(m * K + R * K + K * K))
++        if spec_h > 0:
++            memcpy(dest=fptr(addrs[4], "spec"), src=tp + m * K + R * K + K * K + 1, count=spec_h * K)
+         _ = tmp^
+         return PythonObject(code)
++    if spec_h > 0:
++        ex.download_async(fptr(addrs[4], "spec"), Fs, spec_h * K)
+     var st = List[Float32](length=1, fill=Float32(0.0))
+     ex.download_async(FP(unsafe_from_address=Int(st.unsafe_ptr())), status, 1)
+     ex.download_async(fptr(addrs[1], "params"), Bm, m * K)
+@@ -588,6 +612,20 @@ def _var_fit_queued[E: Exec](
+     return PythonObject(Int(st[0]))
+ 
+ 
++def var_spec_steps_py(ip: PythonObject) raises -> PythonObject:
++    """The speculative forecast rows `var_fit` can return for ip = [K, p]
++    (0 unless SEQ_FAST_VAR_SPEC): VAR_SPEC_H, or fewer so that (p + rows) K
++    fits the threadgroup forecast kernel's 4096 words."""
++    comptime if SEQ_FAST_VAR_SPEC:
++        var K = ival(ip, 0)
++        var p = ival(ip, 1)
++        if K < 1 or p < 1:
++            return PythonObject(0)
++        var rows = min(VAR_SPEC_H, 4096 // K - p)
++        return PythonObject(rows if rows > 0 else 0)
++    return PythonObject(0)
++
++
+ def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+     """addrs = [y_last (p, K), params (m, K), out (h, K)]; ip = [K, p, k_trend, h]."""
+     if len(addrs) != 3 or len(ip) != 4:
+diff --git a/sequence/theta_spec.mojo b/sequence/theta_spec.mojo
+index d570d1938..a99bd6b86 100644
+--- a/sequence/theta_spec.mojo
++++ b/sequence/theta_spec.mojo
+@@ -2,7 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Theta on one simdgroup per series with the Nelder-Mead candidates
+ evaluated side by side (lane/apple-fast-gap-tsa,
+-FAST + Apple, on THETA_REG; default on, -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF off;
++-D MOJOLEARN_SEQ_FAST_THETA_SPEC; FAST + Apple, on THETA_REG; default OFF;
+ docs/apple-fast/notes/gap-tsa.md).
+ 
+ `op_theta` runs one thread per series (64 threads on the board's taxi-hourly
+@@ -36,11 +36,8 @@ from sequence.theta import (
+ )
+ from checks.numerics import ftz, identical_div, identical_sqrt
+ 
+-#: the switch (FAST + Apple with THETA_REG). Default since the M3 A/B (n=1,
+-#: quality identical; theta taxi-hourly 218 -> 20.3 ms);
+-#: -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF turns it off; the old
+-#: -D MOJOLEARN_SEQ_FAST_THETA_SPEC is harmless.
+-comptime THETA_SPEC = THETA_REG and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"]()
++#: the switch (default OFF; FAST + Apple with THETA_REG)
++comptime THETA_SPEC = THETA_REG and is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC"]()
+ 
+ 
+ @fieldwise_init
+diff --git a/tsa/estimator.mojo b/tsa/estimator.mojo
+index 3fbb14ab5..d2100e832 100644
+--- a/tsa/estimator.mojo
++++ b/tsa/estimator.mojo
+@@ -116,7 +116,7 @@ def kpss_test_host(
+     _refuse_empty_shape(batch_size, n_obs, "kpss_test")
+     var ctx = process_ctx[_DEVCTX_SLOT]()
+     comptime if TSA_KPSS_PACK:
+-        # lane/apple-fast-gap-tsa (TSA_KPSS_PACK, default; FAST +
++        # lane/apple-fast-gap-tsa (-D MOJOLEARN_TSA_FAST_KPSS_PACK, FAST +
+         # Apple): one launch, one device buffer and one host stage for the
+         # input and the packed outputs, one wait (kpss_fused.mojo::kpss_rounds)
+         if d == 0 and D == 0 and n_obs <= KPSS_FUSED_MAX_N:
+@@ -181,7 +181,7 @@ def select_d_host(
+     _refuse_empty_shape(batch_size, n_obs, "select_d")
+     var ctx = process_ctx[_DEVCTX_SLOT]()
+     comptime if TSA_SELD_FUSED:
+-        # lane/apple-fast-gap-tsa (TSA_SELD_FUSED, default; FAST +
++        # lane/apple-fast-gap-tsa (-D MOJOLEARN_TSA_FAST_SELD_FUSED, FAST +
+         # Apple): every round of a series in its block, the first stationary
+         # order chosen there, one upload, one launch, one download, one wait
+         # (kpss_fused.mojo::kpss_rounds). Seasonal differencing, d_max past 2
+diff --git a/tsa/impl/timeSeries/kpss_fused.mojo b/tsa/impl/timeSeries/kpss_fused.mojo
+index 1a509c343..94f1cf54c 100644
+--- a/tsa/impl/timeSeries/kpss_fused.mojo
++++ b/tsa/impl/timeSeries/kpss_fused.mojo
+@@ -51,23 +51,19 @@ comptime TSA2_KPSS = (
+ )
+ #: lane/apple-fast-gap-tsa: the KPSS test as one launch over ONE device
+ #: buffer (input and packed outputs) and ONE host stage, one download
+-#: (`kpss_rounds`); FAST + Apple only. Default since the M3 A/B (n=1,
+-#: quality identical; kpss taxi-hourly 5.2 -> 1.5 ms, synthetic 5.3 -> 2.0 ms);
+-#: -D MOJOLEARN_TSA_FAST_KPSS_PACK_OFF turns it off; the old
+-#: -D MOJOLEARN_TSA_FAST_KPSS_PACK is harmless.
++#: (`kpss_rounds`); -D MOJOLEARN_TSA_FAST_KPSS_PACK (default OFF; FAST +
++#: Apple only)
+ comptime TSA_KPSS_PACK = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+-    and not is_defined["MOJOLEARN_TSA_FAST_KPSS_PACK_OFF"]()
++    and is_defined["MOJOLEARN_TSA_FAST_KPSS_PACK"]()
+ )
+ #: lane/apple-fast-gap-tsa: `select_d` as one launch (every round of a
+ #: series inside its block, the first stationary order chosen there), the
+-#: same packed buffers, one download; FAST + Apple only. Default since the
+-#: M3 A/B (n=1, quality identical; select-d taxi-hourly 8.5 -> 2.0 ms,
+-#: synthetic 8.0 -> 2.2 ms); -D MOJOLEARN_TSA_FAST_SELD_FUSED_OFF turns it
+-#: off; the old -D MOJOLEARN_TSA_FAST_SELD_FUSED is harmless.
++#: same packed buffers, one download; -D MOJOLEARN_TSA_FAST_SELD_FUSED
++#: (default OFF; FAST + Apple only)
+ comptime TSA_SELD_FUSED = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+-    and not is_defined["MOJOLEARN_TSA_FAST_SELD_FUSED_OFF"]()
++    and is_defined["MOJOLEARN_TSA_FAST_SELD_FUSED"]()
+ )
+ #: words per series in the packed output: stat, flag, first bad index
+ #: (-1 none), chosen d

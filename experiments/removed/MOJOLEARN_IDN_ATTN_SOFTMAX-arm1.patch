@@ -1,0 +1,1440 @@
+Restores MOJOLEARN_IDN_ATTN_SOFTMAX=1: the reverse of 89a183889 (2026-10-08, "grid-act-3: delete the attn_softmax summary_tree arm (MOJOLEARN_IDN_ATTN_SOFTMAX=1, NN20, and its split-KV controls; gri")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm1.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/experiments/classical_identical_ideas/stats_controls.mojo b/experiments/classical_identical_ideas/stats_controls.mojo
+index c1883d41b..31841565a 100644
+--- a/experiments/classical_identical_ideas/stats_controls.mojo
++++ b/experiments/classical_identical_ideas/stats_controls.mojo
+@@ -33,7 +33,7 @@ comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57
+ # C58/59: only independent classical series/trials, no neural sequence callers.
+ comptime C58_SERIES4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SERIES4"]()
+ # C58_FORECAST4 (four theta/ets/garch series per thread) tried 2026-10-08, run ge123e6f9: NV/AMD 2.93x/2.58x
+-# synthetic, 2.81x/2.13x taxi-hourly (auto-theta), 2.2-3.1x on every theta/damped-ets cell, quality SAME. Deleted and
++# istella, 2.81x/2.13x taxi (auto-theta), 2.2-3.1x on every theta/damped-ets cell, quality SAME. Deleted and
+ # refused (core/six_lane_experiment_guards.mojo); recoverable at main bc10b8b56.
+ # C58 team state budget in MiB: integer sweep -D MOJOLEARN_C58_TEAM_MIB=64|256
+ # (was the boolean MOJOLEARN_C58_TEAM64); absent = 256 = incumbent. A memory
+diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
+index 87f1b5410..f40856e85 100644
+--- a/sequence/exec_device.mojo
++++ b/sequence/exec_device.mojo
+@@ -231,7 +231,7 @@ def seq_kernel[OP: Int](
+     argument to its own buffer slot and has 31, so the unpacked 33-argument
+     signature failed to compile on Apple."""
+     # Tried 2026-10-08 (MOJOLEARN_C58_FORECAST4, four series per thread for theta/ets/garch, run ge123e6f9): NV/AMD
+-    # 2.93x/2.58x synthetic, 2.81x/2.13x taxi-hourly on auto-theta and 2.5-3.2x on every theta/damped-ets cell, quality SAME
++    # 2.93x/2.58x istella, 2.81x/2.13x taxi on auto-theta and 2.5-3.2x on every theta/damped-ets cell, quality SAME
+     # (4x less parallelism). Deleted, the define refused; recoverable at main bc10b8b56; row in docs/apple-fast/EXPERIMENTS.md.
+     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     if i < Int(n):
+diff --git a/training/byte_lm_host.mojo b/training/byte_lm_host.mojo
+index 710f10eb2..48e27fc20 100644
+--- a/training/byte_lm_host.mojo
++++ b/training/byte_lm_host.mojo
+@@ -841,8 +841,8 @@ def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch:
+     `threads` threads (0: one per physical core); same arguments, same bits."""
+     comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+-        and (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4)):
+-        # (the MOJOLEARN_IDN_ATTN_SOFTMAX=1 summary-tree clause was deleted 2026-10-08, grid ge123e6f9 loser; main bc10b8b56)
++        and (get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 1
++             or (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4))):
+         # The legacy packed host block materializes the v1 attention/norm
+         # graph. A v2 build uses the shared host block contract, including
+         # its profile-specific tapes, rather than reusing that v1 graph.
+@@ -864,8 +864,8 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
+     """
+     comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+-        and (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4)):
+-        # (the MOJOLEARN_IDN_ATTN_SOFTMAX=1 summary-tree clause was deleted 2026-10-08, grid ge123e6f9 loser; main bc10b8b56)
++        and (get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 1
++             or (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4))):
+         var logits = byte_host_logits(params, inputs, batch, length, config)
+         var chosen = List[Int32](length=batch, fill=Int32(0))
+         for row in range(batch):
+diff --git a/training/neural_arithmetic_profile.mojo b/training/neural_arithmetic_profile.mojo
+index 335eb57bc..5a54775ec 100644
+--- a/training/neural_arithmetic_profile.mojo
++++ b/training/neural_arithmetic_profile.mojo
+@@ -11,8 +11,8 @@ def neural_arithmetic_suffix() -> String:
+     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+         comptime if NEURAL_PROFILE_CHANGED:
+             result += ".nn-gemm-v2-l" + String(NEURAL_LEAF) + "-c" + String(NEURAL_CHAINS)
+-        # ".nn-attention-v2-tree" (MOJOLEARN_IDN_ATTN_SOFTMAX=1, summary_tree) deleted 2026-10-08: grid ge123e6f9
+-        # loser, 1.6-43x slower NV/AMD; recoverable at main bc10b8b56.
++        comptime if get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 1:
++            result += ".nn-attention-v2-tree"
+         comptime if (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4):
+             result += ".nn-norm-v2-lanes8"
+         # State/gradient graphs also belong to the serialized arithmetic
+diff --git a/training/neural_identical_experiments.mojo b/training/neural_identical_experiments.mojo
+index cdedd0b43..969ff1d88 100644
+--- a/training/neural_identical_experiments.mojo
++++ b/training/neural_identical_experiments.mojo
+@@ -75,9 +75,8 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED
+ comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 0]() == 3
+ 
+ # NI20: fixed tile32 online attention numerical graph on every column. Arm 2
+-# of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1, the NN20
+-# summary tree, was deleted 2026-10-08 as a grid ge123e6f9 loser and is refused;
+-# recoverable at main bc10b8b56).
++# of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1 is NN20,
++# transformer/experiments/attention_summary_contract.mojo).
+ comptime IDN_ATTENTION_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 2
+ # S1 (lane/samba-resident, 2026-10-07): the Samba stack's forward and train
+ # step as ONE device-resident binding call each (training/samba_resident.mojo):
+diff --git a/transformer/checks/transformer_backward.mojo b/transformer/checks/transformer_backward.mojo
+index b46b9d455..c8366b60e 100644
+--- a/transformer/checks/transformer_backward.mojo
++++ b/transformer/checks/transformer_backward.mojo
+@@ -2,6 +2,8 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Transformer backward kernels and host-side launch composition used by the independent gradient checks."""
+ 
++from transformer.experiments.summary_model import model_summary_backward
++from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
+ from transformer.experiments.norm_profile import (
+     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+ )
+@@ -3606,11 +3608,24 @@ def llama_decoder_layer_backward_device(
+     timing_tick(ctx, ton, tk, "bwd.before_attention")
+     bst.attn_repaired = 0
+     bst.attn_backward_status = -1
+-    # Tried 2026-10-08 (MOJOLEARN_IDN_ATTN_SOFTMAX=1, the NN20 summary_tree arm, run ge123e6f9): NV/AMD lm-forward
+-    # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
+-    # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
+-    # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
+-    if fwd.attn_v2:
++    if NN20_BALANCED_SUMMARY_TREE:
++        if fwd.attn_forward_status != 20:
++            raise Error("NN20 backward requires summary-profile forward state")
++        var record_attention = materialize or trace.enabled
++        if record_attention:
++            ensure_backward_attention_capacity(ctx, bst, l, s)
++        model_summary_backward(ctx,bst.attn_zdot,bst.d_q_rope,bst.d_k_cache,bst.d_v_cache,
++            fwd.q_rope,bst.d_attn_ctx,fwd.k_cache,fwd.v_cache,fwd.amax,fwd.denom,
++            bst.d_attn_weights,bst.d_attn_masked,bst.d_attn_scores,bst.d_qk_cell,
++            b,l,nh,nkv,hd,s,pos0,key_lo,window,scale,record_attention)
++        bst.attn_backward_status = 20
++        if record_attention:
++            _rec(ctx,trace,prefix,17,bst.d_attn_weights,cells)
++            _rec(ctx,trace,prefix,18,bst.attn_zdot,b*nh*l)
++            _rec(ctx,trace,prefix,19,bst.d_attn_masked,cells)
++            _rec(ctx,trace,prefix,20,bst.d_attn_scores,cells)
++            _rec(ctx,trace,prefix,21,bst.d_qk_cell,cells)
++    elif fwd.attn_v2:
+         if materialize or trace.enabled:
+             ensure_backward_attention_capacity(ctx, bst, l, s)
+             attention_v2_model_backward[True](
+diff --git a/transformer/checks/transformer_backward_oracle.mojo b/transformer/checks/transformer_backward_oracle.mojo
+index 7f8ef24c0..9789de928 100644
+--- a/transformer/checks/transformer_backward_oracle.mojo
++++ b/transformer/checks/transformer_backward_oracle.mojo
+@@ -129,6 +129,8 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
+     is `^`.
+ """
+ 
++from transformer.experiments.summary_model_host import model_summary_host_backward
++from transformer.experiments.attention_summary_contract import NN20_BALANCED_SUMMARY_TREE
+ from transformer.experiments.norm_profile_contract import (
+     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+ )
+@@ -1612,11 +1614,29 @@ def transformer_block_backward_oracle(
+     # materialized expansion (contract DEVIATION 813). At `n_rep == 1` a
+     # broken head-to-kv map is INVISIBLE, so the gates must carry both.
+     # =====================================================================
+-    # Tried 2026-10-08 (MOJOLEARN_IDN_ATTN_SOFTMAX=1, the NN20 summary_tree arm, run ge123e6f9): NV/AMD lm-forward
+-    # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
+-    # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
+-    # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
+-    if fwd.attn_v2:
++    if NN20_BALANCED_SUMMARY_TREE:
++        # Build outputs outside st so immutable input borrows never overlap
++        # mutable stage-field borrows in the host oracle.
++        var nz = List[Float32]()
++        var nq = List[Float32]()
++        var nk = List[Float32]()
++        var nv = List[Float32]()
++        var nw = List[Float32]()
++        var nm = List[Float32]()
++        var ns = List[Float32]()
++        var nc = List[Float32]()
++        model_summary_host_backward(fwd.q_rope_out,st.d_attn_ctx,fwd.kv_k_cache,fwd.kv_v_cache,
++            fwd.attn_max,fwd.attn_denom,b,l,nh,nkv,hd,s,pos0,key_lo,window,attention_scale(hd),
++            nz,nq,nk,nv,nw,nm,ns,nc)
++        st.attn_zdot = nz^
++        st.d_q_rope = nq^
++        st.d_k_cache = nk^
++        st.d_v_cache = nv^
++        st.d_attn_weights = nw^
++        st.d_attn_masked = nm^
++        st.d_attn_scores = ns^
++        st.d_qk_cell = nc^
++    elif fwd.attn_v2:
+         var av2 = attention_v2_host_backward(
+             fwd.q_rope_out, fwd.kv_k_cache, fwd.kv_v_cache, st.d_attn_ctx,
+             b, l, nh, nkv, s, hd, own0, window, attention_scale(hd),
+diff --git a/transformer/checks/transformer_oracle.mojo b/transformer/checks/transformer_oracle.mojo
+index 3b2dbc1b8..78de986e2 100644
+--- a/transformer/checks/transformer_oracle.mojo
++++ b/transformer/checks/transformer_oracle.mojo
+@@ -102,6 +102,8 @@ torch, on the `mamba/corpus/` pattern, so that the tolerance instrument is
+ not our own code twice.
+ """
+ 
++from transformer.experiments.summary_model_host import model_summary_host_forward
++from transformer.experiments.attention_summary_contract import NN20_BALANCED_SUMMARY_TREE
+ from transformer.experiments.norm_profile_contract import (
+     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+ )
+@@ -2046,11 +2048,13 @@ def transformer_block_oracle(
+     var actx = List[Float32]()
+ 
+     var scale = attention_scale(hd)
+-    # Tried 2026-10-08 (MOJOLEARN_IDN_ATTN_SOFTMAX=1, the NN20 summary_tree arm, run ge123e6f9): NV/AMD lm-forward
+-    # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
+-    # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
+-    # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
+-    if IDN_ATTENTION_V2 and not int15 and not opts.has_softcap() and plant.is_empty():
++    if NN20_BALANCED_SUMMARY_TREE:
++        if opts.has_softcap() or int15 or plant.at != 0:
++            raise Error("NN20 summary profile refuses softcap, INT15 and legacy score plants")
++        model_summary_host_forward(st.q_rope_out,st.kv_k_cache,st.kv_v_cache,
++            b,l,nh,nkv,hd,s,pos0,key_lo,window,scale,
++            scores,masked,amax,aexp,adenom,aweights,actx)
++    elif IDN_ATTENTION_V2 and not int15 and not opts.has_softcap() and plant.is_empty():
+         var av2 = attention_v2_host_forward(
+             st.q_rope_out, st.kv_k_cache, st.kv_v_cache,
+             b, l, nh, nkv, s, hd, own0, window, scale,
+diff --git a/transformer/experiments/attention_summary_contract.mojo b/transformer/experiments/attention_summary_contract.mojo
+new file mode 100644
+index 000000000..8ead9cba3
+--- /dev/null
++++ b/transformer/experiments/attention_summary_contract.mojo
+@@ -0,0 +1,321 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Pure host/device NN20 summary graph; numerical profile constants shared by all columns."""
++from std.memory import bitcast
++from std.sys.compile import is_defined, get_defined_int
++from checks.numerics import (GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_fmax, identical_mul, identical_mul_add)
++
++# ONE attention-softmax version switch (NN20 + NI20 merged, 2026-10-07):
++# -D MOJOLEARN_IDN_ATTN_SOFTMAX=<arm>, absent = attention-eager v1.
++#   1  summary_tree   NN20: balanced 32-key summary tree (this file)
++#   2  online_tile32  NI20: fixed tile32 online softmax
++#                     (training/neural_identical_experiments.mojo)
++# Both are numerical versions in the same eager_attention_forward: an arm
++# changes bits on every column together.
++comptime ATTN_SOFTMAX_ARM = get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]()
++comptime NN20_BALANCED_SUMMARY_TREE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and ATTN_SOFTMAX_ARM == 1
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++# Fixed numerical profile constant, never a dimension-targeting route.
++comptime NN20_KEY_LEAF = 32
++
++
++def summary_levels(keys: Int) -> Int:
++    var tiles = (keys + NN20_KEY_LEAF - 1) // NN20_KEY_LEAF
++    var levels = 1
++    var capacity = 1
++    while capacity < tiles:
++        capacity *= 2
++        levels += 1
++    return levels
++
++
++def summary_scratch_elements(rows: Int, keys: Int, width: Int, key_origin: Int = 0) -> Int:
++    # Two temporaries plus one summary per binary level, for every row.
++    return rows * (summary_levels(key_origin + keys) + 2) * (width + 2)
++
++
++def _empty(summary: MutPointer[Float32, MutAnyOrigin], width: Int):
++    summary.unsafe_store(0, bitcast[DType.float32](UInt32(0xFF800000)))
++    summary.unsafe_store(1, Float32(0.0))
++    for d in range(width):
++        summary.unsafe_store(2 + d, Float32(0.0))
++
++
++def _copy_summary(dst: MutPointer[Float32, MutAnyOrigin],
++                  src: MutPointer[Float32, MutAnyOrigin], width: Int):
++    for i in range(width + 2):
++        dst.unsafe_store(i, src.unsafe_load(i))
++
++
++def merge_summaries(dst: MutPointer[Float32, MutAnyOrigin],
++                    left: MutPointer[Float32, MutAnyOrigin],
++                    right: MutPointer[Float32, MutAnyOrigin], width: Int):
++    """Exact graph of (max, scaled denominator, weighted numerator) merge.
++
++    Empty summaries are bit-copy identities; no exp(-inf-(-inf)) occurs.
++    Each rescale multiply rounds before the add. No FMA contraction crosses
++    that boundary. A and B differ solely in which logical summaries meet.
++    """
++    if left.unsafe_load(1) == Float32(0.0):
++        _copy_summary(dst, right, width)
++        return
++    if right.unsafe_load(1) == Float32(0.0):
++        _copy_summary(dst, left, width)
++        return
++    var lm = left.unsafe_load(0)
++    var rm = right.unsafe_load(0)
++    var m = identical_fmax(lm, rm)
++    var a = ftz(identical_exp(ftz(lm - m)))
++    var b = ftz(identical_exp(ftz(rm - m)))
++    dst.unsafe_store(0, m)
++    for i in range(1, width + 2):
++        var lval = ftz(identical_mul(ftz(left.unsafe_load(i)), a))
++        var rval = ftz(identical_mul(ftz(right.unsafe_load(i)), b))
++        dst.unsafe_store(i, ftz(lval + rval))
++
++
++def _score(q: MutPointer[Float32, MutAnyOrigin],
++           k: MutPointer[Float32, MutAnyOrigin], row: Int, group: Int,
++           key: Int, keys: Int, head_dim: Int, scale: Float32) -> Float32:
++    var score = Float32(0.0)
++    for d in range(head_dim):
++        score = ftz(identical_mul_add(ftz(q.unsafe_load(row * head_dim + d)),
++            ftz(k.unsafe_load((group * keys + key) * head_dim + d)), score))
++    return ftz(identical_mul(score, scale))
++
++
++def leaf_summary(dst: MutPointer[Float32, MutAnyOrigin],
++                 q: MutPointer[Float32, MutAnyOrigin],
++                 k: MutPointer[Float32, MutAnyOrigin],
++                 v: MutPointer[Float32, MutAnyOrigin], row: Int, group: Int,
++                 lo: Int, hi: Int, keys: Int, head_dim: Int,
++                 width: Int, scale: Float32):
++    _empty(dst, width)
++    if lo >= hi:
++        return
++    var m = _score(q, k, row, group, lo, keys, head_dim, scale)
++    for j in range(lo + 1, hi):
++        m = identical_fmax(m, _score(q, k, row, group, j, keys, head_dim, scale))
++    dst.unsafe_store(0, m)
++    var z = Float32(0.0)
++    for j in range(lo, hi):
++        var w = ftz(identical_exp(ftz(_score(q, k, row, group, j, keys, head_dim, scale) - m)))
++        z = ftz(z + w)
++        for d in range(width):
++            var value = ftz(v.unsafe_load((group * keys + j) * width + d))
++            dst.unsafe_store(2 + d, ftz(identical_mul_add(w, value, dst.unsafe_load(2 + d))))
++    dst.unsafe_store(1, z)
++
++
++def summary_attention_forward_row[TREE: Bool](
++    q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin], lo: MutPointer[Int32, MutAnyOrigin],
++    hi: MutPointer[Int32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
++    maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
++    scratch: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
++    row: Int, keys: Int, head_dim: Int, width: Int, queries_per_group: Int,
++    scale: Float32, key_origin: Int = 0,
++):
++    var begin = Int(lo.unsafe_load(row))
++    var end = Int(hi.unsafe_load(row))
++    if begin < 0 or begin > end or end > keys:
++        status.unsafe_store(row, Int32(1))
++        return
++    status.unsafe_store(row, Int32(0))
++    var group = row // queries_per_group
++    var fields = width + 2
++    var levels = summary_levels(key_origin + keys)
++    var stack = scratch + row * (levels + 2) * fields
++    var current = stack + levels * fields
++    var work = current + fields
++    _empty(current, width)
++    # Include empty leading absolute leaves to anchor EVERY tree level at
++    # absolute key zero. Reindexing only the visible leaves would change
++    # pair membership when a sliding window crosses a 32-key boundary.
++    # Empty summaries are exact bit-copy identities at every merge.
++    var tiles = (key_origin + keys + NN20_KEY_LEAF - 1) // NN20_KEY_LEAF
++    comptime if TREE:
++        for tile in range(tiles):
++            # Leaves are aligned to absolute key index, not the visible
++            # interval's start or the device's scheduling block size.
++            leaf_summary(current, q, k, v, row, group,
++                max(begin, tile * NN20_KEY_LEAF - key_origin),
++                min(end, min(keys, (tile + 1) * NN20_KEY_LEAF - key_origin)),
++                keys, head_dim, width, scale)
++            var carry = tile
++            var level = 0
++            while (carry & 1) != 0:
++                merge_summaries(work, stack + level * fields, current, width)
++                var swap = current
++                current = work
++                work = swap
++                carry >>= 1
++                level += 1
++            _copy_summary(stack + level * fields, current, width)
++        var have = False
++        # Low -> high folds the unmatched right fringe. For seven leaves
++        # this is merge(0..3, merge(4..5, 6)), the adjacent-pair odd-carry tree.
++        for level in range(levels):
++            if ((tiles >> level) & 1) != 0:
++                if not have:
++                    _copy_summary(current, stack + level * fields, width)
++                    have = True
++                else:
++                    merge_summaries(work, stack + level * fields, current, width)
++                    var swap = current
++                    current = work
++                    work = swap
++    else:
++        for tile in range(tiles):
++            leaf_summary(work, q, k, v, row, group,
++                max(begin, tile * NN20_KEY_LEAF - key_origin),
++                min(end, min(keys, (tile + 1) * NN20_KEY_LEAF - key_origin)),
++                keys, head_dim, width, scale)
++            merge_summaries(stack, current, work, width)
++            _copy_summary(current, stack, width)
++    var z = current.unsafe_load(1)
++    maxes.unsafe_store(row, current.unsafe_load(0))
++    denoms.unsafe_store(row, z)
++    for d in range(width):
++        var value = Float32(0.0)
++        if z != Float32(0.0):
++            value = ftz(identical_div(current.unsafe_load(2 + d), z))
++        output.unsafe_store(row * width + d, value)
++
++
++def _probability(q: MutPointer[Float32, MutAnyOrigin],
++                 k: MutPointer[Float32, MutAnyOrigin],
++                 maxes: MutPointer[Float32, MutAnyOrigin],
++                 denoms: MutPointer[Float32, MutAnyOrigin],
++                 row: Int, group: Int, j: Int, keys: Int,
++                 head_dim: Int, scale: Float32) -> Float32:
++    var z = denoms.unsafe_load(row)
++    if z == Float32(0.0):
++        return Float32(0.0)
++    var e = ftz(identical_exp(ftz(_score(q, k, row, group, j, keys, head_dim, scale) - maxes.unsafe_load(row))))
++    return ftz(identical_div(e, z))
++
++
++def _dyv(v: MutPointer[Float32, MutAnyOrigin],
++         dy: MutPointer[Float32, MutAnyOrigin], row: Int, group: Int,
++         j: Int, keys: Int, width: Int) -> Float32:
++    var dot = Float32(0.0)
++    for d in range(width):
++        dot = ftz(identical_mul_add(ftz(dy.unsafe_load(row * width + d)),
++            ftz(v.unsafe_load((group * keys + j) * width + d)), dot))
++    return dot
++
++
++def summary_attention_rowdot(
++    q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin], dy: MutPointer[Float32, MutAnyOrigin],
++    lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
++    maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
++    zdot: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
++    row: Int, keys: Int, head_dim: Int, width: Int, queries_per_group: Int,
++    scale: Float32,
++):
++    var z = Float32(0.0)
++    if status.unsafe_load(row) == Int32(0):
++        var group = row // queries_per_group
++        for j in range(Int(lo.unsafe_load(row)), Int(hi.unsafe_load(row))):
++            var p = _probability(q, k, maxes, denoms, row, group, j, keys, head_dim, scale)
++            z = ftz(identical_mul_add(p, _dyv(v, dy, row, group, j, keys, width), z))
++    zdot.unsafe_store(row, z)
++
++
++def summary_attention_dq_cell(
++    q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin], dy: MutPointer[Float32, MutAnyOrigin],
++    lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
++    maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
++    zdot: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
++    dq: MutPointer[Float32, MutAnyOrigin], cell: Int,
++    keys: Int, head_dim: Int, width: Int, queries_per_group: Int, scale: Float32,
++):
++    var row = cell // head_dim
++    var d = cell % head_dim
++    var acc = Float32(0.0)
++    if status.unsafe_load(row) == Int32(0):
++        var group = row // queries_per_group
++        for j in range(Int(lo.unsafe_load(row)), Int(hi.unsafe_load(row))):
++            var p = _probability(q, k, maxes, denoms, row, group, j, keys, head_dim, scale)
++            var ds = ftz(identical_mul(p, ftz(_dyv(v, dy, row, group, j, keys, width) - zdot.unsafe_load(row))))
++            var dscore = ftz(identical_mul(ds, scale))
++            acc = ftz(identical_mul_add(dscore, ftz(k.unsafe_load((group * keys + j) * head_dim + d)), acc))
++    dq.unsafe_store(cell, acc)
++
++
++def summary_attention_dkdv_cell(
++    q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin], dy: MutPointer[Float32, MutAnyOrigin],
++    lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
++    maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
++    zdot: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
++    dk: MutPointer[Float32, MutAnyOrigin], dv: MutPointer[Float32, MutAnyOrigin],
++    cell: Int, rows: Int, keys: Int, head_dim: Int, width: Int,
++    queries_per_group: Int, scale: Float32,
++):
++    var columns = max(head_dim, width)
++    var d = cell % columns
++    var j = (cell // columns) % keys
++    var group = cell // (columns * keys)
++    var ak = Float32(0.0)
++    var av = Float32(0.0)
++    for row in range(group * queries_per_group, min(rows, (group + 1) * queries_per_group)):
++        if status.unsafe_load(row) != Int32(0):
++            continue
++        if j < Int(lo.unsafe_load(row)) or j >= Int(hi.unsafe_load(row)):
++            continue
++        var p = _probability(q, k, maxes, denoms, row, group, j, keys, head_dim, scale)
++        if d < head_dim:
++            var ds = ftz(identical_mul(p, ftz(_dyv(v, dy, row, group, j, keys, width) - zdot.unsafe_load(row))))
++            var dscore = ftz(identical_mul(ds, scale))
++            ak = ftz(identical_mul_add(dscore, ftz(q.unsafe_load(row * head_dim + d)), ak))
++        if d < width:
++            av = ftz(identical_mul_add(p, ftz(dy.unsafe_load(row * width + d)), av))
++    if d < head_dim:
++        dk.unsafe_store((group * keys + j) * head_dim + d, ak)
++    if d < width:
++        dv.unsafe_store((group * keys + j) * width + d, av)
++
++
++def summary_attention_host_forward(
++    q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin], lo: MutPointer[Int32, MutAnyOrigin],
++    hi: MutPointer[Int32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
++    maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
++    scratch: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
++    rows: Int, keys: Int, head_dim: Int, width: Int, queries_per_group: Int, scale: Float32,
++):
++    for row in range(rows):
++        summary_attention_forward_row[NN20_BALANCED_SUMMARY_TREE](q, k, v, lo, hi,
++            output, maxes, denoms, scratch, status, row, keys, head_dim, width,
++            queries_per_group, scale)
++
++
++def summary_attention_host_backward(
++    q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin], dy: MutPointer[Float32, MutAnyOrigin],
++    lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
++    maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
++    zdot: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
++    dq: MutPointer[Float32, MutAnyOrigin], dk: MutPointer[Float32, MutAnyOrigin],
++    dv: MutPointer[Float32, MutAnyOrigin], rows: Int, keys: Int,
++    head_dim: Int, width: Int, queries_per_group: Int, scale: Float32,
++):
++    for row in range(rows):
++        summary_attention_rowdot(q, k, v, dy, lo, hi, maxes, denoms,
++            zdot, status, row, keys, head_dim, width, queries_per_group, scale)
++    for cell in range(rows * head_dim):
++        summary_attention_dq_cell(q, k, v, dy, lo, hi, maxes, denoms,
++            zdot, status, dq, cell, keys, head_dim, width, queries_per_group, scale)
++    var groups = (rows + queries_per_group - 1) // queries_per_group
++    for cell in range(groups * keys * max(head_dim, width)):
++        summary_attention_dkdv_cell(q, k, v, dy, lo, hi, maxes, denoms,
++            zdot, status, dk, dv, cell, rows, keys, head_dim, width,
++            queries_per_group, scale)
++
++
+diff --git a/transformer/experiments/attention_summary_split.mojo b/transformer/experiments/attention_summary_split.mojo
+new file mode 100644
+index 000000000..9f6ac4de3
+--- /dev/null
++++ b/transformer/experiments/attention_summary_split.mojo
+@@ -0,0 +1,261 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Split-KV forward for the NN20 stable-summary attention profile (lane/neural-fusions, L13).
++
++`-D MOJOLEARN_IDN_NN20_SPLIT_KV` (IDENTICAL only, default OFF, requires
++`MOJOLEARN_IDN_ATTN_SOFTMAX=1`, the summary-tree arm). Integer parameter
++`MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES`, legal 2|4|8|16 (default 4): the number of
++32-key NN20 leaves one split owns (a power of two).
++
++WHY. NN20's model forward (`summary_model_forward_kernel`) is one thread per
++query row walking every key leaf of the row serially. At batch 1 the row count
++is `n_heads * L` (12288 at the board's 6 x 2048), about 86 threads per SM on a
++142-SM L40S and 40 per CU on a 304-CU MI325X, and the causal rows near the end
++walk 64 leaves each. Splitting the key axis multiplies the independent work by
++the number of splits per row and evens the causal tail (flash-decoding's idea).
++
++BITS. Unchanged against NN20 (the switch moves no bit RELATIVE TO NN20; NN20
++itself is a profile change against attention v1). NN20 folds the row's leaf
++summaries with a binary counter anchored at absolute key 0: leaf `t` is pushed
++and merged with the stack while the low bits of `t` are ones, and the unmatched
++right fringe is folded low level -> high level at the end. The split is an
++ALIGNED block of `G = 2^s` leaves, `[jG, (j+1)G)`:
++
++  * a full block's counter fold is exactly the complete subtree node(s, j) the
++    row's counter builds (the low `s` bits of `t` and of `t - jG` agree);
++  * the last, partial block of `r < G` leaves folds its fringe low -> high,
++    which is what the row's final fringe fold does to those low levels;
++  * folding the block summaries with the same counter (eagerly merging the
++    trailing ones of the last block's index, then the fringe of the block
++    count) yields the same right-nested sequence of merges over the 1-bits of
++    `q = tiles // G` with the partial block at the bottom as the row's lazy
++    fringe fold does.
++
++So every `merge_summaries` call meets the same two operands in the same order;
++leaf summaries and merges are the contract's own functions, imported. Empty
++leaves and blocks are the empty summary, a bit-copy identity at every merge,
++exactly as in NN20. Host and device columns are untouched (NN20's host path is
++the reference). No rule reads a shape: `G` is a fixed parameter and the grid
++covers any (rows, keys).
++"""
++from std.gpu import block_dim, block_idx, thread_idx
++from std.sys.compile import is_defined, get_defined_int
++from max.gpu.host import DeviceBuffer, DeviceContext
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div
++
++from transformer.experiments.attention_summary_contract import (
++    NN20_BALANCED_SUMMARY_TREE, NN20_KEY_LEAF, leaf_summary, merge_summaries,
++    _copy_summary, _empty,
++)
++
++comptime IDN_NN20_SPLIT_KV = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and NN20_BALANCED_SUMMARY_TREE
++    and is_defined["MOJOLEARN_IDN_NN20_SPLIT_KV"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++comptime NN20_SPLIT_LEAVES = get_defined_int["MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES", 4]()
++comptime _SPLIT_TPB = 64
++
++
++def _levels_for(count: Int) -> Int:
++    """`summary_levels`' rule over `count` items: the smallest L with 2^(L-1) >= count."""
++    var levels = 1
++    var capacity = 1
++    while capacity < count:
++        capacity *= 2
++        levels += 1
++    return levels
++
++
++def _split_levels() -> Int:
++    return _levels_for(NN20_SPLIT_LEAVES)
++
++
++def nn20_split_scratch_floats(rows: Int, tiles: Int, width: Int) -> Int:
++    """Per (row, split): the block summary, plus the split's counter stack
++    (levels for G leaves) and two temporaries."""
++    var blocks = (tiles + NN20_SPLIT_LEAVES - 1) // NN20_SPLIT_LEAVES
++    return rows * blocks * (1 + _split_levels() + 2) * (width + 2)
++
++
++def nn20_merge_scratch_floats(rows: Int, tiles: Int, width: Int) -> Int:
++    var blocks = (tiles + NN20_SPLIT_LEAVES - 1) // NN20_SPLIT_LEAVES
++    return rows * (_levels_for(blocks) + 2) * (width + 2)
++
++
++def _fold_fringe(stack: MutPointer[Float32, MutAnyOrigin],
++                 mut current: MutPointer[Float32, MutAnyOrigin],
++                 mut work: MutPointer[Float32, MutAnyOrigin],
++                 count: Int, levels: Int, width: Int):
++    """`summary_attention_forward_row`'s final loop: low -> high over the
++    1-bits of `count`, merge(stack[level], current)."""
++    var fields = width + 2
++    var have = False
++    for level in range(levels):
++        if ((count >> level) & 1) != 0:
++            if not have:
++                _copy_summary(current, stack + level * fields, width)
++                have = True
++            else:
++                merge_summaries(work, stack + level * fields, current, width)
++                var swap = current
++                current = work
++                work = swap
++
++
++def _push(stack: MutPointer[Float32, MutAnyOrigin],
++          mut current: MutPointer[Float32, MutAnyOrigin],
++          mut work: MutPointer[Float32, MutAnyOrigin],
++          index: Int, width: Int):
++    """`summary_attention_forward_row`'s push of item `index` (in `current`)."""
++    var fields = width + 2
++    var carry = index
++    var level = 0
++    while (carry & 1) != 0:
++        merge_summaries(work, stack + level * fields, current, width)
++        var swap = current
++        current = work
++        work = swap
++        carry >>= 1
++        level += 1
++    _copy_summary(stack + level * fields, current, width)
++
++
++def nn20_split_block_kernel(
++    q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin], lo: MutPointer[Int32, MutAnyOrigin],
++    hi: MutPointer[Int32, MutAnyOrigin], blocks_out: MutPointer[Float32, MutAnyOrigin],
++    scratch: MutPointer[Float32, MutAnyOrigin],
++    rows_in: Int32, keys_in: Int32, hd_in: Int32, width_in: Int32,
++    qpg_in: Int32, key_origin_in: Int32, scale: Float32,
++):
++    """One thread per (row, split j): the summary of leaves [jG, (j+1)G)."""
++    var keys = Int(keys_in)
++    var width = Int(width_in)
++    var key_origin = Int(key_origin_in)
++    var fields = width + 2
++    var tiles = (key_origin + keys + NN20_KEY_LEAF - 1) // NN20_KEY_LEAF
++    var blocks = (tiles + NN20_SPLIT_LEAVES - 1) // NN20_SPLIT_LEAVES
++    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if gid >= Int(rows_in) * blocks:
++        return
++    var row = gid // blocks
++    var j = gid - row * blocks
++    var dst = blocks_out + gid * fields
++    var begin = Int(lo.unsafe_load(row))
++    var end = Int(hi.unsafe_load(row))
++    _empty(dst, width)
++    if begin < 0 or begin > end or end > keys:
++        return  # the merge kernel records the refusal, as NN20 does
++    var t_lo = j * NN20_SPLIT_LEAVES
++    var t_hi = min(tiles, t_lo + NN20_SPLIT_LEAVES)
++    # A split whose keys lie wholly outside [begin, end) is the empty summary:
++    # every leaf in it is empty and every merge of empties is a bit copy.
++    var key_first = t_lo * NN20_KEY_LEAF - key_origin
++    var key_last = t_hi * NN20_KEY_LEAF - key_origin
++    if key_last <= begin or key_first >= end:
++        return
++    var levels = _split_levels()
++    var stack = scratch + gid * (levels + 2) * fields
++    var current = stack + levels * fields
++    var work = current + fields
++    var group = row // Int(qpg_in)
++    var hd = Int(hd_in)
++    for tile in range(t_lo, t_hi):
++        leaf_summary(current, q, k, v, row, group,
++            max(begin, tile * NN20_KEY_LEAF - key_origin),
++            min(end, min(keys, (tile + 1) * NN20_KEY_LEAF - key_origin)),
++            keys, hd, width, scale)
++        _push(stack, current, work, tile - t_lo, width)
++    _fold_fringe(stack, current, work, t_hi - t_lo, levels, width)
++    _copy_summary(dst, current, width)
++
++
++def nn20_split_merge_kernel(
++    lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
++    blocks_in: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
++    maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
++    scratch: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
++    rows_in: Int32, keys_in: Int32, width_in: Int32, key_origin_in: Int32,
++):
++    """One thread per row: the counter fold over the row's split summaries,
++    then `summary_attention_forward_row`'s outputs, line for line."""
++    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if row >= Int(rows_in):
++        return
++    var keys = Int(keys_in)
++    var width = Int(width_in)
++    var fields = width + 2
++    var begin = Int(lo.unsafe_load(row))
++    var end = Int(hi.unsafe_load(row))
++    if begin < 0 or begin > end or end > keys:
++        status.unsafe_store(row, Int32(1))
++        return
++    status.unsafe_store(row, Int32(0))
++    var tiles = (Int(key_origin_in) + keys + NN20_KEY_LEAF - 1) // NN20_KEY_LEAF
++    var blocks = (tiles + NN20_SPLIT_LEAVES - 1) // NN20_SPLIT_LEAVES
++    var levels = _levels_for(blocks)
++    var stack = scratch + row * (levels + 2) * fields
++    var current = stack + levels * fields
++    var work = current + fields
++    _empty(current, width)
++    for j in range(blocks):
++        _copy_summary(current, blocks_in + (row * blocks + j) * fields, width)
++        _push(stack, current, work, j, width)
++    _fold_fringe(stack, current, work, blocks, levels, width)
++    var z = current.unsafe_load(1)
++    maxes.unsafe_store(row, current.unsafe_load(0))
++    denoms.unsafe_store(row, z)
++    for d in range(width):
++        var value = Float32(0.0)
++        if z != Float32(0.0):
++            value = ftz(identical_div(current.unsafe_load(2 + d), z))
++        output.unsafe_store(row * width + d, value)
++
++
++def enqueue_nn20_split_forward(
++    ctx: DeviceContext,
++    mut q: DeviceBuffer[DType.float32], mut k: DeviceBuffer[DType.float32],
++    mut v: DeviceBuffer[DType.float32], mut lo: DeviceBuffer[DType.int32],
++    mut hi: DeviceBuffer[DType.int32], mut output: DeviceBuffer[DType.float32],
++    mut maxes: DeviceBuffer[DType.float32], mut denoms: DeviceBuffer[DType.float32],
++    mut status: DeviceBuffer[DType.int32],
++    mut block_scratch: DeviceBuffer[DType.float32],
++    mut merge_scratch: DeviceBuffer[DType.float32],
++    rows: Int, keys: Int, hd: Int, qpg: Int, key_origin: Int, scale: Float32,
++) raises:
++    """ASYNCHRONOUS; the caller owns both scratch buffers past its wait.
++    `block_scratch` holds `nn20_split_scratch_floats(rows, tiles, hd)` floats,
++    `merge_scratch` `nn20_merge_scratch_floats(rows, tiles, hd)`."""
++    comptime assert (
++        NN20_SPLIT_LEAVES == 2 or NN20_SPLIT_LEAVES == 4
++        or NN20_SPLIT_LEAVES == 8 or NN20_SPLIT_LEAVES == 16
++    ), "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES: legal set 2|4|8|16 (a power of two)"
++    var tiles = (key_origin + keys + NN20_KEY_LEAF - 1) // NN20_KEY_LEAF
++    var blocks = (tiles + NN20_SPLIT_LEAVES - 1) // NN20_SPLIT_LEAVES
++    if len(block_scratch) < nn20_split_scratch_floats(rows, tiles, hd):
++        raise Error("NN20 split-KV: block scratch too small")
++    if len(merge_scratch) < nn20_merge_scratch_floats(rows, tiles, hd):
++        raise Error("NN20 split-KV: merge scratch too small")
++    if rows * blocks * (hd + 2) > 2147483647:
++        raise Error("NN20 split-KV: split index exceeds Int32 kernel ABI")
++    # The block summaries sit at the head of `block_scratch`, the per-split
++    # counter stacks after them.
++    var summaries = rows * blocks * (hd + 2)
++    var cells = rows * blocks
++    # Two disjoint views of one buffer: taken as locals first so the launch
++    # does not pass the same buffer mutably twice.
++    var block_summaries = block_scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var block_counters = block_summaries + summaries
++    ctx.enqueue_function[nn20_split_block_kernel](
++        q.unsafe_ptr(), k.unsafe_ptr(), v.unsafe_ptr(), lo.unsafe_ptr(), hi.unsafe_ptr(),
++        block_summaries, block_counters,
++        Int32(rows), Int32(keys), Int32(hd), Int32(hd), Int32(qpg), Int32(key_origin), scale,
++        grid_dim=((cells + _SPLIT_TPB - 1) // _SPLIT_TPB, 1, 1), block_dim=(_SPLIT_TPB, 1, 1),
++    )
++    ctx.enqueue_function[nn20_split_merge_kernel](
++        lo.unsafe_ptr(), hi.unsafe_ptr(), block_scratch.unsafe_ptr(), output.unsafe_ptr(),
++        maxes.unsafe_ptr(), denoms.unsafe_ptr(), merge_scratch.unsafe_ptr(), status.unsafe_ptr(),
++        Int32(rows), Int32(keys), Int32(hd), Int32(key_origin),
++        grid_dim=((rows + _SPLIT_TPB - 1) // _SPLIT_TPB, 1, 1), block_dim=(_SPLIT_TPB, 1, 1),
++    )
+diff --git a/transformer/experiments/attention_summary_tree.mojo b/transformer/experiments/attention_summary_tree.mojo
+new file mode 100644
+index 000000000..ef600bf7d
+--- /dev/null
++++ b/transformer/experiments/attention_summary_tree.mojo
+@@ -0,0 +1,151 @@
++# SPDX-License-Identifier: Apache-2.0
++"""NN20 device launchers for the shared stable-summary attention profile.
++
++The public model uses summary_model on GPU and summary_model_host on CPU,
++with attention_summary_contract supplying every arithmetic statement.
++Fixed absolute 32-key leaves and adjacent-pair/odd-carry merges define a new
++version. Forward, decode, backward, trace and session profile labels migrate
++together. Existing attention_v2 large-shape nonpromotion remains intact.
++Standalone flag-off calls offer a left-fold component control; the actual
++model flag-off A/B control is incumbent attention. No compile, verification,
++quality assessment or timing has been run and no default was promoted.
++"""
++from std.gpu import block_dim, block_idx, thread_idx
++from std.memory import bitcast
++from std.sys.compile import is_defined
++from max.gpu.host import DeviceBuffer, DeviceContext
++from checks.numerics import (
++    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div,
++    identical_exp, identical_fmax, identical_mul, identical_mul_add,
++)
++
++from transformer.experiments.attention_summary_contract import (
++    NN20_BALANCED_SUMMARY_TREE, NN20_KEY_LEAF, summary_levels, summary_scratch_elements,
++    summary_attention_forward_row, summary_attention_rowdot, summary_attention_dq_cell,
++    summary_attention_dkdv_cell, summary_attention_host_forward, summary_attention_host_backward,
++    _score, _dyv,
++)
++
++def summary_attention_forward_kernel(
++    q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin], lo: MutPointer[Int32, MutAnyOrigin],
++    hi: MutPointer[Int32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
++    maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
++    scratch: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
++    rows: Int32, keys: Int32, head_dim: Int32, width: Int32,
++    queries_per_group: Int32, scale: Float32,
++):
++    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if row < Int(rows):
++        summary_attention_forward_row[NN20_BALANCED_SUMMARY_TREE](q, k, v, lo, hi,
++            output, maxes, denoms, scratch, status, row, Int(keys), Int(head_dim),
++            Int(width), Int(queries_per_group), scale)
++
++
++def summary_attention_backward_kernel[STAGE: Int](
++    q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin], dy: MutPointer[Float32, MutAnyOrigin],
++    lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
++    maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
++    zdot: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
++    dq: MutPointer[Float32, MutAnyOrigin], dk: MutPointer[Float32, MutAnyOrigin],
++    dv: MutPointer[Float32, MutAnyOrigin], rows: Int32, keys: Int32,
++    head_dim: Int32, width: Int32, queries_per_group: Int32, scale: Float32,
++):
++    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var r = Int(rows)
++    var kcount = Int(keys)
++    var hd = Int(head_dim)
++    var w = Int(width)
++    var qpg = Int(queries_per_group)
++    comptime if STAGE == 0:
++        if cell < r:
++            summary_attention_rowdot(q, k, v, dy, lo, hi, maxes, denoms,
++                zdot, status, cell, kcount, hd, w, qpg, scale)
++    elif STAGE == 1:
++        if cell < r * hd:
++            summary_attention_dq_cell(q, k, v, dy, lo, hi, maxes, denoms,
++                zdot, status, dq, cell, kcount, hd, w, qpg, scale)
++    else:
++        var groups = (r + qpg - 1) // qpg
++        if cell < groups * kcount * max(hd, w):
++            summary_attention_dkdv_cell(q, k, v, dy, lo, hi, maxes, denoms,
++                zdot, status, dk, dv, cell, r, kcount, hd, w, qpg, scale)
++
++
++def _require_shape(rows: Int, keys: Int, head_dim: Int, width: Int,
++                   queries_per_group: Int) raises:
++    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++        raise Error("NN20 is an IDENTICAL-only component")
++    if rows <= 0 or keys <= 0 or head_dim <= 0 or width <= 0 or queries_per_group <= 0:
++        raise Error("NN20: positive dimensions/grouping required")
++    # Device scalar ABI is Int32. This is an ABI bound, not a performance
++    # cap; neighboring legal shapes always use the same numerical graph.
++    if max(max(rows, keys), max(max(head_dim, width), queries_per_group)) > 2147483647:
++        raise Error("NN20: dimension exceeds kernel Int32 ABI")
++
++
++def enqueue_summary_attention_forward(
++    ctx: DeviceContext,
++    mut q: DeviceBuffer[DType.float32], mut k: DeviceBuffer[DType.float32],
++    mut v: DeviceBuffer[DType.float32], mut lo: DeviceBuffer[DType.int32],
++    mut hi: DeviceBuffer[DType.int32], mut output: DeviceBuffer[DType.float32],
++    mut maxes: DeviceBuffer[DType.float32], mut denoms: DeviceBuffer[DType.float32],
++    mut scratch: DeviceBuffer[DType.float32], mut status: DeviceBuffer[DType.int32],
++    rows: Int, keys: Int, head_dim: Int, width: Int, queries_per_group: Int,
++    scale: Float32,
++) raises:
++    _require_shape(rows, keys, head_dim, width, queries_per_group)
++    var groups = (rows + queries_per_group - 1) // queries_per_group
++    if len(q) < rows * head_dim or len(k) < groups * keys * head_dim or len(v) < groups * keys * width:
++        raise Error("NN20: short Q/K/V operand")
++    if len(output) < rows * width or len(maxes) < rows or len(denoms) < rows or len(status) < rows or len(lo) < rows or len(hi) < rows:
++        raise Error("NN20: short output/row state")
++    if len(scratch) < summary_scratch_elements(rows, keys, width):
++        raise Error("NN20: bounded summary-stack scratch is too small")
++    ctx.enqueue_function[summary_attention_forward_kernel](
++        q.unsafe_ptr(), k.unsafe_ptr(), v.unsafe_ptr(), lo.unsafe_ptr(), hi.unsafe_ptr(),
++        output.unsafe_ptr(), maxes.unsafe_ptr(), denoms.unsafe_ptr(), scratch.unsafe_ptr(), status.unsafe_ptr(),
++        Int32(rows), Int32(keys), Int32(head_dim), Int32(width), Int32(queries_per_group), scale,
++        grid_dim=((rows + 63) // 64, 1, 1), block_dim=(64, 1, 1),
++    )
++
++
++def enqueue_summary_attention_backward(
++    ctx: DeviceContext,
++    mut q: DeviceBuffer[DType.float32], mut k: DeviceBuffer[DType.float32],
++    mut v: DeviceBuffer[DType.float32], mut dy: DeviceBuffer[DType.float32],
++    mut lo: DeviceBuffer[DType.int32], mut hi: DeviceBuffer[DType.int32],
++    mut maxes: DeviceBuffer[DType.float32], mut denoms: DeviceBuffer[DType.float32],
++    mut zdot: DeviceBuffer[DType.float32], mut status: DeviceBuffer[DType.int32],
++    mut dq: DeviceBuffer[DType.float32], mut dk: DeviceBuffer[DType.float32],
++    mut dv: DeviceBuffer[DType.float32], rows: Int, keys: Int, head_dim: Int,
++    width: Int, queries_per_group: Int, scale: Float32,
++) raises:
++    """Saved max/denom/mask/status must belong to this exact forward generation.
++
++    Caller owns all buffers through completion and consumes/refuses nonzero
++    status before accepting outputs. No source-data comparison is performed.
++    Three in-order kernels establish z before its independent consumers.
++    """
++    _require_shape(rows, keys, head_dim, width, queries_per_group)
++    var groups = (rows + queries_per_group - 1) // queries_per_group
++    if len(q) < rows * head_dim or len(k) < groups * keys * head_dim or len(v) < groups * keys * width or len(dy) < rows * width:
++        raise Error("NN20: short backward operand")
++    if len(dq) < rows * head_dim or len(dk) < groups * keys * head_dim or len(dv) < groups * keys * width:
++        raise Error("NN20: short gradient output")
++    if len(maxes) < rows or len(denoms) < rows or len(zdot) < rows or len(status) < rows or len(lo) < rows or len(hi) < rows:
++        raise Error("NN20: short backward row state")
++    comptime for stage in range(3):
++        var tasks = rows
++        comptime if stage == 1:
++            tasks = rows * head_dim
++        elif stage == 2:
++            tasks = groups * keys * max(head_dim, width)
++        ctx.enqueue_function[summary_attention_backward_kernel[stage]](
++            q.unsafe_ptr(), k.unsafe_ptr(), v.unsafe_ptr(), dy.unsafe_ptr(), lo.unsafe_ptr(), hi.unsafe_ptr(),
++            maxes.unsafe_ptr(), denoms.unsafe_ptr(), zdot.unsafe_ptr(), status.unsafe_ptr(),
++            dq.unsafe_ptr(), dk.unsafe_ptr(), dv.unsafe_ptr(), Int32(rows), Int32(keys),
++            Int32(head_dim), Int32(width), Int32(queries_per_group), scale,
++            grid_dim=((tasks + 255) // 256, 1, 1), block_dim=(256, 1, 1),
++        )
+diff --git a/transformer/experiments/profile.mojo b/transformer/experiments/profile.mojo
+index 08c9bd01a..0231b7024 100644
+--- a/transformer/experiments/profile.mojo
++++ b/transformer/experiments/profile.mojo
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Native version label shared by host/GPU sessions and checkpoint owners."""
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from transformer.experiments.attention_summary_contract import NN20_BALANCED_SUMMARY_TREE
+ from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8
+ from gemm.experiments.neural_profile import NEURAL_LEAF, NEURAL_CHAINS, NEURAL_PROFILE_CHANGED
+ 
+@@ -9,13 +10,11 @@ def transformer_arithmetic_profile() -> String:
+     var name = String("mojolearn.identical.transformer.fp32")
+     if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+         name = String("mojolearn.fast.transformer.fp32")
+-    # ".attn-summary32-tree-v1" (NN20, MOJOLEARN_IDN_ATTN_SOFTMAX=1) deleted 2026-10-08 as a grid ge123e6f9 loser
+-    # (1.6-43x slower NV/AMD); recoverable at main bc10b8b56.
+-    name += ".attn-v1"
++    name += ".attn-summary32-tree-v1" if NN20_BALANCED_SUMMARY_TREE else ".attn-v1"
+     name += ".norm-lanes8-v1" if NN24_NORM_LANES8 else ".norm-v1"
+     name += ".gemm-leaf" + String(NEURAL_LEAF) + "-chains" + String(NEURAL_CHAINS)
+     return name
+ 
+ 
+ def transformer_arithmetic_profile_changed() -> Bool:
+-    return NEURAL_PROFILE_CHANGED or NN24_NORM_LANES8
++    return NEURAL_PROFILE_CHANGED or NN20_BALANCED_SUMMARY_TREE or NN24_NORM_LANES8
+diff --git a/transformer/experiments/summary_model.mojo b/transformer/experiments/summary_model.mojo
+new file mode 100644
+index 000000000..876288266
+--- /dev/null
++++ b/transformer/experiments/summary_model.mojo
+@@ -0,0 +1,197 @@
++# SPDX-License-Identifier: Apache-2.0
++"""NN20 actual transformer layout adapters, shared host/device row graph.
++
++Prefill, decode and sliding windows align leaves to absolute key positions.
++No old v1 softmax is used for trace/backward under this numerical version.
++All temporary device owners survive a completion fence. This source draft
++has not been compiled, verified or measured.
++"""
++from std.gpu import block_idx, block_dim, thread_idx
++from std.memory import bitcast
++from max.gpu.host import DeviceBuffer, DeviceContext
++from core.step_phase import step_count_device_alloc, step_count_launch, step_count_sync
++from checks.numerics import ftz, identical_exp, identical_div, identical_mul
++from transformer.experiments.attention_summary_tree import (
++    NN20_BALANCED_SUMMARY_TREE, summary_scratch_elements,
++    summary_attention_forward_row, summary_attention_rowdot,
++    summary_attention_dq_cell, summary_attention_dkdv_cell, _score, _dyv,
++)
++
++
++from transformer.impl.llama.fused_attention import device_absmax
++from transformer.experiments.attention_summary_contract import NN20_KEY_LEAF
++from transformer.experiments.attention_summary_split import (
++    IDN_NN20_SPLIT_KV, enqueue_nn20_split_forward, nn20_split_scratch_floats,
++    nn20_merge_scratch_floats,
++)
++from transformer.experiments.summary_model_contract import (_require_model_shape, _require_summary_regime, _require_summary_gradient_regime, _token_cell, _mask_row, _materialize_cell)
++
++
++def summary_pack_kernel[PACK: Bool](dst: MutPointer[Float32, MutAnyOrigin],
++    src: MutPointer[Float32, MutAnyOrigin], cells: Int32, l: Int32, nh: Int32, hd: Int32):
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(cells):
++        var token = _token_cell(i, Int(l), Int(nh), Int(hd))
++        comptime if PACK:
++            dst.unsafe_store(i, src.unsafe_load(token))
++        else:
++            dst.unsafe_store(token, src.unsafe_load(i))
++
++
++def summary_masks_kernel(lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
++    status: MutPointer[Int32, MutAnyOrigin], rows: Int32, l: Int32, s: Int32,
++    pos0: Int32, key_lo: Int32, window: Int32):
++    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if row < Int(rows):
++        _mask_row(lo, hi, status, row, Int(l), Int(s), Int(pos0), Int(key_lo), Int(window))
++
++
++def summary_model_forward_kernel(q: MutPointer[Float32, MutAnyOrigin],
++    k: MutPointer[Float32, MutAnyOrigin], v: MutPointer[Float32, MutAnyOrigin],
++    lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
++    output: MutPointer[Float32, MutAnyOrigin], maxes: MutPointer[Float32, MutAnyOrigin],
++    denoms: MutPointer[Float32, MutAnyOrigin], scratch: MutPointer[Float32, MutAnyOrigin],
++    status: MutPointer[Int32, MutAnyOrigin], rows: Int32, s: Int32, hd: Int32,
++    qpg: Int32, key_lo: Int32, scale: Float32):
++    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if row < Int(rows):
++        summary_attention_forward_row[True](q,k,v,lo,hi,output,maxes,denoms,scratch,status,
++            row,Int(s),Int(hd),Int(hd),Int(qpg),scale,Int(key_lo))
++
++
++def summary_materialize_kernel[BACKWARD: Bool](q: MutPointer[Float32, MutAnyOrigin],
++    k: MutPointer[Float32, MutAnyOrigin], v: MutPointer[Float32, MutAnyOrigin],
++    dy: MutPointer[Float32, MutAnyOrigin], lo: MutPointer[Int32, MutAnyOrigin],
++    hi: MutPointer[Int32, MutAnyOrigin], maxes: MutPointer[Float32, MutAnyOrigin],
++    denoms: MutPointer[Float32, MutAnyOrigin], zdot: MutPointer[Float32, MutAnyOrigin],
++    a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin],
++    c: MutPointer[Float32, MutAnyOrigin], d: MutPointer[Float32, MutAnyOrigin],
++    cells: Int32, s: Int32, hd: Int32, qpg: Int32, scale: Float32):
++    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if cell<Int(cells):
++        _materialize_cell[BACKWARD](q,k,v,dy,lo,hi,maxes,denoms,zdot,a,b,c,d,
++            cell,Int(s),Int(hd),Int(qpg),scale)
++
++
++struct SummaryModelBuffers(Movable):
++    var q: DeviceBuffer[DType.float32]
++    var dy: DeviceBuffer[DType.float32]
++    var output: DeviceBuffer[DType.float32]
++    var dq: DeviceBuffer[DType.float32]
++    var scratch: DeviceBuffer[DType.float32]
++    var lo: DeviceBuffer[DType.int32]
++    var hi: DeviceBuffer[DType.int32]
++    var status: DeviceBuffer[DType.int32]
++    def __init__(out self,ctx:DeviceContext,rows:Int,s:Int,hd:Int,key_origin:Int) raises:
++        step_count_device_alloc()
++        self.q=ctx.enqueue_create_buffer[DType.float32](rows*hd)
++        step_count_device_alloc()
++        self.dy=ctx.enqueue_create_buffer[DType.float32](rows*hd)
++        step_count_device_alloc()
++        self.output=ctx.enqueue_create_buffer[DType.float32](rows*hd)
++        step_count_device_alloc()
++        self.dq=ctx.enqueue_create_buffer[DType.float32](rows*hd)
++        step_count_device_alloc()
++        self.scratch=ctx.enqueue_create_buffer[DType.float32](summary_scratch_elements(rows,s,hd,key_origin))
++        step_count_device_alloc()
++        self.lo=ctx.enqueue_create_buffer[DType.int32](rows)
++        step_count_device_alloc()
++        self.hi=ctx.enqueue_create_buffer[DType.int32](rows)
++        step_count_device_alloc()
++        self.status=ctx.enqueue_create_buffer[DType.int32](rows)
++
++
++def _pack(ctx:DeviceContext,mut work:SummaryModelBuffers,mut q:DeviceBuffer[DType.float32],
++          b:Int,l:Int,nh:Int,hd:Int,s:Int,pos0:Int,key_lo:Int,window:Int) raises:
++    var rows=b*nh*l
++    step_count_launch()
++    ctx.enqueue_function[summary_pack_kernel[True]](work.q.unsafe_ptr(),q.unsafe_ptr(),Int32(rows*hd),Int32(l),Int32(nh),Int32(hd),grid_dim=((rows*hd+255)//256,1,1),block_dim=(256,1,1))
++    step_count_launch()
++    ctx.enqueue_function[summary_masks_kernel](work.lo.unsafe_ptr(),work.hi.unsafe_ptr(),work.status.unsafe_ptr(),Int32(rows),Int32(l),Int32(s),Int32(pos0),Int32(key_lo),Int32(window),grid_dim=((rows+255)//256,1,1),block_dim=(256,1,1))
++
++
++def _nn20_split_forward(ctx:DeviceContext,mut work:SummaryModelBuffers,
++    mut k:DeviceBuffer[DType.float32],mut v:DeviceBuffer[DType.float32],
++    mut maxes:DeviceBuffer[DType.float32],mut denoms:DeviceBuffer[DType.float32],
++    rows:Int,s:Int,hd:Int,qpg:Int,key_lo:Int,scale:Float32) raises:
++    """The split arm's two launches. It owns its scratch and waits before
++    releasing it (one extra completion wait, counted, in the ON arm only)."""
++    var tiles = (key_lo + s + NN20_KEY_LEAF - 1) // NN20_KEY_LEAF
++    step_count_device_alloc()
++    var blocks = ctx.enqueue_create_buffer[DType.float32](nn20_split_scratch_floats(rows, tiles, hd))
++    step_count_device_alloc()
++    var merge = ctx.enqueue_create_buffer[DType.float32](nn20_merge_scratch_floats(rows, tiles, hd))
++    step_count_launch()
++    step_count_launch()
++    try:
++        enqueue_nn20_split_forward(ctx, work.q, k, v, work.lo, work.hi, work.output, maxes, denoms,
++            work.status, blocks, merge, rows, s, hd, qpg, key_lo, scale)
++    except error:
++        ctx.synchronize()
++        raise error
++    step_count_sync()
++    ctx.synchronize()
++    _ = blocks^
++    _ = merge^
++
++
++def model_summary_forward(ctx:DeviceContext,mut output:DeviceBuffer[DType.float32],
++    mut maxes:DeviceBuffer[DType.float32],mut denoms:DeviceBuffer[DType.float32],
++    mut scores:DeviceBuffer[DType.float32],mut masked:DeviceBuffer[DType.float32],
++    mut exps:DeviceBuffer[DType.float32],mut probs:DeviceBuffer[DType.float32],
++    mut q:DeviceBuffer[DType.float32],mut k:DeviceBuffer[DType.float32],mut v:DeviceBuffer[DType.float32],
++    b:Int,l:Int,nh:Int,nkv:Int,hd:Int,s:Int,pos0:Int,key_lo:Int,window:Int,scale:Float32,materialize:Bool) raises:
++    _require_model_shape(b,l,nh,nkv,hd,s,pos0,key_lo,window)
++    var rows=b*nh*l
++    var qpg=(nh//nkv)*l
++    _require_summary_regime(device_absmax(ctx,q,rows*hd),device_absmax(ctx,k,b*nkv*s*hd),device_absmax(ctx,v,b*nkv*s*hd),hd,s)
++    var work=SummaryModelBuffers(ctx,rows,s,hd,key_lo)
++    _pack(ctx,work,q,b,l,nh,hd,s,pos0,key_lo,window)
++    # lane/neural-fusions (L13): MOJOLEARN_IDN_NN20_SPLIT_KV splits each
++    # row's key leaves into aligned power-of-two groups and merges the group
++    # summaries with NN20's own counter (attention_summary_split.mojo). Same
++    # merges, same operands, same bits.
++    comptime if IDN_NN20_SPLIT_KV:
++        _nn20_split_forward(ctx, work, k, v, maxes, denoms, rows, s, hd, qpg, key_lo, scale)
++    else:
++        step_count_launch()
++        ctx.enqueue_function[summary_model_forward_kernel](work.q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),work.lo.unsafe_ptr(),work.hi.unsafe_ptr(),work.output.unsafe_ptr(),maxes.unsafe_ptr(),denoms.unsafe_ptr(),work.scratch.unsafe_ptr(),work.status.unsafe_ptr(),Int32(rows),Int32(s),Int32(hd),Int32(qpg),Int32(key_lo),scale,grid_dim=((rows+63)//64,1,1),block_dim=(64,1,1))
++    step_count_launch()
++    ctx.enqueue_function[summary_pack_kernel[False]](output.unsafe_ptr(),work.output.unsafe_ptr(),Int32(rows*hd),Int32(l),Int32(nh),Int32(hd),grid_dim=((rows*hd+255)//256,1,1),block_dim=(256,1,1))
++    if materialize:
++        step_count_launch()
++        # BACKWARD=False only reads maxes; the zdot argument is unused.
++        # Take one explicit pointer view for these repeated read-only arguments.
++        var maxes_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](maxes.unsafe_ptr())
++        ctx.enqueue_function[summary_materialize_kernel[False]](work.q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),work.dy.unsafe_ptr(),work.lo.unsafe_ptr(),work.hi.unsafe_ptr(),maxes_ptr,denoms.unsafe_ptr(),maxes_ptr,scores.unsafe_ptr(),masked.unsafe_ptr(),exps.unsafe_ptr(),probs.unsafe_ptr(),Int32(rows*s),Int32(s),Int32(hd),Int32(qpg),scale,grid_dim=((rows*s+255)//256,1,1),block_dim=(256,1,1))
++    step_count_sync()
++    ctx.synchronize()
++
++
++from transformer.experiments.attention_summary_tree import enqueue_summary_attention_backward
++
++def model_summary_backward(ctx:DeviceContext,mut zdot:DeviceBuffer[DType.float32],
++    mut dq:DeviceBuffer[DType.float32],mut dk:DeviceBuffer[DType.float32],mut dv:DeviceBuffer[DType.float32],
++    mut q:DeviceBuffer[DType.float32],mut dy:DeviceBuffer[DType.float32],mut k:DeviceBuffer[DType.float32],mut v:DeviceBuffer[DType.float32],
++    mut maxes:DeviceBuffer[DType.float32],mut denoms:DeviceBuffer[DType.float32],
++    mut dweights:DeviceBuffer[DType.float32],mut dmasked:DeviceBuffer[DType.float32],
++    mut dscores:DeviceBuffer[DType.float32],mut dqk:DeviceBuffer[DType.float32],
++    b:Int,l:Int,nh:Int,nkv:Int,hd:Int,s:Int,pos0:Int,key_lo:Int,window:Int,scale:Float32,materialize:Bool) raises:
++    _require_model_shape(b,l,nh,nkv,hd,s,pos0,key_lo,window)
++    var rows=b*nh*l
++    var qpg=(nh//nkv)*l
++    _require_summary_gradient_regime(device_absmax(ctx,q,rows*hd),device_absmax(ctx,k,b*nkv*s*hd),device_absmax(ctx,v,b*nkv*s*hd),device_absmax(ctx,dy,rows*hd),hd,s,qpg)
++    var work=SummaryModelBuffers(ctx,rows,s,hd,key_lo)
++    _pack(ctx,work,q,b,l,nh,hd,s,pos0,key_lo,window)
++    step_count_launch()
++    ctx.enqueue_function[summary_pack_kernel[True]](work.dy.unsafe_ptr(),dy.unsafe_ptr(),Int32(rows*hd),Int32(l),Int32(nh),Int32(hd),grid_dim=((rows*hd+255)//256,1,1),block_dim=(256,1,1))
++    enqueue_summary_attention_backward(ctx,work.q,k,v,work.dy,work.lo,work.hi,maxes,denoms,zdot,work.status,work.dq,dk,dv,rows,s,hd,hd,qpg,scale)
++    step_count_launch()
++    ctx.enqueue_function[summary_pack_kernel[False]](dq.unsafe_ptr(),work.dq.unsafe_ptr(),Int32(rows*hd),Int32(l),Int32(nh),Int32(hd),grid_dim=((rows*hd+255)//256,1,1),block_dim=(256,1,1))
++    if materialize:
++        step_count_launch()
++        ctx.enqueue_function[summary_materialize_kernel[True]](work.q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),work.dy.unsafe_ptr(),work.lo.unsafe_ptr(),work.hi.unsafe_ptr(),maxes.unsafe_ptr(),denoms.unsafe_ptr(),zdot.unsafe_ptr(),dweights.unsafe_ptr(),dmasked.unsafe_ptr(),dscores.unsafe_ptr(),dqk.unsafe_ptr(),Int32(rows*s),Int32(s),Int32(hd),Int32(qpg),scale,grid_dim=((rows*s+255)//256,1,1),block_dim=(256,1,1))
++    step_count_sync()
++    ctx.synchronize()
++
++
+diff --git a/transformer/experiments/summary_model_contract.mojo b/transformer/experiments/summary_model_contract.mojo
+new file mode 100644
+index 000000000..92e0290ba
+--- /dev/null
++++ b/transformer/experiments/summary_model_contract.mojo
+@@ -0,0 +1,108 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Shared scalar attention layout, admission and trace operations; no GPU imports."""
++from std.memory import bitcast
++from checks.numerics import ftz, identical_exp, identical_div, identical_mul
++from transformer.experiments.attention_summary_contract import (NN20_BALANCED_SUMMARY_TREE, summary_scratch_elements, summary_attention_forward_row, summary_attention_rowdot, summary_attention_dq_cell, summary_attention_dkdv_cell, _score, _dyv)
++
++def regime_finite(v: Float64) -> Bool:
++    return v < Float64(bitcast[DType.float32](UInt32(0x7F800000)))
++
++def regime_product_ok(n: Int, a: Float64, b: Float64) -> Bool:
++    return regime_finite(a) and regime_finite(b) and Float64(n)*a*b < Float64(1267650600228229401496703205376.0)
++
++def _require_model_shape(b:Int,l:Int,nh:Int,nkv:Int,hd:Int,s:Int,
++                         pos0:Int,key_lo:Int,window:Int) raises:
++    # These are public tensor/index ABI bounds, not performance thresholds.
++    # Every generated mask is then 0 <= lo < hi <= s; its status is zero
++    # by construction, with no device-to-host status scan needed per row.
++    if b <= 0 or l <= 0 or nh <= 0 or nkv <= 0 or hd <= 0 or s <= 0:
++        raise Error("NN20: positive model dimensions required")
++    if nh % nkv != 0 or key_lo < 0 or pos0 < key_lo or s != pos0+l-key_lo or window < 0:
++        raise Error("NN20: invalid grouped-head or absolute key-span metadata")
++    if max(max(b*nh*l*hd,b*nh*l*s),b*nkv*s*hd) > 2147483647:
++        raise Error("NN20: model linear index exceeds Int32 kernel ABI")
++    if pos0+l > 2147483647 or window > 2147483647:
++        raise Error("NN20: absolute position exceeds Int32 kernel ABI")
++
++
++def _host_absmax(x: List[Float32]) -> Float64:
++    var maximum = Float64(0.0)
++    for i in range(len(x)):
++        var bits = bitcast[DType.uint32](x[i]) & UInt32(0x7FFFFFFF)
++        if bits >= UInt32(0x7F800000):
++            return Float64(bitcast[DType.float32](UInt32(0x7F800000)))
++        maximum = max(maximum, Float64(bitcast[DType.float32](bits)))
++    return maximum
++
++
++def _require_summary_regime(qm: Float64, km: Float64, vm: Float64, hd: Int, s: Int) raises:
++    if not regime_product_ok(hd,qm,km) or not regime_product_ok(s,vm,Float64(1.0)):
++        raise Error("NN20: nonfinite or overflow-risk attention operands")
++
++
++def _require_summary_gradient_regime(qm:Float64,km:Float64,vm:Float64,dm:Float64,hd:Int,s:Int,qpg:Int) raises:
++    _require_summary_regime(qm,km,vm,hd,s)
++    if not regime_finite(dm):
++        raise Error("NN20: nonfinite or overflow-risk attention gradient")
++    var dyv = Float64(hd)*dm*vm
++    if (not regime_product_ok(s,Float64(2.0)*dyv,km)
++            or not regime_product_ok(qpg,Float64(2.0)*dyv,qm)
++            or not regime_product_ok(qpg,dm,Float64(1.0))):
++        raise Error("NN20: nonfinite or overflow-risk attention gradient")
++
++
++def _token_cell(i: Int, l: Int, nh: Int, hd: Int) -> Int:
++    var d = i % hd
++    var row = i // hd
++    var t = row % l
++    var h = (row // l) % nh
++    var bb = row // (l * nh)
++    return (bb * l + t) * nh * hd + h * hd + d
++
++
++def _mask_row(lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
++              status: MutPointer[Int32, MutAnyOrigin], row: Int, l: Int, s: Int,
++              pos0: Int, key_lo: Int, window: Int):
++    var p = pos0 + row % l
++    var begin = 0
++    if window > 0:
++        begin = max(0, p - window + 1 - key_lo)
++    lo.unsafe_store(row, Int32(begin))
++    hi.unsafe_store(row, Int32(min(s, p - key_lo + 1)))
++    status.unsafe_store(row, Int32(0))
++
++
++def _materialize_cell[BACKWARD: Bool](q: MutPointer[Float32, MutAnyOrigin],
++    k: MutPointer[Float32, MutAnyOrigin], v: MutPointer[Float32, MutAnyOrigin],
++    dy: MutPointer[Float32, MutAnyOrigin], lo: MutPointer[Int32, MutAnyOrigin],
++    hi: MutPointer[Int32, MutAnyOrigin], maxes: MutPointer[Float32, MutAnyOrigin],
++    denoms: MutPointer[Float32, MutAnyOrigin], zdot: MutPointer[Float32, MutAnyOrigin],
++    a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin],
++    c: MutPointer[Float32, MutAnyOrigin], d: MutPointer[Float32, MutAnyOrigin],
++    cell: Int, s: Int, hd: Int, qpg: Int, scale: Float32):
++    var row = cell // s
++    var j = cell % s
++    var group = row // qpg
++    var visible = j >= Int(lo.unsafe_load(row)) and j < Int(hi.unsafe_load(row))
++    var score = _score(q,k,row,group,j,s,hd,scale)
++    var e = Float32(0.0)
++    var p = Float32(0.0)
++    if visible:
++        e = ftz(identical_exp(ftz(score-maxes.unsafe_load(row))))
++        p = ftz(identical_div(e,denoms.unsafe_load(row)))
++    comptime if BACKWARD:
++        var gy = _dyv(v,dy,row,group,j,s,hd)
++        var ds = Float32(0.0)
++        if visible:
++            ds = ftz(identical_mul(p,ftz(gy-zdot.unsafe_load(row))))
++        a.unsafe_store(cell,gy)
++        b.unsafe_store(cell,ds)
++        c.unsafe_store(cell,ds)
++        d.unsafe_store(cell,ftz(identical_mul(ds,scale)))
++    else:
++        a.unsafe_store(cell,score)
++        b.unsafe_store(cell,score if visible else bitcast[DType.float32](UInt32(0xFF800000)))
++        c.unsafe_store(cell,e)
++        d.unsafe_store(cell,p)
++
++
+diff --git a/transformer/experiments/summary_model_host.mojo b/transformer/experiments/summary_model_host.mojo
+new file mode 100644
+index 000000000..9b411c018
+--- /dev/null
++++ b/transformer/experiments/summary_model_host.mojo
+@@ -0,0 +1,78 @@
++# SPDX-License-Identifier: Apache-2.0
++"""NN20 public host-model adapter using the common scalar contract."""
++from std.memory import bitcast
++from core.host_lanes import host_f32_uninit
++from checks.numerics import ftz, identical_exp, identical_div, identical_mul
++from transformer.experiments.attention_summary_contract import (NN20_BALANCED_SUMMARY_TREE, summary_scratch_elements, summary_attention_forward_row, summary_attention_rowdot, summary_attention_dq_cell, summary_attention_dkdv_cell, _score, _dyv)
++
++from transformer.experiments.summary_model_contract import (_require_model_shape, _host_absmax, _require_summary_regime, _require_summary_gradient_regime, _token_cell, _mask_row, _materialize_cell)
++
++def model_summary_host_forward(q:List[Float32],k:List[Float32],v:List[Float32],
++    b:Int,l:Int,nh:Int,nkv:Int,hd:Int,s:Int,pos0:Int,key_lo:Int,window:Int,scale:Float32,
++    mut scores:List[Float32],mut masked:List[Float32],mut maxes:List[Float32],
++    mut exps:List[Float32],mut denoms:List[Float32],mut probs:List[Float32],mut output:List[Float32]) raises:
++    _require_model_shape(b,l,nh,nkv,hd,s,pos0,key_lo,window)
++    var rows=b*nh*l
++    var qpg=(nh//nkv)*l
++    _require_summary_regime(_host_absmax(q),_host_absmax(k),_host_absmax(v),hd,s)
++    var packed=host_f32_uninit(rows*hd)
++    var result=host_f32_uninit(rows*hd)
++    var scratch=host_f32_uninit(summary_scratch_elements(rows,s,hd,key_lo))
++    var lo=List[Int32](length=rows,fill=Int32(0))
++    var hi=List[Int32](length=rows,fill=Int32(0))
++    var status=List[Int32](length=rows,fill=Int32(0))
++    output=host_f32_uninit(rows*hd)
++    for i in range(rows*hd):
++        packed[i]=q[_token_cell(i,l,nh,hd)]
++    var qp=rebind[MutPointer[Float32,MutAnyOrigin]](packed.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    var kp=rebind[MutPointer[Float32,MutAnyOrigin]](k.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    var vp=rebind[MutPointer[Float32,MutAnyOrigin]](v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    for row in range(rows):
++        _mask_row(lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),row,l,s,pos0,key_lo,window)
++        summary_attention_forward_row[True](qp,kp,vp,lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),result.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),maxes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),denoms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),row,s,hd,hd,qpg,scale,key_lo)
++    for i in range(rows*hd):
++        output[_token_cell(i,l,nh,hd)]=result[i]
++    for cell in range(rows*s):
++        _materialize_cell[False](qp,kp,vp,qp,lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),maxes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),denoms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),maxes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),scores.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),masked.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),exps.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),probs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),cell,s,hd,qpg,scale)
++
++
++def model_summary_host_backward(q:List[Float32],dy:List[Float32],k:List[Float32],v:List[Float32],
++    maxes:List[Float32],denoms:List[Float32],b:Int,l:Int,nh:Int,nkv:Int,hd:Int,s:Int,pos0:Int,key_lo:Int,window:Int,scale:Float32,
++    mut zdot:List[Float32],mut dq:List[Float32],mut dk:List[Float32],mut dv:List[Float32],
++    mut dweights:List[Float32],mut dmasked:List[Float32],mut dscores:List[Float32],mut dqk:List[Float32]) raises:
++    _require_model_shape(b,l,nh,nkv,hd,s,pos0,key_lo,window)
++    var rows=b*nh*l
++    var qpg=(nh//nkv)*l
++    _require_summary_gradient_regime(_host_absmax(q),_host_absmax(k),_host_absmax(v),_host_absmax(dy),hd,s,qpg)
++    var packed=host_f32_uninit(rows*hd)
++    var pdy=host_f32_uninit(rows*hd)
++    var pdq=host_f32_uninit(rows*hd)
++    var lo=List[Int32](length=rows,fill=Int32(0))
++    var hi=List[Int32](length=rows,fill=Int32(0))
++    var status=List[Int32](length=rows,fill=Int32(0))
++    zdot=host_f32_uninit(rows)
++    dq=host_f32_uninit(rows*hd)
++    dk=host_f32_uninit(b*nkv*s*hd)
++    dv=host_f32_uninit(b*nkv*s*hd)
++    dweights=host_f32_uninit(rows*s)
++    dmasked=host_f32_uninit(rows*s)
++    dscores=host_f32_uninit(rows*s)
++    dqk=host_f32_uninit(rows*s)
++    for i in range(rows*hd):
++        packed[i]=q[_token_cell(i,l,nh,hd)]
++        pdy[i]=dy[_token_cell(i,l,nh,hd)]
++    var qp=rebind[MutPointer[Float32,MutAnyOrigin]](packed.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    var kp=rebind[MutPointer[Float32,MutAnyOrigin]](k.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    var vp=rebind[MutPointer[Float32,MutAnyOrigin]](v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    var mp=rebind[MutPointer[Float32,MutAnyOrigin]](maxes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    var zp=rebind[MutPointer[Float32,MutAnyOrigin]](denoms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    for row in range(rows):
++        _mask_row(lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),row,l,s,pos0,key_lo,window)
++        summary_attention_rowdot(qp,kp,vp,pdy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),mp,zp,zdot.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),row,s,hd,hd,qpg,scale)
++    for i in range(rows*hd):
++        summary_attention_dq_cell(qp,kp,vp,pdy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),mp,zp,zdot.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),pdq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),i,s,hd,hd,qpg,scale)
++        dq[_token_cell(i,l,nh,hd)]=pdq[i]
++    for i in range(b*nkv*s*hd):
++        summary_attention_dkdv_cell(qp,kp,vp,pdy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),mp,zp,zdot.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),i,rows,s,hd,hd,qpg,scale)
++    for cell in range(rows*s):
++        _materialize_cell[True](qp,kp,vp,pdy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),mp,zp,zdot.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dweights.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dmasked.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dscores.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dqk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),cell,s,hd,qpg,scale)
+diff --git a/transformer/impl/llama/modeling_llama.mojo b/transformer/impl/llama/modeling_llama.mojo
+index 0a45f1f2a..12accb264 100644
+--- a/transformer/impl/llama/modeling_llama.mojo
++++ b/transformer/impl/llama/modeling_llama.mojo
+@@ -267,6 +267,8 @@ agreement with HuggingFace, PyTorch or MAX: the fold orders,
+ transcendentals and division below are OURS.
+ """
+ 
++from transformer.experiments.summary_model import model_summary_forward
++from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
+ from transformer.experiments.norm_profile import (
+     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+ )
+@@ -4172,10 +4174,31 @@ def eager_attention_forward(
+     corner says so. Returns the fused status (`FUSED_RAN` when the fused
+     bits are the ones in `stages.ctxv`; -1 when the fused path was not
+     attempted)."""
+-    # Tried 2026-10-08 (MOJOLEARN_IDN_ATTN_SOFTMAX=1, the NN20 summary_tree arm, run ge123e6f9): NV/AMD lm-forward
+-    # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
+-    # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
+-    # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
++    comptime if NN20_BALANCED_SUMMARY_TREE:
++        if softcap != Float32(0.0) or stages.int15_on or plant_at != PLANT_AT_NONE:
++            raise Error("NN20 summary profile refuses softcap, INT15 and legacy score plants")
++        var record_stages = materialize or trace.enabled
++        if record_stages:
++            ensure_attention_stage_capacity(ctx, stages, l, s)
++        model_summary_forward(ctx, stages.ctxv, stages.amax, stages.denom,
++            stages.scores, stages.masked, stages.aexp, stages.weights,
++            stages.q_rope, stages.k_cache, stages.v_cache, b, l,
++            dims.n_heads, dims.n_kv, dims.head_dim, s, pos0, key_lo, window,
++            llama_attention_scale(dims.head_dim), record_stages)
++        stages.attn_materialized = record_stages
++        stages.attn_estash_cells = 0
++        stages.attn_fwd_scan.clear()
++        stages.attn_forward_status = 20  # explicit new arithmetic version
++        if trace.enabled:
++            var cells = b * dims.n_heads * l * s
++            trace.record_device[DType.float32](ctx,prefix+".attn.scores",stages.scores,cells)
++            trace.record_device[DType.float32](ctx,prefix+".attn.masked",stages.masked,cells)
++            trace.record_device[DType.float32](ctx,prefix+".attn.max",stages.amax,b*dims.n_heads*l)
++            trace.record_device[DType.float32](ctx,prefix+".attn.exp",stages.aexp,cells)
++            trace.record_device[DType.float32](ctx,prefix+".attn.denom",stages.denom,b*dims.n_heads*l)
++            trace.record_device[DType.float32](ctx,prefix+".attn.weights",stages.weights,cells)
++        trace.record_device[DType.float32](ctx,prefix+".attn.ctx",stages.ctxv,b*l*dims.n_heads*dims.head_dim)
++        return 20
+     stages.attn_v2 = False
+     comptime if IDN_ATTENTION_V2 and not BLOCK_ANY_SABOTAGE:
+         # Numeric-profile choice, independent of hardware and dimensions.

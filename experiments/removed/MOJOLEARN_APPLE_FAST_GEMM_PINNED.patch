@@ -1,0 +1,43 @@
+Restores MOJOLEARN_APPLE_FAST_GEMM_PINNED: the reverse of 75c59ea26 (2026-10-03, "gemm_identical: remove dropped APPLE_FAST_GEMM_PINNED (DROPPED-noise; recover lane/apple-fast-tier@95a09d1fd)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gemm/checks/gemm_identical.mojo b/gemm/checks/gemm_identical.mojo
+index e238939a7..093213d3f 100644
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -4693,7 +4693,15 @@ def identical_gemm_into[allow_vendor: Bool = True](
+     # as 1876 does. Under IDENTICAL this branch is not compiled at all:
+     # bit-unchanged by construction.
+     comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+-        if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
++        var vendor = True
++        comptime if TARGET_COLUMN == COLUMN_APPLE:
++            # lane/apple-fast-tier (2026-10-02): MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
++            # keeps IDENTICAL's own shipped plan under FAST on Apple, where the
++            # board shows the vendor matmul slower at the classical shapes
++            # (rbf-sampler Istella FAST slower than IDENTICAL). Read on the
++            # host per call; default off; never compiled under IDENTICAL.
++            vendor = String(getenv("MOJOLEARN_APPLE_FAST_GEMM_PINNED")) != "1"
++        if vendor and _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
+             return
+     # DEVIATION 2542 -- THE GEMM STEP ARM HOOK. Compiled only under
+     # `-D MOJOLEARN_GEMM_ARM_TRIAL=1`. On a shipped build this block is not
+@@ -8860,7 +8868,15 @@ def identical_gemm[allow_vendor: Bool = True](
+     # before changing anything here; the `n == 1` clause in it is a
+     # correctness requirement and not an optimization.
+     comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+-        if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
++        var vendor = True
++        comptime if TARGET_COLUMN == COLUMN_APPLE:
++            # lane/apple-fast-tier (2026-10-02): MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
++            # keeps IDENTICAL's own shipped plan under FAST on Apple, where the
++            # board shows the vendor matmul slower at the classical shapes
++            # (rbf-sampler Istella FAST slower than IDENTICAL). Read on the
++            # host per call; default off; never compiled under IDENTICAL.
++            vendor = String(getenv("MOJOLEARN_APPLE_FAST_GEMM_PINNED")) != "1"
++        if vendor and _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
+             return
+     var nws = identical_gemm_workspace_max_floats(m, n, k)
+     step_count_device_alloc()

@@ -1,0 +1,18 @@
+Restores MOJOLEARN_ET_DEVICE_BATCH_65536: the reverse of e242fb001 (2026-10-03, "extratrees: remove dropped ET_DEVICE_BATCH_65536 (DROPPED-slower; recover lane/apple-fast@269ffa57a)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/extratrees/estimator.mojo b/extratrees/estimator.mojo
+index 010595a8f..8a85624e3 100644
+--- a/extratrees/estimator.mojo
++++ b/extratrees/estimator.mojo
+@@ -482,6 +482,8 @@ def _et_device_batch() -> Int:
+     grid axis y (65535). The workspace grows as batch x n_cols cells
+     (DEVIATION 205's survey reads every column). None is set by a build script.
+     """
++    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_65536"]():
++        return 65536
+     if is_defined["MOJOLEARN_ET_DEVICE_BATCH_32768"]():
+         return 32768
+     if is_defined["MOJOLEARN_ET_DEVICE_BATCH_4096"]():

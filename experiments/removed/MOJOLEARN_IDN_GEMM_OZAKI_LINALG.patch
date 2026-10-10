@@ -1,0 +1,69 @@
+Restores MOJOLEARN_IDN_GEMM_OZAKI_LINALG: the reverse of 22187de78 (2026-10-08, "grid-act-2: delete gemm_ozaki_linalg (both arms; grid ge123e6f9 gemm S=4 3.97x/2.06x, S=5 7.99x/2.51x slower); refuse th")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_IDN_GEMM_OZAKI_LINALG.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gemm/host_entry.mojo b/gemm/host_entry.mojo
+index 04f89be55..3ab23ec36 100644
+--- a/gemm/host_entry.mojo
++++ b/gemm/host_entry.mojo
+@@ -65,10 +65,27 @@ from gemm.host_transport import (
+ )
+ from gemm.contract import OP_NN, OP_NT, OP_TN
+ from std.sys.compile import is_defined
+-
+-# Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
+-# gemm.neural_dispatch's Ozaki int8 profile; NV/AMD gemm gaussian S=4 3.97x/2.06x, S=5 7.99x/2.51x SLOWER -> deleted
+-# (the neural Ozaki control itself is untouched). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++from gemm.neural_dispatch import (
++    identical_gemm_into as _neural_gemm_into,
++    identical_gemm_workspace_max_floats as _neural_workspace_max_floats,
++)
++from gemm.experiments.neural_ozaki import NEURAL_OZAKI
++
++comptime GEMM_OZAKI_LINALG = is_defined["MOJOLEARN_IDN_GEMM_OZAKI_LINALG"]()
++"""lane/neural-small (2026-10-07), IDENTICAL grid control `gemm_ozaki_linalg`.
++Absent = main: the linalg GEMM calls `gemm_identical` directly. Defined: it
++calls `gemm.neural_dispatch.identical_gemm_into`, so a build that also sets
++`-D MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4|5|6` serves the product with
++the Ozaki int8 profile (gemm/experiments/neural_ozaki.mojo) the neural GEMMs
++already take. Cost reasoning: the incumbent fp32 SIMT body is bound by fp32
++FMA throughput, the int8 matrix units (IMMA on NVIDIA, i8 MFMA on AMD) run
++S(S+1)/2 int8 products per tile at several times that rate, which holds for
++any k under `ozaki_max_k[S]` (a function of S only, not of a board shape);
++k above the bound falls back to the incumbent inside the router.
++BITS CHANGE: a new profile (integer diagonal sums, one RNE epilogue). Same
++words on NVIDIA and AMD by construction (integer sums are order free); the
++host column runs the same construction on its integer ALU (the PIECES
++kernel), so it changes together with the device columns."""
+ 
+ 
+ def identical_gemm_host(
+@@ -137,13 +154,20 @@ def identical_gemm_host(
+     # THE ONE LINE THAT COMPUTES ANYTHING. Everything above is transport and
+     # everything below is transport.
+     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+-        # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
+-        # gemm.neural_dispatch's Ozaki int8 profile; NV/AMD gemm gaussian S=4 3.97x/2.06x, S=5 7.99x/2.51x SLOWER -> deleted
+-        # (the neural Ozaki control itself is untouched). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-        var ws = lease.f32(ctx, ROLE_WS, identical_gemm_workspace_max_floats(m, n, k))
+-        identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
+-        gemm_down_f32(ctx, lease, c, c_ptr, m * n)
+-        _ = ws
++        comptime if GEMM_OZAKI_LINALG:
++            comptime assert NEURAL_OZAKI, (
++                "MOJOLEARN_IDN_GEMM_OZAKI_LINALG routes the linalg GEMM to the"
++                " Ozaki profile: define MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4|5|6"
++            )
++            var ws = lease.f32(ctx, ROLE_WS, _neural_workspace_max_floats(m, n, k))
++            _neural_gemm_into(ctx, c, a, b, ws, m, n, k, op)
++            gemm_down_f32(ctx, lease, c, c_ptr, m * n)
++            _ = ws
++        else:
++            var ws = lease.f32(ctx, ROLE_WS, identical_gemm_workspace_max_floats(m, n, k))
++            identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
++            gemm_down_f32(ctx, lease, c, c_ptr, m * n)
++            _ = ws
+     else:
+         identical_gemm(ctx, c, a, b, m, n, k, op)
+         gemm_down_f32(ctx, lease, c, c_ptr, m * n)

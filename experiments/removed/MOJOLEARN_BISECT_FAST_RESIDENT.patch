@@ -1,0 +1,119 @@
+Restores MOJOLEARN_BISECT_FAST_RESIDENT: the reverse of 50cb0d970 (2026-10-02, "x_cluster cluster2: the OPTICS device order as one grid launch per step (no one-block launch)")
+restricted to code files (hunks that name this define).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index 40a44dd61..feb057688 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -1155,74 +1151,53 @@ def _opt_key(v: Float32, j: Int) -> UInt64:
+     return (UInt64(b) << 32) | UInt64(UInt32(j))
+ 
+ 
+-@always_inline
+-def _opt_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
+-    """The min of the nb partial keys (every thread folds them itself: nb is
+-    the block count, tens at the board's rows)."""
+-    var k = UInt64(0xFFFFFFFFFFFFFFFF)
+-    for b in range(nb):
+-        k = min(k, part[b])
+-    return k
+-
+-
+-def _optics_step_kernel(
++def _optics_order_kernel(
+     dist: FPtr, core: FPtr, n: Int32, max_eps: Float32, ordering: IPtr, reach: FPtr, pred: IPtr, proc: IPtr,
+-    part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, step: Int32,
+ ):
+     var tid = Int(thread_idx.x)
+-    var b = Int(block_idx.x)
+     var N = Int(n)
+-    var NB = Int(nb)
+-    var s = Int(step)
+-    var r0 = b * OPT_ORD_PER
+-    var r1 = r0 + OPT_ORD_PER
+-    if r1 > N:
+-        r1 = N
+     var inf = Float32.MAX * Float32(2)
+     var red = stack_allocation[OPT_ORD_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+-    if s < 0:
+-        for o in range(r0 + tid, r1, OPT_ORD_TPB):
+-            reach[o] = inf
+-            pred[o] = Int32(-1)
+-            proc[o] = Int32(0)
+-    else:
+-        var key = _opt_pick(part + (s & 1) * NB, NB)
+-        var point = Int(UInt32(key & UInt64(0xFFFFFFFF)))
+-        if b == 0 and tid == 0:
+-            ordering[s] = Int32(point)
++    for j in range(tid, N, OPT_ORD_TPB):
++        reach[j] = inf
++        pred[j] = Int32(-1)
++        proc[j] = Int32(0)
++    barrier()
++    for step in range(N):
++        var mine = UInt64(0xFFFFFFFFFFFFFFFF)
++        for j in range(tid, N, OPT_ORD_TPB):
++            if proc[j] == Int32(0):
++                mine = min(mine, _opt_key(reach[j], j))
++        red[tid] = mine
++        barrier()
++        var off = OPT_ORD_TPB // 2
++        while off > 0:
++            if tid < off:
++                red[tid] = min(red[tid], red[tid + off])
++            barrier()
++            off //= 2
++        var point = Int(UInt32(red[0] & UInt64(0xFFFFFFFF)))
++        barrier()
++        if tid == 0:
++            ordering[step] = Int32(point)
++            proc[point] = Int32(1)
++        barrier()
+         var cp = core[point]
+         # the host's `core[point] != inf` after its clamp of core > max_eps
+-        var relax = cp <= max_eps and cp != inf
+-        for o in range(r0 + tid, r1, OPT_ORD_TPB):
+-            if o == point:
+-                proc[o] = Int32(1)
+-            elif relax and proc[o] == Int32(0):
+-                var dd = dist[point * N + o]
+-                if dd <= max_eps:
+-                    var rd = dd if dd > cp else cp
+-                    if rd < reach[o]:
+-                        reach[o] = rd
+-                        pred[o] = Int32(point)
+-    # this thread's rows again (the same stride): the next step's candidate
+-    var mine = UInt64(0xFFFFFFFFFFFFFFFF)
+-    for o in range(r0 + tid, r1, OPT_ORD_TPB):
+-        if proc[o] == Int32(0):
+-            mine = min(mine, _opt_key(reach[o], o))
+-    red[tid] = mine
+-    barrier()
+-    var off = OPT_ORD_TPB // 2
+-    while off > 0:
+-        if tid < off:
+-            red[tid] = min(red[tid], red[tid + off])
++        if cp <= max_eps and cp != inf:
++            for o in range(tid, N, OPT_ORD_TPB):
++                if proc[o] == Int32(0):
++                    var dd = dist[point * N + o]
++                    if dd <= max_eps:
++                        var rd = dd if dd > cp else cp
++                        if rd < reach[o]:
++                            reach[o] = rd
++                            pred[o] = Int32(point)
+         barrier()
+-        off //= 2
+-    if tid == 0:
+-        part[((s + 1) & 1) * NB + b] = red[0]
+ 
+ 
+ # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+-# `-D MOJOLEARN_BISECT_FAST_RESIDENT=1` (BISECT_FAST_RESIDENT, asked by
+-# x_cluster/bisect.mojo under the same define):
++# env `MOJOLEARN_BISECT_FAST_RESIDENT=1` (read in x_cluster/bisect.mojo):
+ # `sqdist_cell` for the rows `rows[i]` of the resident centered data, so a
+ # split's child scores need an upload of m ints, not of the m x d subset
+ # again (`ops.put(sub)` after `ops.kmeans` had already uploaded it). The

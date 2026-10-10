@@ -1,0 +1,228 @@
+Shared hunks of deletion commit e5ad4d891 ("trees: delete T01/N07 streamed histogram replicas (lost on NV+AMD) and its experiment code"): code hunks that name none of the defines it deleted.
+Apply before any experiments/removed/<DEFINE>.patch that names this file. See docs/TOMBSTONES.md.
+
+diff --git a/ensemble/decisiontree/batched_levelalgo/builder.mojo b/ensemble/decisiontree/batched_levelalgo/builder.mojo
+index f54e702db..00cd5344a 100644
+--- a/ensemble/decisiontree/batched_levelalgo/builder.mojo
++++ b/ensemble/decisiontree/batched_levelalgo/builder.mojo
+@@ -2,7 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
+ 
+-from ensemble.tree_identical_ideas import T02, T03, T04, T05, T07, T11, T11_LEVELS, T13, T13_BYTES, histogram_task_rows
++from ensemble.tree_identical_ideas import T01, T02, T03, T04, T05, T07, T11, T11_LEVELS, T13, T13_BYTES, histogram_task_rows
+ from std.gpu import WARP_SIZE
+ from std.sys.compile import is_defined, get_defined_int
+ from std.math import ceildiv
+diff --git a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+index a4942dc90..ef7160abc 100644
+--- a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
++++ b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+@@ -380,7 +380,7 @@ which already priced the width for the reduction this scratch feeds.
+ 
+ from ensemble.tree_moments import moment_pair, moment_finish
+ from checks.soft_f64 import sf64_from_f32
+-from ensemble.tree_identical_ideas import T04, T05, T07, T08, T08_LAYOUT, T08_BITS, T14, T14_EXACT, C48
++from ensemble.tree_identical_ideas import T01, T01_REPLICAS, T04, T05, T07, T08, T08_LAYOUT, T08_BITS, T14, T14_EXACT, C48
+ from std.gpu import (
+     WARP_SIZE,
+     block_dim,
+@@ -421,6 +421,7 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
+     _quantize,
+ )
+ from std.atomic import Atomic, Ordering
++from std.ffi import _Global
+ from std.gpu.primitives.warp import shuffle_idx as _hist_shuffle_idx
+ from std.gpu.primitives.warp import sum as _hist_warp_sum
+ from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
+diff --git a/ensemble/tree_identical_ideas.mojo b/ensemble/tree_identical_ideas.mojo
+index 2830c5631..e5c7fe239 100644
+--- a/ensemble/tree_identical_ideas.mojo
++++ b/ensemble/tree_identical_ideas.mojo
+@@ -45,4 +46,6 @@ def histogram_task_rows(histogram_bytes: Int, row_bytes: Int, reference: Int) ->
+     comptime if T02:
+         var rows = max(128, min(1024, (2 * histogram_bytes) // max(1, row_bytes)))
+         return ((rows + 127) // 128) * 128
++    comptime if T01:
++        return max(128, min(1024, ((T01_ROWS + 127) // 128) * 128))
+     return reference
+diff --git a/experiments/performance_ideas/N07/check.mojo b/experiments/performance_ideas/N07/check.mojo
+new file mode 100644
+index 000000000..32c7cf8cd
+--- /dev/null
++++ b/experiments/performance_ideas/N07/check.mojo
+@@ -0,0 +1,57 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Exact signed weighted histogram arms, skew, tails and invalid addends."""
++from experiments.performance_ideas.N07.production_check import run_checks as check_production
++from max.gpu.host import DeviceContext
++from experiments.performance_ideas.N07.streamed_histogram import streamed_histogram
++
++
++def main() raises:
++    check_production()
++    var ctx=DeviceContext()
++    var rows=769;var features=11
++    comptime BINS=32
++    var hb=ctx.enqueue_create_host_buffer[DType.int32](rows*features)
++    var hw=ctx.enqueue_create_host_buffer[DType.int32](rows)
++    var bins=ctx.enqueue_create_buffer[DType.int32](rows*features)
++    var weights=ctx.enqueue_create_buffer[DType.int32](rows)
++    var partials=ctx.enqueue_create_buffer[DType.int64](4*features*BINS)
++    var output=ctx.enqueue_create_buffer[DType.int64](features*BINS)
++    var status=ctx.enqueue_create_buffer[DType.int32](4*3)
++    var ho=ctx.enqueue_create_host_buffer[DType.int64](features*BINS)
++    var hs=ctx.enqueue_create_host_buffer[DType.int32](4*3)
++    ctx.synchronize()
++    for fixture in range(3):
++        var reference=List[Int64]()
++        for cell in range(features*BINS):reference.append(Int64(0))
++        for row in range(rows):
++            hw[row]=Int32(row%17-8)
++            for f in range(features):
++                var bin=0 if fixture==1 else (row*7+f*11)%BINS
++                hb[row*features+f]=Int32(bin)
++                reference[f*BINS+bin]+=Int64(hw[row])
++        if fixture==2:
++            hw[rows-1]=Int32(9)
++        ctx.enqueue_copy(dst_buf=bins,src_buf=hb)
++        ctx.enqueue_copy(dst_buf=weights,src_buf=hw)
++        ctx.synchronize()
++        for arm in range(3):
++            var groups=3
++            if arm==0:
++                streamed_histogram[4,BINS,1](ctx,bins,weights,partials,output,status,rows,features,8)
++            elif arm==1:
++                streamed_histogram[4,BINS,4](ctx,bins,weights,partials,output,status,rows,features,8)
++            else:
++                groups=2
++                streamed_histogram[8,BINS,4](ctx,bins,weights,partials,output,status,rows,features,8)
++            ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(),src_buf=output)
++            ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(),src_buf=status)
++            ctx.synchronize()
++            var invalid=0
++            for cell in range(4*groups):invalid+=Int(hs[cell])
++            if fixture==2:
++                if invalid==0:raise Error("out-of-contract addend was accepted")
++            else:
++                if invalid!=0:raise Error("valid integer histogram rejected")
++                for cell in range(features*BINS):
++                    if ho[cell]!=reference[cell]:raise Error("signed histogram differs from exact integer oracle")
++            print("N07_PASS fixture="+String(fixture)+" arm="+String(arm)+" invalid_partitions="+String(invalid))
+diff --git a/experiments/performance_ideas/N07/streamed_histogram.mojo b/experiments/performance_ideas/N07/streamed_histogram.mojo
+new file mode 100644
+index 000000000..0a65f93c1
+--- /dev/null
++++ b/experiments/performance_ideas/N07/streamed_histogram.mojo
+@@ -0,0 +1,89 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Bounded feature chunks and shared integer histogram replicas.
++
++Input weights are the caller's existing exact Int32 accumulator addends;
++this adapter performs no float quantization. One row tile owns partials,
++then an exact Int64 merge runs per histogram cell in ascending tile order.
++The caller proves 256*max_abs<=Int32.max; the device also rejects addends or
++bin IDs outside that contract. No float atomics or unsupported global queue.
++"""
++from std.atomic import Atomic,Ordering
++from std.gpu import block_idx,thread_idx,block_dim
++from std.memory import stack_allocation
++from max.gpu.memory import AddressSpace
++from max.gpu.sync import barrier
++from max.gpu.host import DeviceContext,DeviceBuffer
++
++
++@always_inline
++def _histogram_tile_body[CHUNK: Int,BINS: Int,REPLICAS: Int](
++    bins: MutPointer[Int32,MutAnyOrigin],weights: MutPointer[Int32,MutAnyOrigin],
++    partials: MutPointer[Int64,MutAnyOrigin],status: MutPointer[Int32,MutAnyOrigin],
++    features: Int32,max_abs: Int32,fg: Int,tile: Int,row_begin: Int,row_end: Int):
++    comptime assert REPLICAS==1 or REPLICAS==4
++    comptime assert CHUNK*BINS*REPLICAS*4<=16384, "bounded shared replication"
++    var hist=stack_allocation[CHUNK*BINS*REPLICAS,Int32,address_space=AddressSpace.SHARED]()
++    var tid=Int(thread_idx.x)
++    for cell in range(tid,CHUNK*BINS*REPLICAS,128):
++        hist[cell]=Int32(0)
++    if tid==0:
++        status.unsafe_store(tile*((Int(features)+CHUNK-1)//CHUNK)+fg,Int32(0))
++    barrier()
++    var replica=0
++    comptime if REPLICAS==4:
++        replica=tid//32
++    for row in range(row_begin+tid,row_end,128):
++        var weight=weights.unsafe_load(row)
++        if Int64(weight)>Int64(max_abs) or Int64(weight)<-Int64(max_abs):
++            _=Atomic.fetch_add(status.unsafe_offset(tile*((Int(features)+CHUNK-1)//CHUNK)+fg),Int32(1))
++            continue
++        comptime for f in range(CHUNK):
++            var feature=fg*CHUNK+f
++            if feature<Int(features):
++                var bin=Int(bins.unsafe_load(row*Int(features)+feature))
++                if bin<0 or bin>=BINS:
++                    _=Atomic.fetch_add(status.unsafe_offset(tile*((Int(features)+CHUNK-1)//CHUNK)+fg),Int32(1))
++                else:
++                    _=Atomic.fetch_add[ordering=Ordering.RELAXED](hist.unsafe_offset((replica*CHUNK+f)*BINS+bin),weight)
++    barrier()
++    for cell in range(tid,CHUNK*BINS,128):
++        var feature=fg*CHUNK+cell//BINS
++        if feature<Int(features):
++            var total=Int64(0)
++            comptime for replica_id in range(REPLICAS):
++                total+=Int64(hist[replica_id*CHUNK*BINS+cell])
++            partials.unsafe_store(tile*Int(features)*BINS+feature*BINS+cell%BINS,total)
++
++
++def histogram_kernel[CHUNK: Int,BINS: Int,REPLICAS: Int](
++    bins: MutPointer[Int32,MutAnyOrigin],weights: MutPointer[Int32,MutAnyOrigin],
++    partials: MutPointer[Int64,MutAnyOrigin],status: MutPointer[Int32,MutAnyOrigin],
++    rows: Int32,features: Int32,max_abs: Int32):
++    var tile=Int(block_idx.y)
++    _histogram_tile_body[CHUNK,BINS,REPLICAS](bins,weights,partials,status,features,max_abs,
++        Int(block_idx.x),tile,tile*256,min(tile*256+256,Int(rows)))
++
++def merge_kernel(partials: MutPointer[Int64,MutAnyOrigin],output: MutPointer[Int64,MutAnyOrigin],cells: Int32,tiles: Int32):
++    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if cell<Int(cells):
++        var total=Int64(0)
++        for tile in range(Int(tiles)):
++            total+=partials.unsafe_load(tile*Int(cells)+cell)
++        output.unsafe_store(cell,total)
++
++
++# N07 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
++# N07 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
++# Explicit bounded integer adapter; production fixed-point weighted route is separately guarded.
++def streamed_histogram[CHUNK: Int,BINS: Int,REPLICAS: Int](ctx: DeviceContext,
++    mut bins: DeviceBuffer[DType.int32],mut weights: DeviceBuffer[DType.int32],
++    mut partials: DeviceBuffer[DType.int64],mut output: DeviceBuffer[DType.int64],
++    mut status: DeviceBuffer[DType.int32],rows: Int,features: Int,max_abs: Int) raises:
++    if rows<1 or rows>2147483647 or features<1 or features>2147483647//BINS or max_abs<0 or max_abs>2147483647//256:
++        raise Error("histogram signed integer bound is not proven")
++    var tiles=(rows+255)//256
++    var featuregroups=(features+CHUNK-1)//CHUNK
++    if len(bins)<rows*features or len(weights)<rows or len(partials)<tiles*features*BINS or len(output)<features*BINS or len(status)<tiles*featuregroups:
++        raise Error("histogram buffers too small")
++    ctx.enqueue_function[histogram_kernel[CHUNK,BINS,REPLICAS]](bins,weights,partials,status,Int32(rows),Int32(features),Int32(max_abs),grid_dim=(featuregroups,tiles,1),block_dim=(128,1,1))
++    ctx.enqueue_function[merge_kernel](partials,output,Int32(features*BINS),Int32(tiles),grid_dim=((features*BINS+127)//128,1,1),block_dim=(128,1,1))
+diff --git a/experiments/performance_ideas/N07/time.mojo b/experiments/performance_ideas/N07/time.mojo
+new file mode 100644
+index 000000000..3cdbeb51c
+--- /dev/null
++++ b/experiments/performance_ideas/N07/time.mojo
+@@ -0,0 +1,15 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Measure production forest fits using the retained benchmark data generator.
++One excluded fit warms the same DeviceContext before one scored full fit.
++"""
++from max.gpu.host import DeviceContext
++from gemm.checks.gemm_step_arms import gemm_step_env_int
++from ensemble.bench.rf_bench import run_arm
++
++
++def main() raises:
++    var ctx = DeviceContext()
++    var rows = gemm_step_env_int("AB_ROWS", 100000)
++    var features = gemm_step_env_int("AB_FEATURES", 32)
++    run_arm(ctx, "N07-warmup", rows, features, 128, False, False, False, 1)
++    run_arm(ctx, "N07-score", rows, features, 128, True, True, True, 1)
+

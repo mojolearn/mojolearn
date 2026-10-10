@@ -1,0 +1,67 @@
+Restores MOJOLEARN_TREES_T09: the reverse of eb8efb83a (2026-10-07, "trees: delete ET T09 bootstrap sort (unreachable, host sync in fit); guard refuses MOJOLEARN_TREES_T09; EXPERIMENTS row")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_TREES_T09.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/ensemble/tree_identical_ideas.mojo b/ensemble/tree_identical_ideas.mojo
+index ded5e17f7..8d6ab323c 100644
+--- a/ensemble/tree_identical_ideas.mojo
++++ b/ensemble/tree_identical_ideas.mojo
+@@ -23,8 +23,9 @@ comptime T07 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEAR
+ comptime T08 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T08"]()
+ comptime T08_LAYOUT = get_defined_int["MOJOLEARN_TREES_T08_LAYOUT", 1]()
+ comptime T08_BITS = get_defined_int["MOJOLEARN_TREES_T08_BITS", 8]()
+-# T09 (the ExtraTrees bootstrap-locality sort) was deleted by lane/grid-prune
+-# (2026-10-07): unreachable on the board, host sync inside the fit.
++# T09 now names the ExtraTrees bootstrap-locality sort only (split from the
++# RF arms below on 2026-10-07 so RF and ET effects stay separable).
++comptime T09 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T09"]()
+ # RF bootstrap sample route: ONE switch with three arms (trees-cleanup
+ # 2026-10-07; replaces RF T09 and T10, which silently disabled each other).
+ #   -D MOJOLEARN_TREES_RF_SAMPLE=0  drawn order, two launches (sample, gather)
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo b/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
+index 194fb2916..d54ae18b9 100644
+--- a/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
+@@ -2,10 +2,12 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
+ 
++from ensemble.bootstrap_sort import sort_selected_rows
++from core.segmented_sort import SORT_BLOCK
+ from std.collections import InlineArray
+ from core.tree_math import tree_log
+ from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
+-from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T11, T11_LEVELS, T12, T12_BYTES, T13, T13_BYTES, T14, T14_EXACT, C48
++from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T09, T11, T11_LEVELS, T12, T12_BYTES, T13, T13_BYTES, T14, T14_EXACT, C48
+ from std.memory import bitcast, memcpy
+ 
+ from ensemble.instruments import StageTimes
+@@ -2282,10 +2284,23 @@ def fill_row_slots(
+             UInt64(Int(row_sample_seed(seed, tree_ids[first + s]))),
+         )
+         _ = slot^
+-    # The ExtraTrees bootstrap-locality sort (MOJOLEARN_TREES_T09) was deleted
+-    # by lane/grid-prune (2026-10-07): unreachable on the board (et runs
+-    # bootstrap=False and returns above) and it put a host synchronize inside
+-    # the GPU fit. Recoverable at main ab554bb4a.
++    comptime if T09:
++        # Draw first, then sort each exact bootstrap multiset with RF's shared
++        # radix schedule. Threshold/feature counters still use logical IDs.
++        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++        var keys = ctx.enqueue_create_buffer[DType.uint32](max(1,Int(slot_rows)))
++        var offsets = ctx.enqueue_create_buffer[DType.int32](max(1,Int(slot_rows)))
++        var blocks = ctx.enqueue_create_buffer[DType.int32](max(1,ceildiv(Int(slot_rows),SORT_BLOCK)))
++        for slot_id in range(g):
++            var slot = d_row_ids.create_sub_buffer[DType.int32](slot_id*Int(slot_rows),Int(slot_rows))
++            sort_selected_rows(ctx,slot,Int(slot_rows),Int(n_rows),keys,offsets,blocks)
++            _ = slot^
++        # This helper owns scratch: finish its uses before releasing it.
++        # The whole-operation recipe includes this synchronization.
++        ctx.synchronize()
++        _ = keys^
++        _ = offsets^
++        _ = blocks^
+     _ = d_row_ids.unsafe_ptr()
+ 
+ 

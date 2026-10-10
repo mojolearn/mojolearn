@@ -1,0 +1,397 @@
+Restores MOJOLEARN_KMEANS_DIRECT_DISTANCE: the reverse of a5eb8a916 (2026-10-08, "grid-act-2: delete kmeans_assign direct arms (MOJOLEARN_KMEANS_DIRECT_DISTANCE; grid ge123e6f9 direct4 12.7x/6.2x istell")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_KMEANS_DIRECT_DISTANCE.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/cluster/checks/plus_plus.mojo b/cluster/checks/plus_plus.mojo
+index a81a3e6f3..f4bf12f75 100644
+--- a/cluster/checks/plus_plus.mojo
++++ b/cluster/checks/plus_plus.mojo
+@@ -19,6 +19,7 @@ two candidates tie to the last bit, a different order picks a different
+ centroid and the whole fit diverges. Ties at that precision are not expected
+ and are not impossible.
+ """
++from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+@@ -83,9 +84,8 @@ def candidate_cost_kernel(
+                 ftz(ftz(x_norm.unsafe_load(i)) + ftz(cn)),
+             )
+         )
+-        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++        comptime if KMEANS_DIRECT_DISTANCE:
++            d = z.unsafe_load(i * n_trials + trial)
+         if d <= Float32(0.0):
+             d = Float32(0.0)
+         var cur = current_min.unsafe_load(i)
+@@ -133,9 +133,8 @@ def adopt_candidate_min_kernel(
+                 ftz(ftz(x_norm.unsafe_load(i)) + ftz(cn)),
+             )
+         )
+-        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++        comptime if KMEANS_DIRECT_DISTANCE:
++            d = z.unsafe_load(i * n_trials + trial)
+         if d <= Float32(0.0):
+             d = Float32(0.0)
+         var cur = current_min.unsafe_load(i)
+diff --git a/cluster/host/kmeans_oracle.mojo b/cluster/host/kmeans_oracle.mojo
+index 4ac02a7c4..70e0d476e 100644
+--- a/cluster/host/kmeans_oracle.mojo
++++ b/cluster/host/kmeans_oracle.mojo
+@@ -148,6 +148,8 @@ of its own.
+ The restatement is a prediction until measured. The four-column diff of
+ tools/identity_break.py on the kmeans lane is the measurement.
+ """
++from core.classical_distance import direct_squared_distance
++from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
+@@ -559,9 +561,19 @@ def host_assign(
+         var val = FUSED_MAX
+         var key = UInt32(0xFFFFFFFF)
+         var xn = xnp.unsafe_load(row)
+-        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++        comptime if KMEANS_DIRECT_DISTANCE:
++            # The shared helper only reads these arrays. Its raw-pointer ABI
++            # needs an explicit origin; the enclosing Lists retain the storage.
++            var raw_x = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(xp))
++            var raw_ct = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(ctp))
++            for col in range(k):
++                var dist = direct_squared_distance(raw_x + row*d, raw_ct + col, d, 1, k)
++                if dist < val or (dist == val and UInt32(col) < key):
++                    val = dist
++                    key = UInt32(col)
++            mp.unsafe_store(row, identical_sqrt(val) if is_sqrt else val)
++            lp.unsafe_store(row, key)
++            return
+         var col0 = 0
+         while col0 + ASSIGN_W <= k:
+             var acc = host_cell_dots[ASSIGN_W](xp, row, d, ctp, k, col0)
+@@ -811,9 +823,8 @@ def _candidate_distance(
+ ) -> Float32:
+     """The clamped expanded distance of `candidate_cost_kernel` and
+     `adopt_candidate_min_kernel` (`plus_plus.mojo:50, 93`)."""
+-    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++    comptime if KMEANS_DIRECT_DISTANCE:
++        return z[i*n_trials+trial]
+     var dd = ftz(
+         identical_mul_add(
+             Float32(-2.0),
+@@ -863,9 +874,10 @@ def host_kmeans_plus_plus(
+                 candidates[t * d + p] = x[sel * d + p]
+         var cand_norm = host_row_norms(candidates, n_trials, d, False)
+         var z = host_gemm_nt(x, candidates, n, n_trials, d)
+-        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++        comptime if KMEANS_DIRECT_DISTANCE:
++            for row in range(n):
++                for trial in range(n_trials):
++                    z[row*n_trials+trial] = direct_squared_distance((host_list_ptr(x)+row*d).unsafe_origin_cast[MutAnyOrigin](),(host_list_ptr(candidates)+trial*d).unsafe_origin_cast[MutAnyOrigin](),d)
+         # candidate_cost_kernel: one block per trial, lanes stride the rows.
+         var cost = List[Float32](length=n_trials, fill=Float32(0.0))
+         # Each (trial, lane) chain is independent: one task per chain, its
+@@ -1643,9 +1655,8 @@ def host_kmeans_transform(
+         for col in range(k):
+             var acc = host_cell_dot(xp, row, d, ctp, k, col)
+             var dist = _assign_dist(acc, xn, cnp.unsafe_load(col))
+-            # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-            # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-            # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++            comptime if KMEANS_DIRECT_DISTANCE:
++                dist = direct_squared_distance((xp+row*d).unsafe_origin_cast[MutAnyOrigin](),(ctp+col).unsafe_origin_cast[MutAnyOrigin](),d,1,k)
+             if is_sqrt:
+                 dist = identical_sqrt(dist)
+             comptime if KMEANS_TRANSFORM_HOST_SABOTAGE:
+diff --git a/cluster/impl/detail/classical_assignment.mojo b/cluster/impl/detail/classical_assignment.mojo
+index 11e506c0a..a23acb4b2 100644
+--- a/cluster/impl/detail/classical_assignment.mojo
++++ b/cluster/impl/detail/classical_assignment.mojo
+@@ -1,12 +1,12 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""KMEANS_ASSIGN row arms (old C36 rows; the C30 KMeans direct profile was deleted
+-2026-10-08, grid ge123e6f9, see the tombstone in the kernel). Merged into one control in graph_controls.mojo.
++"""KMEANS_ASSIGN row arms (old C36 rows and the C30 KMeans direct profile,
++merged into one control in graph_controls.mojo). NOT MEASURED.
+ A thread owns R adjacent samples and broadcasts each center feature to R
+ ascending independent folds. Scratch is R accumulators, never n by k.
+ """
+ from std.gpu import block_idx, block_dim, thread_idx
+ from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
+-from experiments.classical_identical_ideas.graph_controls import KMEANS_ROW_ASSIGN_ROWS
++from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE, KMEANS_ROW_ASSIGN_ROWS
+ #: Rows per thread; 2 when the control is absent (the kernel is then not launched).
+ comptime ASSIGN_ROWS = KMEANS_ROW_ASSIGN_ROWS if KMEANS_ROW_ASSIGN_ROWS > 0 else 2
+ 
+@@ -29,19 +29,18 @@ def classical_assign_group(
+             comptime for r in range(ASSIGN_ROWS):
+                 if first+r < n:
+                     var xv = ftz(x[(first+r)*d+f])
+-                    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-                    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-                    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-                    sums[r] = ftz(identical_mul_add(xv,cv,sums[r]))
++                    comptime if KMEANS_DIRECT_DISTANCE:
++                        var delta = ftz(xv-cv)
++                        sums[r] = ftz(sums[r] + ftz(identical_mul(delta,delta)))
++                    else:
++                        sums[r] = ftz(identical_mul_add(xv,cv,sums[r]))
+         comptime for r in range(ASSIGN_ROWS):
+             if first+r < n:
+                 var dist = sums[r]
+-                # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-                # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-                # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-                dist = ftz(identical_mul_add(Float32(-2),ftz(dist),ftz(ftz(xn[first+r])+ftz(cn[center]))))
+-                if dist*dist < Float32(1e-6) and xn[first+r] == cn[center]:
+-                    dist = Float32(0)
++                comptime if not KMEANS_DIRECT_DISTANCE:
++                    dist = ftz(identical_mul_add(Float32(-2),ftz(dist),ftz(ftz(xn[first+r])+ftz(cn[center]))))
++                    if dist*dist < Float32(1e-6) and xn[first+r] == cn[center]:
++                        dist = Float32(0)
+                 if dist <= Float32(0):
+                     dist = Float32(0)
+                 if dist < best[r] or (dist == best[r] and UInt32(center) < ids[r]):
+diff --git a/cluster/impl/detail/kmeans.mojo b/cluster/impl/detail/kmeans.mojo
+index 0d0a96379..7c847739a 100644
+--- a/cluster/impl/detail/kmeans.mojo
++++ b/cluster/impl/detail/kmeans.mojo
+@@ -52,6 +52,8 @@ about restarts is inherently serial, and they are the most obviously
+ parallel thing in k-means, so this is the first place to look when the
+ control plane becomes the cost. Copied as-is because it is theirs.
+ """
++from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
++from core.classical_distance import direct_squared_distance
+ # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
+ # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
+ # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
+@@ -460,9 +462,8 @@ def pp_adopt_dev_kernel(
+                 ftz(ftz(x_norm[i]) + ftz(cn)),
+             )
+         )
+-        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++        comptime if KMEANS_DIRECT_DISTANCE:
++            d = z.unsafe_load(i * n_trials + trial)
+         if d <= Float32(0.0):
+             d = Float32(0.0)
+         if d < current_min[i]:
+@@ -481,9 +482,12 @@ def pp_copy_best_kernel(
+         dst[j] = candidates[Int(best[0]) * nf + j]
+ 
+ 
+-# Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-# place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-# arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++def _direct_trial_distance(z: MutPointer[Float32,MutAnyOrigin], x: MutPointer[Float32,MutAnyOrigin], c: MutPointer[Float32,MutAnyOrigin], n: Int32, nt: Int32, d: Int32):
++    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if cell<Int(n)*Int(nt):
++        var row=cell//Int(nt)
++        var trial=cell%Int(nt)
++        z[cell]=direct_squared_distance(x+row*Int(d),c+trial*Int(d),Int(d))
+ 
+ 
+ def kmeans_plus_plus(
+@@ -627,17 +631,15 @@ def kmeans_plus_plus(
+                     sel_index.unsafe_ptr(), Int32(n_features),
+                     grid_dim=(n_trials, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+                 )
+-                # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-                # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-                # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-                enqueue_row_norms(ctx, candidate_norm, candidates, n_trials, n_features)
+-                # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-                # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-                # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-                gemm_nt(
+-                    ctx, candidate_z, x, candidates, n_samples, n_trials,
+-                    n_features,
+-                )
++                comptime if not KMEANS_DIRECT_DISTANCE:  # the direct arm never reads them
++                    enqueue_row_norms(ctx, candidate_norm, candidates, n_trials, n_features)
++                comptime if KMEANS_DIRECT_DISTANCE:
++                    ctx.enqueue_function[_direct_trial_distance](candidate_z.unsafe_ptr(),x.unsafe_ptr(),candidates.unsafe_ptr(),Int32(n_samples),Int32(n_trials),Int32(n_features),grid_dim=((n_samples*n_trials+127)//128,1,1),block_dim=128)
++                else:
++                    gemm_nt(
++                        ctx, candidate_z, x, candidates, n_samples, n_trials,
++                        n_features,
++                    )
+                 ctx.enqueue_function[candidate_cost_kernel](
+                     candidate_cost.unsafe_ptr(), candidate_z.unsafe_ptr(),
+                     x_norm.unsafe_ptr(), candidate_norm.unsafe_ptr(),
+@@ -717,22 +719,20 @@ def kmeans_plus_plus(
+             block_dim=(PLUS_PLUS_TPB, 1, 1),
+         )
+ 
+-        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-        enqueue_row_norms(ctx, candidate_norm, candidates, n_trials, n_features)
+-        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-        gemm_nt(
+-            ctx,
+-            candidate_z,
+-            x,
+-            candidates,
+-            n_samples,
+-            n_trials,
+-            n_features,
+-        )
++        comptime if not KMEANS_DIRECT_DISTANCE:  # the direct arm never reads them
++            enqueue_row_norms(ctx, candidate_norm, candidates, n_trials, n_features)
++        comptime if KMEANS_DIRECT_DISTANCE:
++            ctx.enqueue_function[_direct_trial_distance](candidate_z.unsafe_ptr(),x.unsafe_ptr(),candidates.unsafe_ptr(),Int32(n_samples),Int32(n_trials),Int32(n_features),grid_dim=((n_samples*n_trials+127)//128,1,1),block_dim=128)
++        else:
++            gemm_nt(
++                ctx,
++                candidate_z,
++                x,
++                candidates,
++                n_samples,
++                n_trials,
++                n_features,
++            )
+         ctx.enqueue_function[candidate_cost_kernel](
+             candidate_cost.unsafe_ptr(),
+             candidate_z.unsafe_ptr(),
+@@ -1304,10 +1304,8 @@ def init_scalable_kmeans_plus_plus(
+         ctx.synchronize()
+ 
+         _km_stage(ctx, km_on, km_t, "init.step7")
+-        # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-        # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-        # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-        enqueue_row_norms(ctx, cand_norm_rows, cand_buf, cand_count, d)
++        comptime if not KMEANS_DIRECT_DISTANCE:  # the direct arm never reads them
++            enqueue_row_norms(ctx, cand_norm_rows, cand_buf, cand_count, d)
+         ctx.synchronize()
+         kmeans_plus_plus(
+             ctx,
+@@ -1595,9 +1593,8 @@ def kmeans_fit_main_traced(
+     # k-means++ and k-means|| all take the direct chain), so they are not
+     # computed there; the identity trace still records them.
+     var x_norm_live = params.needs_row_norms()
+-    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++    comptime if KMEANS_DIRECT_DISTANCE:
++        x_norm_live = x_norm_live and trace.enabled
+     if x_norm_live:
+         enqueue_row_norms(ctx, x_norm, x, n_samples, n_features)
+         ctx.synchronize()
+diff --git a/cluster/impl/detail/kmeans_transform.mojo b/cluster/impl/detail/kmeans_transform.mojo
+index 6df0f99e3..660aa0861 100644
+--- a/cluster/impl/detail/kmeans_transform.mojo
++++ b/cluster/impl/detail/kmeans_transform.mojo
+@@ -29,6 +29,8 @@ on every column, the order the fused kernel already pins. No reduction runs
+ across cells, so the launch geometry below is scheduling only and moves no
+ bit.
+ """
++from core.classical_distance import direct_squared_distance
++from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+@@ -86,9 +88,8 @@ def kmeans_transform_kernel(
+         dist * dist < TRANSFORM_CLAMP_PRECISION and xn == yn
+     ):
+         dist = Float32(0.0)
+-    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++    comptime if KMEANS_DIRECT_DISTANCE:
++        dist = direct_squared_distance(x + row*d, centroids + col*d, d)
+     if is_sqrt_in != 0:
+         dist = identical_sqrt(dist)
+     dist_out.unsafe_store(cell, dist)
+diff --git a/cluster/impl/detail/min_cluster_distance_compute.mojo b/cluster/impl/detail/min_cluster_distance_compute.mojo
+index f352de8d2..bf8cfa004 100644
+--- a/cluster/impl/detail/min_cluster_distance_compute.mojo
++++ b/cluster/impl/detail/min_cluster_distance_compute.mojo
+@@ -47,7 +47,7 @@ The tile is indexed with `IndexT`, so the tile itself, not the dataset, is
+ what must fit the index type.
+ """
+ from experiments.classical_identical_ideas.graph_controls import (
+-    KMEANS_ROW_ASSIGN, KMEANS_ROW_ASSIGN_MAX_KD,
++    KMEANS_ROW_ASSIGN, KMEANS_DIRECT_DISTANCE, KMEANS_ROW_ASSIGN_MAX_KD,
+ )
+ from cluster.impl.detail.classical_assignment import ASSIGN_ROWS, classical_assign_kernel, classical_assign_gated_kernel
+ # SPDX-License-Identifier: Apache-2.0
+@@ -91,15 +91,18 @@ from cluster.impl.distance.unfused_distance_nn import (
+ 
+ def kmeans_row_assign_takes(n_clusters: Int, n_features: Int) -> Bool:
+     """KMEANS_ASSIGN (graph_controls.mojo): the row-register kernel takes this
+-    assignment. The expanded row arms do only while the per-thread chain
++    assignment. The direct arms always do (the tiled kernel has no direct
++    arithmetic). The expanded row arms do only while the per-thread chain
+     `k * d` is at most `KMEANS_ROW_ASSIGN_MAX_KD` (cost rule, see there); past
+     it the tiled kernel keeps the launch. Either kernel gives the expanded
+     arms the same bits."""
++    comptime assert not KMEANS_DIRECT_DISTANCE or KMEANS_ROW_ASSIGN, (
++        "MOJOLEARN_KMEANS_DIRECT_DISTANCE is an arm of MOJOLEARN_KMEANS_ROW_ASSIGN=2|4"
++    )
+     comptime if not KMEANS_ROW_ASSIGN:
+         return False
+-    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
+-    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
+-    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++    comptime if KMEANS_DIRECT_DISTANCE:
++        return True
+     return n_clusters * n_features <= KMEANS_ROW_ASSIGN_MAX_KD
+ 
+ def compute_centroid_norms(
+diff --git a/experiments/classical_identical_ideas/graph_controls.mojo b/experiments/classical_identical_ideas/graph_controls.mojo
+index 950bae281..e744c0302 100644
+--- a/experiments/classical_identical_ideas/graph_controls.mojo
++++ b/experiments/classical_identical_ideas/graph_controls.mojo
+@@ -42,25 +42,28 @@ comptime GRAPH_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_GRAPH
+ # "off" arm). The old opt-in define is refused in
+ # core/six_lane_experiment_guards.mojo.
+ comptime IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL and not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"]()
+-# KMEANS_ASSIGN: ONE control replacing C30 (kmeans part) and C36 (whose
+-# ROWS_4 knob set the same value as C30_ROWS_4):
++# KMEANS_ASSIGN: ONE control, five arms, replacing C30 (kmeans part) and C36
++# (whose ROWS_4 knob set the same value as C30_ROWS_4):
+ #   tiled   (no define)                      incumbent tiled fused L2-NN
+ #   rows2   MOJOLEARN_KMEANS_ROW_ASSIGN=2    row-register kernel, expanded L2
+ #   rows4   MOJOLEARN_KMEANS_ROW_ASSIGN=4
+-# The row arms keep the incumbent's bits (same ascending-d fma chain, same
+-# epilogue, same (value, lowest index) minimum), so no host change.
+-# Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arms direct2/direct4, run ge123e6f9): (x-c)^2 distances on the row kernel at
+-# every size (plus k-means++, k-means|| and transform, host oracle following); direct4 NV/AMD kmeans istella 12.7x/6.2x, taxi
+-# 1.78x/1.96x SLOWER; inertia SAME -> deleted (direct2 shares the code and was not a grid arm). Recoverable at main 42d1e42c6;
+-# row in docs/apple-fast/EXPERIMENTS.md.
++#   direct2 ROW_ASSIGN=2 + MOJOLEARN_KMEANS_DIRECT_DISTANCE   (x-c)^2 arithmetic
++#   direct4 ROW_ASSIGN=4 + MOJOLEARN_KMEANS_DIRECT_DISTANCE
++# The expanded row arms keep the incumbent's bits (same ascending-d fma chain,
++# same epilogue, same (value, lowest index) minimum), so no host change. The
++# direct arms change bits; the host column (cluster/host/kmeans_oracle.mojo)
++# follows KMEANS_DIRECT_DISTANCE. DIRECT without ROW_ASSIGN is refused at
++# compile time (kmeans_assign_check), so one arm is never two spellings.
+ comptime KMEANS_ROW_ASSIGN_ROWS = get_defined_int["MOJOLEARN_KMEANS_ROW_ASSIGN", 0]()
+ comptime KMEANS_ROW_ASSIGN = GRAPH_IDENTICAL and KMEANS_ROW_ASSIGN_ROWS > 0
++comptime KMEANS_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KMEANS_DIRECT_DISTANCE"]()
+ # Cost rule for the EXPANDED row arms: a thread owns a k*d serial fma chain per
+ # row with no register reuse across rows of the tile, while the tiled kernel
+ # reuses each staged value 4x4. Past 512 chain terms per row the chain latency
+ # dominates, so the tiled kernel keeps those launches. Not a board shape: the
+ # bound is a per-thread chain length, a power of two, far from k*d at any
+-# board row (88 and 1760).
++# board row (88 and 1760). The DIRECT arms have no tiled twin and take the row
++# kernel at every size.
+ comptime KMEANS_ROW_ASSIGN_MAX_KD = 512
+ comptime C31_DEVICE_BUCKETS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C31_DEVICE_BUCKETS"]()
+ comptime C32_COUNT_FUSION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C32_COUNT_FUSION"]()

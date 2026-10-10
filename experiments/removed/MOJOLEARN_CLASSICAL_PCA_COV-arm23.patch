@@ -1,0 +1,203 @@
+Restores MOJOLEARN_CLASSICAL_PCA_COV=23: the reverse of 3df299f27 (2026-10-08, "grid-act-2: delete PCA_COV=23 arm (grid ge123e6f9 pca istella 2.28x/1.27x slower, taxi 0.90x/0.78x; combined 1.195x slow")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm23.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/core/blocked_moments.mojo b/core/blocked_moments.mojo
+index f7c0beb0b..fb2660625 100644
+--- a/core/blocked_moments.mojo
++++ b/core/blocked_moments.mojo
+@@ -602,9 +602,28 @@ def bm_centered_cross_panels(
+     _ = part^
+ 
+ 
+-# Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+-# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+-# (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++def bm_onepass_covariance(
++    ctx: DeviceContext, mu: BmPtr, cov: BmPtr, x: BmPtr, n: Int, d: Int,
++) raises:
++    """C23 (PCA): the mean and the (n - 1)-scaled covariance in one blocked
++    read: each leaf centers on its own means, and the leaves merge by Chan's
++    update in the binary-counter order. Needs n >= 2."""
++    if d < 1 or n < 2:
++        return
++    var cells = d * d
++    var leaf = bm_onepass_leaf_rows(n, cells)
++    var leaves = bm_leaf_count(n, leaf)
++    var tiles = (d + BM_TILE - 1) // BM_TILE
++    var part = ctx.enqueue_create_buffer[DType.float32](leaves * cells)
++    var means = ctx.enqueue_create_buffer[DType.float32](leaves * d)
++    ctx.enqueue_function[bm_leaf_gram_kernel](
++        _bp(part), _bp(means), x, x,
++        Int32(n), Int32(d), Int32(leaf), Int32(tiles), Int32(1),
++        grid_dim=(leaves, tiles * (tiles + 1) // 2, 1), block_dim=BM_TPB,
++    )
++    bm_chan_fold[False](ctx, part, means, leaves, d, n, leaf, cov, mu, n - 1)
++    _ = part^
++    _ = means^
+ 
+ 
+ def bm_tsvd_variances(
+diff --git a/core/blocked_moments_host.mojo b/core/blocked_moments_host.mojo
+index c5e28903b..be113f881 100644
+--- a/core/blocked_moments_host.mojo
++++ b/core/blocked_moments_host.mojo
+@@ -165,9 +165,39 @@ def host_bm_column_mean(x: List[Float32], n: Int, d: Int) -> List[Float32]:
+     return host_bm_sum_fold(part^, leaves, d, n)
+ 
+ 
+-# Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+-# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+-# (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++def host_bm_onepass_covariance(
++    x: List[Float32], n: Int, d: Int, mut mu: List[Float32],
++) -> List[Float32]:
++    """`bm_onepass_covariance`: returns the (n - 1)-scaled covariance and
++    sets `mu`."""
++    var cells = d * d
++    var leaf = bm_onepass_leaf_rows(n, cells)
++    var leaves = bm_leaf_count(n, leaf)
++    var part = List[Float32](length=max(1, leaves * cells), fill=Float32(0.0))
++    var means = List[Float32](length=max(1, leaves * d), fill=Float32(0.0))
++    var c = List[Float32](length=max(1, d), fill=Float32(0.0))
++    for k in range(leaves):
++        var r0 = k * leaf
++        var r1 = min(n, r0 + leaf)
++        for col in range(d):
++            var tot = Float32(0.0)
++            for s in range(BM_GRAM_MEAN_CHAINS):
++                var acc = Float32(0.0)
++                var r = r0 + s
++                while r < r1:
++                    acc = bm_add(acc, x[r * d + col])
++                    r += BM_GRAM_MEAN_CHAINS
++                tot = acc if s == 0 else bm_add(tot, acc)
++            c[col] = bm_div(tot, Float32(r1 - r0))
++            means[k * d + col] = c[col]
++        for i in range(d):
++            for j in range(i, d):
++                var acc = Float32(0.0)
++                for r in range(r0, r1):
++                    acc = bm_fma(bm_sub(x[r * d + i], c[i]), bm_sub(x[r * d + j], c[j]), acc)
++                part[k * cells + i * d + j] = acc
++                part[k * cells + j * d + i] = acc
++    return host_bm_chan_fold(part^, means^, leaves, d, False, n, leaf, n - 1, mu)
+ 
+ 
+ def _host_tsvd_value(x: List[Float32], v: List[Float32], r: Int, d: Int, j: Int) -> Float32:
+diff --git a/decomposition/host/pca_oracle.mojo b/decomposition/host/pca_oracle.mojo
+index 6db2ad814..9247e8774 100644
+--- a/decomposition/host/pca_oracle.mojo
++++ b/decomposition/host/pca_oracle.mojo
+@@ -139,8 +139,8 @@ pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
+ brief records what it has shown.
+ """
+ from experiments.classical_identical_ideas.shared_controls import C01_MEAN
+-from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, TSVD_FUSED_STATS
+-from core.blocked_moments_host import host_bm_column_mean, host_bm_tsvd_variances
++from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_C23, TSVD_FUSED_STATS
++from core.blocked_moments_host import host_bm_column_mean, host_bm_onepass_covariance, host_bm_tsvd_variances
+ from core.classical_centered import centered_gram_v1_cell
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+@@ -734,10 +734,12 @@ def host_pca_fit(
+     host_pca_validate(n_rows, n_cols, n_components)
+     var mu: List[Float32]
+     var cov: List[Float32]
+-    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+-    # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+-    # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-    comptime if PCA_COV_C04:
++    comptime if PCA_COV_C23:
++        # MOJOLEARN_CLASSICAL_PCA_COV=23: `bm_onepass_covariance`'s host
++        # column; it returns the (n - 1)-scaled covariance and the mean
++        mu = List[Float32]()
++        cov = host_bm_onepass_covariance(x, n_rows, n_cols, mu)
++    elif PCA_COV_C04:
+         # MOJOLEARN_CLASSICAL_PCA_COV=4: the reference cell the device's
+         # row-parallel leaves and binary-counter fold reproduce
+         mu = host_column_mean_launch(x, n_rows, n_cols)
+diff --git a/decomposition/impl/linalg/detail/pca.mojo b/decomposition/impl/linalg/detail/pca.mojo
+index 6cbce17ad..6677699c6 100644
+--- a/decomposition/impl/linalg/detail/pca.mojo
++++ b/decomposition/impl/linalg/detail/pca.mojo
+@@ -1,6 +1,6 @@
+ """PCA by covariance eigendecomposition. The `input`-unchanged CONTRACT is the one to not drop: `input` is an in-out parameter that must end the call unchanged, and a fit that leaves the caller's matrix centered is wrong in a way nothing in the fit itself will reveal."""
+-from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_LEGAL
+-from core.blocked_moments import bm_centered_gram_panels
++from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_C23, PCA_COV_LEGAL
++from core.blocked_moments import bm_centered_gram_panels, bm_onepass_covariance
+ from gemm.contract import contract_leaf_size
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+@@ -206,14 +206,20 @@ def compute_covariance(
+     restore_input: Bool = True,
+ ) raises:
+     """Steps 1, 2, 3 and 6. The branch below must take the fused arm exactly when `gemm_tn` would take split-K for this shape, so it asks the SAME `gram_splitk_applies(m, n, k)` that `gemm_tn` asks -- one predicate, both readers, no target test of our own."""
+-    comptime assert PCA_COV_LEGAL, "MOJOLEARN_CLASSICAL_PCA_COV must be 4 (C04 arm); the C23 arm (=23) was deleted 2026-10-08"
++    comptime assert PCA_COV_LEGAL, "MOJOLEARN_CLASSICAL_PCA_COV must be 4 (C04 arm) or 23 (C23 arm)"
+     # MOJOLEARN_CLASSICAL_PCA_COV (lane classical-decomp, 2026-10-07; default
+-    # absent = the incumbent below). One switch, one named arm (c04),
++    # absent = the incumbent below). One switch, two named arms, each
+     # replacing the incumbent's routing at every width; X is never modified.
+     # NOT MEASURED.
+-    # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+-    # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+-    # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++    comptime if PCA_COV_C23:
++        # =23: mean and covariance from ONE blocked read (per-leaf centering,
++        # Chan merge in the binary-counter order), scaled by 1 / (n - 1).
++        bm_onepass_covariance(
++            ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows, n_cols,
++        )
++        return
+     # column_mean_kernel's value, read row-coalesced where it applies
+     # (core/xtdz_coalesced.mojo::column_mean_launch).
+     column_mean_launch(ctx, mu, x, n_rows, n_cols)
+diff --git a/experiments/classical_identical_ideas/linear_controls.mojo b/experiments/classical_identical_ideas/linear_controls.mojo
+index f5eb7f722..8a1f56538 100644
+--- a/experiments/classical_identical_ideas/linear_controls.mojo
++++ b/experiments/classical_identical_ideas/linear_controls.mojo
+@@ -142,8 +142,8 @@ comptime C20_PAIR_LOAD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_P
+ comptime C21_EXTREMA = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"]()
+ comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"]()
+ # lane classical-decomp (2026-10-07): the old C23_CENTERED_PANELS define is
+-# split per algorithm family. Its PCA use (the ONE_PASS arm of
+-# MOJOLEARN_CLASSICAL_PCA_COV, =23) was deleted 2026-10-08 (below); its MCD use is C23_MCD. Both run
++# split per algorithm family. Its PCA use is the ONE_PASS arm of
++# MOJOLEARN_CLASSICAL_PCA_COV below; its MCD use is C23_MCD. Both run
+ # row-parallel (core/blocked_moments.mojo); the per-cell serial kernels
+ # (one GPU thread per covariance cell over every row) are deleted.
+ # C23_MCD: MinCovDet/EllipticEnvelope `emp_cov_at` as the centered Gram
+@@ -151,20 +151,21 @@ comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TR
+ # counter: the old C23 cell's value (x_decomp/classical_cells.mojo, the host
+ # column), now computed in parallel. NOT MEASURED.
+ comptime C23_MCD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_MCD"]()
+-# PCA covariance, ONE switch with a named arm (the old C04-over-C23 silent
++# PCA covariance, ONE switch with named arms (the old C04-over-C23 silent
+ # priority is gone): -D MOJOLEARN_CLASSICAL_PCA_COV=4 is the C04 arm
+ # (two passes: the column mean, then the centered Gram around it read
+ # straight from X, leaves of contract_leaf_size(n) rows, binary-counter
+ # fold: the old C04 cell's value, computed in parallel, no shift/unshift
+-# passes). Absent = the incumbent (column_mean_launch, then split-K or
+-# shift + gemm_tn). The arm replaces the incumbent's routing at every
++# passes); =23 is the C23 arm (ONE blocked pass: each leaf of
++# bm_onepass_leaf_rows rows centers on its own means, leaves merge by
++# Chan's update in the binary-counter order; the mean comes out of the same
++# pass). Absent = the incumbent (column_mean_launch, then split-K or
++# shift + gemm_tn). Either arm replaces the incumbent's routing at every
+ # width. NOT MEASURED.
+-# Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+-# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+-# (c04 stays; C23_MCD is separate). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+ comptime _PCA_COV_RAW = get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV", 0]()
+-comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4
++comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4 or _PCA_COV_RAW == 23
+ comptime PCA_COV_C04 = CLASSICAL_IDN and _PCA_COV_RAW == 4
++comptime PCA_COV_C23 = CLASSICAL_IDN and _PCA_COV_RAW == 23
+ # TSVD_FUSED_STATS (new, lane classical-decomp): TruncatedSVD's
+ # explained_variance_ / _ratio_ in one blocked kernel: per leaf the mean and
+ # centered sum of squares of X's columns and of X V^T's columns (the

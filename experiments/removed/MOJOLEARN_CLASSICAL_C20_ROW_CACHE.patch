@@ -1,0 +1,132 @@
+Restores MOJOLEARN_CLASSICAL_C20_ROW_CACHE: the reverse of fc5c573f7 (2026-10-07, "svm: delete C20_ROW_CACHE (per-row host loop + 1x1 publish kernel); refuse the define; C22_TRIANGLE and C20_PAIR_LOAD sq")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_ROW_CACHE.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/experiments/classical_identical_ideas/linear_controls.mojo b/experiments/classical_identical_ideas/linear_controls.mojo
+index b0ce5f800..a89cb6cee 100644
+--- a/experiments/classical_identical_ideas/linear_controls.mojo
++++ b/experiments/classical_identical_ideas/linear_controls.mojo
+@@ -66,7 +66,7 @@ comptime C18_RESIDUAL_NEXT = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C
+ # per-sample updates are unchanged; only the launch/witness granularity moves.
+ # Legal set enforced in core/six_lane_experiment_guards.mojo.
+ comptime C19_SGD_CHUNK = get_defined_int["MOJOLEARN_CLASSICAL_C19_SGD_CHUNK", 2048]() if CLASSICAL_IDN else 2048
+-# C20_ROW_CACHE deleted 2026-10-07 (serial per-row host loop); refused in core/six_lane_experiment_guards.mojo.
++comptime C20_ROW_CACHE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_ROW_CACHE"]()
+ comptime C20_PAIR_LOAD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"]()
+ comptime C21_EXTREMA = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"]()
+ comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"]()
+diff --git a/svm/impl/classical_kernel_device.mojo b/svm/impl/classical_kernel_device.mojo
+index e23448c6b..4c889e3be 100644
+--- a/svm/impl/classical_kernel_device.mojo
++++ b/svm/impl/classical_kernel_device.mojo
+@@ -1,5 +1,5 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""Classical C20 pair-load gather and C22 symmetric orientation kernels.
++"""Classical C20 row storage and C22 symmetric orientation kernels.
+ NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+ """
+ from std.gpu import block_idx, block_dim, thread_idx
+@@ -20,6 +20,28 @@ def classical_triangle_kernel(x: CFP, norms: CFP, output: CFP, n: Int32, d: Int3
+                 output.unsafe_store(j * nn + i, v)
+ 
+ 
++def classical_cache_row_kernel(x: CFP, norms: CFP, rows: CIP, q: Int32, cache: CFP, keys: CIP,
++                               n: Int32, d: Int32, slots: Int32, kind: Int32, gain: Float32, offset: Float32, degree: Int32):
++    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if j < Int(n):
++        var row = Int(rows.unsafe_load(Int(q)))
++        var slot = row % Int(slots)
++        if Int(keys.unsafe_load(slot)) != row:
++            cache.unsafe_store(slot * Int(n) + j, classical_kernel_cell(x, norms, row, j, Int(d), Int(kind), gain, offset, Int(degree)))
++
++
++def classical_cache_publish_kernel(rows: CIP, q: Int32, keys: CIP, slots: Int32):
++    var row = rows.unsafe_load(Int(q))
++    keys.unsafe_store(Int(row) % Int(slots), row)
++
++
++def classical_cache_gather_kernel(cache: CFP, rows: CIP, q: Int32, cols: CIP, output: CFP, n: Int32, ncols: Int32, slots: Int32):
++    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if j < Int(ncols):
++        var row = Int(rows.unsafe_load(Int(q)))
++        output.unsafe_store(Int(q) * Int(ncols) + j, cache.unsafe_load((row % Int(slots)) * Int(n) + Int(cols.unsafe_load(j))))
++
++
+ def classical_gather_rows_norms_kernel(dst: CFP, dst_norm: CFP, x: CFP, norms: CFP, rows: CIP,
+                                       n: Int32, d: Int32, with_norm: Int32):
+     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+diff --git a/svm/impl/kernelcache.mojo b/svm/impl/kernelcache.mojo
+index 547baecfb..9e1b41ce7 100644
+--- a/svm/impl/kernelcache.mojo
++++ b/svm/impl/kernelcache.mojo
+@@ -35,8 +35,8 @@ because it is symmetric -- and the full tile is `[nnz x batch]` with
+ `[batch x nnz]` column-major tile read the other way.
+ """
+ 
+-from experiments.classical_identical_ideas.linear_controls import C20_PAIR_LOAD
+-from svm.impl.classical_kernel_device import classical_gather_rows_norms_kernel
++from experiments.classical_identical_ideas.linear_controls import C20_ROW_CACHE, C20_PAIR_LOAD
++from svm.impl.classical_kernel_device import classical_cache_row_kernel, classical_cache_publish_kernel, classical_cache_gather_kernel, classical_gather_rows_norms_kernel
+ from std.gpu import block_dim, block_idx, thread_idx
+ from checks.numerics import ftz
+ from max.gpu.host import DeviceBuffer, DeviceContext
+@@ -158,6 +158,9 @@ struct KernelCache(Movable):
+     var matrix_l2: DeviceBuffer[DType.float32]
+     var matrix_l2_ws: DeviceBuffer[DType.float32]
+     var gemm_ws: DeviceBuffer[DType.float32]
++    var classical_cache: DeviceBuffer[DType.float32]
++    var classical_keys: DeviceBuffer[DType.int32]
++    var classical_slots: Int
+ 
+     def __init__(
+         out self,
+@@ -185,6 +188,13 @@ struct KernelCache(Movable):
+         if cache_size != 0.0:
+             raise Error("svm KernelCache: cache_size must be 0 in rung 1")
+         self.n_rows = n_rows
++        # C20 16MiB byte budget, direct row-ID placement and deterministic
++        # eviction. The allocation belongs to this immutable fitted kernel.
++        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++        self.classical_slots = min(n_ws, (16 * 1024 * 1024) // max(4 * n_rows, 1)) if C20_ROW_CACHE else 0
++        self.classical_cache = ctx.enqueue_create_buffer[DType.float32](max(self.classical_slots * n_rows, 1))
++        self.classical_keys = ctx.enqueue_create_buffer[DType.int32](max(self.classical_slots, 1))
++        ctx.enqueue_memset(self.classical_keys, Int32(-1))
+         self.n_cols = n_cols
+         self.n_ws = n_ws
+         self.svm_type = svm_type
+@@ -309,9 +319,31 @@ struct KernelCache(Movable):
+         if self.cache_state == CACHE_BATCHING_INITIALIZED:
+             raise Error("svm KernelCache: Previous batching step incomplete!")
+         var n_ws = self.n_ws
+-        # C20_ROW_CACHE (a host loop of 3 launches per working-set row, one of
+-        # them 1x1) was deleted 2026-10-07: forbidden serial shape, incumbent
+-        # parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
++        comptime if C20_ROW_CACHE:
++            if self.classical_slots > 0 and self.kp.kernel != KERNEL_PRECOMPUTED:
++                # Requests execute in working-set order. A colliding slot is
++                # gathered before the next row can evict it; no atomics or
++                # arithmetic-dependent cache decisions reach the solver.
++                for q in range(n_ws):
++                    ctx.enqueue_function[classical_cache_row_kernel](
++                        x.unsafe_ptr(), self.matrix_l2.unsafe_ptr(), self.ws_idx_mod.unsafe_ptr(), Int32(q),
++                        self.classical_cache.unsafe_ptr(), self.classical_keys.unsafe_ptr(),
++                        Int32(self.n_rows), Int32(self.n_cols), Int32(self.classical_slots), Int32(self.kp.kernel),
++                        Float32(self.kp.gamma), Float32(self.kp.coef0), Int32(self.kp.degree),
++                        grid_dim=_grid(self.n_rows), block_dim=SEL_TPB,
++                    )
++                    ctx.enqueue_function[classical_cache_publish_kernel](
++                        self.ws_idx_mod.unsafe_ptr(), Int32(q), self.classical_keys.unsafe_ptr(), Int32(self.classical_slots),
++                        grid_dim=1, block_dim=1,
++                    )
++                    # Both index arguments are read-only views of the same live working set.
++                    var ws_ptr = rebind[MutPointer[Int32, MutAnyOrigin]](self.ws_idx_mod.unsafe_ptr())
++                    ctx.enqueue_function[classical_cache_gather_kernel](
++                        self.classical_cache.unsafe_ptr(), ws_ptr, Int32(q), ws_ptr,
++                        self.kernel_tile.unsafe_ptr(), Int32(self.n_rows), Int32(n_ws), Int32(self.classical_slots),
++                        grid_dim=_grid(n_ws), block_dim=SEL_TPB,
++                    )
++                return
+         comptime if C20_PAIR_LOAD:
+             ctx.enqueue_function[classical_gather_rows_norms_kernel](
+                 self.x_ws_dense.unsafe_ptr(), self.matrix_l2_ws.unsafe_ptr(), x.unsafe_ptr(), self.matrix_l2.unsafe_ptr(),

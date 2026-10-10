@@ -1,0 +1,547 @@
+Restores MOJOLEARN_CC_FAST_OFF: the reverse of 2851a6627 (2026-10-08, "PageRank/Louvain accept CSR (pointer handoff to xn_pr_csr/xn_louvain_csr); connected_components batched rounds + device ")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_CC_FAST_OFF.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/python/mojolearn/_expansion_neighbors.py b/python/mojolearn/_expansion_neighbors.py
+index f13877d92..2eaeb61a8 100644
+--- a/python/mojolearn/_expansion_neighbors.py
++++ b/python/mojolearn/_expansion_neighbors.py
+@@ -1692,11 +1692,8 @@ def _adjacency(A):
+ 
+ 
+ class PageRank(_XNeighbors):
+-    """PageRank by power iteration on a weighted adjacency matrix
+-    (A[i, j] = weight of the edge i -> j): dense, a scipy.sparse matrix
+-    (any format, read as CSR with sorted indices: the device checks the
+-    column order and raises) or an (indptr, indices, n) tuple (every edge
+-    weighs 1.0).
++    """PageRank by power iteration on a dense weighted adjacency matrix
++    (A[i, j] = weight of the edge i -> j).
+ 
+     References: networkx `pagerank` (`_pagerank_scipy`: row-stochastic
+     transition matrix, dangling nodes redistributed by the personalization,
+@@ -1748,19 +1745,9 @@ class PageRank(_XNeighbors):
+         return out
+ 
+     def fit(self, A, y=None):
++        A = _adjacency(A)
++        n = A.shape[0]
+         binary = self.weight is None or self.weight is False
+-        csr = _csr_graph_of(A)
+-        if csr is not None:
+-            # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.2):
+-            # a scipy.sparse matrix or an (indptr, indices, n) tuple goes to
+-            # the device as it is (`xn_pr_csr`): the column lists are built
+-            # by one sort on the device, the vectors the caller left to the
+-            # default are filled there, no dense matrix and no separate
+-            # fill calls. Glue only: pointer handoff and flags.
+-            indptr, indices, vals, n = csr
+-        else:
+-            A = _adjacency(A)
+-            n = A.shape[0]
+         # the iteration over the column lists of the adjacency, built
+         # and iterated on the device (lane hr-graph,
+         # x_neighbors/graph_par.mojo): the dense chains with their zero
+@@ -1774,34 +1761,18 @@ class PageRank(_XNeighbors):
+                 self._op("p2m_fill", [(u, 1)], (n,), (1.0 / n,))
+             return u
+ 
++        if self.personalization is None:
++            p = uniform()
++        else:
++            p = self._unit(self.personalization, n, "personalization")
++        dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
++        x = uniform() if self.nstart is None else self._unit(self.nstart, n, "nstart")
++        x = x.copy()
+         info = empty((2,), "<i4")
+         thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
+-        if csr is not None:
+-            p_uniform = self.personalization is None
+-            p = empty((n,), "<f4") if p_uniform else self._unit(self.personalization, n, "personalization")
+-            dw_uniform = self.dangling is None and p_uniform
+-            dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
+-            x_uniform = self.nstart is None
+-            x = empty((n,), "<f4") if x_uniform else self._unit(self.nstart, n, "nstart").copy()
+-            has_vals = vals is not None
+-            if not has_vals:
+-                vals = empty((1,), "<f4")
+-            self._op("pr_csr", [(indptr, 0), (indices, 0), (vals, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
+-                     (n, indices.shape[0], 1 if has_vals else 0, int(self.max_iter), thr >> 32,
+-                      thr & 0xFFFFFFFF, 1 if binary else 0, 1 if x_uniform else 0, 1 if p_uniform else 0,
+-                      1 if dw_uniform else 0),
+-                     (_f32_scalar(self.alpha),))
+-        else:
+-            if self.personalization is None:
+-                p = uniform()
+-            else:
+-                p = self._unit(self.personalization, n, "personalization")
+-            dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
+-            x = uniform() if self.nstart is None else self._unit(self.nstart, n, "nstart")
+-            x = x.copy()
+-            self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
+-                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF, 1 if binary else 0),
+-                     (_f32_scalar(self.alpha),))
++        self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
++                 (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF, 1 if binary else 0),
++                 (_f32_scalar(self.alpha),))
+         it, ok = info.tolist()
+         if ok:
+             self.pagerank_ = x
+@@ -1833,18 +1804,22 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
+         # and labels as the dense matrix's, without building or scanning it
+         indptr, indices, n = csr
+         lab = _p2m_iota(est, n)
+-        # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.3): the
+-        # GPU binding on every vendor and tier runs the batched rounds and
+-        # compacts the labels itself in order of first appearance
+-        # (`_cc_relabel`'s integers; lane/apple-fast-graph's CC_FAST
+-        # promoted) and puts n_components + 1 in info[1]; info[1] == 0
+-        # means the host binding ran (it never writes info[1]) and `lab`
+-        # still needs `_cc_relabel` (zeros, not empty, for that reason).
+-        info = zeros((2,), "<i4")
++        if _cc_fast_tier(est):
++            # lane/apple-fast-graph (2026-10-02), FAST on Apple only: two
++            # info words. Under CC_FAST (default; `-D MOJOLEARN_CC_FAST_OFF` rolls back) the device compacts the
++            # labels itself in order of first appearance (`_cc_relabel`'s
++            # integers) and puts n_components + 1 in info[1]; info[1] == 0
++            # means the binding's main path ran and `lab` still needs
++            # `_cc_relabel` (zeros, not empty: the main path never writes
++            # info[1]).
++            info = zeros((2,), "<i4")
++            est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
++            k1 = int(info.tolist()[1])
++            if k1 > 0:
++                return (k1 - 1, lab) if return_labels else k1 - 1
++            return _cc_relabel(lab, return_labels, est)
++        info = empty((1,), "<i4")
+         est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
+-        k1 = int(info.tolist()[1])
+-        if k1 > 0:
+-            return (k1 - 1, lab) if return_labels else k1 - 1
+         return _cc_relabel(lab, return_labels, est)
+     A = _adjacency(A)
+     n = A.shape[0]
+@@ -1863,6 +1838,14 @@ def _p2m_iota(est, n):
+     return lab
+ 
+ 
++def _cc_fast_tier(est):
++    """True on the FAST tier on Apple (lane/apple-fast-graph): the x_neighbors
++    binding may compact connected_components' labels on the device
++    (CC_FAST, default; rollback `-D MOJOLEARN_CC_FAST_OFF`). IDENTICAL and the other vendors never come
++    through the branch this gates."""
++    return est.numeric_mode_used() == "fast" and est.vendor_used() == "metal"
++
++
+ def _cc_relabel(lab, return_labels, est):
+     """(count, labels) renumbered by first occurrence (`xn_p2m_relabel`)."""
+     if not lab.shape[0]:
+@@ -1895,42 +1878,9 @@ def _csr_of(A):
+     return ip, ix, n
+ 
+ 
+-def _csr_graph_of(A):
+-    """(indptr, indices, vals, n) for PageRank and Louvain (lane gap-graph):
+-    `_csr_of`'s lists plus the weights as a float32 Array (a scipy matrix's
+-    `data`), or None for the weights when the caller gave an (indptr,
+-    indices, n) tuple (every edge then weighs 1.0 on the device); None for
+-    a dense input. Glue only: the device checks the column order and the
+-    symmetry, never Python."""
+-    if isinstance(A, tuple) and len(A) == 3:
+-        indptr, indices, n = A
+-        n = int(n)
+-        vals = None
+-    elif hasattr(A, "tocsr") and hasattr(A, "shape"):
+-        if len(A.shape) != 2 or A.shape[0] != A.shape[1]:
+-            raise ValueError("the adjacency matrix must be square")
+-        M = A.tocsr()
+-        indptr, indices, n = M.indptr, M.indices, int(M.shape[0])
+-        vals = _f32_1d(M.data, "data")
+-    else:
+-        return None
+-    ip = _i32(indptr, "indptr")
+-    ix = _i32(indices, "indices")
+-    if ip.shape[0] != n + 1:
+-        raise ValueError("the CSR adjacency's indptr must hold n + 1 entries")
+-    if int(ip[n]) != ix.shape[0]:  # argument check: one scalar, the entry count
+-        raise ValueError("the CSR adjacency's indices must hold indptr[n] entries")
+-    if vals is not None and vals.shape[0] != ix.shape[0]:
+-        raise ValueError("the CSR adjacency's data must hold one weight per entry")
+-    return ip, ix, vals, n
+-
+-
+ # ====================================================================== Louvain
+ class Louvain(_XNeighbors):
+-    """Louvain community detection on a symmetric weighted adjacency: dense,
+-    a scipy.sparse matrix (read as CSR with sorted indices; the device
+-    checks the column order and the symmetry and raises) or an (indptr,
+-    indices, n) tuple (every edge weighs 1.0).
++    """Louvain community detection on a dense symmetric weighted adjacency.
+ 
+     References: networkx `louvain_communities` / `louvain_partitions`
+     (`_one_level`, `_gen_graph`, `modularity`) and cuGraph
+@@ -1951,49 +1901,25 @@ class Louvain(_XNeighbors):
+         self.seed = seed
+ 
+     def fit(self, A, y=None):
++        A = _adjacency(A)
++        n = A.shape[0]
++        # The symmetry and no-edge checks run natively (`xn_graph_symmetry`,
++        # lane neural-pass14): over `A.tolist()` they were a 400-million-cell
++        # Python scan at the board's 20,000 nodes, most of the race's minute.
++        flags = _empty_out((2,), "<i4")
++        self._op("graph_symmetry", [(A, 0), (flags, 1)], (n,))
++        flags = flags.tolist()
++        if flags[0]:
++            raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
++        if not flags[1]:
++            raise ValueError("Louvain: the graph has no edges")
++        labels = empty((n,), "<i4")
++        info = _empty_out((2,), "<f4")
+         ml = 0 if self.max_level is None else int(self.max_level)
+         if self.max_level is not None and ml < 1:
+             raise ValueError("max_level must be a positive integer or None")
+-        csr = _csr_graph_of(A)
+-        if csr is not None:
+-            # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.1):
+-            # a scipy.sparse matrix or an (indptr, indices, n) tuple goes to
+-            # the device as it is (`xn_louvain_csr`): the graph slot is
+-            # filled from the lists, the symmetry, column-order and no-edge
+-            # checks run on the device (the op raises their ValueError
+-            # text), no dense matrix. Glue only: pointer handoff.
+-            indptr, indices, vals, n = csr
+-            has_vals = vals is not None
+-            if not has_vals:
+-                vals = empty((1,), "<f4")
+-            labels = empty((n,), "<i4")
+-            info = _empty_out((2,), "<f4")
+-            try:
+-                self._op("louvain_csr", [(indptr, 0), (indices, 0), (vals, 0), (labels, 1), (info, 1)],
+-                         (n, indices.shape[0], 1 if has_vals else 0, ml),
+-                         (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
+-            except Exception as e:  # the device checks' messages as ValueErrors
+-                msg = str(e)
+-                if "Louvain:" in msg:
+-                    raise ValueError(msg[msg.index("Louvain:"):]) from None
+-                raise
+-        else:
+-            A = _adjacency(A)
+-            n = A.shape[0]
+-            # The symmetry and no-edge checks run natively (`xn_graph_symmetry`,
+-            # lane neural-pass14): over `A.tolist()` they were a 400-million-cell
+-            # Python scan at the board's 20,000 nodes, most of the race's minute.
+-            flags = _empty_out((2,), "<i4")
+-            self._op("graph_symmetry", [(A, 0), (flags, 1)], (n,))
+-            flags = flags.tolist()
+-            if flags[0]:
+-                raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
+-            if not flags[1]:
+-                raise ValueError("Louvain: the graph has no edges")
+-            labels = empty((n,), "<i4")
+-            info = _empty_out((2,), "<f4")
+-            self._op("louvain", [(A, 0), (labels, 1), (info, 1)], (n, ml),
+-                     (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
++        self._op("louvain", [(A, 0), (labels, 1), (info, 1)], (n, ml),
++                 (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
+         got = _p2m_relabel(self, labels)
+         if got is None:
+             raise RuntimeError("Louvain: a community label fell outside [0, n)")
+diff --git a/x_neighbors/iter_device.mojo b/x_neighbors/iter_device.mojo
+index 946a70ab0..cbdf0d13f 100644
+--- a/x_neighbors/iter_device.mojo
++++ b/x_neighbors/iter_device.mojo
+@@ -65,7 +65,6 @@ from x_neighbors.items import K_RBF, U_IDENTITY
+ from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_nonfinite_kernel, lp_prod_kernel, lp_rowcount_kernel
+ from core.device_zero import enqueue_fill
+ from core.pinned_reduce import pinned_block_sum
+-from core.scratch_pool import take_host_i32, give_host_i32
+ from checks.numerics import NUMERIC_IDENTICAL
+ from checks.numerics import identical_exp
+ from x_neighbors.items import lp_clamp_item, ls_clamp_item
+@@ -399,12 +398,13 @@ def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int, co
+ 
+ def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
+     """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
+-    indices nnz), no dense matrix: hooking and pointer jumping on the device.
+-    Lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.3): the
+-    batched rounds with the relabel on the device (`_cc_csr_batched`, the
+-    Apple FAST path of lane/apple-fast-graph) on every vendor and tier.
+-    info is int32 x 2: the round count and n_components + 1."""
+-    _cc_csr_batched(indptr, indices, lab, info, n, nnz)
++    indices nnz), no dense matrix: hooking and pointer jumping on the device
++    (`_cc_csr_device`). FAST on Apple under `-D MOJOLEARN_CC_FAST`:
++    `_cc_csr_fast` (batched rounds, the relabel on the device)."""
++    comptime if CC_FAST:
++        _cc_csr_fast(indptr, indices, lab, info, n, nnz)
++    else:
++        _cc_csr_device(indptr, indices, lab, info, n, nnz)
+ 
+ 
+ # lane/neural-pass95 (2026-10-01): weak connected components of a CSR graph
+@@ -445,45 +445,136 @@ def cc_jump_kernel(lab: IP, n: Int32):
+         lab.unsafe_store(v, Int32(p))
+ 
+ 
+-# lane/apple-fast-graph (2026-10-02), FAST on Apple since 2026-10-04 and on
+-# EVERY vendor and tier since lane gap-graph (2026-10-08, plan 5.3; the
+-# per-round-wait `_cc_csr_device` and the never-compiled C33 CC chunking
+-# are deleted: this is the same idea finished). The same hooking and
+-# pointer jumping, with the host waits taken out of the loop. The board's
+-# race (20,000 nodes, 54,528 edges) spent its ~90 ms on overhead, not on
++# C33: preserve the first fixed-point round while later scheduled work is inert.
++# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++def _c33_cc_hook(ip: IP, ix: IP, lab: IP, n: Int32, changed: IP, state: IP):
++    if state.unsafe_load(0) == 0:
++        cc_hook_kernel(ip, ix, lab, n, changed)
++
++
++def _c33_cc_jump(lab: IP, n: Int32, state: IP):
++    if state.unsafe_load(0) == 0:
++        cc_jump_kernel(lab, n)
++
++
++def _c33_cc_finish(changed: IP, state: IP, round_: Int32):
++    if thread_idx.x == 0 and state.unsafe_load(0) == 0 and changed.unsafe_load(0) == 0:
++        state.unsafe_store(0, Int32(1))
++        state.unsafe_store(1, round_)
++
++
++def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
++    # Every host side of a copy is ONE pinned host buffer (lane/neural-pass95,
++    # 2026-10-02): the peer's MI325X paid ~100 ms on the first fit after any
++    # fork / posix_spawn in the process (ps, a notebook's subprocess) when
++    # the CSR, the labels and the per-round flag went through pageable
++    # memory, which fork's copy-on-write unmaps from the GPU's view; pinned
++    # host memory is excluded from fork (MADV_DONTFORK). Copies only.
++    var ctx = xn_ctx()
++    var o_ix = n + 1
++    var o_l = o_ix + max(nnz, 1)
++    var o_c = o_l + max(n, 1)
++    var hb = ctx.enqueue_create_host_buffer[DType.int32](o_c + 1)
++    ctx.synchronize()
++    var hp = hb.unsafe_ptr()
++    memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
++    if nnz > 0:
++        memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
++    if n > 0:
++        memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
++    var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
++    var d_ix = ctx.enqueue_create_buffer[DType.int32](max(nnz, 1))
++    var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
++    var d_c = ctx.enqueue_create_buffer[DType.int32](1)
++    ctx.enqueue_copy(dst_buf=d_ip, src_ptr=hp)
++    if nnz > 0:
++        ctx.enqueue_copy(dst_buf=d_ix, src_ptr=hp + o_ix)
++    if n > 0:
++        ctx.enqueue_copy(dst_buf=d_l, src_ptr=hp + o_l)
++    var blocks = (n + 255) // 256
++    var rounds = 0
++    comptime if C33_FROZEN_CHUNKS:
++        var state = ctx.enqueue_create_buffer[DType.int32](2)
++        state.enqueue_fill(Int32(0))
++        var hstate = List[Int32](length=2,fill=Int32(0))
++        while n > 0:
++            for offset in range(C33_CHUNK):
++                d_c.enqueue_fill(Int32(0))
++                ctx.enqueue_function[_c33_cc_hook](d_ip.unsafe_ptr(),d_ix.unsafe_ptr(),d_l.unsafe_ptr(),Int32(n),d_c.unsafe_ptr(),state.unsafe_ptr(),grid_dim=blocks,block_dim=256)
++                ctx.enqueue_function[_c33_cc_jump](d_l.unsafe_ptr(),Int32(n),state.unsafe_ptr(),grid_dim=blocks,block_dim=256)
++                ctx.enqueue_function[_c33_cc_finish](d_c.unsafe_ptr(),state.unsafe_ptr(),Int32(rounds+offset+1),grid_dim=1,block_dim=1)
++            rounds += C33_CHUNK
++            ctx.enqueue_copy(dst_ptr=hstate.unsafe_ptr(),src_buf=state)
++            ctx.synchronize()
++            if hstate[0] != 0:
++                rounds=Int(hstate[1])
++                break
++        _ = state^
++        _ = hstate^
++    else:
++        while n > 0:
++            rounds += 1
++            d_c.enqueue_fill(Int32(0))
++            ctx.enqueue_function[cc_hook_kernel](d_ip.unsafe_ptr(), d_ix.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n),
++                                                 d_c.unsafe_ptr(), grid_dim=blocks, block_dim=256)
++            ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
++            ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=d_c)
++            ctx.synchronize()
++            if hp[o_c] == 0:
++                break
++    if n > 0:
++        ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_l)
++        ctx.synchronize()
++        memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
++    IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
++    _ = hb^
++    _ = d_ip^
++    _ = d_ix^
++    _ = d_l^
++    _ = d_c^
++
++
++# lane/apple-fast-graph (2026-10-02), FAST on Apple only, the default since
++# 2026-10-04 (rollback `-D MOJOLEARN_CC_FAST_OFF`): the same hooking and pointer jumping as
++# `_cc_csr_device`, with the host waits taken out of the loop. The board's
++# race (20,000 nodes, 54,528 edges) spends its ~90 ms on overhead, not on
+ # the kernels: one host wait and one memset per round, a pinned staging
+ # buffer with its own wait, three uploads, and Python's relabel over the
+-# labels. Here the CSR and the start labels are staged through ONE pinned
+-# host buffer from the scratch pool (pinned: fork's copy-on-write unmaps
+-# pageable memory from the GPU's view, ~100 ms on the MI325X after any
+-# subprocess, lane/neural-pass95; pooled: `-D MOJOLEARN_IDN_SCRATCH_POOL`
+-# keeps it across calls), CC_BATCH rounds run between two reads of the
+-# change word, the change word is never cleared (every writer of a round
+-# stores the ROUND NUMBER, so after a batch the word equals the batch's last
+-# round iff that round still lowered a label; a round that changes nothing
+-# is the fixed point, so the spare rounds of a batch change nothing), and
+-# the relabel is a device flag-and-scan: a root (lab[v] == v) is numbered
+-# by the count of roots below it, which is the order of first appearance of
+-# the min-labels over the nodes (the component's minimum node is the first
+-# node that carries its label), the integers `_cc_relabel` builds; every
+-# node takes its root's number. One download of the labels and the count.
+-# BITS: the hook is an atomic min and the jump reads a chain of its own
+-# labels, so the min-label fixed point does not depend on the round order
+-# or on how many rounds a batch runs (a label only falls, to the lowest
+-# node of its component): the same integers as the per-round path on NVIDIA
+-# and AMD and as the host rounds + Python relabel. The round count in
+-# info[0] includes the batch's spare rounds (Python reads only the labels
+-# and the count).
+-#: Source lane/apple-fast-graph@1fa36a7ec (ported 2026-10-04, lane
+-#: apple-fast-rec-misc). OUTCOME on the M3 (afc_ab_def, full board size,
+-#: 1 run per arm, 2026-10-04, tag rab3-ccfast): connected-components taxi
+-#: 8.17 -> 3.60 ms (-56.0%); n_components 588 both arms, output digest
+-#: identical. KEEP. NVIDIA/AMD: the board race after the gap merge.
+-#: hook + jump rounds between two reads of the change word: a spare round
+-#: is one O(nnz) launch (microseconds), a read is a host wait (tens of
+-#: microseconds), so a batch of 4 pays at most 3 spare launches to skip 3
+-#: waits; a rule from the launch/wait cost ratio, not from any dataset.
+-comptime CC_BATCH = 4
++# labels. Here the CSR and the start labels go straight to the device (no
++# staging), CC_FAST_BATCH rounds run between two reads of the change word,
++# the change word is never cleared (every writer of a round stores the ROUND
++# NUMBER, so after a batch the word equals the batch's last round iff that
++# round still lowered a label; a round that changes nothing is the fixed
++# point, so the spare rounds of a batch change nothing), and the relabel is a
++# device flag-and-scan: a root (lab[v] == v) is numbered by the count of
++# roots below it, which is the order of first appearance of the min-labels
++# over the nodes (the component's minimum node is the first node that
++# carries its label), the integers `_cc_relabel` builds; every node takes
++# its root's number. One download of the labels and the count. Same labels
++# as the host rounds + Python relabel; the round count in info[0] includes
++# the batch's spare rounds (Python reads only the labels and the count).
++#: FAST Apple, default ON since 2026-10-04 (rollback
++#: `-D MOJOLEARN_CC_FAST_OFF`; the old -D name is harmless). Source
++#: lane/apple-fast-graph@1fa36a7ec (ported 2026-10-04, lane
++#: apple-fast-rec-misc). connected_components on a CSR graph: batched
++#: hook + jump rounds (one change-word read per CC_FAST_BATCH rounds), the
++#: first-appearance relabel and the component count on the device.
++#: Known: never ran. M3 graph-cc-fast-taxi failed to parse at
++#: `cc_relabel_kernel(..., out: IP, ...)` ("expected argument name": `out`
++#: is an argument convention); renamed `dst`. Python half rebased onto
++#: main's `_p2m_iota` / `_p2m_relabel` (both already device ops). Board:
++#: connected-components taxi 0.68 (already a win); prior gap 88 ms vs
++#: networkx 7.3 ms was launch + wait overhead, not kernel time.
++#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
++#: rab3-ccfast): connected-components taxi 8.17 -> 3.60 ms (-56.0%);
++#: n_components 588 both arms, output digest identical. KEEP.
++comptime CC_FAST = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and not is_defined["MOJOLEARN_CC_FAST_OFF"]()
++)
++#: hook + jump rounds between two reads of the change word
++comptime CC_FAST_BATCH = 4
+ 
+ 
+ def cc_hook_round_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP, rid: Int32):
+@@ -569,34 +660,18 @@ def cc_relabel_kernel(lab: IP, newid: IP, dst: IP, n: Int32):
+         dst.unsafe_store(v, newid.unsafe_load(Int(lab.unsafe_load(v))))
+ 
+ 
+-def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
+-    """`op_cc_iterate_csr`'s contract plus the relabel: out, `lab` holds the
++def _cc_csr_fast(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
++    """`_cc_csr_device`'s contract plus the relabel: out, `lab` holds the
+     compacted labels (component k = the k-th component in order of first
+     appearance over the nodes, scipy's numbering) and info[1] the number of
+     components + 1 (0 would mean "not relabelled here"). Start labels are
+     the identity (what `connected_components` passes)."""
+-    comptime assert NC_SMEM_FITS, "cc_csr_batched: a 1 KB threadgroup page must fit"
++    comptime assert NC_SMEM_FITS, "cc_csr_fast: a 1 KB threadgroup page must fit"
+     var ctx = xn_ctx()
+-    # the CSR and the start labels through one pinned staging buffer (the
+-    # lane note above): indptr | indices | labels | count
+-    var o_ix = n + 1
+-    var o_l = o_ix + max(nnz, 1)
+-    var o_c = o_l + max(n, 1)
+-    var hb = take_host_i32(ctx, o_c + 1)
+-    var hp = hb.unsafe_ptr()
+-    memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
+-    if nnz > 0:
+-        memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
+-    if n > 0:
+-        memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
+-    var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
+-    var d_ix = ctx.enqueue_create_buffer[DType.int32](max(nnz, 1))
+-    var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+-    ctx.enqueue_copy(dst_buf=d_ip, src_ptr=hp)
+-    if nnz > 0:
+-        ctx.enqueue_copy(dst_buf=d_ix, src_ptr=hp + o_ix)
+-    if n > 0:
+-        ctx.enqueue_copy(dst_buf=d_l, src_ptr=hp + o_l)
++    # the CSR and the start labels straight to the device (the copy engine)
++    var d_ip = _buf_i(ctx, indptr, n + 1, True)
++    var d_ix = _buf_i(ctx, indices, nnz, True)
++    var d_l = _buf_i(ctx, lab, n, True)
+     var d_out = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+     var d_new = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+     var nb = max((n + NC_CHUNK - 1) // NC_CHUNK, 1)
+@@ -610,20 +685,20 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
+     # the change word starts below every round number (a kernel, not a memset)
+     enqueue_fill(ctx, d_c, Int32(0))
+     var blocks = (n + 255) // 256
++    var hflag = List[Int32](length=1, fill=Int32(0))
+     var rounds = 0
+     while n > 0:
+-        for _ in range(CC_BATCH):
++        for _ in range(CC_FAST_BATCH):
+             rounds += 1
+             ctx.enqueue_function[cc_hook_round_kernel](
+                 d_ip.unsafe_ptr(), d_ix.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n), d_c.unsafe_ptr(), Int32(rounds),
+                 grid_dim=blocks, block_dim=256,
+             )
+             ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+-        # one read per batch (into the pinned word): did the batch's last
+-        # round still lower a label?
+-        ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=d_c)
++        # one read per batch: did the batch's last round still lower a label?
++        ctx.enqueue_copy(dst_ptr=hflag.unsafe_ptr(), src_buf=d_c)
+         ctx.synchronize()
+-        if Int(hp[o_c]) != rounds:
++        if Int(hflag[0]) != rounds:
+             break
+     # the relabel: root flags per block -> group sums -> top scan (the count
+     # into d_cnt) -> block offsets -> root ranks -> every node its root's rank
+@@ -638,17 +713,15 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
+     if n > 0:
+         ctx.enqueue_function[cc_relabel_kernel](lp, d_new.unsafe_ptr(), d_out.unsafe_ptr(), Int32(n),
+                                                 grid_dim=blocks, block_dim=256)
+-    # the count and the labels through the pinned buffer, one wait
+-    ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=d_cnt)
+-    if n > 0:
+-        ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_out)
++    var hcnt = List[Int32](length=1, fill=Int32(0))
++    ctx.enqueue_copy(dst_ptr=hcnt.unsafe_ptr(), src_buf=d_cnt)
++    _down_i(ctx, d_out, lab, n)
+     ctx.synchronize()
+-    if n > 0:
+-        memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
+     var ip = IP(unsafe_from_address=info)
+     ip.unsafe_store(0, Int32(rounds))
+-    ip.unsafe_store(1, hp[o_c] + Int32(1))
+-    give_host_i32(ctx, hb^)
++    ip.unsafe_store(1, hcnt[0] + Int32(1))
++    _ = hflag^
++    _ = hcnt^
+     _ = d_ip^
+     _ = d_ix^
+     _ = d_l^

@@ -1,0 +1,137 @@
+Restores MOJOLEARN_IDN_RF_STREAM_REPLICAS: the reverse of e5ad4d891 (2026-10-07, "trees: delete T01/N07 streamed histogram replicas (lost on NV+AMD) and its experiment code")
+restricted to code files (hunks that name this define).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_IDN_RF_STREAM_REPLICAS.patch  (or git apply -3 when main has moved on).
+First apply experiments/removed/_shared-e5ad4d891.patch: the deletion commit's hunks that name no single define (shared by every define it deleted).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+index a4942dc90..ef7160abc 100644
+--- a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
++++ b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+@@ -635,10 +636,33 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
+ # candidate round"). The candidate arm is P = 4.
+ # =========================================================
+ # `-D MOJOLEARN_2012_SMEM_COPIES4=1` selects P = 4; 1 is shipped.
+-# N07 / TREES_T01 streamed exact histogram replicas: DELETED 2026-10-07
+-# (lane trees-cleanup). Lost on both vendors at source cbcc8dcd3303:
+-# 100000x32 AMD 1.034, NVIDIA L40S 1.293; NVIDIA 131071x17 1.227.
+-# Row in docs/apple-fast/EXPERIMENTS.md; recoverable at 8be4d20d4.
++# N07 2026-10-06 representative RF caller LOSS, source cbcc8dcd3303.
++# rows/features=100000/32: AMD 335.854582 -> 347.276258 ms
++# (candidate/baseline 1.034); NVIDIA L40S 124.757991 -> 161.308000 ms
++# (1.293). NVIDIA neighbor 131071/17: 107.523736 -> 131.878435 ms
++# (1.227); matching AMD neighbor pending. Flag changes histogram COPIES=4
++# and TILE=4; the 128-bin fixture admits the bounded shared-memory route.
++# No per-fit launch counter was emitted by this timing driver. One excluded
++# same-context warmup and one scored fit, rc=0; prior identity evidence reused.
++# Default OFF: generated representative fits do not qualify the full datasets.
++# Evidence: measurements/20261006/index.json.
++comptime IDN_RF_STREAM_REPLICAS = T01 or (BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_STREAM_REPLICAS"]())
++comptime STREAM_REPLICAS = T01_REPLICAS if T01 else 4
++
++struct _StreamReplicaAudit(Defaultable, Movable):
++    var launches: Int64
++    def __init__(out self):
++        self.launches = Int64(0)
++
++comptime _STREAM_REPLICA_AUDIT = _Global[StorageType=_StreamReplicaAudit, name="MojolearnForestStreamReplicasV1", init_fn=_StreamReplicaAudit.__init__]
++
++def forest_stream_replica_count() raises -> Int:
++    # Enqueue reach only; no wait, device readback, or quality inference.
++    comptime if IDN_RF_STREAM_REPLICAS:
++        ref audit = _STREAM_REPLICA_AUDIT.get_or_create_ptr()[]
++        return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.launches)))
++    return 0
++
+ comptime HIST_SMEM_COPIES_DEFAULT = 4 if is_defined["MOJOLEARN_2012_SMEM_COPIES4"]() else 1
+ 
+ 
+@@ -3003,7 +3027,7 @@ def launch_build_histograms_kernel[
+             comptime USE4 = (
+                 DEFAULT4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]()
+             )
+-            comptime TILE = (10 if is_defined[
++            comptime TILE = 4 if IDN_RF_STREAM_REPLICAS else (10 if is_defined[
+                 "MOJOLEARN_RF_HIST_COLUMNS10"
+             ]() else (
+                 8 if (
+@@ -3020,10 +3044,10 @@ def launch_build_histograms_kernel[
+                 )
+             ))
+             comptime ENABLED = (
+-                USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
++                IDN_RF_STREAM_REPLICAS or USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
+             )
+-            comptime COPIES = 1
+-            comptime if ENABLED and SMEM_COPIES == 1 and sabotage == 0:
++            comptime COPIES = STREAM_REPLICAS if IDN_RF_STREAM_REPLICAS else 1
++            comptime if ENABLED and (SMEM_COPIES == 1 or IDN_RF_STREAM_REPLICAS) and sabotage == 0:
+                 # Actual bin bytes bound the four-column replicated footprint.
+                 # Above16KiB the original single-column replica/fallback path runs.
+                 var need = COPIES * TILE * max_n_bins * num_outputs * size_of[O.BinT]()
+@@ -3031,6 +3055,9 @@ def launch_build_histograms_kernel[
+                     comptime SLOTS = BYTES // size_of[O.BinT]()
+                     if num_outputs > 0 and need > 0 and need <= SLOTS * size_of[O.BinT]():
+                         comptime tiled = build_histograms_binned_columns_kernel[O, TPB, TILE, SLOTS, sampled_labels, 0, COPIES]
++                        comptime if IDN_RF_STREAM_REPLICAS:
++                            ref audit = _STREAM_REPLICA_AUDIT.get_or_create_ptr()[]
++                            _ = Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.launches), Int64(1))
+                         log_launch_ctx(ctx, "histogram_binned_columns" + String(TILE) + "_" + String(BYTES))
+                         ctx.enqueue_function[tiled](
+                             argsp.unsafe_origin_cast[MutAnyOrigin](),
+@@ -3058,7 +3085,7 @@ def launch_build_histograms_kernel[
+                 sabotage,
+                 True,
+                 sampled_labels,
+-                SMEM_COPIES,
++                STREAM_REPLICAS if IDN_RF_STREAM_REPLICAS else SMEM_COPIES,
+             ]
+             log_launch_ctx(ctx, "histogram_binned")
+             ctx.enqueue_function[ksb](
+diff --git a/experiments/performance_ideas/N07/production_check.mojo b/experiments/performance_ideas/N07/production_check.mojo
+new file mode 100644
+index 000000000..2086d4b12
+--- /dev/null
++++ b/experiments/performance_ideas/N07/production_check.mojo
+@@ -0,0 +1,41 @@
++# SPDX-License-Identifier: Apache-2.0
++"""N07 real forest streamed-replica route, unchanged existing fixed-point bins.
++No GPU timing. Independent histogram tally, small-replica fallback and actual
++weighted fit/zero-weight/failure contracts precede any speed qualification.
++"""
++from max.gpu.host import DeviceContext
++from ensemble.checks.rf_perf_candidates_check import Fixture, run_histogram_arm, expected_histogram
++from ensemble.checks.sample_weight_check import arm_a_zero_weight_drop, arm_b_validation, arm_c_double_counting, arm_d_weighted_bins_train
++from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import IDN_RF_STREAM_REPLICAS, forest_stream_replica_count
++
++
++def run_checks() raises:
++    var ctx = DeviceContext()
++    var fx = Fixture(ctx)
++    var expected = expected_histogram(fx)
++    var control = run_histogram_arm[TILE=4](ctx, fx, False, False)
++    var candidate = run_histogram_arm[TILE=4, SMEM_COPIES=4](ctx, fx, False, False)
++    var fallback = run_histogram_arm[SMEM_COPIES=4, SMEM_SLOTS=48](ctx, fx, False, False)
++    for cell in range(len(expected)):
++        if control[cell] != expected[cell] or candidate[cell] != expected[cell] or fallback[cell] != expected[cell]:
++            raise Error("N07 independent exact histogram mismatch cell" + String(cell))
++    var before = forest_stream_replica_count()
++    var fails = arm_a_zero_weight_drop(ctx)
++    fails += arm_b_validation(ctx)
++    fails += arm_c_double_counting(ctx)
++    fails += arm_d_weighted_bins_train(ctx)
++    var after = forest_stream_replica_count()
++    if fails != 0:
++        raise Error("N07 weighted forest contract failed")
++    comptime if IDN_RF_STREAM_REPLICAS:
++        if after <= before:
++            raise Error("N07 actual production streamed-replica route not reached")
++    else:
++        if before != 0 or after != 0:
++            raise Error("N07 baseline unexpectedly enabled stream route")
++    _ = fx^
++    print("N07_PRODUCTION_PASS exact_histograms weighted_fits failure_contract route_hits", after - before)
++
++
++def main() raises:
++    run_checks()

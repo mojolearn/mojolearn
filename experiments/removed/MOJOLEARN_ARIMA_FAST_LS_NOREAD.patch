@@ -1,0 +1,87 @@
+Restores MOJOLEARN_ARIMA_FAST_LS_NOREAD: the reverse of 569e80238 (2026-10-03, "arima: remove dropped ARIMA_FAST_LS_NOREAD (DROPPED-noise; recover lane/apple-fast-gap-arima@d967c0121)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/arima/impl/batched_fit.mojo b/arima/impl/batched_fit.mojo
+index 34f915453..5df2a94f8 100644
+--- a/arima/impl/batched_fit.mojo
++++ b/arima/impl/batched_fit.mojo
+@@ -121,6 +121,7 @@ from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
+ from arima.impl.fast_eval_ws import FastEvalWS
+ from arima.impl.fast_lbfgs_async import (
+     ARIMA_FAST_ASYNC,
++    ARIMA_FAST_LS_NOREAD,
+     async_min_lbfgs,
+ )
+ from arima.impl.lbfgs_device import (
+@@ -613,7 +614,12 @@ def batched_min_lbfgs(
+ 
+         # THE SHARED LINE SEARCH (`ls_backtrack:109-121`, B at a time)
+         for _t in range(param.max_linesearch):
+-            if not _read_flag(ctx, any_searching, flag_host):
++            var read_it = True
++            comptime if ARIMA_FAST_LS_NOREAD:
++                # the prelude's word is "yes" whenever a series is active
++                # (fast_lbfgs_async.mojo banner); an extra round changes nothing
++                read_it = _t > 0
++            if read_it and not _read_flag(ctx, any_searching, flag_host):
+                 break
+             ctx.enqueue_memset(any_searching, Int32(0))
+             ctx.enqueue_function[lbfgs_candidate_kernel](
+diff --git a/arima/impl/fast_lbfgs_async.mojo b/arima/impl/fast_lbfgs_async.mojo
+index c58767e31..1f304ade7 100644
+--- a/arima/impl/fast_lbfgs_async.mojo
++++ b/arima/impl/fast_lbfgs_async.mojo
+@@ -1,9 +1,17 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""lane/apple-fast-gap-arima (2026-10-03): a FAST-on-Apple switch for
++"""lane/apple-fast-gap-arima (2026-10-03): two FAST-on-Apple switches for
+ `batched_fit.mojo::batched_min_lbfgs`. ARIMA_FAST_ASYNC is the FAST+Apple
+-default (`_OFF` turns it off). ARIMA_FAST_LS_NOREAD was DROPPED-noise; its
+-code is on lane/apple-fast-gap-arima @ d967c0121.
++default (`_OFF` turns it off); ARIMA_FAST_LS_NOREAD stays opt-in.
++
++`-D MOJOLEARN_ARIMA_FAST_LS_NOREAD=1` (ARIMA_FAST_LS_NOREAD). The lock-step
++solver reads `any_searching` back right after `lbfgs_prelude_kernel`, a
++host wait per L-BFGS iteration whose answer is "yes" whenever any series is
++active (the prelude starts a search for every active series unless its step
++or direction is invalid). The switch skips that first read: when no series
++searches, the one extra evaluation proposes every series' current `x`, the
++accept kernel changes nothing and the next read ends the search. Same bits,
++one host wait fewer per iteration.
+ 
+ `-D MOJOLEARN_ARIMA_FAST_ASYNC=1` (ARIMA_FAST_ASYNC). The lock-step solver
+ moves every series through the same phase together: prelude, a shared line
+@@ -29,6 +37,7 @@ from std.atomic import Atomic
+ from std.gpu import block_dim, block_idx, thread_idx
+ from std.math import isinf, isnan
+ from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+ from std.memory import memcpy
+@@ -46,6 +55,8 @@ from arima.impl.lbfgs_device import (
+ )
+ from arima.impl.tsa.arima_common import ARIMAOrder
+ from checks.numerics import (
++    GLOBAL_NUMERIC_MODE,
++    NUMERIC_FAST,
+     ftz,
+     identical_mul,
+     identical_mul_add,
+@@ -63,6 +74,13 @@ from glm.impl.qn.qn_util import (
+     LBFGSParam,
+ )
+ 
++comptime ARIMA_FAST_LS_NOREAD = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_ARIMA_FAST_LS_NOREAD"]()
++    and not is_defined["MOJOLEARN_ARIMA_FAST_LS_NOREAD_OFF"]()
++)
++
+ #: DEFAULT ON (FAST + Apple, via KALMAN_FAST_EVAL_WS) since the M3 A/B:
+ #: autoarima taxi-hourly 39,639 -> 24,563 ms (-38%), synthetic 28,511 ->
+ #: 14,918 ms (-48%), forecast_rmse identical. The old

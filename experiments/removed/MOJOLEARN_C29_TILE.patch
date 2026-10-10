@@ -1,0 +1,24 @@
+Restores MOJOLEARN_C29_TILE: the reverse of 58146b270 (2026-10-07, "knn: delete C29_STREAM_TOPK + C29_TILE (one thread per query over every index row); KNN_DIRECT_DISTANCE keeps only the r")
+restricted to code files (hunks that name this define).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_C29_TILE.patch  (or git apply -3 when main has moved on).
+First apply experiments/removed/_shared-58146b270.patch: the deletion commit's hunks that name no single define (shared by every define it deleted).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/experiments/classical_identical_ideas/graph_controls.mojo b/experiments/classical_identical_ideas/graph_controls.mojo
+index 15fbba7e4..20b459fea 100644
+--- a/experiments/classical_identical_ideas/graph_controls.mojo
++++ b/experiments/classical_identical_ideas/graph_controls.mojo
+@@ -8,9 +8,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from std.sys.compile import is_defined
+ from std.sys.defines import get_defined_int
+ comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-# C29_STREAM_TOPK and its MOJOLEARN_C29_TILE knob were deleted 2026-10-07
+-# (one thread per query over every index row); refused in
+-# core/six_lane_experiment_guards.mojo.
++comptime C29_STREAM_TOPK = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C29_STREAM_TOPK"]()
++# C29 reference tile: integer sweep -D MOJOLEARN_C29_TILE=128|256 (was the
++# boolean MOJOLEARN_C29_TILE_128); absent = 256. Acts only under the C29 gate.
++comptime C29_REFERENCE_TILE = get_defined_int["MOJOLEARN_C29_TILE", 256]()
+ # C30 split per algorithm family (lane classical-kmeans, 2026-10-07). The old
+ # MOJOLEARN_C30_DIRECT_DISTANCE changed about 12 algorithms at once, so a grid
+ # could not separate them. Each family now has its own define with the old C30

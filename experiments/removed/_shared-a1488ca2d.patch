@@ -1,0 +1,122 @@
+Shared hunks of deletion commit a1488ca2d ("attention/norm/rope/swiglu/kv-cache: one switch per idea (IDN_NORM, IDN_ROPE, IDN_TRAIN_SWIGLU, IDN_TRAIN_NO_DECODE_CACH"): code hunks that name none of the defines it deleted.
+Apply before any experiments/removed/<DEFINE>.patch that names this file. See docs/TOMBSTONES.md.
+
+diff --git a/training/byte_lm_host.mojo b/training/byte_lm_host.mojo
+index 48e27fc20..33b77f4d1 100644
+--- a/training/byte_lm_host.mojo
++++ b/training/byte_lm_host.mojo
+@@ -41,7 +41,7 @@ fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
+ 
+ from std.math import max, min
+ from std.os import getenv
+-from std.sys.compile import is_defined, get_defined_int
++from std.sys.compile import is_defined
+ from std.sys.info import num_physical_cores, simd_width_of
+ 
+ from std.memory import bitcast, unsafe_memcpy
+diff --git a/training/neural_arithmetic_profile.mojo b/training/neural_arithmetic_profile.mojo
+index 176cc994a..3ae937db5 100644
+--- a/training/neural_arithmetic_profile.mojo
++++ b/training/neural_arithmetic_profile.mojo
+@@ -1,6 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """CPU-safe identifier for selected, same-version neural arithmetic graphs."""
+-from std.sys.compile import is_defined, get_defined_int
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS
+ from training.neural_ab_profile_contract import NN54_LOSS_PROFILE, NN57_NORM_PROFILE
+diff --git a/transformer/experiments/attention_schedules.mojo b/transformer/experiments/attention_schedules.mojo
+index f848f5ecd..548a32b81 100644
+--- a/transformer/experiments/attention_schedules.mojo
++++ b/transformer/experiments/attention_schedules.mojo
+@@ -1,8 +1,5 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""NN25/26/29 source-only scheduling candidates, 2026-10-06.
+-
+-NN22 (eager dK/dV pairing) and NN23 (row-dot dS) were deleted on 2026-10-07:
+-only transformer/checks read them, never a public binding route.
++"""NN22/25/26/29 source-only scheduling candidates, 2026-10-06.
+ 
+ No compilation, identity, quality or timing evidence exists for these drafts.
+ Every switch requires IDENTICAL and is disabled by MOJOLEARN_IDN_ALL_OFF.
+@@ -87,6 +85,49 @@ def training_swiglu_kernel(
+     gated.unsafe_store(i, ftz(identical_mul(sil, ftz(up.unsafe_load(i)))))
+ 
+ 
++def eager_dkdv_pair_kernel(
++    dk: MutPointer[Float32, MutAnyOrigin],
++    dv: MutPointer[Float32, MutAnyOrigin],
++    dcell: MutPointer[Float32, MutAnyOrigin],
++    weights: MutPointer[Float32, MutAnyOrigin],
++    q: MutPointer[Float32, MutAnyOrigin],
++    dctx: MutPointer[Float32, MutAnyOrigin],
++    b_in: Int32, l_in: Int32, nh_in: Int32, nkv_in: Int32,
++    hd_in: Int32, s_in: Int32,
++):
++    """NN22: pair independent eager K/V chains and share address arithmetic.
++
++    Distinct from rejected cooperative/stacked fused-attention experiments:
++    this consumes already materialized dcell/weights. Each chain includes
++    every h then t term, including masked signed zeros; no atomics, shared
++    tree or omitted terms. Full models must exercise eager/fallback scope.
++    """
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var l = Int(l_in)
++    var nh = Int(nh_in)
++    var nkv = Int(nkv_in)
++    var hd = Int(hd_in)
++    var s = Int(s_in)
++    if i >= Int(b_in) * nkv * s * hd:
++        return
++    var d = i % hd
++    var j = (i // hd) % s
++    var kvh = (i // (hd * s)) % nkv
++    var bb = i // (hd * s * nkv)
++    var nrep = nh // nkv
++    var ak = Float32(0.0)
++    var av = Float32(0.0)
++    for hh in range(nrep):
++        var h = kvh * nrep + hh
++        for t in range(l):
++            var cell = ((bb * nh + h) * l + t) * s + j
++            var qi = (bb * l + t) * nh * hd + h * hd + d
++            ak = ftz(identical_mul_add(ftz(dcell.unsafe_load(cell)), ftz(q.unsafe_load(qi)), ak))
++            av = ftz(identical_mul_add(ftz(weights.unsafe_load(cell)), ftz(dctx.unsafe_load(qi)), av))
++    dk.unsafe_store(i, ak)
++    dv.unsafe_store(i, av)
++
++
+ def kv_ring_pair_kernel(
+     ring_k: MutPointer[Float32, MutAnyOrigin],
+     ring_v: MutPointer[Float32, MutAnyOrigin],
+@@ -213,3 +251,29 @@ def score_scale_mask_kernel(
+     var fill = Float32(0.0) if visible else mask_fill
+     masked.unsafe_store(i, ftz(score + fill))
+ 
++
++def eager_rowdot_ds_kernel(
++    zdot: MutPointer[Float32, MutAnyOrigin],
++    ds: MutPointer[Float32, MutAnyOrigin],
++    dy: MutPointer[Float32, MutAnyOrigin],
++    y: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, keys_in: Int32,
++):
++    """NN23 eager extension: consume z immediately after its exact fold.
++
++    One owner completes the whole row dot before writing any dS. It stores
++    z for tracing and fused fallback witnesses. No masked terms are omitted.
++    This saves a launch and row-z broadcasts, but serial cell stores may
++    lose against the split flat grid; full workloads must decide that.
++    """
++    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if row >= Int(rows_in):
++        return
++    var keys = Int(keys_in)
++    var base = row * keys
++    var z = Float32(0.0)
++    for j in range(keys):
++        z = ftz(identical_mul_add(ftz(dy.unsafe_load(base + j)), ftz(y.unsafe_load(base + j)), z))
++    zdot.unsafe_store(row, ftz(z))
++    for j in range(keys):
++        var delta = ftz(ftz(dy.unsafe_load(base + j)) - ftz(z))
++        ds.unsafe_store(base + j, ftz(identical_mul(ftz(y.unsafe_load(base + j)), delta)))

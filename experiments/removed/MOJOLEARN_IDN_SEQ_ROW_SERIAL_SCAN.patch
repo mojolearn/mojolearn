@@ -1,0 +1,103 @@
+Restores MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN: the reverse of 0a0c7205f (2026-10-07, "L11: delete NI49 row-serial LSTM scan arm (serial per row); NN44 grouping merged into IDN_MOE_STABLE_PACK")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
+index ecec19922..d562b565e 100644
+--- a/sequence/exec_device.mojo
++++ b/sequence/exec_device.mojo
+@@ -50,7 +50,7 @@ from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
+ from sequence.ets_team import ETS_TEAM, ets_team
+ from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
+ from sequence.ops import OP_ETS, OP_GARCH
+-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_block
++from sequence.recurrent_scan import SEQ_LSTM_ROW_SERIAL_SCAN, OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_block
+ from x_linear.ops import IP
+ from x_linear.witness import witness_end
+ from std.sys.info import has_apple_gpu_accelerator
+@@ -656,14 +656,14 @@ struct DeviceExec(Exec):
+             return
+         # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
+         # recurrence of a layer, one block per batch row (n = B rows)
+-        comptime if OP == OP_CELL_FWD_SCAN:
++        comptime if OP == OP_CELL_FWD_SCAN and not SEQ_LSTM_ROW_SERIAL_SCAN:
+             self.ctx.enqueue_function[cell_fwd_scan_kernel](
+                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                 Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
+                 grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
+             )
+             return
+-        comptime if OP == OP_CELL_BWD_SCAN:
++        comptime if OP == OP_CELL_BWD_SCAN and not SEQ_LSTM_ROW_SERIAL_SCAN:
+             self.ctx.enqueue_function[cell_bwd_scan_kernel](
+                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                 Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
+@@ -876,7 +876,7 @@ struct DeviceExec(Exec):
+                     block_dim=(GT_TPB, 1, 1),
+                 )
+                 return
+-        comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
++        comptime if SEQ_LSTM_ROW_SERIAL_SCAN or (OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN):
+             comptime GROUP = 4 if C58_FORECAST4 and (OP == OP_THETA or OP == OP_ETS or OP == OP_GARCH) else 1
+             var tasks = (n + GROUP - 1) // GROUP
+             self.ctx.enqueue_function[seq_kernel[OP]](
+diff --git a/sequence/moe_group.mojo b/sequence/moe_group.mojo
+index 5581987bc..2ffebebe8 100644
+--- a/sequence/moe_group.mojo
++++ b/sequence/moe_group.mojo
+@@ -24,10 +24,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ # NN44: deterministic ascending-pair grouping; OFF and unmeasured. Each
+ # expert scans the pairs once, replacing contended atomic scatter cursors.
+ # O(E*P) comparisons is a real cost; measure skew and full MoE operations.
+-# L11 (2026-10-07): NN44's grouping and NI53 launched the same stable kernel;
+-# one switch, MOJOLEARN_IDN_MOE_STABLE_PACK (the NN44_STABLE_GROUP define is
+-# retired). NN44_EXPERT_BISECT (sequence/moe_tiled.mojo) stays independent.
+-comptime NN44_STABLE_GROUP = False
++comptime NN44_STABLE_GROUP = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_NN44_STABLE_GROUP"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ from sequence.ops import FP
+ from sequence.moe_tiled import TILE_P
+diff --git a/sequence/recurrent_scan.mojo b/sequence/recurrent_scan.mojo
+index 25af83990..e0129313f 100644
+--- a/sequence/recurrent_scan.mojo
++++ b/sequence/recurrent_scan.mojo
+@@ -68,11 +68,19 @@ comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
+ # required before timing or promoting this candidate. The owner forbids those
+ # runs in this worktree; none were attempted. A faster broken arm is a loser.
+ comptime SEQ_LSTM_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_SEQ_LSTM_SCAN"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+-# NI49's row-serial arm (MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN: one GPU thread
+-# per batch row, serial over units and timesteps) was deleted by L11
+-# (2026-10-07): a per-row serial executor breaks the IDENTICAL GPU rule
+-# (parallel only). NN41 and NI49 are now the one switch above.
+-comptime SEQ_LSTM_SCAN = (_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()) or SEQ_LSTM_SCAN_IDN
++# NI49 independent conservative repair candidate, default OFF: one logical
++# row is one executor item. It executes the existing host scan body on GPU,
++# serial over units and timesteps, with no within-kernel inter-thread state
++# reads, barriers or gate regrouping. This is an ordinary scheduling algorithm,
++# not a toolchain modification. The standard packed Args executor transports it.
++# It removes T launches but reduces parallelism; neither quality recovery nor
++# speed is established. The earlier cooperative SCAN failures remain above.
++comptime SEQ_LSTM_ROW_SERIAL_SCAN = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++comptime SEQ_LSTM_SCAN = (_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()) or SEQ_LSTM_SCAN_IDN or SEQ_LSTM_ROW_SERIAL_SCAN
+ comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
+ comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
+ #: SEQ_FAST_LSTM_SCAN_WIDE (with SCAN; lane apple-fast-s-seq, 2026-10-05,
+@@ -106,6 +114,9 @@ comptime SCAN_SMEM = 4096
+ 
+ def scan_applies(H: Int, G: Int) -> Bool:
+     """The scan kernels' shape bound: one lane per unit, the staged row fits."""
++    comptime if SEQ_LSTM_ROW_SERIAL_SCAN:
++        # One scalar executor item owns the row; no H-wide launch/shared page.
++        return H >= 1
+     return H >= 1 and H <= SCAN_MAX_H and G * H <= SCAN_SMEM
+ 
+ 

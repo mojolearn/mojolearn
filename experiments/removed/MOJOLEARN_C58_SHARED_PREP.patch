@@ -1,0 +1,97 @@
+Restores MOJOLEARN_C58_SHARED_PREP: the reverse of 3978db7ce (2026-10-08, "grid-losers-1: delete c58_shared_prep (grid ge123e6f9 noise on ets); refuse the define")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_C58_SHARED_PREP.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/experiments/classical_identical_ideas/stats_controls.mojo b/experiments/classical_identical_ideas/stats_controls.mojo
+index 7d10dcaa3..27575380c 100644
+--- a/experiments/classical_identical_ideas/stats_controls.mojo
++++ b/experiments/classical_identical_ideas/stats_controls.mojo
+@@ -31,6 +31,7 @@ comptime C56_QDA_PROJECT = get_defined_int["MOJOLEARN_CLASSICAL_C56_QDA_PROJECT"
+ # C57: retain each robust candidate's mean for its covariance computation.
+ comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57_CANDIDATE_STATE"]()
+ # C58/59: only independent classical series/trials, no neural sequence callers.
++comptime C58_SHARED_PREP = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SHARED_PREP"]()
+ comptime C58_SERIES4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SERIES4"]()
+ comptime C58_FORECAST4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_FORECAST4"]()
+ # C58 team state budget in MiB: integer sweep -D MOJOLEARN_C58_TEAM_MIB=64|256
+diff --git a/holtwinters/impl/internal/hw_estimate.mojo b/holtwinters/impl/internal/hw_estimate.mojo
+index 26f341502..5072a8ae6 100644
+--- a/holtwinters/impl/internal/hw_estimate.mojo
++++ b/holtwinters/impl/internal/hw_estimate.mojo
+@@ -79,7 +79,7 @@ IEEE `/` (correctly rounded on every column measured, IDENTITY_PATHS row
+     `hw_estimate_check.mojo` compares their bits.
+ """
+ 
+-from experiments.classical_identical_ideas.stats_controls import C58_SERIES4
++from experiments.classical_identical_ideas.stats_controls import C58_SERIES4, C58_SHARED_PREP
+ from std.gpu import block_dim, block_idx, thread_idx
+ from std.memory import bitcast, stack_allocation
+ from max.gpu.memory import AddressSpace
+@@ -175,6 +175,14 @@ def _series_scale(
+     return _pow2_scale(m)
+ 
+ 
++def hw_classical_scale_kernel(ts: MutPointer[Float32, MutAnyOrigin], scratch: MutPointer[Float32, MutAnyOrigin],
++                             n: Int32, batch: Int32, offset: Int32):
++    # C58: one immutable observation scan shared by all parameter starts.
++    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++    var series = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if series < Int(batch):
++        scratch[Int(offset)+series] = _series_scale(series, ts, Int(n), Int(batch))
++
+ 
+ # ---------------------------------------------------------------------------
+ # The per-element arithmetic every arm shares
+@@ -935,7 +943,11 @@ def holtwinters_estimate_block_kernel[B: Int = HW_EST_BLOCK](
+     var sw = base.unsafe_offset(d * d + f * d)
+     var thp = sw.unsafe_offset(f)
+ 
+-    var sc = _series_scale(s, ts, n, batch_size)
++    var sc: Float32
++    comptime if C58_SHARED_PREP:
++        sc = scratch[batch_size*HW_EST_STARTS*hw_est_block_scratch_len(f)+s]
++    else:
++        sc = _series_scale(s, ts, n, batch_size)
+     var inv_sc = _inv_pow2(sc)
+     var l0 = _f(_mad(Float32(-f), start_trend.unsafe_load(s), start_level.unsafe_load(s)) * sc)
+     var b0 = _f(start_trend.unsafe_load(s) * sc)
+diff --git a/holtwinters/impl/internal/hw_estimate_launch.mojo b/holtwinters/impl/internal/hw_estimate_launch.mojo
+index d4a3902c1..658ba9c67 100644
+--- a/holtwinters/impl/internal/hw_estimate_launch.mojo
++++ b/holtwinters/impl/internal/hw_estimate_launch.mojo
+@@ -5,11 +5,12 @@
+ that module holds only the kernels and the per-thread arithmetic they share
+ with the host column; the launch sequence and its arguments are unchanged."""
+ 
+-from experiments.classical_identical_ideas.stats_controls import C58_SERIES4
++from experiments.classical_identical_ideas.stats_controls import C58_SERIES4, C58_SHARED_PREP
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from holtwinters.impl.internal.hw_estimate import (
+     HW_EST_BLOCK,
++    hw_classical_scale_kernel,
+     HW_EST_STARTS,
+     holtwinters_estimate_block_kernel,
+     holtwinters_estimate_finish_kernel,
+@@ -56,7 +57,7 @@ def holtwinters_estimate_gpu(
+     if hw_est_parallel(frequency) and not force_serial:
+         var d = frequency + 5
+         var blocks = batch_size * HW_EST_STARTS
+-        var scratch = ctx.enqueue_create_buffer[DType.float32](blocks * hw_est_block_scratch_len(frequency) + scratch_pad)
++        var scratch = ctx.enqueue_create_buffer[DType.float32](blocks * hw_est_block_scratch_len(frequency) + (batch_size if C58_SHARED_PREP else 0) + scratch_pad)
+         var cand_theta = ctx.enqueue_create_buffer[DType.float32](blocks * d + scratch_pad)
+         var cand_sse = ctx.enqueue_create_buffer[DType.float32](blocks + scratch_pad)
+         var cand_ints = ctx.enqueue_create_buffer[DType.int32](2 * blocks)
+@@ -66,6 +67,11 @@ def holtwinters_estimate_gpu(
+         cand_sse.enqueue_fill(scratch_poison)
+         sw_all.enqueue_fill(scratch_poison)
+         ctx.synchronize()
++        comptime if C58_SHARED_PREP:
++            ctx.enqueue_function[hw_classical_scale_kernel](
++                ts.unsafe_ptr(), scratch.unsafe_ptr(), Int32(n), Int32(batch_size),
++                Int32(blocks*hw_est_block_scratch_len(frequency)),
++                grid_dim=((batch_size+tpb-1)//tpb,1,1), block_dim=(tpb,1,1))
+         if d <= HW_EST_FAST_BLOCK:
+             ctx.enqueue_function[holtwinters_estimate_block_kernel[HW_EST_FAST_BLOCK]](
+                 ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),

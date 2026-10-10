@@ -1,0 +1,241 @@
+Restores MOJOLEARN_ORDERED_FOLD_DERIVS: the reverse of 219ae194a (2026-10-03, "gbdt ordered: remove dropped ORDERED_FOLD_DERIVS (DROPPED-slower; recover lane/apple-fast-ordered@5b8722353)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_ORDERED_FOLD_DERIVS.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
+index 65dc723cf..d4244e6bb 100644
+--- a/gbdt/methods/ordered_boosting.mojo
++++ b/gbdt/methods/ordered_boosting.mojo
+@@ -1355,11 +1355,16 @@ def _ordered_estimate_complete(
+ # ===========================================================================
+ # APPLE FAST (lane/apple-fast-ordered, 2026-10-02): the per-fold loops of a
+ # tree as one launch per stage. Compiled only under FAST on an Apple GPU;
+-# IDENTICAL compiles the code above unchanged. BATCH_EST is the default
+-# (see below). The opt-in FOLD_DERIVS arm (one fold-derivative launch) was
+-# DROPPED-slower (282 -> 287 s); its code is on lane/apple-fast-ordered @
+-# 5b8722353.
++# IDENTICAL compiles the code above unchanged. FOLD_DERIVS is opt-in
++# (measured slower, 282 -> 287 s); BATCH_EST is the default (see below).
+ #
++#   -D MOJOLEARN_ORDERED_FOLD_DERIVS  step 2 (the fold derivatives): one
++#       launch over the concatenated fold layout instead of two per fold
++#       (`launch_approximate` + `_ord_scatter_planes_kernel`), reading the
++#       learn permutation's cursors as ONE buffer (`fast_cat`, fold
++#       `f` at `offsets[f]`; the per-fold cursors are views of it). Also
++#       drops the per-iteration `MOJOLEARN_ORD_STD_SPLIT` env read (a host
++#       step): the split noise fold is the only arm.
+ #   ORDERED_BATCH_EST (default; -D MOJOLEARN_ORDERED_BATCH_EST_OFF to
+ #       disable) step 6 (the fold models and the
+ #       estimation model): every task of the tree in one reduce launch per
+@@ -1380,6 +1385,11 @@ def _ordered_estimate_complete(
+ #       statements, FAST bits.
+ # ===========================================================================
+ 
++comptime ORDERED_FOLD_DERIVS = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_ORDERED_FOLD_DERIVS"]()
++)
+ #: ORDERED_BATCH_EST is the FAST + Apple default since the M3 A/B of
+ #: 2026-10-02 (gbdt-ordered taxi 275.9 -> 264.1 s, auc .6289 -> .6285).
+ #: `-D MOJOLEARN_ORDERED_BATCH_EST_OFF` restores the per-task walk;
+@@ -1390,8 +1400,8 @@ comptime ORDERED_BATCH_EST = (
+     and has_apple_gpu_accelerator()
+     and not is_defined["MOJOLEARN_ORDERED_BATCH_EST_OFF"]()
+ )
+-#: BATCH_EST keeps a learn permutation's fold cursors in one buffer
+-comptime ORDERED_CAT_CURSORS = ORDERED_BATCH_EST
++#: either switch keeps a learn permutation's fold cursors in one buffer
++comptime ORDERED_CAT_CURSORS = ORDERED_FOLD_DERIVS or ORDERED_BATCH_EST
+ #: chunks per (task, leaf) run in the batched reduce
+ comptime ORDERED_BAT_CHUNKS = 8
+ 
+@@ -1439,6 +1449,40 @@ def _ord_fast_segment(
+     return lo
+ 
+ 
++def _ord_fold_planes_kernel[objective: Int, second_order: Bool](
++    y_p: MutPointer[Float32, MutAnyOrigin],
++    w_p: MutPointer[Float32, MutAnyOrigin],
++    cursor_cat: MutPointer[Float32, MutAnyOrigin],
++    fold_off: MutPointer[UInt32, MutAnyOrigin],
++    n_folds_in: Int32,
++    total_in: Int32,
++    alpha: Float32,
++    border: Float32,
++    sw: MutPointer[Float32, MutAnyOrigin],
++    sg: MutPointer[Float32, MutAnyOrigin],
++):
++    """Every fold's two search planes in one pass over the concatenated
++    layout: position `p` is fold `f`'s position `i = p - fold_off[f]`, at
++    that fold's cursor (`cursor_cat[p]`) over the learn permutation's
++    own-order target and weight (`y_p[i]`, `w_p[i]`). Plane 0 is the weight
++    (Cosine) or `weight * Der2` (NewtonCosine, `second_der_as_weights`),
++    plane 1 `weight * Der`: `launch_approximate[False, second_order]`'s
++    stores, scattered where `_ord_scatter_planes_kernel` put them."""
++    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if p < Int(total_in):
++        var f = _ord_fast_segment(fold_off, Int(n_folds_in), p)
++        var i = p - Int(fold_off.unsafe_load(f))
++        var val = cursor_cat.unsafe_load(p)
++        var relev = y_p.unsafe_load(i)
++        var weight = w_p.unsafe_load(i)
++        var d = _ord_point[objective](relev, val, weight, alpha, border)
++        var plane0 = weight
++        comptime if second_order:
++            plane0 = d[1]
++        sw.unsafe_store(p, plane0)
++        sg.unsafe_store(p, d[0])
++
++
+ def _ord_bat_reduce_kernel[objective: Int](
+     y_p: MutPointer[Float32, MutAnyOrigin],
+     w_p: MutPointer[Float32, MutAnyOrigin],
+@@ -1569,6 +1613,63 @@ def _ord_bat_apply_kernel(
+         )
+ 
+ 
++def _launch_ord_fold_planes[second_order: Bool](
++    ctx: DeviceContext,
++    objective: Int,
++    mut y_p: DeviceBuffer[DType.float32],
++    mut w_p: DeviceBuffer[DType.float32],
++    mut cursor_cat: DeviceBuffer[DType.float32],
++    mut fold_off: DeviceBuffer[DType.uint32],
++    n_folds: Int,
++    total: Int,
++    alpha: Float32,
++    border: Float32,
++    mut sw: DeviceBuffer[DType.float32],
++    mut sg: DeviceBuffer[DType.float32],
++) raises:
++    """`launch_pointwise_target_kernel`'s objective switch, for
++    `_ord_fold_planes_kernel`."""
++
++    @parameter
++    def _go[obj: Int]() raises:
++        ctx.enqueue_function[_ord_fold_planes_kernel[obj, second_order]](
++            y_p.unsafe_ptr(), w_p.unsafe_ptr(), cursor_cat.unsafe_ptr(),
++            fold_off.unsafe_ptr(), Int32(n_folds), Int32(total), alpha,
++            border, sw.unsafe_ptr(), sg.unsafe_ptr(),
++            grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
++        )
++
++    if objective == OBJECTIVE_RMSE:
++        _go[OBJECTIVE_RMSE]()
++    elif objective == OBJECTIVE_LOGLOSS:
++        _go[OBJECTIVE_LOGLOSS]()
++    elif objective == OBJECTIVE_CROSSENTROPY:
++        _go[OBJECTIVE_CROSSENTROPY]()
++    elif objective == OBJECTIVE_QUANTILE:
++        _go[OBJECTIVE_QUANTILE]()
++    elif objective == OBJECTIVE_MAE:
++        _go[OBJECTIVE_MAE]()
++    elif objective == OBJECTIVE_LOGLINQUANTILE:
++        _go[OBJECTIVE_LOGLINQUANTILE]()
++    elif objective == OBJECTIVE_MAPE:
++        _go[OBJECTIVE_MAPE]()
++    elif objective == OBJECTIVE_POISSON:
++        _go[OBJECTIVE_POISSON]()
++    elif objective == OBJECTIVE_LQ:
++        _go[OBJECTIVE_LQ]()
++    elif objective == OBJECTIVE_EXPECTILE:
++        _go[OBJECTIVE_EXPECTILE]()
++    elif objective == OBJECTIVE_TWEEDIE:
++        _go[OBJECTIVE_TWEEDIE]()
++    elif objective == OBJECTIVE_HUBER:
++        _go[OBJECTIVE_HUBER]()
++    else:
++        raise Error(
++            "ordered fold planes: objective " + String(objective)
++            + " is not a pointwise loss"
++        )
++
++
+ def _launch_ord_bat_reduce(
+     ctx: DeviceContext,
+     objective: Int,
+@@ -2152,33 +2253,48 @@ def fit_ordered(
+         times.begin(ctx)
+         var sw = ctx.enqueue_create_buffer[DType.float32](total)
+         var sg = ctx.enqueue_create_buffer[DType.float32](total)
+-        for f in range(n_folds):
+-            var r = folds[f].quality_evaluate_samples.right
+-            # the prefix [0, r) of the learn permutation's own-order copies
+-            ref gy = dys[learn_p]
+-            ref gw = dws[learn_p]
+-            ref stats = der_stats[f]
+-            ref part = der_part[f]
+-            var blocks = (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
++        comptime if ORDERED_FOLD_DERIVS:
++            # every fold's planes in one launch (`_ord_fold_planes_kernel`)
+             if second_order:
+-                launch_approximate[False, True](
+-                    ctx, opts.objective, gy, gw, Int32(r),
+-                    cursors[learn_p][f], Int32(1), opts.kernel_alpha,
+-                    opts.logloss_border, stats, part, Int32(0),
+-                    dummy_mag, Int32(0), blocks,
++                _launch_ord_fold_planes[True](
++                    ctx, opts.objective, dys[learn_p], dws[learn_p],
++                    fast_cat[learn_p], fast_fold_off[0], n_folds, total,
++                    opts.kernel_alpha, opts.logloss_border, sw, sg,
+                 )
+             else:
+-                launch_approximate[False](
+-                    ctx, opts.objective, gy, gw, Int32(r),
+-                    cursors[learn_p][f], Int32(1), opts.kernel_alpha,
+-                    opts.logloss_border, stats, part, Int32(0),
+-                    dummy_mag, Int32(0), blocks,
++                _launch_ord_fold_planes[False](
++                    ctx, opts.objective, dys[learn_p], dws[learn_p],
++                    fast_cat[learn_p], fast_fold_off[0], n_folds, total,
++                    opts.kernel_alpha, opts.logloss_border, sw, sg,
++                )
++        else:
++            for f in range(n_folds):
++                var r = folds[f].quality_evaluate_samples.right
++                # the prefix [0, r) of the learn permutation's own-order copies
++                ref gy = dys[learn_p]
++                ref gw = dws[learn_p]
++                ref stats = der_stats[f]
++                ref part = der_part[f]
++                var blocks = (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
++                if second_order:
++                    launch_approximate[False, True](
++                        ctx, opts.objective, gy, gw, Int32(r),
++                        cursors[learn_p][f], Int32(1), opts.kernel_alpha,
++                        opts.logloss_border, stats, part, Int32(0),
++                        dummy_mag, Int32(0), blocks,
++                    )
++                else:
++                    launch_approximate[False](
++                        ctx, opts.objective, gy, gw, Int32(r),
++                        cursors[learn_p][f], Int32(1), opts.kernel_alpha,
++                        opts.logloss_border, stats, part, Int32(0),
++                        dummy_mag, Int32(0), blocks,
++                    )
++                ctx.enqueue_function[_ord_scatter_planes_kernel](
++                    stats.unsafe_ptr(), sw.unsafe_ptr(), sg.unsafe_ptr(),
++                    Int32(r), Int32(offsets[f]), grid_dim=(_grid(r), 1, 1),
++                    block_dim=(ORDERED_BLOCK, 1, 1),
+                 )
+-            ctx.enqueue_function[_ord_scatter_planes_kernel](
+-                stats.unsafe_ptr(), sw.unsafe_ptr(), sg.unsafe_ptr(),
+-                Int32(r), Int32(offsets[f]), grid_dim=(_grid(r), 1, 1),
+-                block_dim=(ORDERED_BLOCK, 1, 1),
+-            )
+ 
+         times.end(ctx, "ord.derivatives")
+         # 3. the score noise, from the UNBOOTSTRAPPED quality slices
+@@ -2204,7 +2320,9 @@ def fit_ordered(
+         var held_h = List[HostBuffer[DType.float32]]()
+         if fused_sums:
+             var part = ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
+-            var std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
++            var std_split = True
++            comptime if not ORDERED_FOLD_DERIVS:
++                std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
+             if std_split:
+                 ctx.enqueue_function[_ord_std_lanes_kernel](
+                     sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),

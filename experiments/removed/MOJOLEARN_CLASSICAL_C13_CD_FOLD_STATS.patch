@@ -1,0 +1,344 @@
+Restores MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS: the reverse of f4de82db4 (2026-10-07, "Delete C13_CD_FOLD_STATS (measured loser) and unmeasured C18_TILE64/GRAM_PREFETCH; EXPERIMENTS rows")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/bindings/_mojolearn_x_linear_host.mojo b/bindings/_mojolearn_x_linear_host.mojo
+index 53d9d907a..1d62a1dd5 100644
+--- a/bindings/_mojolearn_x_linear_host.mojo
++++ b/bindings/_mojolearn_x_linear_host.mojo
+@@ -4,7 +4,8 @@
+ HOST ONLY: the GPU binding's export names and address contract, running the
+ same x_linear/ source (`fit_dispatch`, `decision_one`) directly on the CPU."""
+ from std.os import abort
+-from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
++from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C13_LOGCV_WEIGHTS
++from x_linear.classical_fold_stats import fold_stat_words
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+@@ -109,6 +110,9 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject,
+     var fpl = List[Float32](capacity=max(n_fp, 1))
+     for i in range(n_fp):
+         fpl.append(Float32(Float64(py=fp[i])))
++    comptime if C13_FOLD_STATS:
++        if Int(py=algo) == 9:
++            n_fw += Int(ipl[3]) * fold_stat_words(d)
+     comptime if C13_LOGCV_WEIGHTS:
+         if Int(py=algo) == ALGO_LOGCV:
+             n_fw += Int(ipl[4]) + 1
+diff --git a/experiments/classical_identical_ideas/linear_controls.mojo b/experiments/classical_identical_ideas/linear_controls.mojo
+index a1cd0c13e..36b1939af 100644
+--- a/experiments/classical_identical_ideas/linear_controls.mojo
++++ b/experiments/classical_identical_ideas/linear_controls.mojo
+@@ -31,9 +31,11 @@ comptime CLASSICAL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # `-D MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF` restores the per-fold passes (arm B
+ # of the isolated confirmation A/B owed on nv and amd).
+ comptime C13_FOLD_STATS = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF"]()
+-# The LassoCV/ElasticNetCV fold cache (C13_CD_FOLD_STATS) was deleted on
+-# lane/classical-cv (2026-10-07): T.C13.only measured it 4.0x/1.4x slower on
+-# Taxi and quality-failing on both vendors (row in docs/apple-fast/EXPERIMENTS.md).
++# The LassoCV/ElasticNetCV fold cache (x_linear/cd.mojo, cd_grid.mojo) is the
++# measured loser above (T.C13.only: Taxi 4.0x/1.4x slower, Taxi quality worse on
++# both vendors; Istella 1.1x slower). It stays opt-in under its own name so the
++# RidgeCV default cannot drag it in; delete it unless a later A/B clears it.
++comptime C13_CD_FOLD_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS"]()
+ comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"]()
+ comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
+ comptime C16_GLM_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C16_GLM_FUSED"]()
+@@ -67,6 +69,8 @@ comptime C27_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_
+ comptime C28_BUCKET_SOLVES = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES"]()
+ 
+ # Additional independent component/residual sub-arms; the header status applies.
++comptime C18_TILE64 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C18_TILE64"]()
++comptime C18_GRAM_PREFETCH = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH"]()
+ comptime C27_FA_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS"]()
+ comptime C27_NORM_VECTOR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_NORM_VECTOR"]()
+ comptime C13_LOGCV_WEIGHTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"]()
+diff --git a/solver/impl/cd.mojo b/solver/impl/cd.mojo
+index cc73925f3..2cc4a0590 100644
+--- a/solver/impl/cd.mojo
++++ b/solver/impl/cd.mojo
+@@ -141,6 +141,7 @@ from gemm.checks.gemm_identical import (
+ from solver.impl.linalg.norm import col_norm_l2_squared
+ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+ from gemm.contract import OP_NT
++from experiments.classical_identical_ideas.linear_controls import C18_TILE64, C18_GRAM_PREFETCH
+ from solver.impl.cd_gram_rule import CD_IDN_GRAM_ON, cd_idn_gram_shape
+ from checks.rtf_seam import rtf_mul_add
+ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
+@@ -730,7 +731,10 @@ def cd_step_kernel(
+ # Every stored word is the same expression of the same words, so no bit
+ # moves. -D MOJOLEARN_CD_FUSED_OFF=1 restores the six-launch sweep.
+ comptime CD_FUSED_LEAVES = 4
+-comptime CD_FUSED_STEPS = 128
++# C18_TILE64 halves the live residual window, independent of data dimensions;
++# every canonical leaf still consumes rows ascending. B retains 128 rows.
++# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++comptime CD_FUSED_STEPS = 64 if C18_TILE64 else 128
+ comptime CD_FUSED_TPB = 128
+ comptime CD_FUSED_PER_THREAD = CD_FUSED_LEAVES * CD_FUSED_STEPS // CD_FUSED_TPB
+ comptime CD_FUSED = (
+@@ -1069,7 +1073,15 @@ def cd_idn_gram_sweep_kernel(
+         if live and tid == 0:
+             sh[unsafe_offset = 1] = Float32(0.0)
+             sh[unsafe_offset = 2] = Float32(0.0)
++        var gram_word = Float32(0)
++        comptime if C18_GRAM_PREFETCH:
++            if tid < p:
++                gram_word = ftz(g.unsafe_load(tid * p))
+         for j in range(p):
++            var next_gram = Float32(0)
++            comptime if C18_GRAM_PREFETCH:
++                if tid < p and j + 1 < p:
++                    next_gram = ftz(g.unsafe_load(tid * p + j + 1))
+             if live and tid == j:
+                 var old = ftz(coef.unsafe_load(j))
+                 var c = ftz(identical_mul_add(ftz(g.unsafe_load(j * p + j)), old, qk))
+@@ -1098,9 +1110,11 @@ def cd_idn_gram_sweep_kernel(
+             if live and tid < p:
+                 qk = ftz(
+                     identical_mul_add(
+-                        sh[unsafe_offset = 0], ftz(g.unsafe_load(tid * p + j)), qk
++                        sh[unsafe_offset = 0], gram_word if C18_GRAM_PREFETCH else ftz(g.unsafe_load(tid * p + j)), qk
+                     )
+                 )
++            comptime if C18_GRAM_PREFETCH:
++                gram_word = next_gram
+             barrier()
+         if live and tid == 0:
+             var cmax = sh[unsafe_offset = 1]
+diff --git a/x_linear/cd.mojo b/x_linear/cd.mojo
+index 561f94765..e4fc35ee4 100644
+--- a/x_linear/cd.mojo
++++ b/x_linear/cd.mojo
+@@ -27,7 +27,8 @@ from x_linear.ops import (
+     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
+     add_acc, axpy_centered,
+ )
+-from experiments.classical_identical_ideas.linear_controls import C18_RESIDUAL_NEXT
++from experiments.classical_identical_ideas.linear_controls import C18_RESIDUAL_NEXT, C13_CD_FOLD_STATS
++from x_linear.classical_fold_stats import fold_stat_words, fold_mean_cell, fold_gram_cell, fold_prep_from_cache
+ from std.sys.info import is_gpu
+ from x_linear.team import Team
+ from x_linear.tops import upper_cell, fold_fa_ix, fold_sq_ix, chain_cfmad_ix
+@@ -265,14 +266,28 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
+     var alphas = d + 4
+     var mse = alphas + l_n * a_n
+     var rr = t.row(0)
++    var cache = fw + d * d + 4 * d + 3 + a_n * (d + 2)
++    comptime if C13_CD_FOLD_STATS and not is_gpu():
++        for f in range(f_n):
++            for col in range(d + 1):
++                fold_mean_cell(x, y, n, d, f, col, fi, cache)
++            for i in range(d + 1):
++                for j in range(i, d + 1):
++                    fold_gram_cell(x, y, n, d, f, i, j, cache)
+     # the grids, on all rows
+-    _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
++    comptime if C13_CD_FOLD_STATS and not is_gpu():
++        fold_prep_from_cache(cache, d, f_n, -1, fw, xm, gg, q, sc)
++    else:
++        _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+     if t.lead():
+         ecv_alphas(res, alphas, fp, l_n, a_n, explicit, eps, fw, q, d, n)
+     t.sync()
+     # the path on each fold
+     for f in range(f_n):
+-        _prep(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
++        comptime if C13_CD_FOLD_STATS and not is_gpu():
++            fold_prep_from_cache(cache, d, f_n, f, fw, xm, gg, q, sc)
++        else:
++            _prep(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
+         var ym = ld(fw, sc)
+         var yn = ld(fw, sc + 1)
+         var rows = Int(ld(fw, sc + 2))
+@@ -335,7 +350,10 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
+         ecv_choose(res, fp, d, l_n, a_n, f_n)
+     t.sync()
+     # the refit on all rows, from zero
+-    _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
++    comptime if C13_CD_FOLD_STATS and not is_gpu():
++        fold_prep_from_cache(cache, d, f_n, -1, fw, xm, gg, q, sc)
++    else:
++        _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+     if not t.lead():
+         return
+     var l1r = ld(res, d + 2)
+diff --git a/x_linear/cd_grid.mojo b/x_linear/cd_grid.mojo
+index b403f2d30..469f4e1c8 100644
+--- a/x_linear/cd_grid.mojo
++++ b/x_linear/cd_grid.mojo
+@@ -22,6 +22,8 @@ below) when the page fits; the per-value kernels otherwise. (The
+ `MOJOLEARN_X_LINEAR_ENETCV_GRID` / `_STAGED` A/B switches were deleted,
+ cpu-gpu-cleanup c-linear.)
+ """
++from experiments.classical_identical_ideas.linear_controls import C13_CD_FOLD_STATS
++from x_linear.classical_fold_stats import fold_stat_words, fold_mean_cell, fold_gram_cell, fold_prep_from_cache
+ from std.gpu import block_idx, block_dim, thread_idx
+ from std.atomic import Atomic
+ from max.gpu.sync import barrier
+@@ -642,6 +644,35 @@ def ecv_span_finish_kernel(
+             span.unsafe_store(2 * f + 1, Int32(0))
+ 
+ 
++def classical_fold_means_kernel(x: FP, y: FP, n: Int32, d: Int32, folds: Int32, fi: Int32, cache: FP, wf: IP, woff: Int32, nonce: Int32):
++    var c = Int(block_idx.x) * ECV_TPB + Int(thread_idx.x)
++    var width = Int(d) + 1
++    if c < Int(folds) * width:
++        fold_mean_cell(x, y, Int(n), Int(d), c // width, c % width, fi != 0, cache)
++    witness_end(wf, woff, nonce)
++
++
++def classical_fold_grams_kernel(x: FP, y: FP, n: Int32, d: Int32, folds: Int32, cache: FP, wf: IP, woff: Int32, nonce: Int32):
++    var c = Int(block_idx.x) * ECV_TPB + Int(thread_idx.x)
++    var width = Int(d) + 1
++    var cells = width * (width + 1) // 2
++    if c < Int(folds) * cells:
++        var pair = upper_cell(c % cells, width)
++        fold_gram_cell(x, y, Int(n), Int(d), c // cells, pair[0], pair[1], cache)
++    witness_end(wf, woff, nonce)
++
++
++def classical_fold_combine_kernel(cache: FP, d: Int32, ip: IP, ew: FP, wf: IP, woff: Int32, nonce: Int32):
++    var p = Int(block_idx.x) * ECV_TPB + Int(thread_idx.x)
++    var dd = Int(d)
++    var folds = ldi(ip, 3)
++    if p <= folds:
++        var lay = _EcvLayout(dd, ldi(ip, 2), folds, ldi(ip, 4))
++        var base = lay.prep(p)
++        fold_prep_from_cache(cache, dd, folds, _fold_of(p, folds), ew, base, base + dd, base + dd + dd * dd, base + 2 * dd + dd * dd)
++    witness_end(wf, woff, nonce)
++
++
+ def enetcv_fit_grid(
+     ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
+     ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
+@@ -652,6 +683,7 @@ def enetcv_fit_grid(
+     var l_n = Int(ip[4])
+     var lay = _EcvLayout(d, a_n, f_n, l_n)
+     var paths = f_n * l_n
++    var dcache = ctx.enqueue_create_buffer[DType.float32](max(f_n * fold_stat_words(d), 1) if C13_CD_FOLD_STATS else 1)
+     var nt = min(LINEAR_TPB, max(32, (d + 31) // 32 * 32))
+     var hip = ip.copy()
+     var hfp = fp.copy()
+@@ -704,29 +736,40 @@ def enetcv_fit_grid(
+         dout.enqueue_fill(Float32(0))
+         dew.enqueue_fill(Float32(0))
+         dtw.enqueue_fill(Float32(0))
+-        if staged:
+-            var tiles = (d + 1 + ECV_TC - 1) // ECV_TC
+-            ctx.enqueue_function[ecv_means_staged_kernel](
+-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+-                wit.p(), Int32(wo), nonce, grid_dim=tiles, block_dim=ECV_NT,
+-            )
+-            wo += tiles
+-            ctx.enqueue_function[ecv_gram_staged_kernel](
+-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+-                wit.p(), Int32(wo), nonce, grid_dim=tiles * (tiles + 1) // 2 * (f_n + 1), block_dim=ECV_NT,
+-            )
+-            wo += tiles * (tiles + 1) // 2 * (f_n + 1)
++        comptime if C13_CD_FOLD_STATS:
++            ctx.enqueue_function[classical_fold_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(f_n), ip[1], dcache.unsafe_ptr(), wit.p(), Int32(wo), nonce,
++                                                             grid_dim=_blocks(f_n * (d + 1)), block_dim=ECV_TPB)
++            wo += _blocks(f_n * (d + 1))
++            ctx.enqueue_function[classical_fold_grams_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(f_n), dcache.unsafe_ptr(), wit.p(), Int32(wo), nonce,
++                                                             grid_dim=_blocks(f_n * (d + 1) * (d + 2) // 2), block_dim=ECV_TPB)
++            wo += _blocks(f_n * (d + 1) * (d + 2) // 2)
++            ctx.enqueue_function[classical_fold_combine_kernel](dcache.unsafe_ptr(), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(), wit.p(), Int32(wo), nonce,
++                                                               grid_dim=_blocks(f_n + 1), block_dim=ECV_TPB)
++            wo += _blocks(f_n + 1)
+         else:
+-            ctx.enqueue_function[ecv_means_kernel](
+-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+-                wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d + 1)), block_dim=ECV_TPB,
+-            )
+-            wo += _blocks((f_n + 1) * (d + 1))
+-            ctx.enqueue_function[ecv_gram_kernel](
+-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+-                wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1)), block_dim=ECV_TPB,
+-            )
+-            wo += _blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1))
++            if staged:
++                var tiles = (d + 1 + ECV_TC - 1) // ECV_TC
++                ctx.enqueue_function[ecv_means_staged_kernel](
++                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
++                    wit.p(), Int32(wo), nonce, grid_dim=tiles, block_dim=ECV_NT,
++                )
++                wo += tiles
++                ctx.enqueue_function[ecv_gram_staged_kernel](
++                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
++                    wit.p(), Int32(wo), nonce, grid_dim=tiles * (tiles + 1) // 2 * (f_n + 1), block_dim=ECV_NT,
++                )
++                wo += tiles * (tiles + 1) // 2 * (f_n + 1)
++            else:
++                ctx.enqueue_function[ecv_means_kernel](
++                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
++                    wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d + 1)), block_dim=ECV_TPB,
++                )
++                wo += _blocks((f_n + 1) * (d + 1))
++                ctx.enqueue_function[ecv_gram_kernel](
++                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
++                    wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1)), block_dim=ECV_TPB,
++                )
++                wo += _blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1))
+         ctx.enqueue_function[ecv_grid_kernel](
+             Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(),
+             wit.p(), Int32(wo), nonce, grid_dim=_blocks(l_n * a_n), block_dim=ECV_TPB,
+diff --git a/x_linear/classical_fold_stats.mojo b/x_linear/classical_fold_stats.mojo
+index 27a276507..314dc2b58 100644
+--- a/x_linear/classical_fold_stats.mojo
++++ b/x_linear/classical_fold_stats.mojo
+@@ -17,6 +17,32 @@ def fold_value(x: FP, y: FP, row: Int, col: Int, d: Int) -> Float32:
+     return ld(y, row) if col == d else ld(x, row * d + col)
+ 
+ 
++def fold_mean_cell(x: FP, y: FP, n: Int, d: Int, f: Int, col: Int, fi: Bool, cache: FP):
++    var base = f * fold_stat_words(d)
++    var count = 0
++    var acc = Float32(0)
++    for row in range(n):
++        if Int(ld(y, n + row)) == f:
++            count += 1
++            if fi:
++                acc = fa(acc, fold_value(x, y, row, col, d))
++    st(cache, base + 1 + col, fd(acc, i2f(count)) if count > 0 and fi else Float32(0))
++    if col == 0:
++        st(cache, base, i2f(count))
++
++
++def fold_gram_cell(x: FP, y: FP, n: Int, d: Int, f: Int, i: Int, j: Int, cache: FP):
++    var base = f * fold_stat_words(d)
++    var mi = ld(cache, base + 1 + i)
++    var mj = ld(cache, base + 1 + j)
++    var acc = Float32(0)
++    for row in range(n):
++        if Int(ld(y, n + row)) == f:
++            acc = fmad(fs(fold_value(x, y, row, i, d), mi), fs(fold_value(x, y, row, j, d), mj), acc)
++    st(cache, base + d + 2 + i * (d + 1) + j, acc)
++    st(cache, base + d + 2 + j * (d + 1) + i, acc)
++
++
+ def retained_count(cache: FP, d: Int, folds: Int, held: Int) -> Float32:
+     var count = Float32(0)
+     for f in range(folds):
+@@ -48,6 +74,19 @@ def retained_cross(cache: FP, d: Int, folds: Int, held: Int, i: Int, j: Int) ->
+     return acc
+ 
+ 
++def fold_prep_from_cache(cache: FP, d: Int, folds: Int, held: Int, fw: FP, xm: Int, gg: Int, q: Int, sc: Int):
++    for i in range(d):
++        st(fw, xm + i, retained_mean(cache, d, folds, held, i))
++        st(fw, q + i, retained_cross(cache, d, folds, held, i, d))
++        for j in range(i, d):
++            var v = retained_cross(cache, d, folds, held, i, j)
++            st(fw, gg + i * d + j, v)
++            st(fw, gg + j * d + i, v)
++    st(fw, sc, retained_mean(cache, d, folds, held, d))
++    st(fw, sc + 1, retained_cross(cache, d, folds, held, d, d))
++    st(fw, sc + 2, retained_count(cache, d, folds, held))
++
++
+ @always_inline
+ def _fold_two_sum(mut value: Float32, mut carry: Float32, word: Float32):
+     var total = fa(value, word)

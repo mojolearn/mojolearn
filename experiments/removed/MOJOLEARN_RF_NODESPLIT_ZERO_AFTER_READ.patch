@@ -1,0 +1,103 @@
+Restores MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ: the reverse of 931143bf8 (2026-10-03, "rf: remove dropped RF_NODESPLIT_ZERO_AFTER_READ (DROPPED-noise; recover lane/apple-fast-trees2@bfd1d7cc6)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+index cad3c82bb..3b8d2bf8a 100644
+--- a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
++++ b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+@@ -401,6 +401,7 @@ from max.gpu.sync import barrier
+ from core.block_reduce import block_flush_count_i32, block_reduce_sum
+ from core.launch_log import log_launch
+ from core.launch_clock import log_launch_ctx
++from core.device_zero import enqueue_fill
+ from core.block_scan import BlockScanElement, pdf_to_cdf
+ from core.scan_by_key import (
+     ScanByKeyElement,
+@@ -791,6 +792,20 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
+ # below is a pure function of its flat index, so the width moves no value.
+ comptime PHASE_SETUP_TPB = 256
+ 
++#: FAST on Apple (trees-apple3): the node split's shadow counter is zeroed
++#: by the kernel that reads it (`publish_local_left_counts_kernel`), so the
++#: batch needs no `nodesplit_reset` launch: one launch fewer per node batch.
++#: `reset_local_left_counts_kernel` also zeroed `splits[i].local_nLeft`,
++#: which no kernel reads before the publish overwrites it. The shadow is
++#: zeroed once when the scratch is built. Same counts, same splits. OPT-IN
++#: until its A/B passes: `-D MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ`.
++comptime NODESPLIT_ZERO_AFTER_READ = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ"]()
++)
++
++
+ def phase_setup_kernel[
+     dtype: DType
+ ](
+@@ -993,7 +1008,7 @@ def reset_local_left_counts_kernel[
+ 
+ 
+ def publish_local_left_counts_kernel[
+-    dtype: DType
++    dtype: DType, zero_after: Bool = False
+ ](
+     splits: MutPointer[Split[dtype], MutAnyOrigin],
+     local_nleft: MutPointer[Int32, MutAnyOrigin],
+@@ -1011,6 +1026,9 @@ def publish_local_left_counts_kernel[
+         var s = splits[unsafe_offset=idx]
+         s.local_nLeft = Int64(Int(local_nleft[unsafe_offset=idx]))
+         splits[unsafe_offset=idx] = s
++        comptime if zero_after:
++            # NODESPLIT_ZERO_AFTER_READ: the next batch's count starts at 0
++            local_nleft[unsafe_offset=idx] = Int32(0)
+ 
+ 
+ @fieldwise_init
+@@ -1508,6 +1526,8 @@ struct NodeSplitScratch[
+         self.local_nleft = ctx.enqueue_create_buffer[DType.int32](
+             max_work_items if max_work_items > 0 else 1
+         )
++        comptime if NODESPLIT_ZERO_AFTER_READ:
++            enqueue_fill(ctx, self.local_nleft, Int32(0))
+         self.states = ctx.enqueue_create_buffer[DType.uint8](
+             scan_by_key_temp_bytes[Self.Ops, Self.TPB](max_slots) + 1
+         )
+@@ -1627,15 +1647,16 @@ def launch_node_split_kernel[
+     # `:155-160` -- `constexpr int reset_tpb = 128;`
+     comptime RESET_TPB = 128
+     var reset_grid = ceildiv(n_work_items, RESET_TPB)
+-    comptime k_reset = reset_local_left_counts_kernel[dtype]
+-    log_launch_ctx(ctx, "nodesplit_reset")
+-    ctx.enqueue_function[k_reset](
+-        splits.unsafe_origin_cast[MutAnyOrigin](),
+-        scratch.local_nleft.unsafe_ptr(),
+-        Int32(n_work_items),
+-        grid_dim=reset_grid if reset_grid > 0 else 1,
+-        block_dim=RESET_TPB,
+-    )
++    comptime if not NODESPLIT_ZERO_AFTER_READ:
++        comptime k_reset = reset_local_left_counts_kernel[dtype]
++        log_launch_ctx(ctx, "nodesplit_reset")
++        ctx.enqueue_function[k_reset](
++            splits.unsafe_origin_cast[MutAnyOrigin](),
++            scratch.local_nleft.unsafe_ptr(),
++            Int32(n_work_items),
++            grid_dim=reset_grid if reset_grid > 0 else 1,
++            block_dim=RESET_TPB,
++        )
+ 
+     # `:161-164`
+     comptime count_sab = 1 if sabotage == 7 else 0
+@@ -1655,7 +1676,9 @@ def launch_node_split_kernel[
+ 
+     # DEVIATION 127: their 64-bit atomic landed straight in the field;
+     # ours widens the shadow into it here, before `:113` reads it.
+-    comptime k_pub = publish_local_left_counts_kernel[dtype]
++    comptime k_pub = publish_local_left_counts_kernel[
++        dtype, NODESPLIT_ZERO_AFTER_READ
++    ]
+     log_launch_ctx(ctx, "nodesplit_publish")
+     ctx.enqueue_function[k_pub](
+         splits.unsafe_origin_cast[MutAnyOrigin](),

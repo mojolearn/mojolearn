@@ -1,0 +1,105 @@
+Restores MOJOLEARN_SGD_PERC_QOLD: the reverse of 170cbedc0 (2026-10-04, "apple-fast verdicts 4: revert SGD_PERC averaging, IVF_COARSE_FAISS_INIT, KNN_FAST_REFINE to opt-in (rab5-perc, rab5-ivfi")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+index ed2dbee61..dd81b05af 100644
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+@@ -149,15 +149,9 @@ gathered on the device (`ivf_gather_rows_kernel`, 2026-10-04); only the
+ seeded ids are made on the host. Moves FAST
+ bits (another start): paired recall check."""
+ 
+-comptime IVF_COARSE_FAISS_INIT = IVF_FAST_RANDOM_INIT and is_defined["MOJOLEARN_IVF_COARSE_FAISS_INIT"]()
+-"""FAST QUALITY FIX candidate (lane apple-fast-q-misc, 2026-10-04), REVERTED
+-the same day: opt-in `-D MOJOLEARN_IVF_COARSE_FAISS_INIT` (the old
+-`-D MOJOLEARN_IVF_COARSE_INIT_QOLD` is harmless). OUTCOME (M3 afc_ab_def,
+-full board size, 1 run per arm, tag rab5-ivfinit): ivf-sq recall_at_10
+-istella 0.60895 -> 0.51065, taxi 0.83325 -> 0.76685 (worse); ivf-filter /
+-ivf-pq istella +0.01, taxi -0.001 to -0.002; time -3% to -21%. The quality
+-loss on ivf-sq decides: IVF_FAST_SEED's k-means++ start is the default
+-again. What it did: the coarse quantizer starts from
++comptime IVF_COARSE_FAISS_INIT = IVF_FAST_RANDOM_INIT and not is_defined["MOJOLEARN_IVF_COARSE_INIT_QOLD"]()
++"""FAST QUALITY FIX (lane apple-fast-q-misc, 2026-10-04; old behavior
++`-D MOJOLEARN_IVF_COARSE_INIT_QOLD`): the coarse quantizer starts from
+ `IVF_FAST_RANDOM_INIT`'s n_lists distinct seeded training rows (FAISS's
+ `Clustering` rule, the board opponent's) and the `IVF_FAST_SEED` k-means++
+ seeding is skipped. Before this, `IVF_FAST_SEED` set INIT_ARRAY first, so
+diff --git a/neighbors/estimator.mojo b/neighbors/estimator.mojo
+index 483e886d1..92de9f2f5 100644
+--- a/neighbors/estimator.mojo
++++ b/neighbors/estimator.mojo
+@@ -128,14 +128,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ from std.math import fma, sqrt
+ 
+ comptime KNN_FAST_REFINE = (
+-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_KNN_FAST_REFINE"]()
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_KNN_REFINE_QOLD"]()
+ )
+-"""FAST QUALITY FIX candidate (lane apple-fast-q-misc, 2026-10-04), REVERTED
+-the same day: opt-in `-D MOJOLEARN_KNN_FAST_REFINE` (the old
+-`-D MOJOLEARN_KNN_REFINE_QOLD` is harmless). OUTCOME (M3 afc_ab_def, full
+-board size, 1 run per arm, tag rab5-knnref): knn recall_at_k identical
+-(istella 0.982434, taxi 0.999773), istella 365.0 -> 378.4 ms (+3.7%), taxi
+--1.5%: no gain. What it did: Euclidean / sqeuclidean
++"""FAST QUALITY FIX (lane apple-fast-q-misc, 2026-10-04; old behavior
++`-D MOJOLEARN_KNN_REFINE_QOLD`). Euclidean / sqeuclidean
+ `knn_search_resident` (what `NearestNeighbors.kneighbors` runs on a GPU)
+ selects a pool of `min(n_index, 4 k, KNN_REFINE_POOL_MAX)` candidates by
+ the expanded float32 distance |q|^2 + |x|^2 - 2 q.x, then re-ranks the pool
+@@ -617,7 +613,7 @@ def knn_search_resident(
+     )
+     comptime if KNN_FAST_REFINE:
+         # FAST quality fix (lane apple-fast-q-misc): pool then exact re-rank;
+-        # opt-in `-D MOJOLEARN_KNN_FAST_REFINE`; default: the expanded-form top-k below.
++        # `-D MOJOLEARN_KNN_REFINE_QOLD` keeps the expanded-form top-k below.
+         if _knn_refine_applies(plan[0], negate_products, k, n_index):
+             return _knn_search_resident_refined(
+                 ctx, index, index_ptr, n_index, queries_ptr, n_queries, n_features, k,
+diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
+index 59fa44906..1f5836b24 100644
+--- a/x_linear/sgd.mojo
++++ b/x_linear/sgd.mojo
+@@ -420,9 +420,9 @@ def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
+     return Float32(1) if v == i2f(c) else Float32(-1)
+ 
+ 
+-#: lane apple-fast-q-clf (2026-10-04), QUALITY-FIX candidate, REVERTED the
+-#: same day (OUTCOME below): opt-in `-D MOJOLEARN_SGD_PERC_AVG` (every vendor
+-#: and the FAST host column); the final iterate is the default. The minibatch Perceptron (constant rate, the batch-SUM step,
++#: lane apple-fast-q-clf (2026-10-04), QUALITY-FIX, FAST default (every vendor
++#: and the FAST host column); -D MOJOLEARN_SGD_PERC_QOLD restores the final
++#: iterate. The minibatch Perceptron (constant rate, the batch-SUM step,
+ #: tol=None never settles on non-separable data) returns the MEAN of its
+ #: epoch-end iterates from epoch max_iter // 2 on (weights and intercept),
+ #: not the last one. Audit: perceptron taxi FAST accuracy 0.46538 vs
+@@ -435,12 +435,7 @@ def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
+ #: is untouched. Applies to loss perceptron at learning_rate 'constant' only,
+ #: never the one-class problem; a fit that stops before epoch max_iter // 2
+ #: keeps its last iterate.
+-#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+-#: rab5-perc): perceptron taxi accuracy 0.76219 (last iterate, A) -> 0.74097
+-#: (averaged, B), worse; 1401.1 -> 1400.3 ms. REVERTED: the last iterate is
+-#: the default again; averaging is opt-in `-D MOJOLEARN_SGD_PERC_AVG` (the old
+-#: `-D MOJOLEARN_SGD_PERC_QOLD` is harmless).
+-comptime SGD_PERC_AVG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_SGD_PERC_AVG"]()
++comptime SGD_PERC_AVG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_SGD_PERC_QOLD"]()
+ 
+ 
+ @always_inline
+diff --git a/x_linear/sgd_avg.mojo b/x_linear/sgd_avg.mojo
+index 241dad6d3..ec53a2da2 100644
+--- a/x_linear/sgd_avg.mojo
++++ b/x_linear/sgd_avg.mojo
+@@ -6,8 +6,8 @@ the minibatch Perceptron's mean of its epoch-end iterates (x_linear/sgd.mojo
+ `_sgd_mb_grid` launches `sgd_avg_acc_kernel` after each epoch from
+ `sgd_perc_avg_from(max_iter)` on and `sgd_avg_fin_kernel` once before the
+ result words. One thread a weight (and one for the intercept): a grid, no
+-host step. FAST only, and since 2026-10-04 (rab5-perc: accuracy 0.76219 ->
+-0.74097, worse) only with the opt-in -D MOJOLEARN_SGD_PERC_AVG."""
++host step. FAST only; nothing launches them under IDENTICAL or with
++-D MOJOLEARN_SGD_PERC_QOLD."""
+ from std.gpu import block_idx, block_dim, thread_idx
+ from x_linear.ops import FP, ld, st, fa, fm
+ 

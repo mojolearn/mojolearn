@@ -1,0 +1,43 @@
+Restores MOJOLEARN_TREES_T31_PACKED_A: the reverse of bad9c74ce (2026-10-07, "trees: drop no-op T31_PACKED_A and duplicate T31_PACKED_B (packed is the default)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_TREES_T31_PACKED_A.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/core/forest_experiments.mojo b/core/forest_experiments.mojo
+index e28221898..5aac592f6 100644
+--- a/core/forest_experiments.mojo
++++ b/core/forest_experiments.mojo
+@@ -7,9 +7,8 @@ VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED. No device-specific arithmeti
+ from std.sys.compile import is_defined
+ from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+-# T31_PACKED_A/B removed (trees-cleanup 2026-10-07): packed nodes are already
+-# the default layout (core/forest_inference.mojo FOREST_PACKED_NODES), so A was
+-# a no-op and B duplicated MOJOLEARN_FOREST_SEPARATE_NODES.
++comptime T31_PACKED_A = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T31_PACKED_A"]()
++comptime T31_PACKED_B = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T31_PACKED_B"]()
+ comptime T32_SHARED_ROWS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T32_SHARED_ROWS"]()
+ comptime T33_COST_SCHEDULE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T33_COST_SCHEDULE"]()
+ comptime T34_CHUNK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T34_CHUNK_FOLD"]()
+diff --git a/core/forest_inference.mojo b/core/forest_inference.mojo
+index 8b3e9800c..4f3406e7f 100644
+--- a/core/forest_inference.mojo
++++ b/core/forest_inference.mojo
+@@ -36,7 +36,7 @@ from core.apple_fast_tree_experiments import (
+     AFT_P02, AFT_P03, AFT_GROVE_BLOCK, AFT_GROVES_PER_BLOCK,
+     AFT_ROW_STAGE_BYTES, AFT_ORDERED_ITEMS, AFT_ARGMAX_ROWS,
+ )
+-from core.forest_experiments import (T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
++from core.forest_experiments import (T31_PACKED_A, T31_PACKED_B, T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
+ 
+ # AFCL-T08: two Apple SIMD groups per RF traversal workgroup instead of
+ # four. Logical 32-tree groves, tree order and all outputs stay unchanged.
+@@ -121,7 +121,7 @@ comptime FOREST_ROW_THREADS_SABOTAGE = is_defined["MOJOLEARN_FOREST_ROW_THREADS_
+ # 1.2171/1.1355/1.2153, repeat0.9942/0.9843/0.9526, refit1.0205/1.0163/1.0359.
+ # Quality/output survival equal; one warmup+score. Mixed/cold regression:
+ # no new promotion; existing cross-mode layout default retained, OFF escape above.
+-comptime FOREST_PACKED_NODES = not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]()
++comptime FOREST_PACKED_NODES = T31_PACKED_A or (not T31_PACKED_B and not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]())
+ 
+ 
+ @always_inline

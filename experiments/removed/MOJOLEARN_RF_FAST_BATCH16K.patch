@@ -1,0 +1,26 @@
+Restores MOJOLEARN_RF_FAST_BATCH16K: the reverse of 288809ef8 (2026-10-03, "rf: remove dropped RF_FAST_BATCH16K arm and the trees-apple3 one-shot A/B job scripts that request it (DROPPED-noise; re")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_RF_FAST_BATCH16K.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/bindings/_mojolearn_rf.mojo b/bindings/_mojolearn_rf.mojo
+index 5db562da9..c0e020133 100644
+--- a/bindings/_mojolearn_rf.mojo
++++ b/bindings/_mojolearn_rf.mojo
+@@ -219,12 +219,13 @@ def _check_criterion(
+ #: default width (4096) is widened, only for trees without a leaf budget
+ #: (max_leaves -1) that may grow past 12 levels, and only as far as `RF_FAST_BATCH_BYTES` of histogram
+ #: workspace per stream allows. OPT-IN until its A/B passes: `-D
+-#: MOJOLEARN_RF_FAST_BATCH32K` (the 16K arm was DROPPED-noise,
+-#: lane/apple-fast-trees2 @ bfd1d7cc6).
++#: MOJOLEARN_RF_FAST_BATCH16K` or `-D MOJOLEARN_RF_FAST_BATCH32K`.
+ comptime RF_FAST_BATCH = 0 if not (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+ ) else (
+-    32768 if is_defined["MOJOLEARN_RF_FAST_BATCH32K"]() else 0
++    32768 if is_defined["MOJOLEARN_RF_FAST_BATCH32K"]() else (
++        16384 if is_defined["MOJOLEARN_RF_FAST_BATCH16K"]() else 0
++    )
+ )
+ comptime RF_FAST_BATCH_BYTES = 536870912
+ comptime RF_CUML_DEFAULT_BATCH = 4096

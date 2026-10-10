@@ -1,0 +1,173 @@
+Restores MOJOLEARN_BGMM_ENT: the reverse of 31b0cf94c (2026-10-03, "bgmm: the k-sized float64 host updates move onto the device (float-float workspace, one scalar block per iteration); def")
+restricted to code files (hunks that name this define).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_BGMM_ENT.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/x_cluster/bgmm.mojo b/x_cluster/bgmm.mojo
+index e8403cb85..641fc968b 100644
+--- a/x_cluster/bgmm.mojo
++++ b/x_cluster/bgmm.mojo
+@@ -1,68 +1,85 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""BayesianGaussianMixture and the EM GaussianMixture, every covariance
+-type. Reference: scikit-learn `sklearn/mixture/_bayesian_mixture.py` (the
+-variational updates, `_estimate_log_weights`, `_estimate_log_prob`,
++"""BayesianGaussianMixture, full covariance (lane/algos-cluster). Reference:
++scikit-learn `sklearn/mixture/_bayesian_mixture.py` (the variational
++updates, `_estimate_log_weights`, `_estimate_log_prob`,
+ `_compute_lower_bound`, `_set_parameters`), `_base.py::fit_predict` (the EM
+ loop, `abs(change) < tol`, the best of `n_init`) and `_gaussian_mixture.py`
+ (`_estimate_gaussian_parameters`, `_compute_precision_cholesky`).
+ 
+-EVERYTHING IS THE DEVICE'S. The n-sized work in float32: the Mahalanobis
+-squares against the upper-triangular precision Cholesky factors
+-(`bodies.gauss_q_cell`), the row log-sum-exp of the E-step
+-(`bodies.resp_row`), the M-step moments (`nk_cell` rows ascending; the
+-means and covariances through the identical GEMM, DEVIATION 5110 revised
+-2026-09-29, `x_cluster/host/moments_gemm.mojo`), the bound's entropy or mean
+-log-likelihood (the float-float fold, lane cgr2-cluster), the default priors
+-(X's mean and covariance as the moments of one all-ones component). The
+-k-sized work in float-float on the device (lane cgr4-device-optim-bgmm,
+-`x_cluster/bgmm_device.mojo`): the Wishart and Dirichlet(-process) updates,
+-the d x d Cholesky and its triangular inverse, digamma and log-gamma, the
+-E-step constants and the lower bound. The state stays in one device
+-workspace for the whole fit; per iteration only the scalar block (the bound,
+-the convergence and error flags) comes home, and the state once at the end.
+-The host column runs the same cells in the same order (`bgmm_host_step`).
+-The k-means start is this library's KMeans through `ClusterOps.kmeans`."""
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
++THE n-SIZED WORK IS THE DEVICE'S, float32: the Mahalanobis squares against
++the upper-triangular precision Cholesky factors (`bodies.gauss_q_cell`), the
++row log-sum-exp of the E-step (`bodies.resp_row`, the portable exp and log),
++and the M-step moments (`nk_cell` rows ascending; the means and covariances
++through the identical GEMM, DEVIATION 5110 revised 2026-09-29,
++`x_cluster/host/moments_gemm.mojo`). THE k-SIZED WORK IS HOST FLOAT64, one source in both
++bindings: the Wishart and Dirichlet(-process) updates, the d x d Cholesky and
++its triangular inverse, digamma and log-gamma (series on the portable
++`identical_log64`), the lower bound (its n-sized sums, the entropy and the
++mean log-likelihood, are the device's float-float fold, lane cgr2-cluster;
++the start's one-hot or random responsibilities are written on the device). Every host product that feeds an add is
++`identical_mul64`. The k-means start is this library's KMeans through
++`ClusterOps.kmeans`. Only covariance_type='full' (NOT_IMPLEMENTED.tsv)."""
++from std.math import sqrt
+ from std.sys.compile import is_defined
++
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_log64, identical_mul64
+ from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
+-from x_cluster.bgmm_device import (
+-    BGMM_CHOL_ERROR,
+-    SC_CONV,
+-    SC_DOFP,
+-    SC_ERR,
+-    SC_HAVE,
+-    SC_LB,
+-    SC_MPP,
+-    SC_N,
+-    SC_REG,
+-    SC_SIZE,
+-    SC_TOL,
+-    SC_WCP,
+-    ST_A1,
+-    ST_A2,
+-    ST_B,
+-    ST_CHOL,
+-    ST_D,
+-    ST_E,
+-    ST_F,
+-    ST_KEEP,
+-    ST_OVR,
+-    ST_PRIOR,
+-    ST_UUT,
+-    ST_W,
+-    BgL,
+-)
+ from x_cluster.bodies import SPLITMIX_GAMMA, SplitMix64
+ from x_cluster.common import greedy_kmeans_pp_indices
+ from x_cluster.ops import ClusterOps
+-from x_cluster.post_bodies import FM_PROD, FM_VAL, ff_of_f64
+-from x_linear.ff import FF, ff_f32
+-
++from x_cluster.post_bodies import FM_PROD, FM_VAL
++
++# Lane cluster-apple3, FAST and the GPU binding only, OPT-IN while unproven
++# (`-D MOJOLEARN_BGMM_ENT=1`): the lower bound's entropy sum(resp * log_resp)
++# from the device as float32 products summed over runs of BGMM_ENT_G cells,
++# the runs added here in Float64. The host read 2 n K floats an iteration and
++# formed the n K Float64 products itself. Another rounding of the same sum.
++comptime BGMM_ENT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ENT"]()
++comptime BGMM_ENT_G = 4
+ # `-D MOJOLEARN_BGMM_ESTEP1=1` (FAST, the GPU binding): the E-step's three
+ # kernels as one launch, a row per thread (`ops.estep`; the same values).
+ comptime BGMM_ESTEP1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ESTEP1"]()
+ 
++comptime LOG2 = 0.6931471805599453
++comptime LOG_2PI = 1.8378770664093453
++
++
++def _ln(x: Float64) -> Float64:
++    return identical_log64(x)
++
++
++def digamma64(x_in: Float64) -> Float64:
++    """psi(x), x > 0: the recurrence up to x >= 6, then the asymptotic series."""
++    var x = x_in
++    var acc = Float64(0)
++    while x < 6.0:
++        acc = acc - 1.0 / x
++        x = x + 1.0
++    var inv = 1.0 / x
++    var inv2 = identical_mul64(inv, inv)
++    var series = identical_mul64(
++        inv2,
++        1.0 / 12.0 - identical_mul64(inv2, 1.0 / 120.0 - identical_mul64(inv2, 1.0 / 252.0 - identical_mul64(inv2, 1.0 / 240.0 - identical_mul64(inv2, 1.0 / 132.0)))),
++    )
++    return acc + _ln(x) - identical_mul64(0.5, inv) - series
++
++
++def lgamma64(x_in: Float64) -> Float64:
++    """log Gamma(x), x > 0: shift to x >= 7 (one product, one log), then Stirling."""
++    var x = x_in
++    var prod = Float64(1)
++    while x < 7.0:
++        prod = identical_mul64(prod, x)
++        x = x + 1.0
++    var inv = 1.0 / x
++    var inv2 = identical_mul64(inv, inv)
++    var series = identical_mul64(
++        inv,
++        1.0 / 12.0 - identical_mul64(inv2, 1.0 / 360.0 - identical_mul64(inv2, 1.0 / 1260.0 - identical_mul64(inv2, 1.0 / 1680.0))),
++    )
++    return identical_mul64(x - 0.5, _ln(x)) - x + 0.5 * LOG_2PI + series - _ln(prod)
++
+ 
+ struct BgmmState(Copyable, Movable):
+     var nk: List[Float64]
+@@ -296,22 +492,14 @@ def bgmm_fit[O: ClusterOps](
+     var ms = ops.zeros(kc * d)
+     var ps = ops.zeros(kc * d * d)
+     var cs = ops.zeros(kc)
+-    var es = ops.zeros(2)
+-    if not (has_m and has_c):
+-        # the default priors: X's mean and np.cov(X.T), the moments of one
+-        # all-ones component, on the device
+-        var ones = ops.zeros(n)
+-        ops.onehot(ops.zeros_i(n), n, 1, True, ones)
+-        var n1 = ops.zeros(1)
+-        var x1 = ops.zeros(d)
+-        var s1 = ops.zeros(d * d)
+-        ops.moments(ones, xs, n, d, 1, Float32(0), n1, x1, s1)
+-        var aux = (1 if has_m else 0) + (2 if has_c else 0) + (4 if pr.cov_type == 3 else 0)
+-        ops.bgmm_step(ST_PRIOR, kc, d, cfg, aux, ws, x1, s1, -1)
++    var ent_dev = False
++    comptime if BGMM_ENT:
++        ent_dev = pr.variational and ops.fast_device()
+     var estep1 = False
+     comptime if BGMM_ESTEP1:
+         estep1 = ops.fast_device()
+-    var ovr = (1 if len(w_init) > 0 else 0) + (2 if len(m_init) > 0 else 0)
++    var n_ent = (n * kc + BGMM_ENT_G - 1) // BGMM_ENT_G
++    var es = ops.zeros(n_ent if ent_dev else 1)
+     var max_lb = Float64(0)
+     var have_best = False
+     var best_iter = 0

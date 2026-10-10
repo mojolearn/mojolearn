@@ -1,0 +1,19 @@
+Restores MOJOLEARN_AFFINITY_FAST_LOOP: the reverse of c5d0ef805 (2026-10-02, "x_cluster cluster2: the ap_loop comment names the define, not the old env switch")
+restricted to code files (hunks that name this define).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index 881c87126..40a44dd61 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -1034,8 +1034,7 @@ def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32,
+ 
+ 
+ # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+-# `-D MOJOLEARN_AFFINITY_FAST_LOOP=1` (AP_FAST_LOOP, asked by
+-# x_cluster/affinity.mojo under the same define):
++# env `MOJOLEARN_AFFINITY_FAST_LOOP=1` (read in x_cluster/affinity.mojo):
+ # the AffinityPropagation iteration on the device for AP_LOOP_BATCH
+ # iterations per host wait. Cause: the driver's `while it < max_iter`
+ # (affinity.mojo) read the n exemplar flags back EVERY iteration

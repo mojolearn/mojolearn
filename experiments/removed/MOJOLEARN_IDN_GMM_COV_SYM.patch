@@ -1,0 +1,262 @@
+Restores MOJOLEARN_IDN_GMM_COV_SYM: the reverse of 9829cdb31 (2026-10-08, "grid-losers-1: delete gmm_cov_sym (grid ge123e6f9: gmm taxi 1.84x/1.45x slower, mean log-likelihood -0.78%); mstep.mojo ")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_IDN_GMM_COV_SYM.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/mixture/checks/mstep.mojo b/mixture/checks/mstep.mojo
+index 389093ab5..351de09f4 100644
+--- a/mixture/checks/mstep.mojo
++++ b/mixture/checks/mstep.mojo
+@@ -130,6 +130,8 @@ from gemm.checks.gemm_identical import (
+     identical_gemm_workspace_max_floats,
+ )
+ from gemm.contract import OP_TN
++#: lane classical-te-gmm (2026-10-07): the symmetric covariance cover (IDENTICAL A/B, default off)
++from mixture.cov_sym import GMM_COV_SYM, gmm_cov_sym_split, gmm_cov_sym_cell
+ from mixture.chol_order import (
+     GMM_IDN_CHOL_TPB,
+     IDN_GMM_FUSED_CHOL,
+@@ -1378,6 +1380,75 @@ def cov_finish_kernel(
+     cov.unsafe_store(kc * d * d + idx, v)
+ 
+ 
++def center_scale_sym_kernel(
++    x: MutPointer[Float32, MutAnyOrigin],
++    means: MutPointer[Float32, MutAnyOrigin],
++    resp: MutPointer[Float32, MutAnyOrigin],
++    diff: MutPointer[Float32, MutAnyOrigin],
++    scaled: MutPointer[Float32, MutAnyOrigin],
++    diff_hi: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++    d_in: Int32,
++    h_in: Int32,
++    kcomp_in: Int32,
++    ncomp_in: Int32,
++):
++    """`center_scale_kernel`'s words (`_center_scale_values`) at the
++    addresses the symmetric cover's two GEMMs read (mixture/cov_sym.mojo):
++    `diff` n x d as before; `scaled`'s region as scaled[:, :h] packed n x h
++    at 0 then scaled[:, h:] packed n x (d-h) at n*h; `diff_hi` =
++    diff[:, h:] packed n x (d-h). Addressing only; no arithmetic moves."""
++    var n = Int(n_in)
++    var d = Int(d_in)
++    var h = Int(h_in)
++    var kc = Int(kcomp_in)
++    var ncomp = Int(ncomp_in)
++    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if idx >= n * d:
++        return
++    var i = idx // d
++    var j = idx % d
++    var values = _center_scale_values(x.unsafe_load(idx), means.unsafe_load(kc * d + j), resp.unsafe_load(i * ncomp + kc))
++    diff.unsafe_store(idx, values[0])
++    if j < h:
++        scaled.unsafe_store(i * h + j, values[1])
++    else:
++        var w = d - h
++        scaled.unsafe_store(n * h + i * w + (j - h), values[1])
++        diff_hi.unsafe_store(i * w + (j - h), values[0])
++
++
++def cov_finish_sym_kernel(
++    raw: MutPointer[Float32, MutAnyOrigin],
++    nk: MutPointer[Float32, MutAnyOrigin],
++    cov: MutPointer[Float32, MutAnyOrigin],
++    d_in: Int32,
++    h_in: Int32,
++    kcomp_in: Int32,
++    reg_covar: Float32,
++    divide_in: Int32,
++):
++    """`cov_finish_kernel` over the symmetric cover (mixture/cov_sym.mojo):
++    cell (a, b) and cell (b, a) both read the kept cell (min, max) at
++    `gmm_cov_sym_cell`, then the same division and diagonal ridge in the
++    same order (DEVIATION 1736). The upper triangle keeps its words; the
++    lower triangle takes the transposed upper words."""
++    var d = Int(d_in)
++    var h = Int(h_in)
++    var kc = Int(kcomp_in)
++    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if idx >= d * d:
++        return
++    var a = idx // d
++    var b = idx % d
++    var v = ftz(raw.unsafe_load(gmm_cov_sym_cell(min(a, b), max(a, b), d, h)))
++    if Int(divide_in) != 0:
++        v = ftz(identical_div(v, ftz(nk.unsafe_load(kc))))
++    if a == b:
++        v = ftz(v + reg_covar)
++    cov.unsafe_store(kc * d * d + idx, v)
++
++
+ def cov_reset_identity_kernel(
+     cov: MutPointer[Float32, MutAnyOrigin],
+     d_in: Int32,
+@@ -1426,7 +1497,14 @@ def gmm_mstep_scratch_floats(n: Int, d: Int, ncomp: Int) -> Int:
+     var raw = ncomp * d
+     if d * d > raw:
+         raw = d * d
+-    return 2 * n * d + raw + 1
++    var total = 2 * n * d + raw + 1
++    comptime if GMM_COV_SYM:
++        # lane classical-te-gmm: `diff`'s columns [h, d) packed n x (d-h) for the
++        # (d-h) x (d-h) block's GEMM (mixture/cov_sym.mojo), after `denom`
++        var h = gmm_cov_sym_split(d)
++        if h > 0:
++            total += n * (d - h)
++    return total
+ 
+ 
+ def gmm_mstep_gemm_workspace_floats(n: Int, d: Int, ncomp: Int) -> Int:
+@@ -1437,6 +1515,16 @@ def gmm_mstep_gemm_workspace_floats(n: Int, d: Int, ncomp: Int) -> Int:
+     var a = identical_gemm_workspace_max_floats(ncomp, d, n)
+     var b = identical_gemm_workspace_max_floats(d, d, n)
+     var w = a if a > b else b
++    comptime if GMM_COV_SYM:
++        # lane classical-te-gmm: the two blocks of the symmetric cover are their own shapes
++        var h = gmm_cov_sym_split(d)
++        if h > 0:
++            var c1 = identical_gemm_workspace_max_floats(h, d, n)
++            var c2 = identical_gemm_workspace_max_floats(d - h, d - h, n)
++            if c1 > w:
++                w = c1
++            if c2 > w:
++                w = c2
+     if w < 1:
+         return 1
+     return w
+@@ -2091,7 +2179,44 @@ def gmm_m_step(
+         if paired:
+             pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](GMM_CENTER_GROUP*n*d))
+             pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](GMM_CENTER_GROUP*n*d))
++    # lane classical-te-gmm (2026-10-07): the symmetric covariance cover (mixture/cov_sym.mojo),
++    # on the plain per-component path only; sym_h = 0 leaves the incumbent launches
++    var sym_h = 0
++    comptime if GMM_COV_SYM:
++        sym_h = gmm_cov_sym_split(d)
++        if sabotage != 0 or fast_gram or paired:
++            sym_h = 0
+     for kc in range(ncomp_loop):
++        comptime if GMM_COV_SYM:
++            if sym_h > 0:
++                # Views of `scratch` as fresh locals (the incumbent's pattern on the paired path below): two
++                # reads of one List inside a single call alias for the compiler; separate locals do not.
++                var sym_sw = d - sym_h
++                # scaled[:, :h] (n x h), scaled[:, h:] (n x (d-h)), diff[:, h:] (n x (d-h)) after denom,
++                # raw rows [0, h) (h x d), raw's (d-h) x (d-h) block from h*d on
++                var sym_scaled_lo = scratch.create_sub_buffer[DType.float32](n * d, n * sym_h)
++                var sym_scaled_hi = scratch.create_sub_buffer[DType.float32](n * d + n * sym_h, n * sym_sw)
++                var sym_diff_hi = scratch.create_sub_buffer[DType.float32](2 * n * d + raw_max + 1, n * sym_sw)
++                var sym_raw_rows = scratch.create_sub_buffer[DType.float32](2 * n * d, sym_h * d)
++                var sym_raw_block = scratch.create_sub_buffer[DType.float32](2 * n * d + sym_h * d, sym_sw * sym_sw)
++                ctx.enqueue_function[center_scale_sym_kernel](
++                    x.unsafe_ptr(), means.unsafe_ptr(), resp.unsafe_ptr(), diff.unsafe_ptr(), scaled.unsafe_ptr(),
++                    sym_diff_hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                    Int32(n), Int32(d), Int32(sym_h), Int32(kc), Int32(ncomp),
++                    grid_dim=(grid_nd, 1, 1),
++                    block_dim=(elem_tpb, 1, 1),
++                )
++                # rows [0, h) of `scaled^T . diff`, every column: h x d over n (OP_TN, the incumbent's words)
++                identical_gemm_into(ctx, sym_raw_rows, sym_scaled_lo, diff, gws, sym_h, d, n, OP_TN)
++                # the (d-h) x (d-h) block: `scaled[:, h:]^T . diff[:, h:]`
++                identical_gemm_into(ctx, sym_raw_block, sym_scaled_hi, sym_diff_hi, gws, d - sym_h, d - sym_h, n, OP_TN)
++                ctx.enqueue_function[cov_finish_sym_kernel](
++                    raw.unsafe_ptr(), nk.unsafe_ptr(), cov.unsafe_ptr(), Int32(d), Int32(sym_h), Int32(kc), reg_covar,
++                    divide_after,
++                    grid_dim=(grid_dd, 1, 1),
++                    block_dim=(elem_tpb, 1, 1),
++                )
++                continue
+         if fast_gram:
+             ctx.enqueue_function[center_sqrt_scale_kernel](
+                 x.unsafe_ptr(),
+diff --git a/mixture/cov_sym.mojo b/mixture/cov_sym.mojo
+new file mode 100644
+index 000000000..6df7d01f4
+--- /dev/null
++++ b/mixture/cov_sym.mojo
+@@ -0,0 +1,58 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""LANE classical-te-gmm (2026-10-07): the SYMMETRIC M-step covariance of
++the Gaussian mixture under IDENTICAL, default OFF, the A/B define
++-D MOJOLEARN_IDN_GMM_COV_SYM. A leaf: no accelerator import, so the device
++M-step (mixture/checks/mstep.mojo) and the host column
++(mixture/host/gmm_host_oracle.mojo) read one switch and one cell map.
++
++Each component's raw covariance `scaled^T . diff` (d x d over n rows) is
++symmetric in exact arithmetic. The device computes a two-block COVER of
++its upper triangle with the shipped identical GEMM as the tile:
++
++    rows [0, h) x every column      `scaled[:, :h]^T . diff`         h x d
++    rows [h, d) x columns [h, d)    `scaled[:, h:]^T . diff[:, h:]`  (d-h)^2
++
++h = d // 2 minimizes h*d + (d-h)^2 (3/4 of d^2 cells, the operands read
++2.5 n d words instead of 2 n d, and one GEMM fewer per component than the
++three-block cover); the cost holds for every d >= 2 (below it there is
++nothing to split, the incumbent path runs). The GEMM contract (gemm/
++IDENTICAL_FP32_CONTRACT.md: a cell's word depends on k and the operand
++words along k only, never on m, n or the plan) makes every kept cell the
++incumbent's word on both GPU vendors. `cov_finish_sym_kernel` then reads
++cell (a, b) and cell (b, a) from the one kept cell (min, max):
++BITS: the upper triangle (a <= b) is unchanged; the lower triangle becomes
++the transposed upper words (the covariance is exactly symmetric). The host
++column mirrors the same cell of its full product, so NVIDIA, AMD and the
++host change together. Switches that take the plain per-component path
++away (the FAST Gram, the paired center kernels MOJOLEARN_IDN_GMM_CENTER_PAIR
++/ C53, a sabotage) leave this one off for that fit.
++"""
++from std.sys.compile import is_defined
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++
++comptime GMM_COV_SYM = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_GMM_COV_SYM"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++
++
++@always_inline
++def gmm_cov_sym_split(d: Int) -> Int:
++    """h: rows [0, h) of the product are computed whole, then the
++    (d-h) x (d-h) block; d // 2 minimizes h*d + (d-h)^2. 0 below d = 2
++    (no split)."""
++    if d < 2:
++        return 0
++    return d // 2
++
++
++@always_inline
++def gmm_cov_sym_cell(a: Int, b: Int, d: Int, h: Int) -> Int:
++    """The raw-buffer word of kept cell (a, b), a <= b: row a < h sits in
++    the h x d block at [0, h*d) in the product's own row-major layout; a
++    row at or past h in the (d-h) x (d-h) block stored from h*d on."""
++    if a < h:
++        return a * d + b
++    return h * d + (a - h) * (d - h) + (b - h)
+diff --git a/mixture/host/gmm_host_oracle.mojo b/mixture/host/gmm_host_oracle.mojo
+index 99b3ebab9..625894d3e 100644
+--- a/mixture/host/gmm_host_oracle.mojo
++++ b/mixture/host/gmm_host_oracle.mojo
+@@ -60,6 +60,7 @@ initialization.
+ from std.memory import bitcast
+ from mixture.meanll_order import gmm_meanll_host
+ from mixture.nk_order import IDN_GMM_NK_LEVELS, gmm_nk_fold_levels
++from mixture.cov_sym import GMM_COV_SYM
+ from mixture.chol_order import gmm_idn_chol_applies, gmm_idn_chol_host
+ 
+ from checks.numerics import (
+@@ -445,7 +446,12 @@ def gmmh_m_step(
+         for idx in range(dd):
+             var a = idx // d
+             var b = idx % d
+-            var v = ftz(rc[idx])
++            var v: Float32
++            comptime if GMM_COV_SYM:
++                # lane classical-te-gmm: the device keeps cell (min, max) and mirrors it (mixture/cov_sym.mojo)
++                v = ftz(rc[min(a, b) * d + max(a, b)])
++            else:
++                v = ftz(rc[idx])
+             v = ftz(identical_div(v, ftz(nk[kc])))
+             if a == b:
+                 v = ftz(v + reg_covar)

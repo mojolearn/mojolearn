@@ -1,0 +1,60 @@
+Restores MOJOLEARN_NN22_EAGER_DKDV_PAIR: the reverse of a1488ca2d (2026-10-07, "attention/norm/rope/swiglu/kv-cache: one switch per idea (IDN_NORM, IDN_ROPE, IDN_TRAIN_SWIGLU, IDN_TRAIN_NO_DECODE_CACH")
+restricted to code files (hunks that name this define).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch  (or git apply -3 when main has moved on).
+First apply experiments/removed/_shared-a1488ca2d.patch: the deletion commit's hunks that name no single define (shared by every define it deleted).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/transformer/checks/transformer_backward.mojo b/transformer/checks/transformer_backward.mojo
+index c8366b60e..bd24c655e 100644
+--- a/transformer/checks/transformer_backward.mojo
++++ b/transformer/checks/transformer_backward.mojo
+@@ -7,6 +7,10 @@ from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY
+ from transformer.experiments.norm_profile import (
+     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+ )
++from transformer.experiments.attention_schedules import (
++    NN22_EAGER_DKDV_PAIR, eager_dkdv_pair_kernel,
++    NN23_ROWDOT_DS, eager_rowdot_ds_kernel,
++)
+ from std.gpu import block_dim, block_idx, thread_idx
+ from std.time import perf_counter_ns
+ from std.memory import bitcast, memcpy
+@@ -2599,6 +2603,22 @@ def bwd_attention_grads(
+         # Caller-owned outputs stay live; the final dv completion wait
+         # drains this kernel too. The intervening work only enqueues.
+ 
++    # NN22 distinct eager/fallback arm. DQ above is unchanged; K/V retain
++    # their complete head/query folds and share only integer traversal.
++    comptime if NN22_EAGER_DKDV_PAIR and not BWD_ANY_SABOTAGE:
++        step_count_launch()
++        ctx.enqueue_function[eager_dkdv_pair_kernel](
++            bst.d_k_cache.unsafe_ptr(), bst.d_v_cache.unsafe_ptr(),
++            bst.d_qk_cell.unsafe_ptr(), fwd.weights.unsafe_ptr(),
++            fwd.q_rope.unsafe_ptr(), bst.d_attn_ctx.unsafe_ptr(),
++            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(hd), Int32(s),
++            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
++            block_dim=(BWD_TPB, 1, 1),
++        )
++        step_count_sync()
++        ctx.synchronize()
++        return
++
+     # ---- dk ------------------------------------------------------------
+     comptime if SAB_B11_DK_VIA_GEMM:
+         # SABOTAGE: `OP_TN` at `(s, hd, l)`, `k' = L`, with the head group
+diff --git a/transformer/experiments/attention_schedules.mojo b/transformer/experiments/attention_schedules.mojo
+index f848f5ecd..548a32b81 100644
+--- a/transformer/experiments/attention_schedules.mojo
++++ b/transformer/experiments/attention_schedules.mojo
+@@ -21,8 +18,9 @@ from checks.numerics import (
+ comptime NN_AB_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ # Each flag below is OFF: full transformer/LM/Samba train-step NVIDIA+AMD
+ # ratios, host/three-GPU words, task quality and sample counts are pending.
+-# NN25 = arms 2 and 4 of MOJOLEARN_IDN_NORM (norm_profile_contract.mojo).
+-comptime NN25_RMS_SPLIT_SCALE = NN_AB_ENABLED and (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 2 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4)
++comptime NN25_RMS_SPLIT_SCALE = NN_AB_ENABLED and is_defined["MOJOLEARN_NN25_RMS_SPLIT_SCALE"]()
++comptime NN26_TRAIN_SWIGLU = NN_AB_ENABLED and is_defined["MOJOLEARN_NN26_TRAIN_SWIGLU"]()
++comptime NN22_EAGER_DKDV_PAIR = NN_AB_ENABLED and is_defined["MOJOLEARN_NN22_EAGER_DKDV_PAIR"]()
+ comptime NN29_RING_PAIR = NN_AB_ENABLED and is_defined["MOJOLEARN_NN29_RING_PAIR"]()
+ 
+ 

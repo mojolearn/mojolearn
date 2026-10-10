@@ -1,0 +1,132 @@
+Restores MOJOLEARN_XPREP_DEVICE_CODES: the reverse of 08b1152e6 (2026-10-09, "postmerge-act-2: delete fg-knn-nb G5 (MOJOLEARN_XPREP_DEVICE_CODES; post-merge A/B nv n0668->n0631, amd a1066->a1091: ga")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_XPREP_DEVICE_CODES.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/bindings/_mojolearn_x_prep.mojo b/bindings/_mojolearn_x_prep.mojo
+index d53dd6a52..c52994d73 100644
+--- a/bindings/_mojolearn_x_prep.mojo
++++ b/bindings/_mojolearn_x_prep.mojo
+@@ -15,7 +15,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ from std.sys.compile import is_defined
+ from std.sys.info import has_apple_gpu_accelerator
+ from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
+-from x_prep.device import run_program_device_ranges_host, XPREP_NO_SLOT_HOP
++from x_prep.device import run_program_device_ranges_host, XPREP_NO_SLOT_HOP, XPREP_DEVICE_CODES
+ from x_prep.folds import I32P, kfold_folds, strat_folds
+ from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py, IDN_NB_CSR, nb_csr_fit_int_py, nb_csr_jll_chk_py
+ from x_prep.blocked import IDN_NB_ONEPASS, IDN_NB_CSR_DENSE
+@@ -133,6 +133,12 @@ def run_ranges_host_binding(arena_addr: PythonObject, prog_addr: PythonObject, o
+     return PythonObject(s)
+ 
+ 
++def device_codes_binding() raises -> PythonObject:
++    """G5 (`-D MOJOLEARN_XPREP_DEVICE_CODES`, x_prep/device.mojo): present only
++    when built with it; GaussianNB.fit's probe for the device label codes."""
++    return PythonObject(1)
++
++
+ def dev_put_binding(addr: PythonObject, n_words: PythonObject) raises -> PythonObject:
+     """A resident copy of n_words host words (core/device_store.mojo); its id."""
+     var a = Int(py=addr)
+@@ -415,9 +421,9 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
+         comptime if XPREP_NO_SLOT_HOP:
+             # lane fg-knn-nb G3 (default off)
+             m.def_function[run_ranges_host_binding]("x_prep_run_ranges_host")
+-        # TOMBSTONE: lane fg-knn-nb G5 `x_prep_device_codes` probe (MOJOLEARN_XPREP_DEVICE_CODES) deleted 2026-10-09
+-        # (lane postmerge-act-2): SLOWER, gaussian-nb istella NV 1.29x / AMD 1.12x, taxi 1.70x / 1.35x (nv n0631, amd a1091),
+-        # accuracy SAME, same digests; code recoverable at main 5c137b55e.
++        comptime if XPREP_DEVICE_CODES:
++            # lane fg-knn-nb G5 (default off)
++            m.def_function[device_codes_binding]("x_prep_device_codes")
+         m.def_function[dev_put_binding]("x_prep_dev_put")
+         m.def_function[dev_free_binding]("x_prep_dev_free")
+         m.def_function[dev_live_binding]("x_prep_dev_live")
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index 2ede4e331..27c239cdb 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -2701,11 +2701,34 @@ def _partial_dev(est, y, n, walk):
+     return _DevCodes(lb, cats, walk)
+ 
+ 
+-#: TOMBSTONE: lane fg-knn-nb G5 (MOJOLEARN_XPREP_DEVICE_CODES, `_fit_device_codes`:
+-#: GaussianNB.fit classes and codes from the device unique_inverse) deleted
+-#: 2026-10-09 (lane postmerge-act-2): SLOWER, gaussian-nb istella NV 1.29x / AMD
+-#: 1.12x, taxi NV 1.70x / AMD 1.35x (nv n0668->n0631, amd a1066->a1091), accuracy
+-#: SAME, same digests; code recoverable at main 5c137b55e.
++#: lane fg-knn-nb G5: the label dtypes whose classes the device
++#: `unique_inverse` returns exactly as the native encoder does (bool, uint64
++#: and object labels keep `encode_labels`).
++_DEVICE_CODE_DTYPES = frozenset(("i1", "i2", "i4", "i8", "u1", "u2", "u4", "f4", "f8"))
++
++
++def _fit_device_codes(est, y, n, mode):
++    """lane fg-knn-nb G5 (-D MOJOLEARN_XPREP_DEVICE_CODES, default off; the
++    binding's `x_prep_device_codes` probe is the switch): a fit's classes and
++    int32 codes from the base binding's DEVICE `unique_inverse` instead of the
++    native host sort, for a numeric label vector of n labels; else None (the
++    caller keeps `_encode_y`). Sets `est.classes_` as `_encode_y` does."""
++    if isinstance(y, (list, tuple, str, bytes)):
++        return None
++    if _optional_prep_entry(_prep_binding(mode), "x_prep_device_codes") is None:
++        return None
++    from ._buffer import _materialize
++    try:
++        arr, _ = _materialize(y, "y")
++    except (TypeError, ValueError):
++        return None
++    dt = arr.dtype.lstrip("<>|=")
++    if dt not in _DEVICE_CODE_DTYPES or arr.size != n or arr.size == 0 or arr.size != max(arr.shape):  # glue: largest axis of the shape
++        return None
++    classes, codes = _labels.unique_inverse(arr)
++    conv = float if dt[0] == "f" else int
++    est.classes_ = [conv(v) for v in classes.tolist()]  # glue: the k class values
++    return codes
+ 
+ 
+ def _stage_partial_codes(pr, codes, mode):
+@@ -2805,9 +2828,12 @@ class GaussianNB(_Classifier):
+     def fit(self, X, y, sample_weight=None):
+         arr = _x2d(X)
+         n, d = arr.shape
+-        codes = self._encode_y(y, n)
+-        K = len(self.classes_)
+         mode = _mode()
++        # lane fg-knn-nb G5 (default off): device label codes when built in
++        codes = _fit_device_codes(self, y, n, mode)
++        if codes is None:
++            codes = self._encode_y(y, n)
++        K = len(self.classes_)
+         pr = _Prog()
+         xo = pr.put(arr)
+         yo = pr.put_codes(codes)
+diff --git a/x_prep/device.mojo b/x_prep/device.mojo
+index 3a30dd4fb..575fd3a70 100644
+--- a/x_prep/device.mojo
++++ b/x_prep/device.mojo
+@@ -390,11 +390,19 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages:
+ #: words reach the same arena offsets before any stage runs).
+ comptime XPREP_NO_SLOT_HOP = is_defined["MOJOLEARN_XPREP_NO_SLOT_HOP"]()
+ 
+-#: TOMBSTONE: G5 (lane fg-knn-nb, MOJOLEARN_XPREP_DEVICE_CODES: GaussianNB.fit
+-#: label codes from the device unique_inverse) deleted 2026-10-09 (lane
+-#: postmerge-act-2): SLOWER, gaussian-nb istella NV 1.29x / AMD 1.12x, taxi NV
+-#: 1.70x / AMD 1.35x (nv n0668->n0631, amd a1066->a1091), accuracy SAME, same
+-#: digests; refused in core/six_lane_experiment_guards.mojo; main 5c137b55e.
++#: G5 (lane fg-knn-nb, 2026-10-09; `-D MOJOLEARN_XPREP_DEVICE_CODES=1`,
++#: DEFAULT OFF, an A/B arm): the binding registers `x_prep_device_codes`, and
++#: GaussianNB.fit (python/mojolearn/_expansion_prep.py `_fit_device_codes`)
++#: takes the classes and the class codes of a numeric label vector from the
++#: base binding's DEVICE `unique_inverse` (core/label_encode_device.mojo: a
++#: device sort, a flag/scan compaction and a gather) instead of the native
++#: HOST encoder (`_labels.encode_labels`: a single-threaded host sort of all
++#: n labels). Cost reasoning: the host sort is O(n log n) serial work on the
++#: fit's critical path (tens of ms at 1M labels); the device sort is a few
++#: parallel passes over 8 MB. Bits: none (the same sorted classes and dense
++#: codes by definition; `-0.0`/`0.0` one class with the first spelling kept
++#: and NaN refused on both routes).
++comptime XPREP_DEVICE_CODES = is_defined["MOJOLEARN_XPREP_DEVICE_CODES"]()
+ 
+ 
+ def run_program_device_ranges_host(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int,

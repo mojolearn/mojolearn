@@ -1,0 +1,53 @@
+Restores MOJOLEARN_GMM_FAST_ESTEP_STACK: the reverse of 7b2638a38 (2026-10-03, "mixture estep: remove dropped GMM_FAST_ESTEP_STACK (DROPPED-slower; recover lane/apple-fast-linear@1c7c213f8)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_GMM_FAST_ESTEP_STACK.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/mixture/checks/estep.mojo b/mixture/checks/estep.mojo
+index fcfa8718c..0b714636b 100644
+--- a/mixture/checks/estep.mojo
++++ b/mixture/checks/estep.mojo
+@@ -79,6 +79,7 @@ from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+ from std.gpu.primitives.warp import shuffle_xor
+ from std.memory import stack_allocation
+ from std.sys.compile import is_defined
++from std.os import getenv
+ from mixture.meanll_order import GMM_MEANLL_CHUNK, gmm_meanll_levels_floats
+ from std.sys.info import has_apple_gpu_accelerator
+ from std.math import exp as fast_exp, log as fast_log
+@@ -951,6 +952,13 @@ comptime GMM_ESTEP_STACK = (
+     and not is_defined["MOJOLEARN_GMM_ESTEP_STACK_OFF"]()
+ )
+ comptime GMM_ESTEP_STACK_MAX_FLOATS = 1 << 28
++#: lane/apple-fast-linear (2026-10-02): `-D MOJOLEARN_GMM_FAST_ESTEP_STACK=1`
++#: takes the stacked form under FAST on Apple too (gmm_e_step below).
++comptime GMM_FAST_ESTEP_STACK = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_GMM_FAST_ESTEP_STACK"]()
++)
+ 
+ 
+ def stack_prec_kernel(
+@@ -1147,6 +1155,21 @@ def gmm_e_step(
+             and sabotage == GMM_SAB_NONE
+             and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
+         )
++    comptime if GMM_FAST_ESTEP_STACK:
++        # lane/apple-fast-linear (2026-10-02): -D MOJOLEARN_GMM_FAST_ESTEP_STACK
++        # takes the stacked form under FAST too, where it was IDENTICAL-only
++        # (GMM_ESTEP_STACK). Cause: past the fused kernel's d <= 32 (Istella
++        # is 100,000 x 200, K = 8) the FAST E-step is K GEMMs of X . P_k
++        # (n x d by d x d, MAX's matmul) and K `mahal_kernel` launches, each
++        # writing and re-reading an n x d scratch; stacked it is one GEMM
++        # against [P_1 .. P_K] (d x K d) and one fold a (row, component).
++        if (
++            not fused
++            and not stacked
++            and sabotage == GMM_SAB_NONE
++            and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
++        ):
++            stacked = True
+     if stacked:
+         var kd = ncomp * d
+         var pstack = ctx.enqueue_create_buffer[DType.float32](d * kd)

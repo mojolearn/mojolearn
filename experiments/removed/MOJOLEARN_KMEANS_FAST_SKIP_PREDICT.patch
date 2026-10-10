@@ -1,0 +1,113 @@
+Restores MOJOLEARN_KMEANS_FAST_SKIP_PREDICT: the reverse of a595988e8 (2026-10-03, "cluster kmeans: remove dropped KMEANS_FAST_SKIP_PREDICT and detail/kmeans_fast.mojo (DROPPED-noise; recover lane/apple-f")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_SKIP_PREDICT.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/cluster/estimator.mojo b/cluster/estimator.mojo
+index 4784789a1..4378eb04e 100644
+--- a/cluster/estimator.mojo
++++ b/cluster/estimator.mojo
+@@ -122,7 +122,8 @@ from cluster.impl.detail.kmeans_transform import (
+ from cluster.impl.detail.min_cluster_distance_compute import (
+     compute_centroid_norms,
+ )
+-from cluster.impl.kmeans import fit_predict, predict
++from cluster.impl.kmeans import fit, fit_predict, predict
++from cluster.impl.detail.kmeans_fast import kmeans_fast_skip_predict_on
+ from core.device_zero import enqueue_fill
+ from core.row_norms import NORM_TPB, row_norm_kernel
+ from cluster.impl.kmeans_params import (
+@@ -461,14 +462,24 @@ def _kmeans_fit_tail(
+     var take_sqrt = Int32(0)
+     if centroid_norms_take_sqrt(metric):
+         take_sqrt = Int32(1)
+-    ctx.enqueue_function[row_norm_kernel](
+-        x_norm.unsafe_ptr(),
+-        x.unsafe_ptr(),
+-        Int32(n_features),
+-        take_sqrt,
+-        grid_dim=(n_samples, 1, 1),
+-        block_dim=(NORM_TPB, 1, 1),
++    # MOJOLEARN_KMEANS_FAST_SKIP_PREDICT=1 (lane/apple-fast-core, 2026-10-02,
++    # FAST + Apple only; `detail/kmeans_fast.mojo`): with one restart the
++    # fit's own post-loop assignment (`kmeans_fit_main_traced`, their
++    # `:500-537`) already wrote the labels against the FINAL centroids, so
++    # `fit_predict`'s second assignment, and this `x_norm` pass that feeds
++    # only it, are skipped. Same kernel, same inputs: same labels.
++    var skip_predict = kmeans_fast_skip_predict_on() and (
++        n_init == 1 or init == INIT_ARRAY
+     )
++    if not skip_predict:
++        ctx.enqueue_function[row_norm_kernel](
++            x_norm.unsafe_ptr(),
++            x.unsafe_ptr(),
++            Int32(n_features),
++            take_sqrt,
++            grid_dim=(n_samples, 1, 1),
++            block_dim=(NORM_TPB, 1, 1),
++        )
+     ctx.synchronize()
+ 
+     var params = KMeansParams.default()
+@@ -481,6 +492,24 @@ def _kmeans_fit_tail(
+     params.n_init = n_init
+     params.oversampling_factor = oversampling_factor
+ 
++    if skip_predict:
++        var r = fit(
++            ctx,
++            x,
++            weights,
++            centroids,
++            labels,
++            params,
++            n_samples,
++            n_features,
++            Float32(sum_scale),
++            Float32(weight_scale),
++        )
++        ctx.enqueue_copy(dst_ptr=out_centroids_ptr, src_buf=centroids)
++        ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
++        ctx.synchronize()
++        return KMeansFitResult(r.inertia, r.n_iter, sum_scale, weight_scale)
++
+     var result = fit_predict(
+         ctx,
+         x,
+diff --git a/cluster/impl/detail/kmeans_fast.mojo b/cluster/impl/detail/kmeans_fast.mojo
+new file mode 100644
+index 000000000..5ae2899c9
+--- /dev/null
++++ b/cluster/impl/detail/kmeans_fast.mojo
+@@ -0,0 +1,31 @@
++"""FAST + Apple opt-in switches for the k-means fit (lane/apple-fast-core,
++2026-10-02). Every switch is a `-D MOJOLEARN_<NAME>` define read with
++`is_defined` inside `KMEANS_FAST_APPLE` (no env read: that was a host step)
++and defaults OFF; nothing here is compiled under IDENTICAL, whose bits never
++move. The device-scale switch this file first carried is gone: main's
++`plan_sum_scale(ctx, x, ...)` forms the fixed-point scale on the device.
++
++    -D MOJOLEARN_KMEANS_FAST_SKIP_PREDICT
++        `kmeans_fit` runs `fit_predict`: the fit, whose loop already ends
++        with a fresh assignment against the FINAL centroids
++        (`kmeans_fit_main_traced`, `:500-537`), then `predict`, the same
++        assignment again over the same `x`, `x_norm` and centroids. With one
++        restart (`n_init == 1`, the board's setting) the second pass writes
++        the labels the first wrote, so it and the `x_norm` pass that feeds
++        it are skipped. Same kernel on the same inputs: same labels.
++"""
++from max.gpu.host import DeviceBuffer, DeviceContext
++from std.gpu import block_dim, block_idx, thread_idx
++from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++
++comptime KMEANS_FAST_APPLE = (
++    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
++)
++
++def kmeans_fast_skip_predict_on() -> Bool:
++    comptime if not (KMEANS_FAST_APPLE and is_defined["MOJOLEARN_KMEANS_FAST_SKIP_PREDICT"]()):
++        return False
++    else:
++        return True

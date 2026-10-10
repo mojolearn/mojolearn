@@ -1,0 +1,259 @@
+Shared hunks of deletion commit 9decae29f ("gap-cls1: BAYES/ARD CLS1 STATS/PARTS/BATCH, RIDGE CLS1 CODES, NC CLS1 LABELS FAST+Apple default (_OFF); drop RIDGE/NC PR"): code hunks that name none of the defines it deleted.
+Apply before any experiments/removed/<DEFINE>.patch that names this file. See docs/TOMBSTONES.md.
+
+diff --git a/bindings/_mojolearn_x_linear.mojo b/bindings/_mojolearn_x_linear.mojo
+index 9f71a6f79..61c01e85a 100644
+--- a/bindings/_mojolearn_x_linear.mojo
++++ b/bindings/_mojolearn_x_linear.mojo
+@@ -19,8 +19,8 @@ from checks.vendor import COMPILED_VENDOR
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from std.sys.info import has_apple_gpu_accelerator
+ from std.sys.compile import is_defined
+-from x_linear.ops import FP
+-from x_linear.device import fit_device, decision_device
++from x_linear.ops import FP, IP
++from x_linear.device import fit_device, decision_device, decision_codes_device
+ from x_linear.cls1_fast import cls1_flags
+ 
+ 
+@@ -105,6 +105,25 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
+     return PythonObject(n * k)
+ 
+ 
++def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
++                           out_addr: PythonObject) raises -> PythonObject:
++    """lane/apple-fast-gap-cls1: the int32 class code per row (dims [n, d, k])."""
++    var n = Int(py=dims[0])
++    var d = Int(py=dims[1])
++    var k = Int(py=dims[2])
++    if n < 0 or d < 0 or k <= 0:
++        raise Error("x_linear: positive dimensions required")
++    var x = _fp(Int(py=x_addr))
++    var wb = _fp(Int(py=wb_addr))
++    var oa = Int(py=out_addr)
++    if oa == 0:
++        raise Error("x_linear: null int32 buffer address")
++    var out = IP(unsafe_from_address=oa)
++    with GILReleased(Python()):
++        decision_codes_device(x, wb, n, d, k, out)
++    return PythonObject(n)
++
++
+ def cls1_flags_binding() raises -> PythonObject:
+     return PythonObject(cls1_flags())
+ 
+@@ -136,6 +155,7 @@ def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
+         m.def_function[fit_binding]("x_linear_fit")
+         m.def_function[decision_binding]("x_linear_decision")
+         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
++        m.def_function[decision_codes_binding]("x_linear_decision_codes")
+         m.def_function[cls1_flags_binding]("x_linear_cls1_flags")
+         m.def_function[vendor_binding]("x_linear_vendor")
+         m.def_function[py2mojo_rows_binding]("py2mojo_rows")
+diff --git a/neighbors/impl/detail/fast_mma_knn.mojo b/neighbors/impl/detail/fast_mma_knn.mojo
+index b912748bc..e208a45cb 100644
+--- a/neighbors/impl/detail/fast_mma_knn.mojo
++++ b/neighbors/impl/detail/fast_mma_knn.mojo
+@@ -400,6 +423,8 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
+     d_in: Int32,
+     k_in: Int32,
+     slice_rows_in: Int32,
++    seed: MutPointer[Float32, MutAnyOrigin],
++    seed_mode: Int32,
+ ):
+     """`fast_mma_partial_kernel` past MQ_MAX_D features (lane/apple-fast-
+     classical, 2026-10-02): the shared tile holds MQ_T index rows by MQ_DC
+@@ -430,6 +455,13 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
+     var bi = SIMD[DType.uint32, K * A](0xFFFFFFFF)
+     var worst = SIMD[DType.float32, A](MQ_BIG)
+     var thr = SIMD[DType.float32, A](MQ_BIG)
++    if Int(seed_mode) == 2:
++        # KNN_CLS1_PRESEED: start at the query's seeded bound (raw units)
++        comptime for a in range(A):
++            var qs = q0 + 8 * a + frow
++            if qs < Int(n_queries_in):
++                var b0 = seed[unsafe_offset = qs]
++                thr[a] = min(MQ_BIG, b0 + abs(b0) * Float32(1.52587890625e-05) + Float32(1.0e-30))
+ 
+     var lo = s * Int(slice_rows_in)
+     var hi = min(ni, lo + Int(slice_rows_in))
+@@ -553,6 +585,17 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
+                                 bi[a * K + t] = bi[a * K + t + st]
+                                 bd[a * K + t + st] = td
+                                 bi[a * K + t + st] = ti
++    if Int(seed_mode) == 1:
++        # KNN_CLS1_PRESEED's first pass: the k-th raw distance of the folded list
++        comptime for a in range(A):
++            var q = q0 + 8 * a + frow
++            if q < nq and sub == 0:
++                var kth = MQ_BIG
++                comptime for t in range(K):
++                    if t == k - 1:
++                        kth = bd[a * K + t]
++                seed[unsafe_offset = q] = kth
++        return
+     comptime for a in range(A):
+         var q = q0 + 8 * a + frow
+         if q < nq and sub == 0:
+@@ -674,7 +717,10 @@ def fast_mma_knn(
+         a_sel = 1
+     var QPB = MQ_SG * 8 * a_sel
+     var qblocks = (n_queries + QPB - 1) // QPB
+-    var slices = 480 // qblocks
++    var slice_target = 480
++    comptime if KNN_CLS1_SLICES2:
++        slice_target = 960
++    var slices = slice_target // qblocks
+     if slices < 1:
+         slices = 1
+     if slices > 64:
+@@ -690,34 +736,68 @@ def fast_mma_knn(
+     var part_d = ctx.enqueue_create_buffer[DType.float32](slices * n_queries * k)
+     var part_i = ctx.enqueue_create_buffer[DType.uint32](slices * n_queries * k)
+     var inorm = ctx.enqueue_create_buffer[DType.float32](max(n_index, 1))
++    var seed_mode = 0
++    var seed = ctx.enqueue_create_buffer[DType.float32](max(n_queries, 1) if KNN_CLS1_PRESEED else 1)
+     if n_features > MQ_MAX_D:
+         ctx.enqueue_function[fast_mma_norms_kernel](
+             index.unsafe_ptr(), inorm.unsafe_ptr(), Int32(n_index), Int32(n_features),
+             grid_dim=((n_index + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+         )
++        comptime if KNN_CLS1_PRESEED:
++            if k <= 64 and n_index >= 4 * MQ_SEED_ROWS:
++                # the seed pass: rows [0, MQ_SEED_ROWS) as one slice
++                if k <= 8:
++                    ctx.enqueue_function[fast_mma_bigd_kernel[8, 1]](
++                        queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
++                        part_i.unsafe_ptr(), Int32(n_queries), Int32(MQ_SEED_ROWS), Int32(n_features), Int32(k),
++                        Int32(MQ_SEED_ROWS), seed.unsafe_ptr(), Int32(1), grid_dim=(qblocks, 1, 1), block_dim=(MQ_TPB, 1, 1),
++                    )
++                elif k <= 16:
++                    ctx.enqueue_function[fast_mma_bigd_kernel[16, 1]](
++                        queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
++                        part_i.unsafe_ptr(), Int32(n_queries), Int32(MQ_SEED_ROWS), Int32(n_features), Int32(k),
++                        Int32(MQ_SEED_ROWS), seed.unsafe_ptr(), Int32(1), grid_dim=(qblocks, 1, 1), block_dim=(MQ_TPB, 1, 1),
++                    )
++                elif k <= 32:
++                    ctx.enqueue_function[fast_mma_bigd_kernel[32, 1]](
++                        queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
++                        part_i.unsafe_ptr(), Int32(n_queries), Int32(MQ_SEED_ROWS), Int32(n_features), Int32(k),
++                        Int32(MQ_SEED_ROWS), seed.unsafe_ptr(), Int32(1), grid_dim=(qblocks, 1, 1), block_dim=(MQ_TPB, 1, 1),
++                    )
++                else:
++                    ctx.enqueue_function[fast_mma_bigd_kernel[64, 1]](
++                        queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
++                        part_i.unsafe_ptr(), Int32(n_queries), Int32(MQ_SEED_ROWS), Int32(n_features), Int32(k),
++                        Int32(MQ_SEED_ROWS), seed.unsafe_ptr(), Int32(1), grid_dim=(qblocks, 1, 1), block_dim=(MQ_TPB, 1, 1),
++                    )
++                seed_mode = 2
+         if k <= 8:
+             ctx.enqueue_function[fast_mma_bigd_kernel[8, 1]](
+                 queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
+                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+-                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
++                Int32(slice_rows), seed.unsafe_ptr(), Int32(seed_mode), grid_dim=(qblocks, slices, 1),
++                block_dim=(MQ_TPB, 1, 1),
+             )
+         elif k <= 16:
+             ctx.enqueue_function[fast_mma_bigd_kernel[16, 1]](
+                 queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
+                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+-                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
++                Int32(slice_rows), seed.unsafe_ptr(), Int32(seed_mode), grid_dim=(qblocks, slices, 1),
++                block_dim=(MQ_TPB, 1, 1),
+             )
+         elif k <= 32:
+             ctx.enqueue_function[fast_mma_bigd_kernel[32, 1]](
+                 queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
+                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+-                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
++                Int32(slice_rows), seed.unsafe_ptr(), Int32(seed_mode), grid_dim=(qblocks, slices, 1),
++                block_dim=(MQ_TPB, 1, 1),
+             )
+         else:
+             ctx.enqueue_function[fast_mma_bigd_kernel[64, 1]](
+                 queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
+                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+-                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
++                Int32(slice_rows), seed.unsafe_ptr(), Int32(seed_mode), grid_dim=(qblocks, slices, 1),
++                block_dim=(MQ_TPB, 1, 1),
+             )
+     elif n_features <= 8:
+         if k <= 8:
+@@ -761,3 +841,4 @@ def fast_mma_knn(
+     _ = part_d^
+     _ = part_i^
+     _ = inorm^
++    _ = seed^
+diff --git a/python/mojolearn/_expansion_linear.py b/python/mojolearn/_expansion_linear.py
+index 2df904045..c6ab5bc4e 100644
+--- a/python/mojolearn/_expansion_linear.py
++++ b/python/mojolearn/_expansion_linear.py
+@@ -158,7 +158,7 @@ def _py2mojo_proba(est, mode, scores, k):
+     return out
+ 
+ 
+-_CLS1_RIDGE_CODES = 1
++_CLS1_RIDGE_CODES, _CLS1_RIDGE_PREDICT = 1, 2
+ 
+ 
+ def _cls1_flags(est):
+diff --git a/x_linear/cls1_fast.mojo b/x_linear/cls1_fast.mojo
+index d210541a9..2cb88810f 100644
+--- a/x_linear/cls1_fast.mojo
++++ b/x_linear/cls1_fast.mojo
+@@ -1,13 +1,9 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """lane/apple-fast-gap-cls1 (2026-10-03): FAST + Apple build-time candidates
+-for the M3 FAST board rows where we trailed the best opponent
+-(bayesian-ridge, ard, ridge-clf taxi). Every switch is the FAST + Apple
+-default since the M3 A/B (n=1, quality identical: bayesian-ridge taxi
+-102 -> 15.3 ms with all three BAYES switches, ard taxi 14.4 -> 8.3 ms with
+-all three ARD switches, ridge-clf taxi 120 -> 19.0 ms with CODES), off with
+--D <NAME>_OFF, and compiles to nothing on IDENTICAL or off Apple. Notes:
+-docs/apple-fast/notes/gap-cls1.md.
++for the M3 FAST board rows where we trail the best opponent (bayesian-ridge,
++ard, ridge-clf taxi). Every switch is default OFF and compiles to nothing
++on IDENTICAL or off Apple. Notes: docs/apple-fast/notes/gap-cls1.md.
+ 
+   * MOJOLEARN_BAYES_FAST_CLS1_STATS: BayesianRidge's means, Gram and X'y
+     from the shared grid Gram (x_linear/fast_gram.mojo) in place of the
+@@ -62,11 +62,13 @@ comptime C1_BAYES_STATE = 16
+ 
+ 
+ def cls1_flags() -> Int:
+-    """Bit 1: RIDGE_CLS1_CODES (the Python side reads it from the binding,
+-    so an A/B of two builds needs no env)."""
++    """Bit 1: RIDGE_CLS1_CODES; bit 2: RIDGE_CLS1_PREDICT (the Python side
++    reads these from the binding, so an A/B of two builds needs no env)."""
+     var f = 0
+     comptime if RIDGE_CLS1_CODES:
+         f |= 1
++    comptime if RIDGE_CLS1_PREDICT:
++        f |= 2
+     return f
+ 
+ 
+diff --git a/x_linear/device.mojo b/x_linear/device.mojo
+index 71cb3bb2b..509031274 100644
+--- a/x_linear/device.mojo
++++ b/x_linear/device.mojo
+@@ -59,7 +59,7 @@ from x_linear.enetcv_fast import enetcv_fast
+ from x_linear.fast_gram import fast_gram_into, XL_RIDGE_FAST_GRAM
+ from x_linear.cls1_fast import (
+     C1_TPB, C1_BATCH, C1_BAYES_STATE, BAYES_CLS1_STATS, BAYES_CLS1_PARTS, BAYES_CLS1_BATCH,
+-    RIDGE_CLS1_CODES, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
++    RIDGE_CLS1_CODES, RIDGE_CLS1_PREDICT, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
+ )
+ from x_linear.dispatch import ALGO_LOGCV
+ from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
+@@ -3404,7 +3454,7 @@ def fit_device(
+         if bayes_like:
+             # STATS: BayesianRidge (unweighted) on main's grid driver only;
+             # ARD keeps main's moments grid (its X'y pass is the team's)
+-            # lane/apple-fast-gap-cls1: BAYES_CLS1_STATS (FAST + Apple default) turns the same path on
++            # lane/apple-fast-gap-cls1: -D MOJOLEARN_BAYES_FAST_CLS1_STATS turns the same path on
+             if algo == ALGO_BAYES and n > 0 and d > 0 and (is_defined["MOJOLEARN_KERNEL_FAST_BAYES_STATS"]() or BAYES_CLS1_STATS):
+                 kstats = True
+                 grid_gram = True

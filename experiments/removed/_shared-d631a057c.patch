@@ -1,0 +1,769 @@
+Shared hunks of deletion commit d631a057c ("trees: delete duplicate/loser defines (IDN_RF_ROWS_SORTED, IDN_RF_TASK_ROWS256, IDN_RF_DEVICE_LOOP_K*, IDN_ET_BINNED_U16"): code hunks that name none of the defines it deleted.
+Apply before any experiments/removed/<DEFINE>.patch that names this file. See docs/TOMBSTONES.md.
+
+diff --git a/ensemble/tree_identical_ideas.mojo b/ensemble/tree_identical_ideas.mojo
+index 8d6ab323c..18d814348 100644
+--- a/ensemble/tree_identical_ideas.mojo
++++ b/ensemble/tree_identical_ideas.mojo
+@@ -40,8 +40,8 @@ comptime RF_SAMPLE_ARM = get_defined_int["MOJOLEARN_TREES_RF_SAMPLE", -1]()
+ comptime RF_SAMPLE_SORTED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 1
+ comptime RF_SAMPLE_FUSED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 2
+ # T11 device frontier levels per header drain: one int sweep
+-# `-D MOJOLEARN_TREES_T11_LEVELS=1|2|4|8|16` (absent = incumbent K=4; the
+-# older IDN K1/K2/K8 defines are deleted). Scheduling only, no bit moves. RF K1/K2/K8 already
++# `-D MOJOLEARN_TREES_T11_LEVELS=1|2|4|8|16` (absent = incumbent K=4, or the
++# older K1/K2/K8 arms). Scheduling only, no bit moves. RF K1/K2/K8 already
+ # measured "no combined improvement" (forest-final-decisions 2026-10-05), so
+ # the RF grid should start at 16; ET has no such record.
+ comptime T11 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T11_LEVELS"]()
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo b/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
+index d54ae18b9..e3a091fa2 100644
+--- a/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
+@@ -79,6 +79,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
+     build_workload_info,
+     float_gain_key,
+     node_feature_score_host,
++    node_feature_score_host_binned,
+     ScoredCandidate,
+     leaf_kernel,
+     node_split_kernel,
+@@ -1235,6 +1236,7 @@ def _exact_candidate(
+     min_samples_leaf: Int32,
+     seed: UInt64,
+     tree_id: Int32,
++    bins: HostBins,
+ ) -> SplitExact:
+     """One (node, feature) cell as the device's reduction receives it:
+     `node_feature_score_host` then `score_to_candidate_kernel`'s policy (a
+@@ -1246,21 +1248,38 @@ def _exact_candidate(
+         seed, UInt32(Int(tree_id)), UInt32(Int(item.idx)), UInt32(Int(col))
+     )
+     var cell: ScoredCandidate
+-    cell = node_feature_score_host(
+-        dataset.data.unsafe_origin_cast[MutAnyOrigin](),
+-        dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
+-        labels_q,
+-        Int(dataset.m),
+-        Int(item.instances.begin),
+-        Int(item.instances.count),
+-        Int(col),
+-        node_feature_min_max(dataset, item, col),
+-        key,
+-        n_acc,
+-        is_classification,
+-        Int(min_samples_leaf),
+-        True,
+-    )
++    if bins.on and not is_classification:
++        # `IDN_ET_BINNED`: the binned range and score passes.
++        cell = node_feature_score_host_binned(
++            bins.codes.unsafe_origin_cast[MutAnyOrigin](),
++            (bins.q + Int(col) * ET_BINS).unsafe_origin_cast[MutAnyOrigin](),
++            bins.nb[unsafe_offset = Int(col)],
++            dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
++            labels_q,
++            Int(dataset.m),
++            Int(item.instances.begin),
++            Int(item.instances.count),
++            Int(col),
++            bins.extent(dataset, item, col),
++            key,
++            Int(min_samples_leaf),
++        )
++    else:
++        cell = node_feature_score_host(
++            dataset.data.unsafe_origin_cast[MutAnyOrigin](),
++            dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
++            labels_q,
++            Int(dataset.m),
++            Int(item.instances.begin),
++            Int(item.instances.count),
++            Int(col),
++            node_feature_min_max(dataset, item, col),
++            key,
++            n_acc,
++            is_classification,
++            Int(min_samples_leaf),
++            True,
++        )
+     if cell.status != SCORE_STATUS_SCORED:
+         return SplitExact()
+     var acc_left = cell.acc_left.copy()
+@@ -1310,6 +1329,7 @@ def _exact_node_split(
+     min_samples_leaf: Int32,
+     seed: UInt64,
+     tree_id: Int32,
++    bins: HostBins,
+ ) -> Split:
+     """The device's per-node winner: the candidates of `colids` reduced by
+     `SplitExact.update` under `split_tie_salt_for(tree, node)`, then the
+@@ -1320,33 +1340,38 @@ def _exact_node_split(
+     for ci in range(len(colids)):
+         var cand = _exact_candidate(
+             dataset, labels_q, item, colids[ci], n_acc, is_classification,
+-            criterion, min_samples_leaf, seed, tree_id,
++            criterion, min_samples_leaf, seed, tree_id, bins,
+         )
+         _ = acc.update(cand, SPLIT_SAB_NONE, tie_salt)
+     var out = acc.split
++    if bins.on and not is_classification and out.colid >= 0:
++        # `et_code_threshold_kernel`: the stored threshold is the border.
++        out.quesval = bins.stored_threshold(out.colid, out.quesval)
+     if acc.key.valid == 0 or out.colid < 0:
+         out.best_metric_val = Float32.MIN_FINITE
+     return out
+ 
+ 
+ def _exact_extent(
+-    dataset: Dataset, item: NodeWorkItem, col: Int32,
++    dataset: Dataset, item: NodeWorkItem, col: Int32, bins: HostBins,
+     is_classification: Bool,
+ ) -> FeatureRange:
+-    """The range pass's cell: the float min and max (the binned
+-    `IDN_ET_BINNED` arm was deleted by lane trees-small, 2026-10-07)."""
++    """The range pass's cell: borders of the node's codes under
++    `IDN_ET_BINNED` regression, the float min and max otherwise."""
++    if bins.on and not is_classification:
++        return bins.extent(dataset, item, col)
+     return node_feature_min_max(dataset, item, col)
+ 
+ 
+ def _exact_rescue_columns_host(
+-    dataset: Dataset, item: NodeWorkItem,
++    dataset: Dataset, item: NodeWorkItem, bins: HostBins,
+     is_classification: Bool,
+ ) raises -> List[Int32]:
+     """`rescue_columns` over `_exact_extent` (the device survey runs the
+     same range pass the search runs)."""
+     var out = List[Int32]()
+     for col in range(Int(dataset.n)):
+-        var extent = _exact_extent(dataset, item, Int32(col), is_classification)
++        var extent = _exact_extent(dataset, item, Int32(col), bins, is_classification)
+         if not node_feature_is_constant(extent, item.instances.count):
+             out.append(Int32(col))
+     return out^
+@@ -1354,12 +1379,12 @@ def _exact_rescue_columns_host(
+ 
+ def _exact_all_constant_host(
+     dataset: Dataset, item: NodeWorkItem, colids: List[Int32],
+-    is_classification: Bool,
++    bins: HostBins, is_classification: Bool,
+ ) -> Bool:
+     """`node_nonconstant_flag_kernel`'s per-node answer: no sampled column
+     varied on this node's rows."""
+     for ci in range(len(colids)):
+-        var extent = _exact_extent(dataset, item, colids[ci], is_classification)
++        var extent = _exact_extent(dataset, item, colids[ci], bins, is_classification)
+         if not node_feature_is_constant(extent, item.instances.count):
+             return False
+     return True
+@@ -1434,12 +1459,13 @@ def train_tree_exact(
+     is_classification: Bool,
+     n_acc: Int,
+     inv_scale: Float32,
++    bins: HostBins,
+ ) raises -> TreeMetaDataNode[DType.float32]:
+     """cpu4-forest: the HOST COLUMN body lives in `train_tree_exact_host` (the checker's
+     host-column naming); this name is kept for its callers."""
+     return train_tree_exact_host(
+         dataset, labels_q, params, tree_id, seed, is_classification, n_acc,
+-        inv_scale,
++        inv_scale, bins,
+     )
+ 
+ 
+@@ -1452,6 +1478,7 @@ def train_tree_exact_host(
+     is_classification: Bool,
+     n_acc: Int,
+     inv_scale: Float32,
++    bins: HostBins,
+ ) raises -> TreeMetaDataNode[DType.float32]:
+     """One tree grown as the device grows it, on the host: the block comment
+     above. `labels_q` is the device's label plane (class ids for a
+@@ -1463,7 +1490,7 @@ def train_tree_exact_host(
+         # (et-clf-entropy-bestfirst, 2026-09-15): see the function below.
+         return train_tree_exact_bestfirst(
+             dataset, labels_q, params, tree_id, seed, is_classification,
+-            n_acc, inv_scale,
++            n_acc, inv_scale, bins,
+         )
+     if Int(dataset.num_outputs) != n_acc:
+         raise Error(
+@@ -1493,6 +1520,7 @@ def train_tree_exact_host(
+             var split = _exact_node_split(
+                 dataset, labels_q, item, my_colids, n_acc, is_classification,
+                 params.split_criterion, params.min_samples_leaf, seed, tree_id,
++                bins,
+             )
+             # DEVIATION 205 as the device loop keys it: every sampled column
+             # constant on a non-empty node, then one non-constant column
+@@ -1501,11 +1529,11 @@ def train_tree_exact_host(
+             if (
+                 item.instances.count > 0
+                 and _exact_all_constant_host(
+-                    dataset, item, my_colids, is_classification
++                    dataset, item, my_colids, bins, is_classification
+                 )
+             ):
+                 var nonconst = _exact_rescue_columns_host(
+-                    dataset, item, is_classification
++                    dataset, item, bins, is_classification
+                 )
+                 if len(nonconst) > 0:
+                     var u = rescue_pick(
+@@ -1517,7 +1545,7 @@ def train_tree_exact_host(
+                     split = _exact_node_split(
+                         dataset, labels_q, item, one, n_acc, is_classification,
+                         params.split_criterion, params.min_samples_leaf, seed,
+-                        tree_id,
++                        tree_id, bins,
+                     )
+             splits.append(split)
+             if not split_not_valid(
+@@ -1545,6 +1573,7 @@ def _exact_search_one(
+     is_classification: Bool,
+     n_acc: Int,
+     k: Int32,
++    bins: HostBins,
+ ) raises -> Split:
+     """One node's search as `search_batch` answers it for member `i` of any
+     batch, on the host: the column sample keyed by (seed, tree, node)
+@@ -1558,13 +1587,13 @@ def _exact_search_one(
+     _ = sample_features(colids, one_item, tree_id, seed, Int(dataset.n), Int(k))
+     var split = _exact_node_split(
+         dataset, labels_q, item, colids, n_acc, is_classification,
+-        params.split_criterion, params.min_samples_leaf, seed, tree_id,
++        params.split_criterion, params.min_samples_leaf, seed, tree_id, bins,
+     )
+     if item.instances.count > 0 and _exact_all_constant_host(
+-        dataset, item, colids, is_classification
++        dataset, item, colids, bins, is_classification
+     ):
+         var nonconst = _exact_rescue_columns_host(
+-            dataset, item, is_classification
++            dataset, item, bins, is_classification
+         )
+         if len(nonconst) > 0:
+             var u = rescue_pick(
+@@ -1575,6 +1604,7 @@ def _exact_search_one(
+             split = _exact_node_split(
+                 dataset, labels_q, item, one, n_acc, is_classification,
+                 params.split_criterion, params.min_samples_leaf, seed, tree_id,
++                bins,
+             )
+     return split
+ 
+@@ -1588,6 +1618,7 @@ def train_tree_exact_bestfirst(
+     is_classification: Bool,
+     n_acc: Int,
+     inv_scale: Float32,
++    bins: HostBins,
+ ) raises -> TreeMetaDataNode[DType.float32]:
+     """One tree grown BEST-FIRST as the device grows it (DEVIATION 466), on
+     the host and on the exact key (the CPU training lane,
+@@ -1633,7 +1664,7 @@ def train_tree_exact_bestfirst(
+         for i in range(len(pending)):
+             var split = _exact_search_one(
+                 dataset, labels_q, pending[i], params, tree_id, seed,
+-                is_classification, n_acc, k,
++                is_classification, n_acc, k, bins,
+             )
+             _ = queue.bestfirst_admit(pending[i], split, tree_id)
+         if not queue.bestfirst_can_pop():
+@@ -2357,6 +2432,79 @@ comptime ET_CODE_TILE = 8
+ """Features per block for the code passes (M4 istellareg: 4 -> 53 s, 8 -> 49 s, 16 -> 67 s, 32 -> 79 s)."""
+ 
+ 
++def et_identical_bins_wanted(n_cols: Int, k: Int) -> Bool:
++    """`IDN_ET_BINNED`'s per-fit gate, ONE function for the device forest
++    loop and the host column (`host_forest.fit_forest_exact`): a regression
++    fit bins when the data is wide and the fit samples at least half of it
++    (the tiled search's own `2k >= n_cols` gate, `ensure_row_major`)."""
++    comptime if not IDN_ET_BINNED:
++        return False
++    # lane/review-fixes: no test of ET_RANGE_TILED / ET_SCORE_TILED here.
++    # Those come from vendor switches (Apple's ET_TILED_SEARCH_*_OFF,
++    # NVIDIA/AMD's IDN_ET_TILED_SEARCH_OFF), so the binning decision would
++    # differ by vendor under some switch mix. IDN_ET_BINNED forces both
++    # tiled passes on (bit-inert) on every device instead, so this gate is
++    # one rule on NVIDIA, AMD, Apple and the host column.
++    return n_cols >= ET_IDN_BINNED_MIN_COLS and 2 * k >= n_cols
++
++
++@fieldwise_init
++struct HostBins(ImplicitlyCopyable, Movable):
++    """`IDN_ET_BINNED`, the host column's view of the device's binned X:
++    `codes` is COLUMN-major (`codes[col * m + row]`, the value
++    `et_bin_rows_kernel` stores at `[row * n_cols + col]`), `q` the borders
++    (`n_cols x ET_BINS`, `DeviceDataset.d_quant`), `nb` the per-column
++    border counts. `on` False means float X and the pointers are unread.
++    Built by `extratrees/impl/decisiontree/batched_levelalgo/host_binned.mojo`."""
++
++    var on: Bool
++    var codes: MutPointer[Scalar[ET_CODE], MutUntrackedOrigin]
++    var q: MutPointer[Float32, MutUntrackedOrigin]
++    var nb: MutPointer[Int32, MutUntrackedOrigin]
++
++    def extent(self, dataset: Dataset, item: NodeWorkItem, col: Int32) -> FeatureRange:
++        """cpu4-forest: the HOST COLUMN body lives in `extent_host` (the checker's
++        host-column naming); this name is kept for its callers."""
++        return self.extent_host(dataset, item, col)
++
++    def extent_host(self, dataset: Dataset, item: NodeWorkItem, col: Int32) -> FeatureRange:
++        """`node_feature_range_tiled_kernel`'s code arm then the decode: the
++        borders of the node's lowest and highest codes, no missing count (a
++        code is never NaN). An empty node keeps `node_feature_min_max`'s
++        answer (the kernel maps nothing when no row was seen)."""
++        var begin = Int(item.instances.begin)
++        var end = begin + Int(item.instances.count)
++        if end <= begin:
++            return node_feature_min_max(dataset, item, col)
++        var base = Int(col) * Int(dataset.m)
++        var cmin = 65535
++        var cmax = 0
++        for p in range(begin, end):
++            var row = Int(dataset.row_ids[unsafe_offset=p])
++            var c = Int(self.codes[unsafe_offset = base + row])
++            if c < cmin:
++                cmin = c
++            if c > cmax:
++                cmax = c
++        var qb = Int(col) * ET_BINS
++        return FeatureRange(
++            self.q[unsafe_offset = qb + cmin],
++            self.q[unsafe_offset = qb + cmax],
++            Int32(0),
++        )
++
++    def stored_threshold(self, col: Int32, thr: Float32) -> Float32:
++        """`et_code_threshold_kernel` for one winner."""
++        var qp = (self.q + Int(col) * ET_BINS).unsafe_origin_cast[MutAnyOrigin]()
++        var n = self.nb[unsafe_offset = Int(col)]
++        var t = et_snap_code(qp, n, thr)
++        if t < 0:
++            t = 0
++        if t >= Int(n) - 1:
++            return Float32.MAX
++        return self.q[unsafe_offset = Int(col) * ET_BINS + t]
++
++
+ # THE DEVICE RESCUE (fam2-forests 2026-10-04; unconditional since cpu3-trees,
+ # in IDENTICAL and FAST, every vendor): DEVIATION 205's rescue column is
+ # picked ON THE DEVICE. `ident_colids_kernel` writes the survey's columns,
+@@ -2549,10 +2697,18 @@ struct DeviceDataset(Movable):
+     """ET_BINNED_REG: the per-feature borders, `n_cols x ET_BINS`."""
+     var d_nbins: DeviceBuffer[DType.int32]
+     var has_bins: Bool
++    var bins_fit: Bool
++    """`IDN_ET_BINNED`: whether THIS fit takes the codes (set by the
++    regression forest loop from `et_identical_bins_wanted`), so a dataset a
++    session reuses with another `max_features` answers as the host column
++    does. Unread under FAST (`bins_active` is `has_bins` there)."""
+ 
+     @always_inline
+     def bins_active(self) -> Bool:
+-        return self.has_bins
++        comptime if IDN_ET_BINNED:
++            return self.has_bins and self.bins_fit
++        else:
++            return self.has_bins
+ 
+     def ensure_binned(mut self, ctx: DeviceContext) raises:
+         """Build the row-major codes and their borders (RandomForest's
+@@ -2729,7 +2885,7 @@ def upload_dataset(
+     ctx.synchronize()
+     return DeviceDataset(
+         d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False,
+-        d_bins_rm^, d_quant^, d_nbins^, False,
++        d_bins_rm^, d_quant^, d_nbins^, False, False,
+     )
+ 
+ 
+@@ -3446,7 +3602,7 @@ comptime ET_RANGE_TILED = (
+         is_defined["MOJOLEARN_ET_RANGE_TILED"]()
+         or ET_TILED_SEARCH_APPLE_DEFAULT
+     )
+-) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
++) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH or IDN_ET_BINNED
+ """FAST experiment: the range pass reads a row-major X with up to
+ `ET_FEATURE_TILE` sampled features per block
+ (`node_feature_range_tiled_kernel`)."""
+@@ -3484,7 +3640,7 @@ comptime ET_SCORE_TILED = (
+         is_defined["MOJOLEARN_ET_SCORE_TILED"]()
+         or ET_TILED_SEARCH_APPLE_DEFAULT
+     )
+-) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
++) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH or IDN_ET_BINNED
+ """FAST experiment: the REGRESSION score pass reads a row-major X with up to
+ `ET_FEATURE_TILE` sampled features per block
+ (`node_feature_score_reg_tiled_kernel`)."""
+@@ -7422,8 +7578,18 @@ def train_forest_regression_device_timed(
+ 
+         dataset.ensure_row_major(ctx, Int(k))
+         comptime if ET_RANGE_TILED and ET_SCORE_TILED:
+-            if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS:
+-                dataset.ensure_binned(ctx)
++            comptime if IDN_ET_BINNED:
++                # Per fit, and the host column's gate (`HostBins`).
++                dataset.bins_fit = et_identical_bins_wanted(
++                    Int(dataset.n_cols), Int(k)
++                )
++                if dataset.bins_fit and dataset.has_rm:
++                    dataset.ensure_binned(ctx)
++                else:
++                    dataset.bins_fit = False
++            else:
++                if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS:
++                    dataset.ensure_binned(ctx)
+         var ws = make_level_workspace(
+             ctx,
+             Int(params.max_batch_size),
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/host_binned.mojo b/extratrees/impl/decisiontree/batched_levelalgo/host_binned.mojo
+new file mode 100644
+index 000000000..495209751
+--- /dev/null
++++ b/extratrees/impl/decisiontree/batched_levelalgo/host_binned.mojo
+@@ -0,0 +1,160 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The HOST column of `builder.IDN_ET_BINNED` (fam2-forests, 2026-10-04, a
++candidate arm, default OFF): the border table and the 16-bit codes the
++device builds in `DeviceDataset.ensure_binned`, restated on the host so
++`train_tree_exact` searches the same binned X the device searches.
++
++Device, in order: `compute_quantiles(ctx, d_data, ET_BINS, n_rows, n_cols)`
++(default oversampling 4, seed 0, column-major: one PCG row per sample index
++shared by every column, the segmented sort over twiddled keys, the Float64
++bin index table, the gather, the sequential `unique` over `ftz` operands),
++then `et_bin_rows_kernel` (a lower bound over `[0, n_bins - 1]` with the
++compare `border >= value`). Host: the same statements, sequentially, from
++the RandomForest host oracle's generator and bin index
++(`ensemble/host/rf_oracle.mojo`), so a change to either lands here too.
++
++Host only: reached from `extratrees/impl/randomforest/host_forest.mojo`.
++"""
++
++from std.builtin.sort import sort
++from std.memory import bitcast
++
++from checks.numerics import ftz
++from ensemble.host.rf_oracle import (
++    RF_QUANTILE_OVERSAMPLING,
++    host_pcg_init,
++    host_pcg_uniform_u64,
++    host_quantile_bin_index,
++)
++from extratrees.impl.decisiontree.batched_levelalgo.builder import (
++    ET_BINS,
++    HostBins,
++)
++
++
++@always_inline
++def _to_sortable(bits: UInt32) -> UInt32:
++    """`float_to_sortable`, `core/segmented_sort.mojo` (CUB TwiddleIn)."""
++    if (bits & UInt32(0x80000000)) != UInt32(0):
++        return ~bits
++    return bits | UInt32(0x80000000)
++
++
++@always_inline
++def _from_sortable(key: UInt32) -> UInt32:
++    """`sortable_to_float`, `core/segmented_sort.mojo` (TwiddleOut)."""
++    if (key & UInt32(0x80000000)) != UInt32(0):
++        return key & UInt32(0x7FFFFFFF)
++    return ~key
++
++
++struct HostBinTables(Movable):
++    """The owner of what `HostBins` points at. Keep it alive (name it after
++    the last tree) for as long as a `view()` is in use."""
++
++    var on: Bool
++    var codes: List[UInt16]
++    var q: List[Float32]
++    var nb: List[Int32]
++
++    def __init__(out self):
++        """The OFF tables: one element each, never read (`HostBins.on` is
++        False)."""
++        self.on = False
++        self.codes = List[UInt16](length=1, fill=UInt16(0))
++        self.q = List[Float32](length=1, fill=Float32(0.0))
++        self.nb = List[Int32](length=1, fill=Int32(0))
++
++    def view(self) -> HostBins:
++        return HostBins(
++            self.on,
++            rebind[MutPointer[UInt16, MutUntrackedOrigin]](
++                self.codes.unsafe_ptr()
++            ),
++            rebind[MutPointer[Float32, MutUntrackedOrigin]](
++                self.q.unsafe_ptr()
++            ),
++            rebind[MutPointer[Int32, MutUntrackedOrigin]](
++                self.nb.unsafe_ptr()
++            ),
++        )
++
++
++def host_bin_tables(
++    x_col_major: List[Float32], n_rows: Int, n_cols: Int
++) raises -> HostBinTables:
++    """The borders and codes of `DeviceDataset.ensure_binned`, on the host.
++    `x_col_major` is the matrix the device uploads (`d_data`)."""
++    if n_rows <= 0 or n_cols <= 0:
++        raise Error("host_bin_tables: n_rows and n_cols must be positive")
++    if len(x_col_major) < n_rows * n_cols:
++        raise Error("host_bin_tables: X is shorter than n_rows * n_cols")
++    var out = HostBinTables()
++    var max_n_bins = ET_BINS
++    var global_rows = UInt64(n_rows)
++    var budget = UInt64(max_n_bins) * UInt64(RF_QUANTILE_OVERSAMPLING)
++    var sample_count = Int(global_rows if global_rows < budget else budget)
++
++    # `sample_owned_columns_kernel`: one row per sample index, shared by
++    # every column; the identity when the budget covers the data.
++    var sample_rows = List[Int](capacity=sample_count)
++    for sample_idx in range(sample_count):
++        var global_row = UInt64(sample_idx)
++        if UInt64(sample_count) != global_rows:
++            var gen = host_pcg_init(UInt64(0), UInt64(sample_idx), UInt64(0))
++            global_row = host_pcg_uniform_u64(gen, UInt64(0), global_rows)
++        sample_rows.append(Int(global_row))
++
++    var bin_idx = List[Int](capacity=max_n_bins)
++    for b in range(max_n_bins):
++        bin_idx.append(host_quantile_bin_index(b, sample_count, max_n_bins))
++
++    out.q = List[Float32](length=n_cols * max_n_bins, fill=Float32(0.0))
++    out.nb = List[Int32](length=n_cols, fill=Int32(0))
++    out.codes = List[UInt16](length=n_rows * n_cols, fill=UInt16(0))
++    for col in range(n_cols):
++        # The segmented sort: ascending over the twiddled keys (the float
++        # total order; equal keys are equal bits, so stability is
++        # unobservable).
++        var keys = List[UInt32](capacity=sample_count)
++        for s in range(sample_count):
++            keys.append(
++                _to_sortable(
++                    bitcast[DType.uint32](
++                        x_col_major[col * n_rows + sample_rows[s]]
++                    )
++                )
++            )
++        sort(keys)
++        var col_q = col * max_n_bins
++        # `compute_quantiles_batched_kernel`: the gather, then the
++        # sequential unique over `ftz` operands (DEVIATION 403).
++        for b in range(max_n_bins):
++            out.q[col_q + b] = bitcast[DType.float32](
++                _from_sortable(keys[bin_idx[b]])
++            )
++        var w = 1
++        for r in range(1, max_n_bins):
++            var prev = out.q[col_q + w - 1]
++            var cur = out.q[col_q + r]
++            if ftz(cur) != ftz(prev):
++                out.q[col_q + w] = cur
++                w += 1
++        out.nb[col] = Int32(w)
++
++        # `et_bin_rows_kernel`, its compare as written (`border >= value`;
++        # a NaN value answers False every step and lands on the top code).
++        for row in range(n_rows):
++            var v = x_col_major[col * n_rows + row]
++            var lo = 0
++            var hi = w - 1
++            while lo < hi:
++                var mid = (lo + hi) // 2
++                if out.q[col_q + mid] >= v:
++                    hi = mid
++                else:
++                    lo = mid + 1
++            out.codes[col * n_rows + row] = UInt16(lo)
++    out.on = True
++    return out^
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo b/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+index 0f154e780..299c6452a 100644
+--- a/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+@@ -1423,6 +1423,91 @@ def node_feature_score_host(
+     )
+ 
+ 
++def node_feature_score_host_binned(
++    codes: MutPointer[UInt16, MutAnyOrigin],
++    quant_col: MutPointer[Float32, MutAnyOrigin],
++    nb: Int32,
++    row_ids: MutPointer[Int32, MutAnyOrigin],
++    labels_q: MutPointer[Int32, MutAnyOrigin],
++    m: Int,
++    range_start: Int,
++    range_len: Int,
++    col: Int,
++    extent: FeatureRange,
++    key: SplitKey,
++    min_samples_leaf: Int,
++) -> ScoredCandidate:
++    """`node_feature_score_host` for the REGRESSION score pass over binned
++    codes (`node_feature_score_reg_tiled_kernel`'s code arm, the IDENTICAL
++    candidate `builder.IDN_ET_BINNED`): `extent` is the border range the
++    binned range pass published, the threshold is drawn from it exactly as
++    the float pass draws, and a row goes left when its code is at most the
++    code the draw snaps down to (`et_snap_code`; -1 sends no row left).
++    `codes` is column-major (`codes[col * m + row]`), `quant_col` this
++    column's borders. The reported threshold is the UNSNAPPED draw, as the
++    finalize kernel reports it; the stored one is snapped by the caller
++    (`et_code_threshold_kernel`). Counts, status and key as the float form."""
++    if extent.n_missing != Int32(0):
++        return empty_scored_candidate(SCORE_STATUS_MISSING_REFUSED, 1)
++    if node_feature_is_constant(extent, Int32(range_len)):
++        return empty_scored_candidate(SCORE_STATUS_CONSTANT, 1)
++
++    var threshold = draw_threshold_device(key, extent)
++    var snapped = Float32(et_snap_code(quant_col, nb, threshold))
++
++    var acc_left = List[Int32](length=1, fill=Int32(0))
++    var acc_total = List[Int32](length=1, fill=Int32(0))
++    var n_left = 0
++    var n_total = 0
++    var col_offset = col * m
++
++    for p in range(range_start, range_start + range_len):
++        var row = Int(row_ids[unsafe_offset=p])
++        var c = Float32(Int(codes[unsafe_offset = col_offset + row]))
++        var lab = Int(labels_q[unsafe_offset=row])
++        n_total += 1
++        acc_total[0] += Int32(lab)
++        if c <= snapped:
++            acc_left[0] += Int32(lab)
++            n_left += 1
++
++    var n_right = n_total - n_left
++    var status = SCORE_STATUS_SCORED
++    if (
++        n_left < min_samples_leaf
++        or n_right < min_samples_leaf
++        or n_left == 0
++        or n_right == 0
++    ):
++        status = SCORE_STATUS_REJECTED_MIN_SAMPLES_LEAF
++
++    var num = Int64(0)
++    var den = Int64(0)
++    if status == SCORE_STATUS_SCORED:
++        if not regression_key(
++            Int64(Int(acc_left[0])),
++            Int64(Int(acc_total[0])),
++            n_left,
++            n_right,
++            range_len,
++            SCORE_SAB_NONE,
++            num,
++            den,
++        ):
++            status = SCORE_STATUS_REGRESSION_REFUSED
++
++    return ScoredCandidate(
++        status,
++        threshold,
++        Int32(n_left),
++        Int32(n_total),
++        acc_left^,
++        acc_total^,
++        num,
++        den,
++    )
++
++
+ def scored_candidate_at(
+     out_status: MutPointer[Int32, MutAnyOrigin],
+     out_threshold: MutPointer[Float32, MutAnyOrigin],
+diff --git a/extratrees/impl/randomforest/host_forest.mojo b/extratrees/impl/randomforest/host_forest.mojo
+index c1d389ca5..e138022e3 100644
+--- a/extratrees/impl/randomforest/host_forest.mojo
++++ b/extratrees/impl/randomforest/host_forest.mojo
+@@ -18,8 +18,14 @@ from extratrees.impl.decisiontree.decisiontree import (
+ from extratrees.impl.decisiontree.flatnode import TreeMetaDataNode
+ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
+     DEVICE_MAX_ACC,
++    et_identical_bins_wanted,
++    n_sampled_cols_for,
+     train_tree_exact,
+ )
++from extratrees.impl.decisiontree.batched_levelalgo.host_binned import (
++    HostBinTables,
++    host_bin_tables,
++)
+ from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
+     train_classification,
+     train_regression,
+@@ -202,6 +208,17 @@ def fit_forest_exact(
+     var forest = Forest(num_outputs)
+     var labels_q_p = labels_q.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+     var x_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_col_major.unsafe_ptr())
++    # `IDN_ET_BINNED` (fam2-forests, a candidate arm, default OFF): the
++    # device's regression forest loop bins X when
++    # `et_identical_bins_wanted(n_cols, k)`; the same gate builds the same
++    # borders and codes here and the exact search reads them. Off (always,
++    # without the define) the tables are one element and unread.
++    var bin_tables = HostBinTables()
++    if not is_classification and et_identical_bins_wanted(
++        Int(n_cols), Int(n_sampled_cols_for(params, n_cols))
++    ):
++        bin_tables = host_bin_tables(x_col_major, Int(n_rows), Int(n_cols))
++    var bins = bin_tables.view()
+     var labels_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](labels.unsafe_ptr())
+     # THE TREES, ONE TASK PER CONTIGUOUS TREE RANGE (lane/trees-cpu,
+     # 2026-09-28). A tree reads X, the label planes and its own seed and
+@@ -220,7 +237,7 @@ def fit_forest_exact(
+     var failed = List[Bool](length=tasks, fill=False)
+     var messages = List[String](length=tasks, fill=String(""))
+ 
+-    def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks}:
++    def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks, imm bins}:
+         var lo = task * chunk
+         var hi = min(lo + chunk, n)
+         try:
+@@ -242,7 +259,7 @@ def fit_forest_exact(
+                 )
+                 slots[tree_id] = train_tree_exact(
+                     dataset, labels_q_p, params, Int32(tree_start + tree_id), seed,
+-                    is_classification, Int(num_outputs), inv_scale,
++                    is_classification, Int(num_outputs), inv_scale, bins,
+                 )
+                 _ = row_ids.unsafe_ptr()
+         except e:
+@@ -256,6 +273,9 @@ def fit_forest_exact(
+     _ = x_col_major.unsafe_ptr()
+     _ = labels.unsafe_ptr()
+     _ = labels_q.unsafe_ptr()
++    _ = bin_tables.codes.unsafe_ptr()
++    _ = bin_tables.q.unsafe_ptr()
++    _ = bin_tables.nb.unsafe_ptr()
+     # the serial walk raised its first failing tree's error; the lowest
+     # failing task holds the lowest trees and stopped at its first
+     for k in range(tasks):
+diff --git a/gbdt/targets/kernel/yeti_rank.mojo b/gbdt/targets/kernel/yeti_rank.mojo
+index 33dbfd1f0..23275501f 100644
+--- a/gbdt/targets/kernel/yeti_rank.mojo
++++ b/gbdt/targets/kernel/yeti_rank.mojo
+@@ -117,6 +117,7 @@ from checks.numerics import (
+     identical_mul,
+     identical_pow,
+ )
++from gbdt.trees_identical_switches import T29_YETI
+ from gbdt.data.yeti_rank_tasks import (
+     YETI_TASK_POSITIONS,
+     yeti_rank_cuda_seed,
+@@ -191,7 +192,7 @@ def yeti_block_parallel_for[column: Int]() -> Bool:
+     return column == COLUMN_NVIDIA
+ 
+ 
+-comptime YETI_BLOCK_PARALLEL = yeti_block_parallel_for[TARGET_COLUMN]()
++comptime YETI_BLOCK_PARALLEL = T29_YETI or yeti_block_parallel_for[TARGET_COLUMN]()
+ #: negative control for DEVIATION 3040: phase 2 before phase 1 (default off)
+ comptime YETI_SABOTAGE = is_defined["MOJOLEARN_GBDT_YETI_SABOTAGE"]()
+ 

@@ -1,0 +1,136 @@
+Restores MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE: the reverse of ab4e8e543 (2026-10-08, "grid-losers-1: delete C25_PROJECTION_REUSE (grid ge123e6f9 noise on nystroem/rbf-sampler); refuse the define")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/experiments/classical_identical_ideas/linear_controls.mojo b/experiments/classical_identical_ideas/linear_controls.mojo
+index d8c231b27..f3cabcc56 100644
+--- a/experiments/classical_identical_ideas/linear_controls.mojo
++++ b/experiments/classical_identical_ideas/linear_controls.mojo
+@@ -138,6 +138,7 @@ comptime TSVD_FUSED_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_TS
+ comptime C24_PANEL8 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_PANEL8"]()
+ comptime C24_ROWS2048 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048"]()
+ comptime C24_TREE4 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_TREE4"]()
++comptime C25_PROJECTION_REUSE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE"]()
+ comptime C26_PRODUCTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_PRODUCTS"]()
+ comptime C26_UPDATE_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED"]()
+ comptime C27_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_COMPONENTS"]()
+diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
+index 05e64afaf..10a8916d5 100644
+--- a/kernel_methods/estimator.mojo
++++ b/kernel_methods/estimator.mojo
+@@ -137,7 +137,9 @@ from x_decomp.cells import F32Ptr
+ from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale, enqueue_es_unscale_diag
+ from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
+ from x_decomp.rr import rr_block, rr_cs, rr_vrow
++from experiments.classical_identical_ideas.linear_controls import C25_PROJECTION_REUSE
+ from kernel_methods.rbf_fused import (
++    classical_projection_kernel,
+     RBF_FUSED_MAX_D,
+     RBF_FUSED_TPB,
+     rbf_fused_project_kernel,
+@@ -204,6 +206,19 @@ def _rbf_idn_fused_launch(
+     """RBF_IDN_FUSED's launch: the whole transform (`whole`) or the
+     projection alone, one thread per cell. ASYNCHRONOUS."""
+     var grid = (n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB
++    comptime if C25_PROJECTION_REUSE:
++        var groups = ((n_rows + 3) // 4) * dd
++        if whole:
++            ctx.enqueue_function[classical_projection_kernel[True]](
++                dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(n_rows), Int32(d), Int32(dd), scale,
++                grid_dim=(groups + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB, block_dim=RBF_FUSED_TPB,
++            )
++        else:
++            ctx.enqueue_function[classical_projection_kernel[False]](
++                dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(n_rows), Int32(d), Int32(dd), scale,
++                grid_dim=(groups + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB, block_dim=RBF_FUSED_TPB,
++            )
++        return
+     if whole:
+         ctx.enqueue_function[rbf_fused_transform_kernel](
+             dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
+@@ -2621,8 +2636,8 @@ def rbf_sampler_transform_host(
+     # transform in that launch when no stage needs the projection alone)
+     var chain = False
+     var whole = False
+-    comptime if RBF_IDN_FUSED:
+-        chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
++    comptime if RBF_IDN_FUSED or C25_PROJECTION_REUSE:
++        chain = (C25_PROJECTION_REUSE or d <= RBF_FUSED_MAX_D) and n_rows * dd > 0
+         whole = chain and sabotage == KMSAB_NONE and not trace.enabled
+         if chain:
+             _rbf_idn_fused_launch(ctx, dp, dx, dw, db, n_rows, d, dd, model.scale, whole)
+@@ -2721,8 +2736,8 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
+     # RBF_IDN_FUSED: the projection as the per-cell chain (and the whole
+     # transform in that launch when no stage needs the projection alone)
+     var chain = False
+-    comptime if RBF_IDN_FUSED:
+-        chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
++    comptime if RBF_IDN_FUSED or C25_PROJECTION_REUSE:
++        chain = (C25_PROJECTION_REUSE or d <= RBF_FUSED_MAX_D) and n_rows * dd > 0
+         fused = chain and sabotage == KMSAB_NONE and not trace.enabled
+         if chain:
+             _rbf_idn_fused_launch(ctx, dp, dx, dw, db, n_rows, d, dd, model.scale, fused)
+diff --git a/kernel_methods/rbf_fused.mojo b/kernel_methods/rbf_fused.mojo
+index 7639e9ed6..99b668139 100644
+--- a/kernel_methods/rbf_fused.mojo
++++ b/kernel_methods/rbf_fused.mojo
+@@ -5,6 +5,7 @@ neighbors-apple3, 2026-09-28). Its own module, imported only where a build
+ selects it (kernel_methods/estimator.mojo, `-D MOJOLEARN_RBF_FUSED`)."""
+ from std.gpu import block_dim, block_idx, thread_idx
+ 
++from gemm.contract import contract_leaf_size, leaf_count, leaf_begin, leaf_end
+ from checks.numerics import ftz, identical_cos, identical_mul, identical_mul_add
+ 
+ comptime RBF_FUSED_MAX_D = 64
+@@ -65,3 +66,50 @@ def rbf_fused_project_kernel(
+     for f in range(d):
+         acc = ftz(identical_mul_add(ftz(x.unsafe_load(i * d + f)), ftz(w.unsafe_load(f * dd + j)), acc))
+     dst.unsafe_store(t, acc)
++
++
++def classical_projection_kernel[FUSED: Bool](dst: MutPointer[Float32, MutAnyOrigin],
++    x: MutPointer[Float32, MutAnyOrigin], w: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32, d_in: Int32, q_in: Int32, scale: Float32):
++    """C25: four independent row scores reuse each immutable projection weight.
++    GEMM-v1 leaves/tree and the incumbent offset/cos/scale seams are retained.
++    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++    """
++    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var n = Int(n_in)
++    var d = Int(d_in)
++    var q = Int(q_in)
++    var first = (t // q) * 4
++    var col = t % q
++    if first >= n:
++        return
++    var leaf = contract_leaf_size(d)
++    var levels = InlineArray[Float32, 44](fill=Float32(0))
++    var occupied = UInt32(0)
++    for part in range(leaf_count(d, leaf)):
++        var acc = InlineArray[Float32, 4](fill=Float32(0))
++        for f in range(leaf_begin(part, leaf), leaf_end(part, leaf, d)):
++            var weight = ftz(w.unsafe_load(f * q + col))
++            comptime for row in range(4):
++                if first + row < n:
++                    acc[row] = ftz(identical_mul_add(ftz(x.unsafe_load((first + row) * d + f)), weight, acc[row]))
++        var level = 0
++        while (occupied & (UInt32(1) << UInt32(level))) != 0:
++            comptime for row in range(4):
++                acc[row] = ftz(levels[level * 4 + row] + acc[row])
++            occupied = occupied & ~(UInt32(1) << UInt32(level))
++            level += 1
++        comptime for row in range(4):
++            levels[level * 4 + row] = acc[row]
++        occupied = occupied | (UInt32(1) << UInt32(level))
++    comptime for row in range(4):
++        if first + row < n:
++            var acc = Float32(0)
++            var have = False
++            for level in range(11):
++                if (occupied & (UInt32(1) << UInt32(level))) != 0:
++                    acc = ftz(levels[level * 4 + row] + acc) if have else levels[level * 4 + row]
++                    have = True
++            comptime if FUSED:
++                acc = ftz(identical_mul(identical_cos(ftz(acc + ftz(b.unsafe_load(col)))), scale))
++            dst.unsafe_store((first + row) * q + col, acc)

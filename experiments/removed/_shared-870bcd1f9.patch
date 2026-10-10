@@ -1,0 +1,16 @@
+Shared hunks of deletion commit 870bcd1f9 ("GEMM leaf: one switch MOJOLEARN_IDN_GEMM_LEAF (neural128/neural256/all256); delete I04 leaf64 loser"): code hunks that name none of the defines it deleted.
+Apply before any experiments/removed/<DEFINE>.patch that names this file. See docs/TOMBSTONES.md.
+
+diff --git a/gemm/contract.mojo b/gemm/contract.mojo
+index 0f57daf48..00214ddf8 100644
+--- a/gemm/contract.mojo
++++ b/gemm/contract.mojo
+@@ -17,7 +17,7 @@ cannot drift (cpu-gpu-cleanup lane n-gemm, 2026-10-02: moved out of
+ """
+ 
+ from std.memory import bitcast
+-from std.sys.compile import is_defined, get_defined_int
++from std.sys.compile import is_defined
+ 
+ 
+ #: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,

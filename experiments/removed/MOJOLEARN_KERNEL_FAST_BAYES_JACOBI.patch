@@ -1,0 +1,124 @@
+Restores MOJOLEARN_KERNEL_FAST_BAYES_JACOBI: the reverse of e302f0ee8 (2026-10-03, "x_linear: remove dropped KERNEL_FAST_BAYES_JACOBI skip threshold (DROPPED-noise; recover lane/apple-fast-kernel@9e851777")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_KERNEL_FAST_BAYES_JACOBI.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/x_linear/bayes.mojo b/x_linear/bayes.mojo
+index 44d1bf8f4..6790ffd8d 100644
+--- a/x_linear/bayes.mojo
++++ b/x_linear/bayes.mojo
+@@ -308,7 +308,8 @@ def bayes_yvar(y: FP, n: Int) -> Float32:
+     return fd(acc, i2f(n))
+ 
+ 
+-def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Float32, Float32]:
++def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32,
++                   jtol: Float32 = Float32(1e-9)) -> Tuple[Float32, Float32]:
+     """The d x d half of `bayes_prep` (no row passes): the eigendecomposition
+     of G on the team, the lead's eigenvalues and V'X'y, the starting alpha
+     (the lead's, from yvar, when alpha_init is none) and lambda."""
+@@ -319,7 +320,9 @@ def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Floa
+     var old = vty + d
+     var tmp = old + d
+     var alpha = ld(fp, 5)
+-    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
++    # jtol: the Jacobi's skip threshold (lane/apple-fast-kernel, FAST on Apple
++    # with ip[7]: 1e-7; the default is the old 1e-9, x_linear/tops.mojo)
++    t_jacobi_eig(t, fw, gg, fw, vv, d, 60, jtol)
+     if t.lead():
+         for j in range(d):
+             var ev = ld(fw, gg + j * d + j)
+@@ -505,7 +508,12 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
+                 yvar = wyvar
+         else:
+             yvar = bayes_yvar(y, n)
+-    var al = bayes_eig_prep(t, fw, fp, d, yvar)
++    var jtol = Float32(1e-9)
++    comptime if is_gpu() and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
++        # lane/apple-fast-kernel: ip[7] (MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1)
++        if ldi(ip, 7) != 0:
++            jtol = Float32(1e-7)
++    var al = bayes_eig_prep(t, fw, fp, d, yvar, jtol)
+     var alpha = al[0]
+     var lam = al[1]
+     return (alpha, lam, ym, wsum)
+diff --git a/x_linear/device.mojo b/x_linear/device.mojo
+index 1de9dbcef..d478b6615 100644
+--- a/x_linear/device.mojo
++++ b/x_linear/device.mojo
+@@ -361,7 +361,12 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
+     var t = device_team(tw, 0, team_rows(a, ip), team_own(a, dd))
+     var wsum = ld(state, 3)
+     var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
+-    var al = bayes_eig_prep(t, fw, fp, dd, yvar)
++    var jtol = Float32(1e-9)
++    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
++        # lane/apple-fast-kernel: ip[7] (MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1)
++        if ldi(ip, 7) != 0:
++            jtol = Float32(1e-7)
++    var al = bayes_eig_prep(t, fw, fp, dd, yvar, jtol)
+     var ratio = fd(al[1], al[0])
+     for j in range(t.tid, dd, t.nt):
+         st(res, j, bayes_coef_one(fw, dd, j, ratio))
+@@ -3321,7 +3326,9 @@ def fit_device(
+     # mean / variance passes on one block (after the 2026-10-02 merge: in
+     # place of main's moments grid, one block per 16-column tile pair with
+     # one serial chain per cell, and main's `bayes_xty_kernel`; the y
+-    # partials stay main's).
++    # partials stay main's). -D MOJOLEARN_KERNEL_FAST_BAYES_JACOBI (ip[7]): the team Jacobi
++    # skips rotations below 1e-7 * sqrt(a_pp a_qq) instead of 1e-9, a
++    # threshold float32 roundoff never reaches, so it ran all 60 sweeps.
+     var kstats = False
+     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+         if bayes_like:
+@@ -3331,6 +3338,9 @@ def fit_device(
+                 kstats = True
+                 grid_gram = True
+                 hip[4] = Int32(1)
++            while len(hip) < 8:
++                hip.append(Int32(0))
++            hip[7] = Int32(1 if is_defined["MOJOLEARN_KERNEL_FAST_BAYES_JACOBI"]() else 0)
+     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
+     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(0, 3, 0))
+     var hfp = fp.copy()
+diff --git a/x_linear/tops.mojo b/x_linear/tops.mojo
+index 65d21d0d8..c626ebd88 100644
+--- a/x_linear/tops.mojo
++++ b/x_linear/tops.mojo
+@@ -16,6 +16,7 @@ from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
+ from x_linear.ops import fz as _fz
+ from x_linear.ops import xmad
+ from checks.numerics import identical_mul
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+ 
+ @always_inline
+@@ -496,7 +497,8 @@ def t_cholesky(t: Team, a: FP, aoff: Int, m: Int) -> Bool:
+     return True
+ 
+ 
+-def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
++def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int,
++                 skip_tol: Float32 = Float32(1e-9)):
+     """`jacobi_eig` (x_linear/ops.mojo) on the team (lane/neural-pass85,
+     2026-10-01). A rotation (p, q) is three element-wise passes over k: the
+     columns p, q of A, then its rows p, q, then the columns p, q of V; in each
+@@ -530,7 +532,17 @@ def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps
+                 var app = ld(a, aoff + p * m + p)
+                 var aqq = ld(a, aoff + q * m + q)
+                 var scale = fsqrt(fabs(fm(app, aqq)))
+-                if fabs(apq) <= fm(Float32(1e-9), scale) or apq == 0:
++                # lane/apple-fast-kernel (2026-10-02): FAST may pass a skip
++                # threshold (`skip_tol`, BayesianRidge/ARD under
++                # MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1: 1e-7). Float32
++                # roundoff leaves every |a_pq| near 6e-8 * scale, above the
++                # 1e-9 test, so the serial sweeps never stopped early and
++                # the 220 x 220 solve ran all 60 sweeps on one block (about
++                # 5x the sweeps the diagonal needs). IDENTICAL keeps 1e-9.
++                var thr = fm(Float32(1e-9), scale)
++                comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++                    thr = fm(skip_tol, scale)
++                if fabs(apq) <= thr or apq == 0:
+                     continue
+                 rotated = True
+                 var theta = fd(fs(aqq, app), fm(Float32(2), apq))

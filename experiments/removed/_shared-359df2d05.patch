@@ -1,0 +1,84 @@
+Shared hunks of deletion commit 359df2d05 ("trees: delete T16/I17 resident frontier (lost on NV+AMD) and duplicate T20; T17 batch and T21 streams become int sweeps"): code hunks that name none of the defines it deleted.
+Apply before any experiments/removed/<DEFINE>.patch that names this file. See docs/TOMBSTONES.md.
+
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index fc3ecbf92..166b4e709 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -63,7 +63,7 @@ from checks.soft_f64 import (
+     sf64_to_f32,
+ )
+ from std.sys.compile import is_defined
+-from gbdt.trees_identical_switches import T17_BATCH, T18, T19, T19_DEFER, T21, C47_GBDT, C45_GBDT
++from gbdt.trees_identical_switches import T16, T17, T18, T19, T19_DEFER, T20, T21, C47_GBDT, C45_GBDT
+ 
+ from std.sys.info import has_apple_gpu_accelerator
+ from std.builtin.sort import sort
+@@ -170,7 +170,7 @@ from gbdt.options.catboost_options import (
+ # cache reduces repeated work without changing any leaf's arithmetic.
+ comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ 
+-comptime DEFER_HIST_COPY_1903 = T19_DEFER or not SPLIT_COST_IDENTICAL or (
++comptime DEFER_HIST_COPY_1903 = T20 or T19_DEFER or not SPLIT_COST_IDENTICAL or (
+     (
+         has_apple_gpu_accelerator()
+         or (
+@@ -3196,10 +3208,16 @@ def fit_non_symmetric_tree[
+             # the host fold's
+             comptime if LG_EXACT_ID:
+                 if lg_exact:
+-                    ctx.enqueue_copy(
+-                        dst_ptr=h_part_stats.unsafe_ptr(),
+-                        src_buf=part_stats,
+-                    )
++                    if len(lg_resident_stats)>0:
++                        var snapshot=part_stats.create_sub_buffer[DType.float32](0,max_leaves*stat_count)
++                        ctx.enqueue_copy(dst_buf=lg_resident_stats[1],src_buf=snapshot)
++                        _ = snapshot^
++                        lg_resident_snapshots+=1
++                    else:
++                        ctx.enqueue_copy(
++                            dst_ptr=h_part_stats.unsafe_ptr(),
++                            src_buf=part_stats,
++                        )
+             mgr.wait_complete()
+             stage_times.end(ctx, "score.read")
+             # the identity ladder's records are UNCHANGED: the
+@@ -3554,12 +3572,18 @@ def fit_non_symmetric_tree[
+                         var pn = lg_leaf_node[left_id]
+                         lg_node_path[pn] = parent.path.copy()
+                         comptime if LG_EXACT_ID:
+-                            for st in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): copy of the split node's stats
+-                                lg_node_stats[pn * stat_count + st] = (
+-                                    h_part_stats.unsafe_ptr().unsafe_load(
+-                                        left_id * stat_count + st
++                            if len(lg_resident_stats)>0:
++                                var current=lg_resident_stats[1].create_sub_buffer[DType.float32](left_id*stat_count,stat_count)
++                                var kept=lg_resident_stats[0].create_sub_buffer[DType.float32](pn*stat_count,stat_count)
++                                ctx.enqueue_copy(dst_buf=kept,src_buf=current)
++                                _ = current^; _ = kept^
++                            else:
++                                for st in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): copy of the split node's stats
++                                    lg_node_stats[pn * stat_count + st] = (
++                                        h_part_stats.unsafe_ptr().unsafe_load(
++                                            left_id * stat_count + st
++                                        )
+                                     )
+-                                )
+                         var cn = len(lg_node_leaf)
+                         lg_node_left[pn] = cn
+                         lg_node_right[pn] = cn + 1
+@@ -3958,6 +3982,13 @@ def fit_non_symmetric_tree[
+                 ctx.enqueue_copy(
+                     dst_ptr=h_leaf_vals.unsafe_ptr(), src_buf=d_leaf_vals
+                 )
++            if len(lg_resident_stats)>0:
++                # All logical node slots were initialized, and only scored
++                # split parents are consumed by the exact replay. This copy
++                # rides the existing final leaf-value/statistics wait.
++                var kept=lg_resident_stats[0].create_sub_buffer[DType.float32](0,len(lg_node_stats))
++                ctx.enqueue_copy(dst_ptr=lg_node_stats.unsafe_ptr(),src_buf=kept)
++                _ = kept^
+             ctx.enqueue_copy(
+                 dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats
+             )

@@ -1,0 +1,114 @@
+Restores MOJOLEARN_GBDT_SEG_SUMS_BLOCK: the reverse of 7ca37fd0b (2026-10-03, "gbdt segmented sort: remove dropped GBDT_SEG_SUMS_BLOCK (DROPPED-noise; recover lane/apple-fast-rfet-scan@500168cfe)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_GBDT_SEG_SUMS_BLOCK.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/core/segmented_sort.mojo b/core/segmented_sort.mojo
+index e2add726b..1f41b67f4 100644
+--- a/core/segmented_sort.mojo
++++ b/core/segmented_sort.mojo
+@@ -105,9 +105,7 @@ comptime SORT_BLOCK = 512
+ #: scan (the A/B arm); IDENTICAL compiles the old path.
+ #: Default since the M3 A/B (b272364e4, n=2, identical output hashes): RF
+ #: istella 13,583 -> 10,116 ms (-25.5%), taxi neutral. GBDT's own copy
+-#: (gbdt/gpu_util/kernel/segmented_sort.mojo) keeps the one-thread scan: its
+-#: opt-in block arm MOJOLEARN_GBDT_SEG_SUMS_BLOCK was DROPPED-noise
+-#: (lane/apple-fast-rfet-scan @ 500168cfe).
++#: (gbdt/gpu_util/kernel/segmented_sort.mojo) stays opt-in.
+ comptime SEG_SUMS_BLOCK_SCAN = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and has_apple_gpu_accelerator()
+diff --git a/gbdt/gpu_util/kernel/segmented_sort.mojo b/gbdt/gpu_util/kernel/segmented_sort.mojo
+index ad3c1b674..190c2e72c 100644
+--- a/gbdt/gpu_util/kernel/segmented_sort.mojo
++++ b/gbdt/gpu_util/kernel/segmented_sort.mojo
+@@ -76,8 +76,21 @@ binary search that follows it (`exact_estimation.cu:31-39`).
+ """
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from std.memory import bitcast
++from std.memory import bitcast, stack_allocation
+ from max.gpu.primitives.block import prefix_sum
++from max.gpu.memory import AddressSpace
++from max.gpu.sync import barrier
++from core.segmented_sort import SEG_SUMS_BLOCK_SCAN, SEG_SUMS_TPB
++from std.sys.compile import is_defined
++
++#: Gradient boosting keeps the one-thread block-total scan by default: the
++#: block scan is measured on the RF/ET sort only (M3 A/B, lane
++#: apple-fast-rfet-scan), and the GBDT A/B (aft-ab-gbseg) is not read yet.
++#: Opt in with `-D MOJOLEARN_GBDT_SEG_SUMS_BLOCK` (FAST on Apple only, and
++#: `-D MOJOLEARN_SEG_SUMS_SERIAL` still turns it off).
++comptime GBDT_SEG_SUMS_BLOCK_SCAN = (
++    SEG_SUMS_BLOCK_SCAN and is_defined["MOJOLEARN_GBDT_SEG_SUMS_BLOCK"]()
++)
+ from std.gpu import block_dim, block_idx, thread_idx
+ 
+ from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
+@@ -201,6 +214,42 @@ def seg_scan_block_sums_kernel(
+         acc += v
+ 
+ 
++def seg_scan_block_sums_block_kernel(
++    block_sums: MutPointer[Int32, MutAnyOrigin],
++    seg_sizes: MutPointer[UInt32, MutAnyOrigin],
++    blocks_wide_in: Int32,
++):
++    """`seg_scan_block_sums_kernel` with one SEG_SUMS_TPB-thread block per
++    segment (GBDT_SEG_SUMS_BLOCK_SCAN: FAST on Apple with `-D
++    MOJOLEARN_GBDT_SEG_SUMS_BLOCK`, opt-in): chunks of block
++    totals scanned with the block prefix sum and carried. Exclusive and in
++    place over the same `used` slots; Int32 adds, so the same values."""
++    var seg = Int(block_idx.x)
++    var size = Int(seg_sizes.unsafe_load(seg))
++    var wide = Int(blocks_wide_in)
++    var used = (size + REORDER_BLOCK - 1) // REORDER_BLOCK
++    var tid = Int(thread_idx.x)
++    var total = stack_allocation[
++        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
++    ]()
++    var carry = Int32(0)
++    var c0 = 0
++    while c0 < used:
++        var b = c0 + tid
++        var v = Int32(0)
++        if b < used:
++            v = block_sums.unsafe_load(seg * wide + b)
++        var ex = prefix_sum[block_size=SEG_SUMS_TPB, exclusive=True](v)
++        if b < used:
++            block_sums.unsafe_store(seg * wide + b, carry + ex)
++        if tid == SEG_SUMS_TPB - 1:
++            total[0] = ex + v
++        barrier()
++        carry += total[0]
++        barrier()
++        c0 += SEG_SUMS_TPB
++
++
+ def seg_add_block_carry_kernel(
+     offsets: MutPointer[Int32, MutAnyOrigin],
+     block_sums: MutPointer[Int32, MutAnyOrigin],
+@@ -366,11 +415,18 @@ def _seg_radix_pass(
+         grid_dim=(blocks_wide, n_segments, 1),
+         block_dim=(REORDER_BLOCK, 1, 1),
+     )
+-    ctx.enqueue_function[seg_scan_block_sums_kernel](
+-        block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
+-        Int32(blocks_wide),
+-        grid_dim=(n_segments, 1, 1), block_dim=(1, 1, 1),
+-    )
++    comptime if GBDT_SEG_SUMS_BLOCK_SCAN:
++        ctx.enqueue_function[seg_scan_block_sums_block_kernel](
++            block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
++            Int32(blocks_wide),
++            grid_dim=(n_segments, 1, 1), block_dim=(SEG_SUMS_TPB, 1, 1),
++        )
++    else:
++        ctx.enqueue_function[seg_scan_block_sums_kernel](
++            block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
++            Int32(blocks_wide),
++            grid_dim=(n_segments, 1, 1), block_dim=(1, 1, 1),
++        )
+     ctx.enqueue_function[seg_add_block_carry_kernel](
+         offsets.unsafe_ptr(), block_sums.unsafe_ptr(),
+         seg_offsets.unsafe_ptr(), seg_sizes.unsafe_ptr(),

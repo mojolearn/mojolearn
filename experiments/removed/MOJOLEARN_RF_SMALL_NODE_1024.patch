@@ -1,0 +1,18 @@
+Restores MOJOLEARN_RF_SMALL_NODE_1024: the reverse of baa477878 (2026-10-03, "rf: remove dropped RF_SMALL_NODE_1024 arm (DROPPED-noise; recover lane/apple-fast-trees2@50dfdcca0)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_RF_SMALL_NODE_1024.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+index 852f6d092..cad3c82bb 100644
+--- a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
++++ b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+@@ -518,7 +518,7 @@ one launch) instead of zero + histogram + find_best_splits."""
+ 
+ comptime SMALL_NODE_ROWS = 256 if is_defined[
+     "MOJOLEARN_RF_SMALL_NODE_256"
+-]() else 4096
++]() else (1024 if is_defined["MOJOLEARN_RF_SMALL_NODE_1024"]() else 4096)
+ """The largest node `small_node_split_kernel` takes."""
+ 
+ comptime HIST_ZERO_AFTER_READ_DEFAULT = (

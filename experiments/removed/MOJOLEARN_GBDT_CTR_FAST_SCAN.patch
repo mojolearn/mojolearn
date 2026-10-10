@@ -1,0 +1,278 @@
+Restores MOJOLEARN_GBDT_CTR_FAST_SCAN: the reverse of afda7b9ce (2026-10-03, "gbdt scan: remove dropped GBDT_CTR_FAST_SCAN (DROPPED-noise; recover lane/apple-fast-trees-depthwise@f743edd60)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_GBDT_CTR_FAST_SCAN.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gbdt/gpu_util/kernel/scan.mojo b/gbdt/gpu_util/kernel/scan.mojo
+index 086ed931e..40801feef 100644
+--- a/gbdt/gpu_util/kernel/scan.mojo
++++ b/gbdt/gpu_util/kernel/scan.mojo
+@@ -53,9 +53,34 @@ only input this implementation scans is a 0/1 flag per row.
+ """
+ 
+ from std.gpu import block_dim, block_idx, thread_idx
++from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.primitives.block import prefix_sum
+ 
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
++
++#: lane/apple-fast-trees-depthwise (2026-10-02), `-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1`,
++#: FAST + Apple only, default OFF. Phase 2 of every `ScanVector` below runs
++#: on ONE THREAD over `size / 512` block totals (`scan_block_sums_u32_kernel`,
++#: the `grid_dim=1, block_dim=1` launch in `launch_scan_vector_u32`): at
++#: taxi's 4.1M rows that is ~8,000 dependent global round trips per scan, and
++#: the categorical fit's CTR prep runs it per cat feature per permutation
++#: (`ctrs/ctr_bins_builder.mojo` compute_current_bins,
++#: `ctrs/ctr_calcers.mojo` TWeightedBinFreqCalcerGpu). The arm launches one
++#: 256-thread block instead (`scan_block_sums_u32_parallel_kernel`, the
++#: shape `reorder_one_bit.mojo`'s `scan_block_sums_parallel_kernel` already
++#: ships for the radix sort). Integer sums, so the carries are the serial
++#: scan's bit for bit; IDENTICAL compiles the one-thread kernel unchanged.
++comptime CTR_FAST_SCAN = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_GBDT_CTR_FAST_SCAN"]()
++)
++
++#: the one block of the parallel block-sums scan (CTR_FAST_SCAN)
++comptime SCAN_SUMS_BLOCK_U32 = 256
++
+ 
+ comptime SCAN_BLOCK = 512
+ """The block. Not `GetScanBlockSize()`'s 768: that constant belongs to the
+@@ -112,6 +137,34 @@ def scan_block_sums_u32_kernel(
+         running += v
+ 
+ 
++def scan_block_sums_u32_parallel_kernel(
++    block_sums: MutPointer[UInt32, MutAnyOrigin], n_blocks_in: Int32
++):
++    """Phase 2 with `SCAN_SUMS_BLOCK_U32` threads in ONE block
++    (CTR_FAST_SCAN): thread `t` owns the contiguous stripe
++    `[t * per, (t + 1) * per)`, sums it, the block's exclusive `prefix_sum`
++    gives each stripe its carry, and each thread writes its stripe's
++    exclusive prefixes. Integer sums (0/1 flags, below 2^31), so every
++    value is the serial kernel's. Launch with `grid_dim=1,
++    block_dim=SCAN_SUMS_BLOCK_U32`."""
++    var n = Int(n_blocks_in)
++    var tid = Int(thread_idx.x)
++    var per = (n + SCAN_SUMS_BLOCK_U32 - 1) // SCAN_SUMS_BLOCK_U32
++    var lo = tid * per
++    var hi = min(lo + per, n)
++    var local = Int32(0)
++    for i in range(lo, hi):
++        local += Int32(Int(block_sums.unsafe_load(i)))
++    var carry = prefix_sum[block_size=SCAN_SUMS_BLOCK_U32, exclusive=True](
++        local
++    )
++    var running = UInt32(Int(carry))
++    for i in range(lo, hi):
++        var v = block_sums.unsafe_load(i)
++        block_sums.unsafe_store(i, running)
++        running += v
++
++
+ def scan_add_carry_u32_kernel(
+     scanned: MutPointer[UInt32, MutAnyOrigin],
+     block_sums: MutPointer[UInt32, MutAnyOrigin],
+@@ -169,10 +222,16 @@ def launch_scan_vector_u32(
+         block_sums.unsafe_ptr(),
+         grid_dim=n_blocks, block_dim=SCAN_BLOCK,
+     )
+-    ctx.enqueue_function[scan_block_sums_u32_kernel](
+-        block_sums.unsafe_ptr(), Int32(n_blocks),
+-        grid_dim=1, block_dim=1,
+-    )
++    comptime if CTR_FAST_SCAN:
++        ctx.enqueue_function[scan_block_sums_u32_parallel_kernel](
++            block_sums.unsafe_ptr(), Int32(n_blocks),
++            grid_dim=1, block_dim=SCAN_SUMS_BLOCK_U32,
++        )
++    else:
++        ctx.enqueue_function[scan_block_sums_u32_kernel](
++            block_sums.unsafe_ptr(), Int32(n_blocks),
++            grid_dim=1, block_dim=1,
++        )
+     ctx.enqueue_function[scan_add_carry_u32_kernel](
+         output.unsafe_ptr(), block_sums.unsafe_ptr(), Int32(size),
+         grid_dim=n_blocks, block_dim=SCAN_BLOCK,
+diff --git a/gbdt/gpu_util/kernel/segmented_scan.mojo b/gbdt/gpu_util/kernel/segmented_scan.mojo
+index 38be28dd5..870cbd297 100644
+--- a/gbdt/gpu_util/kernel/segmented_scan.mojo
++++ b/gbdt/gpu_util/kernel/segmented_scan.mojo
+@@ -117,8 +117,34 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ from core.device_zero import enqueue_fill
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
++from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
+ 
+ from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
++
++#: lane/apple-fast-trees-depthwise (2026-10-02), `-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1`,
++#: FAST + Apple only, default OFF. Phase 2 of the segmented scan
++#: (`seg_scan_block_sums_kernel`, launched `grid_dim=1, block_dim=1` in
++#: `_run_segmented_scan`) walks `size / 768` block aggregates on ONE THREAD:
++#: ~5,400 dependent round trips at taxi's 4.1M rows, twice per CTR calcer
++#: (`ctrs/ctr_calcers.mojo` THistoryBasedCtrCalcerGpu reset + visit) per
++#: cat feature per permutation. The arm runs that phase as one 256-thread
++#: block (`seg_scan_block_sums_parallel_kernel`) and ONLY from
++#: `launch_segmented_scan_and_scatter_non_negative`, the CTR entry, when
++#: `size < SEG_SUMS_EXACT_ROWS`: there the values are trivial weights and
++#: 0/1 target stats, every partial sum is an integer below 2^24, and an
++#: integer-valued Float32 sum is exact in any association, so the carries
++#: are the serial kernel's bit for bit. `launch_segmented_scan_vector`
++#: (the Exact leaf estimation's weights, not integers) keeps the serial
++#: kernel; IDENTICAL compiles it everywhere.
++comptime CTR_FAST_SCAN = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_GBDT_CTR_FAST_SCAN"]()
++)
++comptime SEG_SUMS_BLOCK = 256
++comptime SEG_SUMS_EXACT_ROWS = 1 << 24
+ 
+ 
+ #: `TIndexWrapper::Index()` is `Idx & 0x3FFFFFFF` (`index_wrapper.cuh:22`).
+@@ -293,6 +319,80 @@ def seg_scan_block_sums_kernel(
+             running = running + v
+ 
+ 
++def seg_scan_block_sums_parallel_kernel(
++    block_sums: MutPointer[Float32, MutAnyOrigin],
++    block_flags: MutPointer[UInt8, MutAnyOrigin],
++    n_blocks_in: Int32,
++):
++    """Phase 2 with `SEG_SUMS_BLOCK` threads in ONE block (CTR_FAST_SCAN).
++
++    Thread `t` owns the stripe `[t * per, (t + 1) * per)` of block
++    aggregates and folds it with the serial kernel's operator (a flagged
++    block restarts the running sum at its own value). The stripe results
++    then take `seg_block_scan_kernel`'s segmented inclusive scan in shared
++    memory, so stripe `t`'s carry-in is stripe `t - 1`'s inclusive value --
++    exactly the serial `running` at that point -- and each thread writes
++    its stripe's exclusive prefixes. Same values as the serial kernel for
++    integer-valued inputs below 2^24 (the launcher's guard); launch with
++    `grid_dim=1, block_dim=SEG_SUMS_BLOCK`.
++    """
++    var s_val = stack_allocation[
++        SEG_SUMS_BLOCK,
++        Scalar[DType.float32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var s_flg = stack_allocation[
++        SEG_SUMS_BLOCK,
++        Scalar[DType.int32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var n = Int(n_blocks_in)
++    var tid = Int(thread_idx.x)
++    var per = (n + SEG_SUMS_BLOCK - 1) // SEG_SUMS_BLOCK
++    var lo = tid * per
++    var hi = min(lo + per, n)
++
++    var agg_v = Float32(0.0)
++    var agg_f = Int32(0)
++    for i in range(lo, hi):
++        var v = block_sums.unsafe_load(i)
++        var f = block_flags.unsafe_load(i)
++        if f != UInt8(0):
++            agg_v = v
++            agg_f = Int32(1)
++        else:
++            agg_v = agg_v + v
++    s_val.unsafe_store(tid, agg_v)
++    s_flg.unsafe_store(tid, agg_f)
++    barrier()
++
++    var d = 1
++    while d < SEG_SUMS_BLOCK:
++        var lv = Float32(0.0)
++        var lf = Int32(0)
++        if tid >= d:
++            lv = s_val.unsafe_load(tid - d)
++            lf = s_flg.unsafe_load(tid - d)
++        barrier()
++        if tid >= d and s_flg.unsafe_load(tid) == Int32(0):
++            s_val.unsafe_store(tid, s_val.unsafe_load(tid) + lv)
++            s_flg.unsafe_store(tid, lf)
++        barrier()
++        d *= 2
++
++    var running = Float32(0.0)
++    if tid > 0:
++        running = s_val.unsafe_load(tid - 1)
++    for i in range(lo, hi):
++        var v = block_sums.unsafe_load(i)
++        var f = block_flags.unsafe_load(i)
++        block_sums.unsafe_store(i, running)
++        if f != UInt8(0):
++            running = v
++        else:
++            running = running + v
++
++
+ def seg_add_block_carry_kernel(
+     scanned: MutPointer[Float32, MutAnyOrigin],
+     has_flag: MutPointer[UInt8, MutAnyOrigin],
+@@ -409,10 +509,13 @@ def _run_segmented_scan[from_sign_bit: Bool](
+     mut has_flag: DeviceBuffer[DType.uint8],
+     mut block_sums: DeviceBuffer[DType.float32],
+     mut block_flags: DeviceBuffer[DType.uint8],
++    parallel_sums: Bool = False,
+ ) raises:
+     """The three phases. `scanned` leaves holding the segmented INCLUSIVE
+     scan of the whole array, which is what both of their entry points hand
+-    to their output iterator."""
++    to their output iterator. `parallel_sums` (CTR_FAST_SCAN only) takes
++    phase 2 on one block instead of one thread; a caller passes it only
++    where the sums are exact in any association."""
+     var n_blocks = (size + SEG_SCAN_BLOCK - 1) // SEG_SCAN_BLOCK
+ 
+     ctx.enqueue_function[seg_block_scan_kernel[from_sign_bit]](
+@@ -421,10 +524,25 @@ def _run_segmented_scan[from_sign_bit: Bool](
+         block_sums.unsafe_ptr(), block_flags.unsafe_ptr(),
+         grid_dim=n_blocks, block_dim=SEG_SCAN_BLOCK,
+     )
+-    ctx.enqueue_function[seg_scan_block_sums_kernel](
+-        block_sums.unsafe_ptr(), block_flags.unsafe_ptr(), Int32(n_blocks),
+-        grid_dim=1, block_dim=1,
+-    )
++    comptime if CTR_FAST_SCAN:
++        if parallel_sums:
++            ctx.enqueue_function[seg_scan_block_sums_parallel_kernel](
++                block_sums.unsafe_ptr(), block_flags.unsafe_ptr(),
++                Int32(n_blocks),
++                grid_dim=1, block_dim=SEG_SUMS_BLOCK,
++            )
++        else:
++            ctx.enqueue_function[seg_scan_block_sums_kernel](
++                block_sums.unsafe_ptr(), block_flags.unsafe_ptr(),
++                Int32(n_blocks),
++                grid_dim=1, block_dim=1,
++            )
++    else:
++        ctx.enqueue_function[seg_scan_block_sums_kernel](
++            block_sums.unsafe_ptr(), block_flags.unsafe_ptr(),
++            Int32(n_blocks),
++            grid_dim=1, block_dim=1,
++        )
+     ctx.enqueue_function[seg_add_block_carry_kernel](
+         scanned.unsafe_ptr(), has_flag.unsafe_ptr(), block_sums.unsafe_ptr(),
+         Int32(size),
+@@ -508,9 +626,11 @@ def launch_segmented_scan_and_scatter_non_negative(
+     if not inclusive:
+         enqueue_fill(ctx, output, Float32(0.0))
+ 
++    # CTR_FAST_SCAN: the CTR calcers' inputs are integer-valued (trivial
++    # weights, 0/1 target stats), exact below 2^24 in any association
+     _run_segmented_scan[True](
+         ctx, size, SEGMENT_START_MASK, values, indices, scanned, has_flag,
+-        block_sums, block_flags,
++        block_sums, block_flags, parallel_sums=size < SEG_SUMS_EXACT_ROWS,
+     )
+ 
+     var emit_blocks = (size + SEG_EMIT_BLOCK - 1) // SEG_EMIT_BLOCK

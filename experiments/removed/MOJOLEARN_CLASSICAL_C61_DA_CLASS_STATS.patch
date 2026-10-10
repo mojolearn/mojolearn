@@ -1,0 +1,578 @@
+Restores MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS: the reverse of d3f096a80 (2026-10-08, "grid-act-3: delete c61_da and c61_nb (both arms; the shared C61 csbm_* ops 190-192; grid ge123e6f9 lda-clf NV 1.38x/1.54")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/bindings/_mojolearn_x_prep.mojo b/bindings/_mojolearn_x_prep.mojo
+index 21cf02abb..849661461 100644
+--- a/bindings/_mojolearn_x_prep.mojo
++++ b/bindings/_mojolearn_x_prep.mojo
+@@ -1,7 +1,7 @@
+ """THE PREP LANE'S GPU BINDING (preprocessing additions, naive Bayes and
+ discriminant analysis). One entry runs a program of units on the device
+ (x_prep/common.mojo); the host binding runs the same units on the CPU."""
+-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT
++from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT, C61_NB_ARM, C61_DA
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+@@ -323,10 +323,10 @@ def c08_routes_binding() raises -> PythonObject:
+ def classical_shared_binding() raises -> PythonObject:
+     """Bits read by python/mojolearn/_expansion_prep.py `_classical_shared`:
+     1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 C04_LDA,
+-    8 C56_LDA_INPUT; 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
+-    after grid ge123e6f9: slower on both vendors, quality same)."""
++    8 C56_LDA_INPUT, 16-48 C61_NB_ARM << 4, 64 C61_DA."""
+     return PythonObject(
+         Int(C08_DICTIONARY) | (Int(C04_LDA) << 2) | (Int(C56_LDA_INPUT) << 3)
++        | ((C61_NB_ARM & 3) << 4) | (Int(C61_DA) << 6)
+     )
+ 
+ 
+diff --git a/bindings/_mojolearn_x_prep_host.mojo b/bindings/_mojolearn_x_prep_host.mojo
+index eeca88947..d374641d1 100644
+--- a/bindings/_mojolearn_x_prep_host.mojo
++++ b/bindings/_mojolearn_x_prep_host.mojo
+@@ -1,7 +1,7 @@
+ """CPU binding for `_mojolearn_x_prep`. HOST ONLY: the same units as the
+ device, run in a loop on the caller's arena (x_prep/host/program.mojo), with
+ the GPU binding's export names and address contract."""
+-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT
++from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT, C61_NB_ARM, C61_DA
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+@@ -198,10 +198,10 @@ def c08_routes_binding() raises -> PythonObject:
+ def classical_shared_binding() raises -> PythonObject:
+     """Bits read by python/mojolearn/_expansion_prep.py `_classical_shared`:
+     1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 C04_LDA,
+-    8 C56_LDA_INPUT; 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
+-    after grid ge123e6f9: slower on both vendors, quality same)."""
++    8 C56_LDA_INPUT, 16-48 C61_NB_ARM << 4, 64 C61_DA."""
+     return PythonObject(
+         Int(C08_DICTIONARY) | (Int(C04_LDA) << 2) | (Int(C56_LDA_INPUT) << 3)
++        | ((C61_NB_ARM & 3) << 4) | (Int(C61_DA) << 6)
+     )
+ 
+ 
+diff --git a/experiments/classical_identical_ideas/shared_controls.mojo b/experiments/classical_identical_ideas/shared_controls.mojo
+index 0453deaa5..4be5733b3 100644
+--- a/experiments/classical_identical_ideas/shared_controls.mojo
++++ b/experiments/classical_identical_ideas/shared_controls.mojo
+@@ -99,10 +99,31 @@ comptime C56_LDA_INPUT = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+ comptime C05_OLS_PHASE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C05_OLS_PHASE"]()
+ 
+-# C61 (lane classical-nbda, 2026-10-07): single-pass blocked class statistics
+-# (MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1|2 for GaussianNB,
+-# MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS for LDA/QDA; one walk of X with
+-# per-block Welford M2 and a Chan merge) tried 2026-10-08, run ge123e6f9:
+-# gaussian-nb NV/AMD 1.58x/1.05x istella, 1.42x/1.08x taxi (arm 1),
+-# 1.57x/1.02x, 1.37x/1.03x (arm 2); lda-clf 1.38x/1.04x, 1.54x/1.11x SLOWER,
+-# quality SAME. Deleted, both defines refused; recoverable at main bc10b8b56.
++# C61 (lane classical-nbda, 2026-10-07): single-pass blocked class statistics.
++# The incumbent IDENTICAL class statistics read X twice per fit: csb1_part
++# (block sums) + csb_fold, then csb1_ss (block squared deviations from the
++# folded class mean) + csb_var. C61 reads X ONCE: one unit per (XB-row block,
++# column) keeps, for every class, the block's sum (csb1_part's chain, same
++# words), count and a Welford mean / M2; one unit per (class, column) folds the
++# blocks ascending (sum and count exactly as csb_fold, so means are unchanged)
++# and merges M2 with Chan's pairwise rule in a fixed ascending block order,
++# the M2 terms summed with a compensated (two-sum) accumulator. No serial
++# chain longer than one block. Variances take a new order (bits change on
++# every vendor and the host column together).
++# Split per estimator family (Python routes by caller):
++#   C61_NB_ARM (naive Bayes; GaussianNB is the only NB fit that reads a class
++#     variance, Multinomial/Complement/Bernoulli/Categorical read sums or
++#     counts that are already one pass, so they are not reached):
++#     -D MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1  single-pass class stats
++#     -D MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2  also GaussianNB's epsilon
++#        column variance from the merged class M2 (Chan across classes), so
++#        the unweighted fit reads X once instead of four times
++#     (arms need the value; legal set {1, 2}). Bits 4-5 (arm << 4).
++#   C61_DA (discriminants): -D MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS: LDA/QDA
++#     class stats with a variance (shrinkage routes) single-pass, and LDA
++#     'svd' takes its within-class std from the pooled class M2 instead of
++#     materialising X - mean[y] and running two column-stat passes over it.
++#     Bit 6 (value 64).
++comptime C61_NB_ARM = get_defined_int["MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS", 0]() if CLASSICAL_IDENTICAL else 0
++comptime C61_DA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS"]()
++comptime C61_OPS = C61_NB_ARM != 0 or C61_DA
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index 04e5957eb..5a1656534 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -62,6 +62,7 @@ _BINDING = "_mojolearn_x_prep"
+ 
+ #: op name -> id; x_prep/units.mojo `run_unit` holds the same table.
+ _OPS = dict(
++    csbm_part=190, csbm_fold=191, csbm_pool=192,
+     centered_matmul=178, unique_inverse=177, sort_cols=0, col_stats=1, quantile=2, affine=3, scale_params=4, unique_cols=5, mode_cols=6,
+     lookup=7, count_neg=8, onehot=9, i2f=10, f2i=11, binarize=12, matmul=13, row_softmax=14,
+     row_argmax=15, class_stats=16, center_rows=17, eigh=18, where_neg=19,
+@@ -2583,28 +2584,54 @@ def _cs(pr, mode, xo, n, d, out, var=True):
+         pr.stage("col_stats", d, xo, n, d, out)
+ 
+ 
+-def _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, sums, *tail):
++def _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, sums, *tail, family=None):
+     """An unweighted class_stats stage: x_prep/blocked.mojo's blocked order
+     under IDN_STATS_BLOCKED (IDENTICAL; `_class_stats`) while its partial
+     tables stay within _CLS_BLOCK_WORDS, else one thread per (class, column)
+     over every row (`tail`: the serial stage's trailing parameters)."""
+     nb = (n + _XB - 1) // _XB
+     if _blocked() and _idn_fam(mode) & _IDN_STATS_BLOCKED and nb * K * d <= _CLS_BLOCK_WORDS:
+-        _class_stats(pr, None, K * d, xo, n, d, yo, K, cnt, mean, var, sums, mode=mode)
++        _class_stats(pr, None, K * d, xo, n, d, yo, K, cnt, mean, var, sums, mode=mode, family=family)
+     else:
+         pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, sums, *tail)
+ 
+ 
+-# Tried 2026-10-08 (C61 single-pass class statistics, csbm_part / csbm_fold / csbm_pool, x_prep ops 190-192;
+-# MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1|2 and MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS, run ge123e6f9): slower on
+-# both vendors, quality SAME. gaussian-nb arm 1 NV/AMD 1.58x/1.05x istella, 1.42x/1.08x taxi; arm 2 1.57x/1.02x,
+-# 1.37x/1.03x; lda-clf 1.38x/1.04x, 1.54x/1.11x. Deleted with the defines refused; recoverable at main bc10b8b56.
+-def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None):
++def _c61(mode, family):
++    """The C61 single-pass class-statistics arm this binding was built with
++    for an estimator family ('nb': 0, 1 or 2; 'da': 0 or 1), from
++    `x_prep_classical_shared` bits 4-5 / 6 (compile-time admission only)."""
++    if family is None:
++        return 0
++    bits = _classical_shared(mode if mode is not None else _mode())
++    if family == "nb":
++        return (bits >> 4) & 3
++    return 1 if family == "da" and bits & 64 else 0
++
++
++def _class_stats_m2(pr, wo, xo, n, d, yo, K, cnt, mean, var, sums, m2=_NONE):
++    """C61 (x_prep/blocked.mojo csbm_part / csbm_fold): class statistics from
++    ONE walk of X; the class means and sums are csb_fold's words, the
++    variances (and the raw M2 into m2) come from Chan-merged block Welford
++    partials. Returns the per-(class, column) count table for csbm_pool."""
++    nb = (n + _XB - 1) // _XB
++    w = _NONE if wo is None else wo
++    ps, pc, pm, pm2 = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(nb * K * d), pr.work(nb * K * d)
++    cn = pr.work(K * d)
++    pr.stage("csbm_part", nb * d, xo, n, d, yo, K, ps, pc, pm, pm2, nb, w)
++    pr.stage("csbm_fold", K * d, ps, pc, pm, pm2, nb, K, d, cn, cnt, mean, sums, var, m2, w)
++    return cn
++
++
++def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None, family=None):
+     """class_stats, or its weighted form when a sample_weight offset is given;
+     in x_prep/blocked.mojo's blocked order when `_blocked()` (offsets
+     _NONE are not written). mode given and IDN_CLASS_ONEPASS (IDENTICAL):
+     one unit per (block, column) walks X once for every class (csb1_part /
+-    csb1_ss; the same words as csb_part / csb_ss)."""
++    csb1_ss; the same words as csb_part / csb_ss). family ('nb' / 'da') with
++    its C61 switch built in and a variance wanted: `_class_stats_m2`."""
++    if _blocked() and var != _NONE and _c61(mode, family):
++        _class_stats_m2(pr, wo, xo, n, d, yo, K, cnt, mean, var, sums)
++        return
+     if _blocked():
+         nb = (n + _XB - 1) // _XB
+         w = _NONE if wo is None else wo
+@@ -2632,13 +2659,20 @@ def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None
+ 
+ def _gnb_stats(pr, mode, wo, xo, n, d, yo, K, cnt, theta, var, eps, vs):
+     """GaussianNB's statistics stages: epsilon (var_smoothing * the largest
+-    column variance) and the class counts, means and variances (column
+-    stats, then `_class_stats`; the C61 single-pass arms were deleted
+-    2026-10-08, see the note above `_class_stats`)."""
++    column variance) and the class counts, means and variances. C61 arm 2
++    (unweighted): the column variance is the Chan merge of the class M2 over
++    the classes (csbm_pool), so X is walked once; otherwise column stats and
++    `_class_stats` (C61 arm 1: its single-pass form)."""
++    if wo is None and _blocked() and _c61(mode, "nb") == 2:
++        m2, cv = pr.work(K * d), pr.work(d)
++        cn = _class_stats_m2(pr, None, xo, n, d, yo, K, cnt, theta, var, _NONE, m2)
++        pr.stage("csbm_pool", d, m2, theta, cn, K, d, n, cv, 1)
++        pr.stage("gnb_eps", 1, cv, d, eps, vs)
++        return
+     st = pr.alloc(6 * d)
+     _col_stats(pr, xo, n, d, st)
+     pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
+-    _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE, mode=mode)
++    _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE, mode=mode, family="nb")
+ 
+ 
+ def _given_priors(values, K, who, check_sum=False):
+@@ -3363,18 +3397,28 @@ class LinearDiscriminantAnalysis(_Classifier):
+         scal1, g2, ms = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(K * d)
+         e2, v2 = pr.alloc(d), pr.alloc(d * d)
+         scal, coef, inter, evr, tmp = pr.alloc(d * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(d), pr.alloc(K * d)
+-        # C61_DA (the within-class std from a pooled class M2, csbm_pool) tried 2026-10-08, run ge123e6f9:
+-        # lda-clf NV/AMD 1.38x/1.04x istella, 1.54x/1.11x taxi SLOWER, quality SAME; deleted, recoverable at main bc10b8b56.
+-        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
++        # C61_DA: the within-class std from the pooled class M2 of one walk of X
++        # (csbm_pool), not from X - mean[y] materialised and two column-stat passes
++        c61 = _blocked() and _c61(mode, "da") and ((n + _XB - 1) // _XB) * K * d <= _CLS_BLOCK_WORDS
++        if c61:
++            m2 = pr.work(K * d)
++            cn = _class_stats_m2(pr, None, xo, n, d, yo, K, cnt, mean, _NONE, _NONE, m2)
++        else:
++            _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
+         gflag, gofs = 0, 0
+         if self.priors is not None:
+             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
+             gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)  # glue: validates the user priors argument sums to one (pv-sized: user prior list)
+         pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
+-        z, stz = pr.work(n * d), pr.alloc(6 * d)
+-        pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
+-        _cs(pr, mode, z, n, d, stz)
+-        pr.stage("lda_w", d, stz + 2 * d, d, n, K, std, w)
++        if c61:
++            wv = pr.work(d)
++            pr.stage("csbm_pool", d, m2, mean, cn, K, d, n, wv, 0)
++        else:
++            z, stz = pr.work(n * d), pr.alloc(6 * d)
++            pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
++            _cs(pr, mode, z, n, d, stz)
++            wv = stz + 2 * d
++        pr.stage("lda_w", d, wv, d, n, K, std, w)
+         pr.stage("center_rows", n * d, xo, n, d, mean, yo, w, z2)
+         _gram(pr, mode, z2, n, d, g)
+         pr.stage("eigh", 1, g, d, 0, e1, v1)
+@@ -3410,7 +3454,7 @@ class LinearDiscriminantAnalysis(_Classifier):
+         yo = pr.put_codes(codes)
+         cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
+         var = pr.alloc(K * d) if shr is not None else _NONE
+-        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE)
++        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE, family="da")
+         gflag, gofs = 0, 0
+         if self.priors is not None:
+             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
+@@ -3423,7 +3467,7 @@ class LinearDiscriminantAnalysis(_Classifier):
+             y0 = pr.put_list([0.0] * n)
+             c1, m1 = pr.alloc(1), pr.alloc(d)
+             v1 = pr.alloc(d) if shr is not None else _NONE
+-            _cls(pr, mode, xo, n, d, y0, 1, c1, m1, v1, _NONE)
++            _cls(pr, mode, xo, n, d, y0, 1, c1, m1, v1, _NONE, family="da")
+             gt = None if est is None else _estimator_covs(est, arr, None, 1, "LinearDiscriminantAnalysis")
+             tot = _lda_cov_blocks(pr, xo, n, d, y0, 1, m1, v1, c1, shr, gt)
+         gk = None if est is None else _estimator_covs(est, arr, codes, K, "LinearDiscriminantAnalysis")
+@@ -3601,7 +3645,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
+         var = pr.alloc(K * d) if shr is not None else _NONE
+         # the trailing 1: FAST keeps row-order class sums here (the tree sums did not pass
+         # QuadraticDiscriminantAnalysis' paired quality check)
+-        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
++        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE, 1, family="da")
+         gflag, gofs = 0, 0
+         if self.priors is not None:
+             gflag, gofs = 1, pr.put_list(_given_priors(self.priors, K, "QuadraticDiscriminantAnalysis"))
+diff --git a/x_prep/blocked.mojo b/x_prep/blocked.mojo
+index c5d93d420..c18e79269 100644
+--- a/x_prep/blocked.mojo
++++ b/x_prep/blocked.mojo
+@@ -601,10 +601,258 @@ def csb_var_unit(t: Int, f: FP, q: IP):
+     st(f, p(q, 5) + t, v)
+ 
+ 
+-# C61 single-pass class statistics (csbm_part / csbm_fold / csbm_pool: per-block Welford mean + M2, Chan merge with
+-# a compensated M2, ops 190-192) tried 2026-10-08, run ge123e6f9: gaussian-nb NV/AMD 1.58x/1.05x istella, 1.42x/1.08x
+-# taxi (arm 1), lda-clf 1.38x/1.04x, 1.54x/1.11x SLOWER, quality SAME. Deleted with the defines refused; recoverable at
+-# main bc10b8b56 (x_prep/blocked.mojo); row in docs/apple-fast/EXPERIMENTS.md.
++# ------------------------------------------- C61 single-pass class statistics
++# lane classical-nbda (2026-10-07), IDENTICAL on every vendor and the host
++# column, OFF by default (experiments/classical_identical_ideas/
++# shared_controls.mojo C61_NB_ARM / C61_DA; Python stages these only when the
++# binding reports them). csbm_part walks each (block, column) ONCE and keeps,
++# per class, csb1_part's sum and count chains (same words) plus a Welford mean
++# and M2; csbm_fold folds blocks ascending: count and sum exactly as csb_fold
++# (so the class means are csb_fold's words) and M2 by Chan's pairwise rule
++# with a compensated (two-sum) M2 accumulator; csbm_pool merges the class M2
++# of a column (classes ascending, compensated), optionally with the
++# between-class term (the whole column's population variance). No chain is
++# longer than one XB-row block or one pass over nb block partials.
++
++
++@always_inline
++def _comp_add(mut hi: Float32, mut lo: Float32, x: Float32):
++    """hi + lo += x with Knuth's two-sum: the rounding error of each add is
++    kept in lo (the identical add/sub, so the same words on every target)."""
++    var s = add(hi, x)
++    var bb = sub(s, hi)
++    var e = add(sub(hi, sub(s, bb)), sub(x, bb))
++    hi = s
++    lo = add(lo, e)
++
++
++@always_inline
++def _chan_step(
++    mut na: Float32, mut ma: Float32, mut hi: Float32, mut lo: Float32, nb: Float32, mb: Float32, m2b: Float32
++):
++    """Chan's merge of (nb, mb, m2b) into (na, ma, hi + lo); nb > 0."""
++    if na == Float32(0):
++        na = nb
++        ma = mb
++        _comp_add(hi, lo, m2b)
++        return
++    var nn = add(na, nb)
++    var delta = sub(mb, ma)
++    var rb = div(nb, nn)
++    ma = add(ma, mul(delta, rb))
++    _comp_add(hi, lo, m2b)
++    _comp_add(hi, lo, mul(mul(delta, delta), mul(na, rb)))
++    na = nn
++
++
++@always_inline
++def _csbm_reg_take(
++    x: Float32, k: Int, w: Float32, W: Int,
++    mut s: SIMD[DType.float32, CSB1_REG], mut cw: SIMD[DType.float32, CSB1_REG],
++    mut m: SIMD[DType.float32, CSB1_REG], mut m2: SIMD[DType.float32, CSB1_REG],
++):
++    """One row of csbm_part's register path: csb1_part's sum and count adds,
++    then the class's Welford step (weighted: West's rule)."""
++    if W < 0:
++        comptime for u in range(CSB1_REG):
++            if k == u:
++                s[u] = acc_add(s[u], x)
++                cw[u] = cw[u] + Float32(1)
++                var e = sub(x, m[u])
++                m[u] = add(m[u], div(e, cw[u]))
++                m2[u] = add(m2[u], mul(e, sub(x, m[u])))
++    else:
++        comptime for u in range(CSB1_REG):
++            if k == u:
++                s[u] = add(s[u], mul(w, x))
++                cw[u] = add(cw[u], w)
++                if cw[u] != Float32(0):
++                    var e = sub(x, m[u])
++                    m[u] = add(m[u], div(mul(w, e), cw[u]))
++                    m2[u] = add(m2[u], mul(w, mul(e, sub(x, m[u]))))
++
++
++@always_inline
++def _csbm_mem_take(
++    f: FP, x: Float32, k: Int, w: Float32, W: Int, PS: Int, PC: Int, PM: Int, PM2: Int, base: Int, d: Int, K: Int
++):
++    """One row of csbm_part's table path (K > CSB1_REG): the same operations
++    on the partial tables' words."""
++    if k < 0 or k >= K:
++        return
++    var at = base + k * d
++    var c: Float32
++    if W < 0:
++        st(f, PS + at, add(ld(f, PS + at), x))
++        c = ld(f, PC + at) + Float32(1)
++        st(f, PC + at, c)
++        var mo = ld(f, PM + at)
++        var e = sub(x, mo)
++        var mn = add(mo, div(e, c))
++        st(f, PM + at, mn)
++        st(f, PM2 + at, add(ld(f, PM2 + at), mul(e, sub(x, mn))))
++    else:
++        st(f, PS + at, add(ld(f, PS + at), mul(w, x)))
++        c = add(ld(f, PC + at), w)
++        st(f, PC + at, c)
++        if c != Float32(0):
++            var mo = ld(f, PM + at)
++            var e = sub(x, mo)
++            var mn = add(mo, div(mul(w, e), c))
++            st(f, PM + at, mn)
++            st(f, PM2 + at, add(ld(f, PM2 + at), mul(w, mul(e, sub(x, mn)))))
++
++
++def csbm_part_unit(t: Int, f: FP, q: IP):
++    """q = [X, n, d, Y, K, PS, PC, PM, PM2, nb, W]; t = b*d + c. For EVERY
++    class k of (block b, column c), from one walk of the block's rows,
++    ascending, at (b*K + k)*d + c: PS / PC = csb1_part's words (sum, count or
++    weight sum), PM = the block's Welford class mean, PM2 = its sum of
++    squared deviations from that mean (W >= 0: weighted)."""
++    var X = p(q, 0)
++    var n = p(q, 1)
++    var d = p(q, 2)
++    var Y = p(q, 3)
++    var K = p(q, 4)
++    var PS = p(q, 5)
++    var PC = p(q, 6)
++    var PM = p(q, 7)
++    var PM2 = p(q, 8)
++    var W = p(q, 10)
++    var c = t % d
++    var b = t // d
++    var r = _span(b, n)
++    var base = b * K * d + c
++    var full = r[0] + (r[1] - r[0]) - (r[1] - r[0]) % RUN
++    if K <= CSB1_REG:
++        var s = SIMD[DType.float32, CSB1_REG](0)
++        var cw = SIMD[DType.float32, CSB1_REG](0)
++        var m = SIMD[DType.float32, CSB1_REG](0)
++        var m2 = SIMD[DType.float32, CSB1_REG](0)
++        for i0 in range(r[0], full, RUN):
++            var bx = run_block[RUN](f, X + i0 * d + c, d)
++            var by = run_block[RUN](f, Y + i0, 1)
++            var bw = SIMD[DType.float32, RUN](0)
++            if W >= 0:
++                bw = run_block[RUN](f, W + i0, 1)
++            comptime for u in range(RUN):
++                _csbm_reg_take(ftz(bx[u]), Int(ftz(by[u])), ftz(bw[u]), W, s, cw, m, m2)
++        for i in range(full, r[1]):
++            var w = Float32(0)
++            if W >= 0:
++                w = ld(f, W + i)
++            _csbm_reg_take(ld(f, X + i * d + c), Int(ld(f, Y + i)), w, W, s, cw, m, m2)
++        comptime for u in range(CSB1_REG):
++            if u < K:
++                st(f, PS + base + u * d, s[u])
++                st(f, PC + base + u * d, cw[u])
++                st(f, PM + base + u * d, m[u])
++                st(f, PM2 + base + u * d, m2[u])
++    else:
++        for k in range(K):
++            st(f, PS + base + k * d, Float32(0))
++            st(f, PC + base + k * d, Float32(0))
++            st(f, PM + base + k * d, Float32(0))
++            st(f, PM2 + base + k * d, Float32(0))
++        for i0 in range(r[0], full, RUN):
++            var bx = run_block[RUN](f, X + i0 * d + c, d)
++            var by = run_block[RUN](f, Y + i0, 1)
++            var bw = SIMD[DType.float32, RUN](0)
++            if W >= 0:
++                bw = run_block[RUN](f, W + i0, 1)
++            comptime for u in range(RUN):
++                _csbm_mem_take(f, ftz(bx[u]), Int(ftz(by[u])), ftz(bw[u]), W, PS, PC, PM, PM2, base, d, K)
++        for i in range(full, r[1]):
++            var w = Float32(0)
++            if W >= 0:
++                w = ld(f, W + i)
++            _csbm_mem_take(f, ld(f, X + i * d + c), Int(ld(f, Y + i)), w, W, PS, PC, PM, PM2, base, d, K)
++
++
++def csbm_fold_unit(t: Int, f: FP, q: IP):
++    """q = [PS, PC, PM, PM2, nb, K, d, CN, CNT, MEAN, SUM, VAR, M2O, W];
++    t = k*d + c. CN / CNT / MEAN / SUM exactly as csb_fold (blocks ascending);
++    the blocks' (count, mean, M2) merged ascending by Chan's rule (`_chan_step`)
++    into M2O and VAR = M2 / count (zero for an empty class). Offsets < 0 are
++    not written."""
++    var PS = p(q, 0)
++    var PC = p(q, 1)
++    var PM = p(q, 2)
++    var PM2 = p(q, 3)
++    var nb = p(q, 4)
++    var K = p(q, 5)
++    var d = p(q, 6)
++    var W = p(q, 13)
++    var kd = K * d
++    var s = Float32(0)
++    var cw = Float32(0)
++    var na = Float32(0)
++    var ma = Float32(0)
++    var hi = Float32(0)
++    var lo = Float32(0)
++    var cnt = 0
++    for b in range(nb):
++        var at = b * kd + t
++        var nbk = ld(f, PC + at)
++        if W < 0:
++            cnt += Int(nbk)
++        else:
++            cw = add(cw, nbk)
++        s = add(s, ld(f, PS + at))
++        if nbk != Float32(0):
++            _chan_step(na, ma, hi, lo, nbk, ld(f, PM + at), ld(f, PM2 + at))
++    if W < 0:
++        cw = Float32(cnt)
++    var mean = Float32(0)
++    var m2 = add(hi, lo)
++    var v = Float32(0)
++    if cw != Float32(0):
++        mean = div(s, cw)
++        v = div(m2, cw)
++    st(f, p(q, 7) + t, cw)
++    if t % d == 0 and p(q, 8) >= 0:
++        st(f, p(q, 8) + t // d, cw)
++    if p(q, 9) >= 0:
++        st(f, p(q, 9) + t, mean)
++    if p(q, 10) >= 0:
++        st(f, p(q, 10) + t, s)
++    if p(q, 11) >= 0:
++        st(f, p(q, 11) + t, v)
++    if p(q, 12) >= 0:
++        st(f, p(q, 12) + t, m2)
++
++
++def csbm_pool_unit(t: Int, f: FP, q: IP):
++    """q = [M2, MEAN, CN, K, d, n, OUT, BETWEEN]; t = column c. Over the
++    classes ascending (empty ones skipped): the sum of the class M2 words,
++    compensated; BETWEEN != 0 adds the between-class term by Chan's rule on
++    (CN, MEAN), giving the column's whole M2. OUT[c] = that sum / n (the
++    population variance: LDA 'svd''s within-class std, or GaussianNB's
++    epsilon column variance); zero when n is zero."""
++    var M2 = p(q, 0)
++    var MEAN = p(q, 1)
++    var CN = p(q, 2)
++    var K = p(q, 3)
++    var d = p(q, 4)
++    var n = p(q, 5)
++    var between = p(q, 7) != 0
++    var na = Float32(0)
++    var ma = Float32(0)
++    var hi = Float32(0)
++    var lo = Float32(0)
++    for k in range(K):
++        var at = k * d + t
++        var nk = ld(f, CN + at)
++        if nk == Float32(0):
++            continue
++        if between:
++            _chan_step(na, ma, hi, lo, nk, ld(f, MEAN + at), ld(f, M2 + at))
++        else:
++            _comp_add(hi, lo, ld(f, M2 + at))
++    var v = Float32(0)
++    if n > 0:
++        v = div(add(hi, lo), Float32(n))
++    st(f, p(q, 6) + t, v)
+ 
+ 
+ # ---------------------------------------------------------------- categories
+diff --git a/x_prep/units.mojo b/x_prep/units.mojo
+index 9fcc80263..37592904c 100644
+--- a/x_prep/units.mojo
++++ b/x_prep/units.mojo
+@@ -2,7 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """The op table: op id -> unit. python/mojolearn/_expansion_prep.py `_OPS` carries
+ the same ids; the binding refuses an id outside the table."""
+-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_GROUPED_OUTPUT, C04_LDA
++from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_GROUPED_OUTPUT, C04_LDA, C61_OPS
+ from x_prep.common import FP, IP, p
+ from x_prep.prims import (
+     sort_cols_unit, col_stats_unit, quantile_unit, affine_unit, scale_params_unit,
+@@ -45,6 +45,7 @@ from x_prep.blocked import (
+     IDN_NB_ONEPASS, csb1_part_unit, csb1_neg_unit,
+     IDN_NB_CSR_DENSE, csr_dense_unit,
+     IDN_CLASS_ONEPASS, csb1_ss_unit,
++    csbm_part_unit, csbm_fold_unit, csbm_pool_unit,
+ )
+ from x_prep.select_blocked import (
+     IDN_SELECT_BLOCKED, fcb_part_unit, fcb_fin_unit, frb_part1_unit, frb_mean_unit, frb_part2_unit, frb_fin_unit,
+@@ -76,10 +77,10 @@ comptime IDN_INT_OPS = IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR_DENSE
+ #: 166-171 (IDN_SELECT_BLOCKED, x_prep/select_blocked.mojo), IDENTICAL only, every vendor and the
+ #: host column; ops 172-176 (IDN_PT_BLOCKED, x_prep/pt_blocked.mojo) likewise.
+ comptime IDN_FAM_OPS = IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED
+-#: op 178 (centered_matmul) is LDA transform's C04_LDA. Ops 190-192 (C61 single-pass class
+-#: statistics, csbm_*) were tried and deleted 2026-10-08 (run ge123e6f9: gaussian-nb / lda-clf
+-#: NV 1.38-1.58x, AMD 1.02-1.11x SLOWER, quality SAME); recoverable at main bc10b8b56.
+-comptime N_OPS = 179 if C04_LDA else 178 if C08_DICTIONARY else (177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))))
++#: lane classical-nbda: ops 190-192 (C61 single-pass class statistics, x_prep/blocked.mojo
++#: csbm_part / csbm_fold / csbm_pool) only under C61_NB_ARM or C61_DA (IDENTICAL, every vendor
++#: and the host column); op 178 (centered_matmul) is LDA transform's C04_LDA.
++comptime N_OPS = 193 if C61_OPS else 179 if C04_LDA else 178 if C08_DICTIONARY else (177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))))
+ #: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
+ #: CAT_CLS2_PACK (FAST + Apple default, -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF off)
+ 
+@@ -462,3 +463,11 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
+ 
+     comptime if OP == 178:
+         centered_matmul_unit(t, f, q)
++
++    comptime if C61_OPS:
++        comptime if OP == 190:
++            csbm_part_unit(t, f, q)
++        comptime if OP == 191:
++            csbm_fold_unit(t, f, q)
++        comptime if OP == 192:
++            csbm_pool_unit(t, f, q)

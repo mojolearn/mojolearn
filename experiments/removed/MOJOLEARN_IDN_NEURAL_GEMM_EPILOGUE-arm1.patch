@@ -1,0 +1,307 @@
+Restores MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1: the reverse of d48c5eaaf (2026-10-09, "grid-act-5: delete the neural_gemm_epilogue mlp arm (MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE bit 1, NN06; grid ge123e6f9 mlp-")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE-arm1.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gemm/experiments/neural_epilogue.mojo b/gemm/experiments/neural_epilogue.mojo
+new file mode 100644
+index 000000000..682fc7153
+--- /dev/null
++++ b/gemm/experiments/neural_epilogue.mojo
+@@ -0,0 +1,172 @@
++# SPDX-License-Identifier: Apache-2.0
++"""NN06: rounded bias/scale/residual/ReLU stages with shared host mirrors.
++
++Generic component API, uncompiled/unverified. The selected public NN06
++placement is training.mlp_ops, with its existing activation/backward rules;
++this generic component does not redefine another caller's activation. Order is product -> bias -> scale -> residual -> optional ReLU.
++Each enabled stage owns an explicit FP32/FTZ boundary in both A and B.
++"""
++from gemm.experiments.neural_profile_device import neural_profile_device
++from std.sys.compile import is_defined, get_defined_int
++from std.gpu import block_idx,block_dim,thread_idx
++from max.gpu.host import DeviceBuffer,DeviceContext
++from checks.numerics import ftz,identical_mul,identical_fmax
++from gemm.contract import CONTRACT_K_LEAF_MIN
++from gemm.experiments.neural_profile import (
++    NEURAL_EXPERIMENTS_ALLOWED, NEURAL_LEAF, NEURAL_CHAINS,neural_partition,neural_strides,neural_validate,
++    neural_cell,neural_profile_host,
++)
++
++# OFF: no compile/identity/quality/timing evidence in this worktree. This is
++# separate from I05's previously losing bias-only scalar component candidate.
++# ONE epilogue-fusion switch with per-caller arms (NN06 + NI09 merged,
++# 2026-10-07): -D MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=<mask>, 1 = MLP caller
++# (this rounded epilogue, training/mlp_ops.mojo), 2 = CNN caller (NI09 tiled
++# bias, x_cnn/device.mojo), 3 = both. One idea, two kernels; the mask lets
++# the grid time each caller family separately.
++comptime NEURAL_GEMM_EPILOGUE = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE", 0]()
++comptime NN06 = NEURAL_EXPERIMENTS_ALLOWED and (NEURAL_GEMM_EPILOGUE & 1) != 0
++comptime EP_BIAS = 1
++comptime EP_SCALE = 2
++comptime EP_RESIDUAL = 4
++comptime EP_RELU = 8
++
++
++@always_inline
++def neural_epilogue_stage[STAGE: Int](value: Float32, operand: Float32) -> Float32:
++    comptime if STAGE == EP_SCALE:
++        # Pinned multiplication cannot fuse with the following residual add.
++        return ftz(identical_mul(ftz(value),ftz(operand)))
++    elif STAGE == EP_RELU:
++        return ftz(identical_fmax(ftz(value),Float32(0)))
++    else:
++        return ftz(ftz(value)+ftz(operand))
++
++
++@always_inline
++def neural_epilogue_apply[KIND: Int](
++    value: Float32, bias: MutPointer[Float32,MutAnyOrigin],
++    residual: MutPointer[Float32,MutAnyOrigin],preactivation: MutPointer[Float32,MutAnyOrigin],
++    cell: Int,n: Int,scale: Float32,
++) -> Float32:
++    var result = ftz(value)
++    comptime if (KIND & EP_BIAS) != 0:
++        result = neural_epilogue_stage[EP_BIAS](result,bias.unsafe_load(cell%n))
++    comptime if (KIND & EP_SCALE) != 0:
++        result = neural_epilogue_stage[EP_SCALE](result,scale)
++    comptime if (KIND & EP_RESIDUAL) != 0:
++        result = neural_epilogue_stage[EP_RESIDUAL](result,residual.unsafe_load(cell))
++    comptime if (KIND & EP_RELU) != 0:
++        preactivation.unsafe_store(cell,result)
++        result = neural_epilogue_stage[EP_RELU](result,Float32(0))
++    return result
++
++
++def _neural_epilogue_fused_kernel[KIND: Int](
++    c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,MutAnyOrigin],
++    b: MutPointer[Float32,MutAnyOrigin],bias: MutPointer[Float32,MutAnyOrigin],
++    residual: MutPointer[Float32,MutAnyOrigin],preactivation: MutPointer[Float32,MutAnyOrigin],
++    m: Int32,n: Int32,k: Int32,leaf: Int32,leaves: Int32,
++    asi: Int32,asp: Int32,bsp: Int32,bsj: Int32,scale: Float32,
++):
++    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if cell < Int(m)*Int(n):
++        var product = neural_cell[NEURAL_CHAINS](a,b,cell//Int(n),cell%Int(n),Int(k),Int(leaf),
++            Int(leaves),Int(asi),Int(asp),Int(bsp),Int(bsj))
++        c.unsafe_store(cell,neural_epilogue_apply[KIND](product,bias,residual,preactivation,cell,Int(n),scale))
++
++
++def _neural_epilogue_stage_kernel[STAGE: Int](
++    c: MutPointer[Float32,MutAnyOrigin],operand: MutPointer[Float32,MutAnyOrigin],
++    preactivation: MutPointer[Float32,MutAnyOrigin],cells: Int32,n: Int32,scale: Float32,
++):
++    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if cell < Int(cells):
++        var value = ftz(c.unsafe_load(cell))
++        var other = scale
++        comptime if STAGE == EP_BIAS:
++            other = operand.unsafe_load(cell%Int(n))
++        elif STAGE == EP_RESIDUAL:
++            other = operand.unsafe_load(cell)
++        elif STAGE == EP_RELU:
++            preactivation.unsafe_store(cell,value)
++        c.unsafe_store(cell,neural_epilogue_stage[STAGE](value,other))
++
++
++def neural_epilogue_ab[KIND: Int = EP_BIAS, CANDIDATE: Bool = False](
++    ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
++    mut b: DeviceBuffer[DType.float32],mut bias: DeviceBuffer[DType.float32],
++    mut residual: DeviceBuffer[DType.float32],mut preactivation: DeviceBuffer[DType.float32],
++    m: Int,n: Int,k: Int,op: Int,scale: Float32 = 1.0,
++) raises:
++    comptime assert KIND >= 0 and KIND < 16, "epilogue stage mask"
++    neural_validate(m,n,k,op)
++    if len(c)<m*n or len(a)<m*k or len(b)<n*k:
++        raise Error("neural epilogue matrix buffer too short")
++    comptime if (KIND & EP_BIAS) != 0:
++        if len(bias)<n or bias.unsafe_ptr() == c.unsafe_ptr():
++            raise Error("neural epilogue bias buffer short or aliases output")
++    comptime if (KIND & EP_RESIDUAL) != 0:
++        if len(residual)<m*n or residual.unsafe_ptr() == c.unsafe_ptr():
++            raise Error("neural epilogue residual must be a distinct full buffer")
++    comptime if (KIND & EP_RELU) != 0:
++        if len(preactivation)<m*n or preactivation.unsafe_ptr() == c.unsafe_ptr():
++            raise Error("neural epilogue preactivation must be a distinct full buffer")
++    if m == 0 or n == 0:
++        return
++    comptime if CANDIDATE and NN06:
++        var part = neural_partition[NEURAL_LEAF](k)
++        var st = neural_strides(op,m,n,k)
++        ctx.enqueue_function[_neural_epilogue_fused_kernel[KIND]](c,a,b,bias,residual,preactivation,
++            Int32(m),Int32(n),Int32(k),Int32(part[0]),Int32(part[1]),
++            Int32(st[0]),Int32(st[1]),Int32(st[2]),Int32(st[3]),scale,
++            grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
++    else:
++        neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
++        comptime if (KIND & EP_BIAS) != 0:
++            ctx.enqueue_function[_neural_epilogue_stage_kernel[EP_BIAS]](c,bias,preactivation,
++                Int32(m*n),Int32(n),scale,grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
++        comptime if (KIND & EP_SCALE) != 0:
++            ctx.enqueue_function[_neural_epilogue_stage_kernel[EP_SCALE]](c,bias,preactivation,
++                Int32(m*n),Int32(n),scale,grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
++        comptime if (KIND & EP_RESIDUAL) != 0:
++            ctx.enqueue_function[_neural_epilogue_stage_kernel[EP_RESIDUAL]](c,residual,preactivation,
++                Int32(m*n),Int32(n),scale,grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
++        comptime if (KIND & EP_RELU) != 0:
++            ctx.enqueue_function[_neural_epilogue_stage_kernel[EP_RELU]](c,bias,preactivation,
++                Int32(m*n),Int32(n),scale,grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
++
++
++def neural_epilogue_host[KIND: Int = EP_BIAS](
++    c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,MutAnyOrigin],
++    b: MutPointer[Float32,MutAnyOrigin],bias: MutPointer[Float32,MutAnyOrigin],
++    residual: MutPointer[Float32,MutAnyOrigin],preactivation: MutPointer[Float32,MutAnyOrigin],
++    m: Int,n: Int,k: Int,op: Int,scale: Float32 = 1.0,
++) raises:
++    neural_profile_host[NEURAL_LEAF,NEURAL_CHAINS](c,a,b,m,n,k,op)
++    for cell in range(m*n):
++        c.unsafe_store(cell,neural_epilogue_apply[KIND](c.unsafe_load(cell),bias,residual,preactivation,cell,n,scale))
++
++
++@always_inline
++def neural_relu_backward_value(gradient: Float32,preactivation: Float32) -> Float32:
++    # The explicit derivative convention at zero is zero. Full caller mapping
++    # must establish it matches the model's convention before wiring this API.
++    return ftz(gradient) if ftz(preactivation) > Float32(0) else Float32(0)
++
++
++def neural_relu_backward_kernel(
++    output: MutPointer[Float32,MutAnyOrigin],gradient: MutPointer[Float32,MutAnyOrigin],
++    preactivation: MutPointer[Float32,MutAnyOrigin],count: Int32,
++):
++    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if i < Int(count):
++        output.unsafe_store(i,neural_relu_backward_value(gradient.unsafe_load(i),preactivation.unsafe_load(i)))
++
++
++def neural_relu_backward_host(
++    output: MutPointer[Float32,MutAnyOrigin],gradient: MutPointer[Float32,MutAnyOrigin],
++    preactivation: MutPointer[Float32,MutAnyOrigin],count: Int,
++):
++    for i in range(count):
++        output.unsafe_store(i,neural_relu_backward_value(gradient.unsafe_load(i),preactivation.unsafe_load(i)))
+diff --git a/gemm/experiments/neural_tiled_v2.mojo b/gemm/experiments/neural_tiled_v2.mojo
+index 83618d17a..be6920413 100644
+--- a/gemm/experiments/neural_tiled_v2.mojo
++++ b/gemm/experiments/neural_tiled_v2.mojo
+@@ -21,12 +21,8 @@ from gemm.checks.gemm_identical import (
+ 
+ comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime NI07_GROUPED_PROJECTIONS = _NEURAL_ARMS and is_defined["MOJOLEARN_NI07_GROUPED_PROJECTIONS"]()
+-# NI09 = the CNN arm (mask bit 2) of MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE, now
+-# its only arm. TOMBSTONE (lane grid-act-5, 2026-10-08): the MLP arm (bit 1,
+-# NN06, gemm/experiments/neural_epilogue.mojo + training/mlp_ops.mojo's fused
+-# projection) was DELETED as an IDENTICAL grid ge123e6f9 loser, mlp-train-step
+-# NV 2.0 -> 3.8 / AMD 3.5 -> 3.4 ms (1.367x slower), same bits; recoverable at
+-# main 8ed94710a. core/six_lane_experiment_guards.mojo refuses bit 1.
++# NI09 = the CNN arm (mask bit 2) of MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE; the
++# MLP arm (bit 1) is NN06 in gemm/experiments/neural_epilogue.mojo.
+ comptime NI09_TILED_BIAS = _NEURAL_ARMS and (get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE", 0]() & 2) != 0
+ comptime FP = MutPointer[Float32, MutAnyOrigin]
+ comptime BiasFn = def(Float32, Float32) thin -> Float32
+diff --git a/training/mlp_ops.mojo b/training/mlp_ops.mojo
+index b11e2c107..7c33e9bb0 100644
+--- a/training/mlp_ops.mojo
++++ b/training/mlp_ops.mojo
+@@ -30,8 +30,9 @@ from gemm.neural_dispatch import (
+     NEURAL_GEMM_EXPERIMENT_ENABLED,
+ )
+ from gemm.contract import OP_NN, OP_NT, OP_TN
++from gemm.experiments.neural_epilogue import NN06
+ from gemm.experiments.neural_switches import ROLE_PROJECTION, ROLE_WGRAD
+-from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED
++from gemm.experiments.neural_profile import NEURAL_LEAF,NEURAL_CHAINS,NEURAL_EXPERIMENTS_ALLOWED,neural_partition,neural_cell
+ from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN
+ from core.device_scan import device_first_nonfinite
+ from training.checks.optimizer import (
+@@ -94,13 +95,7 @@ def _add(left: Float32, right: Float32) -> Float32:
+     return ftz(identical_mul_add(Float32(1), ftz(left), ftz(right)))
+ 
+ 
+-# TOMBSTONE (lane grid-act-5, 2026-10-08): neural_gemm_epilogue=mlp (NN06,
+-# -D MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE bit 1: the forward's GEMM + bias (+
+-# ReLU) as one thread-per-cell kernel, _mlp_gemm_epilogue_kernel /
+-# _mlp_fused_projection) was DELETED as an IDENTICAL grid ge123e6f9 loser:
+-# mlp-train-step NV 2.0 -> 3.8 ms / AMD 3.5 -> 3.4 ms (1.367x combined
+-# SLOWER), same bits. Recoverable at main 8ed94710a; the guard refuses bit 1.
+-
++comptime MLP_NN06 = NN06 and not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_CONTROL"]()
+ # gemm_leaf=neural128 for THE MLP TRAINING STEP ONLY (lane grid-act-5,
+ # 2026-10-08; IDENTICAL grid ge123e6f9, docs/apple-fast/EXPERIMENTS.md). The
+ # build-wide arm (-D MOJOLEARN_IDN_GEMM_LEAF=1) was a SPLIT: mlp-train-step
+@@ -125,6 +120,34 @@ comptime MLP_GEMM_LEAF128 = (
+ )
+ 
+ 
++def _mlp_gemm_epilogue_kernel[ACTIVATE: Bool](
++    output: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,MutAnyOrigin],
++    weight: MutPointer[Float32,MutAnyOrigin],bias: MutPointer[Float32,MutAnyOrigin],
++    m: Int32,n: Int32,k: Int32,leaf: Int32,leaves: Int32,
++):
++    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if cell<Int(m)*Int(n):
++        # Match this model's actual _add and <=0 ReLU rules, including the
++        # rounded GEMM seam and the activated-output derivative used below.
++        var product = neural_cell[NEURAL_CHAINS](a,weight,cell//Int(n),cell%Int(n),
++            Int(k),Int(leaf),Int(leaves),Int(k),1,1,Int(k))
++        var value = _add(product,bias.unsafe_load(cell%Int(n)))
++        comptime if ACTIVATE:
++            if value<=Float32(0):
++                value = Float32(0)
++        output.unsafe_store(cell,value)
++
++
++def _mlp_fused_projection[ACTIVATE: Bool](ctx: DeviceContext,
++    mut output: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
++    mut weight: DeviceBuffer[DType.float32],mut bias: DeviceBuffer[DType.float32],
++    m: Int,n: Int,k: Int) raises:
++    var part = neural_partition[NEURAL_LEAF](k)
++    ctx.enqueue_function[_mlp_gemm_epilogue_kernel[ACTIVATE]](output,a,weight,bias,
++        Int32(m),Int32(n),Int32(k),Int32(part[0]),Int32(part[1]),
++        grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
++
++
+ def _mlp_kernel(
+     source: MutPointer[Float32, MutAnyOrigin],
+     other: MutPointer[Float32, MutAnyOrigin],
+@@ -437,23 +460,27 @@ def mlp_train_step_host(
+     ctx.enqueue_copy(dst_buf=w2_v, src_ptr=w2_ptr)
+     ctx.enqueue_copy(dst_buf=b2_v, src_ptr=b2_ptr)
+     var ws = ctx.enqueue_create_buffer[DType.float32](ws_n)
+-    var pre1 = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
++    var pre1 = ctx.enqueue_create_buffer[DType.float32](1 if MLP_NN06 else rows * MLP_HID)
+     var act = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
+-    var pre2 = ctx.enqueue_create_buffer[DType.float32](rows * MLP_OUT)
++    var pre2 = ctx.enqueue_create_buffer[DType.float32](1 if MLP_NN06 else rows * MLP_OUT)
+     var logits = ctx.enqueue_create_buffer[DType.float32](rows * MLP_OUT)
+ 
+     # ---- Forward: `_forward` (two `_matmul(..., transpose_b=True)`, two
+     # `_bias`).
+-    _gemm(ctx, pre1, x_d, w1_v, ws, rows, MLP_HID, MLP_IN, OP_NT)
+-    _launch_mlp(
+-        ctx, pre1.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B1, act.unsafe_ptr(),
+-        rows, MLP_HID, 1,
+-    )
+-    _gemm(ctx, pre2, act, w2_v, ws, rows, MLP_OUT, MLP_HID, OP_NT)
+-    _launch_mlp(
+-        ctx, pre2.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B2, logits.unsafe_ptr(),
+-        rows, MLP_OUT, 0,
+-    )
++    comptime if MLP_NN06:
++        _mlp_fused_projection[True](ctx,act,x_d,w1_v,b1_v,rows,MLP_HID,MLP_IN)
++        _mlp_fused_projection[False](ctx,logits,act,w2_v,b2_v,rows,MLP_OUT,MLP_HID)
++    else:
++        _gemm(ctx, pre1, x_d, w1_v, ws, rows, MLP_HID, MLP_IN, OP_NT)
++        _launch_mlp(
++            ctx, pre1.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B1, act.unsafe_ptr(),
++            rows, MLP_HID, 1,
++        )
++        _gemm(ctx, pre2, act, w2_v, ws, rows, MLP_OUT, MLP_HID, OP_NT)
++        _launch_mlp(
++            ctx, pre2.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B2, logits.unsafe_ptr(),
++            rows, MLP_OUT, 0,
++        )
+     # The loss's refusal scan of the logits runs on the device (one scan
+     # launch and its partials read back; cpu-gpu-cleanup n-train-mamba), and
+     # the logits come down once, as a result, behind it on the same queue.

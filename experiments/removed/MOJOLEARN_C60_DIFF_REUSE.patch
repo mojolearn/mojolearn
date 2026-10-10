@@ -1,0 +1,192 @@
+Restores MOJOLEARN_C60_DIFF_REUSE: the reverse of f7abb25cf (2026-10-07, "classical-misc: C58 arms 16->5 and TEAM64 -> TEAM_MIB sweep; delete dead C60_DIFF_REUSE; add default-off C61 HDBSCAN sam")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_C60_DIFF_REUSE.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/experiments/classical_identical_ideas/graph_controls.mojo b/experiments/classical_identical_ideas/graph_controls.mojo
+index 4975e9998..56fc4d04e 100644
+--- a/experiments/classical_identical_ideas/graph_controls.mojo
++++ b/experiments/classical_identical_ideas/graph_controls.mojo
+@@ -34,10 +34,3 @@ comptime C41_FUSED_MINIMA = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C41_FUSED_
+ comptime C42_ACTIVE_TRIANGLE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C42_ACTIVE_TRIANGLE"]()
+ comptime C43_RESIDENT_NORMALIZATION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C43_RESIDENT_NORMALIZATION"]()
+ comptime C44_SAMPLING_DESCRIPTORS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C44_SAMPLING_DESCRIPTORS"]()
+-# C61 (lane classical-misc, 2026-10-07): HDBSCAN sparse mutual-reachability
+-# Boruvka search, tiled kernel (NVIDIA/AMD default): skip a j tile whose points
+-# all lie in the block's single component. Those cells are excluded anyway, so
+-# outputs are bit-identical; only the d-long chains of dead cells are saved.
+-# Fixed order unchanged (per-point min over the total (key, j) order).
+-# NOT TESTED — NOT MEASURED. Default OFF.
+-comptime C61_SAME_COMPONENT_SKIP = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C61_SAME_COMPONENT_SKIP"]()
+diff --git a/experiments/classical_identical_ideas/stats_controls.mojo b/experiments/classical_identical_ideas/stats_controls.mojo
+index 6b666ccb5..2b46686fe 100644
+--- a/experiments/classical_identical_ideas/stats_controls.mojo
++++ b/experiments/classical_identical_ideas/stats_controls.mojo
+@@ -28,12 +28,8 @@ comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57
+ comptime C58_SHARED_PREP = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SHARED_PREP"]()
+ comptime C58_SERIES4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SERIES4"]()
+ comptime C58_FORECAST4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_FORECAST4"]()
+-# C58 team state budget in MiB: integer sweep -D MOJOLEARN_C58_TEAM_MIB=64|256
+-# (was the boolean MOJOLEARN_C58_TEAM64); absent = 256 = incumbent. A memory
+-# budget only: it sets series per launch slice, never per-series arithmetic.
+-comptime C58_TEAM_MIB = get_defined_int["MOJOLEARN_C58_TEAM_MIB", 256]() if CLASSICAL_IDENTICAL else 256
++comptime C58_TEAM64 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_TEAM64"]()
+ comptime C59_TRIAL_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C59_TRIAL_STATE"]()
+ # C60: shared detrended observations across independent lag tasks.
+ comptime C60_LAG4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C60_LAG4"]()
+-# C60_DIFF_REUSE removed 2026-10-07 (lane classical-misc): dead code. It fired only
+-# for d_ == 2, but select_d loops d_ in range(d_max) with d_max <= 2 - D, so d_ <= 1.
++comptime C60_DIFF_REUSE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C60_DIFF_REUSE"]()
+diff --git a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+index 87d784a74..0aeaddba0 100644
+--- a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
++++ b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+@@ -46,7 +46,7 @@ from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DIST
+ from core.classical_distance import direct_distance_step
+ from checks.numerics import identical_sqrt
+ from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
+-from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES, C61_SAME_COMPONENT_SKIP
++from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+@@ -280,26 +280,6 @@ def sparse_mr_search_tiled_kernel(
+         var t = t0 + tid
+         ti_s[unsafe_offset=tid] = todo[t] if t < n_todo else Int32(-1)
+     barrier()
+-    # C61 (default OFF): the block's one component when every listed point
+-    # shares it (else -2); a j tile whose every point is in that component
+-    # holds only cells the epilogue below excludes (`cj != ci[r]`), so the
+-    # whole tile is skipped. Same cells written, same (key, j) minimum.
+-    var uc_s = stack_allocation[
+-        2, Scalar[DType.int32], address_space = AddressSpace.SHARED
+-    ]()
+-    comptime if C61_SAME_COMPONENT_SKIP:
+-        if tid == 0:
+-            var uc = Int32(-1)
+-            for q in range(SMR_TI):
+-                var i = Int(ti_s[unsafe_offset=q])
+-                if i >= 0:
+-                    var c = comp[i]
+-                    if uc == Int32(-1):
+-                        uc = c
+-                    elif c != uc:
+-                        uc = Int32(-2)
+-            uc_s[0] = uc if uc >= 0 else Int32(-2)
+-        barrier()
+     var ci = InlineArray[Int32, SMR_RI](fill=Int32(-1))
+     var ni = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
+     var cri = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
+@@ -322,22 +302,6 @@ def sparse_mr_search_tiled_kernel(
+                 crj_s[unsafe_offset=tid] = core[j]
+             else:
+                 cj_s[unsafe_offset=tid] = Int32(-1)
+-        comptime if C61_SAME_COMPONENT_SKIP:
+-            # uc_s[1]: 1 when some j < jb of this tile leaves the block's
+-            # component. Reset, barrier, mark, barrier, then a block-uniform
+-            # read; the trailing barrier on a skip keeps the next reset
+-            # behind every read.
+-            if tid == 0:
+-                uc_s[1] = Int32(0)
+-            barrier()
+-            if tid < SMR_TJ and jt + tid < jb:
+-                if cj_s[unsafe_offset=tid] != uc_s[0]:
+-                    uc_s[1] = Int32(1)
+-            barrier()
+-            if uc_s[0] >= 0 and uc_s[1] == Int32(0):
+-                barrier()
+-                jt += SMR_TJ
+-                continue
+         var acc = InlineArray[Float32, SMR_RI * SMR_RJ](fill=Float32(0.0))
+         var k0 = 0
+         while k0 < d:
+diff --git a/sequence/fit_team_py.mojo b/sequence/fit_team_py.mojo
+index 7a74a2402..cc004c355 100644
+--- a/sequence/fit_team_py.mojo
++++ b/sequence/fit_team_py.mojo
+@@ -17,7 +17,7 @@ then the fit raises. NVIDIA and AMD run the fit in one launch with no check
+ `-D MOJOLEARN_WITNESS_SABOTAGE=1` makes every Apple GARCH / Prophet fit
+ raise (the test that the check is wired)."""
+ from std.python import PythonObject
+-from experiments.classical_identical_ideas.stats_controls import C58_TEAM_MIB
++from experiments.classical_identical_ideas.stats_controls import C58_TEAM64
+ from std.sys.info import has_apple_gpu_accelerator
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+@@ -47,11 +47,11 @@ from sequence.pyapi import (
+ #: device words a group of series may hold in shared and private rows; a
+ #: larger batch runs as several groups over the same buffers
+ # C58 independent classical-series grouping: cap live optimizer/rollback state
+-# at C58_TEAM_MIB (int sweep 64|256, absent = incumbent 256 MiB). Grouping follows actual state bytes,
++# at 64 MiB versus incumbent 256 MiB. Grouping follows actual state bytes,
+ # including Apple rollback copies, rather than series count or dataset shape.
+ # Same kernels, same series-local trial order; all groups complete before return.
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+-comptime SEQ_TEAM_BYTES = C58_TEAM_MIB << 20
++comptime SEQ_TEAM_BYTES = (1 << 26) if C58_TEAM64 else (1 << 28)
+ #: Apple: the lead-thread steps one launch may take over all of its series
+ #: (a bound on the command buffer's length, not on any value)
+ comptime SEQ_TEAM_APPLE_STEPS = 1 << 27
+diff --git a/tsa/impl/select_d_fast.mojo b/tsa/impl/select_d_fast.mojo
+index bf9429565..a79e45b94 100644
+--- a/tsa/impl/select_d_fast.mojo
++++ b/tsa/impl/select_d_fast.mojo
+@@ -27,7 +27,7 @@ from std.sys.info import has_apple_gpu_accelerator
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from bindings.hostptr import copy_f32
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
+-from experiments.classical_identical_ideas.stats_controls import C60_LAG4
++from experiments.classical_identical_ideas.stats_controls import C60_LAG4, C60_DIFF_REUSE
+ from core.column_stats import STATS_TPB
+ from tsa.impl.timeSeries.arima_helpers import prepare_data
+ from tsa.impl.timeSeries.stationarity import (
+@@ -94,6 +94,25 @@ def choose_d_kernel(chosen: MutPointer[Int32, MutAnyOrigin], res: MutPointer[UIn
+     chosen.unsafe_store(b, Int32(c))
+ 
+ 
++def classical_second_diff_reuse(
++    raw: MutPointer[Float32, MutAnyOrigin], workspace: MutPointer[Float32, MutAnyOrigin],
++    n_obs_in: Int32, previous_in: Int32, output_in: Int32,
++):
++    # C60: d=1 already produced raw[i+2]-raw[i+1]. Reuse exactly that
++    # rounded first subtraction in d=2's incumbent left-to-right expression.
++    # This is not diff(diff(raw)), which has a different association.
++    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++    var n = Int(n_obs_in)
++    var series = Int(block_idx.x)
++    var i = Int(thread_idx.x)
++    while i < n-2:
++        var first = workspace[Int(previous_in)+series*(n-1)+i+1]
++        var mid = ftz(raw[series*n+i+1])
++        var low = ftz(raw[series*n+i])
++        workspace[Int(output_in)+series*(n-2)+i] = ftz(ftz(first-mid)+low)
++        i += Int(block_dim.x)
++
++
+ def select_d_fast(
+     ctx: DeviceContext,
+     mut d_y: DeviceBuffer[DType.float32],
+@@ -133,6 +152,7 @@ def select_d_fast(
+     comptime sum_kernel = series_sum_kernel[False]
+     comptime sumsq_kernel = series_sum_kernel[True]
+     var off = 0
++    var previous_y_at = 0
+     for d_ in range(d_max):
+         var nd = n_obs - d_ - s * D
+         var tot = batch_size * nd
+@@ -150,8 +170,15 @@ def select_d_fast(
+             # the round tests the input itself: a device-to-device copy into the workspace
+             var src = d_y.create_sub_buffer[DType.float32](0, tot)
+             ctx.enqueue_copy(dst_buf=y_diff, src_buf=src)
++        elif C60_DIFF_REUSE and D == 0 and d_ == 2:
++            ctx.enqueue_function[classical_second_diff_reuse](
++                d_y.unsafe_ptr(), w.unsafe_ptr(), Int32(n_obs),
++                Int32(previous_y_at), Int32(y_at),
++                grid_dim=(batch_size, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
++            )
+         else:
+             prepare_data(ctx, y_diff, d_y, batch_size, n_obs, d_, D, s)
++        previous_y_at = y_at
+         # `_kpss_test`'s launches (tsa/impl/timeSeries/stationarity.mojo), on the workspace
+         var nd_f = Float32(nd)
+         var ratio = Float32(1.0) / nd_f

@@ -1,0 +1,29 @@
+Restores MOJOLEARN_GBDT_LG_EXACT_BATCH16: the reverse of dc23f13c8 (2026-10-03, "gbdt lossguide: remove dropped GBDT_LG_EXACT_BATCH16 width arm (DROPPED-slower; recover lane/apple-fast-trees2@50dfdcca0")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH16.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index 36759b06e..babac61bc 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -1146,7 +1146,7 @@ comptime LG_EXACT_BATCH = (
+ #: `-D MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF` is the A/B arm (back to 64); the
+ #: old `-D MOJOLEARN_GBDT_LG_EXACT_BATCH128` stays harmless. FAST elsewhere:
+ #: width 64 (arms 32|128). IDENTICAL (`LG_EXACT_ID`) keeps main's width 32
+-#: (arm 64). Lossguide only; depthwise never reads the width.
++#: (arms 16|64). Lossguide only; depthwise never reads the width.
+ comptime _LG_EXACT_BATCH128 = (
+     is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128"]()
+     or (
+@@ -1159,7 +1159,9 @@ comptime LG_EXACT_BATCH_WIDTH = (
+         32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
+     )
+ ) if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else (
+-    64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else 32
++    64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else (
++        16 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH16"]() else 32
++    )
+ )
+ 
+ #: FAST on Apple (trees-apple3): THE ESTIMATOR INHERITS THE SEARCHER'S

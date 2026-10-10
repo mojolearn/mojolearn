@@ -1,0 +1,129 @@
+Restores MOJOLEARN_TREES_HIST_MULTISTAT: the reverse of 9c6dccee7 (2026-10-08, "grid-act-2: delete hist_multistat (both arms; grid ge123e6f9 gbdt-multiclass 1.15x/1.13x combined slower, quality same);")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_TREES_HIST_MULTISTAT.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+index 20d25610c..01099a113 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+@@ -15,7 +15,7 @@ from max.gpu.host.device_attribute import DeviceAttribute
+ 
+ from checks.fixed_point import choose_scale
+ from gbdt.trees_identical_switches import T21_STREAMS
+-from gbdt.trees_hist_switches import HIST_SYM_FEATURE_PARALLEL
++from gbdt.trees_hist_switches import HIST_MULTISTAT, HIST_SYM_FEATURE_PARALLEL
+ from gbdt.trees_small_switches import HIST_REP_SM, HIST_REP_SM_ON, HIST_REP_BPSM, HIST_REP_DEVICE, HIST_REP_DEVICE_X4
+ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit_wide import (
+     hist2_8bit_wide_kernel,
+@@ -3638,24 +3638,37 @@ def launch_histograms_for_blocks[
+                                 block_hist, acc_i32, fixed_scale,
+                             )
+                         else:
+-                            # Tried 2026-10-08 (MOJOLEARN_TREES_HIST_MULTISTAT = 4 | 8, run ge123e6f9): MultiClass one-byte histograms, one cindex
+-                            # walk per 4 or 8 stat planes (launch_hist2_8bit_wide[NS, 1]); NV/AMD gbdt-multiclass istella 1.04x/1.41x (4), 0.99x/1.31x (8),
+-                            # taxi 1.07x/1.11x (4), 1.11x/1.14x (8) SLOWER; accuracy and mlogloss SAME -> deleted. Recoverable at main 42d1e42c6.
+-                            # MultiClass carries 1 + (K-1) stat planes and the
+-                            # fused arm is two-stat by construction. When it
+-                            # landed (8010b2f) every caller WAS two-stat;
+-                            # MultiClass arrived later in another lane, and the
+-                            # first 254-border multiclass fit hit the fused
+-                            # arm's guard instead of a histogram. Multi-stat
+-                            # shapes take the PASS route, whose shared-Int32
+-                            # arm walks stat pairs on the z axis exactly as
+-                            # their ladder does.
+-                            launch_one_byte[8, hist2_smem_mode, ridx_stats](
+-                                ctx, blk, depth, n_live, n_rows, stat_count,
+-                                max_leaves, sm_count, line, base, cindex,
+-                                row_index, stats, p_off, p_sz, ids,
+-                                block_hist, acc_i32, fixed_scale,
+-                            )
++                            comptime if HIST_MULTISTAT > 0:
++                                # lane trees-hist-ideas idea 3 (default off): one
++                                # walk per HIST_MULTISTAT planes instead of one
++                                # per plane; same addends, same cells.
++                                comptime assert (
++                                    HIST_MULTISTAT == 4 or HIST_MULTISTAT == 8
++                                ), "MOJOLEARN_TREES_HIST_MULTISTAT is 4 or 8"
++                                launch_hist2_8bit_wide[
++                                    HIST_MULTISTAT, 1, ridx_stats
++                                ](
++                                    ctx, blk, depth, n_live, n_rows, stat_count,
++                                    max_leaves, sm_count, line, base, cindex,
++                                    row_index, stats, p_off, p_sz, ids,
++                                    acc_i32, fixed_scale,
++                                )
++                            else:
++                                # MultiClass carries 1 + (K-1) stat planes and the
++                                # fused arm is two-stat by construction. When it
++                                # landed (8010b2f) every caller WAS two-stat;
++                                # MultiClass arrived later in another lane, and the
++                                # first 254-border multiclass fit hit the fused
++                                # arm's guard instead of a histogram. Multi-stat
++                                # shapes take the PASS route, whose shared-Int32
++                                # arm walks stat pairs on the z axis exactly as
++                                # their ladder does.
++                                launch_one_byte[8, hist2_smem_mode, ridx_stats](
++                                    ctx, blk, depth, n_live, n_rows, stat_count,
++                                    max_leaves, sm_count, line, base, cindex,
++                                    row_index, stats, p_off, p_sz, ids,
++                                    block_hist, acc_i32, fixed_scale,
++                                )
+                     else:
+                         launch_one_byte[8, hist2_smem_mode, ridx_stats](
+                             ctx, blk, depth, n_live, n_rows, stat_count,
+diff --git a/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit_wide.mojo b/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit_wide.mojo
+index 1c22de75e..b6cc36ec5 100644
+--- a/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit_wide.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit_wide.mojo
+@@ -2,12 +2,15 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Wide fixed-point 8-bit histograms: NS stat planes x FG compressed-index
+ columns per block, in ONE walk of the partition (lane trees-hist-ideas,
+-2026-10-07). Default off; reached only through the IDENTICAL switch in
+-`gbdt/trees_hist_switches.mojo` below. (Idea 3, MOJOLEARN_TREES_HIST_MULTISTAT=4|8,
+-NS planes per MultiClass walk, was deleted 2026-10-08: grid ge123e6f9
+-gbdt-multiclass NV/AMD istella 1.04x/1.41x (4) 0.99x/1.31x (8), taxi
+-1.07x/1.11x (4) 1.11x/1.14x (8) slower, quality SAME; recoverable at main
+-42d1e42c6. The kernel keeps its general NS.)
++2026-10-07). Default off; reached only through two IDENTICAL switches in
++`gbdt/trees_hist_switches.mojo`:
++
++  MOJOLEARN_TREES_HIST_MULTISTAT=4|8 (idea 3). MultiClass carries
++      `stat_count` > 2 planes, and its >128-bin one-byte blocks take the PASS
++      route `launch_one_byte[8]` with grid z = stat_count: the compressed
++      index, the row index and the dither are read once PER PLANE. Here a
++      block covers NS planes (grid z = ceil(stat_count / NS)), so they are
++      read once per NS planes. FG = 1.
+ 
+   MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL (idea 4). Two-stat SymmetricTree
+       blocks. The incumbent fused kernel gives each block ONE cindex column
+diff --git a/gbdt/trees_hist_switches.mojo b/gbdt/trees_hist_switches.mojo
+index 974e02002..16e71d6ad 100644
+--- a/gbdt/trees_hist_switches.mojo
++++ b/gbdt/trees_hist_switches.mojo
+@@ -16,6 +16,7 @@ NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
+ |---|---|---|---|
+ | MOJOLEARN_TREES_HIST_PACKED_GH   | switch   | on/off        | hist_2_one_byte_8bit.mojo `h8_add_point` |
+ | MOJOLEARN_TREES_HIST_WARP_AGG    | switch   | on/off        | hist_2_one_byte_8bit.mojo body loops |
++| MOJOLEARN_TREES_HIST_MULTISTAT   | int sweep| 4, 8 (0 = off)| greedy_search_helper.mojo multi-stat 8-bit arm |
+ | MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL | switch | on/off | greedy_search_helper.mojo `replication_for` |
+ """
+ from std.sys.compile import is_defined
+@@ -34,10 +35,12 @@ comptime HIST_PACKED_GH = _IDN and is_defined["MOJOLEARN_TREES_HIST_PACKED_GH"](
+ # reduction and ONE lane issues the atomic. See `h8_add_point_wave`.
+ comptime HIST_WARP_AGG = _IDN and is_defined["MOJOLEARN_TREES_HIST_WARP_AGG"]()
+ 
+-# Tried 2026-10-08 (MOJOLEARN_TREES_HIST_MULTISTAT = 4 | 8, run ge123e6f9): MultiClass one-byte histograms, one cindex
+-# walk per 4 or 8 stat planes (launch_hist2_8bit_wide[NS, 1]); NV/AMD gbdt-multiclass istella 1.04x/1.41x (4), 0.99x/1.31x (8),
+-# taxi 1.07x/1.11x (4), 1.11x/1.14x (8) SLOWER; accuracy and mlogloss SAME -> deleted. Recoverable at main 42d1e42c6.
+-# (Idea 3; the wide kernel stays for idea 4.)
++# Idea 3: multi-stat (MultiClass) 8-bit histograms. The incumbent walks the
++# compressed index once PER STAT PLANE (`launch_one_byte[8]`, grid z =
++# stat_count). This arm walks it once per GROUP of HIST_MULTISTAT planes.
++# Legal sweep {4, 8}; 0 (absent) keeps the incumbent. 2 is the fused
++# two-stat kernel and is not a legal value here.
++comptime HIST_MULTISTAT = get_defined_int["MOJOLEARN_TREES_HIST_MULTISTAT", 0]() if _IDN else 0
+ 
+ # Idea 4: cost-chosen feature-parallel vs row-parallel histogram grid for
+ # the SymmetricTree greedy searcher. See `sym_feature_parallel_replicas`.

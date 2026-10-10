@@ -1,0 +1,275 @@
+Restores MOJOLEARN_XN_FAST_TILED_RBF: the reverse of f103d7381 (2026-10-03, "x_neighbors: remove dropped XN_FAST_TILED_RBF kernel_tiled op and its env read (DROPPED-noise; recover lane/apple-fast-n")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_XN_FAST_TILED_RBF.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/bindings/_mojolearn_x_neighbors.mojo b/bindings/_mojolearn_x_neighbors.mojo
+index af08a91d2..36fe2de9a 100644
+--- a/bindings/_mojolearn_x_neighbors.mojo
++++ b/bindings/_mojolearn_x_neighbors.mojo
+@@ -12,7 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from x_neighbors.eigh_device import op_eigh
+ from checks.vendor import COMPILED_VENDOR
+ from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_fill, op_p2m_iota, op_p2m_negate, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
+-from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
++from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
+ from x_neighbors.ocsvm_dev import op_ocsvm
+ from x_neighbors.graph_dev import op_louvain
+ from x_neighbors.kapprox_dev import kpca_resident_binding
+@@ -1081,6 +1081,22 @@ def lp_iterate_knn_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
+     return PythonObject(None)
+ 
+ 
++def kernel_tiled_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_y = _a(a_, 1)
++    var v_res = _a(a_, 2)
++    var v_n = _n(i_, 0)
++    var v_m = _n(i_, 1)
++    var v_d = _n(i_, 2)
++    var v_kind = _n(i_, 3)
++    var v_gamma = _f(f_, 0)
++    var v_coef0 = _f(f_, 1)
++    var v_degree = _n(i_, 4)
++    with GILReleased(Python()):
++        op_kernel_tiled(v_x, v_y, v_res, v_n, v_m, v_d, v_kind, v_gamma, v_coef0, v_degree)
++    return PythonObject(None)
++
++
+ def ocsvm_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+     var v_q = _a(a_, 0)
+     var v_cv = _a(a_, 1)
+@@ -1189,6 +1205,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[svgp_fit_ff_binding]("xn_svgp_fit_ff")
+     m.def_function[svgp_predict_binding]("xn_svgp_predict")
+     m.def_function[lp_iterate_knn_binding]("xn_lp_iterate_knn")
++    m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
+     m.def_function[ocsvm_binding]("xn_ocsvm")
+     m.def_function[louvain_binding]("xn_louvain")
+     m.def_function[eigh_binding]("xn_eigh")
+diff --git a/bindings/_mojolearn_x_neighbors_host.mojo b/bindings/_mojolearn_x_neighbors_host.mojo
+index 244d6d384..4ebad4c70 100644
+--- a/bindings/_mojolearn_x_neighbors_host.mojo
++++ b/bindings/_mojolearn_x_neighbors_host.mojo
+@@ -12,7 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from x_neighbors.eigh import op_eigh
+ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
+ from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_fill, op_p2m_iota, op_p2m_negate, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
+-from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
++from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
+ from x_neighbors.ocsvm_host import op_ocsvm
+ from x_neighbors.graph_host import op_louvain
+ from x_neighbors.kapprox_host import kpca_resident_binding
+@@ -1081,6 +1081,22 @@ def lp_iterate_knn_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
+     return PythonObject(None)
+ 
+ 
++def kernel_tiled_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_y = _a(a_, 1)
++    var v_res = _a(a_, 2)
++    var v_n = _n(i_, 0)
++    var v_m = _n(i_, 1)
++    var v_d = _n(i_, 2)
++    var v_kind = _n(i_, 3)
++    var v_gamma = _f(f_, 0)
++    var v_coef0 = _f(f_, 1)
++    var v_degree = _n(i_, 4)
++    with GILReleased(Python()):
++        op_kernel_tiled(v_x, v_y, v_res, v_n, v_m, v_d, v_kind, v_gamma, v_coef0, v_degree)
++    return PythonObject(None)
++
++
+ def ocsvm_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+     var v_q = _a(a_, 0)
+     var v_cv = _a(a_, 1)
+@@ -1189,6 +1205,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[svgp_fit_ff_binding]("xn_svgp_fit_ff")
+     m.def_function[svgp_predict_binding]("xn_svgp_predict")
+     m.def_function[lp_iterate_knn_binding]("xn_lp_iterate_knn")
++    m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
+     m.def_function[ocsvm_binding]("xn_ocsvm")
+     m.def_function[louvain_binding]("xn_louvain")
+     m.def_function[eigh_binding]("xn_eigh")
+diff --git a/python/mojolearn/_expansion_neighbors.py b/python/mojolearn/_expansion_neighbors.py
+index a87853ae7..b88c03ce1 100644
+--- a/python/mojolearn/_expansion_neighbors.py
++++ b/python/mojolearn/_expansion_neighbors.py
+@@ -202,10 +202,12 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
+ #: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
+ #: dangling rows in Python).
+ _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
+-#: lane/apple-fast-neighbors2 (2026-10-02): LabelPropagation /
+-#: LabelSpreading's kNN-graph loop as one resident op (`lp_iterate_knn`) is
+-#: the FAST + Apple default, read back from the binding (`_lp_fast_resident`,
+-#: no env read).
++#: lane/apple-fast-neighbors2 (2026-10-02), FAST tier only, default off:
++#: the rbf kernel matrix from staged tiles (`kernel_tiled`; OneClassSVM's
++#: Gram). LabelPropagation / LabelSpreading's kNN-graph loop as one resident
++#: op (`lp_iterate_knn`) is the FAST + Apple default, read back from the
++#: binding (`_lp_fast_resident`, no env read).
++_FAST_TILED_RBF = os.environ.get("MOJOLEARN_XN_FAST_TILED_RBF", "") == "1"
+ 
+ 
+ def _lp_fast_resident(est):
+@@ -280,7 +282,8 @@ class _XNeighbors(NumericModeMixin):
+         n, d = A.shape
+         m = B.shape[0]
+         out = _empty_out((n, m), "<f4")
+-        self._op("kernel", [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
++        op = "kernel_tiled" if (_FAST_TILED_RBF and kind == "rbf" and self._fast_tier()) else "kernel"
++        self._op(op, [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
+                  (_f32_scalar(gamma), _f32_scalar(coef0)))
+         return out
+ 
+diff --git a/python/mojolearn/_surface_neighbors.py b/python/mojolearn/_surface_neighbors.py
+index 42e8e630b..8f024a338 100644
+--- a/python/mojolearn/_surface_neighbors.py
++++ b/python/mojolearn/_surface_neighbors.py
+@@ -113,6 +113,7 @@ FAMILIES = (
+             "xn_svgp_fit_ff",
+             "xn_svgp_predict",
+             "xn_lp_iterate_knn",
++            "xn_kernel_tiled",
+             "xn_ocsvm",
+             "xn_louvain",
+             "xn_eigh",
+diff --git a/x_neighbors/gen.py b/x_neighbors/gen.py
+index 6cb9a856b..7bf2fa28c 100644
+--- a/x_neighbors/gen.py
++++ b/x_neighbors/gen.py
+@@ -297,6 +297,12 @@ CUSTOM_OPS = [
+      [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"),
+       ("unlabeled", "iin", "n"), ("info", "iout", "2"), ("n", "int"), ("k", "int"), ("c", "int"), ("max_iter", "int"),
+       ("variant", "int"), ("tol_hi", "int"), ("tol_lo", "int"), ("alpha", "float")]),
++    # lane/apple-fast-neighbors2, FAST tier only: `kernel` with x and y tiles
++    # staged in threadgroup memory (rbf; other kinds take `kernel`),
++    # MOJOLEARN_XN_FAST_TILED_RBF=1
++    ("kernel_tiled",
++     [("x", "fin", "n * d"), ("y", "fin", "m * d"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int"), ("d", "int"),
++      ("kind", "int"), ("gamma", "float"), ("coef0", "float"), ("degree", "int")]),
+ ]
+ 
+ #: lane/neural-pass72: scratch ops whose item slices the scratch by its own
+diff --git a/x_neighbors/iter_device.mojo b/x_neighbors/iter_device.mojo
+index 2f67a8aae..66db87865 100644
+--- a/x_neighbors/iter_device.mojo
++++ b/x_neighbors/iter_device.mojo
+@@ -44,7 +44,7 @@ from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
+ from checks.numerics import identical_mul, identical_div, identical_sqrt
+ from std.memory import bitcast as _bc
+ from x_neighbors.device_ops import (
+-    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
++    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, op_kernel,
+     absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
+     pagerank_step_kernel, cc_step_kernel,
+     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
+@@ -2039,3 +2039,81 @@ def op_lp_iterate_knn(
+         _ = d_ys^
+         _ = d_unl^
+         _ = ctx^
++
++
++# ---------------------------------------------------------------- kernel_tiled
++#: MOJOLEARN_XN_FAST_TILED_RBF=1 (lane/apple-fast-neighbors2, 2026-10-02; FAST
++#: tier only, Python-side switch, default off): the rbf kernel matrix from
++#: KT_T x KT_T tiles whose x and y rows are staged in threadgroup memory.
++#: Cause: `kernel_kernel` (x_neighbors/device_ops.mojo, one thread per cell)
++#: streams both rows from device memory for every cell: OneClassSVM's
++#: 10,000 x 10,000 Gram at Istella's 220 features reads each y row 10,000
++#: times (88 GB of traffic for 400 MB of output). Here a block reads its 16
++#: x rows and 16 y rows once and folds 256 cells from threadgroup memory.
++#: Same values up to FAST's fma/exp spellings. d <= KT_MAX_D; other kinds
++#: and wider rows take `kernel`.
++comptime KT_T = 16
++comptime KT_TPB = KT_T * KT_T
++comptime KT_MAX_D = 224
++
++
++def kernel_rbf_tiled_kernel(x: FP, y: FP, res: FP, n_: Int64, m_: Int64, d_: Int64, gamma_: Float32):
++    var n = Int(n_)
++    var m = Int(m_)
++    var d = Int(d_)
++    var tid = Int(thread_idx.x)
++    var i0 = Int(block_idx.y) * KT_T
++    var j0 = Int(block_idx.x) * KT_T
++    var xs = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
++    var ys = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
++    var q = tid
++    while q < KT_T * d:
++        var r = q // d
++        var f = q - r * d
++        var xv = Float32(0)
++        var yv = Float32(0)
++        if i0 + r < n:
++            xv = x.unsafe_load((i0 + r) * d + f)
++        if j0 + r < m:
++            yv = y.unsafe_load((j0 + r) * d + f)
++        xs[q] = xv
++        ys[q] = yv
++        q += KT_TPB
++    barrier()
++    var ti = tid // KT_T
++    var tj = tid - ti * KT_T
++    var i = i0 + ti
++    var j = j0 + tj
++    if i < n and j < m:
++        var acc = Float32(0)
++        for f in range(d):
++            var df = xs[ti * d + f] - ys[tj * d + f]
++            acc = identical_mul_add(df, df, acc)
++        res.unsafe_store(i * m + j, identical_exp(-gamma_ * acc))
++
++
++def op_kernel_tiled(
++    x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
++) raises:
++    """`kernel` from staged tiles for the rbf kind (see KT_T above); every
++    other kind, and d > KT_MAX_D, is `op_kernel` itself."""
++    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++        if kind == K_RBF and d >= 1 and d <= KT_MAX_D and n > 0 and m > 0:
++            var ctx = xn_ctx()
++            var d_x = ctx.enqueue_create_buffer[DType.float32](n * d)
++            ctx.enqueue_copy(dst_buf=d_x, src_ptr=FP(unsafe_from_address=x))
++            var d_y = ctx.enqueue_create_buffer[DType.float32](m * d)
++            ctx.enqueue_copy(dst_buf=d_y, src_ptr=FP(unsafe_from_address=y))
++            var d_res = ctx.enqueue_create_buffer[DType.float32](n * m)
++            ctx.enqueue_function[kernel_rbf_tiled_kernel](
++                d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), gamma,
++                grid_dim=((m + KT_T - 1) // KT_T, (n + KT_T - 1) // KT_T, 1), block_dim=(KT_TPB, 1, 1),
++            )
++            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=res), src_buf=d_res)
++            ctx.synchronize()
++            _ = d_x^
++            _ = d_y^
++            _ = d_res^
++            _ = ctx^
++            return
++    op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)
+diff --git a/x_neighbors/iter_host.mojo b/x_neighbors/iter_host.mojo
+index fa10a6756..064283832 100644
+--- a/x_neighbors/iter_host.mojo
++++ b/x_neighbors/iter_host.mojo
+@@ -16,7 +16,7 @@ from x_neighbors.items import (
+     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
+ )
+ 
+-from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
++from x_neighbors.host_ops import op_knn_impute_cells, op_kernel, X_NEIGHBORS_HOST_SABOTAGE
+ from x_neighbors.items import (
+     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
+     K_RBF, U_IDENTITY,
+@@ -516,6 +516,13 @@ def op_lp_iterate_knn(
+     _ = hs^
+ 
+ 
++def op_kernel_tiled(
++    x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
++) raises:
++    """The CPU column of `kernel_tiled`: `kernel` itself."""
++    op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)
++
++
+ def lp_fast_resident_binding() raises -> PythonObject:
+     """The host column never takes the resident kNN-graph loop by default
+     (LP_FAST_RESIDENT is FAST + Apple; the Python loop runs here)."""

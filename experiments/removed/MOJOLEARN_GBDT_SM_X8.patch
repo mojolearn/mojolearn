@@ -1,0 +1,20 @@
+Restores MOJOLEARN_GBDT_SM_X8: the reverse of eccc9be7e (2026-10-03, "gbdt depthwise: remove dropped GBDT_SM_X8 (DROPPED-slower; recover lane/apple-fast-trees2@50dfdcca0)")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_GBDT_SM_X8.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index bbde8acbd..f51e8ba78 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -1713,6 +1713,10 @@ def fit_non_symmetric_tree[
+     # DEVIATION 2007a: no override, so the pool's cached machine constant.
+     if sm_count <= 0:
+         sm_count = ws[0].sm_count
++        # Measurement arms (FAST): scale the machine-sized split-chain grids.
++        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
++            comptime if is_defined["MOJOLEARN_GBDT_SM_X8"]():
++                sm_count *= 8
+     # ============ DEVIATION 1911/1912: is the quantized family running? ====
+     # The vendor/mode half is COMPTIME (`QUANTIZED_HIST_LIVE`, the
+     # `greedy_quantized_hist_for` row -- False under IDENTICAL, so that

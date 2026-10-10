@@ -1,0 +1,46 @@
+Restores MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF: the reverse of 37b572c78 (2026-10-08, "grid-act-2: delete the ols_one_entry off switch (MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF; grid ge123e6f9 off arm 2.97x/1.74x ist")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/python/mojolearn/linear_model.py b/python/mojolearn/linear_model.py
+index 785a97786..9dba44244 100644
+--- a/python/mojolearn/linear_model.py
++++ b/python/mojolearn/linear_model.py
+@@ -555,10 +555,8 @@ def _ols_tsqr_centered(x, y, rows, cols, mode):
+     [X - mu | y - mean] read the resident buffers, then `_ols_tsqr`'s solve
+     on the small R. The same words as `_column_means` + `_center` +
+     `_ols_tsqr`, which crossed X four times. None when the binding does not
+-    route here (an older binding or a FAST build): the caller keeps that
+-    sequence. The IDENTICAL off arm (MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF) was
+-    deleted 2026-10-08 (grid ge123e6f9: 2.97x/1.74x istella, 6.17x/3.83x
+-    taxi slower on NV/AMD); recoverable at main 42d1e42c6."""
++    route here (an older binding, a FAST build, or one built with -D
++    MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF): the caller keeps that sequence."""
+     from ._expansion_decomp import _F32_EPS, _Kit, _M, _mode, _tsqr_lstsq_core
+     k = _Kit(_mode(mode))
+     flags = _optional_export(k._raw(), "x_decomp_idn_flags")
+diff --git a/x_decomp/api.mojo b/x_decomp/api.mojo
+index 673f9d384..148e5f18f 100644
+--- a/x_decomp/api.mojo
++++ b/x_decomp/api.mojo
+@@ -578,15 +578,11 @@ def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises
+ 
+ # lane idn-dense-linalg (2026-10-04): the one-entry routes Python takes when
+ # `idn_flags_py` says so (both bindings; the same words as the calls they
+-# replace). -D MOJOLEARN_IDN_LU_GESV_OFF clears its bit, and Python keeps
+-# the old call sequence. IDENTICAL builds only: a FAST build's bits are 0
+-# and its routes are as they were.
+-# Tried 2026-10-08 (MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF, the ols_one_entry "off" arm, run ge123e6f9): the old four-crossing
+-# OLS sequence (_column_means + _center + _ols_tsqr) is NV/AMD 2.97x/1.74x SLOWER istella, 6.17x/3.83x taxi, r2 SAME, so
+-# the one-entry route is the only IDENTICAL OLS route (MOJOLEARN_IDN_ALL_OFF no longer clears it); the _OFF define is
+-# refused. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++# replace). -D MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF / -D MOJOLEARN_IDN_LU_GESV_OFF
++# clear the bit, and Python keeps the old call sequence. IDENTICAL builds
++# only: a FAST build's bits are 0 and its routes are as they were.
+ comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-comptime IDN_OLS_ONE_ENTRY = _API_IDN
++comptime IDN_OLS_ONE_ENTRY = _API_IDN and not (is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ comptime IDN_LU_GESV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ # lane fam-decomp (2026-10-04): LLE builds F0 = [F^ | u] in three cells and
+ # takes F^ X as F0 [X; 0] on every column of an IDENTICAL build (device and

@@ -1,0 +1,22 @@
+Restores MOJOLEARN_KERNEL_FAST_GPR_RESIDENT: the reverse of cc300add8 (2026-10-03, "gaussian_process: remove dropped KERNEL_FAST_GPR_RESIDENT note (DROPPED-semantics, no code on main; recover lane/apple-f")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_KERNEL_FAST_GPR_RESIDENT.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gaussian_process/estimator.mojo b/gaussian_process/estimator.mojo
+index bdaf5e413..6889f170c 100644
+--- a/gaussian_process/estimator.mojo
++++ b/gaussian_process/estimator.mojo
+@@ -717,6 +717,12 @@ def gpr_fit_host(
+         elem_tpb,
+         sabotage,
+     )
++    # MOJOLEARN_KERNEL_FAST_GPR_RESIDENT (lane/apple-fast-kernel, M3 A/B
++    # kernel-gpr-resident-ist: gpr istella 168.4 -> 132.8 ms, r2 .2354 same)
++    # is SUBSUMED here: main's resident chain below (lane/cgr-kernel) keeps
++    # K, L and the dual on the device in every mode and folds y.alpha on
++    # the device, which the lane arm did on the host. The define (and
++    # MOJOLEARN_KERNEL_FAST_GPR_RESIDENT_OFF) are accepted and change nothing.
+     # --- L = cholesky(K + alpha I); alpha_ = cho_solve(L, y), RESIDENT ----
+     # (lane/cgr-kernel) K, its factor and the dual never leave the device
+     # until the fit's outputs are read back. Before, K was downloaded, then

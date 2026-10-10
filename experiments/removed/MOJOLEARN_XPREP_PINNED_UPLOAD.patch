@@ -1,0 +1,151 @@
+Restores MOJOLEARN_XPREP_PINNED_UPLOAD: the reverse of fd7e86b46 (2026-10-09, "postmerge-act-1: delete the G1 DeviceStore pinned upload stage (MOJOLEARN_XPREP_PINNED_UPLOAD; post-merge A/B nv n0607->")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_XPREP_PINNED_UPLOAD.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/core/arena_io.mojo b/core/arena_io.mojo
+index e0e5ccd56..5db61a27a 100644
+--- a/core/arena_io.mojo
++++ b/core/arena_io.mojo
+@@ -133,10 +133,8 @@ def upload_ranges_host(
+     """G3 (lane fg-knn-nb, 2026-10-09; x_prep/device.mojo XPREP_NO_SLOT_HOP):
+     `upload_ranges` where a triple's src = -2 - j names entry j of the Int64
+     host address table at `host_tab_addr` (`n_host` entries): that input's
+-    host words go STRAIGHT into the arena range, through
+-    `DeviceStore.stage_upload` (one copy from the host pointer; TOMBSTONE: the
+-    G1 pinned stage was deleted 2026-10-09, lane postmerge-act-1, slower on
+-    both vendors, core/device_store.mojo), instead of into a store slot
++    host words go STRAIGHT into the arena range, through the store's pinned
++    stage (G1, `DeviceStore.stage_upload`), instead of into a store slot
+     first and then device to device into the arena. Same words in the same
+     places. `check_in_ranges(..., n_host)` must have passed."""
+     var r = ArenaIP(unsafe_from_address=ins_addr)
+diff --git a/core/device_store.mojo b/core/device_store.mojo
+index 32228afea..cc2e988b4 100644
+--- a/core/device_store.mojo
++++ b/core/device_store.mojo
+@@ -34,23 +34,42 @@ MOJOLEARN_XPREP_ARENA_POOL_OFF=1` makes live device memory exactly the live
+ slots again. Where bytes live moves no bit.
+ """
+ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
++from std.memory import memcpy
++from std.sys import has_accelerator
+ from std.sys.compile import is_defined
+-from max.gpu.host import DeviceBuffer, DeviceContext
++from std.sys.info import has_apple_gpu_accelerator
++from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ from core.device_zero import enqueue_fill
+ 
+-#: TOMBSTONE G1 (lane fg-knn-nb pinned upload stage, `MOJOLEARN_XPREP_PINNED_UPLOAD`;
+-#: deleted 2026-10-09 by lane postmerge-act-1, code recoverable at main 432d6e8ff):
+-#: `put`/`write` of >= 1M words went through a store-lifetime pinned stage of
+-#: two 32 MB halves (host memcpy of chunk i overlapping the DMA of chunk
+-#: i - 1). Post-merge A/B (one run per arm) found the plain pageable copy
+-#: FASTER on both vendors, gaussian-nb default -> `_OFF`: istella NV 129.8 ->
+-#: 88.7 ms (0.68x), AMD 46.4 -> 27.9 (0.60x); taxi NV 20.9 -> 19.3 (0.92x), AMD
+-#: 14.1 -> 12.9 (0.91x); same digests. The host memcpy into the stage plus
+-#: the pinned allocation cost more than the DMA gain. Every upload is one
+-#: `enqueue_copy` from the caller's pointer; both defines are refused by
+-#: core/six_lane_experiment_guards.mojo. No bit moves.
++#: G1 (lane fg-knn-nb, 2026-10-09, docs/plans/flagship-gaps-20261009/read_knn_nb.md):
++#: `put` and `write` of at least STORE_STAGE_MIN_WORDS words copy the host
++#: words through a store-lifetime PINNED stage of two STORE_STAGE_WORDS
++#: halves, chunk by chunk, the host memcpy of chunk i overlapping the DMA of
++#: chunk i - 1 (gemm/host_transport.mojo's double buffer), instead of one
++#: `enqueue_copy` from the caller's PAGEABLE pointer. Cost reasoning: a
++#: pageable H2D is staged by the driver through its own small bounce buffer
++#: (measured ~0.8 GB/s in the GaussianNB fit cell: 880 MB more X cost
++#: ~1 s more), while a pinned H2D runs at the link rate (PCIe 4 x16 ~25
++#: GB/s); the extra host memcpy runs at memory bandwidth and overlaps the
++#: DMA, so a large put becomes memcpy-bound (~10 GB/s) instead of ~1 GB/s.
++#: The stage costs 64 MB of pinned host memory per store, made on the first
++#: large put. Below 1M words (4 MB) a put keeps the direct copy (the stage's
++#: fixed waits are not repaid). Generic: every binding with a DeviceStore
++#: (x_prep, x_metrics, model selection) takes it. Not on Apple (unified
++#: memory: the stage is a second host copy for nothing) and not in FAST
++#: (untouched by this lane). DEFAULT ON (transport only, no bit moves);
++#: `-D MOJOLEARN_XPREP_PINNED_UPLOAD_OFF=1` restores the direct copy.
++comptime STORE_PINNED_UPLOAD = (
++    has_accelerator()
++    and not has_apple_gpu_accelerator()
++    and GLOBAL_NUMERIC_MODE != NUMERIC_FAST
++    and not is_defined["MOJOLEARN_XPREP_PINNED_UPLOAD_OFF"]()
++)
++#: 8M words = 32 MB per stage half.
++comptime STORE_STAGE_WORDS = 1 << 23
++comptime STORE_STAGE_MIN_WORDS = 1 << 20
+ 
+ #: G2 (lane fg-knn-nb, slot half; the arena half is x_prep/device.mojo
+ #: X_PREP_POOL_ARENA): a freed slot's buffer of at least STORE_POOL_MIN_WORDS
+@@ -117,6 +136,9 @@ struct DeviceStore(Defaultable, Movable):
+     var words: List[Int]
+     var released: List[Int]
+     var live: Int
++    #: G1: the pinned upload stage (two STORE_STAGE_WORDS halves), made on
++    #: the first large put.
++    var stage: Optional[HostBuffer[DType.float32]]
+     #: G2: freed slot buffers kept for a put of the same length, and their bytes.
+     var spare: List[DeviceBuffer[DType.float32]]
+     var spare_bytes: Int
+@@ -126,6 +148,7 @@ struct DeviceStore(Defaultable, Movable):
+         self.words = List[Int]()
+         self.released = List[Int]()
+         self.live = 0
++        self.stage = Optional[HostBuffer[DType.float32]]()
+         self.spare = List[DeviceBuffer[DType.float32]]()
+         self.spare_bytes = 0
+ 
+@@ -158,11 +181,34 @@ struct DeviceStore(Defaultable, Movable):
+ 
+     def _upload(mut self, ctx: DeviceContext, dst: DeviceBuffer[DType.float32], src_addr: Int, n_words: Int) raises:
+         """The `n_words` host words at `src_addr` into `dst[0, n_words)`;
+-        waits. One copy from the caller's pointer (the G1 pinned stage was
+-        deleted 2026-10-09: slower on both vendors, see the TOMBSTONE above)."""
++        waits. G1: large copies go through the pinned stage."""
+         if n_words <= 0:
+             ctx.synchronize()
+             return
++        comptime if STORE_PINNED_UPLOAD:
++            if n_words >= STORE_STAGE_MIN_WORDS:
++                if not self.stage:
++                    self.stage = ctx.enqueue_create_host_buffer[DType.float32](2 * STORE_STAGE_WORDS)
++                    ctx.synchronize()
++                var stage = StoreWP(unsafe_from_address=Int(self.stage.value().unsafe_ptr()))
++                var src = StoreWP(unsafe_from_address=src_addr)
++                # Double-buffered: chunk i is written into its half while
++                # chunk i - 1's DMA runs; the wait before DMA i retires DMA
++                # i - 1, so when chunk i + 1 refills that half nothing reads it.
++                var off = 0
++                var i = 0
++                while off < n_words:
++                    var cnt = min(STORE_STAGE_WORDS, n_words - off)
++                    var half = stage + (i % 2) * STORE_STAGE_WORDS
++                    memcpy(dest=half, src=src + off, count=cnt)
++                    if i > 0:
++                        ctx.synchronize()
++                    ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.float32](off, cnt), src_ptr=half)
++                    off += cnt
++                    i += 1
++                # the next host write into the stage needs these DMAs retired
++                ctx.synchronize()
++                return
+         if n_words == len(dst):
+             ctx.enqueue_copy(dst_buf=dst, src_ptr=StoreWP(unsafe_from_address=src_addr))
+         else:
+diff --git a/x_prep/device.mojo b/x_prep/device.mojo
+index 575fd3a70..25fab8918 100644
+--- a/x_prep/device.mojo
++++ b/x_prep/device.mojo
+@@ -380,9 +380,7 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages:
+ #: Python program (`_Prog.run`) sends a large direct input (the
+ #: MOJOLEARN_XPREP_DIRECT case) as a host span of the range list instead of
+ #: putting it into a store slot first: `upload_ranges_host` copies its host
+-#: words straight into the arena range (one copy from the host pointer;
+-#: TOMBSTONE: the G1 pinned stage it went through was deleted 2026-10-09,
+-#: lane postmerge-act-1, slower on both vendors, core/device_store.mojo). Cost
++#: words straight into the arena range through the pinned stage. Cost
+ #: reasoning: the slot route allocates a second device copy of X (~880 MB at
+ #: 1M x 220), uploads into it, copies it device to device into the arena
+ #: (another ~880 MB of traffic) and frees it, per fit; the host span route

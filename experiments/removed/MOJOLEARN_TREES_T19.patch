@@ -1,0 +1,152 @@
+Restores MOJOLEARN_TREES_T19: the reverse of e2c65c026 (2026-10-08, "grid-losers-1: delete T19 (grid ge123e6f9: gbdt-depthwise 0.47x/0.69x taxi but istella AUC -0.43%, logloss +20.7%); fuse")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_TREES_T19.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index 1c6bd0eea..84607f809 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -63,7 +63,7 @@ from checks.soft_f64 import (
+     sf64_to_f32,
+ )
+ from std.sys.compile import is_defined
+-from gbdt.trees_identical_switches import T17_BATCH, T18, T19_DEFER, T21, C45_GBDT, LG_LEVEL_ROUNDS
++from gbdt.trees_identical_switches import T17_BATCH, T18, T19, T19_DEFER, T21, C45_GBDT, LG_LEVEL_ROUNDS
+ 
+ from std.sys.info import has_apple_gpu_accelerator
+ from std.builtin.sort import sort
+@@ -271,7 +271,9 @@ comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
+ #: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` turns it off (and with it
+ #: DW_NO_LEVEL_SYNC, which stacks on it); the old
+ #: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN` is harmless.
+-comptime DW_FUSED_CHAIN = (
++# T19/C48: same stable integer partition, canonical IDENTICAL stats retained.
++# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++comptime DW_FUSED_CHAIN = T19 or (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and has_apple_gpu_accelerator()
+ # F12/depthwise M3 2026-10-06: 4 scored caller times; B/A
+@@ -297,7 +299,7 @@ comptime DW_FUSED_CHAIN = (
+ #: nothing to score keep the two-wait schedule.
+ #: DEFAULT with DW_FUSED_CHAIN (numbers above). `-D
+ #: MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF` turns it off; the old `-D MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC` is harmless.
+-comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not is_defined[
++comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not T19 and not is_defined[
+     "MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF"
+ ]()
+ 
+@@ -310,7 +312,7 @@ comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not is_defined[
+ #: depthwise taxi 12,711 -> 11,361 ms (-10.6%), istella 17,154 -> 16,539 ms
+ #: (-3.6%), auc within spread. Off: `-D MOJOLEARN_GBDT_DW2_PART_VEC4_OFF`.
+ #: The old opt-in define `-D MOJOLEARN_GBDT_DW2_PART_VEC4` is harmless.
+-comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not is_defined[
++comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not T19 and not is_defined[
+     "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
+ ]()
+ #: The histogram prefix scan over a shared-memory copy of 16 features'
+@@ -483,7 +485,7 @@ def _launch_fused_split_chain[
+         grid_dim=(chunk_grid, n_split, 1),
+         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
+     )
+-    ctx.enqueue_function[fused_scan_update_kernel[GUARD]](
++    ctx.enqueue_function[fused_scan_update_kernel[GUARD, not SPLIT_COST_IDENTICAL]](
+         d_left.unsafe_ptr(),
+         d_right.unsafe_ptr(),
+         p_off.unsafe_ptr(),
+@@ -1807,9 +1809,9 @@ def fit_non_symmetric_tree[
+     # Istella 1.024); -D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF restores the cut.
+     # FAST keeps it at every width. One decision per tree, so a tree never
+     # mixes the two schedules.
+-    var use_ridx = RIDX_ONLY_SPLITS and (
++    var use_ridx = T19 or (RIDX_ONLY_SPLITS and (
+         not SPLIT_COST_IDENTICAL or ridx_schedule_pays(len(fold_counts))
+-    )
++    ))
+     if options.policy != GROW_DEPTHWISE and options.policy != GROW_LOSSGUIDE:
+         raise Error(
+             "fit_non_symmetric_tree is EGrowPolicy::Depthwise or Lossguide;"
+diff --git a/gbdt/methods/greedy_subsets_searcher/kernel/split_chain_fused.mojo b/gbdt/methods/greedy_subsets_searcher/kernel/split_chain_fused.mojo
+index 1ba521c63..5374b6be7 100644
+--- a/gbdt/methods/greedy_subsets_searcher/kernel/split_chain_fused.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/kernel/split_chain_fused.mojo
+@@ -114,7 +114,7 @@ def fused_flags_count_kernel[GUARD: Bool = False](
+         chunk += Int(grid_dim.x)
+ 
+ 
+-def fused_scan_update_kernel[GUARD: Bool = False](
++def fused_scan_update_kernel[GUARD: Bool = False, PROPAGATE_STATS: Bool = True](
+     left_leaves: MutPointer[UInt32, MutAnyOrigin],
+     right_leaves: MutPointer[UInt32, MutAnyOrigin],
+     part_offset: MutPointer[UInt32, MutAnyOrigin],
+@@ -150,29 +150,32 @@ def fused_scan_update_kernel[GUARD: Bool = False](
+     var n_chunks = (size + FUSED_CHAIN_BLOCK - 1) // FUSED_CHAIN_BLOCK
+     var tid = Int(thread_idx.x)
+ 
+-    # DEVIATION 1901's stats update, verbatim (one thread per stat; the
+-    # parent's entry is read before either child's is written, in-thread)
+-    var bin_feature_count = Int(bin_feature_count_in)
+-    var stat_count = Int(stat_count_in)
+-    var cell = Int(win_cells.unsafe_load(leaf_slot))
+-    var one_hot = split_features[unsafe_offset=leaf_slot].one_hot_feature
+-    var stat_id = tid
+-    while stat_id < stat_count:
+-        var parent = part_stats.unsafe_load(left_leaf * stat_count + stat_id)
+-        var cell_sum = histograms.unsafe_load(
+-            left_leaf * bin_feature_count * stat_count
+-            + stat_id * bin_feature_count
+-            + cell
+-        )
+-        var derived = parent - cell_sum
+-        if stat_id == 0:
+-            cell_sum = max(cell_sum, Float32(0.0))
+-            derived = max(derived, Float32(0.0))
+-        var left_sum = derived if one_hot else cell_sum
+-        var right_sum = cell_sum if one_hot else derived
+-        part_stats.unsafe_store(left_leaf * stat_count + stat_id, left_sum)
+-        part_stats.unsafe_store(right_leaf * stat_count + stat_id, right_sum)
+-        stat_id += Int(block_dim.x)
++    # T19/C48: IDENTICAL uses its unchanged canonical reduction next level.
++    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++    comptime if PROPAGATE_STATS:
++        # DEVIATION 1901's stats update, verbatim (one thread per stat; the
++        # parent's entry is read before either child's is written, in-thread)
++        var bin_feature_count = Int(bin_feature_count_in)
++        var stat_count = Int(stat_count_in)
++        var cell = Int(win_cells.unsafe_load(leaf_slot))
++        var one_hot = split_features[unsafe_offset=leaf_slot].one_hot_feature
++        var stat_id = tid
++        while stat_id < stat_count:
++            var parent = part_stats.unsafe_load(left_leaf * stat_count + stat_id)
++            var cell_sum = histograms.unsafe_load(
++                left_leaf * bin_feature_count * stat_count
++                + stat_id * bin_feature_count
++                + cell
++            )
++            var derived = parent - cell_sum
++            if stat_id == 0:
++                cell_sum = max(cell_sum, Float32(0.0))
++                derived = max(derived, Float32(0.0))
++            var left_sum = derived if one_hot else cell_sum
++            var right_sum = cell_sum if one_hot else derived
++            part_stats.unsafe_store(left_leaf * stat_count + stat_id, left_sum)
++            part_stats.unsafe_store(right_leaf * stat_count + stat_id, right_sum)
++            stat_id += Int(block_dim.x)
+ 
+     var carry = 0
+     var c = 0
+diff --git a/gbdt/trees_identical_switches.mojo b/gbdt/trees_identical_switches.mojo
+index 1e807ddd2..e3fa8e70b 100644
+--- a/gbdt/trees_identical_switches.mojo
++++ b/gbdt/trees_identical_switches.mojo
+@@ -19,8 +19,8 @@ comptime T17_BATCH = get_defined_int["MOJOLEARN_TREES_T17_BATCH", 0]() if GLOBAL
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+ comptime T18 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T18"]()
+ 
+-# T19 (fused partition chain under IDENTICAL) deleted 2026-10-08 by lane/grid-losers-1: grid ge123e6f9 quality loss
+-# (gbdt-depthwise istella AUC -0.43%, logloss +20.7%); see docs/apple-fast/EXPERIMENTS.md. T19_DEFER below is independent.
++# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++comptime T19 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T19"]()
+ 
+ # T20 removed 2026-10-07: it set the same DEFER_HIST_COPY_1903 constant as T19_DEFER.
+ 

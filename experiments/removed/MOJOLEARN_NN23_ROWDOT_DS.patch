@@ -1,0 +1,121 @@
+Restores MOJOLEARN_NN23_ROWDOT_DS: the reverse of a1488ca2d (2026-10-07, "attention/norm/rope/swiglu/kv-cache: one switch per idea (IDN_NORM, IDN_ROPE, IDN_TRAIN_SWIGLU, IDN_TRAIN_NO_DECODE_CACH")
+restricted to code files (hunks that name this define).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch  (or git apply -3 when main has moved on).
+First apply experiments/removed/_shared-a1488ca2d.patch: the deletion commit's hunks that name no single define (shared by every define it deleted).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/transformer/checks/transformer_backward.mojo b/transformer/checks/transformer_backward.mojo
+index c8366b60e..bd24c655e 100644
+--- a/transformer/checks/transformer_backward.mojo
++++ b/transformer/checks/transformer_backward.mojo
+@@ -7,6 +7,10 @@ from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY
+ from transformer.experiments.norm_profile import (
+     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+ )
++from transformer.experiments.attention_schedules import (
++    NN22_EAGER_DKDV_PAIR, eager_dkdv_pair_kernel,
++    NN23_ROWDOT_DS, eager_rowdot_ds_kernel,
++)
+ from std.gpu import block_dim, block_idx, thread_idx
+ from std.time import perf_counter_ns
+ from std.memory import bitcast, memcpy
+@@ -2801,41 +2821,52 @@ def bwd_attention_eager_stages(
+     # =====================================================================
+     # STAGE 18-19. The softmax backward, ONE closed form. DEVIATION 1406.
+     # =====================================================================
+-    step_count_launch()
+-    ctx.enqueue_function[bwd_softmax_zdot_kernel](
+-        bst.attn_zdot.unsafe_ptr(),
+-        bst.d_attn_weights.unsafe_ptr(),
+-        fwd.weights.unsafe_ptr(),
+-        Int32(b),
+-        Int32(nh),
+-        Int32(l),
+-        Int32(s),
+-        grid_dim=(_grid(b * nh * l), 1, 1),
+-        block_dim=(BWD_TPB, 1, 1),
+-    )
+-    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+-    # statement is a trace record. `IdentityTrace.record_device` returns
+-    # at once when tracing is off; when it is on it enqueues its OWN copy
+-    # behind this kernel on the same in-order context and drains AFTER
+-    # it. This wait ordered nothing in either branch.
+-    _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
+-    step_count_launch()
+-    ctx.enqueue_function[bwd_softmax_ds_kernel](
+-        bst.d_attn_masked.unsafe_ptr(),
+-        bst.d_attn_weights.unsafe_ptr(),
+-        fwd.weights.unsafe_ptr(),
+-        bst.attn_zdot.unsafe_ptr(),
+-        Int32(cells),
+-        Int32(s),
+-        grid_dim=(_grid(cells), 1, 1),
+-        block_dim=(BWD_TPB, 1, 1),
+-    )
+-    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+-    # statement is a trace record. `IdentityTrace.record_device` returns
+-    # at once when tracing is off; when it is on it enqueues its OWN copy
+-    # behind this kernel on the same in-order context and drains AFTER
+-    # it. This wait ordered nothing in either branch.
+-    _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
++    comptime if NN23_ROWDOT_DS and not BWD_ANY_SABOTAGE:
++        step_count_launch()
++        ctx.enqueue_function[eager_rowdot_ds_kernel](
++            bst.attn_zdot.unsafe_ptr(), bst.d_attn_masked.unsafe_ptr(),
++            bst.d_attn_weights.unsafe_ptr(), fwd.weights.unsafe_ptr(),
++            Int32(b * nh * l), Int32(s),
++            grid_dim=(_grid(b * nh * l), 1, 1), block_dim=(BWD_TPB, 1, 1),
++        )
++        _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
++        _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
++    else:
++        step_count_launch()
++        ctx.enqueue_function[bwd_softmax_zdot_kernel](
++            bst.attn_zdot.unsafe_ptr(),
++            bst.d_attn_weights.unsafe_ptr(),
++            fwd.weights.unsafe_ptr(),
++            Int32(b),
++            Int32(nh),
++            Int32(l),
++            Int32(s),
++            grid_dim=(_grid(b * nh * l), 1, 1),
++            block_dim=(BWD_TPB, 1, 1),
++        )
++        # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
++        # statement is a trace record. `IdentityTrace.record_device` returns
++        # at once when tracing is off; when it is on it enqueues its OWN copy
++        # behind this kernel on the same in-order context and drains AFTER
++        # it. This wait ordered nothing in either branch.
++        _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
++        step_count_launch()
++        ctx.enqueue_function[bwd_softmax_ds_kernel](
++            bst.d_attn_masked.unsafe_ptr(),
++            bst.d_attn_weights.unsafe_ptr(),
++            fwd.weights.unsafe_ptr(),
++            bst.attn_zdot.unsafe_ptr(),
++            Int32(cells),
++            Int32(s),
++            grid_dim=(_grid(cells), 1, 1),
++            block_dim=(BWD_TPB, 1, 1),
++        )
++        # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
++        # statement is a trace record. `IdentityTrace.record_device` returns
++        # at once when tracing is off; when it is on it enqueues its OWN copy
++        # behind this kernel on the same in-order context and drains AFTER
++        # it. This wait ordered nothing in either branch.
++        _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
+ 
+     # =====================================================================
+     # STAGE 20. S13's backward, an EXACT IDENTITY. DEVIATION 1414.
+diff --git a/transformer/experiments/attention_schedules.mojo b/transformer/experiments/attention_schedules.mojo
+index f848f5ecd..548a32b81 100644
+--- a/transformer/experiments/attention_schedules.mojo
++++ b/transformer/experiments/attention_schedules.mojo
+@@ -185,6 +222,7 @@ def qk_rope_pair_kernel(
+         k_out.unsafe_store(ki, ftz(ftz(ka) + ftz(kb)))
+ 
+ comptime NN21_SCALE_MASK = NN_AB_ENABLED and is_defined["MOJOLEARN_NN21_SCALE_MASK"]()
++comptime NN23_ROWDOT_DS = NN_AB_ENABLED and is_defined["MOJOLEARN_NN23_ROWDOT_DS"]()
+ 
+ 
+ def score_scale_mask_kernel(

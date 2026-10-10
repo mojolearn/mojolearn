@@ -1,0 +1,77 @@
+Restores MOJOLEARN_SYM_HIST_FAST: the reverse of 6f5ace7fa (2026-10-03, "gbdt sym hist / kernel_matrix: remove dropped SYM_HIST_FAST 512 block on Apple FAST (DROPPED-noise; recover lane/apple-f")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_SYM_HIST_FAST.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/checks/kernel_matrix.mojo b/checks/kernel_matrix.mojo
+index 18ab52d9e..a37ea5488 100644
+--- a/checks/kernel_matrix.mojo
++++ b/checks/kernel_matrix.mojo
+@@ -1015,6 +1015,22 @@ def hist2_block_size_for[column: Int, smem_mode: Int]() -> Int:
+         comptime want = (
+             APPLE_HIST2_SHARED_I32_BLOCK_CAP if column == COLUMN_APPLE else 512
+         )
++        # `-D MOJOLEARN_SYM_HIST_FAST=1` (lane/apple-fast-trees-yeti,
++        # 2026-10-02), FAST on Apple only: the 512-thread shared-Int32
++        # block the arm was measured at (1.94x, `hist_2_one_byte_base.mojo`
++        # module docstring) instead of the 256 cap above, which is the M2
++        # Pro's dispatch limit and halves the per-core occupancy of every
++        # histogram launch on the M3 (one 32 KB block per core either way).
++        # Same bits: the accumulation is Int32 fixed point and the flush
++        # adds Int32 cells, so the block changes the grid only (the note
++        # on the cap). IDENTICAL keeps the cap; its bits never move.
++        comptime if (
++            is_defined["MOJOLEARN_SYM_HIST_FAST"]()
++            and column == COLUMN_APPLE
++            and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
++        ):
++            comptime by_smem_fast = 512 if limit >= 512 else limit
++            return by_smem_fast if by_smem_fast < hard else hard
+         comptime by_smem = want if limit >= want else limit
+         return by_smem if by_smem < hard else hard
+     else:
+diff --git a/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo b/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo
+index d45e5fbd0..075a3eb8c 100644
+--- a/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo
+@@ -81,9 +81,28 @@ from checks.kernel_matrix import (
+ #: IDENTICAL two-stat fit at the default 254 borders) kept its literal 512.
+ #: No bit moves with the block: the addends are position-dithered Int32 and
+ #: every sum is an Int32 sum (one slice per 128 threads, `H8_SLICES` of them).
+-comptime H8_BLOCK = (
+-    APPLE_HIST2_SHARED_I32_BLOCK_CAP if TARGET_COLUMN == COLUMN_APPLE else 512
+-)
++def _h8_block_for[column: Int]() -> Int:
++    """The fused 8-bit kernel's block: 512, and the M2 Pro cap on Apple.
++
++    `-D MOJOLEARN_SYM_HIST_FAST=1` (lane/apple-fast-trees-yeti, 2026-10-02),
++    FAST on Apple only: the literal 512 this kernel kept until 2026-09-29,
++    which the M3 ran correctly (the cap's note in `kernel_matrix.mojo`).
++    Cause: under FAST every greedy one-byte width routes through this kernel
++    (`greedy_one_byte_fixed_for`), so the 256 cap halves the per-core
++    occupancy of every `sym.hist` launch on the M3 (one 32 KB block per core
++    either way; the 512 block fills its 4 slices with 16 warps instead of
++    8). No bit moves with the block (the note above). IDENTICAL keeps the
++    cap; its bits never move."""
++    comptime if (
++        is_defined["MOJOLEARN_SYM_HIST_FAST"]()
++        and column == COLUMN_APPLE
++        and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
++    ):
++        return 512
++    return APPLE_HIST2_SHARED_I32_BLOCK_CAP if column == COLUMN_APPLE else 512
++
++
++comptime H8_BLOCK = _h8_block_for[TARGET_COLUMN]()
+ comptime H8_SLICE = 2048
+ comptime H8_SLICES = H8_BLOCK // 128
+ comptime H8_SMEM = H8_SLICE * H8_SLICES
+@@ -94,7 +113,7 @@ def _h8_unroll_for[column: Int]() -> Int:
+     """The main loop's unroll: 4 aligned warp loads (16 points) per trip.
+ 
+     `-D MOJOLEARN_YETI_SYM_HIST_UNROLL8=1` (lane/apple-fast-yetirank,
+-    2026-10-02, layered on the 512 block), FAST on
++    2026-10-02, layered on `MOJOLEARN_SYM_HIST_FAST`'s 512 block), FAST on
+     Apple only: 8 loads (32 points) per trip. Cause: with one 32 KB block
+     per core the kernel hides its global latency with the loads a thread
+     has in flight before its atomics, and a trip issues them all before the

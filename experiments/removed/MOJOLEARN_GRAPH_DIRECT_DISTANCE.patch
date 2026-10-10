@@ -1,0 +1,213 @@
+Restores MOJOLEARN_GRAPH_DIRECT_DISTANCE: the reverse of deae02e73 (2026-10-08, "grid-act-2: delete graph_direct (MOJOLEARN_GRAPH_DIRECT_DISTANCE; grid ge123e6f9 hdbscan 1.76x/1.70x istella, 1.14x/1.16")
+restricted to code files (all code hunks of the deletion commit).
+Apply from the repo root: git apply experiments/removed/MOJOLEARN_GRAPH_DIRECT_DISTANCE.patch  (or git apply -3 when main has moved on).
+Then drop its refusal in core/six_lane_experiment_guards.mojo and its grid_controls removed entry. See docs/TOMBSTONES.md.
+
+diff --git a/experiments/classical_identical_ideas/graph_controls.mojo b/experiments/classical_identical_ideas/graph_controls.mojo
+index 983875c92..950bae281 100644
+--- a/experiments/classical_identical_ideas/graph_controls.mojo
++++ b/experiments/classical_identical_ideas/graph_controls.mojo
+@@ -20,14 +20,14 @@ comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ comptime KNN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KNN_DIRECT_DISTANCE"]()
+ comptime KDE_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KDE_DIRECT_DISTANCE"]()
+ comptime DBSCAN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_DBSCAN_DIRECT_DISTANCE"]()
+-# KNN covers the brute-force/RBC kNN primitive and its
++# GRAPH: HDBSCAN and single-linkage Agglomerative share the linkage host oracle
++# (hierarchy/checks/linkage_oracle.mojo) and the connectivities distance tile,
++# so they share one define. KNN covers the brute-force/RBC kNN primitive and its
+ # host twin wherever it is called (KNN, the kNN graphs of HDBSCAN/UMAP/Spectral,
+ # DBSCAN's RBC eps route through rbc_cmp_dist). KDE covers kde/impl/distance,
+ # which the kernel-matrix route also calls. Each primitive keeps one define on
+ # both its device kernel and its host twin.
+-# Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-# MST and the shared linkage tile (single-linkage Agglomerative, host oracles following); NV/AMD hdbscan istella 1.76x/1.70x,
+-# taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++comptime GRAPH_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_GRAPH_DIRECT_DISTANCE"]()
+ # IVF_DIRECT_DISTANCE: the IVF-Flat scan's distances as direct sums of
+ # squared differences instead of the -2 q.x + |q|^2 + |x|^2 expansion
+ # (device scan, balanced tasks and the ivf_host twin together; bits change).
+diff --git a/hdbscan/host/hdbscan_host_oracle.mojo b/hdbscan/host/hdbscan_host_oracle.mojo
+index 2128612c0..d42cff29f 100644
+--- a/hdbscan/host/hdbscan_host_oracle.mojo
++++ b/hdbscan/host/hdbscan_host_oracle.mojo
+@@ -52,6 +52,8 @@ THE SABOTAGE. `-D MOJOLEARN_HOST_SABOTAGE=1` reads the core distance one
+ slot early (the (k - 1)-th neighbor instead of the k-th), so every core
+ distance, and with it the whole graph, differs.
+ """
++from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
++from core.classical_distance import direct_distance_step
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
+@@ -610,17 +612,16 @@ def hdbh_mutual_reachability(
+                 for f in range(n):
+                     var qv = ftz(xp.unsafe_load(row * n + f))
+                     var yv = ftz(xp.unsafe_load(col * n + f))
+-                    # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-                    # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+-                    # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-                    acc = ftz(identical_mul_add(qv, yv, acc))
++                    comptime if GRAPH_DIRECT_DISTANCE:
++                        acc = direct_distance_step[1](acc,qv,yv)
++                    else:
++                        acc = ftz(identical_mul_add(qv, yv, acc))
+                 var d = ftz(identical_mul_add(
+                     Float32(-2.0), acc,
+                     ftz(ftz(np.unsafe_load(row)) + ftz(np.unsafe_load(col))),
+                 ))
+-                # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-                # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+-                # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++                comptime if GRAPH_DIRECT_DISTANCE:
++                    d = acc
+                 if d <= Float32(0.0):
+                     d = Float32(0.0)
+                 d = ftz(identical_sqrt(d))
+diff --git a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+index d516f01a8..69e200fde 100644
+--- a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
++++ b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+@@ -42,6 +42,8 @@ NON-FINITE WEIGHTS. Round 1 searches every point against every other, so
+ every edge weight is computed at least once; a NaN or infinite weight is
+ reported by its point and refused by name (DEVIATION 1607's rule).
+ """
++from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
++from core.classical_distance import direct_distance_step
+ from checks.numerics import identical_sqrt
+ from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
+ from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES, C62_SAME_COMPONENT_SKIP
+@@ -89,10 +91,11 @@ comptime SMR_KEY_MIN: Int32 = -0x7FFFFFFF - 1
+ 
+ @always_inline
+ def _c30_mr_edge_weight(acc: Float32, na: Float32, nb: Float32, ca: Float32, cb: Float32, inv_alpha: Float32, sabotage: Int32) -> Float32:
+-    # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-    # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+-    # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-    return mr_edge_weight(acc,na,nb,ca,cb,inv_alpha,sabotage)
++    comptime if GRAPH_DIRECT_DISTANCE:
++        var d = Float32(0) if acc <= Float32(0) else acc
++        return mr_max3(ca,cb,mr_scale(inv_alpha,ftz(identical_sqrt(d))),sabotage)
++    else:
++        return mr_edge_weight(acc,na,nb,ca,cb,inv_alpha,sabotage)
+ 
+ 
+ def sparse_mr_search_kernel(
+@@ -144,10 +147,10 @@ def sparse_mr_search_kernel(
+             continue
+         var acc = Float32(0.0)
+         for f in range(d):
+-            # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-            # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+-            # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-            acc = ftz(identical_mul_add(ftz(xt[f * m + i]), ftz(x[j * d + f]), acc))
++            comptime if GRAPH_DIRECT_DISTANCE:
++                acc = direct_distance_step[1](acc,xt[f*m+i],x[j*d+f])
++            else:
++                acc = ftz(identical_mul_add(ftz(xt[f * m + i]), ftz(x[j * d + f]), acc))
+         var v = _c30_mr_edge_weight(acc, ni, norms[j], cri, core[j], inv_alpha, sabotage)
+         if (bitcast[DType.uint32](v) & 0x7F800000) == 0x7F800000:
+             bad = True
+@@ -371,12 +374,12 @@ def sparse_mr_search_tiled_kernel(
+                     bv[c] = b_s[unsafe_offset = kk * SMR_TJ + tx + c * SMR_TX]
+                 comptime for r in range(SMR_RI):
+                     comptime for c in range(SMR_RJ):
+-                        # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-                        # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+-                        # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-                        acc[r * SMR_RJ + c] = ftz(
+-                            identical_mul_add(av[r], bv[c], acc[r * SMR_RJ + c])
+-                        )
++                        comptime if GRAPH_DIRECT_DISTANCE:
++                            acc[r*SMR_RJ+c] = direct_distance_step[1](acc[r*SMR_RJ+c],av[r],bv[c])
++                        else:
++                            acc[r * SMR_RJ + c] = ftz(
++                                identical_mul_add(av[r], bv[c], acc[r * SMR_RJ + c])
++                            )
+             barrier()
+             k0 += SMR_KC
+         comptime for c in range(SMR_RJ):
+diff --git a/hierarchy/checks/linkage_oracle.mojo b/hierarchy/checks/linkage_oracle.mojo
+index 3ed411e35..25b30dbf8 100644
+--- a/hierarchy/checks/linkage_oracle.mojo
++++ b/hierarchy/checks/linkage_oracle.mojo
+@@ -46,6 +46,8 @@ exists to separate one thing:
+     FIX_BLOBS_DUPS the blobs with a few exact duplicates: the card's
+                    fixture, one input that exercises both regimes
+ """
++from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
++from core.classical_distance import direct_distance_step
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+@@ -258,18 +260,17 @@ def host_pinned_distance(
+     for f in range(d):
+         var qv = ftz(x[i * d + f])
+         var yv = ftz(x[j * d + f])
+-        # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-        # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+-        # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-        acc = ftz(identical_mul_add(qv, yv, acc))
++        comptime if GRAPH_DIRECT_DISTANCE:
++            acc = direct_distance_step[1](acc,qv,yv)
++        else:
++            acc = ftz(identical_mul_add(qv, yv, acc))
+     var dist = ftz(
+         identical_mul_add(
+             Float32(-2.0), acc, ftz(ftz(norms[i]) + ftz(norms[j]))
+         )
+     )
+-    # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-    # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+-    # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++    comptime if GRAPH_DIRECT_DISTANCE:
++        dist = acc
+     if dist <= Float32(0.0):
+         dist = Float32(0.0)
+     if is_sqrt:
+diff --git a/hierarchy/impl/cluster/detail/connectivities.mojo b/hierarchy/impl/cluster/detail/connectivities.mojo
+index 9a482854d..378d3d2c7 100644
+--- a/hierarchy/impl/cluster/detail/connectivities.mojo
++++ b/hierarchy/impl/cluster/detail/connectivities.mojo
+@@ -48,6 +48,7 @@ residue to `+0.0` on every vendor (an IEEE compare, not a hardware
+ therefore plants at `build_sorted_mst` (`linkage_check.mojo`).
+ """
+ 
++from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
+ from std.gpu import block_dim, block_idx, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+@@ -233,10 +234,7 @@ def pairwise_distances(
+             if devices > 1:
+                 pairwise_rows(ctx, x, norms, data, m, n, is_sqrt, tile_tpb, devices)
+             else:
+-                # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-                # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+-                # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-                ctx.enqueue_function[pinned_distance_tile_direct_kernel[False]](
++                ctx.enqueue_function[pinned_distance_tile_direct_kernel[GRAPH_DIRECT_DISTANCE]](
+                     data.unsafe_ptr(),
+                     x.unsafe_ptr(),
+                     x_view.unsafe_ptr(),
+diff --git a/hierarchy/impl/cluster/detail/multi_gpu.mojo b/hierarchy/impl/cluster/detail/multi_gpu.mojo
+index cc2897086..2bbb0d7b0 100644
+--- a/hierarchy/impl/cluster/detail/multi_gpu.mojo
++++ b/hierarchy/impl/cluster/detail/multi_gpu.mojo
+@@ -1,5 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Pinned pairwise rows; root diagonal policy and Boruvka order stay intact."""
++from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
+ from max.gpu.host import DeviceContext, DeviceBuffer
+ from std.os import getenv
+ from std.sys.compile import is_defined
+@@ -47,10 +48,7 @@ def pairwise_rows(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
+         qnorms.append(peer_clone(ctx, devices[rank], nv))
+         rnorms.append(peer_clone(ctx, devices[rank], norms))
+         outputs.append(devices[rank].enqueue_create_buffer[DType.float32](rows*m))
+-        # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
+-        # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at
+-        # main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-        devices[rank].enqueue_function[pinned_distance_tile_direct_kernel[False]](
++        devices[rank].enqueue_function[pinned_distance_tile_direct_kernel[GRAPH_DIRECT_DISTANCE]](
+             outputs[rank].unsafe_ptr(), queries[rank].unsafe_ptr(), references[rank].unsafe_ptr(),
+             qnorms[rank].unsafe_ptr(), rnorms[rank].unsafe_ptr(),
+             Int32(rows), Int32(m), Int32(d), is_sqrt,
