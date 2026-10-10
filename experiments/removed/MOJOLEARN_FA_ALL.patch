@@ -1,0 +1,98 @@
+diff --git b/x_decomp/fa_fast.mojo a/x_decomp/fa_fast.mojo
+index 676c85776..95801d400 100644
+--- b/x_decomp/fa_fast.mojo
++++ a/x_decomp/fa_fast.mojo
+@@ -48,6 +48,7 @@ defines (docs/apple-fast/ab/fa.md):
+ - MOJOLEARN_FA_TRANSFORM_FUSED: `fa_transform_kernel`, transform as one
+   launch over rows with P = (W / psi)^T cov_z (d x nc) and the mean in
+   threadgroup memory, one row per thread, the n x nc result read back once.
++- MOJOLEARN_FA_ALL: every define above.
+ - (QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) every ITER_DEVICE
+   arm forms G in double-float (`fa_gram_tile_df_kernel`), factors it once
+   (`fa_chol_df_kernel`, R^T R = G) and takes main's one-sided SVD of
+@@ -102,9 +103,21 @@ from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
+ 
+ #: the guard of every route in this file: a FAST build for the Apple GPU
+ comptime FA_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+-# TOMBSTONE: MOJOLEARN_FA_ALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: every FA define at once; factor-analysis istella 10300.9 -> 20530.8 ms (+99.3%, rab6-faqfix), quality noise.
+-# Restore: git apply experiments/removed/MOJOLEARN_FA_ALL.patch; record in docs/TOMBSTONES.md.
++#: (FAST + Apple, default OFF) every FA define below at once. Source
++#: lane/apple-fast-fa@3efbce2af; built rc=0 there, never timed as one arm.
++#: Recovered 2026-10-04 (lane/apple-fast-rec-fa-robust): READY-AB.
++#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
++#: apple-fast-rec-ab3 @ 0ca521cc5): FA_GRAM_ONCE, FA_ITER_DEVICE and FA_ALL each:
++#: factor-analysis istella 10.4 s -> 1.95-2.0 s (GRAM, ITER; ALL 9.54 s) but
++#: mean_log_likelihood 99.487 -> 92.898 (worse); taxi -14.82365 -> -14.82371
++#: (noise) at 358 -> 30.4 ms (ALL), 192 ms (ITER), 325 ms (GRAM).
++#: HOLD-quality: all stay off; a fix lane is working on the istella loss.
++#: OUTCOME 2 (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
++#: rab6-faqfix, with the FA_GRAM_DF fix): FA_ALL istella 10300.9 -> 20530.8 ms
++#: (+99.3%, slower; mean_log_likelihood 99.487208 -> 99.487246), taxi 345.1 ->
++#: 34.2 ms. DROPPED-slower on istella: FA_ALL stays OFF. FA_ITER_DEVICE alone
++#: (with FA_GRAM_DF) is the FAST + Apple default, below.
++comptime FA_ALL = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_ALL"]()
+ #: (FAST + Apple, default OFF) FactorAnalysis.fit forms the centred Gram G
+ #: (d x d) in ONE tiled pass over the resident X (`fa_gram_tile_kernel` +
+ #: `fa_gram_fold_kernel`), and the Python EM loop takes the eigh of D G D / n
+@@ -117,7 +130,7 @@ comptime FA_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_a
+ #: var - colsum(W^2), whose float32 floor near var * 1e-7 cost Istella's
+ #: held-out log-likelihood. Quality risk: G squares the condition number the
+ #: QR route sees; the A/B's quality check decides.
+-comptime FA_GRAM_ONCE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_GRAM_ONCE"]()
++comptime FA_GRAM_ONCE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_GRAM_ONCE"]() or FA_ALL)
+ #: (FAST + Apple, default ON since 2026-10-04; implies GRAM_ONCE's pass) the whole EM loop as
+ #: ONE binding call on the resident G (`fa_em_py`): per iteration
+ #: `fa_scale_kernel`, main's round-robin eigh, `fa_finish_kernel` (order, sign,
+@@ -137,12 +150,13 @@ comptime FA_GRAM_ONCE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_GRAM_ONCE"]()
+ #: -14.823710 (noise). KEEP: the FAST + Apple default since then (FA_GRAM_DF
+ #: with it, since FA_GRAM_DF follows FA_ITER_DEVICE); rollback
+ #: -D MOJOLEARN_FA_ITER_DEVICE_OFF (the old -D name is harmless; the
+-#: EIG_SMALL, LIVEBUF and LL_DEVICE arms still turn it on).
++#: EIG_SMALL, LIVEBUF, LL_DEVICE and FA_ALL arms still turn it on).
+ comptime FA_ITER_DEVICE = FA_FAST_APPLE and (
+     not is_defined["MOJOLEARN_FA_ITER_DEVICE_OFF"]()
+     or is_defined["MOJOLEARN_FA_EIG_SMALL"]()
+     or is_defined["MOJOLEARN_FA_LIVEBUF"]()
+     or is_defined["MOJOLEARN_FA_LL_DEVICE"]()
++    or FA_ALL
+ )
+ #: (FAST + Apple, default OFF; implies ITER_DEVICE) the d x d eigh inside the
+ #: loop as ONE launch of one threadgroup (`fa_rr_eigh_block_kernel`): main's
+@@ -152,12 +166,12 @@ comptime FA_ITER_DEVICE = FA_FAST_APPLE and (
+ #: lane/apple-fast-fa@3efbce2af. Prior M3 B arms (EIG_SMALL + ITER_DEVICE):
+ #: taxi 39.5 ms, istella 5884 ms against board 308 / 10351 (istella slower
+ #: than ITER_DEVICE alone: one threadgroup on a 220 x 220 eigh). No failure.
+-comptime FA_EIG_SMALL = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_EIG_SMALL"]()
++comptime FA_EIG_SMALL = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_EIG_SMALL"]() or FA_ALL)
+ #: (FAST + Apple, default OFF; implies ITER_DEVICE) the loop's scratch as one
+ #: arena buffer (one live Metal buffer instead of ~14) and W + psi read back
+ #: in one copy. Source lane/apple-fast-fa@3efbce2af. Prior M3 B arms
+ #: (ITER_DEVICE + LIVEBUF): istella 1258 ms, taxi 168.7 ms. No failure.
+-comptime FA_LIVEBUF = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LIVEBUF"]()
++comptime FA_LIVEBUF = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_LIVEBUF"]() or FA_ALL)
+ #: (FAST + Apple, default OFF; implies ITER_DEVICE) the convergence test on
+ #: the device: `fa_finish_kernel` sums the 2 d terms in double-float float32
+ #: (Metal has no float64), tests (ll - old_ll) < tol and sets a flag every
+@@ -166,7 +180,7 @@ comptime FA_LIVEBUF = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LIVEBUF"]()
+ #: (EIG_SMALL + ITER_DEVICE + LL_DEVICE): taxi 30.2 ms, istella 5879 ms.
+ #: The test may stop one iteration away from the float64 host test when a
+ #: step sits within double-float error of tol; the quality check decides.
+-comptime FA_LL_DEVICE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LL_DEVICE"]()
++comptime FA_LL_DEVICE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_LL_DEVICE"]() or FA_ALL)
+ #: (FAST + Apple, default OFF; RECORD rab7-fatransform 2026-10-04: istella
+ #: 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical: stays off)
+ #: FactorAnalysis.transform as one launch over
+@@ -177,9 +191,10 @@ comptime FA_LL_DEVICE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LL_DEVICE"]()
+ #: threadgroup page, checked against the column's page). Source
+ #: lane/apple-fast-fa@3efbce2af. Prior M3 B arms: istella 6201 ms, taxi
+ #: 243 ms against board 10351 / 308 (whole fit + transform lane). No failure.
+-comptime FA_TRANSFORM_FUSED = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_TRANSFORM_FUSED"]()
++comptime FA_TRANSFORM_FUSED = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_TRANSFORM_FUSED"]() or FA_ALL)
+ #: (FAST + Apple, QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) the
+-#: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm takes it unless -D MOJOLEARN_FA_GRAM_QOLD keeps the float32 route.
++#: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm (FA_ALL among
++#: them) takes it unless -D MOJOLEARN_FA_GRAM_QOLD keeps the float32 route.
+ #: Cause: the float32 Gram + float32 eigh of D G D / n resolve B = D G D / n
+ #: only to eps ||B||, but the psi of a column the factors explain sits at
+ #: relative psi_j / var_j (1e-8 on Istella) of B_jj; FA_ALL's Istella held-out
