@@ -327,8 +327,14 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     # sm_90a are the same slot and neither can appear twice.
     hopper = keyset & RELEASE_HOPPER_ALTS
     normalised = (keyset - RELEASE_HOPPER_ALTS) | ({("cuda", "sm_90")} if hopper else set())
-    if (version != read_version(source_root) or len(keys) != len(required)
-            or len(hopper) > 1 or normalised != required):
+    # 0.8.38: the Hopper slot is optional while gpu_plugins registers no Hopper slot for CUDA (sm_89-only wheel,
+    # PyPI's 100 MiB file limit); a set that carries one still packs as before.
+    hopper_optional = (("cuda", "sm_90") in required and not any(
+        {"sm_90", "sm_90a"} & set(slot) for slot in gpu_plugins.PLUGINS["cuda"]["slots"]))  # glue: slot registry lookup
+    fills = normalised == required or (hopper_optional and not hopper
+                                       and normalised == required - {("cuda", "sm_90")})
+    if (version != read_version(source_root) or len(keys) != len(normalised)
+            or len(hopper) > 1 or not fills):
         if required == RELEASE_061_SETS:
             raise SystemExit(profile + ' requires exactly CUDA sm_89, CUDA sm_90'
                              ' or sm_90a, and HIP gfx942')

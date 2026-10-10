@@ -93,7 +93,7 @@ REUSE_SCHEMA = "mojolearn.linux.reused-bindings.v1"
 LINUX = "linux-64"
 MACOS = "osx-arm64"
 #: The Linux release sets: native sm_89, the PTX slot sm_80 (Andrew 2026-10-10: PTX is a
-#: normal target; no flag) and gfx942 (python/mojolearn/gpu_plugins.py; sm_90a out since 0.8.37).
+#: normal target; no flag) and gfx942 (python/mojolearn/gpu_plugins.py; sm_90a out from 0.8.38: PyPI 100 MiB limit).
 LINUX_SETS = (("cuda", "sm_89"), ("cuda", "sm_80"), ("hip", "gfx942"))
 #: The PTX slot (gpu_plugins.PTX_ARCH): always BUILD, never taken from a published wheel.
 PTX_SET = ("cuda", "sm_80")
