@@ -194,8 +194,6 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.methods.kernel.sym_fast import (
-    SYM_HIST_MULT,
-    SYM_HIST_MULT_FACTOR,
     SYM_SCAN_SUB_FUSED,
 )
 from gbdt.methods.kernel.split_properties_helpers import (
@@ -359,16 +357,9 @@ def pw_block_multiplier(
         ):
             multiplier *= 2
         return multiplier
-    comptime if SYM_HIST_MULT:
-        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_HIST_MULT` (FAST +
-        # Apple only): the same ladder asked for SYM_HIST_MULT_FACTOR
-        # times the SM count's worth of blocks; cap and row floor stand.
-        var scaled = estimate_block_per_feature_multiplier(
-            nx, ny, nz, size, sm_count * SYM_HIST_MULT_FACTOR
-        )
-        if scaled > PW_MAX_MULTIPLIER:
-            scaled = PW_MAX_MULTIPLIER
-        return scaled
+    # TOMBSTONE: MOJOLEARN_SYM_HIST_MULT (DROPPED-noise: symhist-hist-mult istella/taxi noise, old base) deleted 2026-10-09 on
+    # lane/owed-deletions-D1 (2x the SM count's worth of histogram blocks); code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_MULT.patch; record in docs/TOMBSTONES.md.
     comptime if not pointwise_doc_split_for[
         TARGET_COLUMN, HIST_BUILD_MODE != NUMERIC_FAST
     ]():

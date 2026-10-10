@@ -258,6 +258,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SYM_REUSE_PARTITION"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple symmetric reuse of the searcher final partition for leaf estimation was DROPPED-noise: sym-iter-reuse taxi +0.3% (old base); F12 re-runs 2026-10-06 B/A 0.94-1.03 mixed, kept OFF; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_SYM_GATHER_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple symmetric partition sizes and both gathers in one launch was DROPPED-noise: symhist-gather istella/taxi noise (old base); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_SYM_PART_STATS_PAR"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple symmetric per-partition sums on a partitions x chunks grid with float atomics was DROPPED-noise: symhist-part-stats istella/taxi noise (old base); code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_SYM_HIST_MULT"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple pointwise histogram blocks at 2x the SM count was DROPPED-noise: symhist-hist-mult istella/taxi noise (old base); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

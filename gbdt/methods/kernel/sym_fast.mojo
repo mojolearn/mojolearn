@@ -74,17 +74,7 @@ comptime SYM_SCAN_SUB_FUSED = SYM_FAST_APPLE and (
     is_defined["MOJOLEARN_SYM_SCAN_SUB_FUSED"]()
 )
 
-#: the pointwise histogram launchers ask CatBoost's document multiplier for
-#: `SYM_HIST_MULT_FACTOR` times as many blocks as the SM heuristic would
-#: (`pointwise_kernels.mojo::pw_block_multiplier`), still capped at 64 and
-#: at >= 10k rows per block.
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
-#: arms never reached the queue).
-#: apple-fast LEDGER 2026-10-03: symhist hist-mult noise DROP, old base;
-#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
-comptime SYM_HIST_MULT = SYM_FAST_APPLE and (
-    is_defined["MOJOLEARN_SYM_HIST_MULT"]()
-)
-comptime SYM_HIST_MULT_FACTOR = 2
+#: TOMBSTONE: MOJOLEARN_SYM_HIST_MULT (DROPPED-noise: symhist-hist-mult istella/taxi noise, old base) deleted 2026-10-09 on
+#: lane/owed-deletions-D1 (2x the SM count's worth of histogram blocks); code recoverable at b639a2bd2.
+#: Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_MULT.patch; record in docs/TOMBSTONES.md.
 
