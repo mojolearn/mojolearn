@@ -25,8 +25,8 @@
     "_mojolearn_x_sequence"
    ],
    "bits_change": false,
-   "status": "new",
-   "note": "Lane neural-io-2. Default ON (waste removal): MoEBlock's forward on resident sequence tensors (x, y, logits, picks, weights stay on the device; 2 x 4 T D bytes over PCIe and four host zero-filled outputs per call removed; host-array entry outputs np.empty). The OFF arm leaves moe_forward_dev out of the binding, so MoEBlock.to_device returns host arrays and the host-array entry runs (the before arm). Same moe_forward_core launches on the same words: no bit moves. A/B owed on moe plus a neighboring shape (e.g. T=6144, D=1024, F=2816; T=8192, D=768)."
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; post-merge neural A/B, one run per arm (nv2 L40S v1052/v1056 defaults on main 9f83ea479, amd MI325X a1152/a1156 on main 0a7b206f1)): device IO stays the default",
+   "note": "Lane neural-io-2. Default ON (waste removal): MoEBlock's forward on resident sequence tensors (x, y, logits, picks, weights stay on the device; 2 x 4 T D bytes over PCIe and four host zero-filled outputs per call removed; host-array entry outputs np.empty). The OFF arm leaves moe_forward_dev out of the binding, so MoEBlock.to_device returns host arrays and the host-array entry runs (the before arm). Same moe_forward_core launches on the same words: no bit moves. A/B owed on moe plus a neighboring shape (e.g. T=6144, D=1024, F=2816; T=8192, D=768). CONFIRMED 2026-10-10: the _OFF arm is slower, moe NV 23.16 -> 30.19 ms (1.30x, v1058) / AMD 18.79 -> 22.25 ms (1.18x, a1158); digest 393fefe9 unchanged."
   },
   "xcnn_res_new_nozero_off": {
    "define": "MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF",
@@ -48,8 +48,8 @@
     "_mojolearn_x_cnn"
    ],
    "bits_change": false,
-   "status": "new",
-   "note": "Lane neural-io-2. Default ON (waste removal): BatchNorm2d/1d and Dropout2d resident outputs (y, dx) are not +0.0 filled; every word is stored by bn_apply / the dx pass / the dropout apply / the mask product. No bit moves. A/B owed on batchnorm2d and dropout2d plus a neighboring shape (e.g. 32 x 128 x 28 x 28)."
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; post-merge neural A/B, one run per arm (nv2 L40S v1052/v1056 defaults on main 9f83ea479, amd MI325X a1152/a1156 on main 0a7b206f1)): no-zero resident outputs stay the default",
+   "note": "Lane neural-io-2. Default ON (waste removal): BatchNorm2d/1d and Dropout2d resident outputs (y, dx) are not +0.0 filled; every word is stored by bn_apply / the dx pass / the dropout apply / the mask product. No bit moves. A/B owed on batchnorm2d and dropout2d plus a neighboring shape (e.g. 32 x 128 x 28 x 28). CONFIRMED 2026-10-10: the _OFF arm is slower, batchnorm2d NV 1.16 -> 2.09 ms (1.80x, v1060) / AMD 2.19 -> 2.17 ms (0.99x, a1148); dropout2d NV 1.11 -> 1.01 ms / AMD 0.36 -> 0.38 ms."
   },
   "xcnn_res_free_async_off": {
    "define": "MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF",
@@ -69,8 +69,8 @@
     "_mojolearn_x_cnn"
    ],
    "bits_change": false,
-   "status": "new",
-   "note": "Lane neural-io-2. Default ON (waste removal): res_free returns an array to the reuse pool without waiting for the queue (its next user is queued behind every earlier use on the one in-order context); the wait stays where the array is destroyed. No bit moves. Touches every x_cnn resident tensor (conv, pool, BasicBlock, GCN/SAGE, BatchNorm, Dropout); A/B owed on batchnorm2d, dropout2d, conv2d, resnet-block."
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; post-merge neural A/B, one run per arm (nv2 L40S v1052/v1056 defaults on main 9f83ea479, amd MI325X a1152/a1156 on main 0a7b206f1)): async resident frees stay the default",
+   "note": "Lane neural-io-2. Default ON (waste removal): res_free returns an array to the reuse pool without waiting for the queue (its next user is queued behind every earlier use on the one in-order context); the wait stays where the array is destroyed. No bit moves. Touches every x_cnn resident tensor (conv, pool, BasicBlock, GCN/SAGE, BatchNorm, Dropout); A/B owed on batchnorm2d, dropout2d, conv2d, resnet-block. CONFIRMED 2026-10-10: the _OFF arm is slower, batchnorm2d NV 1.16 -> 1.76 ms (1.52x, v1061) / AMD 2.19 -> 2.18 ms (1.00x, a1149)."
   }
  },
  "algorithms": {

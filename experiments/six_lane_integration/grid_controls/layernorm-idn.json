@@ -49,12 +49,12 @@
     "_mojolearn_x_sequence"
    ],
    "bits_change": false,
-   "status": "new",
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; post-merge neural A/B, one run per arm (nv2 L40S v1052/v1056 defaults on main 9f83ea479, amd MI325X a1152/a1156 on main 0a7b206f1)): class device IO stays the default (neutral)",
    "grid": "exclude",
    "tags": [
     "env_switch"
    ],
-   "note": "Python-shell ENVIRONMENT switch, not a build define (the planner's define arms do not reach it; A/B by ENV=MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1 on the race line). Default ON (absent): mojolearn.LayerNorm reports _device_io and has to_device, so the board's generic layer path (and any caller who uploads x once) takes the resident entry layer_norm_dev: no x upload, y download, x + dy upload, dx download inside the clock (4 x M x D floats per fit) and no page-faulted zero fills. Same launches on the same values: no bits. MOJOLEARN_SEQ_DEVICE_IO_OFF=1 and MOJOLEARN_IDN_ALL_OFF=1 also turn it off."
+   "note": "Python-shell ENVIRONMENT switch, not a build define (the planner's define arms do not reach it; A/B by ENV=MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1 on the race line). Default ON (absent): mojolearn.LayerNorm reports _device_io and has to_device, so the board's generic layer path (and any caller who uploads x once) takes the resident entry layer_norm_dev: no x upload, y download, x + dy upload, dx download inside the clock (4 x M x D floats per fit) and no page-faulted zero fills. Same launches on the same values: no bits. MOJOLEARN_SEQ_DEVICE_IO_OFF=1 and MOJOLEARN_IDN_ALL_OFF=1 also turn it off. CONFIRMED 2026-10-10 (env arm): layernorm NV 1.394 -> 1.341 ms (0.96x, v1062) / AMD 1.446 -> 1.488 ms (1.03x, a1150): neutral, average 1.00x; digest 5fe9165c unchanged. Kept: no reason to move."
   },
   "ln_keep_stats_off": {
    "define": "MOJOLEARN_LN_KEEP_STATS_OFF",

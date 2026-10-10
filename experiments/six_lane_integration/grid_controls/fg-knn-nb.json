@@ -33,8 +33,8 @@
     "_mojolearn_x_cluster_host"
    ],
    "bits_change": false,
-   "status": "new default K4",
-   "note": "Rollback arm: per-call allocation of queries, norms, dist_tile, radix pairs, outputs and pinned readback on every resident search. Default: exact-length views of the handle's high-water pool."
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): the scratch pool stays the default",
+   "note": "Rollback arm: per-call allocation of queries, norms, dist_tile, radix pairs, outputs and pinned readback on every resident search. Default: exact-length views of the handle's high-water pool. CONFIRMED 2026-10-10: the _OFF arm is slower, knn istella NV 1.02x / AMD 1.02x, taxi NV 1.05x / AMD 1.06x; recall and hashes unchanged."
   },
   "xprep_arena_pool_off": {
    "define": "MOJOLEARN_XPREP_ARENA_POOL_OFF",

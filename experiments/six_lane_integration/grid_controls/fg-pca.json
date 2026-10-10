@@ -20,8 +20,8 @@
    ],
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "bits_change": false,
-   "status": "new",
-   "note": "P2: PCA fit skips the dead +mu restore pass (2 n*d words) and sizes the two n*d alias buffers to the IDENTICAL route's scratch (split-K partials / v1 workspace / 1). Waste removal; same words."
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): lean scratch stays the default",
+   "note": "P2: PCA fit skips the dead +mu restore pass (2 n*d words) and sizes the two n*d alias buffers to the IDENTICAL route's scratch (split-K partials / v1 workspace / 1). Waste removal; same words. CONFIRMED 2026-10-10 (measured together with tsvd_one_upload_off): pca istella NV 1.11x / AMD 1.04x, pca taxi NV 1.00x / AMD 1.04x, tsvd istella NV 1.60x / AMD 1.48x, tsvd taxi NV 0.96x / AMD 1.24x slower with both _OFF; hashes unchanged."
   },
   "tsvd_one_upload": {
    "define": "MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF",
@@ -42,8 +42,8 @@
    ],
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "bits_change": false,
-   "status": "new",
-   "note": "T1: TruncatedSVD.fit calls tsvd_fit_explained (new export, device + host twin): one H2D copy of X shared by the Gram and the explained-variance tail instead of two. OFF arm runs the two host functions in order inside the same export."
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): one upload stays the default",
+   "note": "T1: TruncatedSVD.fit calls tsvd_fit_explained (new export, device + host twin): one H2D copy of X shared by the Gram and the explained-variance tail instead of two. OFF arm runs the two host functions in order inside the same export. CONFIRMED 2026-10-10 (measured together with pca_lean_scratch_off): tsvd istella NV 1.60x / AMD 1.48x, tsvd taxi NV 0.96x / AMD 1.24x, pca istella NV 1.11x / AMD 1.04x slower with both _OFF; hashes unchanged."
   },
   "rsvd_idn_direct_in": {
    "define": "MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF",
