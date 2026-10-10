@@ -23,7 +23,12 @@ PLUGINS = {
         # 0.8.37 (Andrew 2026-10-10): the release ships sm_89 only. With sm_90a the wheel is 134.6 MiB, over
         # PyPI's 100 MiB file limit, so the Hopper slot ("sm_90", "sm_90a") is not required until PyPI raises the
         # mojolearn-nvidia limit; sm_90/sm_90a stay registered architectures, so a wheel that carries them loads.
-        arches=("sm_89", "sm_90", "sm_90a"), slots=(("sm_89",),),
+        # Blackwell is registered the same way (Andrew 2026-10-10): sm_100/sm_100a (B200/GB200),
+        # sm_103/sm_103a (B300), sm_120/sm_120a (RTX PRO 6000 / RTX 50) and sm_121/sm_121a (DGX
+        # Spark). A wheel carrying one of those native sets loads it; without one, Blackwell runs
+        # the PTX slot. Andrew 2026-10-10: PTX is a normal target; no flag.
+        arches=("sm_89", "sm_90", "sm_90a", "sm_100", "sm_100a", "sm_103", "sm_103a",
+                "sm_120", "sm_120a", "sm_121", "sm_121a"), slots=(("sm_89",),),
         # Andrew 2026-10-10: PTX is a normal target; no flag. The PTX slot is required like sm_89.
         ptx=dict(arch=PTX_ARCH, directory=PTX_DIRECTORY),
         directory="cuda_native", code_format="native", release_enabled=True),
