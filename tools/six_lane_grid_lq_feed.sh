@@ -1,21 +1,23 @@
 #!/bin/bash
-# six_lane_grid_lq_feed.sh <nv|nv2|amd> <lines file> [max queue depth, default 4] [poll seconds, default 300]
+# six_lane_grid_lq_feed.sh <nv|nv2|amd|amd2> <lines file> [max queue depth, default 4] [poll seconds, default 300]
 # Feeds the `lq add` lines that tools/six_lane_grid_lq.py render wrote, in order, to one box through lq
 # (orchestrator side; lq is the only way to a box). Before each line it waits while the box queue holds
-# max-depth or more unfinished jobs (`lq status <box>`: nv/nv2 = queued+starting+running gpu-queue jobs, amd = queue
+# max-depth or more unfinished jobs (`lq status <box>`: nv/nv2 = queued+starting+running gpu-queue jobs, amd/amd2 = queue
 # lines minus done-through). Progress is kept in <lines file>.fed-<box> (lines already added), so a rerun
 # resumes after the last line lq accepted. A line lq refuses stops the loop (rc 1) without advancing.
 # LQ=<path to lq> overrides ~/mojolearn-evidence/lq/lq.
 set -u
-box=${1:?usage: six_lane_grid_lq_feed.sh <nv|nv2|amd> <lines> [max depth] [poll s]}; lines=${2:?lines file}
+box=${1:?usage: six_lane_grid_lq_feed.sh <nv|nv2|amd|amd2> <lines> [max depth] [poll s]}; lines=${2:?lines file}
 max=${3:-4}; poll=${4:-300}; LQ=${LQ:-$HOME/mojolearn-evidence/lq/lq}
 # nv2 (2026-10-08) is a second L40S: it takes the nvidia lines (`lq add nv ...`) and shares nv's tag ledger, so the two
 # NVIDIA feeders never queue one tag twice (the ledger is claimed under a lock right before each lq add)
-case $box in nv|nv2) src=nv;; amd) src=amd;; *) echo "box must be nv, nv2 or amd" >&2; exit 2;; esac
+# amd2 (2026-10-10) is a Hot Aisle MI300X VM (gfx942, as the amd MI325X): it takes the amd lines (`lq add amd ...`) and
+# shares amd's tag ledger the same way
+case $box in nv|nv2) src=nv;; amd|amd2) src=amd;; *) echo "box must be nv, nv2, amd or amd2" >&2; exit 2;; esac
 state=$lines.fed-$box; done_n=$(cat "$state" 2>/dev/null || echo 0); total=$(grep -c '^lq add ' "$lines")
 depth() {
   local s; s=$("$LQ" status "$box" 2>/dev/null </dev/null | grep "^$box:")
-  if [ "$box" = amd ]; then
+  if [ "$box" = amd ] || [ "$box" = amd2 ]; then
     echo "$s" | awk '{n=$2; p=$NF} END {if (n ~ /^[0-9]+$/ && p ~ /^[0-9]+$/) print n-p; else print -1}'
   else
     echo "$s" | awk '{t=0; ok=0; for (i=2;i<NF;i++) if ($i ~ /^[0-9]+$/) {ok=1; if ($(i+1) ~ /^(queued|starting|running)$/) t+=$i} print (ok ? t : (NF<=1 ? 0 : -1))}'

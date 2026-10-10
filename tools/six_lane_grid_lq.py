@@ -958,6 +958,20 @@ def merge_quality(verdicts):
     return 'PENDING'
 
 
+def box_of(o):
+    """The box that ran a sample. amd2 (2026-10-10, a Hot Aisle MI300X VM, lq job ids b####) and amd (the DO MI325X,
+    a####) are both the 'amd' vendor: one gfx942 identity column, whose digests must equal NVIDIA's. Timing is per BOX:
+    an A sample is judged only against the incumbent repeats (median and floor) of the box that ran it, never against
+    the other AMD box's. nv and nv2 are the same L40S part and stay pooled as 'nvidia'."""
+    if o.get('vendor') == 'amd' and str(o.get('id') or '').startswith('b'):
+        return 'amd2'
+    return o.get('vendor')
+
+
+def floor_key(wid, vendor, box):
+    return wid + '|' + vendor + ('' if box in (None, vendor) else '|' + box)
+
+
 def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_samples=2, board=None, repair_runs=()):
     """run_id: one run or several passes (list or comma list). Each pass' A is judged against the same pass' B
     median; a cell's log ratio is the mean over its passes; floors pool the incumbent repeats of every pass.
@@ -1040,7 +1054,9 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
 
     # floors (incumbent repeats, same build per head) -> six_lane_timing floors schema
     floors = {}
-    for (wid, vendor), samples in sorted(B.items()):
+    for (wid, vendor), all_samples in sorted(B.items()):
+      for box in sorted({box_of(s) for s in all_samples}):
+        samples = [s for s in all_samples if box_of(s) == box]
         by_head = {}
         for s in samples:
             if ok(s):
@@ -1052,7 +1068,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
         f = T._spread(ms) if len(ms) >= min_samples else None
         if f is not None:
             f = max(f, FLOOR_MIN)  # two or three repeats that happen to agree are not a 0.1% floor
-        floors[wid + '|' + vendor] = dict(workload_id=wid, vendor=vendor, samples=len(ms), builds_seen=len(by_head),
+        floors[floor_key(wid, vendor, box)] = dict(workload_id=wid, vendor=vendor, box=box, samples=len(ms), builds_seen=len(by_head),
                                           b_head=head, timing_source=TIMING_SOURCE,
                                           passes=sorted({s['pass'] for s in best}, key=run_ids.index),
                                           evidence=sorted({'%s:%s' % (s['evidence'], s['id']) for s in best}),
@@ -1077,10 +1093,10 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                             'every pass pooled): log(p90/p10) of median_ms with 4+ samples, log(max/min) below that '
                             '(six_lane_timing._spread).', runs=run_ids)
 
-    def b_ref(wid, vendor, head, run=None):
-        """Incumbent samples for one A head: the same pass when run is given (else every pass), same head preferred.
-        -> (samples, head_differs, from_other_pass)."""
-        samples = [s for s in B.get((wid, vendor), []) if ok(s)]
+    def b_ref(wid, vendor, head, run=None, box=None):
+        """Incumbent samples for one A head: the same pass when run is given (else every pass), same head preferred;
+        only the given box's samples when box is given (per-box timing, box_of). -> (samples, head_differs, from_other_pass)."""
+        samples = [s for s in B.get((wid, vendor), []) if ok(s) and (box is None or box_of(s) == box)]
         other = False
         if run is not None:
             mine = [s for s in samples if s['pass'] == run]
@@ -1101,7 +1117,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                 continue
             good = [s for s in mine if ok(s)]
             a = good[-1] if good else mine[-1]
-            bs, head_differs, other = b_ref(wid, vendor, a['head'], rid)
+            bs, head_differs, other = b_ref(wid, vendor, a['head'], rid, box_of(a))
             timed_out = not good and any('timeout' in str(s.get('status') or '').lower() for s in mine)
             pp = dict(run=rid, a=a, good=good, bs=bs, head_differs=head_differs, b_other_pass=other, timed_out=False,
                       r=None, a_ms=None, b_ms=_median([s['median_ms'] for s in bs]) if bs else None)
@@ -1133,7 +1149,7 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
             r = sum(pp['r'] for pp in timed) / len(timed)
             a_ok = [pp['a_ms'] for pp in timed if pp['a_ms']]
             gm = (lambda xs: None if not xs else xs[0] if len(xs) == 1 else math.exp(sum(math.log(x) for x in xs) / len(xs)))
-            fl = floors.get(wid + '|' + vendor) or {}
+            fl = floors.get(floor_key(wid, vendor, box_of(ref['a']))) or {}
             any_timeout = any(pp['timed_out'] for pp in timed)
             row = dict(
                 evidence='%s:%s' % (ref['a']['evidence'], ref['a']['id']), a_ms=gm(a_ok), b_ms=gm([pp['b_ms'] for pp in timed]),
@@ -1143,7 +1159,8 @@ def collect(results, logs, plan_dir, out_dir, lanes=None, run_id=None, min_sampl
                 timing_source=TIMING_SOURCE + (' (candidate timed out: ratio is a lower bound)' if any_timeout else ''),
                 floor=fl.get('floor'), floor_evidence=fl.get('evidence'), floor_source=fl.get('floor_source'),
                 a_head=ref['a']['head'], b_head_differs=any(pp['head_differs'] for pp in timed),
-                passes=len(timed), pass_runs=[pp['run'] for pp in timed], pass_log_ratios=[pp['r'] for pp in timed])
+                passes=len(timed), pass_runs=[pp['run'] for pp in timed], pass_log_ratios=[pp['r'] for pp in timed],
+                box=box_of(ref['a']))
             if any_timeout:
                 row.update(timed_out=True, a_status=ref['a']['status'], timed_out_passes=sum(pp['timed_out'] for pp in timed))
             if any(pp['b_other_pass'] for pp in timed):
