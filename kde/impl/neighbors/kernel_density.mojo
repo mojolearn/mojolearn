@@ -1130,24 +1130,24 @@ def _kde_fused_cell_distance[DPAD: Int, qo: MutOrigin, to: MutOrigin](  # device
                     acc += exp(metric_arg * log(a))
     else:
         if metric == DIST_L2_SQRT_UNEXPANDED or metric == DIST_L2_EXPANDED:
-            for f in range(d):
+            for f in range(d):  # small-loop(d: features of one cell): per-thread device helper inside the fused kde kernels
                 var diff = query.unsafe_load(qbase + f) - tile.unsafe_load(tb + f)
                 acc += diff * diff
         elif metric == DIST_L1:
-            for f in range(d):
+            for f in range(d):  # small-loop(d: features of one cell): per-thread device helper inside the fused kde kernels
                 acc += abs(query.unsafe_load(qbase + f) - tile.unsafe_load(tb + f))
         elif metric == DIST_LINF:
-            for f in range(d):
+            for f in range(d):  # small-loop(d: features of one cell): per-thread device helper inside the fused kde kernels
                 var a = abs(query.unsafe_load(qbase + f) - tile.unsafe_load(tb + f))
                 if a > acc:
                     acc = a
         elif metric == DIST_COSINE_EXPANDED:
-            for f in range(d):
+            for f in range(d):  # small-loop(d: features of one cell): per-thread device helper inside the fused kde kernels
                 var t = tile.unsafe_load(tb + f)
                 acc += query.unsafe_load(qbase + f) * t
                 tnorm += t * t
         else:
-            for f in range(d):
+            for f in range(d):  # small-loop(d: features of one cell): per-thread device helper inside the fused kde kernels
                 var a = abs(query.unsafe_load(qbase + f) - tile.unsafe_load(tb + f))
                 if a > Float32(0.0):
                     acc += exp(metric_arg * log(a))
