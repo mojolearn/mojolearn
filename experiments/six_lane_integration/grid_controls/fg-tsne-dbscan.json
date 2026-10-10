@@ -133,17 +133,17 @@
    "note": "D5. IDENTICAL, not Apple. weak_cc fixed point by lock-free hook/compress/border, 4 launches + 1 drain per batch. Labels same; n_iter_ = 1 per batch."
   },
   "hdb_mst_seed_knn": {
-   "define": "MOJOLEARN_IDN_HDB_MST_SEED_KNN",
+   "define": "MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_HDB_MST_SEED_KNN"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:605",
+    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:611",
     "hdbscan/impl/cluster/detail/single_linkage.mojo",
     "hdbscan/impl/detail/reachability.mojo"
    ],
@@ -152,8 +152,8 @@
     "_mojolearn_hdbscan_host"
    ],
    "bits_change": false,
-   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
-   "note": "H2. IDENTICAL, NVIDIA+AMD, sparse arm, alpha <= 1, no trace/sabotage, not with GRAPH/KNN_DIRECT_DISTANCE. k-NN one wider; round-1 point resolved when its cheapest list weight < the list's last distance (exact cells, per-entry distance bit check)."
+   "status": "promoted 2026-10-10 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "note": "H2. IDENTICAL, NVIDIA+AMD, sparse arm, alpha <= 1, no trace/sabotage, not with GRAPH/KNN_DIRECT_DISTANCE. k-NN one wider; round-1 point resolved when its cheapest list weight < the list's last distance (exact cells, per-entry distance bit check). PROMOTED 2026-10-10 (v1048 / a1188): hdbscan istella NV 0.68x / AMD 0.72x, taxi NV 0.82x / AMD 0.83x; hashes unchanged (533cb305, 19b22783). The off arm restores the min_samples-wide k-NN and the all-points round 1."
   },
   "hdb_round_one_sync_off": {
    "define": "MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF",

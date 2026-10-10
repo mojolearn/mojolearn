@@ -577,8 +577,16 @@ def smr_init_kernel(
     e_hi[i] = SMR_INT_MAX
 
 
-#: fg-tsne-dbscan H2 (IDENTICAL, NVIDIA and AMD, DEFAULT OFF, lane
-#: fg-tsne-dbscan 2026-10-09): ROUND 1'S EDGES FROM THE k-NN LIST. In round
+#: fg-tsne-dbscan H2 (IDENTICAL, NVIDIA and AMD, lane fg-tsne-dbscan
+#: 2026-10-09), MOJOLEARN_IDN_HDB_MST_SEED_KNN: the IDENTICAL DEFAULT since
+#: 2026-10-10 (lane/postmerge-act-7; `-D MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF`
+#: restores the k = min_samples k-NN and the all-points round 1; the old
+#: on-define is refused in core/six_lane_experiment_guards.mojo). fg2
+#: board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023
+#: -> v1048, MI325X a1163 -> a1188; ratio = arm / fg2 default on the same
+#: vendor): hdbscan istella NV 0.68x / AMD 0.72x, taxi NV 0.82x / AMD 0.83x;
+#: hashes unchanged (istella 533cb305, taxi 19b22783), n_clusters and
+#: noise_fraction unchanged. ROUND 1'S EDGES FROM THE k-NN LIST. In round
 #: 1 every point is its own component and the search runs every point
 #: against all m (n x m x d multiply-adds per phase). The core distances
 #: come from a k-NN whose distances are the search's own cells (the pinned
@@ -599,12 +607,12 @@ def smr_init_kernel(
 #: non-finite (the search then refuses it by name), or when v* >= d_kk. The
 #: same MST: bits none. Cost: m x kk x d multiply-adds (the list) against the
 #: listed share of round 1's m x m x d. Off with a trace, sabotage, a direct-
-#: distance build or alpha > 1. -D MOJOLEARN_IDN_HDB_MST_SEED_KNN.
+#: distance build or alpha > 1. -D MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF.
 comptime IDN_HDB_MST_SEED_KNN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not KNN_DIRECT_DISTANCE
-    and is_defined["MOJOLEARN_IDN_HDB_MST_SEED_KNN"]()
+    and not is_defined["MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF"]()
 )
 
 
