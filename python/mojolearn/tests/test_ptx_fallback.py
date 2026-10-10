@@ -828,7 +828,8 @@ def pinned_report(case, profile):
             lanes[lane] = dict(state="OWED", reason=A.LANE_OWED_REASON + ", so every part of it would read OWED")
             continue
         if lane not in lanes:
-            cells.append(dict(lane=lane, fixture="base", part="infer", state="IDENTICAL", detail="", value="c" * 16))
+            # one matching part the list does not pin (a conflict lane may pin every scored part of a fixture)
+            cells.append(dict(lane=lane, fixture="base", part="stepfull", state="IDENTICAL", detail="", value="c" * 16))
         if kind == A.EXCLUDED_UNDECLARED:
             lanes.setdefault(lane, dict(state="VERIFIED", reason=None))
             cells.append(dict(lane=lane, fixture=fixture, part=part, state="N/A", detail=A.UNDECLARED_VALUE,
@@ -913,7 +914,7 @@ class PinnedExclusions(Install):
         self._with_lane_exclusion()
         A = self.A
         def conflict(report):
-            return self.cell(report, "x-prep-score-edges", "base", "train")
+            return self.cell(report, "gbdt-feature-freq", "base", "train")
         def undeclared(report):
             return self.cell(report, "gbdt-class-weights", "odd", "batch")
         cases = [
@@ -949,9 +950,9 @@ class PinnedExclusions(Install):
     def test_anything_else_the_table_cannot_judge_still_denies(self):
         cases = [
             # an unpinned part of a lane that also has pinned conflicts: the lane is not excused
-            ("x-prep-score-edges/base/infer", lambda r: self.cell(r, "x-prep-score-edges", "base", "infer").update(
+            ("gbdt-feature-freq/base/stepfull", lambda r: self.cell(r, "gbdt-feature-freq", "base", "stepfull").update(
                 state="OWED", detail="no committed record carries this cell part yet")),
-            ("x-prep-score-edges: lane OWED", lambda r: self.cell(r, "x-prep-score-edges", "base", "infer").update(
+            ("gbdt-feature-freq: lane OWED", lambda r: self.cell(r, "gbdt-feature-freq", "base", "stepfull").update(
                 state="OWED", detail="no committed record carries this cell part yet")),
             # the same conflict sentence on a part that is not pinned
             ("ols/base/train", lambda r: self.cell(r, "ols", "base", "train").update(
@@ -975,8 +976,8 @@ class PinnedExclusions(Install):
         # a conflict lane with no part that matched is not excused either
         report = pinned_report(self, "routine")
         report["cells"] = [c for c in report["cells"]
-                           if not (c["lane"] == "x-prep-select-kbest" and c["state"] == "IDENTICAL")]
-        self.assertTrue(any("x-prep-select-kbest: lane OWED" in row for row in self.judge(report)["missing"]))
+                           if not (c["lane"] == "gbdt-tensor-ctr-tables" and c["state"] == "IDENTICAL")]
+        self.assertTrue(any("gbdt-tensor-ctr-tables: lane OWED" in row for row in self.judge(report)["missing"]))
 
     def test_an_admission_cannot_misstate_its_coverage(self):
         self._with_lane_exclusion()

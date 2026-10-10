@@ -178,14 +178,11 @@ _C, _U = EXCLUDED_CONFLICT, EXCLUDED_UNDECLARED
 LOCAL_EXCLUSIONS = tuple(sorted(
     [(lane, fixture, 'batch', _U) for lane in ('gbdt-class-weights', 'gbdt-multiclass-offgrid')  # glue: spell the pinned list
      for fixture in NVIDIA_FIXTURES]
-    + [(lane, 'ties', part, _C) for lane in ('umap', 'x-decomp-umap-options')  # glue: spell the pinned list
-       for part in ('train', 'infer', 'model', 'batch')]
-    + [('x-cluster-optics-metrics', 'denormal', 'train', _C),
-       ('x-neighbors-nearest-centroid', 'denormal', 'train', _C),
-       ('x-prep-select-kbest', 'dupes', 'train', _C)]
-    + [('x-prep-inverse-transforms', fixture, 'train', _C)  # glue: spell the pinned list
-       for fixture in ('ties', 'hashed', 'wide', 'denormal', 'denormal_ftz', 'dupes', 'negative')]
-    + [('x-prep-score-edges', fixture, 'train', _C) for fixture in NVIDIA_FIXTURES]))  # glue: spell the pinned list
+    + [(lane, fixture, part, _C) for lane in ('gbdt-feature-freq', 'gbdt-tensor-ctr-tables')  # glue: spell the pinned list
+       for fixture in NVIDIA_FIXTURES for part in ('train', 'infer', 'model', 'batch')]))
+# 2026-10-10 (table at ca8ea1f8d, 0.8.37): the Apple M4 column disagrees with NVIDIA, AMD and the host (which agree)
+# on every gbdt-feature-freq and gbdt-tensor-ctr-tables part, so those parts carry no reference; the umap, optics,
+# nearest-centroid and x-prep conflicts of the earlier table are gone (the four columns agree there now).
 # gemm-int15 left the list on 2026-10-08: the shipped table carries its cells
 # and host_surface no longer holds it (lane rehearsal-suite-green).
 

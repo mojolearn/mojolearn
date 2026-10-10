@@ -107,7 +107,7 @@ partial coverage, with one named exception.
 
 ### Pinned exclusions
 
-The reference table in this source tree cannot judge 46 entries on any
+The reference table in this source tree cannot judge 90 entries on any
 device, so without them the command would refuse every machine. They are
 pinned by name in `ptx_admission.LOCAL_EXCLUSIONS`, the local counterpart of
 the release checker's pinned list. Each must read absent in exactly its pinned
@@ -116,8 +116,7 @@ way on the device being qualified:
 | Kind | Entries | Must read |
 | --- | --- | --- |
 | `undeclared-part` | `batch` of `gbdt-class-weights` and `gbdt-multiclass-offgrid`, nine fixtures each (18) | `n/a:UNDECLARED`: the harness declares no batch probe |
-| `reference-conflict` | all four parts of `umap` and `x-decomp-umap-options` on `ties` (8); `train` of `x-prep-score-edges` on nine fixtures, of `x-prep-inverse-transforms` on seven, and of `x-cluster-optics-metrics` and `x-neighbors-nearest-centroid` on `denormal` and `x-prep-select-kbest` on `dupes` (19) | OWED because the committed columns disagree, and the device's value must equal one of those committed column values |
-| `lane-without-record` | `gemm-int15` (1) | lane OWED: `host_surface` declares no release record for it |
+| `reference-conflict` | all four parts (`train`, `infer`, `model`, `batch`) of `gbdt-feature-freq` and `gbdt-tensor-ctr-tables` on nine fixtures each (72): the Apple M4 column disagrees with NVIDIA, AMD and the host there (table of 2026-10-10) | OWED because the committed columns disagree, and the device's value must equal one of those committed column values |
 
 A pinned entry that reads as pinned is recorded in the admission as excluded
 and is never counted as a match. A pinned entry that reads any other way
