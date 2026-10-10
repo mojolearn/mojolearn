@@ -56,13 +56,14 @@
  },
  "modified_controls": {
   "ni12_implicit_conv": {
-   "define": "MOJOLEARN_NI12_IMPLICIT_CONV",
+   "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
    "owner_file": "experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json",
    "source": [
     "x_cnn/device.mojo:393"
    ],
    "bits_change": false,
-   "note": "Kernel rewritten (lane gap-gemm-layers): 64x64 register tile, 4x4 cells a thread, the A tile gathered from x (no cols scratch), the contract's leaves + fold through _fold_push_local; the backward's dW now also gathers cols (implicit_wgrad_leaf_kernel + the GEMM's fold kernels) so no entry builds im2col under the switch. Same words as im2col + identical_gemm_into. Boards it reaches now: neural:conv2d, neural:resnet-block, neural:cnn-clf."
+   "note": "Kernel rewritten (lane gap-gemm-layers): 64x64 register tile, 4x4 cells a thread, the A tile gathered from x (no cols scratch), the contract's leaves + fold through _fold_push_local; the backward's dW now also gathers cols (implicit_wgrad_leaf_kernel + the GEMM's fold kernels) so no entry builds im2col under the switch. Same words as im2col + identical_gemm_into. Boards it reaches now: neural:conv2d, neural:resnet-block, neural:cnn-clf. PROMOTED: conv2d NV 9.62 -> 7.12 ms (0.74x) / AMD 9.02 -> 6.23 ms (0.69x), resnet-block NV 21.43 -> 15.76 ms (0.74x) / AMD 22.06 -> 15.37 ms (0.70x); digests unchanged (conv2d 9782257b, resnet-block 263c26c1). The off arm restores the materialized im2col cols; NN14_BOUNDED_IM2COL still takes its own path when selected.",
+   "status": "promoted 2026-10-10 (lane/postmerge-act-6; post-merge neural A/B, one run per arm, nv2 L40S v1052 -> v1053 on main 9f83ea479, amd MI325X a1152 -> a1153 on main 0a7b206f1): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo"
   }
  },
  "algorithms": {

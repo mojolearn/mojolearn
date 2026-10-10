@@ -86,7 +86,16 @@ comptime TPB = 256
 # No compilation, identity, quality, or performance qualification was run.
 comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime NI11_DIRECT_TAPS64 = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI11_DIRECT_CONV_TAPS64"]()
-comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI12_IMPLICIT_CONV"]()
+# NI12 implicit conv: the IDENTICAL default since 2026-10-09 (lane/postmerge-act-6;
+# -D MOJOLEARN_NI12_IMPLICIT_CONV_OFF restores the materialized im2col cols; the
+# old on-define is refused in core/six_lane_experiment_guards.mojo). Post-merge
+# A/B on main, one run per arm (nv2 L40S v1052 -> v1053, MI325X a1152 -> a1153):
+# conv2d NV 9.62 -> 7.12 ms (0.74x) / AMD 9.02 -> 6.23 ms (0.69x), resnet-block
+# NV 21.43 -> 15.76 ms (0.74x) / AMD 22.06 -> 15.37 ms (0.70x); digests unchanged
+# (conv2d 9782257b, resnet-block 263c26c1): no bit change. The bounded im2col arm
+# (-D MOJOLEARN_NN14_BOUNDED_IM2COL) is a competing cols schedule and takes its own
+# path when selected, as before.
+comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"]() and not NN14_BOUNDED_IM2COL
 comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and NI14_COL2IM == NI14_COL2IM_BOUNDED  # arm 1 of MOJOLEARN_NI14_COL2IM (x_cnn/neural_col2im.mojo)
 comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
 comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and IDN_CNN_CONV_RELU_ARM == 2  # arm 2 of MOJOLEARN_IDN_CNN_CONV_RELU (x_cnn/ops.mojo)
@@ -422,8 +431,9 @@ def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_
 # so dW's words equal `device_gemm(..., OP_TN)`'s on the materialized cols.
 # Under this switch the backward never builds cols either (the input
 # gradient keeps `dcols = g . W` + col2im, whose fold order is col2im's).
-# `-D MOJOLEARN_NI12_IMPLICIT_CONV` (default off; bits equal, speed A/B on nv
-# and amd: conv2d, resnet-block, cnn-clf).
+# The IDENTICAL default since 2026-10-09 (bits equal; conv2d NV 0.74x / AMD
+# 0.69x, resnet-block NV 0.74x / AMD 0.70x, see NI12_IMPLICIT_CONV above);
+# `-D MOJOLEARN_NI12_IMPLICIT_CONV_OFF` restores the materialized cols.
 comptime NI12_TM = 64
 comptime NI12_TN = 64
 comptime NI12_KS = 16

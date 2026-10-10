@@ -1198,26 +1198,26 @@
    "reach": "neural:cnn-clf, NOT reached at the board shape (block 1 ckk 9 already direct, block 2 ckk 72 > 64)"
   },
   "ni12_implicit_conv": {
-   "define": "MOJOLEARN_NI12_IMPLICIT_CONV",
+   "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NI12_IMPLICIT_CONV=1"
+    "on": [],
+    "off": [
+     "MOJOLEARN_NI12_IMPLICIT_CONV_OFF=1"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "x_cnn/device.mojo:83"
    ],
    "binding": "_mojolearn_x_cnn",
    "bits_change": false,
-   "status": "kept",
+   "status": "promoted 2026-10-10 (lane/postmerge-act-6; post-merge neural A/B, one run per arm, nv2 L40S v1052 -> v1053 on main 9f83ea479, amd MI325X a1152 -> a1153 on main 0a7b206f1): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
    "entries": [
     "NI12"
    ],
    "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
-   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "note": "bits_change not re-assessed by L11 (unchanged switch). PROMOTED: conv2d NV 9.62 -> 7.12 ms (0.74x) / AMD 9.02 -> 6.23 ms (0.69x), resnet-block NV 21.43 -> 15.76 ms (0.74x) / AMD 22.06 -> 15.37 ms (0.70x); digests unchanged (conv2d 9782257b, resnet-block 263c26c1). The off arm restores the materialized im2col cols; NN14_BOUNDED_IM2COL still takes its own path when selected.",
    "reach": "neural:cnn-clf: x_cnn/device.mojo:2817 _conv_relu_on_device, both blocks, fit and predict"
   },
   "ni15_bias_no_ones": {
