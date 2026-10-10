@@ -53,4 +53,3 @@ comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not (
 # TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
 # Tried: P5 (lane fg-pca): eig_and_truncate's spectrum order (spectrum_rank_desc) and component gather on the device, only k x n + 2 n words crossing; pca / tsvd NV 0.91-1.01x, AMD 1.00x (fg2 nv2 v1021-v1050, amd a1161-a1190): noise, hashes unchanged.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
-comptime PCA_DEVICE_TRUNCATE = PCA_RR_EIGH and is_defined["MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE"]()

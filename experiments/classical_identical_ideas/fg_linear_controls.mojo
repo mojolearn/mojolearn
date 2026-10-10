@@ -124,4 +124,3 @@ comptime IDN_LINEAR_PINNED_UPLOAD = _FGL_IDN and not is_defined["MOJOLEARN_IDN_L
 # TOMBSTONE: MOJOLEARN_IDN_CD_GRAM_EPOCHS_64 (DROPPED-slower) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
 # Tried: C2 (lane fg-linear): Lasso / ElasticNet IDENTICAL Gram sweep at 64 epochs a launch when n_cols <= 64 (CD_EK_SMALL_COLS), 16 otherwise; lasso taxi NV 1.39x / AMD 1.01x slower, the rest 1.00-1.02x (fg2 nv2 v1021-v1050, amd a1161-a1190), hashes unchanged.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch; record in docs/TOMBSTONES.md.
-comptime CD_EK_SMALL_COLS = 64
