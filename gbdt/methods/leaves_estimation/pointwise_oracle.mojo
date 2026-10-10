@@ -110,15 +110,12 @@ from gbdt.methods.leaves_estimation.leaves_estimation import (
     f32_stash_kernel,
 )
 from gbdt.targets.kernel.multilogit import (
-    MC_CLASS_BATCH_DERIV,
     MC_CLASS_BATCH_EST,
     MC_REG_MAX_CLASSES,
     launch_multilogit_est_fused,
     launch_multilogit_second_der,
     launch_multilogit_second_der_all_rows,
-    launch_multilogit_second_der_all_rows_reg,
     launch_multilogit_value_and_der,
-    launch_multilogit_value_and_der_reg,
     launch_multi_rmse_second_der,
     launch_multi_rmse_value_and_der,
     launch_one_vs_all_second_der,
@@ -884,31 +881,18 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 ):
                     self._write_multiclass_fused_evaluation(value, gradient)
                     return
-            var reg_launch = False
-            comptime if MC_CLASS_BATCH_DERIV:
-                reg_launch = self.num_classes <= MC_REG_MAX_CLASSES
-            if reg_launch:
-                # FAST Apple (`MC_CLASS_BATCH_DERIV`): the softmax in
-                # registers, the same element values
-                launch_multilogit_value_and_der_reg[False](
-                    self.ctx, self.num_classes, self.n_rows,
-                    self.d_target, self.d_weights, self.has_weights,
-                    self.d_cursor, self.n_rows,
-                    self.d_identity, False,
-                    self.d_fv, True,
-                    self.d_multi_der, self.n_rows,
-                    self.d_mag_dummy, False,
-                )
-            else:
-                launch_multilogit_value_and_der(
-                    self.ctx, self.num_classes, self.n_rows,
-                    self.d_target, self.d_weights, self.has_weights,
-                    self.d_cursor, self.n_rows,
-                    self.d_identity, False,
-                    self.d_fv, True,
-                    self.d_multi_der, self.n_rows,
-                    self.d_mag_dummy, False,
-                )
+            # TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_DERIV (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1
+            # (the register-softmax arm here); code recoverable at b639a2bd2.
+            # Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_DERIV.patch.
+            launch_multilogit_value_and_der(
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_target, self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_identity, False,
+                self.d_fv, True,
+                self.d_multi_der, self.n_rows,
+                self.d_mag_dummy, False,
+            )
         self.times.end(self.ctx, "est.approx")
         # `ComputePartitionStats(der, Offsets, &reducedDer)` (`:83`), with
         # `cursorDim` columns instead of one
@@ -1396,26 +1380,15 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # same mirror per row from the row's slot
             var tri = _oracle_tri_planes(self.objective, hbs, self.n_rows)
             if tri != hbs:
-                var reg_rows = False
-                comptime if MC_CLASS_BATCH_DERIV:
-                    # the softmax in registers (`MC_CLASS_BATCH_DERIV`) up to
-                    # the register kernel's `MC_REG_MAX_CLASSES`; a wider
-                    # batch (no longer capped at 8) takes the generic kernel
-                    reg_rows = self.num_classes <= MC_REG_MAX_CLASSES
-                if reg_rows:
-                    launch_multilogit_second_der_all_rows_reg(
-                        self.ctx, self.num_classes, self.n_rows,
-                        self.d_weights, self.has_weights,
-                        self.d_cursor, self.n_rows,
-                        self.d_multi_der, self.n_rows,
-                    )
-                else:
-                    launch_multilogit_second_der_all_rows(
-                        self.ctx, self.num_classes, self.n_rows,
-                        self.d_weights, self.has_weights,
-                        self.d_cursor, self.n_rows,
-                        self.d_multi_der, self.n_rows,
-                    )
+                # TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_DERIV (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1
+                # (the register Hessian arm here); code recoverable at b639a2bd2.
+                # Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_DERIV.patch.
+                launch_multilogit_second_der_all_rows(
+                    self.ctx, self.num_classes, self.n_rows,
+                    self.d_weights, self.has_weights,
+                    self.d_cursor, self.n_rows,
+                    self.d_multi_der, self.n_rows,
+                )
                 compute_partition_stats(
                     self.ctx, self.bin_count, 0, tri, self.n_rows,
                     self.d_leaves, self.d_p_off, self.d_p_sz,

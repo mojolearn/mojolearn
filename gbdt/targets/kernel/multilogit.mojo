@@ -731,16 +731,9 @@ def launch_multilogit_second_der_all_rows(
 # `MC_CLASS_BATCH_EST` (FAST + Apple + the define) only; IDENTICAL and
 # every other build compile the kernels above unchanged.
 #
-# `MC_CLASS_BATCH_DERIV` (`-D MOJOLEARN_MC_CLASS_BATCH_DERIV`): main's
-# kernels read the K-1 cursor planes three times per row (the max, the sum
-# of exps, the der loop) and the Hessian kernel recomputes `exp(approx_k -
-# max) / sum` for every (row, column) of the lower triangle, K(K+1)/2 + 2K
-# exps per row. The `_reg` kernels load the K-1 approxes ONCE into an
-# `InlineArray[Float32, MC_REG_MAX_CLASSES]`, take the exps once, and read
-# `p_k = exps[k] / se` from registers; `routed_exp` on the same operands
-# gives the same float, so every element value is main's kernel's bit for
-# bit. Fits with more than `MC_REG_MAX_CLASSES` classes take main's kernels
-# (the callers dispatch on `num_classes`).
+# TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_DERIV (DROPPED-noise: symmulti-mc-deriv istella/taxi within +-2.4%, same quality) deleted
+# 2026-10-09 on lane/owed-deletions-D1 (MultiClass softmax in registers); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_DERIV.patch; record in docs/TOMBSTONES.md.
 #
 # `MC_CLASS_BATCH_EST` (`-D MOJOLEARN_MC_CLASS_BATCH_EST`): the walker asks
 # the oracle for value + first derivatives and then, at the SAME point, for
@@ -759,17 +752,6 @@ def launch_multilogit_second_der_all_rows(
 # =========================================================================
 
 
-def mc_class_batch_deriv_for[column: Int]() -> Bool:
-    """FAST + Apple + `MOJOLEARN_MC_CLASS_BATCH_DERIV`; False everywhere
-    else (not in `SYM_MULTI_ALL`: a recorded DROP)."""
-    comptime if (
-        is_defined["MOJOLEARN_MC_CLASS_BATCH_DERIV"]()
-    ):
-        comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
-            return True
-    return False
-
-
 def mc_class_batch_est_for[column: Int]() -> Bool:
     """FAST + Apple + `MOJOLEARN_MC_CLASS_BATCH_EST`; False everywhere
     else (not in `SYM_MULTI_ALL`: a recorded DROP)."""
@@ -782,13 +764,6 @@ def mc_class_batch_est_for[column: Int]() -> Bool:
 
 
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
-#: unchecked). `-D MOJOLEARN_MC_CLASS_BATCH_DERIV`.
-#: apple-fast LEDGER 2026-10-03: DROP symmulti mc-deriv
-#: (within +-2.4%, identical quality), old base; recorded loser, OUT of
-#: SYM_MULTI_ALL, not in the A/B table.
-comptime MC_CLASS_BATCH_DERIV = mc_class_batch_deriv_for[TARGET_COLUMN]()
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-multi@d2c832da0. `-D MOJOLEARN_MC_CLASS_BATCH_EST`.
 #: apple-fast LEDGER 2026-10-03: DROP symmulti mc-est
 #: (within +-2.4%, identical quality) and symmulti-all-mc istella (-1.2%),
@@ -800,160 +775,9 @@ comptime MC_CLASS_BATCH_EST = mc_class_batch_est_for[TARGET_COLUMN]()
 comptime MC_REG_MAX_CLASSES = 8
 
 
-def multilogit_val_and_first_der_reg_kernel[max_k: Int, search: Bool](
-    target_classes: MutPointer[Float32, MutAnyOrigin],
-    num_classes_in: Int32,
-    size_in: Int32,
-    weights: MutPointer[Float32, MutAnyOrigin],
-    has_weights: Int32,
-    predictions: MutPointer[Float32, MutAnyOrigin],
-    load_indices: MutPointer[UInt32, MutAnyOrigin],
-    has_load_indices: Int32,
-    predictions_align_size_in: Int32,
-    function_value: MutPointer[Float32, MutAnyOrigin],
-    compute_fv: Int32,
-    der: MutPointer[Float32, MutAnyOrigin],
-    der_align_size_in: Int32,
-    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
-    compute_magnitudes: Int32,
-):
-    """`multilogit_val_and_first_der_kernel` (one element per thread, both
-    modes) with the approxes and exps in registers (`MC_CLASS_BATCH_DERIV`).
-    Same per-element arithmetic and store layout; same fv and magnitude
-    reduces."""
-    var size = Int(size_in)
-    var eff = Int(num_classes_in) - 1
-    var pred_align = Int(predictions_align_size_in)
-    var der_align = Int(der_align_size_in)
-    var idx = Int(block_idx.x) * MULTILOGIT_BLOCK_SIZE + Int(thread_idx.x)
-    comptime plane_base = 1 if search else 0
-
-    var tmp_score = Float32(0.0)
-    var mag_der = Float32(0.0)
-    var mag_weight = Float32(0.0)
-    if idx < size:
-        var li = idx
-        if has_load_indices != Int32(0):
-            li = Int(load_indices.unsafe_load(idx))
-        var target_class = Int(target_classes.unsafe_load(idx))
-        var approx = InlineArray[Float32, max_k](fill=Float32(0.0))
-        var exps = InlineArray[Float32, max_k](fill=Float32(0.0))
-        # `maxApprox = 0` then the max over the free approxes
-        var mx = Float32(0.0)
-        comptime for k in range(max_k):
-            if k < eff:
-                var v = predictions.unsafe_load(li + k * pred_align)
-                approx[k] = v
-                if v > mx:
-                    mx = v
-        var se = Float32(0.0)
-        comptime for k in range(max_k):
-            if k < eff:
-                var e = routed_exp(approx[k] - mx)
-                exps[k] = e
-                se += e
-        # the PINNED class's term
-        se += routed_exp(Float32(0.0) - mx)
-        var tmp = Float32(0.0)
-        comptime for k in range(max_k):
-            if k < eff and k == target_class:
-                tmp = approx[k]
-        var class_approx = tmp - mx
-        var weight = Float32(1.0)
-        if has_weights != Int32(0):
-            weight = weights.unsafe_load(idx)
-        comptime if search:
-            der.unsafe_store(idx, weight)
-        var max_abs_der = Float32(0.0)
-        comptime for k in range(max_k):
-            if k < eff:
-                var pk = exps[k] / se
-                var indicator = Float32(1.0) if target_class == k else Float32(0.0)
-                var d = weight * (indicator - pk)
-                der.unsafe_store(idx + (plane_base + k) * der_align, d)
-                var ad = abs(d)
-                if ad > max_abs_der:
-                    max_abs_der = ad
-        mag_der += max_abs_der
-        mag_weight += abs(weight)
-        if compute_fv != Int32(0):
-            var log_denum = routed_log(se)
-            tmp_score = fma(weight, class_approx - log_denum, tmp_score)
-
-    if compute_fv != Int32(0):
-        var total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](tmp_score)
-        if thread_idx.x == 0:
-            function_value.unsafe_store(Int(block_idx.x), total)
-    comptime if search:
-        if compute_magnitudes != Int32(0):
-            var w_total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
-                mag_weight
-            )
-            var g_total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
-                mag_der
-            )
-            if thread_idx.x == 0:
-                plane_magnitudes.unsafe_store(2 * Int(block_idx.x), w_total)
-                plane_magnitudes.unsafe_store(2 * Int(block_idx.x) + 1, g_total)
-
-
-def multilogit_second_der_all_rows_reg_kernel[max_k: Int](
-    num_classes_in: Int32,
-    size_in: Int32,
-    weights: MutPointer[Float32, MutAnyOrigin],
-    has_weights: Int32,
-    predictions: MutPointer[Float32, MutAnyOrigin],
-    predictions_align_size_in: Int32,
-    der2_align_size_in: Int32,
-    der2: MutPointer[Float32, MutAnyOrigin],
-):
-    """`multilogit_second_der_all_rows_kernel` with the exps in registers
-    (`MC_CLASS_BATCH_DERIV`): K exps per row instead of K(K+1)/2 + 2K, the
-    same values at the same lower-triangle slots."""
-    var size = Int(size_in)
-    var num_classes = Int(num_classes_in)
-    var eff = num_classes - 1
-    var pred_align = Int(predictions_align_size_in)
-    var der2_align = Int(der2_align_size_in)
-    var idx = Int(block_idx.x) * MULTILOGIT_BLOCK_SIZE + Int(thread_idx.x)
-    if idx < size:
-        var exps = InlineArray[Float32, max_k](fill=Float32(0.0))
-        var mx = Float32(0.0)
-        comptime for k in range(max_k):
-            if k < eff:
-                var v = predictions.unsafe_load(idx + k * pred_align)
-                exps[k] = v
-                if v > mx:
-                    mx = v
-        var se = Float32(0.0)
-        comptime for k in range(max_k):
-            if k < eff:
-                var e = routed_exp(exps[k] - mx)
-                exps[k] = e
-                se += e
-        se += routed_exp(Float32(0.0) - mx)
-        var weight = Float32(1.0)
-        if has_weights != Int32(0):
-            weight = weights.unsafe_load(idx)
-        var slot = 0
-        comptime for r in range(max_k):
-            if r < num_classes:
-                var p_row: Float32
-                if r < eff:
-                    p_row = exps[r] / se
-                else:
-                    # the PINNED class's probability
-                    p_row = routed_exp(-mx) / se
-                comptime for k in range(r):
-                    var pk = exps[k] / se
-                    der2.unsafe_store(
-                        idx + (slot + k) * der2_align, -weight * pk * p_row
-                    )
-                der2.unsafe_store(
-                    idx + (slot + r) * der2_align,
-                    weight * (Float32(1.0) - p_row) * p_row,
-                )
-                slot += r + 1
+# TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_DERIV (DROPPED-noise: symmulti-mc-deriv istella/taxi within +-2.4%, same quality) deleted
+# 2026-10-09 on lane/owed-deletions-D1 (MultiClass softmax in registers); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_DERIV.patch; record in docs/TOMBSTONES.md.
 
 
 def multilogit_est_fused_kernel[max_k: Int, reg: Bool](
@@ -1057,75 +881,9 @@ def multilogit_est_fused_kernel[max_k: Int, reg: Bool](
         function_value.unsafe_store(Int(block_idx.x), total)
 
 
-def launch_multilogit_value_and_der_reg[search: Bool](
-    ctx: DeviceContext,
-    num_classes: Int,
-    size: Int,
-    mut target_classes: DeviceBuffer[DType.float32],
-    mut weights: DeviceBuffer[DType.float32],
-    has_weights: Bool,
-    mut predictions: DeviceBuffer[DType.float32],
-    predictions_align_size: Int,
-    mut load_indices: DeviceBuffer[DType.uint32],
-    has_load_indices: Bool,
-    mut function_value: DeviceBuffer[DType.float32],
-    compute_fv: Bool,
-    mut der: DeviceBuffer[DType.float32],
-    der_align_size: Int,
-    mut plane_magnitudes: DeviceBuffer[DType.float32],
-    compute_magnitudes: Bool,
-) raises:
-    """`MC_CLASS_BATCH_DERIV`: `launch_multilogit_value_and_der` (`search`
-    False) or `launch_multilogit_value_and_der_search` (True) on the
-    register kernel. The caller checks `num_classes <= MC_REG_MAX_CLASSES`."""
-    var blocks = multilogit_blocks(size)
-    if blocks == 0:
-        return
-    ctx.enqueue_function[
-        multilogit_val_and_first_der_reg_kernel[MC_REG_MAX_CLASSES, search]
-    ](
-        target_classes.unsafe_ptr(), Int32(num_classes), Int32(size),
-        weights.unsafe_ptr(), Int32(1) if has_weights else Int32(0),
-        predictions.unsafe_ptr(),
-        load_indices.unsafe_ptr(),
-        Int32(1) if has_load_indices else Int32(0),
-        Int32(predictions_align_size),
-        function_value.unsafe_ptr(), Int32(1) if compute_fv else Int32(0),
-        der.unsafe_ptr(), Int32(der_align_size),
-        plane_magnitudes.unsafe_ptr(),
-        Int32(1) if compute_magnitudes else Int32(0),
-        grid_dim=(blocks, 1, 1),
-        block_dim=(MULTILOGIT_BLOCK_SIZE, 1, 1),
-    )
-
-
-def launch_multilogit_second_der_all_rows_reg(
-    ctx: DeviceContext,
-    num_classes: Int,
-    size: Int,
-    mut weights: DeviceBuffer[DType.float32],
-    has_weights: Bool,
-    mut predictions: DeviceBuffer[DType.float32],
-    predictions_align_size: Int,
-    mut der2: DeviceBuffer[DType.float32],
-    der2_align_size: Int,
-) raises:
-    """`MC_CLASS_BATCH_DERIV`: `launch_multilogit_second_der_all_rows` on the
-    register kernel (`num_classes <= MC_REG_MAX_CLASSES`)."""
-    var blocks = multilogit_blocks(size)
-    if blocks == 0:
-        return
-    ctx.enqueue_function[
-        multilogit_second_der_all_rows_reg_kernel[MC_REG_MAX_CLASSES]
-    ](
-        Int32(num_classes), Int32(size),
-        weights.unsafe_ptr(), Int32(1) if has_weights else Int32(0),
-        predictions.unsafe_ptr(), Int32(predictions_align_size),
-        Int32(der2_align_size),
-        der2.unsafe_ptr(),
-        grid_dim=(blocks, 1, 1),
-        block_dim=(MULTILOGIT_BLOCK_SIZE, 1, 1),
-    )
+# TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_DERIV (DROPPED-noise: symmulti-mc-deriv istella/taxi within +-2.4%, same quality) deleted
+# 2026-10-09 on lane/owed-deletions-D1 (MultiClass softmax in registers); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_DERIV.patch; record in docs/TOMBSTONES.md.
 
 
 def launch_multilogit_est_fused(
@@ -1148,7 +906,7 @@ def launch_multilogit_est_fused(
     if blocks == 0:
         return
     ctx.enqueue_function[
-        multilogit_est_fused_kernel[MC_REG_MAX_CLASSES, MC_CLASS_BATCH_DERIV]
+        multilogit_est_fused_kernel[MC_REG_MAX_CLASSES, False]
     ](
         target_classes.unsafe_ptr(), Int32(num_classes), Int32(size),
         weights.unsafe_ptr(), Int32(1) if has_weights else Int32(0),
