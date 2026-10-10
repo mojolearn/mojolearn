@@ -63,8 +63,7 @@
    "interaction_groups": [
     [
      "samba_resident_step",
-     "attn_tile_order",
-     "attn_softmax"
+     "attn_tile_order"
     ],
     [
      "samba_resident_step",
@@ -101,7 +100,6 @@
     [
      "samba_resident_step",
      "attn_tile_order",
-     "attn_softmax",
      "attn_stash"
     ],
     [

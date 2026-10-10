@@ -185,11 +185,11 @@ def byte_lm_arithmetic_suffix() -> String:
     built with belongs to the serialized arithmetic version even when one
     model does not use it. A no-argument suffix keeps the loader check
     shape-free."""
-    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
     var loss_version = String("")
     # NI08/I04 are new GEMM graphs on every column. Keep checkpoint
     # identity distinct from leaf128 even when architecture is unchanged.
     var gemm_version = String("") if CONTRACT_K_LEAF_MIN == 128 else String("-gemm-leaf") + String(CONTRACT_K_LEAF_MIN)
-    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
     var attention_version = String("")
     return neural_arithmetic_suffix() + loss_version + gemm_version + attention_version

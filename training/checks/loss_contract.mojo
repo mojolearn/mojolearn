@@ -18,7 +18,7 @@ from checks.numerics import (
     identical_mul,
 )
 
-# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 # (it set the token-tree256 v2 loss profile here.) Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
 comptime CE_NUMERICAL_PROFILE = "mojolearn.identical.loss.ce.fp32.v1"
 

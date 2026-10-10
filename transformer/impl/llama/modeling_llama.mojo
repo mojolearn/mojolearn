@@ -1636,7 +1636,7 @@ struct LlamaKVCache(Movable):
         self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
 
 
-# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
@@ -4119,7 +4119,7 @@ def attention_path_choice(plant_at: Int) -> Int:
     return ATTN_PATH_AUTO
 
 
-# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # (online_tile32 attention v2; bytes lm-train-step NV/AMD 1.43x/1.56x slower, lm-forward 0.98x/1.04x, mean_nll same; nv2 v1229/v1231/v1232, amd a1555/a1556/a1557): _model_attention_v2_forward.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
@@ -4168,7 +4168,7 @@ def eager_attention_forward(
     # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
     # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
     # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
-    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
     var choice = attention_path_choice(plant_at)
     if choice == ATTN_PATH_AUTO and stages.attn_prefer_eager:
         choice = ATTN_PATH_EAGER
@@ -4286,7 +4286,7 @@ def ensure_attention_materialized(
     in `stages`; the output `ctxv` is rewritten with the same bits."""
     if stages.attn_materialized:
         return
-    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
     var off = IdentityTrace.disabled()
     var dims = stages.dims.copy()
     attention_eager_core(

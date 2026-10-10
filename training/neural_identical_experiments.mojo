@@ -63,7 +63,7 @@ comptime IDN_CE_DENOM_ROWFOLD = _ENABLED and is_defined["MOJOLEARN_IDN_CE_DENOM_
 # 2 = NN62 byte-LM lifetime arena (training/neural_ab_lifetime.mojo), 3 = both.
 comptime IDN_TRAIN_SCRATCH_ARM = get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH", 0]()
 comptime IDN_TRAIN_BACKWARD_SCRATCH = _ENABLED and (IDN_TRAIN_SCRATCH_ARM == 1 or IDN_TRAIN_SCRATCH_ARM == 3)
-# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 # (NI35 256-token tree v2; bytes lm-forward NV/AMD 0.99x/1.01x, lm-train-step 1.01x/1.00x, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557)
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
 # NI34: the existing explicit config stays supported; this opt-in chooses it
@@ -76,7 +76,7 @@ comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and not is_defined["MOJOLEARN_IDN_ACT
 # NI20 / MOJOLEARN_IDN_ATTN_SOFTMAX: both arms are gone and the define is refused
 # (arm 1, the NN20 summary tree, deleted 2026-10-08, grid ge123e6f9, recoverable at
 # main bc10b8b56).
-# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # (online_tile32 attention v2; bytes lm-train-step NV/AMD 1.43x/1.56x slower, lm-forward 0.98x/1.04x, mean_nll same; nv2 v1229/v1231/v1232, amd a1555/a1556/a1557)
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 # S1 (lane/samba-resident, 2026-10-07): the Samba stack's forward and train

@@ -76,7 +76,7 @@ def _check_configuration() -> Bool:
     comptime assert EPI >= 0 and EPI <= 3, "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE is a mask: 1 mlp, 2 cnn"
     comptime HS = get_defined_int["MOJOLEARN_IDN_ATTN_HEAD_SHARE",1]()
     comptime assert HS == 1 or HS == 4, "MOJOLEARN_IDN_ATTN_HEAD_SHARE legal set {4} (two-head I06/NI19 deleted as a loser)"
-    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
     # Both arms are gone, so the define itself is refused, with its forward rows-per-block control MOJOLEARN_IDN_ATTN_V2_TQ.
     comptime assert not is_defined["MOJOLEARN_IDN_ATTN_SOFTMAX"](), "removed: MOJOLEARN_IDN_ATTN_SOFTMAX (=2 online_tile32 attention v2) retired 2026-10-10: slower, avg 1.49x lm-train-step (NV 1.43x / AMD 1.56x), 1.01x lm-forward (NV 0.98x / AMD 1.04x), mean_nll SAME (main ca25d9321, A/B nv2 v1229/v1231/v1232, amd a1555/a1556/a1557, default v1232/a1557); arm 1 summary_tree removed 2026-10-08: slower, NV/AMD lm-forward 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward 5.48x/21.89x (grid ge123e6f9); see EXPERIMENTS.md; see docs/TOMBSTONES.md"
@@ -157,7 +157,7 @@ def _check_configuration() -> Bool:
     comptime assert get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU",0]() == 1 or get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU",0]() == 2, "invalid MOJOLEARN_IDN_CNN_CONV_RELU arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD",0]() == 1 or get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD",0]() == 2, "invalid MOJOLEARN_IDN_SEQ_WGRAD arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_SEQ_LN_LEAF",64]() == 32 or get_defined_int["MOJOLEARN_IDN_SEQ_LN_LEAF",64]() == 64, "invalid MOJOLEARN_IDN_SEQ_LN_LEAF arm (legal: 32|64)"
-    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
     comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() != 2, "removed: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (NI35 token-tree256 v2) retired 2026-10-10: noise, avg 1.00x lm-forward (NV 0.99x / AMD 1.01x), 1.01x lm-train-step (NV 1.01x / AMD 1.00x), mean_nll SAME (main ca25d9321, A/B nv2 v1229/v1231/v1232, amd a1555/a1556/a1557, default v1232/a1557); see docs/TOMBSTONES.md"
     comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 1, "invalid MOJOLEARN_IDN_CE_TOKEN_FOLD arm (legal: 0|1; 2 removed 2026-10-10)"

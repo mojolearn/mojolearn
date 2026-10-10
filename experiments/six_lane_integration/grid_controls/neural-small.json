@@ -264,7 +264,6 @@
      "attn_tile_order",
      "attn_fwd_tq_rule",
      "attn_tile_rule_off",
-     "attn_softmax",
      "attn_stash",
      "attn_scale_mask"
     ],
@@ -298,7 +297,6 @@
     [
      "attn_tile_order",
      "attn_fwd_tq_rule",
-     "attn_softmax",
      "attn_scale_mask"
     ],
     [
@@ -331,7 +329,6 @@
     [
      "attn_tile_order",
      "attn_fwd_tq_rule",
-     "attn_softmax",
      "attn_scale_mask"
     ],
     [
@@ -354,7 +351,6 @@
    "controls": [
     "attn_tile_order",
     "attn_fwd_tq_rule",
-    "attn_softmax",
     "grouped_projections_v2",
     "m3_angle_parallel",
     "m3_angle_block",
@@ -367,8 +363,7 @@
    "interaction_groups": [
     [
      "attn_tile_order",
-     "attn_fwd_tq_rule",
-     "attn_softmax"
+     "attn_fwd_tq_rule"
     ],
     [
      "m3_angle_parallel",
@@ -404,7 +399,6 @@
      "attn_tile_order",
      "attn_fwd_tq_rule",
      "attn_tile_rule_off",
-     "attn_softmax",
      "attn_stash"
     ],
     [

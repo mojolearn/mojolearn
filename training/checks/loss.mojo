@@ -1155,7 +1155,7 @@ def ce_dlogits_kernel(
 # ===========================================================================
 
 
-# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 # (NI35 256-token tree v2; bytes lm-forward NV/AMD 0.99x/1.01x, lm-train-step 1.01x/1.00x, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557): ce_token_tree_v2_leaves_kernel, ce_token_tree_v2_level_kernel, ce_token_tree_v2_into.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
 
@@ -1488,7 +1488,7 @@ def identical_ce_workspace_max_floats(
             w = wb
     comptime if NN54_LOSS_PROFILE:
         w = max(w, 2 * nn_reduce_scratch_floats[128](n_rows))
-    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
     if w < 1:
         return 1
     return w
@@ -1880,7 +1880,7 @@ def identical_ce_forward_into(
     elif NN54_LOSS_PROFILE:
         nn_reduce_pointer_into[128, False](ctx, total.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), row.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows)
     else:
-        # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+        # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
         identical_gemm_into(ctx, total, ones, row, ws, 1, 1, n_rows, OP_NN)
 
     # ---- L13. The divisor's ONE producer.

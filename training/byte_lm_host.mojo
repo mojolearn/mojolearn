@@ -57,7 +57,7 @@ from gemm.host.neural_gemm import gemm_oracle
 from training.byte_lm_config import ByteConfig
 from training.chunked_lm_head_gemm_host import byte_chunked_head_forward
 from training.chunked_lm_head_host import chunked_lm_head_gemm_host_forward
-# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 from training.byte_lm_host_kernels import (
     all_finite_span,
@@ -452,7 +452,7 @@ def block_par(
             var rows = hi - lo
             var mchunk = mp[0].copy()  # empty: the fill is formed in the kernel
             var ctx = List[Float32](length=rows * qw, fill=Float32(0.0))
-            # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+            # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
             # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
             var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
             var kpack = List[Float32](length=hd * s, fill=Float32(0.0))

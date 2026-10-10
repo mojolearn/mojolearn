@@ -6,7 +6,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 # L11 (2026-10-07): the CE token-total fold is ONE switch with arms,
 # -D MOJOLEARN_IDN_CE_TOKEN_FOLD=0|1: 0 = the pinned GEMM ones-fold
 # (default), 1 = NN54 128-row leaf tree. (TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2
-# (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+# (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch) The
 # arm runs on the GPU (training/checks/loss.mojo identical_ce_forward_into)
 # and on the host column (training/byte_lm_host_kernels.mojo) together.

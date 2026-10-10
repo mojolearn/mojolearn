@@ -101,7 +101,7 @@ from transformer.checks.transformer_fixture import (
     unmasked_fill,
 )
 from transformer.checks.transformer_oracle import RopeTable, refuse_nonfinite
-# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
@@ -928,7 +928,7 @@ def block_fast(
     var masks = List[Float32]()
     var scale = attention_scale(hd)
     var ctx = List[Float32](length=m * qw, fill=Float32(0.0))
-    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
     var qmat = List[Float32](length=l * hd, fill=Float32(0.0))
     var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
@@ -994,7 +994,7 @@ def hidden_fast(
     return x^
 
 
-# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
 
 
@@ -1068,7 +1068,7 @@ def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab:
         total[0] = nn_reduce_host_admitted[128,False](
             rebind[MutPointer[Float32,MutAnyOrigin]](rows.unsafe_ptr()),n)
     else:
-        # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+        # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
         gemm_nt_rows(rows, ones_n, 1, n, 0, 1, total)
     var divisor = ce_divisor(cfg.reduction, ce_count(targets, cfg.ignore_index), cfg.num_items)
     return ftz(identical_div(ftz(total[0]), divisor))

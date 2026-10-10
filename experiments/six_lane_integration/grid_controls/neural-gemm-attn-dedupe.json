@@ -336,35 +336,6 @@
    ],
    "note": "Only in _launch_fwd_r2 (ATTN_ARM_TRIAL builds) and only for (n_heads/n_kv)%4==0. Board shapes have n_kv==n_heads: never engages on the board; needs a GQA workload. Two-head arm deleted (I06 loser)."
   },
-  "attn_softmax": {
-   "define": "MOJOLEARN_IDN_ATTN_SOFTMAX",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "online_tile32": [
-     "MOJOLEARN_IDN_ATTN_SOFTMAX=2"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "training/neural_identical_experiments.mojo:80",
-    "transformer/impl/llama/attention_v2_model_device.mojo:331",
-    "transformer/impl/llama/attention_v2_model_device.mojo:795",
-    "core/six_lane_experiment_guards.mojo:77"
-   ],
-   "binding": [
-    "_mojolearn_transformer",
-    "_mojolearn_byte_lm",
-    "_mojolearn_training"
-   ],
-   "bits_change": true,
-   "status": "rewritten",
-   "merged_from": [
-    "I.N.NN20",
-    "I.N.NI20"
-   ],
-   "note": "online_tile32 (MOJOLEARN_IDN_ATTN_SOFTMAX=2) is the attention-online-tile32.fp32.v2 profile; since lane/attention-tiled-v2 (2026-10-07) its device kernels are the tiled ones in attention_v2_model_device.mojo (forward _forward_tiled: one QK^T and one PV sweep per query tile, 32-key device tiles in a 64-key shared ring, two running words per row; backward _prepare_tiled/_dq_tiled/_dkdv_tiled, all in the contract's fold order), not the one-thread-per-row reference, which remains for the Apple column, the trace-only diagnostic cells and head dims outside {16,32,64}. Host column: attention_v2_model_host.mojo (byte_lm_host_kernels.mojo:931, transformer_oracle.mojo:2057). Bits change vs off (profile), equal on NVIDIA and AMD. Its forward rows-per-block sweep is attn_v2_tq (grid_controls/attention-tiled-v2.json). Arm summary_tree (=1) deleted 2026-10-08 (grid ge123e6f9, 1.6-43x slower); see removed."
-  },
   "attn_stash": {
    "define": "MOJOLEARN_IDN_ATTN_STASH",
    "kind": "arms",
@@ -787,7 +758,6 @@
     "neural_gemm_pair",
     "neural_gemm_workspace",
     "neural_gemm_zero_tail",
-    "attn_softmax",
     "attn_stash",
     "attn_scale_mask",
     "norm",
@@ -809,7 +779,6 @@
      "neural_gemm_schedule"
     ],
     [
-     "attn_softmax",
      "attn_scale_mask",
      "attn_stash"
     ],
@@ -829,7 +798,6 @@
     "gemm_leaf",
     "neural_gemm_chains",
     "neural_gemm_pair",
-    "attn_softmax",
     "attn_scale_mask",
     "norm",
     "rope",
@@ -841,10 +809,6 @@
      "neural_gemm_schedule_roles",
      "gemm_leaf",
      "neural_gemm_chains"
-    ],
-    [
-     "attn_softmax",
-     "attn_scale_mask"
     ]
    ],
    "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
@@ -857,7 +821,6 @@
     "gemm_leaf",
     "neural_gemm_chains",
     "neural_gemm_pair",
-    "attn_softmax",
     "attn_scale_mask",
     "norm",
     "rope"
@@ -868,10 +831,6 @@
      "gemm_leaf",
      "neural_gemm_chains",
      "neural_gemm_pair"
-    ],
-    [
-     "attn_softmax",
-     "attn_scale_mask"
     ]
    ],
    "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
@@ -884,7 +843,6 @@
     "neural_gemm_schedule_roles",
     "gemm_leaf",
     "neural_gemm_chains",
-    "attn_softmax",
     "attn_stash",
     "norm",
     "rope",
@@ -896,10 +854,6 @@
      "neural_gemm_schedule_roles",
      "gemm_leaf",
      "neural_gemm_chains"
-    ],
-    [
-     "attn_softmax",
-     "attn_stash"
     ]
    ],
    "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=1 gemm_split_min_leaves=3 gemm_split_min_leaves=2 reach this lane."
@@ -1111,6 +1065,12 @@
   {
    "define": "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1",
    "reason": "removed 2026-10-08 (lane grid-act-5): neural_gemm_epilogue=mlp (NN06 fused MLP GEMM + bias/ReLU, gemm/experiments/neural_epilogue.mojo and training/mlp_ops.mojo _mlp_fused_projection) grid ge123e6f9 loser, mlp-train-step NV 2.0->3.8 / AMD 3.5->3.4 ms (1.367x combined slower), same bits; guard refuses bit 1; EXPERIMENTS.md row; code at main 8ed94710a"
+  },
+  {
+   "define": "MOJOLEARN_IDN_ATTN_SOFTMAX=2",
+   "control": "attn_softmax",
+   "arm": "online_tile32",
+   "reason": "DELETED 2026-10-10 (lane grid-act-15, deletion c1bf9d832): slower. online_tile32/off ms ratio NV/AMD: lm-train-step 1.43/1.56 (35.43 -> 50.57 NV, 42.84 -> 66.68 AMD; avg 1.49 SLOWER), lm-forward 0.98/1.04 (48.55 -> 47.64 NV, 34.67 -> 36.04 AMD; avg 1.01 noise); mean_nll 9.018733 and train loss_last 8.418446 unchanged. main ca25d9321, byte-LM bytes profile, one run per arm, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557 (default v1232/a1557); identity: every arm's NV hash == AMD hash. It was the last arm (summary_tree =1 deleted 2026-10-08), so the control and the define are gone: transformer/impl/llama/attention_v2*.mojo, transformer/checks/attention_v2_*.mojo, tools/attention_v2_*oracle.py (+tests), tools/attention_v2_exact_leg.sh, transformer/ATTENTION_V2_CONTRACT.md and experiments/performance_ideas/N06 deleted, with its forward sweep attn_v2_tq (attention-tiled-v2.json). Code recoverable at main ca25d9321; MOJOLEARN_IDN_ATTN_SOFTMAX refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch."
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."

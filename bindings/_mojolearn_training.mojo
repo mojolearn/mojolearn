@@ -1749,10 +1749,10 @@ from gemm.contract import CONTRACT_K_LEAF_MIN
 def training_experiment_profile_binding() raises -> PythonObject:
     """Checkpoint identity for optional NI34/35/08 numerical contracts."""
     var profile = String("baseline")
-    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by DELSHA_ATTN; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
     if IDN_CHUNKED_LM_HEAD_V2:
         profile += "+head-serial-logit-chunked-v2"
-    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
     if CONTRACT_K_LEAF_MIN != 128:
         profile += "+gemm-leaf" + String(CONTRACT_K_LEAF_MIN)
     return PythonObject(profile)
