@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # miv_quality.sh: QUALITY ONLY (times nothing) for the lane/apple-fast-miv
-# defines on an Apple box: FAST x_prep arms (none, MI_REG_TIES, MI_ALL,
+# defines on an Apple box: FAST x_prep arms (none, MI_REG_TIES,
 # MI_FAST_FOLDS, MI_CLF_RANKMAJOR), tools/miv_quality.py scores per arm,
 # MIV-Q lines (define on vs off). Restores the tree's x_prep .so. Run in a built tree.
 set -u
@@ -24,10 +24,9 @@ arm() {  # $1 name, $2 defines
 }
 arm off ""
 arm ties "-D MOJOLEARN_MI_REG_TIES"
-arm all "-D MOJOLEARN_MI_ALL"
 arm folds "-D MOJOLEARN_MI_FAST_FOLDS"
 arm clfrank "-D MOJOLEARN_MI_CLF_RANKMAJOR"
-for a in ties all folds clfrank; do
+for a in ties folds clfrank; do
   [ -f "$out/off.npz" ] && [ -f "$out/$a.npz" ] && $PY tools/miv_quality.py cmp "$out/off.npz" "$out/$a.npz" "$a"
 done
 [ -f "$out/orig.so" ] && cp "$out/orig.so" "$so.tmp" && mv -f "$so.tmp" "$so"

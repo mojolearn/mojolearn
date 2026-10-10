@@ -185,7 +185,7 @@ comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accele
 comptime EIGH_CYCLIC_Q = 5
 
 #: lane/apple-fast-mi (2026-10-03): FAST + Apple only, default OFF, one `-D MOJOLEARN_MI_<NAME>`
-#: each (docs/apple-fast/ab/mi.md; MOJOLEARN_MI_ALL turns every one on). x_prep/dmi_fast.mojo:
+#: each (docs/apple-fast/ab/mi.md). x_prep/dmi_fast.mojo:
 #: REG_SORTCOUNT: op 68 (`mi_cc`, mutual_info_regression) as the sorted Kraskov search (the
 #: host's argument, x_prep/host/mutual_info.mojo `_cc_column`) instead of the brute-force
 #: unit; REG_TIES: its tie-aware form (implies SORTCOUNT); REG_RANKMAJOR: its point kernel
@@ -194,30 +194,29 @@ comptime EIGH_CYCLIC_Q = 5
 #: one thread per (column, sorted rank). Every launch is inside these guards; IDENTICAL and
 #: the other vendors compile main's code unchanged.
 comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-# DROP-quality, M3 miv-reg-all-* / miv-clf-all-* (istella, taxi):
-# regression 46430 -> 1151 / 2316 -> 81 ms, but includes FAST_FOLDS.
-# M2 30k x 48 tie-heavy fixture: score shift up to 3.2% of scale and
-# selected-set symmetric difference 2. See docs/apple-fast/EXPERIMENTS.md.
-comptime MI_ALL = is_defined["MOJOLEARN_MI_ALL"]()
+# TOMBSTONE: MOJOLEARN_MI_ALL (DROP-quality: M3 miv-reg-all-* reg istella 46,430 -> 1,151 ms, taxi 2,316 -> 81, but
+# it includes FAST_FOLDS, which fails the selected-set gate) deleted 2026-10-09 on lane/owed-deletions-D2: the
+# bundle alias only, each member keeps its own define; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_MI_ALL.patch
 #: MI_REG_TIES: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
 #: select-mutual-info-reg istella 46,465 -> 1,340 ms, taxi 2,339 -> 160 ms (n_selected 110 / 5
 #: both arms; main's istella arm swings 46-70 s run to run, far inside the gap). Quality
 #: (tools/miv_quality.sh, M2): scores bit-identical to main's FAST route on a tie-heavy fixture.
 #: -D MOJOLEARN_MI_REG_TIES_OFF: main's search.
-comptime MI_REG_TIES = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_TIES"]()
+comptime MI_REG_TIES = _MI_FA and (is_defined["MOJOLEARN_MI_REG_TIES"]()
                                    or not is_defined["MOJOLEARN_MI_REG_TIES_OFF"]())
-comptime MI_REG_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_RANKMAJOR"]())
+comptime MI_REG_RANKMAJOR = _MI_FA and is_defined["MOJOLEARN_MI_REG_RANKMAJOR"]()
 comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or MI_REG_RANKMAJOR or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
 #: MI_FAST_FOLDS stays opt-in (lane/apple-fast-miv): its scores move up to 3% of the largest
 #: score and the selected set changes on the tools/miv_quality.py fixture.
 # DROP-quality / INCONCLUSIVE-speed: mi-reg-folds-istella-x was -0.2%
 # on the old base; M2 quality showed 3.2% score shift and selected-set
 # symmetric difference 2. See docs/apple-fast/EXPERIMENTS.md.
-comptime MI_FAST_FOLDS = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_FAST_FOLDS"]())
+comptime MI_FAST_FOLDS = _MI_FA and is_defined["MOJOLEARN_MI_FAST_FOLDS"]()
 #: MI_CLF_RANKMAJOR: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
 #: select-mutual-info istella 715.2 -> 645.2 ms, taxi 202.2 -> 196.4 ms (n_selected identical);
 #: scores bit-identical (tools/miv_quality.sh, M2). -D MOJOLEARN_MI_CLF_RANKMAJOR_OFF: main's layout.
-comptime MI_CLF_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]()
+comptime MI_CLF_RANKMAJOR = _MI_FA and (is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]()
                                         or not is_defined["MOJOLEARN_MI_CLF_RANKMAJOR_OFF"]())
 comptime OP_MI_CC = 68
 comptime OP_MI_COLSCALE = 66

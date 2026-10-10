@@ -136,6 +136,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS`](#mojolearn_classical_c61_nb_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
 | [`MOJOLEARN_KSHAP_FAST_SIGNGRAM`](#mojolearn_kshap_fast_signgram) | Prep | DROPPED | Oct 3 | lane only |
+| [`MOJOLEARN_MI_ALL`](#mojolearn_mi_all) | Prep | DROP (quality) | 2026-10-09 | [MOJOLEARN_MI_ALL.patch](../experiments/removed/MOJOLEARN_MI_ALL.patch) |
 | [`MOJOLEARN_PREP3_LABELS`](#mojolearn_prep3_labels) | Prep | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_PREP3_SPLINE`](#mojolearn_prep3_spline) | Prep | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_RESAMPLE_FAST_IDX_BULK`](#mojolearn_resample_fast_idx_bulk) | Prep | DROPPED-semantics |  | lane only |
@@ -1018,6 +1019,16 @@ in the tables after the sections.
 - Recoverable on the lane: `lane/apple-fast-gap-kapprox2 @ 4fd464a43`.
 - EXPERIMENTS.md:683 (Gap kapprox2 (lane/apple-fast-gap-kapprox2, Oct 3)): `KSHAP_FAST_SIGNGRAM` on kernel-shap / istella, lane/apple-fast-gap-kapprox2 @ 4fd464a43, A/B kap2-kshap-sign-istella (A = BATCH), -1.4% ms, **DROPPED**: noise; sign adds instead of soft-f64 products in the normal equations (same words); not merged
 
+### MOJOLEARN_MI_ALL
+
+- What it tried: one define turning on every lane/apple-fast-mi(v) mutual-information candidate (REG_TIES, REG_RANKMAJOR, FAST_FOLDS, CLF_RANKMAJOR) on FAST + Apple.
+- Verdict: DROP (quality): M3 miv-reg-all-* / miv-clf-all-* reg istella 46,430 -> 1,151 ms, taxi 2,316 -> 81; clf istella 715 -> 552, taxi 203 -> 145, but it includes MI_FAST_FOLDS, which fails the selected-set gate (M2 tie-heavy fixture: scores move up to 3.2% of scale, selected-set symmetric difference 2). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_MI_ALL`): the alias only; REG_TIES and CLF_RANKMAJOR stay FAST defaults, REG_RANKMAJOR keeps its own define.
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_MI_ALL.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `x_prep/device.mojo`, `tools/miv_quality.sh`, `tools/miv_quality.py`
+- Guard refusal (core/six_lane_experiment_guards.mojo:244): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_MI_ALL, the mutual-information FAST bundle, was DROP (quality): M3 miv-reg-all istella 46,430 -> 1,151 ms but it includes MI_FAST_FOLDS (selected set changes); name the members instead; code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:363 (lane/apple-fast-miv @ 514401169): `MI_ALL` on select-mutual-info(-reg) / istella; taxi, A/B miv-reg-all-*, miv-clf-all-*, reg istella 46,430 -> 1,151, taxi 2,316 -> 81; clf istella 715 -> 552, taxi 203 -> 145, **DROP (quality)**: includes MI_FAST_FOLDS, which fails the selected-set gate; opt-in only
+- EXPERIMENTS.md:1826 (Owed deletions D2): **DELETED**.
+
 ### MOJOLEARN_PREP3_LABELS
 
 - Verdict: DROPPED-noise. The code never reached main as a live switch (no code line naming it was ever deleted from main); no patch.
@@ -1853,7 +1864,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_MCD_DEVICE_CSTEPS` | EXPERIMENTS.md:451 DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) (lane/apple-fast-robust @ cfdb95e48) | `x_decomp/mcd_fast.mojo:13` |
 | `MOJOLEARN_MC_CLASS_BATCH_DERIV` | EXPERIMENTS.md:165 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:763` |
 | `MOJOLEARN_MC_CLASS_BATCH_EST` | EXPERIMENTS.md:166 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:774` |
-| `MOJOLEARN_MI_ALL` | EXPERIMENTS.md:363 DROP (quality) (lane/apple-fast-miv @ 514401169) | `x_prep/device.mojo:201` |
 | `MOJOLEARN_MI_FAST_FOLDS` | EXPERIMENTS.md:366 DROP (speed + quality) (lane/apple-fast-batch @ 3150d75c1) | `x_prep/device.mojo:216` |
 | `MOJOLEARN_MOE_FAST_MMA` | EXPERIMENTS.md:1362 DROPPED-slower (bundle), toggles stay opt-in off (main @ 13246c64f) | `sequence/moe_mma.mojo:13` |
 | `MOJOLEARN_MOE_FAST_MMA_KB32` | EXPERIMENTS.md:1362 DROPPED-slower (bundle), toggles stay opt-in off (main @ 13246c64f) | `sequence/moe_mma.mojo:45` |
