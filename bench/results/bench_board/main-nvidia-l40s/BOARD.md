@@ -1,12 +1,12 @@
 # mojolearn benchmark board
 
-Generated 2026-10-10T23:00:40Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-10T23:05:32Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 > MAIN BOARD nvidia-l40s, version label main@ca25d9321. Unreleased: not reproducible by pip install; the release boards are the reference.
 
 > Cells: 191 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@ca25d9321 (2026-10-10T19:37:56Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 232 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 228 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
 > Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 80, n/a 111).
 
@@ -22,14 +22,10 @@ DIFFER: none.
 
 ## FAILED
 
-Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 5 failed runs.
+Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 1 failed runs.
 
 | lane | dataset | commit | hardware | version | box/job | reason | ok cell on the board |
 |---|---|---|---|---|---|---|---|
-| conv2d | synthetic | main@e5f3f2ed8 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.37 (source build, main@e5f3f2ed8) | nv/n0570 | NO-RECORD | none |
-| moe | synthetic | main@e5f3f2ed8 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.37 (source build, main@e5f3f2ed8) | nv/n0570 | NO-RECORD | none |
-| resnet-block | synthetic | main@e5f3f2ed8 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.37 (source build, main@e5f3f2ed8) | nv/n0570 | NO-RECORD | none |
-| gbdt-categorical | istella | main@de2b2b739 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.37 (source build, main@de2b2b739) | nv/n0320 | NO-RECORD | none |
 | gbdt-categorical | taxi | main@de2b2b739 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.37 (source build, main@de2b2b739) | nv/n0320 | REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO) | none |
 
 ## Box

@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-10T23:00:40Z",
+ "generated": "2026-10-10T23:05:32Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-10T23:00:40Z",
+  "generated": "2026-10-10T23:05:32Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -227,7 +227,9 @@
   "GRIDBB: branch freeze-20261007": 4389,
   "GRIDBB: branch freeze-20261010": 1146,
   "GRIDBB: branch gbdt-categorical-oom": 6,
-  "GRIDBB: no job line in results": 1
+  "GRIDBB: no job line in results": 1,
+  "GRIDBB: not a bench_board race": 8,
+  "previous FAILED row: not a bench_board race": 8
  },
- "summary": "MAINBOARD column=amd-mi325x label=main@ca25d9321 races=153 add=1 change=13 drop=0 failed=4 ledger=180 withheld_opponents=2 identity=MATCH:80,n/a:73"
+ "summary": "MAINBOARD column=amd-mi325x label=main@ca25d9321 races=153 add=0 change=0 drop=0 failed=0 ledger=176 withheld_opponents=2 identity=MATCH:80,n/a:73"
 }

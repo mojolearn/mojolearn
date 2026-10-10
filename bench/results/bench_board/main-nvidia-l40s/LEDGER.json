@@ -7211,27 +7211,6 @@
   },
   {
    "column": "nvidia-l40s",
-   "failed": true,
-   "race": "neural/conv2d/synthetic/shape=full",
-   "reason": "infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table",
-   "replaced": {
-    "box": "nv",
-    "commit_date": "2026-10-09T00:15:46Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0570",
-    "kind": "gridbb",
-    "median_ms": null,
-    "reason": "NO-RECORD",
-    "sha": "e5f3f2ed87dcf82573a5ee3252f75a1f7aa8e87c",
-    "status": "REFUSED(NO-RECORD)",
-    "version": "mojolearn 0.8.37 (source build, main@e5f3f2ed8)"
-   },
-   "replaced_by": null
-  },
-  {
-   "column": "nvidia-l40s",
    "failed": false,
    "race": "neural/lm-forward/bytes/shape=full",
    "reason": "older commit",
@@ -7368,48 +7347,6 @@
   },
   {
    "column": "nvidia-l40s",
-   "failed": true,
-   "race": "neural/moe/synthetic/shape=full",
-   "reason": "infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table",
-   "replaced": {
-    "box": "nv",
-    "commit_date": "2026-10-09T00:15:46Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0570",
-    "kind": "gridbb",
-    "median_ms": null,
-    "reason": "NO-RECORD",
-    "sha": "e5f3f2ed87dcf82573a5ee3252f75a1f7aa8e87c",
-    "status": "REFUSED(NO-RECORD)",
-    "version": "mojolearn 0.8.37 (source build, main@e5f3f2ed8)"
-   },
-   "replaced_by": null
-  },
-  {
-   "column": "nvidia-l40s",
-   "failed": true,
-   "race": "neural/resnet-block/synthetic/shape=full",
-   "reason": "infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table",
-   "replaced": {
-    "box": "nv",
-    "commit_date": "2026-10-09T00:15:46Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0570",
-    "kind": "gridbb",
-    "median_ms": null,
-    "reason": "NO-RECORD",
-    "sha": "e5f3f2ed87dcf82573a5ee3252f75a1f7aa8e87c",
-    "status": "REFUSED(NO-RECORD)",
-    "version": "mojolearn 0.8.37 (source build, main@e5f3f2ed8)"
-   },
-   "replaced_by": null
-  },
-  {
-   "column": "nvidia-l40s",
    "failed": false,
    "race": "neural/samba-forward/bytes/shape=full",
    "reason": "older commit",
@@ -7509,27 +7446,6 @@
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
    }
-  },
-  {
-   "column": "nvidia-l40s",
-   "failed": true,
-   "race": "trees/gbdt-categorical/istella/rows=full",
-   "reason": "infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table",
-   "replaced": {
-    "box": "nv",
-    "commit_date": "2026-10-08T13:42:40Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0320",
-    "kind": "gridbb",
-    "median_ms": null,
-    "reason": "NO-RECORD",
-    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
-    "status": "REFUSED(NO-RECORD)",
-    "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
-   },
-   "replaced_by": null
   },
   {
    "column": "nvidia-l40s",
@@ -7823,8 +7739,92 @@
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@444f0b96e)"
    }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": true,
+   "race": "neural/conv2d/synthetic/shape=full",
+   "reason": "infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T00:15:46Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0570",
+    "kind": "gridbb",
+    "median_ms": null,
+    "reason": "NO-RECORD",
+    "sha": "e5f3f2ed87dcf82573a5ee3252f75a1f7aa8e87c",
+    "status": "REFUSED(NO-RECORD)",
+    "version": "mojolearn 0.8.37 (source build, main@e5f3f2ed8)"
+   },
+   "replaced_by": null
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": true,
+   "race": "neural/moe/synthetic/shape=full",
+   "reason": "infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T00:15:46Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0570",
+    "kind": "gridbb",
+    "median_ms": null,
+    "reason": "NO-RECORD",
+    "sha": "e5f3f2ed87dcf82573a5ee3252f75a1f7aa8e87c",
+    "status": "REFUSED(NO-RECORD)",
+    "version": "mojolearn 0.8.37 (source build, main@e5f3f2ed8)"
+   },
+   "replaced_by": null
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": true,
+   "race": "neural/resnet-block/synthetic/shape=full",
+   "reason": "infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T00:15:46Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0570",
+    "kind": "gridbb",
+    "median_ms": null,
+    "reason": "NO-RECORD",
+    "sha": "e5f3f2ed87dcf82573a5ee3252f75a1f7aa8e87c",
+    "status": "REFUSED(NO-RECORD)",
+    "version": "mojolearn 0.8.37 (source build, main@e5f3f2ed8)"
+   },
+   "replaced_by": null
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": true,
+   "race": "trees/gbdt-categorical/istella/rows=full",
+   "reason": "infrastructure status NO-RECORD never replaces an ok cell; no ok run of this race: FAILED table",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0320",
+    "kind": "gridbb",
+    "median_ms": null,
+    "reason": "NO-RECORD",
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "REFUSED(NO-RECORD)",
+    "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
+   },
+   "replaced_by": null
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-10T23:00:40Z"
+ "updated": "2026-10-10T23:05:32Z"
 }
