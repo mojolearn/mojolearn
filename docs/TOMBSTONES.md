@@ -1922,6 +1922,7 @@ in the tables after the sections.
 | `MOJOLEARN_KDE_DIMTILE` | a later EXPERIMENTS row keeps it (KEEP/KEPT/DEFAULT); the DROP row is superseded; DROP: inconclusive on taxi, no istella gain over DIMTILE; opt-in only |
 | `MOJOLEARN_MOE_FAST_MMA` | KEPT (lane/owed-deletions-D2, 2026-10-09): the FAST + Apple default since M3 rab10-moemma (moe synthetic 71.39 -> 53.48 ms, -25.1%, digest identical; sequence/moe_mma.mojo MOE_MMA, opt-out `-D MOJOLEARN_MOE_FAST_MMA_OFF`). EXPERIMENTS.md:1362 DROPPED the KB32 + WIDE + PF bundle on top of it, not the base; KB32 deleted, WIDE / PF still opt-in (no single-variant A/B) |
 | `MOJOLEARN_PL_GROUP_NARROW` | a later EXPERIMENTS row keeps it (KEEP/KEPT/DEFAULT); the DROP row is superseded; DROPPED-noise: reconciled 2026-10-05: old-base result, row `PL_GROUP_NARROW + PL_PAIRS_ONCE` DROPPED-noise (LEDGER 2026-10-03/04). Was OPEN: A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `MOJOLEARN_PT_COLBATCH` | KEPT (lane/owed-deletions-D2, 2026-10-09): its kernels are the FAST + Apple DEFAULT path: x_prep/fastpt.mojo `PT_COLBATCH = ... or PT_SCORE` and `PT_SCORE = ... or PT_SCORE_STABLE` (x_prep/pt_center.mojo, FAST + Apple default since w2-pt-centered2-quality PASS, taxi 293.4 -> 190.8 ms, istella 2,206.6 -> 1,530.5 ms), so `pt_colbatch_fold` runs the default PowerTransformer score. The EXPERIMENTS.md:377 DROP (quality) judged the old COLBATCH + FUSED_TRANSFORM + SI bundle without the centered score; deleting it would change default bits. The standalone `-D MOJOLEARN_PT_COLBATCH` only matters under `MOJOLEARN_PT_SCORE_STABLE_OFF` |
 | `MOJOLEARN_RIDGE_FAST_CLS1_CODES` | a later EXPERIMENTS row keeps it (KEEP/KEPT/DEFAULT); the DROP row is superseded; DROPPED-noise: no better than CODES alone |
 | `MOJOLEARN_YETI_SEARCH_TASK16K` | a later EXPERIMENTS row keeps it (KEEP/KEPT/DEFAULT); the DROP row is superseded; DROPPED-noise: SYM_HIST_FAST part dropped (see above); code removed from main 6f5ace7fa; recover at lane/apple-fast-trees-yeti@65f551e39 |
 
@@ -1971,7 +1972,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_MC_CLASS_BATCH_EST` | EXPERIMENTS.md:166 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:774` |
 | `MOJOLEARN_PL_PAIRS_ONCE` | EXPERIMENTS.md:174 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/pair_logit_group.mojo:130` |
 | `MOJOLEARN_PSHAP_FAST_OVERLAP` | EXPERIMENTS.md:1413 DROPPED-slower (lane/apple-fast-s-shap) | `python/mojolearn/_expansion_trees.py:3530` |
-| `MOJOLEARN_PT_COLBATCH` | EXPERIMENTS.md:377 DROP (quality) (lane/apple-fast-batchv @ 30aa43339) | `x_prep/fastpt.mojo:11` |
 | `MOJOLEARN_QN_FAST_COALESCED_OFF` | EXPERIMENTS.md:247 DROPPED-slower (lane/apple-fast-linear @ 1c7c213f8) | `glm/impl/qn/glm_base.mojo:112` |
 | `MOJOLEARN_QR_FAST_DEV` | EXPERIMENTS.md:453 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1251` |
 | `MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` | EXPERIMENTS.md:384 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:221` |
