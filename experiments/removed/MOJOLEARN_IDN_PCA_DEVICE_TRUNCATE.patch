@@ -251,10 +251,10 @@ index 121ba99f1..2f3e1b060 100644
      var h_cov = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
      var h_vec = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
 diff --git a/decomposition/pca_rr_switch.mojo b/decomposition/pca_rr_switch.mojo
-index 48a42af6f..232fa4ecb 100644
+index b2f04e5c0..232fa4ecb 100644
 --- a/decomposition/pca_rr_switch.mojo
 +++ b/decomposition/pca_rr_switch.mojo
-@@ -50,7 +50,20 @@ comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not (
+@@ -50,6 +50,20 @@ comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not (
  #: on taxi and istella REFUSED at decomposition/impl/linalg/detail/pca.mojo:734). Deleted,
  #: refused in core/six_lane_experiment_guards.mojo; recoverable at main 0a7b206f1.
  
@@ -277,4 +277,4 @@ index 48a42af6f..232fa4ecb 100644
 +#: the same move for eigh), so tied components may swap. The host column
 +#: (`host_eig_and_truncate`, decomposition/host/pca_oracle.mojo) reads this
 +#: switch and takes the same order: build the host binding with it too.
- comptime PCA_DEVICE_TRUNCATE = PCA_RR_EIGH and is_defined["MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE"]()
++comptime PCA_DEVICE_TRUNCATE = PCA_RR_EIGH and is_defined["MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE"]()

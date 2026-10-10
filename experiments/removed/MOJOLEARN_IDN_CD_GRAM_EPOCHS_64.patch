@@ -1,8 +1,8 @@
 diff --git a/experiments/classical_identical_ideas/fg_linear_controls.mojo b/experiments/classical_identical_ideas/fg_linear_controls.mojo
-index a6b8c2887..2c5046418 100644
+index 8f2706a34..2c5046418 100644
 --- a/experiments/classical_identical_ideas/fg_linear_controls.mojo
 +++ b/experiments/classical_identical_ideas/fg_linear_controls.mojo
-@@ -121,7 +121,19 @@ comptime IDN_LINEAR_PINNED_UPLOAD = _FGL_IDN and not is_defined["MOJOLEARN_IDN_L
+@@ -121,6 +121,19 @@ comptime IDN_LINEAR_PINNED_UPLOAD = _FGL_IDN and not is_defined["MOJOLEARN_IDN_L
  # NV 0.99x / AMD 1.00x, taxi 1.00x / 1.00x (nv n0606->n0615, amd a1065->a1074),
  # accuracy SAME, same digests; refused in core/six_lane_experiment_guards.mojo; main 5c137b55e.
  
@@ -24,7 +24,7 @@ index a6b8c2887..2c5046418 100644
 +# per epoch, so coef and n_iter_ are the same at any epochs-per-launch; the
 +# host column (solver/host/cd_oracle.mojo) is unchanged.
 +comptime IDN_CD_GRAM_EPOCHS_64 = _FGL_IDN and is_defined["MOJOLEARN_IDN_CD_GRAM_EPOCHS_64"]()
- comptime CD_EK_SMALL_COLS = 64
++comptime CD_EK_SMALL_COLS = 64
 diff --git a/solver/impl/cd.mojo b/solver/impl/cd.mojo
 index 2e35787b5..e2d799b15 100644
 --- a/solver/impl/cd.mojo

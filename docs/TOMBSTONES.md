@@ -1023,8 +1023,8 @@ in the tables after the sections.
 
 ### MOJOLEARN_IDN_CD_GRAM_EPOCHS_64
 
-- Verdict: DROPPED-slower. Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit 512707dc3).
-- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch` (reverse of the deletion commit, code files only).
+- Verdict: DROPPED-slower. Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commits 512707dc3 and b4d27a394).
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch` (reverse of both deletion commits, code files only: `git diff b4d27a394 9f83ea479` on the two files).
 - What it tried: lane fg-linear C2 (2026-10-09): Lasso / ElasticNet's IDENTICAL Gram sweep (`cd_idn_gram_sweep_kernel`) ran 64 epochs a launch instead of CD_IDN_GRAM_EPOCHS = 16 when n_cols <= CD_EK_SMALL_COLS (64), to amortize the host's per-launch state read; no bit change (convergence and freeze decided on the device per epoch).
 - Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): lasso taxi NV 1.39x / AMD 1.01x (avg 1.20x, slower), lasso istella NV 1.00x / AMD 1.00x, elasticnet taxi NV 1.02x / AMD 1.01x, elasticnet istella 1.00x / 1.00x. Hashes unchanged (lasso 6bb43acc / f90c38ec, elasticnet ffdff5a8 / 1fe5e9b4); r2 unchanged.
 - Files the patch restores: `experiments/classical_identical_ideas/fg_linear_controls.mojo`, `solver/impl/cd.mojo`
@@ -1789,8 +1789,8 @@ in the tables after the sections.
 
 ### MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE
 
-- Verdict: DROPPED-noise. Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit 65b172f2f).
-- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch` (reverse of the deletion commit, code files only).
+- Verdict: DROPPED-noise. Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commits 65b172f2f and b4d27a394).
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch` (reverse of both deletion commits, code files only: `git diff b4d27a394 9f83ea479` on the three files).
 - What it tried: lane fg-pca P5 (2026-10-09): `eig_and_truncate` stopped downloading the whole n x n covariance and eigenvector matrices for the host's O(n^2) exchange sort; the spectrum order (`spectrum_rank_desc`, ties to the lower index) and the top-k component gather ran on the device and only k x n + 2 n words crossed (`_device_truncate`, `truncate_in_order`, `pca_inv_order_kernel`, `pca_gather_components_kernel`); the host twin `host_order_truncate_spectrum_ranked` took the same order. Bits the same except on tied eigenvalues.
 - Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): pca istella NV 1.00x / AMD 1.00x, pca taxi NV 1.01x / AMD 1.00x, tsvd istella NV 1.00x / AMD 1.00x, tsvd taxi NV 0.91x / AMD 1.00x (avg 0.96x on one cell, the rest 1.00x): noise. Hashes unchanged (pca 3cc2b456 / 187a68d3, tsvd 3747911d / 8e8dc2a1); explained_variance_ratio_sum unchanged.
 - Files the patch restores: `decomposition/pca_rr_switch.mojo`, `decomposition/impl/linalg/detail/pca.mojo`, `decomposition/host/pca_oracle.mojo`
