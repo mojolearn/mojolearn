@@ -219,7 +219,10 @@ def annotate_cells(cells):
             for m in ("identical", "fast"):
                 c["ratio_ours_%s_clock" % m] = None
                 o = ours[m]
-                if c.get("library") == "mojolearn" or o is None or _ok_median(c) is None:
+                # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a
+                # column (tools/board_hardware.py sets hardware_comparable False on a row of other hardware).
+                if c.get("library") == "mojolearn" or o is None or _ok_median(c) is None \
+                        or c.get("hardware_comparable") is False:
                     continue
                 c["ratio_ours_%s_clock" % m] = pair_ratio(o["clock"], c["clock"], c)
     return cells

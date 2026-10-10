@@ -248,15 +248,17 @@ def render_race(bb, rr):
     if not ic:
         return []
     L = ["", "Inference (each arm predicts with its own model from the fit rounds above):", "",
-         "| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | "
+         # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+         "| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | "
          "ours FAST / arm | " + bb.CLOCK_HEADER + " | quality | hash stable | comparability | status |",
-         "|---|---|---|---|---|---|---|---|" + "---|" * bb.CLOCK_COLUMNS + "---|---|---|---|"]
+         "|---|---|---|---|---|---|---|---|---|---|" + "---|" * bb.CLOCK_COLUMNS + "---|---|---|---|"]
     for c in ic:
-        L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
-            bb._arm_label(c), c.get("batch"), bb._f(c.get("batch_rows")), bb._f(c["median_ms"]),
+        L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            bb._arm_label(c), bb._f(c.get("hardware")), bb._f(c.get("version")),
+            c.get("batch"), bb._f(c.get("batch_rows")), bb._f(c["median_ms"]),
             "%s..%s" % (bb._f(c["min_ms"]), bb._f(c["max_ms"])) if c["min_ms"] is not None else "-",
-            c["rounds"], bb._f(c.get("ratio_ours_identical_over"), 3),
-            bb._f(c.get("ratio_ours_fast_over"), 3), bb.clock_cells(c),
+            c["rounds"], bb.ratio_text(c, "ratio_ours_identical_over"),
+            bb.ratio_text(c, "ratio_ours_fast_over"), bb.clock_cells(c),
             bb._q(c.get("quality")),
             bb._f(c.get("hash_stable")), bb.clean(c.get("verdict")), bb.clean(c["status"])))
     calls = []
@@ -292,7 +294,7 @@ def render_glance(bb, races):
                 bb._f(fast["median_ms"]) if fast else "-",
                 bb._f(ident["median_ms"]) if ident else "-", agree,
                 "; ".join("%s %s ms (IDENTICAL/arm %s)" % (
-                    c["arm"], bb._f(c["median_ms"]), bb._f(c.get("ratio_ours_identical_over"), 3))
+                    c["arm"], bb._f(c["median_ms"]), bb.ratio_text(c, "ratio_ours_identical_over"))
                     for c in opps) or "-"))
     if not rows:
         return []

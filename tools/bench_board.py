@@ -462,6 +462,9 @@ PROBE = _load_tool("bench_board_probe")
 #: (kernel for a torch GPU arm, whole otherwise; AGENTS.md measurement item 6).
 #: Derived at render time only; the stored cells and ratios are untouched.
 CLOCKS = _load_tool("board_clock_audit")
+#: The box table and the per-row hardware / version fields (standard library only).
+# Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+HW = _load_tool("board_hardware")
 
 
 def _bb():
@@ -1383,6 +1386,8 @@ def load_result(path):
 
 def save_result(path, result):
     result["updated"] = now_utc()
+    # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+    HW.annotate_release(result)
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
         json.dump(result, fh, indent=2, sort_keys=True, default=str)
@@ -1976,7 +1981,11 @@ def ours_of(cells, which):
 def add_ratios(cells):
     """ratio_ours_identical_over / ratio_ours_fast_over: our GPU median divided
     by this OPPONENT arm median, computed only when both sides completed every
-    round. Our CPU is never in a ratio (Andrew, Oct 2 2026)."""
+    round. Our CPU is never in a ratio (Andrew, Oct 2 2026).
+    Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+    An opponent row whose hardware differs from ours (tools/board_hardware.py comparable) gets no ratio:
+    `hardware_comparable` False, rendered NOT-COMPARABLE (different hardware)."""
+    HW.mark(cells)
     ok = [c for c in cells if c["status"] == "ok" and c["median_ms"]]
     ours_id = ours_of(ok, "identical")
     ours_fast = ours_of(ok, "fast")
@@ -1987,7 +1996,7 @@ def add_ratios(cells):
         c.pop("ratio_ours_cpu_over", None)
         # Opponents only. FAST over IDENTICAL is the cost of identity, an
         # internal number that never reaches a board (ENGINEERING_RULES 0b-iii).
-        if id(c) not in done or c["library"] == "mojolearn":
+        if id(c) not in done or c["library"] == "mojolearn" or c.get("hardware_comparable") is False:
             continue
         if ours_id and c is not ours_id:
             c["ratio_ours_identical_over"] = ours_id["median_ms"] / c["median_ms"]
@@ -2071,7 +2080,9 @@ def neural_headline(rr):
     ours = ours_of(ok, "identical")
     out = {"ours_ms": ours["median_ms"] if ours else None, "note": IDENTITY_TAX_NOTE}
     for prec in ("bf16", "fp32"):
-        arms = [c for c in ok if c.get("library") != "mojolearn" and _torch_gpu_precision(c.get("arm")) == prec]
+        # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+        arms = [c for c in ok if c.get("library") != "mojolearn" and _torch_gpu_precision(c.get("arm")) == prec
+                and c.get("hardware_comparable") is not False]
         best = min(arms, key=lambda c: c["median_ms"]) if arms else None
         out[prec] = None if best is None else {
             "arm": best["arm"], "ms": best["median_ms"],
@@ -2798,6 +2809,14 @@ def _clock_ratio(r):
     return "%s (%s)" % (_f(r["value"], 3), clean(r["label"]))
 
 
+def ratio_text(c, field):
+    """A stored ratio, or NOT-COMPARABLE (different hardware) for an opponent row whose hardware differs from ours.
+    Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column."""
+    if c.get("hardware_comparable") is False:
+        return HW.NOT_COMPARABLE
+    return _f(c.get(field), 3)
+
+
 def clock_cells(c):
     """The five clock cells of one board row, joined with ` | ` (the caller's
     format string supplies the outer bars). Derived by CLOCKS.annotate_cells;
@@ -2818,6 +2837,15 @@ def render_board(result):
     # Historical page-only races are measurements too; include them in the main board.
     result.setdefault("races", {}).update(result.get("extra_races") or {})
     result = strip_our_cpu(result)
+    # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+    # Rows an older board stored without them get them from the run's own box record (never guessed), and a row
+    # whose hardware differs from ours is NOT-COMPARABLE before the clock ratios are derived.
+    HW.annotate_release(result)
+    for _rr in (result.get("races") or {}).values():
+        HW.mark(_rr.get("cells") or [])
+        _ic = _rr.get("infer_cells") or []
+        for _b in sorted({str(c.get("batch")) for c in _ic}):
+            HW.mark([c for c in _ic if str(c.get("batch")) == _b])
     CLOCKS.annotate_result(result)      # derived `clock` + ratio-clock fields, this copy only
     box = result.get("box") or {}
     cfg = result.get("config") or {}
@@ -3009,22 +3037,24 @@ def render_board(result):
             if hl is not None:
                 L.append("headline: %s" % headline_text(hl))
                 L.append("")
-            L.append("| arm | library | device | mode | median ms | min..max ms | rounds | "
+            # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+            L.append("| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | "
                      "ours IDENTICAL / arm | ours FAST / arm | " + CLOCK_HEADER + " | peak host MB | "
                      "peak GPU MB | quality | hash stable | comparability | installed_wheel | "
                      "status |")
-            L.append("|---|---|---|---|---|---|---|---|---|" + "---|" * CLOCK_COLUMNS
+            L.append("|---|---|---|---|---|---|---|---|---|---|---|" + "---|" * CLOCK_COLUMNS
                      + "---|---|---|---|---|---|---|")
             for c in rc:
-                L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | "
+                L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | "
                          "%s | %s | %s |" % (
-                             _arm_label(c), c["library"], c["device"], c["mode"],
+                             _arm_label(c), c["library"], c["device"], _f(c.get("hardware")),
+                             _f(c.get("version")), c["mode"],
                              _f(c["median_ms"]),
                              "%s..%s" % (_f(c["min_ms"]), _f(c["max_ms"]))
                              if c["min_ms"] is not None else "-",
                              c["rounds"],
-                             _f(c.get("ratio_ours_identical_over"), 3),
-                             _f(c.get("ratio_ours_fast_over"), 3),
+                             ratio_text(c, "ratio_ours_identical_over"),
+                             ratio_text(c, "ratio_ours_fast_over"),
                              clock_cells(c),
                              _f(c.get("peak_host_mb")), _f(c.get("peak_gpu_mb")),
                              _q(c.get("quality")), _f(c.get("hash_stable")),
