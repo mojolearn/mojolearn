@@ -189,18 +189,12 @@
    "route": "density.py:371 -> dbscan_fit_core -> dbscan/impl/runner.mojo dbscan_fit -> rbc_eps_pass_count/fill (D1) | count_bitmap/fill_bitmap (D2) -> weak_cc_batched (D5)",
    "controls": [
     "dbscan_eps_tile",
-    "dbscan_adj_bitmap",
-    "dbscan_batch_sample",
-    "dbscan_cc_hook"
+    "dbscan_adj_bitmap"
    ],
    "interaction_groups": [
     [
      "dbscan_eps_tile",
-     "dbscan_adj_bitmap",
-     "dbscan_batch_sample"
-    ],
-    [
-     "dbscan_cc_hook"
+     "dbscan_adj_bitmap"
     ]
    ]
   },
