@@ -255,6 +255,7 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM, the threadgroup-staged LSTM scan, was DROPPED-quality with its bundle: M3 rab10 SCAN + SMEM lstm-clf accuracy 0.9608 -> 0.5002, r2 0.9804 -> -0.1043; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not (is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_LSTM_WGRAD, the FAST split-K LSTM weight-gradient folds, was DROPPED-quality with the scan bundle: M3 lstm-clf accuracy 0.9608 -> 0.5002, lstm-reg r2 0.9804 -> -0.1043; never A/B-ed alone; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not (is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_MAP_DOWN, the map_to_host sequence read-back, was DROPPED-slower: M3 layernorm 50.2 -> 79.8 ms (+59%); code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not (is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_RAW_DOWN, the raw chunked sequence read-back, was DROPPED-slower: M3 rab7-seqrawdown layernorm 48.99 -> 73.68 ms (+50.4%); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
