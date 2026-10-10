@@ -256,6 +256,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IVF_REFINE_TEAM"](), "removed 2026-10-09 (lane/owed-deletions-D3): IVF_REFINE_TEAM (ivf refine with one threadgroup per query, dataset uploaded from the caller's array) was NOISE: ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_KAPPROX_DEVICE"](), "removed 2026-10-09 (lane/owed-deletions-D3): KAPPROX_DEVICE (AdditiveChi2Sampler / SkewedChi2Sampler device ops) LOST quality: kernel_rel_error .0378 -> .0480 and additive-chi2 istella 11.0 -> 12.5 ms; code deleted 2026-10-03 by 9d5baaa9b; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_SPARSE_RP_DEVICE"](), "removed 2026-10-09 (lane/owed-deletions-D3): SPARSE_RP_DEVICE (one-launch SparseRandomProjection draw) LOST quality: mean_abs_distortion .147 -> .236; code deleted 2026-10-03 by e58326562; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_KDE2_ALL"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE2_ALL (every kde2 FAST Apple define at once) was DROPPED: kde istella 139.5 -> 63.1 ms but -0.6% vs KDE_DIMTILE alone (the gain is DIMTILE, now the default); it includes SAMPLE_FUSED (taxi +354%); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

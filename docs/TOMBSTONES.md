@@ -138,6 +138,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IVF_REFINE_TEAM`](#mojolearn_ivf_refine_team) | Neighbors | DROPPED-noise | 2026-10-09 | [MOJOLEARN_IVF_REFINE_TEAM.patch](../experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch) |
 | [`MOJOLEARN_KAPPROX_DEVICE`](#mojolearn_kapprox_device) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_KAPPROX_DEVICE.patch](../experiments/removed/MOJOLEARN_KAPPROX_DEVICE.patch) |
 | [`MOJOLEARN_SPARSE_RP_DEVICE`](#mojolearn_sparse_rp_device) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_SPARSE_RP_DEVICE.patch](../experiments/removed/MOJOLEARN_SPARSE_RP_DEVICE.patch) |
+| [`MOJOLEARN_KDE2_ALL`](#mojolearn_kde2_all) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE2_ALL.patch](../experiments/removed/MOJOLEARN_KDE2_ALL.patch) |
 | [`MOJOLEARN_ACHI2_FAST_DEVCHECK`](#mojolearn_achi2_fast_devcheck) | Prep | DROPPED | Oct 3 | lane only |
 | [`MOJOLEARN_CLASSICAL_C55_CLASS_GROUP`](#mojolearn_classical_c55_class_group) | Prep | quality loss | 2026-10-07 | [MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
@@ -1056,6 +1057,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:557: `SPARSE_RP_DEVICE` | sparse-rp / taxi | lane/apple-fast-kapprox @ 10d5a7970 | kap-srp-taxi | sparse-rp taxi 4.9 -> 1.2 | DROPPED-quality | mean_abs_distortion .147 -> .236 (worse); code removed from main e58326562; recover at lane/apple-fast-kapprox@10d5a7970
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): SPARSE_RP_DEVICE (one-launch SparseRandomProjection draw) LOST quality: mean_abs_distortion .147 -> .236; code deleted 2026-10-03 by e58326562; code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_KDE2_ALL
+
+- Verdict: DROP. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KDE2_ALL.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: one -D that turned on every kde2 FAST Apple define (LSE_FUSED, NORM_FUSED, KERNEL_VARIANTS, SAMPLE_FUSED and DIMTILE at every d).
+- Files the patch restores: `kde/impl/neighbors/kernel_density.mojo`
+- EXPERIMENTS.md:327: `KDE2_ALL` | kde / istella; kde / taxi | lane/apple-fast-batch @ 3150d75c1 | kde2-all-istella-x, kde2-all-vs-dimtile-istella-x | istella 139.5 -> 63.1; vs DIMTILE alone -0.6% | DROP | includes SAMPLE_FUSED (taxi +354%); the gain is DIMTILE
+- EXPERIMENTS.md:328: `KDE2_ALL + KDE_DIMTILE` | kde / istella | lane/apple-fast-kde2 @ 659400b94 | kde2-all-vs-dimtile-istella | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KDE2_ALL (every kde2 FAST Apple define at once) was DROPPED: kde istella 139.5 -> 63.1 ms but -0.6% vs KDE_DIMTILE alone (the gain is DIMTILE, now the default); it includes SAMPLE_FUSED (taxi +354%); code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Prep
 
 ### MOJOLEARN_ACHI2_FAST_DEVCHECK
@@ -1962,7 +1973,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
-| `MOJOLEARN_KDE2_ALL` | EXPERIMENTS.md:327 DROP (lane/apple-fast-batch @ 3150d75c1) | `kde/impl/neighbors/kernel_density.mojo:2740` |
 | `MOJOLEARN_KDE_KERNEL_VARIANTS` | EXPERIMENTS.md:330 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2757` |
 | `MOJOLEARN_KDE_LSE_FUSED` | EXPERIMENTS.md:331 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2745` |
 | `MOJOLEARN_KDE_NORM_FUSED` | EXPERIMENTS.md:332 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2751` |
