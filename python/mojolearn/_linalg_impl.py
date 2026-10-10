@@ -1022,17 +1022,8 @@ def _xd_kit():
     return _Kit(_backend.default_mode())
 
 
-def _fast_apple_kit(switch):
-    """lane/apple-fast-rec-decomp (2026-10-04; from
-    lane/apple-fast-decomp-linalg@74d52352b): the FAST x_decomp kit when the
-    process tier is FAST and its binding is a Metal build compiled with
-    `-D <switch>` (`_kit_fast_define`; no env read), else None (the default
-    route stands)."""
-    if _backend.default_mode() != "fast":
-        return None
-    from ._expansion_decomp import _kit_fast_define
-    k = _xd_kit()
-    return k if _kit_fast_define(k, switch) else None
+# TOMBSTONE: MOJOLEARN_QR_FAST_DEV / MOJOLEARN_SVD_FAST_CHOLQR deleted 2026-10-09 on lane/owed-deletions-D1 took their
+# only caller-facing helper, `_fast_apple_kit`; code recoverable at b639a2bd2.
 
 
 def _xd_matrix(a_arr, rows, cols):
@@ -1559,14 +1550,12 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     a_arr, rows, cols = _two_d(a, "a")
     if not compute_uv:
         return svdvals(a_arr)
-    # -D MOJOLEARN_SVD_FAST_CHOLQR (default off, FAST on Apple; x_decomp/
-    # device.mojo SVD_FAST_CHOLQR): the whole-matrix route below, whose
-    # orth_diag then runs CholeskyQR2 passes, instead of the blocked TSQR
-    # (the A/B's A arm)
-    kf = _fast_apple_kit("MOJOLEARN_SVD_FAST_CHOLQR")
-    if kf is None and not hermitian and not full_matrices and _tsqr_on(rows, cols):
+    # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
+    # CholeskyQR2 whole-matrix route ahead of the TSQR); code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch; record in docs/TOMBSTONES.md.
+    if not hermitian and not full_matrices and _tsqr_on(rows, cols):
         return _svd_tsqr(a_arr, rows, cols)
-    k = kf or _xd_kit()
+    k = _xd_kit()
     A = _xd_matrix(a_arr, rows, cols)
     if hermitian:
         if rows != cols:
