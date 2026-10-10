@@ -20,7 +20,7 @@ from . import _causal_lm_fixtures as fixtures
 
 __all__ = ['capture', 'compare']
 
-PROFILE = 'loaded-causal-lm-v2'
+PROFILE = 'loaded-causal-lm-v3'  # v3: canonical state digest (state_digest)
 ARCHITECTURES = (('llama', False), ('llama', True), ('mistral', False),
                  ('qwen2', False), ('qwen3', False), ('phi3', False),
                  ('mamba', True), ('mamba2', True))
@@ -29,16 +29,35 @@ CHECKS = frozenset(('prefill_step', 'batch', 'reset', 'reload', 'greedy_repeat',
                     'state_positions', 'tensor_mapping', 'composition_fault_detected'))
 
 
+# The canonical decode state, one spelling for the host and every device:
+# numeric content only. A transformer KV cache is hashed through
+# `keys()`/`values()` (the written positions in `[B, n_kv, held, head_dim]`
+# order), never as its capacity-sized buffers, and string attributes are
+# version LABELS, not state: the GPU `TransformerBlock._extension` tags each
+# state with `arithmetic_profile` (_transformer_impl.py `_admit_state_profile`)
+# while the CPU `TransformerBlockInference._extension` (neural_inference.py)
+# reaches a binding that reports none, so hashing that string made every
+# transformer state digest differ host vs device with equal bits (0.8.37
+# loaded-lm-cpu-gpu-compare, 18/24 cases; Mamba states carry no label).
+_KV_BUFFERS = frozenset(('k_cache', 'v_cache'))
+
+
 def state_digest(state):
     parts = []
     for layer in state.layers:
         if hasattr(layer, 'snapshot'):
             layer = layer.snapshot()
+        packed = hasattr(layer, 'keys') and hasattr(layer, 'values') and hasattr(layer, 'cached_tokens')
         for name, value in sorted(vars(layer).items()):
+            if packed and name in _KV_BUFFERS:
+                continue
             if hasattr(value, 'tobytes'):
                 parts.append((name, digest(value)))
-            elif isinstance(value, (int, float, str)):
+            elif isinstance(value, (int, float)):
                 parts.append((name, value))
+        if packed:
+            parts.append(('keys', digest(layer.keys())))
+            parts.append(('values', digest(layer.values())))
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()
 
 
