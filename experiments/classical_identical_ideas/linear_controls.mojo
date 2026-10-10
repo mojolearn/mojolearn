@@ -199,8 +199,18 @@ comptime C24_PANEL8 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_PANE
 # old opt-in define is refused in core/six_lane_experiment_guards.mojo.
 comptime C24_ROWS2048 = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF"]()
 comptime C24_TREE4 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_TREE4"]()
-# TOMBSTONE: MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE (slower) deleted 2026-10-08 by ab4e8e543; code recoverable at ab4e8e543^.
-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch; record in docs/TOMBSTONES.md.
+# C25_PROJECTION_REUSE (IDENTICAL default since 2026-10-10): RBFSampler's projection
+# runs as classical_projection_kernel (kernel_methods/rbf_fused.mojo), four rows per
+# thread reusing each projection weight, the GEMM-v1 leaf/tree fold, for every d.
+# grid pass 2 (run ge123e6f9r2, NVIDIA) with pass 1 (ge123e6f9, AMD + NVIDIA), vendor-averaged scored ms on/off:
+#  nystroem istella 0.890x, taxi 0.937x; rbf-sampler istella 0.891x, taxi 0.895x; 8 vendor cells,
+#  geo-mean 0.903x, worst 0.983x (consistent small win), kernel_rel_error SAME -> PROMOTE
+#  (~/mojolearn-evidence/grid-lq/decisions_act_0600_c25.json). Deleted 2026-10-08 (ab4e8e543) on pass-1 data
+#  alone as noise; restored 2026-10-10 from the tombstone patch after grid pass 2.
+# `-D MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF` restores the old path (the d <= 64
+# chain under RBF_IDN_FUSED, the identical GEMM above it). The old opt-in define is
+# refused in core/six_lane_experiment_guards.mojo.
+comptime C25_PROJECTION_REUSE = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF"]()
 comptime C26_PRODUCTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_PRODUCTS"]()
 comptime C26_UPDATE_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED"]()
 comptime C27_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_COMPONENTS"]()
