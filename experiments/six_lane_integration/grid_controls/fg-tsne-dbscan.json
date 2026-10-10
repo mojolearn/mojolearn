@@ -90,27 +90,6 @@
    "status": "promoted 2026-10-10 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): IDENTICAL default (needs dbscan_eps_tile on); the old on-define is refused in core/six_lane_experiment_guards.mojo",
    "note": "D2, needs D1 (the on arm sets both). Count pass writes word-major bit words; loop 1 keeps each range's bit-scanned CSR (kept total <= edge_cap edges); loop 2, batch 0 and the border pass copy it. Ranges capped at 25% of free memory over n/8 + 8*landmarks bytes a row (more batches at large n). PROMOTED 2026-10-10: dbscan istella with EPS_TILE NV 0.20x / AMD 0.20x (v1043 / a1183) against EPS_TILE alone 0.42x / 0.34x; hash 7494ce8e unchanged. The off arm keeps D1 and restores its second distance pass."
   },
-  "dbscan_cc_hook": {
-   "define": "MOJOLEARN_IDN_DBSCAN_CC_HOOK",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_DBSCAN_CC_HOOK"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "dbscan/impl/sparse/detail/csr.mojo:383"
-   ],
-   "binding": [
-    "_mojolearn_estimators",
-    "_mojolearn_estimators_host"
-   ],
-   "bits_change": false,
-   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
-   "note": "D5. IDENTICAL, not Apple. weak_cc fixed point by lock-free hook/compress/border, 4 launches + 1 drain per batch. Labels same; n_iter_ = 1 per batch."
-  },
   "hdb_mst_seed_knn": {
    "define": "MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF",
    "kind": "switch",
@@ -249,6 +228,11 @@
    "define": "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE",
    "control": "dbscan_batch_sample",
    "reason": "DELETED 2026-10-10 (lane postmerge-act-7): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023 -> v1044, amd MI325X a1163 -> a1184; ratio = arm / fg2.default-ivf-cluster): measured on top of EPS_TILE, dbscan istella NV 0.42x / AMD 0.35x against EPS_TILE alone NV 0.42x / AMD 0.34x: no gain (noise); hash 7494ce8e unchanged; taxi timed out in every arm and the default. D4 sampled-degree range plan (dbscan/impl/runner.mojo IDN_DBSCAN_BATCH_SAMPLE, DS_SAMPLE, ds_gather_rows_kernel) deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main ca8ea1f8d (experiments/removed/MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.patch)."
+  },
+  {
+   "define": "MOJOLEARN_IDN_DBSCAN_CC_HOOK",
+   "control": "dbscan_cc_hook",
+   "reason": "DELETED 2026-10-10 (lane postmerge-act-7): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023 -> v1045, amd MI325X a1163 -> a1185; ratio = arm / fg2.default-ivf-cluster): dbscan istella NV 1.00x / AMD 0.96x: noise; hash 7494ce8e unchanged; taxi timed out in every arm and the default. D5 weak_cc hook and compress (dbscan/impl/sparse/detail/csr.mojo IDN_DBSCAN_CC_HOOK, _cc_find, _cc_union, weak_cc_hook_kernel, weak_cc_compress_kernel, weak_cc_border_kernel, _weak_cc_hook) deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main ca8ea1f8d (experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_HOOK.patch)."
   }
  ]
 }

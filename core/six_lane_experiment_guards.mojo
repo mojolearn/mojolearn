@@ -337,6 +337,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_HDB_MST_SEED_KNN"](), "promoted 2026-10-10 (fg2 A/B nv2 v1023 -> v1048, amd a1163 -> a1188, lane/postmerge-act-7): HDBSCAN round-1 MST edges from the one-wider k-NN list are the IDENTICAL default (hdbscan istella NV 0.68x / AMD 0.72x, taxi NV 0.82x / AMD 0.83x; hashes 533cb305 / 19b22783 unchanged); drop -D MOJOLEARN_IDN_HDB_MST_SEED_KNN, use -D MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF for the all-points round 1"
     # Lane postmerge-act-7 (2026-10-10), removed: losers of the same fg2 A/B (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main ca8ea1f8d.
     comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE"](), "removed 2026-10-10 (lane/postmerge-act-7): IDN_DBSCAN_BATCH_SAMPLE (D4: DBSCAN first ranges sized from a 1,024-row sampled degree) was NOISE on top of EPS_TILE: dbscan istella NV 0.42x / AMD 0.35x against EPS_TILE alone 0.42x / 0.34x (fg2 nv2 v1044, amd a1184), hash unchanged; code at main ca8ea1f8d; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_HOOK"](), "removed 2026-10-10 (lane/postmerge-act-7): IDN_DBSCAN_CC_HOOK (D5: DBSCAN weak_cc fixed point by lock-free hook and compress) was NOISE: dbscan istella NV 1.00x / AMD 0.96x (fg2 nv2 v1045, amd a1185), hash unchanged; code at main ca8ea1f8d; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
