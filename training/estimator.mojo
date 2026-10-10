@@ -109,7 +109,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.afn_optim import (
     AFN_APPLE_FAST,
     AFN_LOSS_FUSED,
-    AFN_OPT_RESIDENT_STATE,
     AFN_SF_DENOM,
     AFN_SF_NORMS,
     AFN_SF_OUT2,
@@ -412,13 +411,16 @@ def identical_optimizer_step_host(
 #: instead of six to eight device allocations a call. Every launch writes a
 #: scratch cell before it reads it, as with a fresh (uninitialized) buffer:
 #: no bit moves. -D MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF restores the fresh
-#: buffers. FAST keeps its own switch (AFN_OPT_RESIDENT_STATE).
+#: buffers. FAST has no pooled scratch.
 comptime IDN_OPT_SCRATCH_POOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and not (is_defined["MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
-comptime OPT_SCRATCH_POOL = AFN_OPT_RESIDENT_STATE or IDN_OPT_SCRATCH_POOL
+# TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, M3 rab19 adam within +-2%) deleted 2026-10-09 on
+# lane/owed-deletions-D2: FAST's share of this switch; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
+comptime OPT_SCRATCH_POOL = IDN_OPT_SCRATCH_POOL
 
 
 def _scratch(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float32]:

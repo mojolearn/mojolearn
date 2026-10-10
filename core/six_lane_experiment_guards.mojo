@@ -240,6 +240,7 @@ def _check_configuration() -> Bool:
     # Lane owed-deletions-D2 (2026-10-09): owed deletions of DROPPED Apple FAST / neural defines (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main b639a2bd2.
     comptime assert not (is_defined["MOJOLEARN_AFN_OPT_FUSE_SCAN"]() or is_defined["MOJOLEARN_AFN26_OPT_FUSE_SCAN"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_AFN_OPT_FUSE_SCAN (and alias MOJOLEARN_AFN26_OPT_FUSE_SCAN), the fused optimizer refusal scan, was DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not (is_defined["MOJOLEARN_AFN_OPT_VEC4"]() or is_defined["MOJOLEARN_AFN26_OPT_VEC4"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_AFN_OPT_VEC4 (and alias MOJOLEARN_AFN26_OPT_VEC4), the 4-wide FAST Adam update, was DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not (is_defined["MOJOLEARN_AFN_OPT_RESIDENT_STATE"]() or is_defined["MOJOLEARN_AFN26_OPT_RESIDENT_STATE"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_AFN_OPT_RESIDENT_STATE (and alias MOJOLEARN_AFN26_OPT_RESIDENT_STATE), the FAST pooled optimizer/loss scratch, was DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric; IDENTICAL keeps its scratch pool; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

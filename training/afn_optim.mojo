@@ -39,13 +39,9 @@ on every one):
       already one launch over the flat model in main; it is untouched.
   (MOJOLEARN_AFN_OPT_VEC4, the 4-wide Adam update, was deleted 2026-10-09:
       DROPPED-noise; see the TOMBSTONE at the guards below.)
-  MOJOLEARN_AFN_OPT_RESIDENT_STATE the per-step scratch (the scan
-      partials, the clip partials, the gate cells and their pinned mirror,
-      the SGD table, the eight small buffers the resident host entry
-      allocates every step, the loss's row/flag scratch) lives in a
-      process-wide pool and is created once per shape, so a step allocates
-      nothing. The moments were already resident; the step scalars are
-      kernel arguments (no upload), so no device-side schedule is needed.
+  (MOJOLEARN_AFN_OPT_RESIDENT_STATE, the FAST pooled per-step scratch, was
+      deleted 2026-10-09: DROPPED-noise; see the TOMBSTONE at the guards
+      below. The pool itself stays: IDENTICAL's resident step uses it.)
   MOJOLEARN_AFN_LOSS_FUSED         cross-entropy forward + backward in ONE
       launch, one block per row: the row max, the sum of exponentials, the
       row loss (with label smoothing when spelled) and `dlogits` are
@@ -134,11 +130,9 @@ comptime AFN_OPT_MULTITENSOR = AFN_APPLE_FAST and (
 # TOMBSTONE: MOJOLEARN_AFN_OPT_VEC4 (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric)
 # deleted 2026-10-09 on lane/owed-deletions-D2 (with alias MOJOLEARN_AFN26_OPT_VEC4); code recoverable at
 # b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch
-# T06 AFN26 alias: not tested in this campaign; retain pool ownership rules.
-comptime AFN_OPT_RESIDENT_STATE = AFN_APPLE_FAST and (
-    AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_RESIDENT_STATE"]()
-    or is_defined["MOJOLEARN_AFN26_OPT_RESIDENT_STATE"]()
-)
+# TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality
+# metric) deleted 2026-10-09 on lane/owed-deletions-D2 (with alias MOJOLEARN_AFN26_OPT_RESIDENT_STATE); code
+# recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
 # T06 AFN26 alias: not tested in this campaign; loss is independent of optimizer.
 comptime AFN_LOSS_FUSED = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_LOSS_FUSED"]()
@@ -148,7 +142,6 @@ comptime AFN_LOSS_FUSED = AFN_APPLE_FAST and (
 comptime AFN_OPT_ANY = (
     AFN_OPT_CLIP_FUSE
     or AFN_OPT_MULTITENSOR
-    or AFN_OPT_RESIDENT_STATE
 )
 
 # T10: not tested. Optimizer scan/fold/update geometry only; powers of two
@@ -218,30 +211,25 @@ def _nonfinite_bits(x: Float32) -> Bool:
 
 
 # ===========================================================================
-# THE SCRATCH POOL (MOJOLEARN_AFN_OPT_RESIDENT_STATE)
+# THE SCRATCH POOL (IDENTICAL's resident step, training/estimator.mojo)
 # ===========================================================================
+# TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, rab19) deleted 2026-10-09 on lane/owed-deletions-D2:
+# the FAST users of this pool, its Int32 and pinned-host slots (afn_scratch_i32, afn_scratch_host_i32) and
+# afn_scratch_f32; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
 
 
 struct _AfnScratch(Defaultable, Movable):
     """Process-wide scratch slots, created once per shape and reused by
-    every step: `i32[k]` / `f32[k]` device buffers and `hi[k]` pinned host
-    mirrors, each with the length it was created at. A slot is recreated
-    only when a call names a different length."""
+    every step: `f32[k]` device buffers, each with the length it was
+    created at. A slot is recreated only when a call names a different
+    length."""
 
-    var i32: List[DeviceBuffer[DType.int32]]
-    var i32_n: List[Int]
     var f32: List[DeviceBuffer[DType.float32]]
     var f32_n: List[Int]
-    var hi: List[HostBuffer[DType.int32]]
-    var hi_n: List[Int]
 
     def __init__(out self):
-        self.i32 = List[DeviceBuffer[DType.int32]]()
-        self.i32_n = List[Int]()
         self.f32 = List[DeviceBuffer[DType.float32]]()
         self.f32_n = List[Int]()
-        self.hi = List[HostBuffer[DType.int32]]()
-        self.hi_n = List[Int]()
 
 
 #: one pool per tier's binding (lane idn-opt-resident: IDENTICAL's resident
@@ -255,16 +243,7 @@ comptime AFN_SCRATCH = _Global[
     init_fn=_AfnScratch.__init__,
 ]
 
-#: Int32 slots.
-comptime AFN_SI_PART = 0  # scan partials, 4 * blocks
-comptime AFN_SI_CELLS = 1  # the gate cells
-comptime AFN_SI_TABLE = 2  # the SGD offsets + flags table
-comptime AFN_SI_LOSS_BAD = 3  # the loss's per-row flag cells, 2 * N
-comptime AFN_SI_LOSS_CELLS = 4  # the loss's gate cells
-comptime AFN_SI_LOSS_PART = 5  # the loss's per-block flag partials, 2 * AFN_CE_PARTS
-#: Float32 slots.
-comptime AFN_SF_SUMS = 0  # clip partials, blocks
-comptime AFN_SF_FCELLS = 1  # total_norm, coef
+#: Float32 slots (0, 1 and 10..12 were the FAST RESIDENT_STATE slots; numbers kept).
 comptime AFN_SF_DENOM = 2  # the resident host entry's eight buffers ...
 comptime AFN_SF_Q = 3
 comptime AFN_SF_SUMSQ = 4
@@ -273,41 +252,6 @@ comptime AFN_SF_TOTAL = 6
 comptime AFN_SF_OUT2 = 7
 comptime AFN_SF_WS = 8
 comptime AFN_SF_SAB = 9  # ... through here
-comptime AFN_SF_LOSS_ROW = 10  # the loss's row losses, N
-comptime AFN_SF_LOSS_LOSS = 11  # the loss's scalar
-comptime AFN_SF_LOSS_PART = 12  # the loss's per-block sums, AFN_CE_PARTS
-#: Pinned Int32 mirrors.
-comptime AFN_SH_CELLS = 0
-comptime AFN_SH_LOSS_CELLS = 1
-
-
-def afn_scratch_i32(
-    ctx: DeviceContext, slot: Int, n: Int
-) raises -> MutPointer[Int32, MutAnyOrigin]:
-    """The pointer of Int32 slot `slot`, created at `n` elements (at least
-    one) when absent or sized differently. The pool owns the buffer."""
-    var want = n if n > 0 else 1
-    var s = AFN_SCRATCH.get_or_create_ptr()
-    while len(s[].i32) <= slot:
-        step_count_device_alloc()
-        s[].i32.append(ctx.enqueue_create_buffer[DType.int32](1))
-        s[].i32_n.append(0)
-    if s[].i32_n[slot] != want:
-        step_count_device_alloc()
-        s[].i32[slot] = ctx.enqueue_create_buffer[DType.int32](want)
-        s[].i32_n[slot] = want
-    return s[].i32[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-
-
-def afn_scratch_f32(
-    ctx: DeviceContext, slot: Int, n: Int
-) raises -> MutPointer[Float32, MutAnyOrigin]:
-    """`afn_scratch_i32` for a Float32 slot."""
-    afn_scratch_f32_ensure(ctx, slot, n)
-    var s = AFN_SCRATCH.get_or_create_ptr()
-    return s[].f32[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-
-
 def afn_scratch_f32_ensure(ctx: DeviceContext, slot: Int, n: Int) raises:
     """Create or resize Float32 slot `slot` to `n` elements (at least one).
     A caller that needs the `DeviceBuffer` itself (the resident host entry
@@ -336,26 +280,6 @@ def afn_scratch_view(
     afn_scratch_f32_ensure(ctx, slot, want)
     var s = AFN_SCRATCH.get_or_create_ptr()
     return s[].f32[slot].create_sub_buffer[DType.float32](0, want)
-
-
-def afn_scratch_host_i32(
-    ctx: DeviceContext, slot: Int, n: Int
-) raises -> MutPointer[Int32, MutAnyOrigin]:
-    """`afn_scratch_i32` for a pinned host mirror (created with one wait,
-    once per shape)."""
-    var want = n if n > 0 else 1
-    var s = AFN_SCRATCH.get_or_create_ptr()
-    while len(s[].hi) <= slot:
-        step_count_host_alloc()
-        s[].hi.append(ctx.enqueue_create_host_buffer[DType.int32](1))
-        s[].hi_n.append(0)
-    if s[].hi_n[slot] != want:
-        step_count_host_alloc()
-        s[].hi[slot] = ctx.enqueue_create_host_buffer[DType.int32](want)
-        s[].hi_n[slot] = want
-        step_count_sync()
-        ctx.synchronize()
-    return s[].hi[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 # ===========================================================================
@@ -707,8 +631,9 @@ def afn_optimizer_step(
     var clipf = AFN_OPT_CLIP_FUSE and want_clip
     var blocks = _afn_scan_grid(n)
 
-    # ---- scratch: pooled under RESIDENT_STATE, else fresh and kept alive
-    # past the wait by the lists below.
+    # ---- scratch: fresh and kept alive past the wait by the lists below.
+    # TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, rab19) deleted 2026-10-09 on lane/owed-deletions-D2:
+    # the pooled arm; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
     var keep_i = List[DeviceBuffer[DType.int32]]()
     var keep_f = List[DeviceBuffer[DType.float32]]()
     var keep_h = List[HostBuffer[DType.int32]]()
@@ -719,28 +644,21 @@ def afn_optimizer_step(
     var fcells: MutPointer[Float32, MutAnyOrigin]
     var table: MutPointer[Int32, MutAnyOrigin]
     var host: MutPointer[Int32, MutAnyOrigin]
-    comptime if AFN_OPT_RESIDENT_STATE:
-        cells = afn_scratch_i32(ctx, AFN_SI_CELLS, AFN_CELLS)
-        table = afn_scratch_i32(ctx, AFN_SI_TABLE, table_n)
-        sums = afn_scratch_f32(ctx, AFN_SF_SUMS, sums_n)
-        fcells = afn_scratch_f32(ctx, AFN_SF_FCELLS, AFN_FCELLS)
-        host = afn_scratch_host_i32(ctx, AFN_SH_CELLS, AFN_CELLS)
-    else:
-        step_count_device_alloc()
-        keep_i.append(ctx.enqueue_create_buffer[DType.int32](AFN_CELLS))
-        step_count_device_alloc()
-        keep_i.append(ctx.enqueue_create_buffer[DType.int32](table_n))
-        step_count_device_alloc()
-        keep_f.append(ctx.enqueue_create_buffer[DType.float32](sums_n))
-        step_count_device_alloc()
-        keep_f.append(ctx.enqueue_create_buffer[DType.float32](AFN_FCELLS))
-        step_count_host_alloc()
-        keep_h.append(ctx.enqueue_create_host_buffer[DType.int32](AFN_CELLS))
-        cells = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        table = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        sums = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        fcells = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    step_count_device_alloc()
+    keep_i.append(ctx.enqueue_create_buffer[DType.int32](AFN_CELLS))
+    step_count_device_alloc()
+    keep_i.append(ctx.enqueue_create_buffer[DType.int32](table_n))
+    step_count_device_alloc()
+    keep_f.append(ctx.enqueue_create_buffer[DType.float32](sums_n))
+    step_count_device_alloc()
+    keep_f.append(ctx.enqueue_create_buffer[DType.float32](AFN_FCELLS))
+    step_count_host_alloc()
+    keep_h.append(ctx.enqueue_create_host_buffer[DType.int32](AFN_CELLS))
+    cells = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    table = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    sums = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    fcells = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
     # ---- the fused clip: the partial sums and the coefficient.
     # TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
@@ -765,13 +683,7 @@ def afn_optimizer_step(
                 tab.append(Int32(offsets[j]))
             for j in range(j_count):
                 tab.append(Int32(1) if buf_initialized[j] else Int32(0))
-            comptime if AFN_OPT_RESIDENT_STATE:
-                var s = AFN_SCRATCH.get_or_create_ptr()
-                ctx.enqueue_copy(
-                    dst_buf=s[].i32[AFN_SI_TABLE], src_ptr=tab.unsafe_ptr()
-                )
-            else:
-                ctx.enqueue_copy(dst_buf=keep_i[1], src_ptr=tab.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=keep_i[1], src_ptr=tab.unsafe_ptr())
             _afn_launch_sgd_multi(
                 ctx, p_ptr, g_ptr, m_ptr, cells, fcells, table, j_count, n,
                 nest, cfg, sc, fused, clipf,
@@ -796,13 +708,8 @@ def afn_optimizer_step(
 
     # ---- the one wait, then the gate.
     if fused:
-        comptime if AFN_OPT_RESIDENT_STATE:
-            var s2 = AFN_SCRATCH.get_or_create_ptr()
-            step_count_d2h()
-            ctx.enqueue_copy(dst_ptr=host, src_buf=s2[].i32[AFN_SI_CELLS])
-        else:
-            step_count_d2h()
-            ctx.enqueue_copy(dst_ptr=host, src_buf=keep_i[0])
+        step_count_d2h()
+        ctx.enqueue_copy(dst_ptr=host, src_buf=keep_i[0])
     step_count_sync()
     ctx.synchronize()
     _ = tab^
@@ -1392,38 +1299,31 @@ def afn_ce_loss_resident(
     var psum: MutPointer[Float32, MutAnyOrigin]
     var pflag: MutPointer[Int32, MutAnyOrigin]
     var host: MutPointer[Int32, MutAnyOrigin]
-    comptime if AFN_OPT_RESIDENT_STATE:
-        row = afn_scratch_f32(ctx, AFN_SF_LOSS_ROW, n_rows)
-        loss = afn_scratch_f32(ctx, AFN_SF_LOSS_LOSS, 1)
-        bad = afn_scratch_i32(ctx, AFN_SI_LOSS_BAD, 2 * n_rows)
-        cells = afn_scratch_i32(ctx, AFN_SI_LOSS_CELLS, AFN_LOSS_CELLS)
-        psum = afn_scratch_f32(ctx, AFN_SF_LOSS_PART, AFN_CE_PARTS)
-        pflag = afn_scratch_i32(ctx, AFN_SI_LOSS_PART, 2 * AFN_CE_PARTS)
-        host = afn_scratch_host_i32(ctx, AFN_SH_LOSS_CELLS, AFN_LOSS_CELLS)
-    else:
-        step_count_device_alloc()
-        keep_f.append(ctx.enqueue_create_buffer[DType.float32](n_rows))
-        step_count_device_alloc()
-        keep_f.append(ctx.enqueue_create_buffer[DType.float32](1))
-        step_count_device_alloc()
-        keep_i.append(ctx.enqueue_create_buffer[DType.int32](2 * n_rows))
-        step_count_device_alloc()
-        keep_i.append(ctx.enqueue_create_buffer[DType.int32](AFN_LOSS_CELLS))
-        step_count_device_alloc()
-        keep_f.append(ctx.enqueue_create_buffer[DType.float32](AFN_CE_PARTS))
-        step_count_device_alloc()
-        keep_i.append(ctx.enqueue_create_buffer[DType.int32](2 * AFN_CE_PARTS))
-        step_count_host_alloc()
-        keep_h.append(
-            ctx.enqueue_create_host_buffer[DType.int32](AFN_LOSS_CELLS)
-        )
-        row = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        loss = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        bad = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        cells = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        psum = keep_f[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        pflag = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    # TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, rab19) deleted 2026-10-09 on lane/owed-deletions-D2:
+    # the pooled loss scratch; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
+    step_count_device_alloc()
+    keep_f.append(ctx.enqueue_create_buffer[DType.float32](n_rows))
+    step_count_device_alloc()
+    keep_f.append(ctx.enqueue_create_buffer[DType.float32](1))
+    step_count_device_alloc()
+    keep_i.append(ctx.enqueue_create_buffer[DType.int32](2 * n_rows))
+    step_count_device_alloc()
+    keep_i.append(ctx.enqueue_create_buffer[DType.int32](AFN_LOSS_CELLS))
+    step_count_device_alloc()
+    keep_f.append(ctx.enqueue_create_buffer[DType.float32](AFN_CE_PARTS))
+    step_count_device_alloc()
+    keep_i.append(ctx.enqueue_create_buffer[DType.int32](2 * AFN_CE_PARTS))
+    step_count_host_alloc()
+    keep_h.append(
+        ctx.enqueue_create_host_buffer[DType.int32](AFN_LOSS_CELLS)
+    )
+    row = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    loss = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    bad = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    cells = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    psum = keep_f[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    pflag = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
     # T11: not tested; one simdgroup suffices when all classes fit its lanes.
     # Three launches: row, partial reduction, final fold. Larger vocabularies
@@ -1442,25 +1342,13 @@ def afn_ce_loss_resident(
         )
 
     # ---- the readbacks and the one wait
-    comptime if AFN_OPT_RESIDENT_STATE:
-        var s = AFN_SCRATCH.get_or_create_ptr()
+    step_count_d2h()
+    ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=keep_f[0])
+    if want_total:
         step_count_d2h()
-        ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=s[].f32[AFN_SF_LOSS_ROW])
-        if want_total:
-            step_count_d2h()
-            ctx.enqueue_copy(
-                dst_ptr=loss_ptr, src_buf=s[].f32[AFN_SF_LOSS_LOSS]
-            )
-        step_count_d2h()
-        ctx.enqueue_copy(dst_ptr=host, src_buf=s[].i32[AFN_SI_LOSS_CELLS])
-    else:
-        step_count_d2h()
-        ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=keep_f[0])
-        if want_total:
-            step_count_d2h()
-            ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=keep_f[1])
-        step_count_d2h()
-        ctx.enqueue_copy(dst_ptr=host, src_buf=keep_i[1])
+        ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=keep_f[1])
+    step_count_d2h()
+    ctx.enqueue_copy(dst_ptr=host, src_buf=keep_i[1])
     step_count_sync()
     ctx.synchronize()
     if host.unsafe_load(2) != Int32(0):
