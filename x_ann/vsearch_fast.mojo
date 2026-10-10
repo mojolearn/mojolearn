@@ -15,9 +15,8 @@ fits that set `KMeansParams.lazy_shift`) are FAST + Apple
 DEFAULTS since 2026-10-04 (M3 A/B, the `-D MOJOLEARN_VSEARCH_ALL` bundle at
 ad265a028: 9/9 rows faster, recall_at_10 identical); each has a rollback
 define `-D MOJOLEARN_<FLAG>_OFF`. `-D MOJOLEARN_VSEARCH_ALL` is kept as a
-no-op alias (every switch it bundled is a default now, except
-IVF_REFINE_TEAM, which measured neutral and stays opt-in under its own
-define). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
+no-op alias (every switch it bundled is a default now; IVF_REFINE_TEAM
+measured neutral and was deleted 2026-10-09). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
 they answer is docs/apple-fast/notes/vsearch.md; the record is
 docs/apple-fast/EXPERIMENTS.md."""
 from std.sys.compile import is_defined
@@ -59,14 +58,9 @@ comptime PQ_LUT_TILED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_LUT_
 #: the residual in threadgroup memory; no dimension window.
 comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_SCAN_FUSED_OFF"]()
 
-#: refine: the dataset uploaded from the caller's array (no host copy into a
-#: List first) and one threadgroup per query (one thread per candidate, the
-#: cell's fold; thread 0 inserts in slot order) instead of one thread per
-#: query. Same words.
-#: OPT-IN, stays off: M3 A/B (lane/apple-fast-batch 3150d75c1, 2026-10-04,
-#: 1 run per arm) ivf-refine taxi 1208.3->1201.8 ms (-0.5%), NEUTRAL; no
-#: default change. No longer turned on by VSEARCH_ALL (a no-op alias now).
-comptime IVF_REFINE_TEAM = VSEARCH_FAST_APPLE and is_defined["MOJOLEARN_IVF_REFINE_TEAM"]()
+# TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch; record in docs/TOMBSTONES.md.
 
 #: lane fg-ivf (read_ivf.md idea A4), DEFAULT ON outside FAST
 #: (`-D MOJOLEARN_IDN_PQ_LUT_TILED_OFF` restores `pq_score_kernel`):

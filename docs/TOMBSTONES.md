@@ -135,6 +135,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CAGRA_FAST_SEEDS4`](#mojolearn_cagra_fast_seeds4) | Neighbors | DROPPED-semantics | 2026-10-09 | [MOJOLEARN_CAGRA_FAST_SEEDS4.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS4.patch) |
 | [`MOJOLEARN_IVF_COARSE_FAISS_INIT`](#mojolearn_ivf_coarse_faiss_init) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_IVF_COARSE_FAISS_INIT.patch](../experiments/removed/MOJOLEARN_IVF_COARSE_FAISS_INIT.patch) |
 | [`MOJOLEARN_IVF_COARSE_INIT_QOLD`](#mojolearn_ivf_coarse_init_qold) | Neighbors | DROPPED-quality | 2026-10-09 | no code (no patch) |
+| [`MOJOLEARN_IVF_REFINE_TEAM`](#mojolearn_ivf_refine_team) | Neighbors | DROPPED-noise | 2026-10-09 | [MOJOLEARN_IVF_REFINE_TEAM.patch](../experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch) |
 | [`MOJOLEARN_ACHI2_FAST_DEVCHECK`](#mojolearn_achi2_fast_devcheck) | Prep | DROPPED | Oct 3 | lane only |
 | [`MOJOLEARN_CLASSICAL_C55_CLASS_GROUP`](#mojolearn_classical_c55_class_group) | Prep | quality loss | 2026-10-07 | [MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
@@ -1025,6 +1026,15 @@ in the tables after the sections.
 - Files the deletion touched (comments only): 
 - EXPERIMENTS.md:1219: `IVF_COARSE_FAISS_INIT` (old: `MOJOLEARN_IVF_COARSE_INIT_QOLD`) | ivf-sq / taxi, ivf-filter / istella (+ every IVF kind on Apple FAST) (ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo) | lane/apple-fast-q-misc @ ab9acf0e8 | - | - | DROPPED-quality | reconciled 2026-10-05: rab5-ivfinit ivf-sq recall istella .60895 -> .51065, taxi .83325 -> .76685, Verdicts batch 4; reverted, opt-in MOJOLEARN_IVF_COARSE_FAISS_INIT. Was QUALITY-FIX, READY-AB: audit: ivf-sq taxi 0.83325 vs faiss 0.857025 (0.902 before IVF_FAST_SEED default f2e71e548), ivf-filter istella 0.801 vs 0.84195; the promoted FAISS random-row start was dead code under IVF_FAST_SEED; paired recall check on all IVF rows
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): IVF_COARSE_INIT_QOLD was the opt-out name of IVF_COARSE_FAISS_INIT while that was briefly the default; FAISS_INIT was reverted (DROPPED-quality, ivf-sq recall istella 0.60895 -> 0.51065) and QOLD was already a no-op; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_IVF_REFINE_TEAM
+
+- Verdict: DROPPED-noise. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: x_ann refine with one REFINE_T = 128 threadgroup per query (one thread per candidate, query row staged in threadgroup memory; refine_team_kernel) and the dataset uploaded straight from the caller's array (refine_device_team), FAST + Apple.
+- Files the patch restores: `bindings/_mojolearn_x_ann.mojo`, `x_ann/ivf_pq_device.mojo`, `x_ann/vsearch_fast.mojo`
+- EXPERIMENTS.md:326: `IVF_REFINE_TEAM` | ivf-refine / taxi | lane/apple-fast-batch @ 3150d75c1 | vsearch-refine-team-istella, vsearch-refine-team-taxi | ivf-refine taxi 1,208.3 -> 1,201.8 (-0.5%) | DROPPED-noise | NEUTRAL (M3, 2026-10-04, 1 run per arm); stays opt-in under its own define, no default change; no longer in VSEARCH_ALL
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): IVF_REFINE_TEAM (ivf refine with one threadgroup per query, dataset uploaded from the caller's array) was NOISE: ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%); code at main b639a2bd2; see docs/TOMBSTONES.md
 
 ## Prep
 
@@ -1932,7 +1942,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
-| `MOJOLEARN_IVF_REFINE_TEAM` | EXPERIMENTS.md:326 DROPPED-noise (lane/apple-fast-batch @ 3150d75c1) | `x_ann/vsearch_fast.mojo:69` |
 | `MOJOLEARN_KAPPROX_DEVICE` | EXPERIMENTS.md:555 DROPPED-quality (lane/apple-fast-kapprox @ 10d5a7970) | `x_neighbors/kapprox_dev.mojo:9` |
 | `MOJOLEARN_KDE2_ALL` | EXPERIMENTS.md:327 DROP (lane/apple-fast-batch @ 3150d75c1) | `kde/impl/neighbors/kernel_density.mojo:2740` |
 | `MOJOLEARN_KDE_KERNEL_VARIANTS` | EXPERIMENTS.md:330 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2757` |

@@ -253,6 +253,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_HDB_DEV_BORUVKA"](), "removed 2026-10-09 (lane/owed-deletions-D3): HDB_DEV_BORUVKA (d <= 64 Boruvka rounds driven on the device, fast_mr_mst_device.mojo) was NOISE: hdbscan taxi 434 -> 432.6 ms (-0.3%); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_IVF_COARSE_FAISS_INIT"](), "removed 2026-10-09 (lane/owed-deletions-D3): IVF_COARSE_FAISS_INIT (FAISS random-row coarse start, k-means++ seeding skipped) LOST quality: ivf-sq recall@10 istella 0.60895 -> 0.51065, taxi 0.83325 -> 0.76685 (rab5-ivfinit); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_IVF_COARSE_INIT_QOLD"](), "removed 2026-10-09 (lane/owed-deletions-D3): IVF_COARSE_INIT_QOLD was the opt-out name of IVF_COARSE_FAISS_INIT while that was briefly the default; FAISS_INIT was reverted (DROPPED-quality, ivf-sq recall istella 0.60895 -> 0.51065) and QOLD was already a no-op; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_IVF_REFINE_TEAM"](), "removed 2026-10-09 (lane/owed-deletions-D3): IVF_REFINE_TEAM (ivf refine with one threadgroup per query, dataset uploaded from the caller's array) was NOISE: ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
