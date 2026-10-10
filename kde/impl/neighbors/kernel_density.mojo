@@ -2728,7 +2728,6 @@ def kde_score_samples_fused_identical(
 # The sibling defines compose on top of it (each also turns it on):
 #   MOJOLEARN_KDE_LSE_FUSED       merge + normalization in one launch, no lse buffer
 #   MOJOLEARN_KDE_NORM_FUSED      euclidean as |q|^2 + |t|^2 - 2 q.t, one FMA per feature
-#   MOJOLEARN_KDE_KERNEL_VARIANTS the tile kernel instantiated per metric at compile time
 #   MOJOLEARN_KDE_SAMPLE_FUSED    the resident score call drains once (kde/resident_fit.mojo)
 comptime _KDE2_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
@@ -2748,12 +2747,9 @@ comptime KDE2_LSE_FUSED = _KDE2_FAST_APPLE and (
 comptime KDE2_NORM_FUSED = _KDE2_FAST_APPLE and (
     is_defined["MOJOLEARN_KDE_NORM_FUSED"]()
 )
-# INCONCLUSIVE, M3 kde2-variants-istella / -taxi with DIMTILE: no
-# istella gain over DIMTILE; taxi jitter-dominated, quality unchanged.
-# See docs/apple-fast/EXPERIMENTS.md (KDE_KERNEL_VARIANTS).
-comptime KDE2_KERNEL_VARIANTS = _KDE2_FAST_APPLE and (
-    is_defined["MOJOLEARN_KDE_KERNEL_VARIANTS"]()
-)
+# TOMBSTONE: MOJOLEARN_KDE_KERNEL_VARIANTS (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the kde2 tile kernel instantiated per metric (and gaussian x euclidean) at compile time; with DIMTILE no istella gain, taxi jitter-dominated (kde2-variants-*).
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_KERNEL_VARIANTS.patch; record in docs/TOMBSTONES.md.
 # DROP-speed, M3 old-base kde2-sample-taxi-x: taxi +354%; not a
 # current-main result. With DIMTILE (kde2-sample-ontile-istella), no
 # gain over DIMTILE. See docs/apple-fast/EXPERIMENTS.md (KDE_SAMPLE_FUSED).
@@ -2762,7 +2758,7 @@ comptime KDE2_SAMPLE_FUSED = _KDE2_FAST_APPLE and (
 )
 #: KDE2_DIMTILE_ANY_D: the explicit defines take the tile pass at every d.
 comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and (
-    KDE2_LSE_FUSED or KDE2_NORM_FUSED or KDE2_KERNEL_VARIANTS
+    KDE2_LSE_FUSED or KDE2_NORM_FUSED
     or is_defined["MOJOLEARN_KDE_DIMTILE"]()
 )
 #: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03) for
@@ -2918,9 +2914,9 @@ def kde2_dimtile_kernel[METRIC_C: Int, GAUSS_C: Int, NORMED: Bool](
     features per staged chunk. Writes the running `(m, s)` of each query over
     the chunk at `part_*[y * n_query + q]`.
 
-    `METRIC_C < 0` reads the metric at run time (one instantiation);
-    `METRIC_C >= 0` is KERNEL_VARIANTS' compile-time metric. `GAUSS_C` the
-    same for the gaussian x euclidean epilog (`v = acc * -1/(2 h^2)`, no
+    `METRIC_C < 0` reads the metric at run time (the one instantiation
+    launched since KERNEL_VARIANTS was deleted); `METRIC_C >= 0` fixes it at
+    compile time. `GAUSS_C` the same for the gaussian x euclidean epilog (`v = acc * -1/(2 h^2)`, no
     sqrt). `NORMED` (NORM_FUSED) accumulates the dot for the L2 spellings
     and expands with the row norms in the epilog. `logw` is read only when
     weighted, `qnorm`/`tnorm` only for cosine or NORMED L2; the caller
@@ -3383,24 +3379,10 @@ def _kde2_enqueue(
         tn_p = tn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         keep.append(qn^)
         keep.append(tn^)
-    comptime if KDE2_KERNEL_VARIANTS:
-        if metric == DIST_L2_SQRT_UNEXPANDED:
-            if kernel == KDE_KERNEL_GAUSSIAN:
-                _kde2_launch_tile[DIST_L2_SQRT_UNEXPANDED, 1](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
-            else:
-                _kde2_launch_tile[DIST_L2_SQRT_UNEXPANDED, 0](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
-        elif metric == DIST_L2_EXPANDED:
-            _kde2_launch_tile[DIST_L2_EXPANDED, 0](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
-        elif metric == DIST_L1:
-            _kde2_launch_tile[DIST_L1, 0](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
-        elif metric == DIST_LINF:
-            _kde2_launch_tile[DIST_LINF, 0](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
-        elif metric == DIST_COSINE_EXPANDED:
-            _kde2_launch_tile[DIST_COSINE_EXPANDED, 0](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
-        else:
-            _kde2_launch_tile[DIST_LP_UNEXPANDED, 0](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
-    else:
-        _kde2_launch_tile[-1, -1](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
+    # TOMBSTONE: MOJOLEARN_KDE_KERNEL_VARIANTS (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: the per-metric _kde2_launch_tile instantiations here; the run-time-metric [-1, -1] instantiation stays.
+    # Restore: git apply experiments/removed/MOJOLEARN_KDE_KERNEL_VARIANTS.patch; record in docs/TOMBSTONES.md.
+    _kde2_launch_tile[-1, -1](ctx, part_m, part_s, query, train, logw_p, qn_p, tn_p, n_query, n_train, n_features, chunk_rows, n_qblocks, n_chunks, has_weights, bandwidth, kernel, metric, metric_arg)
     comptime if KDE2_LSE_FUSED:
         ctx.enqueue_function[kde2_merge_kernel[True]](
             scores.unsafe_ptr(),

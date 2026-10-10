@@ -139,6 +139,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KAPPROX_DEVICE`](#mojolearn_kapprox_device) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_KAPPROX_DEVICE.patch](../experiments/removed/MOJOLEARN_KAPPROX_DEVICE.patch) |
 | [`MOJOLEARN_SPARSE_RP_DEVICE`](#mojolearn_sparse_rp_device) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_SPARSE_RP_DEVICE.patch](../experiments/removed/MOJOLEARN_SPARSE_RP_DEVICE.patch) |
 | [`MOJOLEARN_KDE2_ALL`](#mojolearn_kde2_all) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE2_ALL.patch](../experiments/removed/MOJOLEARN_KDE2_ALL.patch) |
+| [`MOJOLEARN_KDE_KERNEL_VARIANTS`](#mojolearn_kde_kernel_variants) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE_KERNEL_VARIANTS.patch](../experiments/removed/MOJOLEARN_KDE_KERNEL_VARIANTS.patch) |
 | [`MOJOLEARN_ACHI2_FAST_DEVCHECK`](#mojolearn_achi2_fast_devcheck) | Prep | DROPPED | Oct 3 | lane only |
 | [`MOJOLEARN_CLASSICAL_C55_CLASS_GROUP`](#mojolearn_classical_c55_class_group) | Prep | quality loss | 2026-10-07 | [MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
@@ -1067,6 +1068,15 @@ in the tables after the sections.
 - EXPERIMENTS.md:328: `KDE2_ALL + KDE_DIMTILE` | kde / istella | lane/apple-fast-kde2 @ 659400b94 | kde2-all-vs-dimtile-istella | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KDE2_ALL (every kde2 FAST Apple define at once) was DROPPED: kde istella 139.5 -> 63.1 ms but -0.6% vs KDE_DIMTILE alone (the gain is DIMTILE, now the default); it includes SAMPLE_FUSED (taxi +354%); code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_KDE_KERNEL_VARIANTS
+
+- Verdict: DROP. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KDE_KERNEL_VARIANTS.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the kde2 tile kernel instantiated per metric (and per gaussian x euclidean epilog) at compile time, dispatched on the metric in the score call, FAST + Apple.
+- Files the patch restores: `kde/impl/neighbors/kernel_density.mojo`
+- EXPERIMENTS.md:330: `KDE_DIMTILE + KDE_KERNEL_VARIANTS` | kde / istella; kde / taxi | lane/apple-fast-kde2 @ 659400b94 | kde2-variants-istella, kde2-variants-taxi | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KDE_KERNEL_VARIANTS (kde2 tile kernel instantiated per metric at compile time) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated (~10 ms), quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Prep
 
 ### MOJOLEARN_ACHI2_FAST_DEVCHECK
@@ -1973,7 +1983,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
-| `MOJOLEARN_KDE_KERNEL_VARIANTS` | EXPERIMENTS.md:330 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2757` |
 | `MOJOLEARN_KDE_LSE_FUSED` | EXPERIMENTS.md:331 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2745` |
 | `MOJOLEARN_KDE_NORM_FUSED` | EXPERIMENTS.md:332 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2751` |
 | `MOJOLEARN_KDE_SAMPLE_FUSED` | EXPERIMENTS.md:333 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2763` |
