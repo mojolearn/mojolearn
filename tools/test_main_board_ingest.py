@@ -92,7 +92,7 @@ def _opp_board(lane_config, vendor):
     races[tid] = {"id": tid, "family": "trees", "lane": "gbdt-depthwise", "dataset": "taxi", "rows": None,
                   "status": "done", "cells": [_opp_cell("trees", "gbdt-depthwise", "taxi", "xgboost-gpu",
                                                         "xgboost", 2000.0)]}
-    return {"schema": BB.SCHEMA, "box": {"gpu": {"vendor": vendor, "name": "fixture GPU"},
+    return {"schema": BB.SCHEMA, "box": {"gpu": {"vendor": vendor, "name": "NVIDIA L40S" if vendor == "nvidia" else "AMD Instinct MI325X"},
                                          "host": {"hostname": "fixture-box"}}, "races": races}
 
 
@@ -211,10 +211,10 @@ class MainBoardIngest(unittest.TestCase):
         # Identity section above the box, DIFFER cells by name with both digests; FAILED table with the reason
         self.assertLess(md.index("## Identity"), md.index("## Box"))
         self.assertIn("**DIFFER: 1 cells", md)
-        self.assertIn("| algos/ridge-cv/istella/rows=full | main@bbbbbbbbb | nv/n0011 8888888888888888 | "
-                      "amd-mi325x amd/a0002 7777777777777777 |", md)
-        self.assertIn("| gaussian-nb | taxi | main@bbbbbbbbb | nv/n0010 | error | none |", md)
-        self.assertIn("| ridge-cv | taxi | main@bbbbbbbbb | nv/n0006 | not_ready | main@bbbbbbbbb nv/n0002 stays |", md)
+        self.assertIn("| algos/ridge-cv/istella/rows=full | main@bbbbbbbbb | NVIDIA L40S (nv, RunPod), nv/n0011 8888888888888888 | "
+                      "AMD Instinct MI325X (amd, DO), amd/a0002 7777777777777777 |", md)
+        self.assertIn("| gaussian-nb | taxi | main@bbbbbbbbb | NVIDIA L40S (nv, RunPod) | mojolearn (source build, main@bbbbbbbbb) | nv/n0010 | error | none |", md)
+        self.assertIn("| ridge-cv | taxi | main@bbbbbbbbb | NVIDIA L40S (nv, RunPod) | mojolearn (source build, main@bbbbbbbbb) | nv/n0006 | not_ready | main@bbbbbbbbb nv/n0002 stays |", md)
         self.assertTrue(any(e["replaced"]["job"] == "n0010" and e["failed"] and "FAILED table" in e["reason"]
                             for e in led))
         # the other vendor: settings changed since its opponents were scored -> withheld
