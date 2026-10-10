@@ -82,13 +82,15 @@ comptime OPT_ZERO_OPEN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO
 comptime OPT_PIPE_CH = get_defined_int["MOJOLEARN_OPT_FAST_PIPE_CH", 1 << 21]()
 #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
 #: default OFF, FAST + Apple only: the parameter read-back.
-#:  MOJOLEARN_OPT_FAST_MAP_DOWN: each tensor is read through
-#:    `DeviceBuffer.map_to_host` and one memcpy (no pinned halves).
+#:  (MOJOLEARN_OPT_FAST_MAP_DOWN, the map_to_host read-back, was deleted
+#:    2026-10-09: DROPPED-slower; see the TOMBSTONE below.)
 #:  MOJOLEARN_OPT_FAST_RAW_DOWN: each tensor is DMAd straight into the
 #:    caller's array in OPT_PIPE_CH chunks, all queued, one wait.
 #: Copies only: the same bytes.
-comptime OPT_MAP_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_MAP_DOWN"]()
-comptime OPT_RAW_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_RAW_DOWN"]() and not OPT_MAP_DOWN
+# TOMBSTONE: MOJOLEARN_OPT_FAST_MAP_DOWN (DROPPED-slower: M3 rab7-optfastmapdo rmsprop/adagrad/adamax/nadam +81% .. +86%)
+# deleted 2026-10-09 on lane/owed-deletions-D2 (the define and _map_download); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_FAST_MAP_DOWN.patch
+comptime OPT_RAW_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_RAW_DOWN"]()
 
 #: lane apple-fast-gap-optim (2026-10-03), FAST + Apple only:
 #:  MOJOLEARN_AF_FAST_RESIDENT: Adafactor's second moment (row_var and
@@ -437,21 +439,9 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
     ex.sync()
 
 
-def _map_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) raises:
-    """OPT_MAP_DOWN: every tensor through `map_to_host` (the mapping waits
-    for the queue) and one memcpy into the caller's array."""
-    var off = 0
-    for j in range(len(sizes)):  # small-loop(sizes: parameter tensors of the model): one mapped download per tensor into caller memory
-        var f = ex._find(P + off, sizes[j])
-        var v = ex._sub(f[0], f[1], sizes[j])
-        with v.map_to_host() as h:
-            memcpy(dest=FP(unsafe_from_address=ps[j]), src=FP(unsafe_from_address=Int(h.unsafe_ptr())),
-                   count=sizes[j])
-        _ = v^
-        off += sizes[j]
-    ex.sync()
-
-
+# TOMBSTONE: MOJOLEARN_OPT_FAST_MAP_DOWN (DROPPED-slower, rab7 +81% .. +86%) deleted 2026-10-09 on lane/owed-deletions-D2:
+# _map_download (and its _download_all branch); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_FAST_MAP_DOWN.patch
 def _raw_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) raises:
     """OPT_RAW_DOWN: every chunk DMAd straight into the caller's array, all
     queued behind the step's launch, one wait."""
@@ -470,9 +460,6 @@ def _raw_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) ra
 
 
 def _download_all(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) raises:
-    comptime if OPT_MAP_DOWN:
-        _map_download(ex, P, ps, sizes)
-        return
     comptime if OPT_RAW_DOWN:
         _raw_download(ex, P, ps, sizes)
         return

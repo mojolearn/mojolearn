@@ -244,6 +244,7 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_MI_ALL"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_MI_ALL, the mutual-information FAST bundle, was DROP (quality): M3 miv-reg-all istella 46,430 -> 1,151 ms but it includes MI_FAST_FOLDS (selected set changes); name the members instead; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not (is_defined["MOJOLEARN_MI_FAST_FOLDS"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_MI_FAST_FOLDS, the mutual-information column threadgroup folds, was DROP (speed + quality): istella -0.2%, scores move up to 3.2% of scale and the selected set changes; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not (is_defined["MOJOLEARN_MOE_FAST_MMA_KB32"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_MOE_FAST_MMA_KB32, the MoE 32-word slab, was DROPPED-slower as the KB32 + WIDE + PF bundle: M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms; MM_KB is 16; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not (is_defined["MOJOLEARN_OPT_FAST_MAP_DOWN"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_OPT_FAST_MAP_DOWN, the map_to_host optimizer read-back, was DROPPED-slower: M3 rab7-optfastmapdo rmsprop/adagrad/adamax/nadam +81% .. +86%; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

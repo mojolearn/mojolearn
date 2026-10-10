@@ -206,6 +206,7 @@ in the tables after the sections.
 | [`MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE`](#mojolearn_ni13_cnn_weight_generation_cache) | Neural | dead code | 2026-10-07 | [MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE.patch](../experiments/removed/MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE.patch) |
 | [`MOJOLEARN_NN22_EAGER_DKDV_PAIR`](#mojolearn_nn22_eager_dkdv_pair) | Neural | unmeasured | 2026-10-07 | [MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch](../experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch) |
 | [`MOJOLEARN_NN23_ROWDOT_DS`](#mojolearn_nn23_rowdot_ds) | Neural | unmeasured | 2026-10-07 | [MOJOLEARN_NN23_ROWDOT_DS.patch](../experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch) |
+| [`MOJOLEARN_OPT_FAST_MAP_DOWN`](#mojolearn_opt_fast_map_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_OPT_FAST_MAP_DOWN.patch](../experiments/removed/MOJOLEARN_OPT_FAST_MAP_DOWN.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_NT_TILED`](#mojolearn_apple_fast_gemm_nt_tiled) | GEMM | DROPPED-slower | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_PINNED`](#mojolearn_apple_fast_gemm_pinned) | GEMM | DROPPED-noise | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch) |
 | [`MOJOLEARN_BGMM_FAST_MAHAL_GEMM`](#mojolearn_bgmm_fast_mahal_gemm) | GEMM | DROPPED-slower |  | lane only |
@@ -1588,6 +1589,17 @@ in the tables after the sections.
 - EXPERIMENTS.md:1468 (IDENTICAL neural GEMM/attention switch dedupe (lane/neural-g): `MOJOLEARN_NN23_ROWDOT_DS` on transformer eager softmax backward row-dot + dS in one serial-per-row kernel, source @ 8be4d20d4; deleted, A/B -, - ms, **DROP (unmeasured)**: same reach as NN22; one thread walks every key of its row twice, which the split flat-grid incumbent already parallelizes
 
 
+### MOJOLEARN_OPT_FAST_MAP_DOWN
+
+- What it tried: the sequence optimizer's resident-step parameter read-back through `DeviceBuffer.map_to_host` and one memcpy per tensor instead of the pinned-halves pipeline (FAST + Apple, lane apple-fast-gap-optim; sequence/opt_resident.mojo `_map_download`).
+- Verdict: DROPPED-slower: M3 rab7-optfastmapdo (Verdicts batch 4, reconciled 2026-10-05) rmsprop, adagrad, adamax, nadam synthetic +81% .. +86%. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_OPT_FAST_MAP_DOWN`).
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_OPT_FAST_MAP_DOWN.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `sequence/opt_resident.mojo`
+- Guard refusal (core/six_lane_experiment_guards.mojo:247): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_OPT_FAST_MAP_DOWN, the map_to_host optimizer read-back, was DROPPED-slower: M3 rab7-optfastmapdo rmsprop/adagrad/adamax/nadam +81% .. +86%; code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:1193 (lane/apple-fast-gap-optim @ cf4513f8a, on main): `OPT_FAST_MAP_DOWN` / `OPT_FAST_RAW_DOWN` / `OPT_FAST_PIPE_CH=524288` on rmsprop, adagrad, adamax, nadam / synthetic, **DROPPED-slower**: MAP_DOWN rab7-optfastmapdo +81% .. +86%
+- EXPERIMENTS.md:1279 (lane/apple-fast-verdicts-4): `OPT_FAST_MAP_DOWN`, rab7-optfastmapdo, +81% .. +86%, **RECORD: stays off**: slower
+- EXPERIMENTS.md:1830 (Owed deletions D2): **DELETED**.
+
 ## GEMM
 
 ### MOJOLEARN_APPLE_FAST_GEMM_NT_TILED
@@ -1888,7 +1900,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_MCD_DEVICE_CSTEPS` | EXPERIMENTS.md:451 DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) (lane/apple-fast-robust @ cfdb95e48) | `x_decomp/mcd_fast.mojo:13` |
 | `MOJOLEARN_MC_CLASS_BATCH_DERIV` | EXPERIMENTS.md:165 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:763` |
 | `MOJOLEARN_MC_CLASS_BATCH_EST` | EXPERIMENTS.md:166 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:774` |
-| `MOJOLEARN_OPT_FAST_MAP_DOWN` | EXPERIMENTS.md:1193 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/opt_resident.mojo:90` |
 | `MOJOLEARN_OPT_FAST_PIPE_CH` | EXPERIMENTS.md:1193 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/opt_resident.mojo:82` |
 | `MOJOLEARN_OPT_FAST_RAW_DOWN` | EXPERIMENTS.md:1193 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/opt_resident.mojo:91` |
 | `MOJOLEARN_PL_PAIRS_ONCE` | EXPERIMENTS.md:174 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/pair_logit_group.mojo:130` |
