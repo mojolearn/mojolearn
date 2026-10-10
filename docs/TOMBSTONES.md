@@ -164,6 +164,7 @@ in the tables after the sections.
 | [`MOJOLEARN_DECOMP_FAST_GEMM_TILED`](#mojolearn_decomp_fast_gemm_tiled) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch) |
 | [`MOJOLEARN_FA_ALL`](#mojolearn_fa_all) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_FA_ALL.patch](../experiments/removed/MOJOLEARN_FA_ALL.patch) |
 | [`MOJOLEARN_FA_EIG_SMALL`](#mojolearn_fa_eig_small) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_FA_EIG_SMALL.patch](../experiments/removed/MOJOLEARN_FA_EIG_SMALL.patch) |
+| [`MOJOLEARN_FA_LL_DEVICE`](#mojolearn_fa_ll_device) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_FA_LL_DEVICE.patch](../experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch) |
 | [`MOJOLEARN_AFFINITY_FAST_LOOP`](#mojolearn_affinity_fast_loop) | Cluster | DROPPED-noise | 2026-10-02 | [MOJOLEARN_AFFINITY_FAST_LOOP.patch](../experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch) |
 | [`MOJOLEARN_BGMM_ENT`](#mojolearn_bgmm_ent) | Cluster | DROPPED-noise | 2026-10-03 | [MOJOLEARN_BGMM_ENT.patch](../experiments/removed/MOJOLEARN_BGMM_ENT.patch) |
 | [`MOJOLEARN_BISECT_FAST_RESIDENT`](#mojolearn_bisect_fast_resident) | Cluster | DROPPED-slower | 2026-10-02 | [MOJOLEARN_BISECT_FAST_RESIDENT.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch) |
@@ -1248,6 +1249,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:442: `FA_EIG_SMALL + FA_ITER_DEVICE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-eig-taxi, fa-eig-istella | - | DROPPED-slower | reconciled 2026-10-05: never timed alone on current main; FA_ALL (includes EIG_SMALL) rab6-faqfix istella 10300.89 -> 20530.81 (+99.3%), slowdown from the one-threadgroup EIG_SMALL eigh (Verdicts batch 4 FA_ALL row; x_decomp/fa_fast.mojo `#:`); FA_ITER_DEVICE + FA_GRAM_DF is the default (rab7-faiterfix). Was OPEN: A/B queued (lane/apple-fast-batch prebuilt arms)
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): FA_EIG_SMALL (one-threadgroup eigh / SVD inside the FactorAnalysis EM loop) was SLOWER: in FA_ALL factor-analysis istella 10300.89 -> 20530.81 ms (+99.3%), the slowdown from this one-threadgroup eigh on a 220 x 220; code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_FA_LL_DEVICE
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the FactorAnalysis EM convergence test on the device: fa_finish_kernel summed the 2 d log terms in double-float float32, tested (ll - old_ll) < tol and set a flag later kernels check; the host read the flag every 4 iterations and the ll pairs once at the end.
+- Files the patch restores: `x_decomp/fa_fast.mojo`
+- EXPERIMENTS.md:432: `FA_EIG_SMALL + FA_ITER_DEVICE + FA_LL_DEVICE` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-lldev-taxi, fa-lldev-istella | taxi 30.2, istella 5879 | DROPPED-slower | reconciled 2026-10-05: contains EIG_SMALL: same evidence as the EIG_SMALL + ITER_DEVICE row (rab6-faqfix FA_ALL +99.3% istella); LL_DEVICE alone on the default loop not timed. Was READY-AB: ported to lane/apple-fast-rec-fa-robust; awaiting M2 build + M3 A/B
+- EXPERIMENTS.md:443: `FA_EIG_SMALL + FA_ITER_DEVICE + FA_LL_DEVICE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-lldev-taxi, fa-lldev-istella | - | DROPPED-slower | reconciled 2026-10-05: contains EIG_SMALL: same evidence as the EIG_SMALL + ITER_DEVICE row (rab6-faqfix FA_ALL +99.3% istella); LL_DEVICE alone on the default loop not timed. Was OPEN: A/B queued (lane/apple-fast-batch prebuilt arms)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): FA_LL_DEVICE (FactorAnalysis EM convergence test on the device) was DROPPED-slower with its EIG_SMALL arm (FA_ALL istella +99.3%, rab6-faqfix); never timed alone on the default loop; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Cluster
 
 ### MOJOLEARN_AFFINITY_FAST_LOOP
@@ -1870,7 +1881,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
-| `MOJOLEARN_FA_LL_DEVICE` | EXPERIMENTS.md:432 DROPPED-slower (lane/apple-fast-fa @ 3efbce2af) | `x_decomp/fa_fast.mojo:43` |
 | `MOJOLEARN_HDBSCAN2_ALL` | EXPERIMENTS.md:490 DROP (as a bundle) (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/detail/fast_apple.mojo:8` |
 | `MOJOLEARN_HDB_CORE_TILE` | EXPERIMENTS.md:491 DROP (lane/apple-fast-batchv @ c7ede6e47) | `hdbscan/impl/detail/core_tile.mojo:5` |
 | `MOJOLEARN_HDB_DEV_BORUVKA` | EXPERIMENTS.md:492 DROPPED-noise (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/cluster/detail/fast_mr_mst_device.mojo:4` |
