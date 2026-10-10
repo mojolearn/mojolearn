@@ -27,12 +27,8 @@ turns on SYM_BUF_ARENA only; the other three are recorded DROPs):
   three drains) are skipped. Falls back to main's path when the tree stopped
   early (a repeated split: the structure is shorter than `max_depth` and the
   subsets' bins carry a redundant bit).
-- `MOJOLEARN_SYM_DERIV_FUSED` (`SYM_DERIV_FUSED`): the NEXT tree's gradient
-  pass (`launch_approximate`, the fv and magnitude folds, the score-noise std
-  dev) is enqueued behind this tree's cursor update and the estimator's tail
-  drain settles both, so the magnitude drain and the std-dev drain at the top
-  of the next iteration disappear. The launches stay separate kernels; what
-  is fused is the command buffer and the wait.
+- `MOJOLEARN_SYM_DERIV_FUSED`: deleted 2026-10-09 (DROPPED-noise;
+  docs/TOMBSTONES.md).
 - `MOJOLEARN_SYM_LEAF_FROM_STATS` (`SYM_LEAF_FROM_STATS`, implies
   `SYM_REUSE_PARTITION`): DEVIATION 64 for the pointwise arm. Under Newton
   with one iteration the leaf is `sum(der) / (sum(der2) + l2)` over the
@@ -171,19 +167,11 @@ comptime SYM_REUSE_PARTITION = SYM_ITER_FAST_APPLE and (
 # Compilation/identity reused. No combined-toggle/full-board claim.
     is_defined["MOJOLEARN_SYM_REUSE_PARTITION"]() or SYM_LEAF_FROM_STATS
 )
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
-#: laptop 2026-10-03, singles never built, never timed. Port: compiled with
-#: EST_SHRINK_FUSED, this prefetch wins on its trees (the estimation hook
-#: stands down).
-#: apple-fast LEDGER 2026-10-03: DROP sym-iter-fused (-0.1%), old base;
-#: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
-comptime SYM_DERIV_FUSED = SYM_ITER_FAST_APPLE and (
-    is_defined["MOJOLEARN_SYM_DERIV_FUSED"]()
-)
+#: TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise: sym-iter-fused istella/taxi -0.1%, old base) deleted 2026-10-09 on
+#: lane/owed-deletions-D1 (the next tree's gradient pass behind this tree's tail drain); code recoverable at b639a2bd2.
+#: Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch; record in docs/TOMBSTONES.md.
 comptime SYM_ITER_ANY = (
-    SYM_BUF_ARENA or SYM_REUSE_PARTITION or SYM_DERIV_FUSED
-    or SYM_LEAF_FROM_STATS
+    SYM_BUF_ARENA or SYM_REUSE_PARTITION or SYM_LEAF_FROM_STATS
 )
 
 #: the one-block-per-leaf Hessian reduce
@@ -226,10 +214,6 @@ struct SymIterPool(Movable):
     #: SYM_LEAF_FROM_STATS: the leaf values, device and host
     var d_est: DeviceBuffer[DType.float32]
     var h_est: HostBuffer[DType.float32]
-    #: SYM_DERIV_FUSED: the score-noise std dev's partials, fold and readback
-    var d_sd_partials: DeviceBuffer[DType.float32]
-    var d_sd_out: DeviceBuffer[DType.float32]
-    var h_sd: HostBuffer[DType.float32]
 
     def __init__(
         out self,
@@ -272,16 +256,6 @@ struct SymIterPool(Movable):
         self.h_est = ctx.enqueue_create_host_buffer[DType.float32](
             leaves_stats
         )
-        var sd_blocks = 1
-        if SYM_DERIV_FUSED:
-            sd_blocks = std_dev_blocks(n_rows, sm_count)
-            if sd_blocks < 1:
-                sd_blocks = 1
-        self.d_sd_partials = ctx.enqueue_create_buffer[DType.float32](
-            sd_blocks
-        )
-        self.d_sd_out = ctx.enqueue_create_buffer[DType.float32](1)
-        self.h_sd = ctx.enqueue_create_host_buffer[DType.float32](1)
         ctx.synchronize()
 
 
@@ -392,8 +366,8 @@ def sym_compute_bins_pooled(
 
 
 def sym_objective_is_pointwise(objective: Int) -> Bool:
-    """The objectives whose gradient pass is `launch_approximate`: the
-    prefetch (SYM_DERIV_FUSED) replays exactly that launch."""
+    """The objectives whose gradient pass is `launch_approximate` (the
+    single-dimensional pointwise oracles SYM_BUF_ARENA stages)."""
     return not (
         objective == OBJECTIVE_MULTICLASS
         or objective == OBJECTIVE_MULTICLASS_OVA
@@ -569,47 +543,6 @@ def sym_estimate_leaves_device(
     ctx.enqueue_copy(dst_buf=pool.h_est, src_buf=pool.d_est)
 
 
-def sym_std_dev_enqueue(
-    ctx: DeviceContext,
-    mut stats: DeviceBuffer[DType.float32],
-    count: Int,
-    stat_line_size: Int,
-    sm_count: Int,
-    mut pool: SymIterPool,
-) raises:
-    """`compute_std_dev` up to its drain, on the pool's buffers: the same
-    two launches, the readback enqueued into `pool.h_sd`."""
-    if count <= 0:
-        return
-    var n_blocks = std_dev_blocks(count, sm_count)
-    ctx.enqueue_function[std_dev_partials_kernel](
-        stats.unsafe_ptr(),
-        Int32(count),
-        Int32(stat_line_size),
-        pool.d_sd_partials.unsafe_ptr(),
-        grid_dim=(n_blocks, 1, 1),
-        block_dim=(STD_DEV_BLOCK, 1, 1),
-    )
-    ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
-        pool.d_sd_partials.unsafe_ptr(), Int32(n_blocks),
-        pool.d_sd_out.unsafe_ptr(),
-        grid_dim=1, block_dim=256,
-    )
-    ctx.enqueue_copy(dst_buf=pool.h_sd, src_buf=pool.d_sd_out)
-
-
-def sym_score_std_dev_collect(
-    model_length_mult: Float64,
-    random_strength: Float64,
-    count: Int,
-    pool: SymIterPool,
-) -> Float64:
-    """`compute_score_std_dev`'s host half over the settled `pool.h_sd`:
-    the same product guard, the same multiplication order."""
-    if count <= 0:
-        return 0.0
-    if model_length_mult * random_strength != 0.0:
-        var sum2 = Float64(pool.h_sd[0])
-        var std_dev = sqrt(sum2 / (Float64(count) + 1e-100))
-        return model_length_mult * std_dev * random_strength
-    return 0.0
+# TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise: sym-iter-fused istella/taxi -0.1%, old base) deleted 2026-10-09 on
+# lane/owed-deletions-D1 (the next tree's gradient pass behind this tree's tail drain); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch; record in docs/TOMBSTONES.md.
