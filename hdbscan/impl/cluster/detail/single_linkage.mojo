@@ -84,9 +84,7 @@ from hierarchy.impl.cluster.detail.single_linkage import (
     SL_FAST_BORUVKA_MIN_ROWS,
 )
 from checks.numerics import identical_div
-from hdbscan.impl.detail.core_tile import core_tile_applies
 from hdbscan.impl.detail.fast_apple import (
-    HDB_CORE_TILE,
     HDB_DEV_BORUVKA,
     HDB_LINKAGE_DEVICE,
 )
@@ -247,8 +245,6 @@ def build_mr_linkage(
     # print the wall time of each part. Off, nothing changes.
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var st_t = Int(perf_counter_ns())
-    # lane af-hdbscan2: when the tiled core kernel runs (HDB_CORE_TILE) the
-    # k-NN's m x k outputs are never written, so they are one cell each.
     # fg-tsne-dbscan H2 (IDN_HDB_MST_SEED_KNN): the k-NN one neighbour wider
     # on the sparse arm, so round 1 can resolve points from their lists
     var knn_w = min_samples
@@ -262,13 +258,9 @@ def build_mr_linkage(
         ):
             knn_w = min_samples + 1
     var knn_cells = m * knn_w
-    comptime if HDB_CORE_TILE:
-        if (
-            core_tile_applies(n, min_samples)
-            and sabotage == HDB_SAB_NONE
-            and not trace.enabled
-        ):
-            knn_cells = 1
+    # TOMBSTONE: MOJOLEARN_HDB_CORE_TILE (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: one-cell k-NN outputs when the tiled core kernel ran.
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_CORE_TILE.patch; record in docs/TOMBSTONES.md.
     var knn_dists = ctx.enqueue_create_buffer[DType.float32](knn_cells)
     var knn_inds = ctx.enqueue_create_buffer[DType.int32](knn_cells)
     compute_core_dists(

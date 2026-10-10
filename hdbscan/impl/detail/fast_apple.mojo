@@ -24,12 +24,7 @@ comptime HDB_FAST_APPLE = (
 # Tried: every af-hdbscan2 switch at once; its gain was HDB_SMR_TILED alone (now the default), CORE_TILE and ONE_SYNC lost vs main.
 # Restore: git apply experiments/removed/MOJOLEARN_HDBSCAN2_ALL.patch; record in docs/TOMBSTONES.md.
 
-# AFCL-G04: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
-# Halve the core-distance reference tile to reduce threadgroup storage from
-# 16 KiB to 8 KiB at its existing widest row. More barriers may lose; the
-# reference rows and register top-k are unchanged. HDB_CORE_TILE must be
-# enabled in BOTH arms; this switch does not enable that older experiment.
-comptime AFCL_G04 = HDB_FAST_APPLE and is_defined["MOJOLEARN_AFCL_G04"]()
+# AFCL-G04 (never run; halved the core tile) was deleted with HDB_CORE_TILE below.
 
 comptime HDB_SMR_TILED = HDB_FAST_APPLE and (
     is_defined["MOJOLEARN_HDB_SMR_TILED"]()
@@ -41,17 +36,9 @@ main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
 47 / noise 0.25381 both arms (taxi takes the d <= 64 arm: 426 / 434 ms,
 160 / 0.14222 both). -D MOJOLEARN_HDB_SMR_TILED_OFF: main's search."""
 
-# INCONCLUSIVE-speed, M3 batchv-hdb-core-taxi / -istella vs main:
-# taxi +0.8%; istella 44717 -> 45590 ms (+2%), clusters identical.
-# Old-base -11% did not carry; dropped for no demonstrated main gain.
-# See docs/apple-fast/EXPERIMENTS.md (HDB_CORE_TILE).
-# F15/hdbscan-core M3 2026-10-06: six cold/repeated public fit times,
-# B/A0.9529..1.0389, mixed; retain OFF. Same three-case quality contract,
-# one warmup/one score, caller67d0efb29; results/F15/hdbscan-core.
-comptime HDB_CORE_TILE = HDB_FAST_APPLE and (
-    is_defined["MOJOLEARN_HDB_CORE_TILE"]()
-)
-"""Core distances from one tiled kernel with a register top-k (core_tile.mojo)."""
+# TOMBSTONE: MOJOLEARN_HDB_CORE_TILE (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: core distances from one tiled kernel with a register top-k (core_tile.mojo, with its AFCL_G04 tile knob); hdbscan istella 44,717 -> 45,590 ms (+2%), taxi +0.8%, clusters identical; F15 mixed (B/A 0.95..1.04).
+# Restore: git apply experiments/removed/MOJOLEARN_HDB_CORE_TILE.patch; record in docs/TOMBSTONES.md.
 
 comptime HDB_DEV_BORUVKA = HDB_FAST_APPLE and (
     is_defined["MOJOLEARN_HDB_DEV_BORUVKA"]()
