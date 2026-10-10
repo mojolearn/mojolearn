@@ -90,25 +90,6 @@
    "bits_change": false,
    "status": "new",
    "notes": "L4. The resident Gram fit's, the incumbent ridge_fit_host's and qn_fit_host's X/y uploads (>= 1M floats) through a process-lifetime pinned stage of two 32 MB halves, double-buffered (memcpy of chunk i overlaps DMA of chunk i-1), instead of one pageable enqueue_copy. Not on Apple, IDENTICAL only. Transport only: no bit moves. Time it on the whole clock (the board's fit clock includes the X upload); also read upload_ms_separate."
-  },
-  "cd_gram_epochs_64": {
-   "define": "MOJOLEARN_IDN_CD_GRAM_EPOCHS_64",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_CD_GRAM_EPOCHS_64"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_CD_GRAM_EPOCHS_64",
-    "solver/impl/cd.mojo:1685"
-   ],
-   "binding": "_mojolearn_solver",
-   "bits_change": false,
-   "status": "new",
-   "notes": "C2. 64 CD Gram epochs a launch (16 otherwise) when n_cols <= 64: one state read per 64 epochs. Convergence and freeze decided on the device per epoch: coef and n_iter_ unchanged, no bit change. Lasso / ElasticNet were not raced in the last grid (read file C1): race both arms with n_iter_ recorded."
   }
  },
  "algorithms": {
@@ -148,18 +129,14 @@
   },
   "more:lasso": {
    "binding": "_mojolearn_solver",
-   "route": "fit: Lasso.fit -> cd_fit_host -> cd_fit_traced -> CD_IDN_GRAM -> cd_idn_gram_sweep_kernel (cd_gram_epochs_64 at n_cols <= 64)",
-   "controls": [
-    "cd_gram_epochs_64"
-   ],
+   "route": "fit: Lasso.fit -> cd_fit_host -> cd_fit_traced -> CD_IDN_GRAM -> cd_idn_gram_sweep_kernel (16 epochs a launch; cd_gram_epochs_64 removed 2026-10-10)",
+   "controls": [],
    "interaction_groups": []
   },
   "more:elasticnet": {
    "binding": "_mojolearn_solver",
-   "route": "fit: ElasticNet.fit -> cd_fit_host -> cd_fit_traced -> CD_IDN_GRAM -> cd_idn_gram_sweep_kernel (cd_gram_epochs_64 at n_cols <= 64)",
-   "controls": [
-    "cd_gram_epochs_64"
-   ],
+   "route": "fit: ElasticNet.fit -> cd_fit_host -> cd_fit_traced -> CD_IDN_GRAM -> cd_idn_gram_sweep_kernel (16 epochs a launch; cd_gram_epochs_64 removed 2026-10-10)",
+   "controls": [],
    "interaction_groups": []
   },
   "more:logreg": {
@@ -184,6 +161,11 @@
    "define": "MOJOLEARN_IDN_SGD_EPOCH_KERNEL",
    "control": "sgd_epoch_kernel",
    "reason": "DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found S1 noise: candidate/default sgd-clf istella NV 1588.5 -> 1576.7 ms (0.99x) / AMD 3961.9 -> 3957.3 (1.00x), taxi NV 1036.6 -> 1033.1 (1.00x) / AMD 2320.4 -> 2325.9 (1.00x) (nv n0606 -> n0615, amd a1065 -> a1074); accuracy SAME (0.92033 / 0.75533), same digests. The define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e."
+  },
+  {
+   "define": "MOJOLEARN_IDN_CD_GRAM_EPOCHS_64",
+   "control": "cd_gram_epochs_64",
+   "reason": "DELETED 2026-10-10 (lane postmerge-act-6): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): lasso taxi NV 1.39x / AMD 1.01x (slower), lasso istella 1.00x / 1.00x, elasticnet taxi NV 1.02x / AMD 1.01x, elasticnet istella 1.00x / 1.00x; hashes unchanged. C2 code (fg_linear_controls.mojo IDN_CD_GRAM_EPOCHS_64 / CD_EK_SMALL_COLS, solver/impl/cd.mojo per_launch branch) deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch)."
   }
  ]
 }

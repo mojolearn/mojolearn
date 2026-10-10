@@ -142,7 +142,9 @@ from solver.impl.linalg.norm import col_norm_l2_squared
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 from solver.impl.cd_gram_rule import CD_IDN_GRAM_ON, cd_idn_gram_shape
-from experiments.classical_identical_ideas.fg_linear_controls import CD_EK_SMALL_COLS, IDN_CD_GRAM_EPOCHS_64
+# TOMBSTONE: MOJOLEARN_IDN_CD_GRAM_EPOCHS_64 (DROPPED-slower) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: the C2 imports (CD_EK_SMALL_COLS, IDN_CD_GRAM_EPOCHS_64).
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch; record in docs/TOMBSTONES.md.
 from checks.rtf_seam import rtf_mul_add
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from solver.impl.shuffle import init_shuffle
@@ -1679,12 +1681,10 @@ def cd_fit_traced(
             identical_gemm_into(ctx, gram, x, x_b, gws, gp, gp, n_rows, OP_NT)
             identical_gemm_into(ctx, gq, x, labels, gws, gp, 1, n_rows, OP_NT)
             ctx.enqueue_memset(gst, Float32(0.0))
-            # lane fg-linear C2 (IDN_CD_GRAM_EPOCHS_64, default off): 64
-            # epochs a launch at narrow designs (fg_linear_controls.mojo)
+            # TOMBSTONE: MOJOLEARN_IDN_CD_GRAM_EPOCHS_64 (DROPPED-slower) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+            # Tried: C2's 64 epochs a launch at n_cols <= 64.
+            # Restore: git apply experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch; record in docs/TOMBSTONES.md.
             var per_launch = CD_IDN_GRAM_EPOCHS
-            comptime if IDN_CD_GRAM_EPOCHS_64:
-                if gp <= CD_EK_SMALL_COLS:
-                    per_launch = 64
             while n_iter < epochs:
                 var e_here = epochs - n_iter
                 if e_here > per_launch:
