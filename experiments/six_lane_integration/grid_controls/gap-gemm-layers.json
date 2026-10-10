@@ -54,7 +54,7 @@
   },
   "neural:resnet-block": {
    "binding": "_mojolearn_x_cnn",
-   "route": "python/mojolearn/_expansion_cnn.py BasicBlock -> x_cnn_conv2d_forward_m/_backward_m (x_cnn/device.mojo _conv_relu_on_device: NI12 implicit_conv_kernel when on) + x_cnn_batchnorm_*_m (fused entries when cnn_bn_fuse on)",
+   "route": "python/mojolearn/_expansion_cnn.py BasicBlock -> x_cnn_conv2d_forward_m/_backward_m (x_cnn/device.mojo _conv_relu_on_device: NI12 implicit_conv_kernel by default since 2026-10-10) + x_cnn_batchnorm_*_m (unfused; cnn_bn_fuse removed 2026-10-10)",
    "controls": [
     "ni12_implicit_conv"
    ],

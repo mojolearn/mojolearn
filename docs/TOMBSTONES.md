@@ -276,6 +276,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SEQ_FAST_LSTM_WGRAD`](#mojolearn_seq_fast_lstm_wgrad) | Neural | DROPPED-quality (bundle) | 2026-10-09 | [MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch) |
 | [`MOJOLEARN_SEQ_FAST_MAP_DOWN`](#mojolearn_seq_fast_map_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SEQ_FAST_MAP_DOWN.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_MAP_DOWN.patch) |
 | [`MOJOLEARN_SEQ_FAST_RAW_DOWN`](#mojolearn_seq_fast_raw_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SEQ_FAST_RAW_DOWN.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_RAW_DOWN.patch) |
+| [`MOJOLEARN_IDN_CNN_BN_FUSE`](#mojolearn_idn_cnn_bn_fuse) | Neural | DROPPED-noise | 2026-10-10 | [MOJOLEARN_IDN_CNN_BN_FUSE.patch](../experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_NT_TILED`](#mojolearn_apple_fast_gemm_nt_tiled) | GEMM | DROPPED-slower | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_PINNED`](#mojolearn_apple_fast_gemm_pinned) | GEMM | DROPPED-noise | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch) |
 | [`MOJOLEARN_BGMM_FAST_MAHAL_GEMM`](#mojolearn_bgmm_fast_mahal_gemm) | GEMM | DROPPED-slower |  | lane only |
@@ -2327,6 +2328,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:1196 (lane/apple-fast-gap-optim @ cf4513f8a, on main): `SEQ_FAST_RAW_DOWN` on layernorm / synthetic, **DROPPED-slower**: reconciled 2026-10-05: rab7-seqrawdown 48.99 -> 73.68 (+50.4%)
 - EXPERIMENTS.md:1281 (lane/apple-fast-verdicts-4): `SEQ_FAST_RAW_DOWN`, rab7-seqrawdown, 48.99 -> 73.68 (+50.4%), **RECORD: stays off**
 - EXPERIMENTS.md:1842 (Owed deletions D2): **DELETED**.
+
+### MOJOLEARN_IDN_CNN_BN_FUSE
+
+- Verdict: DROPPED-noise (slower on conv2d). Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit b6bc06edc).
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch` (reverse of the deletion commit, code files only; use `git apply -3` when later deletions touched the same files).
+- What it tried: lane gap-gemm-layers (2026-10-08): the ResNet BasicBlock's BatchNorm epilogues fused, IDENTICAL only: bn1 apply + relu1 in one launch (the BN output never stored), bn2 apply + identity add + relu2 in one launch, relu1's backward folded into bn1's backward reads; `x_cnn_idn_flags` bit 6 told the glue (`_expansion_cnn.BasicBlock`) to take the fused entries. Same words, no bit change claimed.
+- Verdict numbers: post-merge neural A/B, one run per arm (nv2 L40S v1052 -> v1054 on main 9f83ea479, amd MI325X a1152 -> a1154 on main 0a7b206f1; synthetic): resnet-block NV 21.43 -> 20.24 ms (0.94x) / AMD 22.06 -> 22.51 ms (1.02x) (avg 0.98x, noise); conv2d NV 9.62 -> 10.99 ms (1.14x) / AMD 9.02 -> 9.26 ms (1.03x) (slower; conv2d does not take the fused entries, so this is noise on the route); moe unchanged. Quality: digests not moved (same words).
+- Files the patch restores: `x_cnn/ops.mojo`, `x_cnn/device.mojo`, `bindings/_mojolearn_x_cnn.mojo`, `python/mojolearn/_expansion_cnn.py`
+- grid_controls: `gap-gemm-layers.json` `cnn_bn_fuse` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): IDN_CNN_BN_FUSE was NOISE/slower; code at main 9f83ea479.
 
 ## GEMM
 
