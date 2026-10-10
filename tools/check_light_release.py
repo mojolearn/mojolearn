@@ -11,7 +11,7 @@ import zipfile
 
 JOBS = {'create-venv', 'install', 'dependencies', 'installed', 'expanded-api',
         'loaded-lm-cpu', 'loaded-lm-gpu', 'loaded-lm-cpu-gpu-compare',
-        'coverage', 'models', 'batch', 'extended', 'self-test'}
+        'coverage', 'models', 'extended', 'self-test'}  # 'batch' left with 5707f9b7e (extended covers it)
 
 
 def require(condition, message):
