@@ -80,7 +80,7 @@
    "default": "on",
    "source": [
     "neighbors/impl/ball_cover/registers.mojo:983",
-    "dbscan/impl/runner.mojo:780"
+    "dbscan/impl/runner.mojo:711"
    ],
    "binding": [
     "_mojolearn_estimators",
