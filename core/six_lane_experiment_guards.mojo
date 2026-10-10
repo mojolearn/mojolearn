@@ -267,6 +267,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_QN_FAST_COALESCED_OFF"](), "removed 2026-10-09 (lane/owed-deletions-D3): QN_FAST_COALESCED_OFF (rollback from the row-coalesced qn gradient X^T dZ to fast_xtdz) is SLOWER: logreg istella 3,889 -> 4,996 ms (+28.5%); the coalesced route is the only FAST Apple route (QN_FAST_XTDZ_OFF still turns both off); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_SVD_QFIX"](), "removed 2026-10-09 (lane/owed-deletions-D3): SVD_QFIX (TSQR-route svd keeping directions above 2^-40 s_0 with a Householder U_R) was SLOWER with no quality gain: svd taxi 48.54 -> 54.96 ms (+13.2%), istella 1790.45 -> 1795.62 (+0.3%), singular value and reconstruction errors unchanged (rab5-svd); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_SVD_QOLD"](), "removed 2026-10-09 (lane/owed-deletions-D3): SVD_QOLD was the opt-out name of SVD_QFIX while that was briefly the FAST default; SVD_QFIX was reverted (DROPPED-slower, svd taxi +13.2%) and SVD_QOLD was already a no-op; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_TSVD_FAST_CHOLQR3"](), "removed 2026-10-09 (lane/owed-deletions-D3): TSVD_FAST_CHOLQR3 (TruncatedSVD's R from shifted CholeskyQR3, x_decomp/tsvd_fast.mojo) was SLOWER: tsvd istella +19.9% (verdicts batch 6); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

@@ -1187,18 +1187,9 @@ def _svd_tsqr(a_arr, rows, cols):
     return SVDResult(U, S.out((cols,)), Vt.out())
 
 
-def _tsvd_cholqr_r(k, x, rows, cols):
-    """lane/apple-fast-s-linalg TSVD_FAST_CHOLQR3 (default off, FAST + Apple;
-    x_decomp/tsvd_fast.mojo): R of a tall x by shifted CholeskyQR3 on the
-    matrix unit, or None (the caller runs the TSQR) when the binding lacks
-    `x_decomp_tsvd_cholqr_r` (define off) or its device guard tripped."""
-    try:
-        fn = getattr(k._raw(), "x_decomp_tsvd_cholqr_r")
-    except Exception:
-        return None
-    R = empty((cols, cols), "<f4")
-    ok = fn(addr_ro(x, name="x"), addr(R, name="r_out"), [int(rows), int(cols)])
-    return R if int(ok) else None
+# TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: _tsvd_cholqr_r (the binding's x_decomp_tsvd_cholqr_r, None when absent).
+# Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
 
 
 def _tsvd_tsqr_components(x, nc, mode):
@@ -1225,9 +1216,7 @@ def _tsvd_tsqr_components(x, nc, mode):
     rows, cols = int(x.shape[0]), int(x.shape[1])
     if not on or not _tsqr_on(rows, cols) or not 1 <= nc <= cols:
         return None
-    R = _tsvd_cholqr_r(k, x, rows, cols)
-    if R is None:
-        R = _tsqr_r(k.b, x, rows, cols, False)
+    R = _tsqr_r(k.b, x, rows, cols, False)
     S, Vt = k.svd(_xd_matrix(R, cols, cols))
     V = Vt.rows(0, nc)
     V = k.ew("mul", V, k.absmax_signs(V, False))

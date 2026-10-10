@@ -89,7 +89,9 @@ from x_decomp.resident import IDN_EIGH_RESIDENT, dev_eigh_py
 # FAST-only and IDN_LU_RESIDENT is IDENTICAL-only, so one build registers at most one.
 from x_decomp.w4_fast import LLE_FAST_DEV_LU, dev_lu_aux_py as w4_dev_lu_aux_py, w4_flags_py
 from x_decomp.qfix import LU_QFIX, lu_resid_py, qfix_flags_py
-from x_decomp.tsvd_fast import TSVD_FAST_CHOLQR3, tsvd_cholqr_r_py
+# TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: TSVD_QFIX's R from shifted CholeskyQR3 on the matrix unit (x_decomp/tsvd_fast.mojo) instead of the Householder TSQR; tsvd istella +19.9% (verdicts batch 6).
+# Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
 from x_decomp.s_linalg_fast import (
     DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, RSVD_FAST_DEVSCAN, dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py,
     dev_upload_scan_py, s_flags_py,
@@ -224,10 +226,6 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[qfix_flags_py]("x_decomp_qfix_flags")
         comptime if LU_QFIX:
             m.def_function[lu_resid_py]("x_decomp_lu_resid")
-        # lane/apple-fast-s-linalg (x_decomp/tsvd_fast.mojo): -D MOJOLEARN_TSVD_FAST_CHOLQR3
-        # (default off, FAST + Apple): TSVD_QFIX's R by shifted CholeskyQR3
-        comptime if TSVD_FAST_CHOLQR3:
-            m.def_function[tsvd_cholqr_r_py]("x_decomp_tsvd_cholqr_r")
         # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 1 RSVD_FAST_DEVSCAN,
         # bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks)
         m.def_function[s_flags_py]("x_decomp_s_flags")

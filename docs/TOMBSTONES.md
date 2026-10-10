@@ -180,6 +180,7 @@ in the tables after the sections.
 | [`MOJOLEARN_MCD_DEVICE_CSTEPS`](#mojolearn_mcd_device_csteps) | Decomp | DROPPED-quality | 2026-10-09 | [MOJOLEARN_MCD_DEVICE_CSTEPS.patch](../experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch) |
 | [`MOJOLEARN_SVD_QFIX`](#mojolearn_svd_qfix) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SVD_QFIX.patch](../experiments/removed/MOJOLEARN_SVD_QFIX.patch) |
 | [`MOJOLEARN_SVD_QOLD`](#mojolearn_svd_qold) | Decomp | DROPPED-slower | 2026-10-09 | no code (no patch) |
+| [`MOJOLEARN_TSVD_FAST_CHOLQR3`](#mojolearn_tsvd_fast_cholqr3) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_TSVD_FAST_CHOLQR3.patch](../experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch) |
 | [`MOJOLEARN_AFFINITY_FAST_LOOP`](#mojolearn_affinity_fast_loop) | Cluster | DROPPED-noise | 2026-10-02 | [MOJOLEARN_AFFINITY_FAST_LOOP.patch](../experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch) |
 | [`MOJOLEARN_BGMM_ENT`](#mojolearn_bgmm_ent) | Cluster | DROPPED-noise | 2026-10-03 | [MOJOLEARN_BGMM_ENT.patch](../experiments/removed/MOJOLEARN_BGMM_ENT.patch) |
 | [`MOJOLEARN_BISECT_FAST_RESIDENT`](#mojolearn_bisect_fast_resident) | Cluster | DROPPED-slower | 2026-10-02 | [MOJOLEARN_BISECT_FAST_RESIDENT.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch) |
@@ -1418,6 +1419,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:1216: `SVD_QFIX` (QOLD `MOJOLEARN_SVD_QOLD`) | svd / istella, taxi | lane/apple-fast-q-linalg @ aaebc0ab8 | - | - | DROPPED-slower | reconciled 2026-10-05: rab5-svd taxi +13.2%, istella +0.3%, no quality gain, Verdicts batch 4; reverted, opt-in MOJOLEARN_SVD_QFIX. Was QUALITY-FIX, READY-AB: U_R null cut 2^-20 -> 2^-40 s_0 + Householder orthonormalization on the TSQR route; audit recon 3.84e-05 / 1.83e-06 vs numpy 4.1e-08 / 4.3e-08; float32 model 2.1e-06 -> 3.2e-07; max_rel_singular_value_error is an artifact (QUALITY_AUDIT_NOTES.md)
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): SVD_QOLD was the opt-out name of SVD_QFIX while that was briefly the FAST default; SVD_QFIX was reverted (DROPPED-slower, svd taxi +13.2%) and SVD_QOLD was already a no-op; code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_TSVD_FAST_CHOLQR3
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: TSVD_QFIX's R of a tall x from shifted CholeskyQR3 (two diagonal-shifted and two plain passes, Gram and Y R^-1 on the matrix unit via launch_gemm, a device guard falling back to the TSQR) instead of the scalar Householder TSQR, FAST + Apple.
+- Files the patch restores: `bindings/_mojolearn_x_decomp.mojo`, `python/mojolearn/_linalg_impl.py`, `x_decomp/tsvd_fast.mojo`
+- EXPERIMENTS.md:1370: `MOJOLEARN_TSVD_FAST_CHOLQR3` | tsvd / istella, taxi (x_decomp/tsvd_fast.mojo, binding x_decomp) | lane/apple-fast-s-linalg | (owed) | istella 864 / taxi 42.2 (rab8-tsvd, TSVD_QFIX on) -> ? | READY-AB | TSVD_QFIX's R from shifted CholeskyQR3 (2 diagonal-shifted + 2 plain passes; Gram and Y R^-1 on the matrix unit via launch_gemm) instead of the scalar Householder TSQR; device guard (Cholesky info, last-pass Gram diagonal within 2^-6 of 1) falls back to the TSQR. Quality gate: istella relative_reconstruction_error stays ~1.22e-4 (not the Gram's 2.55e-3). Not SVD_FAST_CHOLQR (that was linalg.svd's U with an unshifted CholQR2 per orth pass)
+- EXPERIMENTS.md:1410: `TSVD_FAST_CHOLQR3` | tsvd / istella | lane/apple-fast-s-linalg | verdicts batch 6 | istella +19.9% | DROPPED-slower | stays off
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): TSVD_FAST_CHOLQR3 (TruncatedSVD's R from shifted CholeskyQR3, x_decomp/tsvd_fast.mojo) was SLOWER: tsvd istella +19.9% (verdicts batch 6); code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Cluster
 
 ### MOJOLEARN_AFFINITY_FAST_LOOP
@@ -2112,7 +2123,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_SYM_SCAN_SUB_FUSED` | EXPERIMENTS.md:194 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/split_properties_helpers.mojo:483` |
 | `MOJOLEARN_TREES_T29` | EXPERIMENTS.md:1710 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `gbdt/trees_identical_switches.mojo:74` |
 | `MOJOLEARN_TSA2_KPSS` | EXPERIMENTS.md:544 DROPPED-noise (lane/apple-fast-gap-tsa @ e9da47064) | `tsa/impl/timeSeries/kpss_fused.mojo:7` |
-| `MOJOLEARN_TSVD_FAST_CHOLQR3` | EXPERIMENTS.md:1410 DROPPED-slower (lane/apple-fast-s-linalg) | `x_decomp/tsvd_fast.mojo:4` |
 | `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | EXPERIMENTS.md:872 reconciled 2026-10-05: w2-mbk-labrg: quality PASS, istella 146.6 -> 144.0, taxi 45.3 -> 46.3 (Manager verdicts session 2: DROP-speed noise); opt-in only. Was OPEN, opt-in: Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode). ((not promoted)) | `x_cluster/minibatch_fast.mojo:160` |
 | `MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID` | EXPERIMENTS.md:150 DROPPED-noise (lane/apple-fast-yetirank @ c7b35fd7c) | `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2945` |
 
