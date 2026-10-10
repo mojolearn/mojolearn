@@ -176,7 +176,7 @@
     "_mojolearn_x_ann_host"
    ],
    "bits_change": true,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): the strided coarse start stays the IDENTICAL default",
+   "status": "promoted:postmerge-20261009 (nv2 v0996->v0993, amd a1131->a1134); confirmed:postmerge-20261010 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): the strided coarse start stays the IDENTICAL default",
    "note": "lane postmerge-act-3 (2026-10-09): PROMOTED to the IDENTICAL default; -D MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF restores k-means|| seeding; the old on-define is refused by the guard. Post-merge A/B on main a47bd9fb2, one run per arm: ivf-pq istella NV 1008.1->756.9 ms (0.75x) / AMD 853.1->542.2 (0.64x), recall@10 0.7489->0.8021 on both; taxi NV 157.2->100.0 (0.64x) / AMD 195.0->83.9 (0.43x), recall@10 0.98125 equal. Digests NV == AMD (istella 7a39a98cdca7dc6e, taxi 5c793de3ec021c64). Centre c = training row (c n_train) // n_lists (device gather; host the same rows), INIT_ARRAY. Bits change vs the old default on NV, AMD and the host column together. Makes ivf_idn_recluster_cap_off moot unless _OFF is set. CONFIRMED 2026-10-10: the _OFF arm (old start) is slower on ivf-flat, istella NV 2.33x / AMD 2.90x, taxi NV 2.60x / AMD 3.54x (its hashes are the old start's, as expected).",
    "board": "ivf-pq"
   }
