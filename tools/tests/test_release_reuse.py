@@ -768,15 +768,17 @@ class HostBuiltIntoReusedSets(unittest.TestCase):
             proof.write_text(json.dumps(dict(schema="mojolearn.linux.build-provenance.v1", complete=True, build_exit=0,
                                              action="build", source_commit=commit, source_inventory=inventory,
                                              source_sha256=inventory_digest(inventory), extensions=proof_ext)))
-            inv = pack_wheel.release_inventory(sets, [proof, self.ptx_proof], pack_wheel.read_version(), ROOT,
+            # The PTX set is built every release (release_reuse.PTX_SET), so its leg is the one
+            # that built and read back the host bindings: its proof is the only one owed.
+            inv = pack_wheel.release_inventory(sets, [self.ptx_proof], pack_wheel.read_version(), ROOT,
                                                required=SPLIT_SETS)
             host = inv["host_native"]["_mojolearn_training_host"]
             self.assertEqual(host["origin"], "built")
             self.assertEqual(host["sha256"], witnesses["_mojolearn_training_host"].hex())
             self.assertEqual(inv["host_native"]["_mojolearn_forest_host"]["origin"], "reused")
-            # without a proof, or with two, the host build is not accounted for
+            # with a proof for a set no leg built, the host build is not accounted for
             with self.assertRaises(SystemExit):
-                pack_wheel.release_inventory(sets, [self.ptx_proof], pack_wheel.read_version(), ROOT,
+                pack_wheel.release_inventory(sets, [proof, self.ptx_proof], pack_wheel.read_version(), ROOT,
                                              required=SPLIT_SETS)
 
     def test_a_host_build_without_a_witness_of_the_same_bytes_is_refused(self):

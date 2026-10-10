@@ -1270,6 +1270,15 @@ def main(argv=None, _gates=True):
     # refuses an oversize wheel too, with no per-set sizes), so the failure names them.
     oversize = oversize_report(built)
     if oversize:
+        wheels = {}
+        for whl, vendor in built:
+            distribution = (gpu_plugins.package(vendor)["distribution"] if vendor else gpu_plugins.CORE_DISTRIBUTION)
+            limit = gpu_plugins.wheel_size_limit(distribution)
+            wheels[whl.name] = dict(distribution=distribution, compressed_bytes=whl.stat().st_size,
+                                    pypi_limit_bytes=limit, over_limit=whl.stat().st_size > limit,
+                                    payloads=wheel_payload_sizes(whl))
+        (out / f"SIZES-{version}-linux.json").write_text(json.dumps(
+            dict(wheels=wheels, pypi_limit_bytes=PYPI_LIMIT, over_limit=True, profile=a.profile), indent=2))
         print("\n".join(["", "pack_wheel: WHEEL OVER PyPI's 100 MiB FILE LIMIT. STOP: this release cannot publish."]
                         + oversize), file=sys.stderr)
         return 1

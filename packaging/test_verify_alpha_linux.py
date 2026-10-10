@@ -272,8 +272,9 @@ class SplitLinuxTests(unittest.TestCase):
             members['mojolearn/hip_native/gfx942/_mojolearn_knn.so'] = b'FAKE'
 
         def wrong_marker(prefix, members):
+            bound = json.loads(members[prefix + gate.GPU_PLUGINS.PLUGIN_MARKER])['bundled_ptx']
             members[prefix + gate.GPU_PLUGINS.PLUGIN_MARKER] = json.dumps(
-                gate.GPU_PLUGINS.plugin_marker('cuda', self.version, ['sm_90a'])).encode()
+                gate.GPU_PLUGINS.plugin_marker('cuda', self.version, ['sm_90a'], bundled_ptx=bound)).encode()
 
         def combined_profile(prefix, members):
             doc = json.loads(members[prefix + 'LINUX_PAYLOAD.json'])
@@ -321,7 +322,7 @@ class SplitLinuxTests(unittest.TestCase):
         def loose_pin(prefix, members):
             members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(b'mojolearn==', b'mojolearn>=')
         def unknown_arch(prefix, members):
-            members['mojolearn/cuda_native/sm_100/identical/_mojolearn_knn.so'] = b'FAKE'
+            members['mojolearn/cuda_native/sm_75/identical/_mojolearn_knn.so'] = b'FAKE'  # sm_100 is registered (Blackwell)
         for mutate, why in ((loose_pin, 'exact package dependencies'), (unknown_arch, 'outside its architecture payload')):
             with self.subTest(mutate=mutate.__name__):
                 with self.assertRaisesRegex(ValueError, why):

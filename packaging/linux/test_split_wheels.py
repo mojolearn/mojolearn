@@ -203,8 +203,16 @@ class SplitWheels(unittest.TestCase):
 
     def test_qualification_requires_payloads_as_well_as_aggregates(self):
         import check_linux_release_qualification as qualification
+        import hashlib
         staged = Path(tempfile.mkdtemp(dir=self.root))
         wheels = []
+        # The PTX slot is checked against the inventory (wheel_api_audit): name its commit and bytes.
+        prefix = pw.gpu_plugins.BUNDLED_PTX_ROOT + '/'
+        nvidia = next(w for n, w in self.split.items() if n == 'mojolearn_nvidia')
+        ptx_members = members(nvidia)
+        ptx_commit = json.loads(ptx_members[prefix + pw.gpu_plugins.BASELINE_MANIFEST])['source_commit']
+        ptx_extensions = {n: hashlib.sha256(b).hexdigest() for n, b in ptx_members.items()
+                          if n.startswith(prefix) and n.endswith('.so')}
         for name, wheel in self.split.items():
             row = next((r for r in pw.gpu_plugins.distribution_rows() if r['wheel_name'] == name), None)
             profile = row['profile'] if row else pw.gpu_plugins.CORE_PROFILE
@@ -214,6 +222,7 @@ class SplitWheels(unittest.TestCase):
             data[dist + '/LINUX_PAYLOAD.json'] = json.dumps({
                 'assembly_profile': 'release-split',
                 'sets': {v + '/' + a: {} for v, a in SETS},
+                'source_commit': ptx_commit, 'extensions': ptx_extensions,
                 'split': {'role': profile},
             }).encode()
             wheels.append(pw.write_wheel(staged / wheel.name, {}, data, dist))

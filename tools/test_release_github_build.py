@@ -38,7 +38,7 @@ class Workflow(unittest.TestCase):
     def test_manual_only_and_never_interpolates_the_map_url(self):
         text = WF.read_text()
         # Both native artifact jobs and the isolated experimental PTX job retain .libs.
-        self.assertEqual(text.count("include-hidden-files: true"), 3)
+        self.assertEqual(text.count("include-hidden-files: true"), 2)  # the experimental PTX job is gone
         on = text.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
         self.assertIn("workflow_dispatch:", on)
         for trigger in ("push:", "pull_request", "schedule:"):
