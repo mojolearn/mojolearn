@@ -1,0 +1,144 @@
+diff --git b/bindings/_mojolearn_x_decomp.mojo a/bindings/_mojolearn_x_decomp.mojo
+index a049eca9d..f4d50015c 100644
+--- b/bindings/_mojolearn_x_decomp.mojo
++++ a/bindings/_mojolearn_x_decomp.mojo
+@@ -220,7 +220,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
+         # (LLE_FAST_DEV_LU, RSVD_FAST_DIRECT_IN); the resident LU only when compiled in
+         m.def_function[w4_flags_py]("x_decomp_w4_flags")
+         # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
+-        # (bits TSVD_QFIX 2, LU_QFIX 4, QOLD defines restore; bit 1 SVD_QFIX deleted)
++        # (bits SVD_QFIX 1, TSVD_QFIX 2, LU_QFIX 4; QOLD defines restore)
+         m.def_function[qfix_flags_py]("x_decomp_qfix_flags")
+         comptime if LU_QFIX:
+             m.def_function[lu_resid_py]("x_decomp_lu_resid")
+diff --git b/python/mojolearn/_expansion_decomp.py a/python/mojolearn/_expansion_decomp.py
+index 442c8bef5..495a00db8 100644
+--- b/python/mojolearn/_expansion_decomp.py
++++ a/python/mojolearn/_expansion_decomp.py
+@@ -565,8 +565,8 @@ class _Kit:
+ 
+     def qfix_flags(self):
+         """lane/apple-fast-q-linalg: the binding's FAST quality repairs
+-        (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 2 TSVD_QFIX, bit 4
+-        LU_QFIX (bit 1, SVD_QFIX, deleted 2026-10-09); each off with its -D MOJOLEARN_*_QOLD; 0 on
++        (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 1 SVD_QFIX, bit 2
++        TSVD_QFIX, bit 4 LU_QFIX; each off with its -D MOJOLEARN_*_QOLD; 0 on
+         an IDENTICAL or host binding, which keep the old routes)."""
+         f = self.__dict__.get("_qfix_flags")
+         if f is None:
+diff --git b/python/mojolearn/_linalg_impl.py a/python/mojolearn/_linalg_impl.py
+index edfe2c5d0..42efbd654 100644
+--- b/python/mojolearn/_linalg_impl.py
++++ a/python/mojolearn/_linalg_impl.py
+@@ -1175,10 +1175,15 @@ def _svd_tsqr(a_arr, rows, cols):
+     b = k.b
+     R = _tsqr_r(b, a_arr, rows, cols, True)
+     try:
+-        # TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-        # Tried: the 2^-40 cut + Householder U_R branch here (qfix bit 1).
+-        # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
+-        Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False)
++        if k.qfix_flags() & 1:
++            # SVD_QFIX (see _SVD_QFIX_NULL_RTOL): every direction above
++            # 2^-40 s_0 kept, orthonormalized by Householder QR of the small
++            # n x n A V / s (the orth route's two A R^-1 passes lose
++            # orthogonality on its ill-conditioned columns)
++            Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False,
++                                  null_rtol=_SVD_QFIX_NULL_RTOL, householder=True)
++        else:
++            Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False)
+         C = Ur.out()
+     except BaseException:
+         _tsqr_release(b)
+@@ -1447,25 +1452,36 @@ def _svd_stage_timer():
+     return tick
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: _SVD_QFIX_NULL_RTOL = 2^-40, the TSQR route's U_R null cut.
+-# Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
++#: lane/apple-fast-q-linalg SVD_QFIX (x_decomp/qfix.mojo bit 1; REVERTED
++#: 2026-10-04 to opt-in -D MOJOLEARN_SVD_QFIX: rab5-svd showed no quality
++#: gain and taxi +13.2%, so _SVD_NULL_RTOL and the orth route are the
++#: default again; this cut applies only when the bit is set): the
++#: null cut for U_R on the TSQR route. Directions with 2^-40 s_0 < s_j were
++#: replaced by arbitrary complement columns under the 2^-20 cut, up to 2 s_j
++#: of error each in U S V^T. #: audit 2026-10-04 svd istella
++#: relative_reconstruction_error_100k_rows 3.84e-05 (numpy 4.10e-08), taxi
++#: 1.83e-06 (numpy 4.31e-08); float32 model of the route
++#: (~/mojolearn-evidence/q-linalg/sim_svd2.py): 2^-20 2.1e-06, 2^-30 and
++#: below 3.2e-07.
++_SVD_QFIX_NULL_RTOL = 2.0 ** -40
+ 
+ 
+-def _svd_tall(k, A, full):
++def _svd_tall(k, A, full, null_rtol=None, householder=False):
+     """(U, S, Vt) of a tall A (m >= n) as _M: S and V from the decomp lane's
+     QR + one-sided Jacobi (`Kit.svd`, descending, ties to the lower index);
+     U from the geqrf + orgqr of the columns A v_j / s_j with s_j > 2^-20 s_0
+     (the cells' gemm and division), each Q column signed by its R[j, j],
+     the null directions and the m - n more of full_matrices its trailing
+-    columns."""
++    columns. `null_rtol` overrides _SVD_NULL_RTOL and `householder` skips
++    the orth route (SVD_QFIX, `_svd_tsqr` only: A is then the n x n R)."""
+     from ._expansion_decomp import _M
+     m, n = A.r, A.c
+     tick = _svd_stage_timer()
+     S, Vt = k.svd(A)
+     tick("svd (sliced QR + Jacobi of R)")
+     s0 = S.s[0] if n else 0.0
+-    _SVD_NULL_RTOL = _SVD_NULL_RTOL_MODULE
++    # a local of the module constant's name: SVD_QFIX's override, if any
++    _SVD_NULL_RTOL = _SVD_NULL_RTOL_MODULE if null_rtol is None else null_rtol
+     # the numerical rank, counted in Mojo (x_decomp/api.mojo rank_above_py)
+     r = int(k.b.x_decomp_rank_above(S.s.buffer_info()[0], [n], float(_SVD_NULL_RTOL))) if n else 0
+     AV = k.mm(A, Vt, tb=True)                                   # m x n
+@@ -1473,7 +1489,7 @@ def _svd_tall(k, A, full):
+     Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
+     tick("A V / s")
+     width = m if full else n
+-    if r == n and width == n:
++    if r == n and width == n and not householder:
+         # lane neural-pass17: with every direction kept and no trailing
+         # columns wanted, U is the orthonormalized A V / s: the kit's orth
+         # (two sliced-QR passes and a row-parallel A R^-1, DEVIATION 5309),
+diff --git b/x_decomp/qfix.mojo a/x_decomp/qfix.mojo
+index ee4ca8b1d..239ee37c0 100644
+--- b/x_decomp/qfix.mojo
++++ a/x_decomp/qfix.mojo
+@@ -6,8 +6,8 @@ linear algebra rows the board audit flagged
+ these is compiled into an IDENTICAL binding, and no IDENTICAL kernel changes.
+ Python reads which are on through `x_decomp_qfix_flags()`:
+ 
+-  bit 1  SVD_QFIX   (REVERTED 2026-10-04, DELETED 2026-10-09 with its old
+-         name SVD_QOLD; the bit is always 0; record kept below)
++  bit 1  SVD_QFIX   (REVERTED 2026-10-04: OFF by default, opt-in
++         `-D MOJOLEARN_SVD_QFIX`; `-D MOJOLEARN_SVD_QOLD` is now harmless)
+          `svd(full_matrices=False)` of a tall matrix (the TSQR route): U_R
+          keeps every direction with s_j > 2^-40 s_0 (was 2^-20) and is
+          orthonormalized by Householder QR. The 2^-20 cut replaced genuine
+@@ -62,9 +62,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, pinned_mul_f32
+ from x_decomp.cells import F32Ptr
+ from x_decomp.device import _down, _p, _up, xd_ctx
+ 
+-# TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: svd's TSQR route keeping every direction above 2^-40 s_0 (was 2^-20) with a Householder QR of U_R; svd taxi 48.54 -> 54.96 ms (+13.2%), istella +0.3%, no quality gain (rab5-svd).
+-# Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
++#: REVERTED 2026-10-04 (rab5-svd: no quality gain, taxi +13.2%): opt-in only.
++comptime SVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_SVD_QFIX"]()
+ comptime TSVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_TSVD_QOLD"]()
+ comptime LU_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_LU_QOLD"]()
+ 
+@@ -77,9 +76,10 @@ comptime QF_LAUNCH_CELLS = 1 << 30
+ 
+ 
+ def qfix_flags_py() raises -> PythonObject:
+-    """Bit 2 TSVD_QFIX, bit 4 LU_QFIX (0 in IDENTICAL); bit 1 (SVD_QFIX) was
+-    deleted 2026-10-09 and is always 0."""
++    """Bit 1 SVD_QFIX, bit 2 TSVD_QFIX, bit 4 LU_QFIX (0 in IDENTICAL)."""
+     var f = 0
++    comptime if SVD_QFIX:
++        f |= 1
+     comptime if TSVD_QFIX:
+         f |= 2
+     comptime if LU_QFIX:

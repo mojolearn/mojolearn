@@ -6,8 +6,8 @@ linear algebra rows the board audit flagged
 these is compiled into an IDENTICAL binding, and no IDENTICAL kernel changes.
 Python reads which are on through `x_decomp_qfix_flags()`:
 
-  bit 1  SVD_QFIX   (REVERTED 2026-10-04: OFF by default, opt-in
-         `-D MOJOLEARN_SVD_QFIX`; `-D MOJOLEARN_SVD_QOLD` is now harmless)
+  bit 1  SVD_QFIX   (REVERTED 2026-10-04, DELETED 2026-10-09 with its old
+         name SVD_QOLD; the bit is always 0; record kept below)
          `svd(full_matrices=False)` of a tall matrix (the TSQR route): U_R
          keeps every direction with s_j > 2^-40 s_0 (was 2^-20) and is
          orthonormalized by Householder QR. The 2^-20 cut replaced genuine
@@ -62,8 +62,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, pinned_mul_f32
 from x_decomp.cells import F32Ptr
 from x_decomp.device import _down, _p, _up, xd_ctx
 
-#: REVERTED 2026-10-04 (rab5-svd: no quality gain, taxi +13.2%): opt-in only.
-comptime SVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_SVD_QFIX"]()
+# TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: svd's TSQR route keeping every direction above 2^-40 s_0 (was 2^-20) with a Householder QR of U_R; svd taxi 48.54 -> 54.96 ms (+13.2%), istella +0.3%, no quality gain (rab5-svd).
+# Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
 comptime TSVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_TSVD_QOLD"]()
 comptime LU_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_LU_QOLD"]()
 
@@ -76,10 +77,9 @@ comptime QF_LAUNCH_CELLS = 1 << 30
 
 
 def qfix_flags_py() raises -> PythonObject:
-    """Bit 1 SVD_QFIX, bit 2 TSVD_QFIX, bit 4 LU_QFIX (0 in IDENTICAL)."""
+    """Bit 2 TSVD_QFIX, bit 4 LU_QFIX (0 in IDENTICAL); bit 1 (SVD_QFIX) was
+    deleted 2026-10-09 and is always 0."""
     var f = 0
-    comptime if SVD_QFIX:
-        f |= 1
     comptime if TSVD_QFIX:
         f |= 2
     comptime if LU_QFIX:

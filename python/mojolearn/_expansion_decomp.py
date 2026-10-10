@@ -565,8 +565,8 @@ class _Kit:
 
     def qfix_flags(self):
         """lane/apple-fast-q-linalg: the binding's FAST quality repairs
-        (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 1 SVD_QFIX, bit 2
-        TSVD_QFIX, bit 4 LU_QFIX; each off with its -D MOJOLEARN_*_QOLD; 0 on
+        (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 2 TSVD_QFIX, bit 4
+        LU_QFIX (bit 1, SVD_QFIX, deleted 2026-10-09); each off with its -D MOJOLEARN_*_QOLD; 0 on
         an IDENTICAL or host binding, which keep the old routes)."""
         f = self.__dict__.get("_qfix_flags")
         if f is None:

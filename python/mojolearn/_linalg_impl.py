@@ -1175,15 +1175,10 @@ def _svd_tsqr(a_arr, rows, cols):
     b = k.b
     R = _tsqr_r(b, a_arr, rows, cols, True)
     try:
-        if k.qfix_flags() & 1:
-            # SVD_QFIX (see _SVD_QFIX_NULL_RTOL): every direction above
-            # 2^-40 s_0 kept, orthonormalized by Householder QR of the small
-            # n x n A V / s (the orth route's two A R^-1 passes lose
-            # orthogonality on its ill-conditioned columns)
-            Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False,
-                                  null_rtol=_SVD_QFIX_NULL_RTOL, householder=True)
-        else:
-            Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False)
+        # TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+        # Tried: the 2^-40 cut + Householder U_R branch here (qfix bit 1).
+        # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
+        Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False)
         C = Ur.out()
     except BaseException:
         _tsqr_release(b)
@@ -1452,36 +1447,25 @@ def _svd_stage_timer():
     return tick
 
 
-#: lane/apple-fast-q-linalg SVD_QFIX (x_decomp/qfix.mojo bit 1; REVERTED
-#: 2026-10-04 to opt-in -D MOJOLEARN_SVD_QFIX: rab5-svd showed no quality
-#: gain and taxi +13.2%, so _SVD_NULL_RTOL and the orth route are the
-#: default again; this cut applies only when the bit is set): the
-#: null cut for U_R on the TSQR route. Directions with 2^-40 s_0 < s_j were
-#: replaced by arbitrary complement columns under the 2^-20 cut, up to 2 s_j
-#: of error each in U S V^T. #: audit 2026-10-04 svd istella
-#: relative_reconstruction_error_100k_rows 3.84e-05 (numpy 4.10e-08), taxi
-#: 1.83e-06 (numpy 4.31e-08); float32 model of the route
-#: (~/mojolearn-evidence/q-linalg/sim_svd2.py): 2^-20 2.1e-06, 2^-30 and
-#: below 3.2e-07.
-_SVD_QFIX_NULL_RTOL = 2.0 ** -40
+# TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: _SVD_QFIX_NULL_RTOL = 2^-40, the TSQR route's U_R null cut.
+# Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
 
 
-def _svd_tall(k, A, full, null_rtol=None, householder=False):
+def _svd_tall(k, A, full):
     """(U, S, Vt) of a tall A (m >= n) as _M: S and V from the decomp lane's
     QR + one-sided Jacobi (`Kit.svd`, descending, ties to the lower index);
     U from the geqrf + orgqr of the columns A v_j / s_j with s_j > 2^-20 s_0
     (the cells' gemm and division), each Q column signed by its R[j, j],
     the null directions and the m - n more of full_matrices its trailing
-    columns. `null_rtol` overrides _SVD_NULL_RTOL and `householder` skips
-    the orth route (SVD_QFIX, `_svd_tsqr` only: A is then the n x n R)."""
+    columns."""
     from ._expansion_decomp import _M
     m, n = A.r, A.c
     tick = _svd_stage_timer()
     S, Vt = k.svd(A)
     tick("svd (sliced QR + Jacobi of R)")
     s0 = S.s[0] if n else 0.0
-    # a local of the module constant's name: SVD_QFIX's override, if any
-    _SVD_NULL_RTOL = _SVD_NULL_RTOL_MODULE if null_rtol is None else null_rtol
+    _SVD_NULL_RTOL = _SVD_NULL_RTOL_MODULE
     # the numerical rank, counted in Mojo (x_decomp/api.mojo rank_above_py)
     r = int(k.b.x_decomp_rank_above(S.s.buffer_info()[0], [n], float(_SVD_NULL_RTOL))) if n else 0
     AV = k.mm(A, Vt, tb=True)                                   # m x n
@@ -1489,7 +1473,7 @@ def _svd_tall(k, A, full, null_rtol=None, householder=False):
     Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
     tick("A V / s")
     width = m if full else n
-    if r == n and width == n and not householder:
+    if r == n and width == n:
         # lane neural-pass17: with every direction kept and no trailing
         # columns wanted, U is the orthonormalized A V / s: the kit's orth
         # (two sliced-QR passes and a row-parallel A R^-1, DEVIATION 5309),

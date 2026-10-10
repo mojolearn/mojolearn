@@ -220,7 +220,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         # (LLE_FAST_DEV_LU, RSVD_FAST_DIRECT_IN); the resident LU only when compiled in
         m.def_function[w4_flags_py]("x_decomp_w4_flags")
         # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
-        # (bits SVD_QFIX 1, TSVD_QFIX 2, LU_QFIX 4; QOLD defines restore)
+        # (bits TSVD_QFIX 2, LU_QFIX 4, QOLD defines restore; bit 1 SVD_QFIX deleted)
         m.def_function[qfix_flags_py]("x_decomp_qfix_flags")
         comptime if LU_QFIX:
             m.def_function[lu_resid_py]("x_decomp_lu_resid")
