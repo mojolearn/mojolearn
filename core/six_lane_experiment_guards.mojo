@@ -243,6 +243,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT"](), "removed 2026-10-09 (lane/owed-deletions-D1): AutoARIMA Kalman groups in one concurrent round loop was DROPPED-slower: autoarima +14-16% (M3 verdicts batch 6, 1 run per arm); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_D_CONCURRENT"](), "removed 2026-10-09 (lane/owed-deletions-D1): AutoARIMA d groups in one native search call was DROPPED-slower: autoarima +5-7% (M3 verdicts batch 6, 1 run per arm); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_EST_REUSE_PART"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple leaf estimation in row order over the searcher partition was DROPPED-BUG: symmetric istella auc .980 -> .930, logloss .186 -> 2.15 (wrong leaves, sym-est-rp-ist); code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_EST_SHRINK_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple cursor add fused with the next tree derivative pass was DROPPED-inconclusive: sym-est-sh-1k istella -2.8% on an old base, never verified on main; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

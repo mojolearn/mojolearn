@@ -41,11 +41,8 @@ from gbdt.methods.leaves_estimation.descent_helpers import (
 )
 from gbdt.methods.leaves_estimation.apple_fast_est import (
     EST_APPLE_ANY,
-    EST_SHRINK_FUSED,
     AppleEstScratch,
-    EstDerivsHook,
     apple_est_ensure,
-    apple_est_fuses_derivs,
     apple_est_handles,
     apple_fast_estimate_and_apply,
 )
@@ -1291,9 +1288,8 @@ def _estimate_and_apply(
     # other path ignores it and drains as before.
     defer_tail: Bool = False,
     tail_drain: Bool = True,
-    # lane/apple-fast-sym-est (`EST_SHRINK_FUSED`): the loop head's
-    # derivative pass, for the task to leave done; None everywhere else
-    var derivs_hook: Optional[EstDerivsHook] = None,
+    # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the
+    # `derivs_hook` argument); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch.
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
@@ -1379,7 +1375,6 @@ def _estimate_and_apply(
                 leaf_estimation_method, iters, learning_rate,
                 leaf_values, trace, stage_times, leaf_tag,
                 a_gt, a_gw, a_gc, a_po, a_ps, a_hpo, a_hps, a_s,
-                derivs_hook^,
             )
             return
     # DEVIATION 3041: the oracle's device buffers from the fit's pool (keyed
@@ -3128,10 +3123,8 @@ def fit_with_test(
     # tree's search, or after the loop)
     var deferred_splits = List[TBinarySplit]()
     var has_deferred_tree = False
-    # lane/apple-fast-sym-est (`EST_SHRINK_FUSED`): True when the previous
-    # tree's estimation task left this iteration's search planes and value
-    # partials in `stats` / `fv_part` / `mag_part`; never set otherwise
-    var derivs_ready = False
+    # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the
+    # fused next-tree derivative pass); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch.
     for iteration in range(n_estimators):
         var t_grad = loop_times.start()
         # ---- which permutation the STRUCTURE is searched on ----------
@@ -3220,10 +3213,6 @@ def fit_with_test(
         comptime if SYM_DERIV_FUSED:
             sym_skip_grad = sym_grad_prefetched
             sym_grad_prefetched = False
-        var skip_derivs = False
-        comptime if EST_SHRINK_FUSED:
-            skip_derivs = derivs_ready
-            derivs_ready = False
         # under bootstrap the magnitudes must bound the BOOTSTRAPPED
         # planes (a Bayesian weight reaches ~46 at the tail), so the
         # bootstrap kernel computes them AFTER its multiply instead
@@ -3309,10 +3298,6 @@ def fit_with_test(
                     yeti_rand.next_uniform_l(),
                     stats, fv_part, True, mag_part, mags_in_mse,
                 )
-            elif skip_derivs:
-                # lane/apple-fast-sym-est: the planes are already this cursor's
-                # (`apple_fast_est._launch_apply_derivs`, the same kernels)
-                pass
             elif second_order:
                 # `secondDerAsWeights=true`: plane 0 becomes `weight * der2`
                 # (`pointwise_target_impl.h:193-201`); plane 1 stays
@@ -4275,30 +4260,6 @@ def fit_with_test(
                         y_est = Optional(yeti_buffers.value().handles())
                         # this tree's second draw: the estimation stream's seed
                         y_seed = yeti_rand.next_uniform_l()
-                    var d_hook = Optional[EstDerivsHook]()
-                    comptime if EST_SHRINK_FUSED:
-                        # the learn permutation's cursor is the one the next
-                        # loop head differentiates: hand the task that pass
-                        # (one permutation only: with more, the next
-                        # tree's learn permutation is a fresh draw)
-                        # (never with SYM_DERIV_FUSED's prefetch this
-                        # tree: that tail already enqueues the same pass)
-                        if (
-                            perm_count == 1 and not sym_fuse
-                        ) and apple_est_fuses_derivs(
-                            objective, leaf_estimation_method, approx_dim,
-                            leaf_estimation_iterations,
-                            is_querywise or is_pair_logit or is_yeti_rank,
-                        ):
-                            d_hook = Optional(
-                                EstDerivsHook(
-                                    stats.copy(), fv_part.copy(),
-                                    mag_part.copy(),
-                                    _needs_magnitudes and not bootstrap_on,
-                                    second_order,
-                                )
-                            )
-                            derivs_ready = True
                     _estimate_and_apply(
                         ctx, n_rows, approx_dim, len(sizes), sizes,
                         leaf_offsets,
@@ -4321,7 +4282,6 @@ def fit_with_test(
                         # set, so nothing below needs the values this tree
                         defer_tail=sym_defer_est,
                         tail_drain=not sym_fuse,
-                        derivs_hook=d_hook^,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
