@@ -182,6 +182,7 @@ in the tables after the sections.
 | [`MOJOLEARN_OPTICS_STEP_BATCH`](#mojolearn_optics_step_batch) | Cluster | DROPPED |  | lane only |
 | [`MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN`](#mojolearn_x_cluster_fast_cls2_mbk_fin) | Cluster | DROPPED | 2026-10-03 | [MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch) |
 | [`MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128`](#mojolearn_x_cluster_fast_cls2_mbk_g128) | Cluster | DROPPED | 2026-10-03 | [MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch) |
+| [`MOJOLEARN_BGMM_ESTEP1`](#mojolearn_bgmm_estep1) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_BGMM_ESTEP1.patch](../experiments/removed/MOJOLEARN_BGMM_ESTEP1.patch) |
 | [`MOJOLEARN_ARIMA_FAST_LS_NOREAD`](#mojolearn_arima_fast_ls_noread) | Time series | DROPPED-noise | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch) |
 | [`MOJOLEARN_ARIMA_FAST_P_FIX`](#mojolearn_arima_fast_p_fix) | Time series | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_P_FIX.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_P_FIX.patch) |
 | [`MOJOLEARN_C58_FORECAST4`](#mojolearn_c58_forecast4) | Time series | slower | 2026-10-08 | [MOJOLEARN_C58_FORECAST4.patch](../experiments/removed/MOJOLEARN_C58_FORECAST4.patch) |
@@ -1363,6 +1364,15 @@ in the tables after the sections.
 - EXPERIMENTS.md:505 (Cluster (38)): `MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128` on minibatch-kmeans / istella, taxi, lane/apple-fast-gap-cls2@72602a339 (deleted before merge), A/B gapcls2-g128-mbk-{istella,taxi}, +14%, +22% ms, **DROP, deleted before merge**: slower
 
 
+### MOJOLEARN_BGMM_ESTEP1
+
+- Verdict: DROPPED-noise. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_BGMM_ESTEP1.patch` (reverse of the lane's deletion commit; applies to the lane head).
+- What it tried: the bayesian-gmm E-step's three kernels (gauss_q, resp, exp) as one row-per-thread launch (ops.estep / _estep_row_kernel), FAST only.
+- Files the patch restores: `x_cluster/bgmm.mojo`, `x_cluster/device_ops.mojo`, `x_cluster/host/host_ops.mojo`, `x_cluster/ops.mojo`
+- EXPERIMENTS.md:482: `BGMM_ESTEP1` | bayesian-gmm / taxi | lane/apple-fast-cluster2 @ ded4ea07b | cluster2-bgmm-estep1-taxi | - | DROPPED-noise | reconciled 2026-10-05: cluster2-bgmm-estep1-taxi-b 309.7 -> 311.1 (+0.5%), mean_log_likelihood same (LEDGER 2026-10-03); define stays opt-in on main (x_cluster/bgmm.mojo). Was OPEN: A/B queued, no judged result yet
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): BGMM_ESTEP1 (one-launch row-per-thread E-step, ops.estep) was NOISE: bayesian-gmm taxi 309.7 -> 311.1 ms (+0.5%), mean_log_likelihood same; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Time series
 
 ### MOJOLEARN_ARIMA_FAST_LS_NOREAD
@@ -1791,7 +1801,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_ARIMA_FAST_D_CONCURRENT` | EXPERIMENTS.md:1409 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:140` |
 | `MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT` | EXPERIMENTS.md:1408 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:103` |
 | `MOJOLEARN_ARIMA_FAST_STEPWISE` | EXPERIMENTS.md:1417 DROPPED-slower (main a6ff25ff8) | `arima/impl/fast_order_search.mojo:201` |
-| `MOJOLEARN_BGMM_ESTEP1` | EXPERIMENTS.md:482 DROPPED-noise (lane/apple-fast-cluster2 @ ded4ea07b) | `x_cluster/bgmm.mojo:66` |
 | `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | EXPERIMENTS.md:314 DROPPED-quality (lane/apple-fast-w2-cagra (base b2b1c22bc)) | `x_ann/fast_env.mojo:92` |
 | `MOJOLEARN_CAGRA_FAST_SEEDS4` | EXPERIMENTS.md:308 DROPPED-semantics (lane/apple-fast-gap-cagra @ 2b16b4322) | `x_ann/fast_env.mojo:108` |
 | `MOJOLEARN_CHOL_FAST_BLOCKED` | EXPERIMENTS.md:422 DROPPED-slower+quality 2026-10-04 (see verdicts batch 3) (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `x_decomp/fast_chol.mojo:5` |

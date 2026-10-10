@@ -202,14 +202,6 @@ trait ClusterOps(Movable):
         `zeros` writes n zeros first; on the host `zeros`."""
         ...
 
-    def estep(
-        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
-    ) raises:
-        """`gauss_q`, `resp` and `exp` of one E-step as ONE primitive: row i's
-        kc Mahalanobis squares, its log-sum-exp and its responsibilities by
-        the same bodies in the same order (the same values)."""
-        ...
-
     def optics_order_fast(
         mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
     ) raises:

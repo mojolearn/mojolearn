@@ -25,8 +25,6 @@ workspace for the whole fit; per iteration only the scalar block (the bound,
 the convergence and error flags) comes home, and the state once at the end.
 The host column runs the same cells in the same order (`bgmm_host_step`).
 The k-means start is this library's KMeans through `ClusterOps.kmeans`."""
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.sys.compile import is_defined
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
 from x_cluster.bgmm_device import (
     BGMM_CHOL_ERROR,
@@ -61,9 +59,9 @@ from x_cluster.ops import ClusterOps
 from x_cluster.post_bodies import FM_PROD, FM_VAL, ff_of_f64
 from x_linear.ff import FF, ff_f32
 
-# `-D MOJOLEARN_BGMM_ESTEP1=1` (FAST, the GPU binding): the E-step's three
-# kernels as one launch, a row per thread (`ops.estep`; the same values).
-comptime BGMM_ESTEP1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ESTEP1"]()
+# TOMBSTONE: MOJOLEARN_BGMM_ESTEP1 (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the E-step's three kernels as one row-per-thread launch (ops.estep); bayesian-gmm taxi 309.7 -> 311.1 ms (+0.5%, noise).
+# Restore: git apply experiments/removed/MOJOLEARN_BGMM_ESTEP1.patch; record in docs/TOMBSTONES.md.
 
 
 struct BgmmState(Copyable, Movable):
@@ -310,9 +308,6 @@ def bgmm_fit[O: ClusterOps](
         ops.moments(ones, xs, n, d, 1, Float32(0), n1, x1, s1)
         var aux = (1 if has_m else 0) + (2 if has_c else 0) + (4 if pr.cov_type == 3 else 0)
         ops.bgmm_step(ST_PRIOR, kc, d, cfg, aux, ws, x1, s1, -1)
-    var estep1 = False
-    comptime if BGMM_ESTEP1:
-        estep1 = ops.fast_device()
     var ovr = (1 if len(w_init) > 0 else 0) + (2 if len(m_init) > 0 else 0)
     var max_lb = Float64(0)
     var have_best = False
@@ -364,12 +359,9 @@ def bgmm_fit[O: ClusterOps](
         for it in range(1, max_iter + 1):
             n_iter = it
             # E-step
-            if estep1:
-                ops.estep(xs, n, d, ms, ps, cs, kc, qs, rs, lpn)
-            else:
-                ops.gauss_q(xs, n, d, ms, ps, kc, qs)
-                ops.resp(qs, cs, n, kc, lpn)
-                ops.exp(qs, rs, n * kc)
+            ops.gauss_q(xs, n, d, ms, ps, kc, qs)
+            ops.resp(qs, cs, n, kc, lpn)
+            ops.exp(qs, rs, n * kc)
             # M-step
             ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
             _m_step(ops, kc, d, cfg, ws, nks, xks, sks)
