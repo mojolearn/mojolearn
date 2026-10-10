@@ -17,13 +17,8 @@ family and the ranking targets keep main's path.
                               (its tail) instead of two, no mid-task
                               readback, no host leaf arithmetic and no
                               `d_est` upload.
-  MOJOLEARN_EST_REUSE_PART    the evaluation runs in ROW order over the
-                              searcher's partition: the live target, weight
-                              and cursor buffers are read in place through
-                              `compute_partition_stats_gather`, so the two
-                              (three) gathers, the identity fill and the bins
-                              fill are gone; a row -> leaf map is scattered
-                              only when a shift needs it.
+  MOJOLEARN_EST_REUSE_PART    (deleted 2026-10-09, DROPPED-BUG; see
+                              docs/TOMBSTONES.md)
   MOJOLEARN_EST_ITERS_DEVICE  `leaf_estimation_iterations > 1`: the whole
                               Newton walk (AnyImprovement line search) runs
                               on the device, one `est_walk_kernel` launch per
@@ -60,9 +55,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul_add
 from gbdt.apple_fast_classical import AFCL_T06
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G07
 from core.identity_trace import IdentityTrace
-from gbdt.gpu_util.kernel.partition_stats_gather import (
-    compute_partition_stats_gather,
-)
 from gbdt.gpu_util.kernel.transform import (
     launch_gather_planes_with_mask_f32,
     launch_gather_with_mask_f32,
@@ -139,15 +131,9 @@ comptime EST_STATS_FUSED = _APPLE_FAST and (
 comptime EST_ITERS_DEVICE = _APPLE_FAST and (
     is_defined["MOJOLEARN_EST_ITERS_DEVICE"]() or EST_ALL
 )
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
-#: unstarted), never timed.
-#: apple-fast LEDGER 2026-10-03: DROP sym-est-rp, BUG: auc .980 -> .930,
-#: logloss .186 -> 2.15 (wrong leaves; cause not found, not fixed here);
-#: recorded loser, OUT of SYM_EST_ALL, not in the A/B table.
-comptime EST_REUSE_PART = _APPLE_FAST and (
-    is_defined["MOJOLEARN_EST_REUSE_PART"]()
-)
+# TOMBSTONE: MOJOLEARN_EST_REUSE_PART (DROPPED-BUG: istella auc .980 -> .930, logloss .186 -> 2.15) deleted 2026-10-09 on
+# lane/owed-deletions-D1 (row-order evaluation over the searcher's partition); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_EST_REUSE_PART.patch; record in docs/TOMBSTONES.md.
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
 #: unstarted), never timed. Port: stands down on a tree where
@@ -160,7 +146,7 @@ comptime EST_SHRINK_FUSED = _APPLE_FAST and (
     is_defined["MOJOLEARN_EST_SHRINK_FUSED"]()
 )
 comptime EST_APPLE_ANY = (
-    EST_STATS_FUSED or EST_ITERS_DEVICE or EST_REUSE_PART or EST_SHRINK_FUSED
+    EST_STATS_FUSED or EST_ITERS_DEVICE or EST_SHRINK_FUSED
 )
 
 #: one block, one thread per leaf (looping past 256 leaves)
@@ -215,7 +201,7 @@ def apple_est_handles(
     ):
         return False
     if iterations == 1:
-        return EST_STATS_FUSED or EST_REUSE_PART or EST_SHRINK_FUSED
+        return EST_STATS_FUSED or EST_SHRINK_FUSED
     return EST_ITERS_DEVICE
 
 
@@ -617,32 +603,9 @@ def est_walk_kernel(
         walk.unsafe_store(6 * cap + 2 * s_out + 1, new_step)
 
 
-def est_fixup_apply_kernel(
-    leaf_of_row: MutPointer[UInt32, MutAnyOrigin],
-    est: MutPointer[Float32, MutAnyOrigin],
-    walk: MutPointer[Float32, MutAnyOrigin],
-    cap_in: Int32,
-    learning_rate: Float32,
-    cursor: MutPointer[Float32, MutAnyOrigin],
-    size_in: Int32,
-    walk_i: MutPointer[Int32, MutAnyOrigin],
-    slot_in: Int32,
-):
-    """`AppendModels` on a cursor the walk shifted in place
-    (`EST_REUSE_PART`): `cursor += learning_rate * est - cursor_point`,
-    which at `cursor_point == 0` (one iteration) is main's FAST add
-    `est * rate + cursor` bit for bit. A no-op while the walk is
-    unfinished (`walk_i[4 * slot + 2] == 0`)."""
-    if walk_i.unsafe_load(4 * Int(slot_in) + 2) == Int32(0):
-        return
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(size_in):
-        return
-    var leaf = Int(leaf_of_row.unsafe_load(i))
-    var delta = est.unsafe_load(leaf) * learning_rate - walk.unsafe_load(
-        Int(cap_in) + leaf
-    )
-    cursor.unsafe_store(i, cursor.unsafe_load(i) + delta)
+# TOMBSTONE: MOJOLEARN_EST_REUSE_PART (DROPPED-BUG: istella auc .980 -> .930, logloss .186 -> 2.15) deleted 2026-10-09 on
+# lane/owed-deletions-D1 (row-order evaluation over the searcher's partition); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_EST_REUSE_PART.patch; record in docs/TOMBSTONES.md.
 
 
 def est_apply_derivs_xent_kernel[
@@ -871,13 +834,11 @@ def apple_fast_estimate_and_apply(
     the device doing the folding and the walking.
 
     The partition arrives as the searcher's `row_index` / `sizes` /
-    `leaf_offsets`. Under `EST_REUSE_PART` the live `targets`, `weights`
-    and `cursor` are read in row order through `row_index`; otherwise they
-    are gathered into bin order (`g_*`) as main does. One drain per tree
+    `leaf_offsets`; the live `targets`, `weights` and `cursor` are gathered
+    into bin order (`g_*`) as main does. One drain per tree
     in the common case; a walk that has accepted nothing after
     `iterations` tries continues in device chunks, one drain each, up to
     the walker's cap of 100 tries."""
-    comptime row_order = EST_REUSE_PART
     var fuse_derivs = EST_SHRINK_FUSED and hook.__bool__()
     var newton = estimation_method == LEAF_ESTIMATION_NEWTON
     var sm = est_sm
@@ -904,73 +865,49 @@ def apple_fast_estimate_and_apply(
     ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_ps.unsafe_ptr())
 
-    # the shift needs a row -> leaf map (row order) or the bins of the
-    # gathered order; the fused derivative pass needs the row -> leaf map
+    # the shift needs the bins of the gathered order
+    # TOMBSTONE: MOJOLEARN_EST_REUSE_PART (DROPPED-BUG) deleted 2026-10-09 on lane/owed-deletions-D1 (its row-order
+    # branches in this task); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_EST_REUSE_PART.patch.
     var need_shift = iterations > 1
-    comptime if row_order:
-        if need_shift or fuse_derivs:
-            ctx.enqueue_function[est_leaf_of_row_kernel](
-                d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(),
-                row_index.unsafe_ptr(), s.d_bins.unsafe_ptr(),
-                grid_dim=(gx, n_leaves, 1),
-                block_dim=(256, 1, 1),
-            )
-    else:
+    launch_gather_with_mask_f32(
+        ctx, g_target, targets, row_index, n_rows, UInt32(0xFFFFFFFF),
+    )
+    if has_weights:
         launch_gather_with_mask_f32(
-            ctx, g_target, targets, row_index, n_rows, UInt32(0xFFFFFFFF),
+            ctx, g_weights, weights, row_index, n_rows,
+            UInt32(0xFFFFFFFF),
         )
-        if has_weights:
-            launch_gather_with_mask_f32(
-                ctx, g_weights, weights, row_index, n_rows,
-                UInt32(0xFFFFFFFF),
-            )
-        launch_gather_planes_with_mask_f32(
-            ctx, g_cursor, cursor, row_index, n_rows,
-            UInt32(0xFFFFFFFF), 1, n_rows,
+    launch_gather_planes_with_mask_f32(
+        ctx, g_cursor, cursor, row_index, n_rows,
+        UInt32(0xFFFFFFFF), 1, n_rows,
+    )
+    if need_shift:
+        ctx.enqueue_function[fill_bins_from_partition_kernel](
+            d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(),
+            s.d_bins.unsafe_ptr(),
+            grid_dim=(gx, n_leaves, 1),
+            block_dim=(256, 1, 1),
         )
-        if need_shift:
-            ctx.enqueue_function[fill_bins_from_partition_kernel](
-                d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(),
-                s.d_bins.unsafe_ptr(),
-                grid_dim=(gx, n_leaves, 1),
-                block_dim=(256, 1, 1),
-            )
 
     # `WeightsCpu` (`pointwise_oracle.cpp:236-243`): the weighted arm's
     # per-leaf weight fold, for `RegularizeImpl` and the Gradient Hessian
     if has_weights:
-        comptime if row_order:
-            compute_partition_stats_gather(
-                ctx, n_leaves, 0, 1, n_rows,
-                s.d_leaves, d_p_off, d_p_sz, weights, row_index,
-                s.d_partials, s.d_wsum_stats,
-                sm_count=_afcl_leaf_stats_sm(sm),
-            )
-        else:
-            compute_partition_stats(
-                ctx, n_leaves, 0, 1, n_rows,
-                s.d_leaves, d_p_off, d_p_sz, g_weights,
-                s.d_partials, s.d_wsum_stats,
-                sm_count=_afcl_leaf_stats_sm(sm), row_bound=max_leaf,
-            )
+        compute_partition_stats(
+            ctx, n_leaves, 0, 1, n_rows,
+            s.d_leaves, d_p_off, d_p_sz, g_weights,
+            s.d_partials, s.d_wsum_stats,
+            sm_count=_afcl_leaf_stats_sm(sm), row_bound=max_leaf,
+        )
     stage_times.end(ctx, "est.stage_in")
 
     @parameter
     def _reduce() raises:
-        comptime if row_order:
-            compute_partition_stats_gather(
-                ctx, n_leaves, 0, 2, n_rows,
-                s.d_leaves, d_p_off, d_p_sz, s.d_eval_stats, row_index,
-                s.d_partials, s.d_part_stats,
-                sm_count=_afcl_leaf_stats_sm(sm),
-            )
-        else:
-            compute_partition_stats(
-                ctx, n_leaves, 0, 2, n_rows,
-                s.d_leaves, d_p_off, d_p_sz, s.d_eval_stats,
-                s.d_partials, s.d_part_stats,
-                sm_count=_afcl_leaf_stats_sm(sm), row_bound=max_leaf,
-            )
+        compute_partition_stats(
+            ctx, n_leaves, 0, 2, n_rows,
+            s.d_leaves, d_p_off, d_p_sz, s.d_eval_stats,
+            s.d_partials, s.d_part_stats,
+            sm_count=_afcl_leaf_stats_sm(sm), row_bound=max_leaf,
+        )
 
     @parameter
     def _walk(phase: Int, slot_in: Int, slot_out: Int) raises:
@@ -992,24 +929,14 @@ def apple_fast_estimate_and_apply(
         # `MoveTo` + `ApproximateAt` fused (DEVIATION 2030's kernels): the
         # shift the previous walk launch wrote, applied by the thread that
         # evaluates the row
-        comptime if row_order:
-            launch_approximate_move_eval[True](
-                ctx, objective, s.d_shift, s.d_bins,
-                targets, weights, Int32(n_rows), cursor, hw,
-                alpha, logloss_border,
-                s.d_eval_stats, s.d_fv, Int32(1),
-                s.d_mag_dummy, Int32(0),
-                mse_blocks,
-            )
-        else:
-            launch_approximate_move_eval[True](
-                ctx, objective, s.d_shift, s.d_bins,
-                g_target, g_weights, Int32(n_rows), g_cursor, hw,
-                alpha, logloss_border,
-                s.d_eval_stats, s.d_fv, Int32(1),
-                s.d_mag_dummy, Int32(0),
-                mse_blocks,
-            )
+        launch_approximate_move_eval[True](
+            ctx, objective, s.d_shift, s.d_bins,
+            g_target, g_weights, Int32(n_rows), g_cursor, hw,
+            alpha, logloss_border,
+            s.d_eval_stats, s.d_fv, Int32(1),
+            s.d_mag_dummy, Int32(0),
+            mse_blocks,
+        )
         _reduce()
         _walk(t, t % 2, (t + 1) % 2)
 
@@ -1018,19 +945,18 @@ def apple_fast_estimate_and_apply(
         # `AppendModels`: the rescaled estimate onto the real cursor
         if fuse_derivs:
             ref h = hook.value()
-            comptime if not row_order:
-                # the bins buffer is free once the walk is done: the row ->
-                # leaf map goes there now (stream order covers the walk)
-                ctx.enqueue_function[est_leaf_of_row_kernel](
-                    d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(),
-                    row_index.unsafe_ptr(), s.d_bins.unsafe_ptr(),
-                    grid_dim=(gx, n_leaves, 1),
-                    block_dim=(256, 1, 1),
-                )
+            # the bins buffer is free once the walk is done: the row ->
+            # leaf map goes there now (stream order covers the walk)
+            ctx.enqueue_function[est_leaf_of_row_kernel](
+                d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(),
+                row_index.unsafe_ptr(), s.d_bins.unsafe_ptr(),
+                grid_dim=(gx, n_leaves, 1),
+                block_dim=(256, 1, 1),
+            )
             _launch_apply_derivs(
                 ctx, objective, h.second_order,
                 s.d_bins, s.d_est, s.d_walk, s.leaves_cap, learning_rate,
-                Int32(1) if row_order else Int32(0),
+                Int32(0),
                 s.d_walk_i, Int32(slot),
                 targets, weights, n_rows, cursor, hw, alpha, logloss_border,
                 h.stats, h.fv_part, h.mag_part,
@@ -1038,48 +964,29 @@ def apple_fast_estimate_and_apply(
                 mse_blocks,
             )
             return
-        comptime if row_order:
-            ctx.enqueue_function[est_fixup_apply_kernel](
-                s.d_bins.unsafe_ptr(), s.d_est.unsafe_ptr(),
-                s.d_walk.unsafe_ptr(), Int32(s.leaves_cap), learning_rate,
-                cursor.unsafe_ptr(), Int32(n_rows),
-                s.d_walk_i.unsafe_ptr(), Int32(slot),
-                grid_dim=(mse_blocks, 1, 1),
-                block_dim=(MSE_BLOCK_SIZE, 1, 1),
-            )
-        else:
-            # `est` is 0 while the walk is unfinished, so this adds nothing
-            # early; the gathered copy took the shifts, the live cursor
-            # takes the estimate
-            ctx.enqueue_function[add_model_value_kernel](
-                d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(),
-                row_index.unsafe_ptr(), s.d_est.unsafe_ptr(),
-                learning_rate, cursor.unsafe_ptr(),
-                Int32(1), Int32(n_rows),
-                grid_dim=(gx, n_leaves, 1),
-                block_dim=(256, 1, 1),
-            )
+        # `est` is 0 while the walk is unfinished, so this adds nothing
+        # early; the gathered copy took the shifts, the live cursor
+        # takes the estimate
+        ctx.enqueue_function[add_model_value_kernel](
+            d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(), s.d_est.unsafe_ptr(),
+            learning_rate, cursor.unsafe_ptr(),
+            Int32(1), Int32(n_rows),
+            grid_dim=(gx, n_leaves, 1),
+            block_dim=(256, 1, 1),
+        )
 
     # the start point's evaluation (zero point, no shift); the value is
     # read only by a line search
     stage_times.begin(ctx)
     var fv_flag = Int32(1) if iterations > 1 else Int32(0)
-    comptime if row_order:
-        launch_approximate[True](
-            ctx, objective, targets, weights, Int32(n_rows), cursor, hw,
-            alpha, logloss_border,
-            s.d_eval_stats, s.d_fv, fv_flag,
-            s.d_mag_dummy, Int32(0),
-            mse_blocks,
-        )
-    else:
-        launch_approximate[True](
-            ctx, objective, g_target, g_weights, Int32(n_rows), g_cursor, hw,
-            alpha, logloss_border,
-            s.d_eval_stats, s.d_fv, fv_flag,
-            s.d_mag_dummy, Int32(0),
-            mse_blocks,
-        )
+    launch_approximate[True](
+        ctx, objective, g_target, g_weights, Int32(n_rows), g_cursor, hw,
+        alpha, logloss_border,
+        s.d_eval_stats, s.d_fv, fv_flag,
+        s.d_mag_dummy, Int32(0),
+        mse_blocks,
+    )
     _reduce()
     _walk(-1, 0, 0)
     var t = 0
