@@ -68,7 +68,14 @@ TABLE_NAME = "table.json"
 #: change only lands together with a regenerated table.
 PARTS = ("train", "infer", "model", "batch", "stepfull")
 OPTIONAL_PARTS = ("batchgrad", "batchscale", "ragged", "rlpair")
-CLASSES = ("apple", "nvidia", "amd", "cpu")
+CLASSES = ("apple", "nvidia", "amd", "cpu", "ptx")
+#: THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag): the
+#: NVIDIA PTX set (mojolearn-nvidia's cuda_ptx/sm_80) recorded on an NVIDIA box,
+#: labelled `nvidia-ptx-<gpu>-sm80`. It is judged against the reference and
+#: never decides one: the reference is NVIDIA == AMD, and a PTX value that
+#: differs is listed (`ptx_divergent`) as a bug to fix, never a conflict that
+#: would take the cell from the NVIDIA and AMD users.
+PTX_CLASS = "ptx"
 
 #: what `mojolearn.vendor()` reads back, as a device class of the table
 VENDOR_CLASS = {"metal": "apple", "cuda": "nvidia", "hip": "amd", "cpu": "cpu"}
@@ -144,7 +151,7 @@ def entry(table, lane, fixture, part, device_class=None):
     """The table entry of one cell part, or None when no record has it."""
     cell = table["cells"].get(f"{lane}/{fixture}")
     ent = None if cell is None else cell.get(part)
-    if not ent or part != "model" or device_class not in ("cpu", "apple", "nvidia", "amd"):
+    if not ent or part != "model" or device_class not in ("cpu", "apple", "nvidia", "amd", "ptx"):
         return ent
     # These CPU lanes load the GPU's saved file; they do not write a model.
     # A newer CPU N/A record must not erase a GPU's model-byte reference.
@@ -161,7 +168,7 @@ def entry(table, lane, fixture, part, device_class=None):
         return ent
     if device_class == "cpu":
         return dict(ref=cpu_na, cols={"cpu": cpu[0]})
-    gpu = {cls: value for cls, value in values.items() if cls in ("apple", "nvidia", "amd")}
+    gpu = {cls: value for cls, value in values.items() if cls in ("apple", "nvidia", "amd", "ptx")}
     hashes = {value for _, value in gpu.values()}
     if not gpu or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{16}", value)
                       for value in hashes):
@@ -251,6 +258,9 @@ def device_class(vendor, filename):
     base = os.path.basename(filename).lower()
     if v.startswith("cpu") or base.startswith("cpu"):
         return "cpu"
+    # `nvidia-ptx-<gpu>-sm80`: the PTX set on an NVIDIA box, its own column.
+    if v.startswith("nvidia-ptx") or base.startswith("nvidia-ptx"):
+        return PTX_CLASS
     for cls in ("apple", "nvidia", "amd"):
         # METAL IS APPLE'S GPU API AND NOTHING ELSE'S (2026-09-19). The
         # `arm64` escape below required "apple" in the FILE NAME, so a column
@@ -308,6 +318,8 @@ def record_device_class(record, filename):
     if options.get("vendor") is not None and options["vendor"] != vendor:
         return None, "backend witness contradicts the explicit vendor label"
     declared = legacy or VENDOR_CLASS.get(vendor)
+    if declared == PTX_CLASS and backend == "cuda":
+        cls = PTX_CLASS  # the PTX set runs on the CUDA backend; the label names the set
     if declared is not None and declared != cls:
         return None, "backend witness contradicts vendor or filename device class"
     if declared is None and vendor not in ("arm64", "aarch64", "x86_64", "amd64"):
@@ -678,13 +690,26 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     grouped = {}
     for (cell_key, part, cls), won in best.items():
         grouped.setdefault((cell_key, part), {})[cls] = won
+    def deciding(g):
+        # The PTX column never decides a reference (PTX_CLASS): only the
+        # device classes the identity rule names do, NVIDIA == AMD.
+        return {c: w for c, w in g.items() if c != PTX_CLASS}
+
+    def newest(g):
+        return max(g, key=lambda c: g[c][0])
+
     used = sorted({won[1] for g in grouped.values() for won in g.values()
-                   if _corroborated(g, g[max(g, key=lambda c: g[c][0])][2])})
+                   if deciding(g) and _corroborated(deciding(g), deciding(g)[newest(deciding(g))][2])})
     renum = {old: new for new, old in enumerate(used)}
+    ptx_divergent = []
     for (cell_key, part), by_cls in sorted(grouped.items()):
-        newest_cls = max(by_cls, key=lambda c: by_cls[c][0])
+        decide = deciding(by_cls)
+        if not decide:
+            uncorroborated[part] = uncorroborated.get(part, 0) + 1
+            continue
+        newest_cls = newest(decide)
         n_key, _, ref, _ = by_cls[newest_cls]
-        if not _corroborated(by_cls, ref):
+        if not _corroborated(decide, ref):
             uncorroborated[part] = uncorroborated.get(part, 0) + 1
             continue
         ent = dict(ref=ref, cols={})
@@ -692,6 +717,12 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
             k, idx, value, _ = by_cls[cls]
             if value == ref:
                 ent["cols"][cls] = renum[idx]
+            elif cls == PTX_CLASS:
+                # A bug to fix in the PTX codegen (docs/NVIDIA_PTX_IDENTITY.md),
+                # listed, never a conflict and never a reason to rerun.
+                ent["cols"][cls] = [renum[idx], value]
+                ptx_divergent.append(dict(cell=cell_key, part=part, ptx=value, reference=ref,
+                                          record=f"{records[idx]['dir']}/{records[idx]['file']}"))
             elif k[0] == n_key[0] and records[idx]["commit"] == records[by_cls[newest_cls][1]]["commit"]:
                 ent["conflict"] = True
                 ent["cols"][cls] = [renum[idx], value]
@@ -710,6 +741,8 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     for part in sorted(uncorroborated):
         log(f"uncorroborated {part}: {uncorroborated[part]} cell parts rest on one fit of one "
             "device class and were left out; a second class fitting the cell once admits them")
+    for row in ptx_divergent:
+        log(f"PTX-DIVERGENT {row['cell']} {row['part']}: ptx {row['ptx']} reference {row['reference']} ({row['record']})")
     return dict(
         format=FORMAT,
         generated_by="python -m mojolearn verify --all --emit-reference",
@@ -734,6 +767,10 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         fixtures=want_fix, heldout=want_held,
         records=[records[i] for i in used],
         cells=cells,
+        #: Cell parts where the PTX column differs from the NVIDIA == AMD
+        #: reference: each is a PTX codegen bug to fix; the release admission
+        #: (tools/admit_identity_columns.sh) refuses a table with any.
+        ptx_divergent=ptx_divergent,
     )
 
 

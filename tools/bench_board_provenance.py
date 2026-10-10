@@ -28,7 +28,9 @@ def sha(path):
 
 
 def requested_path():
-    return os.environ.get('MOJOLEARN_CUDA_PATH', 'native').strip().lower()
+    """'ptx' when the worker selects the PTX set by name (MOJOLEARN_GPU_ARCH=sm_80;
+    Andrew 2026-10-10: PTX is a normal target; no flag), else 'native'."""
+    return 'ptx' if os.environ.get('MOJOLEARN_GPU_ARCH', '').strip().lower() == 'sm_80' else 'native'
 
 
 def identity(path):
@@ -37,12 +39,10 @@ def identity(path):
             raise ValueError('Forced PTX boards require --artifact-manifest; legacy smoke is not path evidence')
         return None
     d = json.loads(Path(path).read_text())
-    if d.get('schema') != SCHEMA or d.get('code_path') not in ('native', 'ptx-baseline'):
+    if d.get('schema') != SCHEMA or d.get('code_path') not in ('native', 'ptx'):
         raise ValueError('Invalid board artifact manifest schema/code_path')
     if d['code_path'] != requested_path():
         raise ValueError('Artifact manifest code path differs from requested loader path')
-    if d['code_path'] == 'ptx-baseline' and os.environ.get('MOJOLEARN_EXPERIMENTAL_PTX') != '1':
-        raise ValueError('PTX requires explicit experimental opt-in')
     if len(d.get('source_commit', '')) != 40 or d.get('numeric_mode') != 'identical':
         raise ValueError('Guarded board requires full source SHA and IDENTICAL numeric mode')
     files = d.get('files')
@@ -72,7 +72,7 @@ def identity(path):
             if not Path(name).is_absolute() or '..' in Path(name).parts or len(digest) != 64:
                 raise ValueError('Runtime inventory requires absolute paths and hashes')
         out['runtime_files'] = runtime
-    if d['code_path'] == 'ptx-baseline' and not runtime:
+    if d['code_path'] == 'ptx' and not runtime:
         raise ValueError('Paired PTX board requires pinned common runtime_files')
     return out
 
@@ -212,19 +212,19 @@ def collect(manifest):
     if not gpu:
         raise ValueError('No actual GPU binding loads witnessed')
     runtime = backend.baseline_selection_receipt()
-    if manifest['code_path'] == 'ptx-baseline':
-        if not runtime or runtime.get('requested') != 'ptx-baseline' or runtime.get('selected') != 'ptx-baseline' or runtime.get('native_fallback') is not False or runtime.get('source_commit') != manifest['source_commit']:
-            raise ValueError('Missing forced PTX runtime selection receipt')
+    if manifest['code_path'] == 'ptx':
+        if not runtime or runtime.get('selected') != 'ptx' or runtime.get('source_commit') != manifest['source_commit']:
+            raise ValueError('Missing PTX runtime selection receipt')
         root = Path(backend._BASELINE_ROOT).resolve()
         actual = {((package / r['file']).relative_to(root).as_posix(), r['sha256']) for r in gpu}
         if {(r['file'], r['sha256']) for r in runtime.get('loaded_files', [])} != actual:
             raise ValueError('PTX runtime receipt differs from actual loaded bindings')
     elif runtime is not None:
-        raise ValueError('Native run selected a PTX fallback')
+        raise ValueError('Native run selected the PTX set')
     hardware = hardware_receipt(manifest.get('vendor', 'cuda'))
     return dict(status='verified', artifact_identity=manifest, loaded_files=loaded,
                 runtime_selection=runtime, loaded_runtime_files=loaded_runtime(manifest), hardware=hardware, numeric_mode=ml.numeric_mode(),
-                source_commit=manifest['source_commit'], identical_qualified=False)
+                source_commit=manifest['source_commit'])
 
 
 def register_worker(library):
@@ -271,14 +271,14 @@ def read_receipts(directory, manifest, arms):
 
 
 def compare_boards(native, ptx):
-    """Compare paired timing evidence, never promote PTX to admission.
+    """Compare paired native and PTX timing evidence on one box.
 
-    Missing output digests are explicitly counted: matching timings and
-    available hashes are not full identity qualification.
+    Missing output digests are explicitly counted. Identity is the reference
+    table's PTX column (docs/NVIDIA_PTX_IDENTITY.md), not this comparison.
     """
     configs = [d.get('config', {}) for d in (native, ptx)]
     identities = [c.get('artifact_identity') for c in configs]
-    if not all(identities) or [i.get('code_path') for i in identities] != ['native', 'ptx-baseline']:
+    if not all(identities) or [i.get('code_path') for i in identities] != ['native', 'ptx']:
         raise ValueError('Require guarded native then guarded PTX board')
     if not identities[0].get('runtime_files') or identities[0].get('runtime_files') != identities[1].get('runtime_files'):
         raise ValueError('Paired boards require the same pinned common runtime environment')
@@ -333,7 +333,7 @@ def compare_boards(native, ptx):
                 compared.append(dict(race=rid, arm=arm, phase=phase, native_ms=ms[0], ptx_ms=ms[1], ptx_over_native=ms[1]/ms[0]))
     return dict(schema='mojolearn-paired-board-comparison/1', source_commit=identities[0]['source_commit'],
                 hardware=hardware, races=len(native['plan']), comparisons=compared,
-                missing_output_digests=missing_hashes, identical_qualified=False, release_qualified=False)
+                missing_output_digests=missing_hashes)
 
 
 if __name__ == '__main__':

@@ -11849,11 +11849,25 @@ def _run_reference(args):
     # PROVENANCE BEFORE THE FIRST FIT. The label and the commit are refused
     # here, in seconds, not after nine fixtures of fits.
     vendor = check_vendor_label(args.vendor if args.vendor is not None else default_vendor_label(ml))
+    # THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag). A CUDA
+    # record is the `ptx` device class exactly when the PTX set ran, and its label
+    # says so (`nvidia-ptx-<gpu>-sm80`): an A100 or H100 record taken through the
+    # PTX set must never stand for the native NVIDIA column, nor the reverse.
+    gpu_arch = code_format = None
+    if ml.vendor() == "cuda":
+        from mojolearn import _backend as _ml_backend
+        gpu_arch = _ml_backend.gpu_arch()
+        code_format = "ptx" if _ml_backend.baseline_selection_receipt() is not None else "native"
+        if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
+            raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
+                             f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
     commit, commit_source = commit_witness()
     host = host_record(ml) if ml.vendor() == "cpu" else None
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
                    numpy=np.__version__, python=platform.python_version(),
                    par_devices=",".join(str(d) for d in _par_devices()))
+    if gpu_arch is not None:
+        package.update(gpu_arch=gpu_arch, cuda_code_format=code_format)
     if N != 20000:
         package["fixture_n"] = N
     if PAR_WIDE:

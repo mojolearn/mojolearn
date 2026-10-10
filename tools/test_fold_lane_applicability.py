@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 import lane_applicability as applicability
-import nvidia_baseline_qualification as qualification
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,8 +52,8 @@ def test_fold_lane_is_cpu_applicable_and_never_gpu_coverage():
     assert not applicability._SCOPES_DISAGREE
 
 
-def test_baseline_inventory_excludes_host_work_without_a_metadata_gap():
-    inventory = qualification.inventory(applicability.identity_break())
-    assert 'cross-val-folds' not in inventory['lanes']
-    assert 'CPU host route' in inventory['excluded']['cross-val-folds']
-    assert not inventory['applicability_gaps']
+def test_nvidia_inventory_excludes_host_work_without_a_metadata_gap():
+    applicability.use_harness(applicability.identity_break())
+    ok, reason = applicability.scopes()['cross-val-folds'].applicable('nvidia-1gpu')
+    assert not ok and 'CPU host route' in reason
+    assert not applicability._SCOPES_DISAGREE

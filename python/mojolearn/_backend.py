@@ -713,6 +713,22 @@ def _ptx_directory(pkg):
     return os.path.join(pkg, vdir, gpu_plugins.PTX_ARCH)
 
 
+def _installed_source_commit(pkg):
+    """The source commit of this install: identity_columns/COMMIT in a wheel;
+    in a source checkout (a recording box: tools/record_identity_column.sh
+    nvidia-ptx-*) the checkout's HEAD, which that script holds clean."""
+    from pathlib import Path
+    marker = Path(pkg) / "identity_columns" / "COMMIT"
+    if marker.is_file() or _split_core():
+        return marker.read_text().strip()
+    import subprocess
+    try:
+        return subprocess.run(["git", "-C", str(pkg), "rev-parse", "HEAD"], capture_output=True,
+                              text=True, timeout=20, check=True).stdout.strip()
+    except subprocess.SubprocessError as exc:
+        raise ValueError(f"no identity_columns/COMMIT and no git checkout at {pkg}: {exc}") from exc
+
+
 def _ptx_base(pkg, why, how):
     """THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag).
 
@@ -742,7 +758,7 @@ def _ptx_base(pkg, why, how):
                   for p in root.rglob("*.so")
                   if not {"host", ".libs"} & set(p.relative_to(root).parts)}  # glue: inventory installed binary paths and file digests (the manifest's scope)
         gpu_plugins.validate_baseline_manifest(doc, actual)
-        source = (Path(pkg) / "identity_columns" / "COMMIT").read_text().strip()
+        source = _installed_source_commit(pkg)
         if source != doc["source_commit"] or doc.get("source_dirty") is not False:
             raise ValueError("the PTX set's source differs from the clean installed core")
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:

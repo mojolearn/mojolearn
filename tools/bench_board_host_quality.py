@@ -85,7 +85,7 @@ def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_ca
     data, ref, receipt = root / 'inputs.npz', root / 'host.npz', root / 'receipt.json'
     np.savez(data, **inputs)
     env = dict(os.environ, MOJOLEARN_VENDOR='cpu', MOJOLEARN_NUMERIC_MODE='identical')
-    for key in ('PYTHONPATH', 'MOJOLEARN_CUDA_PATH', 'MOJOLEARN_EXPERIMENTAL_PTX',
+    for key in ('PYTHONPATH',
                 'MOJOLEARN_GPU_ARCH', 'MOJOLEARN_BOARD_ARTIFACT_MANIFEST', 'MOJOLEARN_BOARD_RECEIPTS'):
         env.pop(key, None)
     # The race tree imports mojolearn through PYTHONPATH (not an installed wheel), so the host child gets the parent's
