@@ -139,8 +139,9 @@ pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
 brief records what it has shown.
 """
 from experiments.classical_identical_ideas.shared_controls import C01_MEAN
-from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, TSVD_FUSED_STATS
-from core.blocked_moments_host import host_bm_column_mean, host_bm_tsvd_variances
+from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04
+from core.blocked_moments_host import host_bm_column_mean
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
 from core.classical_centered import centered_gram_v1_cell
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -822,23 +823,8 @@ def host_tsvd_explained(
     DeviceContext: X V^T by `host_gemm_nt_into` (`tsvd_transform`'s host
     arm), then both column variances."""
     host_pca_validate(n_rows, n_features, n_components)
-    comptime if TSVD_FUSED_STATS:
-        # MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS: `bm_tsvd_variances`' host column
-        var xs = List[Float32](length=n_rows * n_features, fill=Float32(0.0))
-        for i in range(n_rows * n_features):
-            xs[i] = x[i]
-        var vs = List[Float32](length=n_components * n_features, fill=Float32(0.0))
-        for i in range(n_components * n_features):
-            vs[i] = components[i]
-        var both = host_bm_tsvd_variances(xs, vs, n_rows, n_features, n_components)
-        var vx = List[Float32](length=n_features, fill=Float32(0.0))
-        var vt = List[Float32](length=n_components, fill=Float32(0.0))
-        for i in range(n_features):
-            vx[i] = both[i]
-        for i in range(n_components):
-            vt[i] = both[n_features + i]
-        tsvd_explained_finish(vt, vx, explained_ptr, ratio_ptr)
-        return
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
     var xt = List[Float32](length=n_rows * n_components, fill=Float32(0.0))
     host_gemm_nt_into(
         x, components, host_list_ptr(xt), n_rows, n_components, n_features,

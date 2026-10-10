@@ -187,87 +187,8 @@ def bm_leaf_gram_kernel(
             part.unsafe_store(base + j * d + i, acc)
 
 
-@always_inline
-def _tsvd_value(x: BmPtr, v: BmPtr, r: Int, d: Int, j: Int) -> Float32:
-    """Column `j` of [X | X V^T] at row `r`; a projection is one ascending
-    flushed multiply-add chain over the features."""
-    if j < d:
-        return ftz(x.unsafe_load(r * d + j))
-    var c = j - d
-    var acc = Float32(0.0)
-    for f in range(d):
-        acc = bm_fma(ftz(x.unsafe_load(r * d + f)), ftz(v.unsafe_load(c * d + f)), acc)
-    return acc
-
-
-def bm_tsvd_leaf_kernel(
-    leaf_mean: BmPtr, leaf_m2: BmPtr, x: BmPtr, v: BmPtr,
-    n_in: Int32, d_in: Int32, nc_in: Int32, leaf_in: Int32,
-):
-    """Block `k` = leaf `k` of [X | X V^T] (m = d + nc columns, the
-    projection formed on the fly, never stored): per column the leaf mean,
-    then the leaf's centered sum of squares, in the colsum kernel's
-    (s, j) chains. One read of the leaf for the sums, one for the squares."""
-    var n = Int(n_in)
-    var d = Int(d_in)
-    var m = d + Int(nc_in)
-    var leaf = Int(leaf_in)
-    var k = Int(block_idx.x)
-    var t = Int(thread_idx.x)
-    var r0 = k * leaf
-    var r1 = min(n, r0 + leaf)
-    var cnt = Float32(r1 - r0)
-    var sh = stack_allocation[BM_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var mu = stack_allocation[BM_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    if m <= BM_TPB:
-        var chains = bm_sub_chains(m)
-        var s = t // m
-        var j = t - s * m
-        var acc = Float32(0.0)
-        if s < chains:
-            var r = r0 + s
-            while r < r1:
-                acc = bm_add(acc, _tsvd_value(x, v, r, d, j))
-                r += chains
-        sh[t] = acc
-        barrier()
-        if t < m:
-            var tot = sh[t]
-            for q in range(1, chains):
-                tot = bm_add(tot, sh[q * m + t])
-            mu[t] = bm_div(tot, cnt)
-        barrier()
-        var acc2 = Float32(0.0)
-        if s < chains:
-            var mj = mu[j]
-            var r = r0 + s
-            while r < r1:
-                var c = bm_sub(_tsvd_value(x, v, r, d, j), mj)
-                acc2 = bm_fma(c, c, acc2)
-                r += chains
-        barrier()
-        sh[t] = acc2
-        barrier()
-        if t < m:
-            var tot = sh[t]
-            for q in range(1, chains):
-                tot = bm_add(tot, sh[q * m + t])
-            leaf_mean.unsafe_store(k * m + t, mu[t])
-            leaf_m2.unsafe_store(k * m + t, tot)
-    else:
-        var j = t
-        while j < m:
-            var acc = Float32(0.0)
-            for r in range(r0, r1):
-                acc = bm_add(acc, _tsvd_value(x, v, r, d, j))
-            var mj = bm_div(acc, cnt)
-            var acc2 = Float32(0.0)
-            for r in range(r0, r1):
-                var c = bm_sub(_tsvd_value(x, v, r, d, j), mj)
-                acc2 = bm_fma(c, c, acc2)
-            leaf_mean.unsafe_store(k * m + j, mj)
-            leaf_m2.unsafe_store(k * m + j, acc2)
-            j += BM_TPB
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
 
 
 # ---------------------------------------------------------------------------
@@ -607,25 +528,5 @@ def bm_centered_cross_panels(
 # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 
 
-def bm_tsvd_variances(
-    ctx: DeviceContext, var_out: BmPtr, x: BmPtr, v: BmPtr, n: Int, d: Int, nc: Int,
-) raises:
-    """TSVD_FUSED_STATS: `var_out[0:d]` = np.var(X, axis=0) and
-    `var_out[d:d+nc]` = np.var(X V^T, axis=0) (ddof 0), the projection formed
-    inside the leaf kernel, the moments merged by Chan's update."""
-    var m = d + nc
-    if m < 1 or n < 1:
-        return
-    var leaf = bm_onepass_leaf_rows(n, m)
-    var leaves = bm_leaf_count(n, leaf)
-    var lmean = ctx.enqueue_create_buffer[DType.float32](leaves * m)
-    var lm2 = ctx.enqueue_create_buffer[DType.float32](leaves * m)
-    var outm = ctx.enqueue_create_buffer[DType.float32](m)
-    ctx.enqueue_function[bm_tsvd_leaf_kernel](
-        _bp(lmean), _bp(lm2), x, v, Int32(n), Int32(d), Int32(nc), Int32(leaf),
-        grid_dim=leaves, block_dim=BM_TPB,
-    )
-    bm_chan_fold[True](ctx, lm2, lmean, leaves, m, n, leaf, var_out, _bp(outm), n)
-    _ = lmean^
-    _ = lm2^
-    _ = outm^
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.

@@ -195,13 +195,9 @@ comptime C23_MCD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_MCD"]()
 comptime _PCA_COV_RAW = get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV", 0]()
 comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4
 comptime PCA_COV_C04 = CLASSICAL_IDN and _PCA_COV_RAW == 4
-# TSVD_FUSED_STATS (new, lane classical-decomp): TruncatedSVD's
-# explained_variance_ / _ratio_ in one blocked kernel: per leaf the mean and
-# centered sum of squares of X's columns and of X V^T's columns (the
-# projection formed in the kernel, never stored), merged by Chan's update.
-# Replaces gemm_nt + two (mean, shift, square, mean) chains: about 8 passes
-# over n x d down to 2 reads of each leaf. NOT MEASURED.
-comptime TSVD_FUSED_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
+# Grid g50ebe26a5: tsvd NV/AMD istella 2.34x/3.46x, taxi 1.83x/1.38x SLOWER (combined 2.84x / 1.59x).
 comptime C24_PANEL8 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_PANEL8"]()
 # C24 ROWS2048: TSQR leaf blocks of 2048 rows instead of 4096
 # (x_decomp/tsqr_core.mojo TS_ROWS; twice the leaf blocks in flight per
