@@ -111,3 +111,18 @@ def test_device_free_binding_requires_registered_same_tier_delegates(tmp_path):
     assert len(row['delegates']) == 2
     (tmp_path / 'unregistered.so').write_bytes(b'host wrapper')
     assert any('unregistered binary' in e for e in baseline.audit_tree(tmp_path, 'a' * 40, 'Mojo')['errors'])
+
+
+def test_source_witness_reads_archive_commit_txt_without_git(tmp_path, monkeypatch):
+    # The release route builds an exported archive: no .git, commit.txt is the
+    # witness (GitHub run 38062838354 died here calling git in the container).
+    sha = 'ab' * 20
+    (tmp_path / 'commit.txt').write_text(sha + '\n')
+    monkeypatch.setenv('MOJOLEARN_COMMIT', sha)
+    assert baseline.source_witness(tmp_path) == (sha, False)
+    monkeypatch.setenv('MOJOLEARN_COMMIT', 'cd' * 20)
+    with pytest.raises(SystemExit):
+        baseline.source_witness(tmp_path)
+    (tmp_path / 'commit.txt').unlink()
+    with pytest.raises(SystemExit):
+        baseline.source_witness(tmp_path)
