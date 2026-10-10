@@ -6,15 +6,15 @@
  "head_note": "Neural-gaps lane N3 (2026-10-09): LayerNorm device I/O for the class (default ON, env before arm), kept forward stats (default ON, env before arm), and the IDENTICAL 32-lane row fold (default OFF, bits change, the gridded switch)",
  "controls": {
   "ln_row_warp": {
-   "define": "MOJOLEARN_IDN_LN_ROW_WARP",
+   "define": "MOJOLEARN_IDN_LN_ROW_WARP_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_LN_ROW_WARP=1"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_LN_ROW_WARP_OFF=1"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "sequence/layernorm.mojo:42",
     "sequence/layernorm.mojo:90",
@@ -27,8 +27,8 @@
     "_mojolearn_x_sequence_host"
    ],
    "bits_change": true,
-   "status": "new",
-   "note": "IDENTICAL only. The LayerNorm forward (sum x, sum (x - mean)^2) and backward-x (sum g, sum g xhat) row reductions as fold32's 32-slot order: logical lane j folds c = j, j + 32, ... ascending from +0.0, then the five-level pairwise tree (tree32). Device: the coop warp cell (coop_ln_fwd_rw / coop_ln_bwd_x_rw, shuffle_xor strides 16..1, inside a 32-lane half on CDNA); one-thread op and host twin: the same slots and tree32. BITS CHANGE against main's one-chain row on NVIDIA, AMD and host together; dweight / dbias folds unchanged. Cost: the one-chain row is D dependent adds per reduction (latency-bound at any D >= 32); the fold is D/32 + 5. ID check nv/amd owed before the A/B. Reaches neural:layernorm (and any LayerNorm user)."
+   "status": "promoted 2026-10-10 (lane/postmerge-act-6; post-merge neural A/B, one run per arm, nv2 L40S v1056 -> v1057 on main 9f83ea479, amd MI325X a1156 -> a1157 on main 0a7b206f1): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
+   "note": "IDENTICAL only. The LayerNorm forward (sum x, sum (x - mean)^2) and backward-x (sum g, sum g xhat) row reductions as fold32's 32-slot order: logical lane j folds c = j, j + 32, ... ascending from +0.0, then the five-level pairwise tree (tree32). Device: the coop warp cell (coop_ln_fwd_rw / coop_ln_bwd_x_rw, shuffle_xor strides 16..1, inside a 32-lane half on CDNA); one-thread op and host twin: the same slots and tree32. BITS CHANGE against main's one-chain row on NVIDIA, AMD and host together; dweight / dbias folds unchanged. Cost: the one-chain row is D dependent adds per reduction (latency-bound at any D >= 32); the fold is D/32 + 5. ID check nv/amd owed before the A/B. Reaches neural:layernorm (and any LayerNorm user). PROMOTED: layernorm NV 1.394 -> 1.071 ms (0.77x) / AMD 1.446 -> 1.143 ms (0.79x); digest 5fe9165c -> 2a8100a0 on BOTH vendors (bits change; every LayerNorm row in IDENTICAL, host twin with it). The off arm restores the one-chain row."
   },
   "ln_class_device_io_off": {
    "define": "MOJOLEARN_LN_CLASS_DEVICE_IO_OFF",

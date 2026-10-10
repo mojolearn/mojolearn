@@ -217,7 +217,8 @@ def coop_ln_bwd_x(row: Int, lane: Int, a: Args):
         c += COOP_W
 
 
-#: lane layernorm-idn N3 (2026-10-09), `-D MOJOLEARN_IDN_LN_ROW_WARP` (the
+#: lane layernorm-idn N3 (2026-10-09), MOJOLEARN_IDN_LN_ROW_WARP, the IDENTICAL
+#: default since 2026-10-10 (`_OFF` restores the one-chain row; the
 #: define and the cost reasoning: sequence/layernorm.mojo LN_ROW_WARP). The
 #: row's reductions on the cell's 32 lanes: lane j folds c = j, j + 32, ...
 #: ascending from +0.0 (coalesced: consecutive lanes read consecutive

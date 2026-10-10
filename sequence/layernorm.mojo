@@ -13,9 +13,14 @@ from std.sys.compile import is_defined, get_defined_int
 from std.sys.info import has_apple_gpu_accelerator
 from sequence.fold32 import FOLD_L, tree32
 
-#: lane layernorm-idn N3 (2026-10-09), `-D MOJOLEARN_IDN_LN_ROW_WARP`, IDENTICAL,
-#: default OFF, BITS CHANGE (a fold order; allowed within one version, every
-#: column together). The row reductions of the forward (sum x, sum (x-mean)^2)
+#: lane layernorm-idn N3 (2026-10-09), MOJOLEARN_IDN_LN_ROW_WARP, IDENTICAL,
+#: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D
+#: MOJOLEARN_IDN_LN_ROW_WARP_OFF` restores the one-chain row; the old on-define
+#: is refused in core/six_lane_experiment_guards.mojo). Post-merge A/B, one run
+#: per arm (nv2 L40S v1056 -> v1057 on main 9f83ea479, MI325X a1156 -> a1157 on
+#: main 0a7b206f1): layernorm NV 1.394 -> 1.071 ms (0.77x) / AMD 1.446 -> 1.143
+#: ms (0.79x); digest 5fe9165c -> 2a8100a0 on BOTH vendors. BITS CHANGE (a fold
+#: order; allowed within one version, every column together, host twin too). The row reductions of the forward (sum x, sum (x-mean)^2)
 #: and of the backward-x (sum g, sum g xhat) stop being one ascending chain of
 #: D terms and become a FIXED 32-LANE FOLD: logical lane j (0 <= j < 32) folds
 #: elements c = j, j + 32, j + 64, ... ascending from +0.0, then a five-level
@@ -41,7 +46,7 @@ from sequence.fold32 import FOLD_L, tree32
 #: dweight / dbias column folds are untouched (LN_FOLD_BLOCK above).
 comptime LN_ROW_WARP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_LN_ROW_WARP"]()
+    and not is_defined["MOJOLEARN_IDN_LN_ROW_WARP_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: logical lanes of the row fold (the tree has log2(LN_RW_LANES) = 5 levels)
