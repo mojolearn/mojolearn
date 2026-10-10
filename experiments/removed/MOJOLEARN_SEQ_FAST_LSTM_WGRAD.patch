@@ -1,0 +1,144 @@
+diff --git a/sequence/recurrent.mojo b/sequence/recurrent.mojo
+index 962bf20c9..ed8802e50 100644
+--- a/sequence/recurrent.mojo
++++ b/sequence/recurrent.mojo
+@@ -48,7 +48,7 @@ from sequence.ops import (
+     gates_of,
+ )
+ from sequence.mlp import mlp_epoch_key, mlp_perm_args
+-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_applies
++from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, SEQ_LSTM_WGRAD, scan_applies
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
+ 
+ from std.sys.compile import is_defined, get_defined_int
+@@ -198,10 +198,50 @@ def gemm[E: Exec](
+     ex.launch[OP_GEMM](a, M * N)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_WGRAD (DROPPED-quality with the SCAN bundle, 2026-10-04: lstm-clf accuracy 0.9608 ->
+-# 0.5002, lstm-reg r2 0.9804 -> -0.1043; never A/B-ed alone) deleted 2026-10-09 on lane/owed-deletions-D2: the FAST split-K
+-# weight-gradient folds (wgrad_gemm, WGRAD_SCRATCH); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch
++#: SEQ_LSTM_WGRAD: the split-K scratch (floats) every weight-gradient fold shares
++comptime WGRAD_SCRATCH = 65536
++
++
++def wgrad_gemm[E: Exec](
++    mut ex: E, A: FP, B: FP, C: FP, M: Int, N: Int, K: Int,
++    sam: Int, sak: Int, sbk: Int, sbn: Int, ldc: Int, scratch: FP,
++) raises:
++    """SEQ_LSTM_WGRAD (FAST + Apple, lane apple-fast-gap-lstm): a weight or
++    bias gradient, C = A B over the K = T B (time x batch) rows, which ran
++    as M N threads each one K-long chain (6,144 terms on the board, 256
++    threads for dW_ih and the bias sums). K splits into S blocks of >= 512
++    so about 65,536 threads fold a block each from zero, then one ordered
++    sum of the S partials per cell (`OP_GEMM_SPLITK`). A different fold
++    order from `gemm`'s chain: FAST only. Shapes outside the bound keep
++    `gemm`."""
++    var MN = M * N
++    if MN <= 16384 and K >= 2048:
++        var S = min(WGRAD_SCRATCH // MN, K // 512)
++        if S > 1:
++            var KS = (K + S - 1) // S
++            S = (K + KS - 1) // KS
++            var a = Args()
++            a.p0 = A
++            a.p1 = B
++            a.p2 = C
++            a.p3 = scratch
++            a.i0 = M
++            a.i1 = N
++            a.i2 = K
++            a.i3 = sam
++            a.i4 = sak
++            a.i5 = sbk
++            a.i6 = sbn
++            a.i7 = 0
++            a.i8 = ldc
++            a.i9 = S
++            a.i10 = KS
++            a.i11 = 0
++            ex.launch[OP_GEMM_SPLITK](a, S * MN)
++            a.i11 = 1
++            ex.launch[OP_GEMM_SPLITK](a, MN)
++            return
++    gemm(ex, A, B, C, M, N, K, sam, sak, sbk, sbn, False, ldc)
+ 
+ 
+ def wgrad_blocked[E: Exec](
+@@ -360,11 +400,14 @@ struct Work(Movable):
+         self.yhat = ex.alloc(B * net.O)
+         self.dy = ex.alloc(B * net.O)
+         self.sq = ex.alloc(B * net.O)
+-        comptime if SEQ_WGRAD_BLOCKED:
++        comptime if SEQ_LSTM_WGRAD or SEQ_WGRAD_BLOCKED:
+             # the bias sums as ones^T dG (one fma by 1.0 per term, exact)
+             self.one = ex.alloc(1)
+             fill(ex, self.one, 1, Float32(1.0))
+-            self.wsplit = ex.alloc(WGRAD_IDN_SCRATCH if train else 1)
++            comptime if SEQ_WGRAD_BLOCKED:
++                self.wsplit = ex.alloc(WGRAD_IDN_SCRATCH if train else 1)
++            else:
++                self.wsplit = ex.alloc(WGRAD_SCRATCH if train else 1)
+         else:
+             self.one = self.sq
+             self.wsplit = self.sq
+@@ -514,9 +557,12 @@ def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int,
+             dhn = t
+             s -= 1
+         var inp = x if l == 0 else w.hall[l - 1] + B * H
+-        # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_WGRAD (DROPPED-quality bundle) deleted 2026-10-09 on lane/owed-deletions-D2;
+-        # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch
+-        comptime if SEQ_WGRAD_BLOCKED:
++        comptime if SEQ_LSTM_WGRAD:
++            wgrad_gemm(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, din, w.wsplit)
++            wgrad_gemm(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, H, w.wsplit)
++            wgrad_gemm(ex, w.one, w.dgx, Gr + net.b_ih(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
++            wgrad_gemm(ex, w.one, w.dgh, Gr + net.b_hh(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
++        elif SEQ_WGRAD_BLOCKED:
+             wgrad_blocked(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, din, w.wsplit)
+             wgrad_blocked(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, H, w.wsplit)
+             if wgrad_block(T * B) < T * B:
+diff --git a/sequence/recurrent_scan.mojo b/sequence/recurrent_scan.mojo
+index 165b9b12c..1fbaaa047 100644
+--- a/sequence/recurrent_scan.mojo
++++ b/sequence/recurrent_scan.mojo
+@@ -19,19 +19,23 @@ Switches (FAST + Apple GPU only; IDENTICAL and other vendors compile main):
+    -D MOJOLEARN_IDN_SEQ_LSTM_SCAN, see the TOMBSTONE below.)
+   (-D MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM, h_prev / dGH_{s+1} staged in
+    threadgroup memory, was deleted 2026-10-09 with the same verdict.)
+-  (-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD, the split-K weight-gradient folds,
+-   was deleted 2026-10-09 with the same verdict.)
++  -D MOJOLEARN_SEQ_FAST_LSTM_WGRAD      the (time x batch)-long weight and bias
++                                        gradient folds split over K
++                                        (sequence/recurrent.mojo gemm/colsum;
++                                        a different fold order, FAST only)
+ 
+ The host executor runs the scan ops as the per-step launches they replace
+ (row by row, step by step): the same cells in the same order.
+ """
+ from std.gpu import block_idx, thread_idx
+ from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
+ 
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+ from x_linear.team import team_barrier
+ from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, st
+ 
++comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+ #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+ #: apple-fast-rec-ab2 @ 40027eb8e), the bundle SCAN + SCAN_SMEM + WGRAD:
+ #: lstm-clf 1877.4 -> 1315.5 ms but accuracy 0.9608 -> 0.5002, logloss 0.0954
+@@ -74,10 +78,7 @@ comptime SEQ_LSTM_SCAN = SEQ_LSTM_SCAN_IDN
+ # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM (bundle DROPPED-quality, rab10 SCAN + SMEM does not train) deleted 2026-10-09
+ # on lane/owed-deletions-D2: the define and both kernels' staged arms; code recoverable at b639a2bd2.
+ # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM.patch
+-# TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_WGRAD (DROPPED-quality with the SCAN bundle, 2026-10-04: lstm-clf accuracy 0.9608 ->
+-# 0.5002, lstm-reg r2 0.9804 -> -0.1043; never A/B-ed alone) deleted 2026-10-09 on lane/owed-deletions-D2: the FAST split-K
+-# weight-gradient folds (wgrad_gemm, WGRAD_SCRATCH); code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch
++comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
+ comptime OP_CELL_FWD_SCAN = 120
+ comptime OP_CELL_BWD_SCAN = 121
+ 

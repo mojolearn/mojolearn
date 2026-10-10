@@ -19,23 +19,19 @@ Switches (FAST + Apple GPU only; IDENTICAL and other vendors compile main):
    -D MOJOLEARN_IDN_SEQ_LSTM_SCAN, see the TOMBSTONE below.)
   (-D MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM, h_prev / dGH_{s+1} staged in
    threadgroup memory, was deleted 2026-10-09 with the same verdict.)
-  -D MOJOLEARN_SEQ_FAST_LSTM_WGRAD      the (time x batch)-long weight and bias
-                                        gradient folds split over K
-                                        (sequence/recurrent.mojo gemm/colsum;
-                                        a different fold order, FAST only)
+  (-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD, the split-K weight-gradient folds,
+   was deleted 2026-10-09 with the same verdict.)
 
 The host executor runs the scan ops as the per-step launches they replace
 (row by row, step by step): the same cells in the same order.
 """
 from std.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.team import team_barrier
 from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, st
 
-comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab2 @ 40027eb8e), the bundle SCAN + SCAN_SMEM + WGRAD:
 #: lstm-clf 1877.4 -> 1315.5 ms but accuracy 0.9608 -> 0.5002, logloss 0.0954
@@ -78,7 +74,10 @@ comptime SEQ_LSTM_SCAN = SEQ_LSTM_SCAN_IDN
 # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM (bundle DROPPED-quality, rab10 SCAN + SMEM does not train) deleted 2026-10-09
 # on lane/owed-deletions-D2: the define and both kernels' staged arms; code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM.patch
-comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_WGRAD (DROPPED-quality with the SCAN bundle, 2026-10-04: lstm-clf accuracy 0.9608 ->
+# 0.5002, lstm-reg r2 0.9804 -> -0.1043; never A/B-ed alone) deleted 2026-10-09 on lane/owed-deletions-D2: the FAST split-K
+# weight-gradient folds (wgrad_gemm, WGRAD_SCRATCH); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch
 comptime OP_CELL_FWD_SCAN = 120
 comptime OP_CELL_BWD_SCAN = 121
 
