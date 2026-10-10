@@ -192,6 +192,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KERNEL_FAST_GPR_RESIDENT`](#mojolearn_kernel_fast_gpr_resident) | Kernel / GP | DROPPED-semantics | 2026-10-03 | [MOJOLEARN_KERNEL_FAST_GPR_RESIDENT.patch](../experiments/removed/MOJOLEARN_KERNEL_FAST_GPR_RESIDENT.patch) |
 | [`MOJOLEARN_SVGP_FAST_GPU`](#mojolearn_svgp_fast_gpu) | Kernel / GP | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_AFN_OPT_FUSE_SCAN`](#mojolearn_afn_opt_fuse_scan) | Neural | DROPPED-noise | 2026-10-09 | [MOJOLEARN_AFN_OPT_FUSE_SCAN.patch](../experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch) |
+| [`MOJOLEARN_AFN_OPT_VEC4`](#mojolearn_afn_opt_vec4) | Neural | DROPPED-noise | 2026-10-09 | [MOJOLEARN_AFN_OPT_VEC4.patch](../experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch) |
 | [`MOJOLEARN_IDN_AF_VEC_FUSED`](#mojolearn_idn_af_vec_fused) | Neural | noise | 2026-10-09 | [MOJOLEARN_IDN_AF_VEC_FUSED.patch](../experiments/removed/MOJOLEARN_IDN_AF_VEC_FUSED.patch) |
 | [`MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE`](#mojolearn_idn_attn_gqa_head_reuse) | Neural | slower | 2026-10-07 | [MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE.patch) |
 | [`MOJOLEARN_IDN_ATTN_SOFTMAX=1`](#mojolearn_idn_attn_softmax-arm1) | Neural | broken | 2026-10-08 | [MOJOLEARN_IDN_ATTN_SOFTMAX-arm1.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm1.patch) |
@@ -1450,6 +1451,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:1415 (rab19): `AFN_OPT_FUSE_SCAN`, `AFN_OPT_VEC4`, `AFN_OPT_RESIDENT_STATE` on adam / board, within +-2%, **DROPPED-noise**: digest changes, no quality metric; stay off
 - EXPERIMENTS.md:1823 (Owed deletions D2): **DELETED**.
 
+### MOJOLEARN_AFN_OPT_VEC4
+
+- What it tried: the FAST Apple Adam/AdamW update four consecutive elements per thread with 4-wide loads and stores (lane afn-optim).
+- Verdict: DROPPED-noise (M3 afc_ab_def rab19, 2026-10-05: adam within +-2%, digest moves, no quality metric). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_AFN_OPT_VEC4`), with the alias `MOJOLEARN_AFN26_OPT_VEC4`; `afn_adam_kernel` lost its width parameter (one element per thread).
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `training/afn_optim.mojo`
+- Guard refusal (core/six_lane_experiment_guards.mojo:242): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_AFN_OPT_VEC4 (and alias MOJOLEARN_AFN26_OPT_VEC4), the 4-wide FAST Adam update, was DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric; code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:1415 (rab19): `AFN_OPT_FUSE_SCAN`, `AFN_OPT_VEC4`, `AFN_OPT_RESIDENT_STATE` on adam / board, within +-2%, **DROPPED-noise**: digest changes, no quality metric; stay off
+- EXPERIMENTS.md:1824 (Owed deletions D2): **DELETED**.
+
 ### MOJOLEARN_IDN_AF_VEC_FUSED
 
 - Verdict: noise. Deleted 2026-10-09 by `0b7bde4ca` (postmerge-act-5: delete IDN_AF_VEC_FUSED (noise, avg 0.98x), tombstones).
@@ -1796,7 +1807,6 @@ non-comment reference at the time of writing.
 | define | DROP row | site |
 |---|---|---|
 | `MOJOLEARN_AFN_OPT_RESIDENT_STATE` | EXPERIMENTS.md:1415 DROPPED-noise (main) | `training/afn_optim.mojo:51` |
-| `MOJOLEARN_AFN_OPT_VEC4` | EXPERIMENTS.md:1415 DROPPED-noise (main) | `training/afn_optim.mojo:47` |
 | `MOJOLEARN_ARIMA_FAST_CSS_SEARCH` | EXPERIMENTS.md:1416 DROPPED-quality (main a6ff25ff8 (arima-ics: search paths get device aic/bic)) | `arima/impl/fast_order_search.mojo:198` |
 | `MOJOLEARN_ARIMA_FAST_D_CONCURRENT` | EXPERIMENTS.md:1409 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:140` |
 | `MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT` | EXPERIMENTS.md:1408 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:103` |

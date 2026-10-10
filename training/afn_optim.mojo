@@ -37,10 +37,8 @@ on every one):
       flat model: a device table of the tensor offsets and flags, and each
       thread finds its tensor by a binary search over the offsets. Adam is
       already one launch over the flat model in main; it is untouched.
-  MOJOLEARN_AFN_OPT_VEC4           the Adam/AdamW update does four
-      consecutive elements per thread with 4-wide loads and stores (a
-      quarter of the threads, wider memory transactions), the same
-      per-element arithmetic. The tail of the model runs the scalar form.
+  (MOJOLEARN_AFN_OPT_VEC4, the 4-wide Adam update, was deleted 2026-10-09:
+      DROPPED-noise; see the TOMBSTONE at the guards below.)
   MOJOLEARN_AFN_OPT_RESIDENT_STATE the per-step scratch (the scan
       partials, the clip partials, the gate cells and their pinned mirror,
       the SGD table, the eight small buffers the resident host entry
@@ -133,11 +131,9 @@ comptime AFN_OPT_MULTITENSOR = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_MULTITENSOR"]()
     or is_defined["MOJOLEARN_AFN26_OPT_MULTITENSOR"]()
 )
-# T06 AFN26 alias: not tested in this campaign; retain per-element equations.
-comptime AFN_OPT_VEC4 = AFN_APPLE_FAST and (
-    AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_VEC4"]()
-    or is_defined["MOJOLEARN_AFN26_OPT_VEC4"]()
-)
+# TOMBSTONE: MOJOLEARN_AFN_OPT_VEC4 (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric)
+# deleted 2026-10-09 on lane/owed-deletions-D2 (with alias MOJOLEARN_AFN26_OPT_VEC4); code recoverable at
+# b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch
 # T06 AFN26 alias: not tested in this campaign; retain pool ownership rules.
 comptime AFN_OPT_RESIDENT_STATE = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_RESIDENT_STATE"]()
@@ -152,7 +148,6 @@ comptime AFN_LOSS_FUSED = AFN_APPLE_FAST and (
 comptime AFN_OPT_ANY = (
     AFN_OPT_CLIP_FUSE
     or AFN_OPT_MULTITENSOR
-    or AFN_OPT_VEC4
     or AFN_OPT_RESIDENT_STATE
 )
 
@@ -180,8 +175,6 @@ comptime AFN_CE_TPB = (
 #: thread grid-strides. The fold launch reads at most this many partials
 #: per buffer with one block.
 comptime AFN_SCAN_BLOCKS = 512
-#: The width of the vectorized Adam update.
-comptime AFN_VEC = 4
 
 #: Gate cell layout (Int32 x AFN_CELLS): 0..3 the smallest non-finite index
 #: in param, grad, m, v (or NONFINITE_NONE); 4 the gate (nonzero refuses
@@ -521,7 +514,7 @@ def _afn_adam_apply[W: Int, CLIP: Bool](
     v_state.unsafe_store[width=W](i, v)
 
 
-def afn_adam_kernel[W: Int, GATED: Bool, CLIP: Bool](
+def afn_adam_kernel[GATED: Bool, CLIP: Bool](
     param: MutPointer[Float32, MutAnyOrigin],
     grad: MutPointer[Float32, MutAnyOrigin],
     m_state: MutPointer[Float32, MutAnyOrigin],
@@ -540,7 +533,7 @@ def afn_adam_kernel[W: Int, GATED: Bool, CLIP: Bool](
     rt_bc2: Float32,
     decay_mul: Float32,
 ):
-    """The Adam/AdamW update, `W` elements per thread, one launch over the
+    """The Adam/AdamW update, one element per thread, one launch over the
     flat model. Under `GATED` every thread reads the gate cell first and
     returns when the step was refused (the fold kernel ran before this
     launch on the same queue). Under `CLIP` the coefficient comes from the
@@ -549,34 +542,20 @@ def afn_adam_kernel[W: Int, GATED: Bool, CLIP: Bool](
         if cells.unsafe_load(AFN_CELL_GATE) != Int32(0):
             return
     var n = Int(n_in)
-    var base = (Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)) * W
+    var base = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if base >= n:
         return
     var coef = Float32(1.0)
     comptime if CLIP:
         coef = fcells.unsafe_load(1)
     var is_adamw = is_adamw_in != Int32(0)
-    comptime if W == 1:
-        _afn_adam_apply[1, CLIP](
-            param, grad, m_state, v_state, base, coef, is_adamw, beta1,
-            beta2, eps, weight_decay, c1, c2, step_size, rt_bc2, decay_mul,
-        )
-    else:
-        if base + W <= n:
-            _afn_adam_apply[W, CLIP](
-                param, grad, m_state, v_state, base, coef, is_adamw, beta1,
-                beta2, eps, weight_decay, c1, c2, step_size, rt_bc2,
-                decay_mul,
-            )
-        else:
-            var i = base
-            while i < n:
-                _afn_adam_apply[1, CLIP](
-                    param, grad, m_state, v_state, i, coef, is_adamw, beta1,
-                    beta2, eps, weight_decay, c1, c2, step_size, rt_bc2,
-                    decay_mul,
-                )
-                i += 1
+    # TOMBSTONE: MOJOLEARN_AFN_OPT_VEC4 (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+    # lane/owed-deletions-D2: the W = 4 arm and its scalar tail; code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch
+    _afn_adam_apply[1, CLIP](
+        param, grad, m_state, v_state, base, coef, is_adamw, beta1,
+        beta2, eps, weight_decay, c1, c2, step_size, rt_bc2, decay_mul,
+    )
 
 
 @always_inline
@@ -901,12 +880,10 @@ def _afn_launch_adam(
 ) raises:
     """One launch of `afn_adam_kernel` at the width, gate and clip form the
     step needs (the four runtime combinations are four instantiations)."""
-    comptime W = AFN_VEC if AFN_OPT_VEC4 else 1
-    var threads = (n + W - 1) // W
-    var grid = _afn_grid(threads)
+    var grid = _afn_grid(n)
     if gated:
         if clipf:
-            comptime k_gc = afn_adam_kernel[W, True, True]
+            comptime k_gc = afn_adam_kernel[True, True]
             step_count_launch()
             ctx.enqueue_function[k_gc](
                 p_ptr, g_ptr, m_ptr, v_ptr, cells, fcells, Int32(n), is_adamw,
@@ -915,7 +892,7 @@ def _afn_launch_adam(
                 grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
             )
         else:
-            comptime k_g = afn_adam_kernel[W, True, False]
+            comptime k_g = afn_adam_kernel[True, False]
             step_count_launch()
             ctx.enqueue_function[k_g](
                 p_ptr, g_ptr, m_ptr, v_ptr, cells, fcells, Int32(n), is_adamw,
@@ -924,7 +901,7 @@ def _afn_launch_adam(
                 grid_dim=(grid, 1, 1), block_dim=(AFN_TPB, 1, 1),
             )
     else:
-        comptime k_p = afn_adam_kernel[W, False, False]
+        comptime k_p = afn_adam_kernel[False, False]
         step_count_launch()
         ctx.enqueue_function[k_p](
             p_ptr, g_ptr, m_ptr, v_ptr, cells, fcells, Int32(n), is_adamw,
