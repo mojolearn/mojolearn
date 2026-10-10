@@ -115,6 +115,11 @@ from dbscan.impl.corepoints.compute import (
     core_points_compute_weighted,
 )
 from dbscan.impl.mergelabels.runner import merge_labels_run
+from dbscan.impl.edge_free import (
+    IDN_DBSCAN_EDGE_FREE,
+    dbscan_edge_free_fit,
+    edge_free_admits,
+)
 # TOMBSTONE: MOJOLEARN_DBSCAN_FAST_DENSEBALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: dbscan with no edge list: dense-ball cliques, early-exit core counts and union-find over landmark pairs (dbscan/impl/denseball.mojo); dbscan istella A 247,185 ms, B timed out (rab3-denseball).
 # Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch; record in docs/TOMBSTONES.md.
@@ -450,6 +455,7 @@ def dbscan_fit(
     has_weights: Bool = False,
     edge_cap: Int = Int(MAX_LABEL),
     n_batches_out_addr: Int = 0,
+    edge_free: Bool = True,
 ) raises -> Int:
     """`Dbscan::run`, single node. Returns the total propagation passes.
 
@@ -459,6 +465,11 @@ def dbscan_fit(
     every batch fits (loop 1 below). A check passes a small cap to force the
     split on a small fixture. `n_batches_out_addr`, when nonzero, is the
     address of one host Int that receives the batch count loop 1 settled on.
+
+    `edge_free` (default True) lets a fit whose memory-sized range passes
+    `edge_cap` leave for the edge-free route (`dbscan/impl/edge_free.mojo`,
+    IDN_DBSCAN_EDGE_FREE) instead of splitting; a check that exercises the
+    split itself passes False.
 
     Workspace, sized as `runner.cuh:169-177` sizes theirs:
 
@@ -734,6 +745,9 @@ their code branches on is this Bool.
         pend_start.append(b0 * batch)
         pend_rows.append(min(n_rows - b0 * batch, batch))
     var n_splits = 0
+    # lane dbscan-taxi-speed: set when loop 1 hands the fit to the edge-free
+    # route (IDN_DBSCAN_EDGE_FREE) instead of splitting a range
+    var go_edge_free = False
 
     while len(pend_start) > 0:
         var start_vertex_id = pend_start.pop()
@@ -789,6 +803,23 @@ their code branches on is this Bool.
                     + "; an exact count is never negative"
                 )
             if nnz1 > edge_cap:
+                # IDN_DBSCAN_EDGE_FREE: a memory-sized range holding more
+                # edges than one int32 CSR is where this route turns O(E)
+                # (splits, recounts, ~E / edge_cap label batches over N);
+                # the edge-free route stores no edge. Cost reasoning, not a
+                # shape: it keys on this range's exact count against the
+                # CSR's own bound.
+                comptime if IDN_DBSCAN_EDGE_FREE:
+                    if edge_free and use_bm and edge_free_admits(n_rows, min_pts):
+                        go_edge_free = True
+                        if phase_timing:
+                            print(
+                                "PHASE mask.edge_free rows "
+                                + String(start_vertex_id) + "+"
+                                + String(n_points) + " edges " + String(nnz1)
+                                + " cap " + String(edge_cap)
+                            )
+                        break
                 if n_points < 2:
                     raise Error(
                         "dbscan: row " + String(start_vertex_id) + " alone has "
@@ -941,6 +972,27 @@ their code branches on is this Bool.
         plan_rows.append(n_points)
         batchadjlen.append(adjlen_here)
         maxklen.append(maxk_here)
+
+    if go_edge_free:
+        # IDN_DBSCAN_EDGE_FREE: core mask, components and border labels with
+        # no CSR (dbscan/impl/edge_free.mojo), then the same finish.
+        # loop 1's kept ranges are not read on this route; free them first
+        kept_ia.clear()
+        kept_ja.clear()
+        var n_ranges = dbscan_edge_free_fit(
+            ctx, x, rbc_xr, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad, rbc_ne,
+            core, labels, bm_buf, n_rows, n_features, n_landmarks,
+            eps_radius, min_pts, batch, phase_timing,
+        )
+        if n_batches_out_addr != 0:
+            MutPointer[Int, MutUntrackedOrigin](
+                unsafe_from_address=n_batches_out_addr
+            ).unsafe_store(0, n_ranges)
+        _dbscan_finish(
+            ctx, labels, core, work_buffer, block_sums, n_rows, n_features,
+            eps, min_pts, n_ranges, metric, has_weights, phase_timing,
+        )
+        return 0
 
     # Loop 1 accepted the ranges in DESCENDING row order; every later loop
     # indexes them ascending, batch 0 first, as `runner.cuh` does.

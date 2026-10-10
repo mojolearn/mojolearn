@@ -94,6 +94,7 @@ def _fit(
     batch: Int,
     method: Int,
     edge_cap: Int,
+    edge_free: Bool = False,
 ) raises -> Tuple[List[Int32], Int]:
     """One fit with fresh workspace; returns (labels, batches loop 1 used)."""
     var n = ES_N
@@ -118,6 +119,7 @@ def _fit(
         n + 1, method,
         edge_cap=edge_cap,
         n_batches_out_addr=Int(n_batches.unsafe_ptr()),
+        edge_free=edge_free,
     )
     var h = ctx.enqueue_create_host_buffer[DType.int32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
@@ -236,6 +238,13 @@ def check_split_moves_no_label(ctx: DeviceContext) raises:
     arms.append("brute, one batch")
     got.append(a4[0].copy())
     nb.append(a4[1])
+    # lane dbscan-taxi-speed: the same forced cap with the edge-free route
+    # allowed (IDN_DBSCAN_EDGE_FREE; where it is compiled out this arm
+    # splits like the first one). Its batch count is the query ranges.
+    var a5 = _fit(ctx, x, 0, EPS_NN_RBC, ES_EDGE_CAP, edge_free=True)
+    arms.append("rbc, edge_cap " + String(ES_EDGE_CAP) + ", edge-free route")
+    got.append(a5[0].copy())
+    nb.append(a5[1])
 
     # The forced cap must actually have split, into more batches than the
     # uniform arithmetic alone would give.
