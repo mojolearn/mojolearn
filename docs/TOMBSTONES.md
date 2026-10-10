@@ -202,6 +202,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_NEURAL_LEAF`](#mojolearn_idn_neural_leaf) | Neural | slower | 2026-10-07 | [MOJOLEARN_IDN_NEURAL_LEAF.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_LEAF.patch) |
 | [`MOJOLEARN_IDN_NEURAL_NN05`](#mojolearn_idn_neural_nn05) | Neural | slower | 2026-10-08 | [MOJOLEARN_IDN_NEURAL_NN05.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_NN05.patch) |
 | [`MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN`](#mojolearn_idn_seq_row_serial_scan) | Neural | serial shape | 2026-10-07 | [MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN.patch) |
+| [`MOJOLEARN_MOE_FAST_MMA_KB32`](#mojolearn_moe_fast_mma_kb32) | Neural | DROPPED-slower (bundle) | 2026-10-09 | [MOJOLEARN_MOE_FAST_MMA_KB32.patch](../experiments/removed/MOJOLEARN_MOE_FAST_MMA_KB32.patch) |
 | [`MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE`](#mojolearn_ni13_cnn_weight_generation_cache) | Neural | dead code | 2026-10-07 | [MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE.patch](../experiments/removed/MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE.patch) |
 | [`MOJOLEARN_NN22_EAGER_DKDV_PAIR`](#mojolearn_nn22_eager_dkdv_pair) | Neural | unmeasured | 2026-10-07 | [MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch](../experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch) |
 | [`MOJOLEARN_NN23_ROWDOT_DS`](#mojolearn_nn23_rowdot_ds) | Neural | unmeasured | 2026-10-07 | [MOJOLEARN_NN23_ROWDOT_DS.patch](../experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch) |
@@ -1550,6 +1551,16 @@ in the tables after the sections.
 - grid_controls/neural-seq-train-dedupe.json removed: DELETED: one GPU thread per batch row, serial over units/timesteps; breaks the IDENTICAL parallel rule (EXPERIMENTS row)
 - EXPERIMENTS.md:1474 (IDENTICAL neural sequence/training switch dedupe (lane/neura): `IDN_SEQ_ROW_SERIAL_SCAN` on lstm-clf, lstm-reg (x_sequence), lane/neural-seq-train-dedupe @ 83b9bf20a (deleted; last present at 8be4d20d4), A/B none, - ms, **DROPPED-rule**: one GPU thread per batch row, serial over units and timesteps: breaks the IDENTICAL parallel-GPU rule; never measured, not a board lane. Recoverable at 8be4d20d4 sequence/recurrent_scan.mojo:71-83
 
+### MOJOLEARN_MOE_FAST_MMA_KB32
+
+- What it tried: the MoE fragment-product kernels (sequence/moe_mma.mojo) with 32-word reduction slabs instead of 16 (half the barriers per reduction), FAST + Apple.
+- Verdict: DROPPED-slower as the bundle KB32 + WIDE + PF on top of the default MOE_FAST_MMA: M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms (2x slower); never A/B-ed alone. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_MOE_FAST_MMA_KB32`); `MM_KB` is 16. `_WIDE` and `_PF` (same bundle) are not on the owed list and stay opt-in.
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_MOE_FAST_MMA_KB32.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `sequence/moe_mma.mojo`
+- Guard refusal (core/six_lane_experiment_guards.mojo:246): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_MOE_FAST_MMA_KB32, the MoE 32-word slab, was DROPPED-slower as the KB32 + WIDE + PF bundle: M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms; MM_KB is 16; code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:1362 (main @ 13246c64f): `MOE_FAST_MMA_KB32 + _WIDE + _PF` (bundle, on top of the default `MOE_FAST_MMA`) on moe / synthetic, A/B rab10-moemmaall, 71.3 -> 146.8 ms, **DROPPED-slower (bundle), toggles stay opt-in off**: 2x slower as a bundle; no single-variant A/B
+- EXPERIMENTS.md:1829 (Owed deletions D2): **DELETED**.
+
 ### MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE
 
 - Verdict: dead code. Deleted 2026-10-07 by `8b90439d5` (L11: delete unreferenced rejected NI13 weight-cache helper; EXPERIMENTS row).
@@ -1828,6 +1839,7 @@ in the tables after the sections.
 | `MOJOLEARN_IDN_ATTN_TILE_ORDER` | desc order is main; removed from the grid, code kept; desc is main (DEVIATION 2900 _bswz); paired not built (EXPERIMENTS.md). |
 | `MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS` | no board effect; not registered in the grid, code kept; not registered: no board effect. The board HDBSCAN input is 100,000 rows (tools/classical_two_datasets.py:211 HDBSCAN_ROWS), above PAIRWISE_MAX_ROWS = 46340, so graph=auto already takes the sparse arm (single_linkage.mojo:201-205), and the define's legal range |
 | `MOJOLEARN_KDE_DIMTILE` | a later EXPERIMENTS row keeps it (KEEP/KEPT/DEFAULT); the DROP row is superseded; DROP: inconclusive on taxi, no istella gain over DIMTILE; opt-in only |
+| `MOJOLEARN_MOE_FAST_MMA` | KEPT (lane/owed-deletions-D2, 2026-10-09): the FAST + Apple default since M3 rab10-moemma (moe synthetic 71.39 -> 53.48 ms, -25.1%, digest identical; sequence/moe_mma.mojo MOE_MMA, opt-out `-D MOJOLEARN_MOE_FAST_MMA_OFF`). EXPERIMENTS.md:1362 DROPPED the KB32 + WIDE + PF bundle on top of it, not the base; KB32 deleted, WIDE / PF still opt-in (no single-variant A/B) |
 | `MOJOLEARN_PL_GROUP_NARROW` | a later EXPERIMENTS row keeps it (KEEP/KEPT/DEFAULT); the DROP row is superseded; DROPPED-noise: reconciled 2026-10-05: old-base result, row `PL_GROUP_NARROW + PL_PAIRS_ONCE` DROPPED-noise (LEDGER 2026-10-03/04). Was OPEN: A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `MOJOLEARN_RIDGE_FAST_CLS1_CODES` | a later EXPERIMENTS row keeps it (KEEP/KEPT/DEFAULT); the DROP row is superseded; DROPPED-noise: no better than CODES alone |
 | `MOJOLEARN_YETI_SEARCH_TASK16K` | a later EXPERIMENTS row keeps it (KEEP/KEPT/DEFAULT); the DROP row is superseded; DROPPED-noise: SYM_HIST_FAST part dropped (see above); code removed from main 6f5ace7fa; recover at lane/apple-fast-trees-yeti@65f551e39 |
@@ -1876,8 +1888,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_MCD_DEVICE_CSTEPS` | EXPERIMENTS.md:451 DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) (lane/apple-fast-robust @ cfdb95e48) | `x_decomp/mcd_fast.mojo:13` |
 | `MOJOLEARN_MC_CLASS_BATCH_DERIV` | EXPERIMENTS.md:165 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:763` |
 | `MOJOLEARN_MC_CLASS_BATCH_EST` | EXPERIMENTS.md:166 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:774` |
-| `MOJOLEARN_MOE_FAST_MMA` | EXPERIMENTS.md:1362 DROPPED-slower (bundle), toggles stay opt-in off (main @ 13246c64f) | `sequence/moe_mma.mojo:13` |
-| `MOJOLEARN_MOE_FAST_MMA_KB32` | EXPERIMENTS.md:1362 DROPPED-slower (bundle), toggles stay opt-in off (main @ 13246c64f) | `sequence/moe_mma.mojo:45` |
 | `MOJOLEARN_OPT_FAST_MAP_DOWN` | EXPERIMENTS.md:1193 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/opt_resident.mojo:90` |
 | `MOJOLEARN_OPT_FAST_PIPE_CH` | EXPERIMENTS.md:1193 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/opt_resident.mojo:82` |
 | `MOJOLEARN_OPT_FAST_RAW_DOWN` | EXPERIMENTS.md:1193 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/opt_resident.mojo:91` |
