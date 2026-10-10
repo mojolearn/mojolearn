@@ -240,6 +240,7 @@ def _check_configuration() -> Bool:
     # Lane owed-deletions-D3 (2026-10-09): owed DROP deletions (docs/TOMBSTONES.md 'Owed deletions'; docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main b639a2bd2.
     comptime assert not is_defined["MOJOLEARN_BGMM_ESTEP1"](), "removed 2026-10-09 (lane/owed-deletions-D3): BGMM_ESTEP1 (one-launch row-per-thread E-step, ops.estep) was NOISE: bayesian-gmm taxi 309.7 -> 311.1 ms (+0.5%), mean_log_likelihood same; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD"](), "removed 2026-10-09 (lane/owed-deletions-D3): CAGRA_FAST_IVFG_LOWD alone (low-d IVFG graph without SEEDS4, opt-in with _LOWD_SEEDS4_OFF) lost recall: cagra taxi recall@10 .997925 -> .997125 (gate B >= A); the low-d graph stays inside the LOWD_SEEDS4 FAST default; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"](), "removed 2026-10-09 (lane/owed-deletions-D3): CAGRA_FAST_SEEDS4 alone (4x search seeds without the low-d graph) was never judged alone (DROPPED-semantics, gapcagra-seeds4-taxi); the 4x seeds stay inside the LOWD_SEEDS4 FAST default; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
