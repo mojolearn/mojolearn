@@ -9,7 +9,13 @@ coming from a pypi release").
     python3 tools/main_board_ingest.py --check      # dry run: the cells that would change
     python3 tools/main_board_ingest.py              # write bench/results/bench_board/main-<column>/
 
-COLUMNS  nvidia-l40s (boxes nv, nv2) and amd-mi325x (box amd); Apple later.
+COLUMNS  one per GPU MODEL, routed by box (tools/board_hardware.py BOXES; the lq job id prefix names the box:
+         n nv, v nv2, a amd, b amd2): nvidia-l40s (nv, nv2), amd-mi325x (amd, DO), amd-mi300x (amd2, Hot Aisle).
+         Apple later. Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models
+         in a column. Every row (ours, each opponent, each LEDGER and FAILED row) carries `hardware` and
+         `version`; a ratio is computed only between rows of the same hardware, any other opponent row reads
+         NOT-COMPARABLE (different hardware). An observation whose recorded vendor or GPU name disagrees with the
+         box table is refused: FAILED table, reason "hardware mismatch: ...".
 LABEL    `main@<sha>` of the newest cell, never a wheel number. The board is
          unreleased: not reproducible by pip install; the release boards are
          the reference.
@@ -90,15 +96,27 @@ GRID_LQ = os.path.join(EVIDENCE, "grid-lq")
 BOARD_ROOT = os.path.join(REPO, "bench", "results", "bench_board")
 
 SCHEMA_NOTE = "mojolearn-main-board/1"
-VENDOR_COLUMN = {"nvidia": "nvidia-l40s", "amd": "amd-mi325x"}
-COLUMN_VENDOR = {v: k for k, v in VENDOR_COLUMN.items()}
-COLUMN_GPU = {"nvidia-l40s": {"vendor": "nvidia", "api": "cuda", "name": "NVIDIA L40S"},
-              "amd-mi325x": {"vendor": "amd", "api": "hip", "name": "AMD Instinct MI325X"}}
-BOX_TEXT = {"nv": "nv (RunPod L40S)", "nv2": "nv2 (RunPod L40S)", "amd": "amd (DigitalOcean MI325X)"}
-OTHER_VENDOR = {"nvidia": "amd", "amd": "nvidia"}
 
-DEFAULT_RESULTS = ["%s=%s" % (b, os.path.join(GRID_LQ, "%s-results.txt" % b)) for b in ("nv", "nv2", "amd")]
-DEFAULT_GRID_LOGS = ["%s=%s" % (b, os.path.join(GRID_LQ, "%s-grid-logs.txt" % b)) for b in ("nv", "nv2", "amd")]
+
+def _load_hw():
+    spec = importlib.util.spec_from_file_location("board_hardware_for_main_board", os.path.join(HERE, "board_hardware.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+# The box table lives in ONE place (tools/board_hardware.py); columns are per GPU model, routed by box.
+HW = _load_hw()
+COLUMN_GPU = {k: dict(v) for k, v in HW.COLUMNS.items()}
+COLUMN_VENDOR = {k: v["vendor"] for k, v in COLUMN_GPU.items()}
+BOX_TEXT = {b: HW.box_hardware(b) for b in HW.BOXES}
+OTHER_VENDOR = {"nvidia": "amd", "amd": "nvidia"}
+LQ_BOXES = ("nv", "nv2", "amd", "amd2")
+OPPONENT_ARCHIVE = os.path.join(REPO, "bench", "results", "opponent-archive")
+
+DEFAULT_RESULTS = ["%s=%s" % (b, os.path.join(GRID_LQ, "%s-results.txt" % b)) for b in LQ_BOXES]
+DEFAULT_GRID_LOGS = ["%s=%s" % (b, os.path.join(GRID_LQ, "%s-grid-logs.txt" % b)) for b in LQ_BOXES]
 #: The stored opponent boards, per column, highest priority first: the Oct 6
 #: opponent re-score (carries the clock spans of AGENTS.md item 6), then the
 #: release boards' own opponent cells (0.8.25, board-resume-r2).
@@ -132,7 +150,11 @@ SETTINGS_KEYS = ("params", "dataset_params", "block", "task", "kind", "stride_su
 PRIORITY = {"json": 3, "algos": 2, "gridbb": 2, "previous": 1}
 OB_FIELDS = ("column", "vendor", "box", "job", "sha", "ct", "kind", "family", "lane", "dataset", "race_id",
              "status_raw", "status", "infra", "median_ms", "quality", "digest", "comparability", "evidence",
-             "measured", "tag", "reason")
+             "measured", "tag", "reason", "hardware", "version", "gpu_recorded")
+#: A line that records the GPU a job ran on (FSPEED-HEADER device=, an ALGOS/GRIDBB device header); a value with
+#: spaces is quoted or written with '_'. Text naming no GPU ("gpu", "selftest") is not judged.
+DEVICE_LINE_RE = re.compile(r"(?:^|[\s:])(?:FSPEED-HEADER|ALGOS-HEADER|ALGOS-DEVICE|GRIDBB-DEVICE)\b.*?"
+                            r"\b(?:device_name|gpu_name|device|gpu)=(\"[^\"]*\"|\S+)")
 
 
 def now_utc():
@@ -161,7 +183,7 @@ class GitResolver:
 
     def __init__(self, repo, main_ref="origin/main"):
         self.repo, self.main_ref = repo, main_ref
-        self.cache, self.anc = {}, {}
+        self.cache, self.anc, self.ver = {}, {}, {}
 
     def __call__(self, sha):
         if sha not in self.cache:
@@ -170,6 +192,16 @@ class GitResolver:
             parts = p.stdout.split()
             self.cache[sha] = (parts[0], int(parts[1])) if p.returncode == 0 and len(parts) == 2 else None
         return self.cache[sha]
+
+    def version(self, full):
+        """'mojolearn <version> (source build, main@<sha9>)': python/mojolearn/_version.py at that commit."""
+        if full not in self.ver:
+            p = subprocess.run(["git", "-C", self.repo, "show", "%s:python/mojolearn/_version.py" % full],
+                               capture_output=True, text=True)
+            m = re.search(r"__version__\s*=\s*[\"']([^\"']+)", p.stdout) if p.returncode == 0 else None
+            self.ver[full] = "mojolearn %s (source build, main@%s)" % (
+                m.group(1) if m else "version unrecorded", full[:9])
+        return self.ver[full]
 
     def on_main(self, full):
         if full not in self.anc:
@@ -236,8 +268,10 @@ def parse_results(lines, box, evidence):
         if not m:
             continue
         jid = m.group("id")
+        # the job id prefix names the box (n nv, v nv2, a amd, b amd2), whatever file the line was pulled into
+        jbox = HW.box_for_job(jid, box)
         env, tail = split_bracket(m.group("rest"))
-        job = jobs.setdefault(jid, dict(box=box, id=jid, vendor=m.group("vendor"), branch=m.group("branch"),
+        job = jobs.setdefault(jid, dict(box=jbox, id=jid, vendor=m.group("vendor"), branch=m.group("branch"),
                                         head=m.group("head"), env={}, bracket=False, cmd_tag=None))
         if env is not None:
             job["bracket"] = True
@@ -248,7 +282,7 @@ def parse_results(lines, box, evidence):
             continue
         a = parse_algos(tail)
         if a:
-            algos.append(dict(a, box=box, job=jid, vendor=m.group("vendor"), branch=m.group("branch"),
+            algos.append(dict(a, box=jbox, job=jid, vendor=m.group("vendor"), branch=m.group("branch"),
                               head=m.group("head"), env=env, evidence=evidence))
     return jobs, algos
 
@@ -269,11 +303,26 @@ def parse_gridbb(lines, box, evidence):
         except ValueError:
             q = {}
         h = m.group("hash")
-        out.append(dict(box=box, job=jm[-1] if jm else None, tag=m.group("tag"), vendor=m.group("vendor"),
+        out.append(dict(box=HW.box_for_job(jm[-1] if jm else None, box), job=jm[-1] if jm else None, tag=m.group("tag"), vendor=m.group("vendor"),
                         head=m.group("head"), family=m.group("family"), lane=m.group("lane"),
                         dataset=m.group("ds"), status=m.group("status"), median_ms=_num(m.group("ms")),
                         quality=q if isinstance(q, dict) else {},
                         digest=None if h in ("none", "None", "") else h[:DIGEST_CHARS], evidence=evidence))
+    return out
+
+
+def parse_devices(lines, box):
+    """{(box, job): recorded GPU name} from device header lines (results or grid-logs, a log path naming the job)."""
+    out = {}
+    for raw in lines:
+        m = DEVICE_LINE_RE.search(raw)
+        if not m:
+            continue
+        r = RESULT_RE.match(raw.strip())
+        jm = JOB_IN_PATH_RE.findall(raw[:m.start()] + "/")
+        jid = r.group("id") if r else (jm[-1] if jm else None)
+        if jid:
+            out[(HW.box_for_job(jid, box), jid)] = m.group(1).strip('"').replace("_", " ")
     return out
 
 
@@ -322,11 +371,18 @@ def job_is_default(job, branch, skip_tag_re):
 
 
 def make_ob(BB, resolve, skips, *, kind, vendor, box, job, head, family, lane, dataset, status_raw, median_ms,
-            quality, digest, evidence, comparability=None, measured=None, tag=None, full=None):
-    column = VENDOR_COLUMN.get(vendor)
+            quality, digest, evidence, comparability=None, measured=None, tag=None, full=None, gpu_recorded=None):
+    # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+    # The column is the BOX's GPU model (tools/board_hardware.py), never the vendor.
+    column = HW.column_for_box(box)
     if column is None:
-        skips.add("vendor without a main-board column", vendor)
+        skips.add("box without a main-board column", "%s (%s)" % (box, vendor))
         return None
+    # Grep-able guard: a recorded vendor or GPU name that disagrees with the box table refuses the observation.
+    mismatch = HW.gpu_mismatch(box, vendor, gpu_recorded)
+    if mismatch:
+        status_raw, median_ms = "REFUSED(hardware mismatch)", None
+        skips.add("hardware mismatch", "%s/%s %s/%s: %s" % (box, job, lane, dataset, mismatch))
     if full is None:
         r = resolve(head)
         if r is None:
@@ -339,11 +395,14 @@ def make_ob(BB, resolve, skips, *, kind, vendor, box, job, head, family, lane, d
             skips.add("sha not in this repo", "%s %s/%s %s %s/%s" % (full, box, job, kind, lane, dataset))
             return None
     shape = "full" if family == "neural" else None
+    version = resolve.version(full) if hasattr(resolve, "version") else "mojolearn (source build, main@%s)" % full[:9]
+    reason = mismatch or failure_reason(status_raw, median_ms, quality)
     return dict(column=column, vendor=vendor, box=box, job=job, sha=full, ct=ct, kind=kind, family=family,
+                hardware=HW.box_hardware(box), version=version, gpu_recorded=gpu_recorded,
                 lane=lane, dataset=dataset, race_id=BB.race_id(family, lane, dataset, None, shape),
                 status_raw=status_raw, status=board_status(status_raw, median_ms), infra=is_infra(status_raw),
                 median_ms=median_ms, quality=quality or {}, digest=digest, comparability=comparability or {},
-                evidence=evidence, measured=measured, tag=tag, reason=failure_reason(status_raw, median_ms, quality))
+                evidence=evidence, measured=measured, tag=tag, reason=reason)
 
 
 def failure_reason(status_raw, median_ms, quality):
@@ -359,7 +418,7 @@ def failure_reason(status_raw, median_ms, quality):
     return "; ".join(parts)
 
 
-def admit_algos(BB, rec, branch, resolve, skips):
+def admit_algos(BB, rec, branch, resolve, skips, devices=None):
     if rec["branch"] != branch:
         skips.add("ALGOS: branch other than %s" % branch)
         return None
@@ -376,10 +435,11 @@ def admit_algos(BB, rec, branch, resolve, skips):
     return make_ob(BB, resolve, skips, kind="algos", vendor=rec["vendor"], box=rec["box"], job=rec["job"],
                    head=rec["head"], family="algos", lane=rec["lane"], dataset=rec["dataset"],
                    status_raw=rec["status"], median_ms=rec["median_ms"], quality=rec["quality"],
-                   digest=rec["digest"], evidence=rec["evidence"])
+                   digest=rec["digest"], evidence=rec["evidence"],
+                   gpu_recorded=(devices or {}).get((rec["box"], rec["job"])))
 
 
-def admit_gridbb(BB, rec, jobs, branch, skip_tag_re, resolve, skips):
+def admit_gridbb(BB, rec, jobs, branch, skip_tag_re, resolve, skips, devices=None):
     job = jobs.get((rec["box"], rec["job"])) if rec["job"] else None
     why = job_is_default(job, branch, skip_tag_re)
     if why:
@@ -394,7 +454,8 @@ def admit_gridbb(BB, rec, jobs, branch, skip_tag_re, resolve, skips):
     return make_ob(BB, resolve, skips, kind="gridbb", vendor=rec["vendor"], box=rec["box"], job=rec["job"],
                    head=job["head"], family=rec["family"], lane=rec["lane"], dataset=rec["dataset"],
                    status_raw=rec["status"], median_ms=rec["median_ms"], quality=rec["quality"],
-                   digest=rec["digest"], evidence=rec["evidence"], tag=rec["tag"])
+                   digest=rec["digest"], evidence=rec["evidence"], tag=rec["tag"],
+                   gpu_recorded=(devices or {}).get((rec["box"], rec["job"])))
 
 
 def json_observations(BB, json_dir, jobs, branch, skip_tag_re, resolve, skips):
@@ -431,6 +492,7 @@ def json_observations(BB, json_dir, jobs, branch, skip_tag_re, resolve, skips):
             skips.add("JSON: commit not on main or not the job's", "%s %s" % (path, commit[:9]))
             continue
         vendor = ((board.get("box") or {}).get("gpu") or {}).get("vendor") or job["vendor"]
+        gpu_name = ((board.get("box") or {}).get("gpu") or {}).get("name")
         for rid, rr in sorted((board.get("races") or {}).items()):
             cell = next((c for c in rr.get("cells") or [] if c.get("arm") == "ours" and c.get("mode") == "identical"),
                         None)
@@ -442,8 +504,8 @@ def json_observations(BB, json_dir, jobs, branch, skip_tag_re, resolve, skips):
                          status_raw=cell.get("status"), median_ms=cell.get("median_ms"),
                          quality=cell.get("quality"), digest=(cell.get("hash") or "")[:DIGEST_CHARS] or None,
                          evidence=path, comparability=cell.get("comparability"), measured=rr.get("finished"),
-                         full=r[0])
-            if ob is not None:
+                         full=r[0], gpu_recorded=cell.get("device_name") or gpu_name)
+            if ob is not None and ob["status_raw"] != "REFUSED(hardware mismatch)":
                 ob["status"] = cell.get("status") or ob["status"]
                 out.append(ob)
     return out
@@ -457,12 +519,22 @@ def previous_observations(prev):
             mb = c.get("main_board") or {}
             ob = mb.get("observation")
             if c.get("library") == "mojolearn" and isinstance(ob, dict) and ob.get("sha"):
-                out.append(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous"))
+                out.append(_reroute(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous")))
     # the failed runs the previous board listed (FAILED table, flags), so a rotated input keeps them too
     for ob in ((prev or {}).get("main_board") or {}).get("failed_observations") or []:
         if isinstance(ob, dict) and ob.get("sha"):
-            out.append(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous"))
-    return out
+            out.append(_reroute(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous")))
+    return [o for o in out if o.get("column")]
+
+
+def _reroute(ob):
+    """A previous board's observation: its box from the job id prefix, its column from the box's GPU model and its
+    hardware from the box table (an older board stored neither). Andrew 2026-10-10: every row names its exact
+    hardware and version; never mix GPU models in a column."""
+    ob["box"] = HW.box_for_job(ob.get("job"), ob.get("box"))
+    ob["column"] = HW.column_for_box(ob["box"])
+    ob["hardware"] = HW.box_hardware(ob["box"])
+    return ob
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +568,7 @@ def ident_group(ob):
 
 def short(ob):
     return dict(sha=ob["sha"], commit_date=iso(ob.get("ct")), box=ob["box"], job=ob["job"], kind=source_kind(ob),
+                hardware=ob.get("hardware") or HW.box_hardware(ob["box"]), version=ob.get("version"),
                 status=ob["status"], median_ms=ob.get("median_ms"), digest=ob.get("digest"),
                 evidence=ob.get("evidence"), reason=ob.get("reason"))
 
@@ -564,10 +637,10 @@ def identity(ob, idx):
     other = OTHER_VENDOR.get(ob["vendor"])
     cands = idx.get((other, ob["race_id"], ob["sha"], ident_group(ob))) or []
     if not cands or not ob.get("digest") or ob["status"] != "ok":
-        return dict(status="n/a", other_column=VENDOR_COLUMN.get(other), other_digest=None, other_job=None)
+        return dict(status="n/a", other_column="the %s columns" % other, other_digest=None, other_job=None)
     o = max(cands, key=order_key)
     same = o["digest"][:DIGEST_CHARS] == ob["digest"][:DIGEST_CHARS]
-    return dict(status="MATCH" if same else "DIFFER", other_column=VENDOR_COLUMN.get(other),
+    return dict(status="MATCH" if same else "DIFFER", other_column=o["column"], other_hardware=o.get("hardware"),
                 other_digest=o["digest"], other_job="%s/%s" % (o["box"], o["job"]))
 
 
@@ -605,7 +678,7 @@ def current_lane_config(BB, family, lane):
     return None
 
 
-def copy_opponents(BB, sources, family, lane, race_id):
+def copy_opponents(BB, sources, family, lane, race_id, archive=None, backfill=None):
     """-> (opponent cells, the first source race (for lane_config), withheld reason or None)."""
     cells, first, seen = [], None, set()
     cur = _settings_view(current_lane_config(BB, family, lane))
@@ -631,6 +704,13 @@ def copy_opponents(BB, sources, family, lane, race_id):
                                  "measured": (c.get("stored") or {}).get("measured_at") or rr.get("finished")}
             old = oc.get("source")
             oc["source"] = "copied from %s%s" % (src["label"], ("; " + old) if old else "")
+            # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+            # From what the measuring run recorded (stored record, the cell, its board box, the opponent
+            # archive), else "unknown (copied from <source>)": never a guess.
+            used = HW.opponent_fields(oc, box, src["label"], archive)
+            if backfill is not None:
+                for field, where in used.items():
+                    backfill[(field, where)] = backfill.get((field, where), 0) + 1
             cells.append(oc)
         if first is None:
             first = rr
@@ -652,7 +732,7 @@ def our_cell(BB, ob, ident, newer_failed=()):
     flags = [failed_flag(o) for o in newer_failed]
     if flags:
         tail += "; " + "; ".join(flags)
-    return {
+    cell = {
         "family": ob["family"], "lane": ob["lane"], "dataset": ob["dataset"], "rows": None, "rows_tag": "full",
         "neural_shape": "full" if ob["family"] == "neural" else None,
         "arm": "ours", "library": "mojolearn", "mode": "identical",
@@ -668,6 +748,9 @@ def our_cell(BB, ob, ident, newer_failed=()):
                        "measured": ob.get("measured"), "identity": ident, "newer_failed": flags,
                        "observation": stored_ob(ob)},
     }
+    # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+    return HW.our_fields(cell, box=ob["box"], version_text=ob.get("version") or "mojolearn (source build, main@%s)"
+                         % ob["sha"][:9], source="box table (job %s/%s)" % (ob["box"], ob["job"]))
 
 
 def _md(v):
@@ -688,13 +771,14 @@ def identity_section(races):
          "and AMD). Counts: %s." % (", ".join("%s %d" % kv for kv in sorted(counts.items())) or "none"), ""]
     if differ:
         L += ["**DIFFER: %d cells whose digest differs from the other vendor's at the same commit.**" % len(differ),
-              "", "| race | commit | this column: box/job, digest | other column: box/job, digest |",
+              "", "| race | commit | this column: hardware, box/job, digest | other column: hardware, box/job, digest |",
               "|---|---|---|---|"]
         for rid, c, ident in differ:
             mb = c["main_board"]
-            L.append("| %s | main@%s | %s/%s %s | %s %s %s |" % (
-                _md(rid), _md(mb["sha"][:9]), _md(mb["box"]), _md(mb["job"]), _md(c.get("hash")),
-                _md(ident["other_column"]), _md(ident["other_job"]), _md(ident["other_digest"])))
+            L.append("| %s | main@%s | %s, %s/%s %s | %s, %s %s |" % (
+                _md(rid), _md(mb["sha"][:9]), _md(c.get("hardware")), _md(mb["box"]), _md(mb["job"]),
+                _md(c.get("hash")), _md(ident.get("other_hardware") or ident["other_column"]),
+                _md(ident["other_job"]), _md(ident["other_digest"])))
     else:
         L.append("DIFFER: none.")
     return {"title": "Identity", "lines": L}
@@ -707,20 +791,22 @@ def failed_section(failures, winners, column):
             continue
         win = winners.get((col, rid))
         for o in obs:
-            rows.append("| %s | %s | main@%s | %s/%s | %s | %s |" % (
-                _md(o["lane"]), _md(o["dataset"]), _md(o["sha"][:9]), _md(o["box"]), _md(o["job"]),
+            rows.append("| %s | %s | main@%s | %s | %s | %s/%s | %s | %s |" % (
+                _md(o["lane"]), _md(o["dataset"]), _md(o["sha"][:9]),
+                _md(o.get("hardware") or HW.box_hardware(o["box"])), _md(o.get("version")), _md(o["box"]), _md(o["job"]),
                 _md(o.get("reason") or o["status"]),
                 "main@%s %s/%s stays" % (win["sha"][:9], win["box"], win["job"]) if win else "none"))
     L = ["Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). "
          "They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board "
          "flagged with the failed run. %d failed runs." % len(rows), ""]
     if rows:
-        L += ["| lane | dataset | commit | box/job | reason | ok cell on the board |",
-              "|---|---|---|---|---|---|"] + rows
+        L += ["| lane | dataset | commit | hardware | version | box/job | reason | ok cell on the board |",
+              "|---|---|---|---|---|---|---|---|"] + rows
     return {"title": "FAILED", "lines": L}, len(rows)
 
 
-def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failures=None):
+def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failures=None, archive=None,
+             backfill=None):
     failures = failures or {}
     races, withheld, boxes, shas = {}, 0, set(), []
     for (col, rid), ob in sorted(winners.items()):
@@ -728,7 +814,7 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
             continue
         ident = identity(ob, idx)
         cell = our_cell(BB, ob, ident, failures.get((col, rid)) or ())
-        opps, src_rr, why = copy_opponents(BB, sources, ob["family"], ob["lane"], rid)
+        opps, src_rr, why = copy_opponents(BB, sources, ob["family"], ob["lane"], rid, archive, backfill)
         # our cell without a quality (the host reference refused) whose output hash equals a copied opponent's:
         # quality {"identical_to": <arm>} (tools/bench_board.py stored_identity_quality; a digest compare only)
         cells = BB.add_ratios(BB.stored_identity_quality([cell] + opps))
@@ -861,10 +947,14 @@ def render_ledger(column, entries):
     L = ["# Main board ledger: %s" % column, "",
          "Every observation the newest-wins rule did not put on the board, with its numbers and the cell that "
          "replaced it (tools/main_board_ingest.py). Times are milliseconds of one scored run.", "",
-         "| race | reason | replaced: commit, box/job, ms, status, digest | by: commit, box/job, ms, status, digest |",
+         "Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.", "",
+         "| race | reason | replaced: commit, hardware, version, box/job, ms, status, digest | "
+         "by: commit, hardware, version, box/job, ms, status, digest |",
          "|---|---|---|---|"]
-    fmt = lambda s: "-" if not s else "main@%s %s/%s %s %s %s" % (   # noqa: E731
-        str(s.get("sha"))[:9], s.get("box"), s.get("job"), s.get("median_ms"), s.get("status"), s.get("digest"))
+    fmt = lambda s: "-" if not s else "main@%s, %s, %s, %s/%s %s %s %s" % (   # noqa: E731
+        str(s.get("sha"))[:9], s.get("hardware") or HW.box_hardware(HW.box_for_job(s.get("job"), s.get("box"))),
+        s.get("version") or "version unrecorded", s.get("box"), s.get("job"), s.get("median_ms"), s.get("status"),
+        s.get("digest"))
     for e in sorted(entries, key=lambda e: (e["race"], str((e.get("replaced") or {}).get("commit_date")))):
         L.append("| %s | %s | %s | %s |" % (e["race"], e["reason"], fmt(e.get("replaced")),
                                             fmt(e.get("replaced_by"))))
@@ -893,20 +983,27 @@ def _read_lines(path, skips):
 
 
 def collect(BB, args, resolve, skips):
-    jobs, recs, obs = {}, [], []
+    jobs, recs, obs, devices = {}, [], [], {}
     skip_tag_re = re.compile(args.skip_tag_re)
     for box, path in _pairs(args.results):
-        j, a = parse_results(_read_lines(path, skips), box, path)
+        lines = _read_lines(path, skips)
+        devices.update(parse_devices(lines, box))
+        j, a = parse_results(lines, box, path)
         for jid, job in j.items():
-            jobs[(box, jid)] = job
+            jobs[(job["box"], jid)] = job
         recs.extend(a)
+    grid = []
+    for box, path in _pairs(args.grid_logs):
+        lines = _read_lines(path, skips)
+        devices.update(parse_devices(lines, box))
+        grid.append((box, path, lines))
     for rec in recs:
-        ob = admit_algos(BB, rec, args.branch, resolve, skips)
+        ob = admit_algos(BB, rec, args.branch, resolve, skips, devices)
         if ob is not None:
             obs.append(ob)
-    for box, path in _pairs(args.grid_logs):
-        for rec in parse_gridbb(_read_lines(path, skips), box, path):
-            ob = admit_gridbb(BB, rec, jobs, args.branch, skip_tag_re, resolve, skips)
+    for box, path, lines in grid:
+        for rec in parse_gridbb(lines, box, path):
+            ob = admit_gridbb(BB, rec, jobs, args.branch, skip_tag_re, resolve, skips, devices)
             if ob is not None:
                 obs.append(ob)
     obs.extend(json_observations(BB, args.json_dir, jobs, args.branch, skip_tag_re, resolve, skips))
@@ -920,7 +1017,10 @@ def build_parser():
     p.add_argument("--grid-logs", action="append", help="BOX=PATH grid-logs file with GRIDBB lines (repeatable)")
     p.add_argument("--json-dir", help="directory of bench_board board.json files from lq jobs (optional)")
     p.add_argument("--opponents", action="append", help="COLUMN=LABEL=PATH stored opponent board, priority order")
-    p.add_argument("--columns", default=",".join(VENDOR_COLUMN.values()))
+    p.add_argument("--columns", default=",".join(COLUMN_GPU))
+    p.add_argument("--opponent-archive", default=OPPONENT_ARCHIVE,
+                   help="dir of <column>/opponent-cells-all.jsonl.gz: fills an opponent row's hardware / version "
+                        "its copied cell lacks (same arm, lane, dataset, median)")
     p.add_argument("--out-root", default=BOARD_ROOT, help="board roots go to <out-root>/main-<column>/")
     p.add_argument("--repo", default=REPO, help="git repo resolving commit dates")
     p.add_argument("--main-ref", default="origin/main")
@@ -951,6 +1051,10 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
         root = os.path.join(args.out_root, "main-%s" % column)
         prevs[column] = (root, BB.load_result(os.path.join(root, "board.json")))
         all_obs.extend(previous_observations(prevs[column][1]))
+    for ob in all_obs:
+        # an observation an older board stored without a version: the version file at its commit
+        if not ob.get("version") and hasattr(resolve, "version"):
+            ob["version"] = resolve.version(ob["sha"])
     obs = dedupe(all_obs)
     winners, failures, ledger = choose(obs)
     idx = identity_index(obs)
@@ -958,7 +1062,22 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
     for column in columns:
         root, prev = prevs[column]
         sources = load_opponent_sources(BB, args.opponents, column, skips)
-        result = assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failures)
+        archive = HW.archive_index(os.path.join(args.opponent_archive or "", column, "opponent-cells-all.jsonl.gz"))
+        backfill = {}
+        result = assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failures, archive, backfill)
+        # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+        unknown, notcmp = [], 0
+        for rid, rr in sorted(result["races"].items()):
+            for c in rr["cells"]:
+                if c.get("library") == "mojolearn":
+                    backfill[("hardware", "box table")] = backfill.get(("hardware", "box table"), 0) + 1
+                    backfill[("version", "git _version.py")] = backfill.get(("version", "git _version.py"), 0) + 1
+                if c.get("hardware_comparable") is False:
+                    notcmp += 1
+                if c.get("hardware_source") == "unknown" or c.get("version_source") == "unknown":
+                    unknown.append("%s %s: %s; %s" % (rid, c.get("arm"), c.get("hardware"), c.get("version")))
+        result["main_board"]["backfill"] = {"filled": {"%s<-%s" % k: v for k, v in sorted(backfill.items())},
+                                            "unknown_rows": unknown, "not_comparable_rows": notcmp}
         changes = diff_boards(prev, result)
         mine = [e for e in ledger if e["column"] == column]
         kinds = {}
@@ -975,6 +1094,12 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
             print("  DIFFER %s main@%s %s %s vs %s %s %s" % (
                 d["race"], d["sha"][:9], d["job"], d["digest"], d["other"]["other_column"],
                 d["other"]["other_job"], d["other"]["other_digest"]), file=out)
+        bf = result["main_board"]["backfill"]
+        print("MAINBOARD-BACKFILL column=%s %s unknown=%d not_comparable=%d" % (
+            column, " ".join("%s=%d" % kv for kv in bf["filled"].items()), len(bf["unknown_rows"]),
+            bf["not_comparable_rows"]), file=out)
+        for u in bf["unknown_rows"][:5]:
+            print("  UNKNOWN %s" % u, file=out)
         summary[column] = line
         if args.check:
             for k, rid, a, b in changes[:args.max_lines]:
