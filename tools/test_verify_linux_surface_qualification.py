@@ -125,5 +125,17 @@ class AdmissionTests(unittest.TestCase):
                 gate.compare(Path('/fetched/amd'), Path('/fetched/nvidia'))
 
 
+
+class PluginArches(unittest.TestCase):
+    """Each plugin's sets come from gpu_plugins.required_sets: mojolearn-nvidia
+    carries native sm_89 and the PTX slot sm_80 (Andrew 2026-10-10: PTX is a
+    normal target; no flag), mojolearn-amd gfx942."""
+
+    def test_plugin_arches_read_from_the_registry(self):
+        self.assertEqual(gate.PLUGIN_ARCHES['cuda'], frozenset({'cuda/sm_89', 'cuda/sm_80'}))
+        self.assertEqual(gate.PLUGIN_ARCHES['hip'], frozenset({'hip/gfx942'}))
+        self.assertTrue(gate.plugin_arch_set_ok('cuda', ['cuda/sm_89', 'cuda/sm_80']))
+        self.assertFalse(gate.plugin_arch_set_ok('cuda', ['cuda/sm_89']))
+
 if __name__ == '__main__':
     unittest.main()

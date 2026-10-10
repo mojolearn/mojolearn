@@ -352,7 +352,7 @@ class RunTests(unittest.TestCase):
         self.assertNotIn("-- release-check", out.stdout)
         # the default route is GitHub's runners (2026-09-27): nothing is rented to build
         self.assertNotIn("gemm_remote_leg.sh", out.stdout.split("-- linux-builds", 1)[1].split("-- ", 1)[0])
-        for name in ("cuda-sm_90a", "cuda-sm_89", "hip-gfx942"):
+        for name in ("cuda-sm_89", "cuda-sm_80", "hip-gfx942"):
             if name in legs:
                 self.assertIn("release_github_build.py run", out.stdout)
         if not any(n in legs for n in ("cuda-", "hip-")):

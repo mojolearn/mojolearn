@@ -25,7 +25,7 @@ class Provenance(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.native = dict(schema=P.SCHEMA, source_commit='a'*40, code_path='native',
                            numeric_mode='identical', files={'cuda_native/sm_89/identical/a.so':'b'*64})
-        self.ptx = dict(self.native, code_path='ptx-baseline')
+        self.ptx = dict(self.native, code_path='ptx')
 
     def tearDown(self):
         self.temp.cleanup()
@@ -49,13 +49,16 @@ class Provenance(unittest.TestCase):
         self.assertEqual(next(r for r in rows if r['role']=='host')['sha256'], P.sha(host))
         self.assertTrue(all(r['module'].startswith('mojolearn.') for r in rows))
 
-    def test_forced_path_requires_manifest_and_opt_in(self):
+    def test_ptx_path_requires_manifest_and_no_opt_in(self):
+        # Andrew 2026-10-10: PTX is a normal target; no flag. MOJOLEARN_GPU_ARCH=sm_80
+        # selects the PTX set by name; no experimental opt-in exists.
         f = self.root/'manifest.json'; f.write_text(json.dumps(self.native))
-        with patch.dict(os.environ, {'MOJOLEARN_CUDA_PATH':'ptx-baseline'}, clear=True):
+        with patch.dict(os.environ, {'MOJOLEARN_GPU_ARCH':'sm_80'}, clear=True):
+            self.assertEqual(P.requested_path(), 'ptx')
             with self.assertRaisesRegex(ValueError, 'require'): P.identity(None)
             with self.assertRaisesRegex(ValueError, 'differs'): P.identity(f)
             f.write_text(json.dumps(self.ptx))
-            with self.assertRaisesRegex(ValueError, 'opt-in'): P.identity(f)
+            with self.assertRaisesRegex(ValueError, 'runtime_files'): P.identity(f)
         with patch.dict(os.environ, {}, clear=True): self.assertIsNone(P.identity(None))
 
     def test_installed_artifact_changed(self):
@@ -110,13 +113,13 @@ class Provenance(unittest.TestCase):
         with patch.dict(P.sys.modules,{'mojolearn':ml,'mojolearn._backend':backend,'mojolearn._sets.identical._mojolearn_x':extension}), patch.object(P.subprocess,'check_output',return_value='GPU-123, RTX 4090, 8.9, 580.1'):
             receipt=P.collect(manifest)
             self.assertEqual(receipt['loaded_files'][0]['sha256'],digest)
-            self.assertFalse(receipt['identical_qualified'])
-            backend.gpu_plugin=lambda:{'code_format':'ptx-baseline'}
-            with self.assertRaisesRegex(ValueError,'wrong CUDA'):P.collect(manifest)
-            manifest=dict(manifest,code_path='ptx-baseline')
-            with self.assertRaisesRegex(ValueError,'Missing forced'):P.collect(manifest)
+            self.assertNotIn('identical_qualified', receipt)
+            backend.gpu_plugin=lambda:{'code_format':'ptx'}
+            with self.assertRaisesRegex(ValueError,'wrong code path'):P.collect(manifest)
+            manifest=dict(manifest,code_path='ptx')
+            with self.assertRaisesRegex(ValueError,'Missing PTX'):P.collect(manifest)
             backend._BASELINE_ROOT=str(package)
-            backend.baseline_selection_receipt=lambda:dict(requested='ptx-baseline',selected='ptx-baseline',native_fallback=False,source_commit='a'*40,loaded_files=[{'file':'_mojolearn_x.so','sha256':digest}])
+            backend.baseline_selection_receipt=lambda:dict(schema='mojolearn.ptx-selection.v2',selected='ptx',source_commit='a'*40,loaded_files=[{'file':'_mojolearn_x.so','sha256':digest}])
             self.assertEqual(P.collect(manifest)['status'],'verified')
             changed=dict(manifest,files={'_mojolearn_x.so':'d'*64})
             with self.assertRaisesRegex(ValueError,'outside pinned'):P.collect(changed)
@@ -140,8 +143,8 @@ class Provenance(unittest.TestCase):
         P.source_check(manifest,package)
         (package/'__init__.py').write_text('# changed source\n')
         with self.assertRaisesRegex(ValueError,'clean frozen'):P.source_check(manifest,package)
-        f=self.root/'source-manifest.json';f.write_text(json.dumps(dict(manifest,code_path='ptx-baseline')))
-        with patch.dict(os.environ,{'MOJOLEARN_CUDA_PATH':'ptx-baseline','MOJOLEARN_EXPERIMENTAL_PTX':'1'}):
+        f=self.root/'source-manifest.json';f.write_text(json.dumps(dict(manifest,code_path='ptx')))
+        with patch.dict(os.environ,{'MOJOLEARN_GPU_ARCH':'sm_80'}):
             with self.assertRaisesRegex(ValueError,'native-only'):P.identity(f)
 
     def test_comparison_refuses_mismatched_source_settings_data_hardware(self):
@@ -165,7 +168,7 @@ class Provenance(unittest.TestCase):
 
     def test_ptx_requires_common_runtime_inventory(self):
         f=self.root/'ptx.json';f.write_text(json.dumps(self.ptx))
-        with patch.dict(os.environ,{'MOJOLEARN_CUDA_PATH':'ptx-baseline','MOJOLEARN_EXPERIMENTAL_PTX':'1'}):
+        with patch.dict(os.environ,{'MOJOLEARN_GPU_ARCH':'sm_80'}):
             with self.assertRaisesRegex(ValueError,'runtime_files'):P.identity(f)
             f.write_text(json.dumps(dict(self.ptx,runtime_files={'relative.so':'f'*64})))
             with self.assertRaisesRegex(ValueError,'absolute'):P.identity(f)

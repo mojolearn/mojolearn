@@ -82,10 +82,14 @@ class ProjectClassification(unittest.TestCase):
         self.assertEqual(result['plugins'], [])
         self.assertEqual(result['payloads'], [])
 
-    def test_experimental_unknown_empty_duplicate_and_mixed_versions_fail(self):
-        with self.assertRaisesRegex(ValueError, 'experimental'):
-            projects.classify([self.wheel('nvidia-ptx80')])
-        with self.assertRaisesRegex(ValueError, 'experimental'):
+    def test_retired_unknown_empty_duplicate_and_mixed_versions_fail(self):
+        # The separate PTX project is retired: the PTX set is a slot of
+        # mojolearn-nvidia (Andrew 2026-10-10: PTX is a normal target; no flag).
+        retired = self.root / 'mojolearn_nvidia_ptx80-1.2.3-py3-none-manylinux_2_35_x86_64.whl'
+        retired.write_bytes(b'')
+        with self.assertRaisesRegex(ValueError, 'unknown GPU release project'):
+            projects.classify([retired])
+        with self.assertRaisesRegex(ValueError, 'unknown GPU release profile'):
             projects.wheel_prefix('nvidia-ptx80')
         with self.assertRaisesRegex(ValueError, 'unknown'):
             projects.classify([self.root / 'other-1.2.3-py3-none-any.whl'])

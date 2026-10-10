@@ -379,3 +379,33 @@ def test_every_scale_rows_in_the_tree_asks_the_whole_batch_set():
     assert ib._tiled_ids(np.zeros((8192, 4), dtype=np.float32),
                          ib.SCALE_WHOLE, 8).shape[0] == ib.SCALE_WHOLE
     assert np.zeros((8192, 4))[:ib.SCALE_WHOLE].shape[0] == ib.SCALE_WHOLE
+
+
+@pytest.mark.parametrize('ptx_loaded,label,refused', [
+    (True, 'nvidia-ptx-l40s-sm80', False),
+    (True, 'nvidia-l40s-sm_89', True),
+    (False, 'nvidia-ptx-l40s-sm80', True),
+    (False, 'nvidia-l40s-sm_89', False),
+])
+def test_ptx_record_needs_the_ptx_label_and_back(run_fixture, monkeypatch, ptx_loaded, label, refused):
+    """THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag): a CUDA
+    record is the ptx class exactly when the PTX set ran and its label says so."""
+    args, state, _ = run_fixture
+    ml = sys.modules["mojolearn"]
+    monkeypatch.setattr(ml, "vendor", lambda: "cuda")
+    backend = ModuleType("mojolearn._backend")
+    backend.gpu_arch = lambda: "sm_80" if ptx_loaded else "sm_89"
+    backend.baseline_selection_receipt = lambda: dict(selected="ptx") if ptx_loaded else None
+    monkeypatch.setitem(sys.modules, "mojolearn._backend", backend)
+    monkeypatch.setattr(ml, "_backend", backend, raising=False)
+    args.vendor = label
+    if refused:
+        with pytest.raises(SystemExit, match='vendor label'):
+            ib._run_reference(args)
+        assert state['calls'] == 0
+    else:
+        # past the label check; what the fake CUDA run does next is not this test's question
+        try:
+            ib._run_reference(args)
+        except SystemExit as exc:
+            assert 'vendor label' not in str(exc)

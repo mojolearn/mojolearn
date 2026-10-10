@@ -18,6 +18,8 @@ def test_registry_parity_and_no_experimental_publication():
     assert set(index.PROJECTS) == {'mojolearn', *(r['distribution'] for r in rows)}
     assert qualifier.PLUGIN_DISTRIBUTIONS == {r['wheel_name']: r['distribution'] for r in rows}
     assert 'nvidia-ptx80' not in release.SPLIT_PACKAGES
+    assert 'nvidia-ptx80' not in registry['PAYLOADS']
+    assert all(r['release_enabled'] for r in rows)
     for row in rows:
         expected = registry['package_requirements'](row['profile'], '1.2.3')
         assert index.REQUIRES[row['distribution']] == tuple(r.split('==')[0] for r in expected)
@@ -61,7 +63,8 @@ def test_synthetic_reuse_normalizes_roots_without_changing_bytes(tmp_path):
         assert z.read('mojolearn/cuda/sm_89/identical/kernel.so') == b'exact bytes'
         metadata = json.loads(z.read('mojolearn-1.dist-info/LINUX_PAYLOAD.json'))
         assert metadata['extensions'] == {'mojolearn/cuda/sm_89/identical/kernel.so': 'hash'}
-    assert release_reuse.legacy_archive_path('mojolearn/cuda_ptx/sm_80/kernel.so') == 'mojolearn/cuda_ptx/sm_80/kernel.so'
+    # the PTX slot's installed root maps back to its set path, like cuda_native
+    assert release_reuse.legacy_archive_path('mojolearn/cuda_ptx/sm_80/kernel.so') == 'mojolearn/cuda/sm_80/kernel.so'
 
 
 def test_missing_payload_index_release_is_refused():
