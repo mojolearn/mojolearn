@@ -55,3 +55,26 @@ def test_fixture_names_exactly_cover_supported_family(architecture,tied):
     if architecture=='qwen2': assert plan.block_options['qkv_bias']
     if architecture=='qwen3': assert plan.block_options['qk_norm']
     if architecture=='phi3': assert any(rows is not None for _,_,rows in plan.layer_weights(0))
+
+
+def test_state_digest_is_canonical_kv_state():
+    # Host and device states with equal written positions digest equal: the
+    # capacity tail and the device-only arithmetic_profile label are not state.
+    from mojolearn import Array
+    from mojolearn._transformer_impl import TransformerState
+    from mojolearn._verify_causal_lm import state_digest
+    def layer(tail, written=1.0, label=None):
+        # B=1, KV=1, HD=2, max_tokens=4, cached_tokens=2: four written floats.
+        k = Array.from_list([written, 2.0, 3.0, 4.0] + [tail] * 4, '<f4')
+        v = Array.from_list([5.0, 6.0, 7.0, 8.0] + [tail] * 4, '<f4')
+        st = TransformerState(1, 1, 2, 4, k, v, cached_tokens=2)
+        if label is not None:
+            st.arithmetic_profile = label
+        return st
+    def lm_state(st):
+        s = CausalLMState(1, 4, [st])
+        s.positions = 2
+        return s
+    host = state_digest(lm_state(layer(0.0)))
+    assert state_digest(lm_state(layer(9.0, label='mojolearn.identical.transformer.fp32'))) == host
+    assert state_digest(lm_state(layer(0.0, written=-1.0))) != host
