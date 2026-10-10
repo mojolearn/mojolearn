@@ -202,7 +202,9 @@ def _arch_key(c):
 
 
 def _pkg_version(packages, library):
-    for name in (library, library + "-cu12", library + "-cu13", library.replace("_", "-")):
+    # the pip names the opponent sets install a library under (tools/opponent_wheels.sh): faiss-cpu, cuml-cu12, ...
+    for name in (library, library + "-cu12", library + "-cu13", library + "-cpu", library + "-gpu",
+                 library.replace("_", "-")):
         if name in (packages or {}):
             return packages[name], name
     return None, None
@@ -240,6 +242,10 @@ def opponent_fields(cell, board_box=None, label=None, archive=None):
     # (a stored record is reused only on an exact store key match, and that key holds the machine: the board
     # box's GPU, tools/bench_board_store.py KEY_FIELDS)
     machine = canonical_model(stored.get("machine") or (box.get("gpu") or {}).get("name")) if dev == "cpu" else None
+    if hw is not None and hw[1] == "cell record" and (box_cpu if dev == "cpu" else box_gpu) \
+            and _norm(hw[0]) != _norm(box_cpu if dev == "cpu" else box_gpu):
+        host = None     # the row's own device is not the board box's: it ran elsewhere, host unrecorded
+        machine = None  # and its machine class is not known either (never assumed from the board box)
     if hw is None:
         _set(cell, "unknown (copied from %s)" % where, None, "unknown")
     elif dev == "cpu":
@@ -293,7 +299,7 @@ def annotate_release(result):
                             our_fields(c, version_text=ver, gpu_name=c.get("device_name") or gpu, hostname=host,
                                        cpu_model=cpu, source="board box")
                     else:
-                        opponent_fields(c, box, "this board")
+                        opponent_fields(c, box, "this board's record")
     return result
 
 
