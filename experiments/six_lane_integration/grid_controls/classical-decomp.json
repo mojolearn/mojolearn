@@ -44,26 +44,6 @@
    "bits_change": true,
    "status": "split_from:C01_LEAF64/C01_LEAF128 (rewritten row-parallel)"
   },
-  "PCA_COV": {
-   "define": "MOJOLEARN_CLASSICAL_PCA_COV",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "c04": [
-     "MOJOLEARN_CLASSICAL_PCA_COV=4"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "decomposition/impl/linalg/detail/pca.mojo:220",
-    "core/blocked_moments.mojo:521",
-    "decomposition/host/pca_oracle.mojo:740",
-    "experiments/classical_identical_ideas/linear_controls.mojo"
-   ],
-   "binding": "_mojolearn_estimators",
-   "bits_change": "c04: true (the old C04 cell values)",
-   "status": "split_from:C04_LOAD_CENTER(PCA)+C23_CENTERED_PANELS(PCA), both rewritten row-parallel; c04 keeps the old C04 cell values, c23 is a new one-pass Chan profile; c23 arm deleted 2026-10-08 (lane grid-act-2, grid ge123e6f9 loser)"
-  },
   "C04_LDA": {
    "define": "MOJOLEARN_CLASSICAL_C04_LDA",
    "kind": "switch",
@@ -158,18 +138,12 @@
  "algorithms": {
   "classical:pca": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "route": "fit: PCA.fit -> pca_fit_binding -> pca_fit_host -> compute_covariance (PCA_COV arm | column_mean_launch [C01_MEAN] + split-K/gemm_tn) -> eig_and_truncate; transform: pca_transform (gemm, no control)",
+   "route": "fit: PCA.fit -> pca_fit_binding -> pca_fit_host -> compute_covariance (column_mean_launch [C01_MEAN] + split-K/gemm_tn) -> eig_and_truncate; transform: pca_transform (gemm, no control)",
    "controls": [
-    "C01_MEAN",
-    "PCA_COV"
+    "C01_MEAN"
    ],
-   "interaction_groups": [
-    [
-     "C01_MEAN",
-     "PCA_COV"
-    ]
-   ],
-   "note": "PCA_COV=23 skips column_mean_launch, so C01_MEAN is inert under it; C01_MEAN x {off, c04} is a real crossing"
+   "interaction_groups": [],
+   "note": "PCA_COV deleted 2026-10-10 (lane grid-act-6; c23 2026-10-08): C01_MEAN is the only control on this route."
   },
   "more:tsvd": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
@@ -299,6 +273,12 @@
    "define": "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS",
    "control": "TSVD_FUSED_STATS",
    "reason": "DELETED 2026-10-10 (lane grid-act-6, deletion commit ffb82c770): IDENTICAL grid g50ebe26a5 loser, one run per arm. on/off ms ratio NV/AMD on more:tsvd: istella 2.337/3.461 (54.1 -> 126.5 NV, 29.5 -> 102.1 AMD), 2.844x combined; taxi 1.834/1.384 (2.9 -> 5.3 NV, 2.7 -> 3.7 AMD), 1.593x. Deleted bm_tsvd_variances / bm_tsvd_leaf_kernel (core/blocked_moments.mojo), host_bm_tsvd_variances (core/blocked_moments_host.mojo) and the branches in decomposition/estimator.mojo and decomposition/host/pca_oracle.mojo; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 328b0ae58; patch experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_PCA_COV",
+   "control": "PCA_COV",
+   "arm": "c04",
+   "reason": "DELETED 2026-10-10 (lane grid-act-6, deletion commit 487a428ad): arm c04 (=4) IDENTICAL grid g50ebe26a5, one run per arm: c04/off ms ratio NV/AMD on classical:pca: istella 1.308/1.254 (106.4 -> 139.2 NV, 52.9 -> 66.3 AMD), 1.281x combined SLOWER; taxi 0.941/0.820 (9.5 -> 8.9 NV, 8.3 -> 6.8 AMD), 0.878x; geo-mean ~1.06x: noise/slower. With c23 deleted 2026-10-08 no arm remains: the control is gone and any -D MOJOLEARN_CLASSICAL_PCA_COV is refused in core/six_lane_experiment_guards.mojo. Deleted the c04 branch in decomposition/impl/linalg/detail/pca.mojo compute_covariance and decomposition/host/pca_oracle.mojo host_pca_fit, and PCA_COV_C04 / PCA_COV_LEGAL in linear_controls.mojo; code recoverable at main 328b0ae58; patch experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch."
   }
  ],
  "notes": [

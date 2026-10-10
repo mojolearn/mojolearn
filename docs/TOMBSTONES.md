@@ -192,6 +192,7 @@ in the tables after the sections.
 | [`MOJOLEARN_X_PREP_PINNED_OUT`](#mojolearn_x_prep_pinned_out) | Prep | DROPPED | 2026-10-04 | lane only |
 | [`MOJOLEARN_AFCL_L09`](#mojolearn_afcl_l09) | Decomp | never run (sub-arm) | 2026-10-09 | [MOJOLEARN_QR_FAST_DEV.patch](../experiments/removed/MOJOLEARN_QR_FAST_DEV.patch) |
 | [`MOJOLEARN_CLASSICAL_PCA_COV=23`](#mojolearn_classical_pca_cov-arm23) | Decomp | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_PCA_COV-arm23.patch](../experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm23.patch) |
+| [`MOJOLEARN_CLASSICAL_PCA_COV=4`](#mojolearn_classical_pca_cov-arm4) | Decomp | noise/slower | 2026-10-10 | [MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch](../experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch) |
 | [`MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS`](#mojolearn_classical_tsvd_fused_stats) | Decomp | slower | 2026-10-10 | [MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch) |
 | [`MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2`](#mojolearn_decomp_fast_small_eigh_j2) | Decomp | DROPPED-semantics |  | lane only |
 | [`MOJOLEARN_EIGH_TANGENT_CACHE`](#mojolearn_eigh_tangent_cache) | Decomp | DROPPED-speed | 2026-10-04 | lane only |
@@ -1606,6 +1607,18 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Guard refusal (core/six_lane_experiment_guards.mojo:201): removed: MOJOLEARN_CLASSICAL_PCA_COV=23 (C23 one-pass covariance) retired 2026-10-08: slower, pca NV 2.28x / AMD 1.27x istella, NV 0.90x / AMD 0.78x taxi, combined 1.195x (grid ge123e6f9); =4 (c04) stays; see EXPERIMENTS.md
 - grid_controls/classical-decomp.json removed (control PCA_COV): DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. c23/off ms ratio NV/AMD on pca: istella 2.281/1.265 (154.0 -> 351.3 NV, 53.1 -> 67.2 AMD), taxi 0.903/0.782; combined 1.195x SLOWER (dimension-dependent: the one-pass d x d leaf Gram loses at wide d; lane grid-flips-1 refused to flip it). Deleted the C23 branch in decomposition/impl/linalg/detail/pca.mojo and pca_oracle.mojo, bm_onepass_covariance (core/blocked_moments.mojo) and its host twin; c04 stays (unmeasured), C23_MCD is separate. Code recoverable at main 42d1e42c6; =23 refused in core/six_lane_experiment_guards.mojo.
 - EXPERIMENTS.md:1711 (IDENTICAL grid ge123e6f9: two promotions and eight loser arm): `MOJOLEARN_CLASSICAL_PCA_COV=23` on classical:pca / istella, taxi, main @ 42d1e42c6 (deleted on lane/grid-act-2), A/B ge123e6f9, istella NV 154.0 -> 351.3 (2.281), AMD 53.1 -> 67.2 (1.265); taxi NV 14.9 -> 13.5 (0.903), AMD 8.2 -> 6.4 (0.782); 1.195x combined SLOWER ms, **DROP (slower on the average), code deleted**: one blocked pass with per-leaf centering and Chan merges: faster at narrow d (taxi), much slower at wide d (istella), so dimension-dependent; lane grid-flips-1 refused to flip it and the vendor average is slower. Deleted the C23 branch in decomposition/impl/linalg/detail/pca.mojo and decomposition/host/pca_oracle.mojo, `bm_onepass_covariance` (core/blocked_moments.mojo) and `host_bm_onepass_covariance` (core/blocked_moments_host.mojo); `=23` is refused.
+
+### MOJOLEARN_CLASSICAL_PCA_COV=4
+
+- Verdict: noise/slower. Deleted 2026-10-10 by `487a428ad` (lane/grid-act-6: delete MOJOLEARN_CLASSICAL_PCA_COV arm c04). With =23 deleted 2026-10-08 no arm remains: the define is gone and refused.
+- Recoverable at `328b0ae58` (the lane's base, main). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch` (reverse of the deletion commit, code files only; applies cleanly to the deletion commit).
+- What it tried: lane classical-decomp (2026-10-07), IDENTICAL only, the PCA half of the old C04_LOAD_CENTER rewritten row-parallel: the covariance as two passes (the column mean, then the centered Gram around it read straight from X, leaves of contract_leaf_size(n) rows, binary-counter fold; `bm_centered_gram_panels` + scale) instead of the incumbent column_mean_launch + split-K / shift + gemm_tn; host column `centered_gram_v1_cell` per cell. Bits change (the old C04 cell values).
+- Verdict numbers: IDENTICAL grid freeze 20261010 @50ebe26a5 (runs g50ebe26a5/h, one run per arm, incumbent once + stored floors; nv2 L40S v1172, amd2 MI325X b0018): classical:pca istella NV 106.4 -> 139.2 ms (1.308x) / AMD 52.9 -> 66.3 ms (1.254x), 1.281x combined SLOWER; taxi NV 9.5 -> 8.9 (0.941x) / AMD 8.3 -> 6.8 (0.820x), 0.878x; geo-mean ~1.06x. Evidence `~/mojolearn-evidence/grid-lq/decisions_act_1900.json`.
+- Files the patch restores: `decomposition/impl/linalg/detail/pca.mojo`, `decomposition/host/pca_oracle.mojo`, `experiments/classical_identical_ideas/linear_controls.mojo`
+- Left in place: `bm_centered_gram_panels` and `centered_gram_v1_cell` (other callers: x_decomp, glm gram_solve, kit_device).
+- grid_controls: `classical-decomp.json` `PCA_COV` moved to `removed` (arm c04; c23 was already there).
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (grid g50ebe26a5, lane/grid-act-6): any -D MOJOLEARN_CLASSICAL_PCA_COV; code at main 328b0ae58.
+- EXPERIMENTS.md: section "Grid g50ebe26a5 ... (lane/grid-act-6, 2026-10-10)".
 
 ### MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS
 
