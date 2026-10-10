@@ -353,12 +353,14 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                          f'{len(built_keys)} built ({", ".join("/".join(k) for k in sorted(built_keys)) or "none"}), '
                          f'{len(host_built)} host binding(s) built ({", ".join(sorted(host_built)) or "none"}), '
                          f'{proofs_needed} proof(s) needed, {len(proof_paths)} given')
+    # Bindings only: the PTX set's PTX_BASELINE.json is its build manifest, bound
+    # by the vendor marker, not a binding a build proof names.
     payload = {f'mojolearn/{rel}': sha(path).hex()
-               for s in sets for rel, path in s.files.items()}
+               for s in sets for rel, path in s.files.items() if rel.endswith('.so')}
     origin = {}
     for s in sets:
         reused = reused_of[(s.vendor, s.arch)]
-        for rel in s.files:
+        for rel in (r for r in s.files if r.endswith('.so')):
             rec = reused.get(rel.split('/', 2)[2])
             origin[f'mojolearn/{rel}'] = (
                 dict(origin='reused', set=f'{s.vendor}/{s.arch}', **reuse_origin(s, rec),
