@@ -36,37 +36,6 @@
    "status": "new default K4",
    "note": "Rollback arm: per-call allocation of queries, norms, dist_tile, radix pairs, outputs and pinned readback on every resident search. Default: exact-length views of the handle's high-water pool."
   },
-  "knn_widek_radix": {
-   "define": "MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "neighbors/impl/detail/knn_brute_force.mojo:KNN_WIDEK_RADIX"
-   ],
-   "binding": [
-    "_mojolearn",
-    "_mojolearn_estimators",
-    "_mojolearn_hdbscan",
-    "_mojolearn_metrics",
-    "_mojolearn_x_ann",
-    "_mojolearn_ivf",
-    "_mojolearn_x_cluster",
-    "_mojolearn_estimators_host",
-    "_mojolearn_hdbscan_host",
-    "_mojolearn_metrics_host",
-    "_mojolearn_x_ann_host",
-    "_mojolearn_x_cluster_host"
-   ],
-   "bits_change": false,
-   "status": "new K2 (A/B owed)",
-   "note": "On a 64-lane column (AMD CDNA) k>=17 column-tile selection by the radix selector (scratch shrink skipped there). NVIDIA build unaffected (32-lane). Same composite-key total order."
-  },
   "xprep_arena_pool_off": {
    "define": "MOJOLEARN_XPREP_ARENA_POOL_OFF",
    "kind": "switch",
@@ -95,17 +64,12 @@
  "algorithms": {
   "classical:knn": {
    "binding": "_mojolearn",
-   "route": "neighbors.py kneighbors -> knn_search_resident -> _knn_search_on_device_index (K4 pool) -> brute_force_knn_impl -> tiled_brute_force_knn (resident cache) -> smem/register distance tile + bound-compact | small-k | radix (K2) | block top-k (K3) + partial merges",
+   "route": "neighbors.py kneighbors -> knn_search_resident -> _knn_search_on_device_index (K4 pool) -> brute_force_knn_impl -> tiled_brute_force_knn (resident cache) -> smem/register distance tile + bound-compact | small-k | radix | block top-k + partial merges",
    "controls": [
-    "knn_scratch_pool_off",
-    "knn_widek_radix"
+    "knn_scratch_pool_off"
    ],
-   "interaction_groups": [
-    [
-     "knn_widek_radix"
-    ]
-   ],
-   "notes": "Diagnostic first: one AMD build with -D MOJOLEARN_KNN_PHASE_TIMERS (existing, vendor-neutral) splits transpose/distance/select/merge/upload. K2/K3/K5 move the AMD build only."
+   "interaction_groups": [],
+   "notes": "Diagnostic first: one AMD build with -D MOJOLEARN_KNN_PHASE_TIMERS (existing, vendor-neutral) splits transpose/distance/select/merge/upload. K1 (legacy-schedule arm), K2, K3 and K5 were removed 2026-10-10 (lane postmerge-act-6): AMD takes the NVIDIA schedule."
   },
   "expanded:gaussian-nb": {
    "binding": "_mojolearn_x_prep",
@@ -147,6 +111,11 @@
    "define": "MOJOLEARN_KNN_AMD_EXACT_CHAIN",
    "control": "knn_amd_exact_chain",
    "reason": "DELETED 2026-10-10 (lane postmerge-act-6): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 1.00x, knn taxi AMD 1.01x: noise (AMD-only arm; NVIDIA untouched), recall and hashes unchanged. K5 deleted from checks/kernel_matrix.mojo knn_distance_exact_chain_for; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_KNN_AMD_EXACT_CHAIN.patch)."
+  },
+  {
+   "define": "MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX",
+   "control": "knn_widek_radix",
+   "reason": "DELETED 2026-10-10 (lane postmerge-act-6): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 1.12x / NV 1.00x, knn taxi AMD 1.31x / NV 0.99x (slower on AMD), recall and hashes unchanged. K2 deleted from neighbors/impl/detail/knn_brute_force.mojo (KNN_WIDEK_RADIX, knn_widek_radix_applies and its two call sites); define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX.patch)."
   }
  ]
 }
