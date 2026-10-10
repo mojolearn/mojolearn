@@ -95,6 +95,8 @@ MACOS = "osx-arm64"
 #: The Linux release sets: native sm_89, the PTX slot sm_80 (Andrew 2026-10-10: PTX is a
 #: normal target; no flag) and gfx942 (python/mojolearn/gpu_plugins.py; sm_90a out since 0.8.37).
 LINUX_SETS = (("cuda", "sm_89"), ("cuda", "sm_80"), ("hip", "gfx942"))
+#: The PTX slot (gpu_plugins.PTX_ARCH): always BUILD, never taken from a published wheel.
+PTX_SET = ("cuda", "sm_80")
 #: The leg that builds when only a host binding or the runtime needs one.
 HOST_LEG = ("cuda", "sm_89")
 LINUX_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
@@ -819,6 +821,11 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
                 decision, reason = "BUILD", "no published release record"
             elif prev.get("linux" if target == LINUX else "macos") is None:
                 decision, reason = "BUILD", "the previous release published no %s wheel" % target
+            elif (b.vendor, b.arch) == PTX_SET:
+                # THE PTX SET IS BUILT EVERY RELEASE: its PTX_BASELINE.json binds the
+                # source commit (the pack and the loader refuse another commit's), and
+                # a set rebuilt from the published wheel carries no manifest.
+                decision, reason = "BUILD", "the PTX set's manifest binds this release's source commit"
             else:
                 decision, reason = compare(cur, old)
             if decision == "BUILD" and reason.startswith("changed: closure"):
