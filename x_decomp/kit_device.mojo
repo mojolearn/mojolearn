@@ -1229,8 +1229,8 @@ def fast_mcd_dev(
     """`fast_mcd` (x_decomp/mcd.mojo) with X resident: the same plan, the
     same C-steps, the same draws and orders. Every permutation, selection,
     support and distance stays on the device (lane cpu3-core)."""
-    # FAST on Apple, OPT-IN (-D MOJOLEARN_MCD_DEVICE_CSTEPS; DROPPED-quality
-    # 2026-10-03, see x_decomp/mcd_fast.mojo's docstring): every candidate's
+    # FAST on Apple, under MCD_BATCH_COMPAT (the old -D MOJOLEARN_MCD_DEVICE_CSTEPS
+    # arm was DROPPED-quality, see x_decomp/mcd_fast.mojo): every candidate's
     # C-steps together on the device (lane/apple-fast-robust; M3 A/B min-cov-det
     # taxi 79,925 -> 215 ms, M2 robust-ee-taxi-x 64,578 -> 267.5 ms)
     comptime if MCD_DEVICE_CSTEPS:

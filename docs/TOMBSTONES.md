@@ -176,6 +176,7 @@ in the tables after the sections.
 | [`MOJOLEARN_FA_EIG_SMALL`](#mojolearn_fa_eig_small) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_FA_EIG_SMALL.patch](../experiments/removed/MOJOLEARN_FA_EIG_SMALL.patch) |
 | [`MOJOLEARN_FA_LL_DEVICE`](#mojolearn_fa_ll_device) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_FA_LL_DEVICE.patch](../experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch) |
 | [`MOJOLEARN_LLE_FAST_NULL_CANON`](#mojolearn_lle_fast_null_canon) | Decomp | DROPPED-quality | 2026-10-09 | [MOJOLEARN_LLE_FAST_NULL_CANON.patch](../experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch) |
+| [`MOJOLEARN_MCD_DEVICE_CSTEPS`](#mojolearn_mcd_device_csteps) | Decomp | DROPPED-quality | 2026-10-09 | [MOJOLEARN_MCD_DEVICE_CSTEPS.patch](../experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch) |
 | [`MOJOLEARN_AFFINITY_FAST_LOOP`](#mojolearn_affinity_fast_loop) | Cluster | DROPPED-noise | 2026-10-02 | [MOJOLEARN_AFFINITY_FAST_LOOP.patch](../experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch) |
 | [`MOJOLEARN_BGMM_ENT`](#mojolearn_bgmm_ent) | Cluster | DROPPED-noise | 2026-10-03 | [MOJOLEARN_BGMM_ENT.patch](../experiments/removed/MOJOLEARN_BGMM_ENT.patch) |
 | [`MOJOLEARN_BISECT_FAST_RESIDENT`](#mojolearn_bisect_fast_resident) | Cluster | DROPPED-slower | 2026-10-02 | [MOJOLEARN_BISECT_FAST_RESIDENT.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch) |
@@ -1377,6 +1378,15 @@ in the tables after the sections.
 - EXPERIMENTS.md:1414: `LLE_FAST_NULL_CANON` | lle / taxi, istella | lane/apple-fast-s-shap | verdicts batch 6 | - | DROPPED-quality | trustworthiness down on both datasets; stays off
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): LLE_FAST_NULL_CANON (canonical LLE answer when the null space is wider than n_components) LOST quality: lle trustworthiness down on taxi and istella (verdicts batch 6); code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_MCD_DEVICE_CSTEPS
+
+- Verdict: DROPPED-quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: every MinCovDet candidate's C-steps together on the device (fast_mcd_fast), switched on by its own define; min-cov-det taxi 79,925 -> 215 ms but a different robust fit.
+- Files the patch restores: `x_decomp/kit_device.mojo`, `x_decomp/mcd_fast.mojo`
+- EXPERIMENTS.md:451: `MCD_DEVICE_CSTEPS` | min-cov-det / taxi; elliptic-envelope / taxi | lane/apple-fast-robust @ cfdb95e48 | M3 min-cov-det taxi; robust-ee-taxi-x (M2) | M3 mcd 79,925 -> 215; M2 ee 64,578 -> 267.5 | DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) | tools/mcd_quality_ab.sh (M2, taxi 100k, mcdq4): Jaccard flagged Xq vs OFF .8805 mcd / .9645 ee (bar .99); OFF vs IDENTICAL .994 / .999; location_ 14%, covariance_ 18% rel Frobenius shift; mcd flag rate .231 -> .203; raw covariance rank 8 vs OFF/IDENTICAL 10 (all exact-fit singular)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): MCD_DEVICE_CSTEPS (legacy device C-steps by their own define) LOST quality: flagged-mask Jaccard vs OFF .8805 MinCovDet / .9645 EllipticEnvelope (bar .99); the device route stays under MCD_BATCH_COMPAT / MCD_BATCH_MMA; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Cluster
 
 ### MOJOLEARN_AFFINITY_FAST_LOOP
@@ -2036,7 +2046,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
 | `MOJOLEARN_KSHAP_FAST_OVERLAP` | EXPERIMENTS.md:1412 DROPPED-noise (lane/apple-fast-s-shap) | `python/mojolearn/_expansion_trees.py:3403` |
-| `MOJOLEARN_MCD_DEVICE_CSTEPS` | EXPERIMENTS.md:451 DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) (lane/apple-fast-robust @ cfdb95e48) | `x_decomp/mcd_fast.mojo:13` |
 | `MOJOLEARN_MC_CLASS_BATCH_DERIV` | EXPERIMENTS.md:165 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:763` |
 | `MOJOLEARN_MC_CLASS_BATCH_EST` | EXPERIMENTS.md:166 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:774` |
 | `MOJOLEARN_MI_ALL` | EXPERIMENTS.md:363 DROP (quality) (lane/apple-fast-miv @ 514401169) | `x_prep/device.mojo:201` |
