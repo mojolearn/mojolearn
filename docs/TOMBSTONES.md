@@ -194,6 +194,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C58_SHARED_PREP`](#mojolearn_c58_shared_prep) | Time series | slower | 2026-10-08 | [MOJOLEARN_C58_SHARED_PREP.patch](../experiments/removed/MOJOLEARN_C58_SHARED_PREP.patch) |
 | [`MOJOLEARN_C60_DIFF_REUSE`](#mojolearn_c60_diff_reuse) | Time series | dead code | 2026-10-07 | [MOJOLEARN_C60_DIFF_REUSE.patch](../experiments/removed/MOJOLEARN_C60_DIFF_REUSE.patch) |
 | [`MOJOLEARN_SEQ_FAST_THETA_HOIST`](#mojolearn_seq_fast_theta_hoist) | Time series | DROPPED-noise | 2026-10-03 | [MOJOLEARN_SEQ_FAST_THETA_HOIST.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_HOIST.patch) |
+| [`MOJOLEARN_SEQ_FAST_VAR_NODRAIN`](#mojolearn_seq_fast_var_nodrain) | Time series | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch) |
 | [`MOJOLEARN_SEQ_FAST_VAR_SPEC`](#mojolearn_seq_fast_var_spec) | Time series | DROPPED-noise | 2026-10-03 | [MOJOLEARN_SEQ_FAST_VAR_SPEC.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_VAR_SPEC.patch) |
 | [`MOJOLEARN_KERNEL_FAST_GPR_RESIDENT`](#mojolearn_kernel_fast_gpr_resident) | Kernel / GP | DROPPED-semantics | 2026-10-03 | [MOJOLEARN_KERNEL_FAST_GPR_RESIDENT.patch](../experiments/removed/MOJOLEARN_KERNEL_FAST_GPR_RESIDENT.patch) |
 | [`MOJOLEARN_SVGP_FAST_GPU`](#mojolearn_svgp_fast_gpu) | Kernel / GP | DROPPED-noise |  | lane only |
@@ -1493,6 +1494,17 @@ in the tables after the sections.
 - Files the patch restores: `sequence/theta.mojo`
 - EXPERIMENTS.md:547 (Time series (34)): `SEQ_FAST_THETA_HOIST` on theta / taxi-hourly, lane/apple-fast-gap-tsa @ e9da47064, A/B gaptsa-thetahoist-theta-taxi-hourly, theta taxi-hourly 218 -> 58 ms, **DROPPED-noise**: -73% alone (at 976a585a0); on top of THETA_SPEC (default) gaptsa-spechoist-theta-taxi-hourly 21.8 -> 21.5 (-1%, noise); code removed from main 239fde86d; recover at lane/apple-fast-gap-tsa@e9da47064
 
+### MOJOLEARN_SEQ_FAST_VAR_NODRAIN
+
+- What it tried: VAR fit / forecast bindings mark their DeviceExec drained after their own final wait so `DeviceExec.__deinit__` skips the second empty synchronize (one Metal wait fewer per call), FAST + Apple (lane apple-fast-s-ts; sequence/exec_device.mojo, bindings/_mojolearn_x_sequence.mojo).
+- Verdict: DROPPED-slower: M3 afc_ab_def verdicts batch 6 (2026-10-05) var taxi-hourly +10.6% (mixed). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_SEQ_FAST_VAR_NODRAIN`): the define, the `drained` field and `mark_drained`; `__deinit__` always synchronizes, as every default build did.
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `sequence/exec_device.mojo`, `bindings/_mojolearn_x_sequence.mojo`
+- Guard refusal (core/six_lane_experiment_guards.mojo:259): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_VAR_NODRAIN, the VAR no-second-drain executor flag, was DROPPED-slower: M3 verdicts batch 6 var taxi-hourly +10.6%; code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:1350 (lane/apple-fast-s-ts @ b8afe92fc): `MOJOLEARN_SEQ_FAST_VAR_NODRAIN` on var / synthetic, taxi-hourly, READY-AB (superseded)
+- EXPERIMENTS.md:1411 (lane/apple-fast-s-ts): `SEQ_FAST_VAR_NODRAIN`, verdicts batch 6, taxi-hourly +10.6% (mixed), **DROPPED-slower**: stays off
+- EXPERIMENTS.md:1843 (Owed deletions D2): **DELETED**.
+
 ### MOJOLEARN_SEQ_FAST_VAR_SPEC
 
 - Verdict: DROPPED-noise. Deleted 2026-10-03 by `dfbdc7943` (apple-fast-gap-tsa: TSA_FAST_KPSS_PACK, TSA_FAST_SELD_FUSED, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_THETA_SPEC default on FAST+Apple (M3 A/B n=1, quality identical: kps).
@@ -2038,7 +2050,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_QR_FAST_DEV` | EXPERIMENTS.md:453 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1251` |
 | `MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` | EXPERIMENTS.md:384 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:221` |
 | `MOJOLEARN_RESAMPLE_FAST_RANK_SORT` | EXPERIMENTS.md:386 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:205` |
-| `MOJOLEARN_SEQ_FAST_VAR_NODRAIN` | EXPERIMENTS.md:1411 DROPPED-slower (lane/apple-fast-s-ts) | `sequence/exec_device.mojo:150` |
 | `MOJOLEARN_SPARSE_RP_DEVICE` | EXPERIMENTS.md:557 DROPPED-quality (lane/apple-fast-kapprox @ 10d5a7970) | `x_neighbors/kapprox_dev.mojo:10` |
 | `MOJOLEARN_SVD_FAST_CHOLQR` | EXPERIMENTS.md:454 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1567` |
 | `MOJOLEARN_SVD_QFIX` | EXPERIMENTS.md:1216 DROPPED-slower (lane/apple-fast-q-linalg @ aaebc0ab8) | `x_decomp/qfix.mojo:10` |

@@ -10,7 +10,7 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
-from sequence.exec_device import DeviceExec, SEQ_FAST_VAR_NODRAIN
+from sequence.exec_device import DeviceExec
 from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
@@ -144,19 +144,15 @@ def sched_exp_block_binding(addrs: PythonObject, fp: PythonObject, ip: PythonObj
 
 def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (DROPPED-slower, var taxi-hourly +10.6%) deleted 2026-10-09 on
+    # lane/owed-deletions-D2; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch
     var r = var_fit_py(ex, addrs, ip)
-    comptime if SEQ_FAST_VAR_NODRAIN:
-        # every var_fit_py return follows its final sync (sequence/exec_device.mojo)
-        ex.mark_drained()
     return r
 
 
 def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     var r = var_forecast_py(ex, addrs, ip)
-    comptime if SEQ_FAST_VAR_NODRAIN:
-        # var_forecast_py returns after its blocking download (a sync)
-        ex.mark_drained()
     return r
 
 
