@@ -133,6 +133,7 @@ in the tables after the sections.
 | [`MOJOLEARN_XN_PCS_SPARSE`](#mojolearn_xn_pcs_sparse) | Neighbors | DROPPED-noise | 2026-10-03 | [MOJOLEARN_XN_PCS_SPARSE.patch](../experiments/removed/MOJOLEARN_XN_PCS_SPARSE.patch) |
 | [`MOJOLEARN_CAGRA_FAST_IVFG_LOWD`](#mojolearn_cagra_fast_ivfg_lowd) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch) |
 | [`MOJOLEARN_CAGRA_FAST_SEEDS4`](#mojolearn_cagra_fast_seeds4) | Neighbors | DROPPED-semantics | 2026-10-09 | [MOJOLEARN_CAGRA_FAST_SEEDS4.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS4.patch) |
+| [`MOJOLEARN_IVF_COARSE_FAISS_INIT`](#mojolearn_ivf_coarse_faiss_init) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_IVF_COARSE_FAISS_INIT.patch](../experiments/removed/MOJOLEARN_IVF_COARSE_FAISS_INIT.patch) |
 | [`MOJOLEARN_ACHI2_FAST_DEVCHECK`](#mojolearn_achi2_fast_devcheck) | Prep | DROPPED | Oct 3 | lane only |
 | [`MOJOLEARN_CLASSICAL_C55_CLASS_GROUP`](#mojolearn_classical_c55_class_group) | Prep | quality loss | 2026-10-07 | [MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
@@ -1004,6 +1005,16 @@ in the tables after the sections.
 - Files the patch restores: `x_ann/fast_env.mojo`
 - EXPERIMENTS.md:308: `CAGRA_FAST_SEEDS4` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seeds4-taxi | 2,887 -> ? | DROPPED-semantics | rec-misc 2026-10-04: never judged alone; SEEDS (in the 3852df59b bundle) kept; `_CAGRA_SEEDS4` survives only inside the opt-in LOWD_SEEDS4 candidate
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): CAGRA_FAST_SEEDS4 alone (4x search seeds without the low-d graph) was never judged alone (DROPPED-semantics, gapcagra-seeds4-taxi); the 4x seeds stay inside the LOWD_SEEDS4 FAST default; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_IVF_COARSE_FAISS_INIT
+
+- Verdict: DROPPED-quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IVF_COARSE_FAISS_INIT.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the FAST Apple IVF coarse quantizer started from IVF_FAST_RANDOM_INIT's n_lists distinct seeded rows (FAISS's Clustering rule) with the IVF_FAST_SEED k-means++ seeding skipped.
+- Files the patch restores: `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo`
+- EXPERIMENTS.md:1219: `IVF_COARSE_FAISS_INIT` (old: `MOJOLEARN_IVF_COARSE_INIT_QOLD`) | ivf-sq / taxi, ivf-filter / istella (+ every IVF kind on Apple FAST) (ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo) | lane/apple-fast-q-misc @ ab9acf0e8 | - | - | DROPPED-quality | reconciled 2026-10-05: rab5-ivfinit ivf-sq recall istella .60895 -> .51065, taxi .83325 -> .76685, Verdicts batch 4; reverted, opt-in MOJOLEARN_IVF_COARSE_FAISS_INIT. Was QUALITY-FIX, READY-AB: audit: ivf-sq taxi 0.83325 vs faiss 0.857025 (0.902 before IVF_FAST_SEED default f2e71e548), ivf-filter istella 0.801 vs 0.84195; the promoted FAISS random-row start was dead code under IVF_FAST_SEED; paired recall check on all IVF rows
+- EXPERIMENTS.md:1273: `IVF_COARSE_FAISS_INIT` (now opt-in `MOJOLEARN_IVF_COARSE_FAISS_INIT`) | ivf-sq, ivf-filter, ivf-pq / istella, taxi | lane/apple-fast-verdicts-4 | rab5-ivfinit | -3.0% .. -20.8% | REVERTED: IVF_FAST_SEED k-means++ start is the default | ivf-sq recall istella 0.60895 -> 0.51065, taxi 0.83325 -> 0.76685 (worse)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): IVF_COARSE_FAISS_INIT (FAISS random-row coarse start, k-means++ seeding skipped) LOST quality: ivf-sq recall@10 istella 0.60895 -> 0.51065, taxi 0.83325 -> 0.76685 (rab5-ivfinit); code at main b639a2bd2; see docs/TOMBSTONES.md
 
 ## Prep
 
@@ -1911,7 +1922,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
-| `MOJOLEARN_IVF_COARSE_FAISS_INIT` | EXPERIMENTS.md:1219 DROPPED-quality (lane/apple-fast-q-misc @ ab9acf0e8) | `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:183` |
 | `MOJOLEARN_IVF_COARSE_INIT_QOLD` | EXPERIMENTS.md:1219 DROPPED-quality (lane/apple-fast-q-misc @ ab9acf0e8) | `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:186` |
 | `MOJOLEARN_IVF_REFINE_TEAM` | EXPERIMENTS.md:326 DROPPED-noise (lane/apple-fast-batch @ 3150d75c1) | `x_ann/vsearch_fast.mojo:69` |
 | `MOJOLEARN_KAPPROX_DEVICE` | EXPERIMENTS.md:555 DROPPED-quality (lane/apple-fast-kapprox @ 10d5a7970) | `x_neighbors/kapprox_dev.mojo:9` |
