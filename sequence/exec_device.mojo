@@ -126,17 +126,15 @@ comptime SEQ_PIPE_DOWN = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST
 comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
 #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
 #: default OFF, FAST + Apple only: the pipelined downloads' read-back.
-#:  MOJOLEARN_SEQ_FAST_MAP_DOWN: each deferred download is read through
-#:    `DeviceBuffer.map_to_host` (the runtime's own mapping) and one memcpy,
-#:    instead of the two pinned (write-combined) halves.
+#:  (MOJOLEARN_SEQ_FAST_MAP_DOWN, the map_to_host read-back, was deleted
+#:    2026-10-09: DROPPED-slower; see the TOMBSTONE below.)
 #:  MOJOLEARN_SEQ_FAST_RAW_DOWN: each deferred download is DMAd straight
 #:    into the caller's array in SEQ_PIPE_CH chunks, all queued, one wait
 #:    (no stage and no host read).
 #: Copies only: the same bytes.
-#: SEQ_FAST_MAP_DOWN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
-#: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 50.2 -> 79.8 ms.
-#: DROPPED-slower: stays off.
-comptime SEQ_MAP_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_MAP_DOWN (DROPPED-slower: M3 afc_ab_def 2026-10-04 layernorm 50.2 -> 79.8 ms; rab2-seqmapdown
+# +58.7%) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_MAP_DOWN.patch
 #: SEQ_FAST_VAR_COOP (sequence/ops.mojo): VAR's long folds as coop cells, routed in `launch`.
 #: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (FAST + Apple, default off, READY-AB): every
 #: binding call's DeviceExec drains the queue again in __deinit__, a second
@@ -148,7 +146,7 @@ comptime SEQ_MAP_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLE
 #: verdicts batch 6): mixed, var taxi-hourly +10.6% slower. DROPPED: stays
 #: off (opt-in only).
 comptime SEQ_FAST_VAR_NODRAIN = _SEQ_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_VAR_NODRAIN"]()
-comptime SEQ_RAW_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
+comptime SEQ_RAW_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]()
 
 
 struct _SeqContext(Defaultable, Movable):
@@ -982,19 +980,9 @@ struct DeviceExec(Exec):
         chunk i - 1 is read out of the other. Each chunk's wait comes before
         its half is reused (that half was last read for chunk i - 2, before
         the previous wait). Returns with every byte in place."""
-        comptime if SEQ_MAP_DOWN:
-            for j in range(len(self.pipe_n)):  # small-loop(pipe_n: deferred download chunks): one mapped DMA copy per chunk into caller memory
-                var nj = self.pipe_n[j]
-                var f = self._find(FP(unsafe_from_address=self.pipe_src[j]), nj)
-                var v = self._sub(f[0], f[1], nj)
-                with v.map_to_host() as h:
-                    memcpy(dest=FP(unsafe_from_address=self.pipe_dst[j]),
-                           src=FP(unsafe_from_address=Int(h.unsafe_ptr())), count=nj)
-                _ = v^
-            self.pipe_dst.clear()
-            self.pipe_src.clear()
-            self.pipe_n.clear()
-            return
+        # TOMBSTONE: MOJOLEARN_SEQ_FAST_MAP_DOWN (DROPPED-slower: M3 afc_ab_def 2026-10-04 layernorm 50.2 -> 79.8 ms; rab2-seqmapdown
+        # +58.7%) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+        # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_MAP_DOWN.patch
         comptime if SEQ_RAW_DOWN:
             for j in range(len(self.pipe_n)):
                 var nj = self.pipe_n[j]

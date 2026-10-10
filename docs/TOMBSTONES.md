@@ -216,6 +216,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SEQ_FAST_LSTM_SCAN`](#mojolearn_seq_fast_lstm_scan) | Neural | DROPPED-quality (broken) | 2026-10-09 | [MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch) |
 | [`MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM`](#mojolearn_seq_fast_lstm_scan_smem) | Neural | DROPPED-quality (bundle) | 2026-10-09 | [MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM.patch) |
 | [`MOJOLEARN_SEQ_FAST_LSTM_WGRAD`](#mojolearn_seq_fast_lstm_wgrad) | Neural | DROPPED-quality (bundle) | 2026-10-09 | [MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch) |
+| [`MOJOLEARN_SEQ_FAST_MAP_DOWN`](#mojolearn_seq_fast_map_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SEQ_FAST_MAP_DOWN.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_MAP_DOWN.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_NT_TILED`](#mojolearn_apple_fast_gemm_nt_tiled) | GEMM | DROPPED-slower | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_PINNED`](#mojolearn_apple_fast_gemm_pinned) | GEMM | DROPPED-noise | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch) |
 | [`MOJOLEARN_BGMM_FAST_MAHAL_GEMM`](#mojolearn_bgmm_fast_mahal_gemm) | GEMM | DROPPED-slower |  | lane only |
@@ -1707,6 +1708,17 @@ in the tables after the sections.
 - EXPERIMENTS.md:1198 / 1294: the bundle, **DROPPED-quality (BROKEN)**, still after the Args fix
 - EXPERIMENTS.md:1840 (Owed deletions D2): **DELETED**.
 
+### MOJOLEARN_SEQ_FAST_MAP_DOWN
+
+- What it tried: the sequence executor's deferred (pipelined) downloads read through `DeviceBuffer.map_to_host` and one memcpy instead of the two pinned write-combined halves (FAST + Apple, lane apple-fast-gap-optim; sequence/exec_device.mojo `_pipe_down`).
+- Verdict: DROPPED-slower: M3 afc_ab_def 2026-10-04 (lane/apple-fast-rec-ab2 @ 40027eb8e) layernorm synthetic 50.2 -> 79.8 ms; rab2-seqmapdown +58.7%. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_SEQ_FAST_MAP_DOWN`).
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_MAP_DOWN.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `sequence/exec_device.mojo`
+- Guard refusal (core/six_lane_experiment_guards.mojo:257): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_MAP_DOWN, the map_to_host sequence read-back, was DROPPED-slower: M3 layernorm 50.2 -> 79.8 ms (+59%); code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:662 (lane/apple-fast-gap-optim @ cf4513f8a): `SEQ_FAST_MAP_DOWN` on adafactor, layernorm / synthetic, **DROPPED-slower 2026-10-04 on layernorm**
+- EXPERIMENTS.md:1195 (lane/apple-fast-rec-ab2 @ 40027eb8e): `SEQ_FAST_MAP_DOWN`, afc_ab_def, 50.2 -> 79.8, **DROPPED-slower**: stays off
+- EXPERIMENTS.md:1841 (Owed deletions D2): **DELETED**.
+
 ## GEMM
 
 ### MOJOLEARN_APPLE_FAST_GEMM_NT_TILED
@@ -2014,7 +2026,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_QR_FAST_DEV` | EXPERIMENTS.md:453 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1251` |
 | `MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` | EXPERIMENTS.md:384 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:221` |
 | `MOJOLEARN_RESAMPLE_FAST_RANK_SORT` | EXPERIMENTS.md:386 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:205` |
-| `MOJOLEARN_SEQ_FAST_MAP_DOWN` | EXPERIMENTS.md:662 DROPPED-slower 2026-10-04 on layernorm (see rec-optim table) (lane/apple-fast-gap-optim @ cf4513f8a) | `sequence/exec_device.mojo:139` |
 | `MOJOLEARN_SEQ_FAST_RAW_DOWN` | EXPERIMENTS.md:1196 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/exec_device.mojo:151` |
 | `MOJOLEARN_SEQ_FAST_VAR_NODRAIN` | EXPERIMENTS.md:1411 DROPPED-slower (lane/apple-fast-s-ts) | `sequence/exec_device.mojo:150` |
 | `MOJOLEARN_SPARSE_RP_DEVICE` | EXPERIMENTS.md:557 DROPPED-quality (lane/apple-fast-kapprox @ 10d5a7970) | `x_neighbors/kapprox_dev.mojo:10` |
