@@ -187,54 +187,49 @@ def split_audit(wheels):
                 problems.append(f'{wheel.name}: Requires-Dist differs from exact package dependencies')
             if metadata.get_all('Provides-Extra', []):
                 problems.append(f'{wheel.name}: GPU package must not declare extras')
-            marker_name = plugins.PLUGIN_MARKER if package['role'] == 'vendor' else plugins.PAYLOAD_MARKER
+            marker_name = plugins.PLUGIN_MARKER
             try:
                 actual_marker = json.loads(read[dist + '/' + marker_name])
                 bundle = actual_marker.get('bundled_ptx')
             except (KeyError, ValueError, AttributeError):
                 bundle = None
-            if bundle is not None:
+            if package.get('ptx'):
+                # THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag):
+                # required in the NVIDIA wheel, its manifest bound by the marker,
+                # its bytes the manifest's and the release inventory's.
                 try:
-                    if profile != 'nvidia':
-                        raise ValueError('only NVIDIA can own bundled PTX')
+                    if bundle is None:
+                        raise ValueError('the vendor marker binds no PTX set')
                     prefix = plugins.BUNDLED_PTX_ROOT + '/'
                     manifest_member = prefix + plugins.BASELINE_MANIFEST
-                    admission_member = prefix + plugins.BASELINE_ADMISSION
                     plugins.validate_bundle_descriptor(bundle)
-                    # A manifest-only bundle is the FAST/DETERMINISTIC fallback:
-                    # it carries no admission and none may ride along unbound.
-                    admitted = 'admission_sha256' in bundle
-                    origin = plugins.bundled_ptx_origin(bundle)
                     with zipfile.ZipFile(wheel) as archive:
                         files = {m[len(prefix):]: hashlib.sha256(archive.read(m)).hexdigest()
                                  for m in payload if m.startswith(prefix) and m.endswith('.so')}
                         manifest_bytes = archive.read(manifest_member)
-                        plugins.validate_bundled_ptx(bundle, manifest_bytes,
-                                                     archive.read(admission_member) if admitted else None, files)
-                        bundle_source = json.loads(manifest_bytes)['source_commit']
+                        plugins.validate_bundled_ptx(bundle, manifest_bytes, files)
+                        ptx_source = json.loads(manifest_bytes)['source_commit']
                         inventory_member = dist + '/LINUX_PAYLOAD.json'
                         if inventory_member in archive.namelist():
                             inventory = json.loads(archive.read(inventory_member))
-                            if (inventory.get('source_commit') != bundle_source
-                                    or inventory.get('bundled_ptx') != dict(bundle, root=plugins.BUNDLED_PTX_ROOT,
-                                                                          source_commit=bundle_source)):
-                                raise ValueError('bundled PTX and release inventory source/descriptor differ')
+                            if inventory.get('source_commit') != ptx_source:
+                                raise ValueError('the PTX set and the release inventory name different commits')
                             for name, digest in files.items():
-                                member = prefix + name
-                                if (inventory.get('extensions', {}).get(member) != digest
-                                        or inventory.get('binding_origin', {}).get(member) != dict(origin=origin, **bundle)):
-                                    raise ValueError('bundled PTX release inventory bytes/provenance differ')
-                    allowed = {prefix + name for name in files} | {manifest_member} | ({admission_member} if admitted else set())
+                                if inventory.get('extensions', {}).get(prefix + name) != digest:
+                                    raise ValueError('PTX set bytes differ from the release inventory')
+                    allowed = {prefix + name for name in files} | {manifest_member}
                     if {m for m in payload if m.startswith(prefix)} != allowed:
-                        raise ValueError('undeclared bundled PTX files')
-                    row['bundled_ptx'] = dict(bundle, source_commit=bundle_source, identical_admission=admitted)
+                        raise ValueError('undeclared PTX set files')
+                    row['ptx'] = dict(bundle, source_commit=ptx_source, arch=plugins.PTX_ARCH)
                 except (ValueError, KeyError, TypeError) as exc:
-                    problems.append(f'{wheel.name}: invalid bundled PTX: {exc}')
+                    problems.append(f'{wheel.name}: invalid PTX slot: {exc}')
+            elif bundle is not None:
+                problems.append(f'{wheel.name}: only the NVIDIA wheel carries a PTX slot')
             arches = []
             stray = []
             for member in payload:
                 try:
-                    valid = plugins.owns_member(profile, member, bundled_ptx=bundle) and member == plugins.installed_member(member)
+                    valid = plugins.owns_member(profile, member) and member == plugins.installed_member(member)
                 except ValueError:
                     valid = False
                 if not valid:
@@ -247,12 +242,11 @@ def split_audit(wheels):
                              and m.split('/')[1] == package['directory']})
             if not plugins.valid_arches(profile, arches):
                 problems.append(f'{wheel.name}: GPU wheel must contain one set per registered architecture slot')
-            marker_name = plugins.PLUGIN_MARKER if package['role'] == 'vendor' else plugins.PAYLOAD_MARKER
             row['arches'] = arches
             try:
                 expected = plugins.package_marker(profile, version, arches, bundled_ptx=bundle)
             except ValueError as exc:
-                problems.append(f'{wheel.name}: invalid bundled ownership: {exc}')
+                problems.append(f'{wheel.name}: invalid vendor marker ownership: {exc}')
                 expected = None
         else:
             problems.append(f'{wheel.name}: unknown distribution {name!r}')

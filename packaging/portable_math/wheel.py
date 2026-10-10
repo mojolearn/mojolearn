@@ -306,8 +306,11 @@ def audit_tree(root, python_only=False):
             "python_math_policy": "owned helpers and guarded CPython fsum", "platform_math_free": True,
             "scope": "wheel native math imports and Python operation policy; excludes Python and OS dependencies", "binaries": binaries,
             "identical_ptx_rounding_pinned": True, "identical_ptx": ptx_rows,
-            "identical_cuda_machine_code": not baseline_reports, "identical_cuda_fatbins": fatbin_rows,
-            "experimental_ptx_baselines": baseline_reports}
+            # The native sets carry machine code; the PTX slot (cuda_ptx/sm_80) carries
+            # rounding-pinned PTX and is reported separately (Andrew 2026-10-10:
+            # PTX is a normal target; no flag).
+            "identical_cuda_machine_code": True, "identical_cuda_fatbins": fatbin_rows,
+            "ptx_sets": baseline_reports}
 
 
 def finalize(wheel, helper=None, audit_only=False):

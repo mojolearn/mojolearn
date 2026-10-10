@@ -66,7 +66,10 @@ IMAGE = "rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083a
 #: are the RunPod CPU box's and they read (and freeze) the same partition; the
 #: runner that built an archive is its manifest's `builder`, never a key field.
 IMAGE_DECL = "runpod-cpu:" + IMAGE
-ARCHS = {"sm_90a": "cuda", "sm_89": "cuda", "gfx942": "hip"}
+#: sm_80 is the PTX slot of mojolearn-nvidia (gpu_plugins.PTX_ARCH), built by the
+#: same route; release061_remote_build.sh gives it the ptx code format
+#: (Andrew 2026-10-10: PTX is a normal target; no flag).
+ARCHS = {"sm_90a": "cuda", "sm_89": "cuda", "sm_80": "cuda", "gfx942": "hip"}
 #: Upload slots each job (a shard, or the assemble job) may PUT into.
 SLOTS_PER_JOB = 80
 MAP_HOURS = 8

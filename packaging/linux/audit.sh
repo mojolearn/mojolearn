@@ -58,7 +58,7 @@ BASE=$(basename "$WHL")
 DIST=${BASE%%-*}
 case "$DIST" in
   mojolearn) SUFFIX="" ;;
-  mojolearn_nvidia|mojolearn_amd|mojolearn_nvidia_sm89|mojolearn_nvidia_sm90|mojolearn_amd_gfx942|mojolearn_nvidia_ptx80) SUFFIX="-$DIST" ;;
+  mojolearn_nvidia|mojolearn_amd|mojolearn_nvidia_sm89|mojolearn_nvidia_sm90|mojolearn_amd_gfx942) SUFFIX="-$DIST" ;;
   *) echo "not a mojolearn wheel: $BASE"; exit 2 ;;
 esac
 

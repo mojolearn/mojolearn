@@ -40,7 +40,8 @@ set -uo pipefail
 DEST="${1:?dest dir}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO"
-# Explicit experimental format; ordinary native builds retain every cubin gate.
+# native (cubin) or ptx (the PTX slot, cuda/sm_80; Andrew 2026-10-10: PTX is a
+# normal target; no flag). Native builds retain every cubin gate.
 CUDA_CODE_FORMAT="${MOJOLEARN_CUDA_CODE_FORMAT:-native}"
 python3 "$REPO/packaging/linux/ptx_baseline.py" validate-config \
   --code-format "$CUDA_CODE_FORMAT" --arch "${MOJOLEARN_GPU_ARCHS:-}" || exit 2
@@ -494,8 +495,8 @@ case "$VENDORS" in
     exit 3 ;;
 esac
 say "vendor: $VENDOR"
-if [[ "$CUDA_CODE_FORMAT" = ptx-baseline && ( "$VENDOR" != cuda || "$ARCH" != sm_80 ) ]]; then
-  say "REFUSING: portable PTX requires read-back cuda/sm_80"; exit 5
+if [[ "$CUDA_CODE_FORMAT" = ptx && ( "$VENDOR" != cuda || "$ARCH" != sm_80 ) ]]; then
+  say "REFUSING: the PTX set requires read-back cuda/sm_80"; exit 5
 fi
 
 # ---------------------------------------------------------------- move
@@ -584,7 +585,7 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
     exit 5
   fi
   say "IDENTICAL machine code: $(python3 -c 'import json,sys; r=[json.loads(l) for l in open(sys.argv[1])][1:]; print(sum(x["in_place"] for x in r), "modules fatbin in place,", sum(x["moved"] for x in r), "moved (lea repointed), ptxas --fmad=false")' "$DEST/cubin.jsonl")"
-  fi # native cubin conversion; baseline retains the rounding-pinned PTX
+  fi # native cubin conversion; the PTX set retains the rounding-pinned PTX
 fi
 
 # ------------------------------------------------- CPU ISA BASELINE
@@ -709,11 +710,11 @@ fi
 # ---------------------------------------------------------------- sizes
 # Audit FINAL bytes after stage_libs has patched ELF RUNPATHs. No format report
 # constitutes IDENTICAL qualification; existing native wheel gates remain strict.
-if [[ "$CUDA_CODE_FORMAT" = ptx-baseline ]]; then
+if [[ "$CUDA_CODE_FORMAT" = ptx ]]; then
   MOJO_VERSION=$(pixi run -e "$PIXI_ENV" mojo --version) || exit 5
   python3 "$REPO/packaging/linux/ptx_baseline.py" audit "$SET" --repo "$REPO" \
     --mojo-version "$MOJO_VERSION" --output "$SET/PTX_BASELINE.json" || exit 5
-  say "EXPERIMENTAL PTX baseline: hardware/driver IDENTICAL qualification required"
+  say "PTX set: manifest written; identity is its reference-table column (docs/NVIDIA_PTX_IDENTITY.md)"
 fi
 
 ( cd "$DEST/sets" && tar czf "$VENDOR.tar.gz" "$VENDOR" )

@@ -138,10 +138,12 @@ def arch_set_ok(keys):
     return len(hopper) <= 1 and {normalise_arch(k) for k in keys} == RELEASE_ARCHES
 
 
-#: Each plugin's share of the release architectures: the split profile packs
-#: `mojolearn-nvidia` from exactly PLUGIN_ARCHES['cuda'] and `mojolearn-amd`
-#: from exactly PLUGIN_ARCHES['hip']. Derived, never spelled a second time.
-PLUGIN_ARCHES = {vendor: frozenset(k for k in RELEASE_ARCHES if k.split('/')[0] == vendor)
+#: Each plugin's architecture sets: the split profile packs `mojolearn-nvidia`
+#: from exactly PLUGIN_ARCHES['cuda'] (native sm_89 and the PTX slot sm_80;
+#: Andrew 2026-10-10: PTX is a normal target; no flag) and `mojolearn-amd` from
+#: exactly PLUGIN_ARCHES['hip'], read from python/mojolearn/gpu_plugins.py
+#: (gpu_plugins.required_sets), never spelled a second time.
+PLUGIN_ARCHES = {vendor: frozenset('/'.join(k) for k in load_gpu_plugins().required_sets(vendor))
                  for vendor in ('cuda', 'hip')}
 
 

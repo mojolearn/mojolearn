@@ -38,7 +38,7 @@ T=/tooling
 OUT=/root/leg_out
 PIXIVER=0.77.0
 case "$MODE" in shard|assemble) ;; *) echo "mode must be shard or assemble" >&2; exit 2 ;; esac
-case "$ARCH" in sm_90a|sm_89) VENDOR=cuda ;; gfx942) VENDOR=hip ;; *) echo "unknown arch $ARCH" >&2; exit 2 ;; esac
+case "$ARCH" in sm_90a|sm_89|sm_80) VENDOR=cuda ;; gfx942) VENDOR=hip ;; *) echo "unknown arch $ARCH" >&2; exit 2 ;; esac
 [[ "${MOJOLEARN_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || { echo "MOJOLEARN_COMMIT must be a full SHA" >&2; exit 2; }
 JOBS=${GHA_BUILD_JOBS:-2}
 [[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo "GHA_BUILD_JOBS must be 1..16" >&2; exit 2; }

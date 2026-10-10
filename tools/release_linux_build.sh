@@ -30,7 +30,7 @@
 #   --out DIR        output root (must not exist)
 #   --vcpu N         pod vCPUs (default 32)      --flavors LIST (default cpu5g,cpu3g)
 #   --jobs N         MOJOLEARN_BUILD_JOBS (default: vcpu / 2, 16 GiB per job)
-#   --archs 'A B'    subset, default 'sm_90a sm_89 gfx942'
+#   --archs 'A B'    subset, default 'sm_90a sm_89 gfx942'; sm_80 builds the PTX slot
 #   --lease MIN      on-pod self-delete (default 120)
 #   --no-bincache    build every extension from source (the R2 binding cache
 #                    is ON by default; tools/bincache.py, partition
@@ -72,7 +72,7 @@ git -C "$ROOT" cat-file -e "$COMMIT^{commit}" 2>/dev/null || die "commit $COMMIT
 printf '%s' "$VCPU" | grep -Eq '^[0-9]+$' || die "--vcpu must be a number"
 [ -n "$JOBS" ] || JOBS=$((VCPU / 2))
 printf '%s' "$JOBS" | grep -Eq '^[0-9]+$' && [ "$JOBS" -ge 1 ] && [ "$JOBS" -le 16 ] || die "--jobs must be 1..16"
-for a in $ARCHS; do case "$a" in sm_90a|sm_89|gfx942) ;; *) die "unknown arch $a" ;; esac; done
+for a in $ARCHS; do case "$a" in sm_90a|sm_89|sm_80|gfx942) ;; *) die "unknown arch $a" ;; esac; done  # sm_80: the PTX slot
 SHORT=$(printf '%s' "$COMMIT" | cut -c1-9)
 [ -n "$OUT" ] || OUT="${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/releases/$COMMIT/linux-cpu-box/$(date -u +%Y-%m-%d_%H%M%S)"
 [ ! -e "$OUT" ] || die "$OUT exists"

@@ -92,7 +92,9 @@ PLAN_SCHEMA = "mojolearn.release-reuse-plan.v1"
 REUSE_SCHEMA = "mojolearn.linux.reused-bindings.v1"
 LINUX = "linux-64"
 MACOS = "osx-arm64"
-LINUX_SETS = (("cuda", "sm_90a"), ("cuda", "sm_89"), ("hip", "gfx942"))
+#: The Linux release sets: native sm_89, the PTX slot sm_80 (Andrew 2026-10-10: PTX is a
+#: normal target; no flag) and gfx942 (python/mojolearn/gpu_plugins.py; sm_90a out since 0.8.37).
+LINUX_SETS = (("cuda", "sm_89"), ("cuda", "sm_80"), ("hip", "gfx942"))
 #: The leg that builds when only a host binding or the runtime needs one.
 HOST_LEG = ("cuda", "sm_89")
 LINUX_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
@@ -1232,7 +1234,7 @@ def legacy_archive_path(name):
     """Canonical identity path across the file-ownership migration; bytes stay unchanged."""
     parts = name.split("/")
     if len(parts) > 2 and parts[0] == "mojolearn":
-        parts[1] = {"cuda_native": "cuda", "hip_native": "hip"}.get(parts[1], parts[1])
+        parts[1] = {"cuda_native": "cuda", "hip_native": "hip", "cuda_ptx": "cuda"}.get(parts[1], parts[1])
     return "/".join(parts)
 
 

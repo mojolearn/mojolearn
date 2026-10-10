@@ -23,7 +23,7 @@ on:
       archs:
         description: "comma list of --target-accelerator values"
         required: false
-        default: "sm_90a,sm_89,gfx942"
+        default: "sm_89,sm_80,gfx942"
       commit:
         description: "commit to check (default: the dispatched ref)"
         required: false

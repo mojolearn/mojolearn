@@ -631,39 +631,24 @@ Hopper qualification column is still required.
 Keep the existing project publishers for repository `mojolearn/mojolearn`,
 workflow `release-provenance.yml`. Each job uploads only its project's files.
 
-#### Experimental NVIDIA PTX baseline
+#### The NVIDIA PTX slot
 
-See [the NVIDIA PTX identity contract](NVIDIA_PTX_IDENTITY.md). A future
-qualified baseline may be bundled inside `mojolearn-nvidia`; no permanent
-separate PyPI project is required. For current local experiments only,
-`mojolearn-nvidia-ptx80` is a release-disabled payload, excluded from default
-dependencies and publication. Build it explicitly with
-`MOJOLEARN_CUDA_CODE_FORMAT=ptx-baseline MOJOLEARN_GPU_ARCHS=sm_80` through
-`packaging/linux/build_sets.sh`; pack with `--profile split --wheels nvidia-ptx80`.
-For a leased CPU build, use
-`python tools/nvidia_baseline_build.py <full-sha> --out <new-directory>` to
-validate the plan; add `--rent` to run it. The commit must already be the tip
-of an advertised origin ref. The runner fetches a real checkout, applies CPU,
-memory and time limits, and relies on the leased runner's watchdog and teardown.
-It leaves native release admission unchanged.
+Andrew 2026-10-10: PTX is a normal target; no flag. `mojolearn-nvidia`
+carries the native sm_89 set AND the PTX set `cuda_ptx/sm_80` as a regular
+slot (`gpu_plugins.PTX_ARCH`). The release builds it as the leg `cuda-sm_80`
+on every build backend, through the same route as any arch
+(`tools/release061_remote_build.sh` gives cuda/sm_80 the `ptx` code format, so
+`packaging/linux/build_sets.sh` keeps the rounding-pinned PTX and writes
+`PTX_BASELINE.json`), cross-compiles it in `cross-compile-check`, and packs it
+into the vendor wheel with its build proof. The vendor marker binds the PTX
+manifest by its SHA256. `pack_wheel.py` checks every wheel against PyPI's
+100 MiB file limit at pack time and fails with the per-set sizes.
 
-Its `cuda_ptx/sm_80/PTX_BASELINE.json` records final hashes, source, compiler,
-PTX target/ISA, rounding checks, and approximate instructions. It does not
-certify bitwise identity.
-
-Selection requires both `MOJOLEARN_CUDA_PATH=ptx-baseline` and
-`MOJOLEARN_EXPERIMENTAL_PTX=1`. It never silently replaces native kernels and
-never falls back to native during a baseline run. An sm80 target is a potential
-forward-compatible CUDA path, subject to driver/toolchain and kernel support;
-it is not a claim of supporting every NVIDIA GPU.
-
-Use `tools/nvidia_baseline_qualification.py collect` in separate baseline and
-native-reference processes, then `check`. The collector records actual loaded
-binary hashes, GPU UUID/capability, driver, source, and output-column hashes.
-Full comparison requires every applicable lane and fixture across at least two
-compute capabilities with native references. `--prototype` permits bounded
-investigation only. Neither comparison enables an IDENTICAL claim or changes
-release admission; such a change needs explicit review of the hardware evidence.
+The loader takes a native set when the device's architecture has one and the
+PTX set on every other NVIDIA GPU of compute capability 8.0 or newer. Its
+identity is its column in the reference table, recorded once on an NVIDIA box
+(`tools/record_identity_column.sh nvidia-ptx-<gpu>-sm80 <out>`) and admitted with
+the other columns; see [the NVIDIA PTX identity contract](NVIDIA_PTX_IDENTITY.md).
 
 ## 4. Install and test on real GPUs (OPTIONAL, never required for a release)
 

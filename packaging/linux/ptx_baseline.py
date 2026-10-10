@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Audit experimental portable PTX artifacts; never certify numerical identity.
+"""Audit the PTX set (cuda_ptx/sm_80) of mojolearn-nvidia and write its manifest.
 
-This report is a build-format witness, not permission to serve IDENTICAL.
-Native cubin gates remain independent. Hardware/driver qualification must compare
-these exact file hashes before a loader can admit this experimental pathway.
+Andrew 2026-10-10: PTX is a normal target; no flag. This report is the PTX
+set's build-format witness (target, no embedded cubin, IDENTICAL arithmetic
+rounding-pinned, approximate instructions inventoried, final file hashes).
+Its numerical identity is decided like every native set's: by its column in
+the reference table (python/mojolearn/verify_reference/table.json), whose
+digests must equal the NVIDIA == AMD digests. Native cubin gates remain
+independent.
 """
 import argparse
 import hashlib
@@ -16,7 +20,8 @@ import subprocess
 from ptx_contract import APPROX, modules, plain_ops
 from device_glue import DEVICE_GLUE
 
-FORMAT = 'ptx-baseline'
+FORMAT = 'ptx'
+SCHEMA = 'mojolearn.ptx-set.v2'
 TARGET = 'sm_80'
 _VERSION = re.compile(rb'^\s*\.version\s+(\d+\.\d+)\s*$', re.M)
 _TARGET = re.compile(rb'^\s*\.target\s+([^\r\n]+)', re.M)
@@ -27,7 +32,7 @@ def validate_config(code_format, arch):
     if code_format not in ('native', FORMAT):
         raise ValueError(f'unsupported CUDA code format: {code_format}')
     if code_format == FORMAT and arch != TARGET:
-        raise ValueError('ptx-baseline requires explicit MOJOLEARN_GPU_ARCHS=sm_80')
+        raise ValueError('the PTX set requires explicit MOJOLEARN_GPU_ARCHS=sm_80')
 
 
 def audit_binary(data, identical=True):
@@ -95,11 +100,10 @@ def audit_tree(root, source_commit, mojo_version, source_dirty=False):
         else:
             row['delegates'] = [dict(file=w['file'], sha256=w['sha256']) for w in witnesses]
     if not any(row['ptx_modules'] for row in rows):
-        errors.append('baseline set contains no PTX modules')
-    return dict(schema="mojolearn.ptx-baseline.v1", code_format=FORMAT, vendor='cuda', target=TARGET,
+        errors.append('PTX set contains no PTX modules')
+    return dict(schema=SCHEMA, code_format=FORMAT, vendor='cuda', target=TARGET,
                 min_compute_capability=[8, 0], source_commit=source_commit,
                 source_dirty=source_dirty, mojo_version=mojo_version.strip(),
-                experimental=True, identical_qualified=False, qualification_required=True,
                 files=rows, errors=errors)
 
 

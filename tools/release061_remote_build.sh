@@ -47,6 +47,15 @@ command -v patchelf >/dev/null || { echo 'Prepare patchelf before the build camp
 export MOJOLEARN_BUILD_PIXI_ENV=default MOJOLEARN_QUALIFY_PYTHON="$PY"
 export MOJOLEARN_PACKAGE_BYTE_LM=1
 export MOJOLEARN_GPU_ARCHS="$arch" MOJOLEARN_COMMIT="$commit"
+# THE PTX SLOT IS A RELEASE SET LIKE ANY ARCH (Andrew 2026-10-10: PTX is a normal
+# target; no flag). cuda/sm_80 is only ever the PTX set (gpu_plugins.PTX_ARCH):
+# build_sets.sh keeps its rounding-pinned PTX and writes PTX_BASELINE.json
+# instead of converting the IDENTICAL modules to sm_80 cubins.
+if [[ "$vendor" = cuda && "$arch" = sm_80 ]]; then
+    export MOJOLEARN_CUDA_CODE_FORMAT=ptx
+else
+    export MOJOLEARN_CUDA_CODE_FORMAT=native
+fi
 export MOJOLEARN_TARGET_COLUMN="$column" MOJOLEARN_LINUX_CPU=x86-64-v3
 unset MOJOLEARN_GPU_ARCH MOJOLEARN_VENDOR PYTHONHOME PYTHONPATH
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1

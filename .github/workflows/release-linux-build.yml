@@ -5,7 +5,7 @@ name: Release Linux build
 # run), never by itself: only light-checks starts by itself (light-checks.yml
 # refuses any other workflow with a push or schedule trigger).
 #
-# One run builds the named sets (cuda sm_90a, cuda sm_89, hip gfx942) of ONE
+# One run builds the named sets (cuda sm_89, the cuda sm_80 PTX slot, hip gfx942) of ONE
 # source commit, with no GPU: Mojo compiles each set ahead of time from
 # --target-accelerator alone, exactly as the RunPod CPU build box does
 # (tools/release_linux_build.sh), in the same pinned image by digest, at the
@@ -35,19 +35,13 @@ run-name: "release-linux-build ${{ inputs.sets }} @ ${{ inputs.commit }} [${{ in
 on:
   workflow_dispatch:
     inputs:
-      code_format:
-        description: "Native release sets or isolated experimental sm_80 PTX baseline"
-        required: true
-        type: choice
-        options: ["native", "ptx-baseline"]
-        default: "native"
       commit:
         description: "the frozen source commit (40 hex)"
         required: true
       sets:
-        description: "space separated: sm_90a sm_89 gfx942"
+        description: "space separated: sm_89 sm_80 gfx942 (sm_80 is the PTX slot; sm_90a also accepted)"
         required: true
-        default: "sm_90a sm_89 gfx942"
+        default: "sm_89 sm_80 gfx942"
       shards:
         description: "shard jobs per set (1..16)"
         required: true
@@ -74,7 +68,6 @@ env:
 
 jobs:
   plan:
-    if: inputs.code_format != 'ptx-baseline'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -116,7 +109,6 @@ jobs:
           retention-days: 7
 
   shard:
-    if: inputs.code_format != 'ptx-baseline'
     needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 150
@@ -198,7 +190,7 @@ jobs:
 
   assemble:
     needs: [plan, shard]
-    if: always() && inputs.code_format != 'ptx-baseline' && needs.plan.result == 'success'
+    if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     strategy:
@@ -293,83 +285,6 @@ jobs:
           name: release-${{ matrix.arch == 'gfx942' && 'hip' || 'cuda' }}-${{ matrix.arch }}
           path: ${{ runner.temp }}/w/art
           # the runtime closure is sets/<vendor>/<arch>/.libs/
-          include-hidden-files: true
-          retention-days: 14
-          if-no-files-found: error
-
-
-  # Experimental path: frozen source body, no native overlays or release admission.
-  baseline:
-    if: inputs.code_format == 'ptx-baseline'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 150
-    steps:
-      - name: Validate inputs
-        env:
-          SOURCE_COMMIT: ${{ inputs.commit }}
-          BUILD_JOBS: ${{ inputs.jobs }}
-        run: |
-          set -eu
-          printf '%s' "$SOURCE_COMMIT" | grep -Eq '^[0-9a-f]{40}$'
-          printf '%s' "$BUILD_JOBS" | grep -Eq '^[12]$'
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          path: tooling
-          persist-credentials: false
-          sparse-checkout: tools
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ inputs.commit }}
-          path: src
-          persist-credentials: false
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            /*
-            !/bench/results/
-            !/mamba/corpus/
-            !/bench/oracle_*
-            !/bench/minentropy_oracle.txt
-      - name: Free runner disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /usr/share/swift
-          mkdir -p "$RUNNER_TEMP/ptx-out/bootstrap"
-          df -h / | tail -1
-      - name: Pull pinned image
-        run: timeout -k 20 600 docker pull "$IMAGE"
-      - name: Build experimental baseline on CPU
-        id: baseline_build
-        env:
-          SOURCE_COMMIT: ${{ inputs.commit }}
-          TOOLING_COMMIT: ${{ github.sha }}
-          BUILD_JOBS: ${{ inputs.jobs }}
-        run: |
-          set -euo pipefail
-          timeout -k 30 7200 docker run --rm \
-            -e SOURCE_COMMIT -e TOOLING_COMMIT -e BUILD_JOBS \
-            -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" \
-            -v "$GITHUB_WORKSPACE/src:/root/mojolearn" \
-            -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
-            -v "$RUNNER_TEMP/ptx-out:/root/leg_out" \
-            "$IMAGE" bash /tooling/tools/gha_nvidia_baseline_box.sh
-      - name: Retain logs and build artifacts
-        if: always()
-        env:
-          SOURCE_COMMIT: ${{ inputs.commit }}
-          BUILD_OUTCOME: ${{ steps.baseline_build.outcome }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/ptx-out/bootstrap"
-          args=()
-          if [ "$BUILD_OUTCOME" = success ]; then args+=(--require-complete); fi
-          sudo python3 tooling/tools/stage_ptx_artifact.py "$RUNNER_TEMP/ptx-out" "$RUNNER_TEMP/ptx-artifact" \
-            --source-commit "$SOURCE_COMMIT" "${args[@]}"
-          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/ptx-artifact"
-          echo 'Experimental PTX only: not IDENTICAL-qualified or release-qualified.' >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: experimental-nvidia-ptx80-${{ inputs.commit }}
-          path: ${{ runner.temp }}/ptx-artifact
           include-hidden-files: true
           retention-days: 14
           if-no-files-found: error

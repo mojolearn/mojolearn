@@ -222,8 +222,10 @@ def test_baseline_manifest_is_rechecked_against_final_bytes(payload):
     assert not manifest['errors']
     (directory / 'PTX_BASELINE.json').write_text(json.dumps(manifest))
     report = audit.audit_tree(payload)
-    assert report['identical_cuda_machine_code'] is False
-    assert report['experimental_ptx_baselines'][0]['identical_qualified'] is False
+    assert report['identical_cuda_machine_code'] is True
+    assert report['ptx_sets'][0]['schema'] == 'mojolearn.ptx-set.v2'
+    assert report['ptx_sets'][0]['code_format'] == 'ptx'
+    assert 'identical_qualified' not in report['ptx_sets'][0]
     binary.write_bytes(binary.read_bytes() + b'changed')
     with pytest.raises(ValueError, match='final bytes differ'):
         audit.audit_tree(payload)

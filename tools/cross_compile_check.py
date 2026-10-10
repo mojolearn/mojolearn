@@ -70,7 +70,7 @@ TIER_DEFINES = {
     "deterministic": ["-D", "MOJOLEARN_NUMERIC_DETERMINISTIC=1"],
     "fast": [],
 }
-DEFAULT_ARCHS = ("sm_89", "gfx942")
+DEFAULT_ARCHS = ("sm_89", "sm_80", "gfx942")  # sm_80: the PTX slot of mojolearn-nvidia
 
 
 def column_of(arch):

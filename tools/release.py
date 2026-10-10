@@ -77,7 +77,7 @@ THE STEPS
                      TIMEOUT, STALLED or MISSING job stops the Linux pipelines
                      by name before linux-builds rents a box
   reuse-plan         tools/release_reuse.py: for every binding of every set
-                     (cuda sm_90a, cuda sm_89, hip gfx942, the host bindings,
+                     (cuda sm_89, the cuda sm_80 PTX slot, hip gfx942, the host bindings,
                      the runtime closure, the macOS wheel) REUSE the bytes the
                      last PUBLISHED release shipped when the binding's identity
                      (source closure, toolchain, flags, builder scripts as they
@@ -444,6 +444,13 @@ def gpu_legs(ctx):
                          "--segment-lease", "120", "--dollar-cap", "15"],
                         dict(runpod, MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_GEMM_LEG_OUT=str(out), **common),
                         rb, legs_dir, out))
+    # THE PTX SLOT needs no GPU to build (Andrew 2026-10-10: PTX is a normal target; no
+    # flag): its leg is the CPU box route, like cpu_legs, with the same set layout.
+    rb, out = leg_layout(legs_dir, "cpu-box", "cuda-sm_80")
+    legs.append(Leg("cuda-sm_80", "cuda", "sm_80",
+                    ["bash", "tools/release_linux_build.sh", ctx.commit, "--rent", "--archs", "sm_80",
+                     "--flavors", CPU_BOX_FLAVORS, "--out", str(out)],
+                    {}, rb, legs_dir, out))
     route, why = amd_build_route(ctx)
     if route == "cpu-box":
         rb, out = leg_layout(legs_dir, "cpu-box", "hip-gfx942")
@@ -594,6 +601,13 @@ def no_stock(log, *dirs):
 CPU_BOX_FLAVORS = "cpu5g,cpu3g,cpu5m,cpu3m"
 
 
+#: The Linux build legs, one per release set (release_reuse.LINUX_SETS): native sm_89, the
+#: PTX slot sm_80 and gfx942. sm_90a out for 0.8.37 (gpu_plugins.py). Andrew 2026-10-10:
+#: PTX is a normal target; no flag. The PTX leg builds through the same route as any arch
+#: (release061_remote_build.sh gives cuda/sm_80 the ptx code format); it needs no GPU.
+RELEASE_LEG_SETS = tuple(release_reuse.LINUX_SETS)
+
+
 def cpu_legs(ctx):
     """OPT-IN ROUTE (--build-backend cpu-box): the three Linux sets compile on
     RunPod CPU pods, one pod per set, all three at once, with no GPU present
@@ -607,7 +621,7 @@ def cpu_legs(ctx):
     own files from this checkout (its route.txt), so it takes no route overlay."""
     legs_dir = ctx.rel / "legs"
     legs = []
-    for vendor, arch in (("cuda", "sm_89"), ("hip", "gfx942")):  # sm_90a out for 0.8.37 (gpu_plugins.py)
+    for vendor, arch in RELEASE_LEG_SETS:
         name = f"{vendor}-{arch}"
         rb, out = leg_layout(legs_dir, "cpu-box", name)
         legs.append(Leg(name, vendor, arch,
@@ -630,7 +644,7 @@ def github_legs(ctx):
     overlay, like cpu-box."""
     legs_dir = ctx.rel / "legs"
     legs = []
-    for vendor, arch in (("cuda", "sm_89"), ("hip", "gfx942")):  # sm_90a out for 0.8.37 (gpu_plugins.py)
+    for vendor, arch in RELEASE_LEG_SETS:
         name = f"{vendor}-{arch}"
         rb, out = leg_layout(legs_dir, "github", name)
         legs.append(Leg(name, vendor, arch,
@@ -1253,7 +1267,9 @@ class Release:
 
     # ------------------------------------------------------------ cross-compile (GitHub)
     XCC_WORKFLOW = "cross-compile-check.yml"
-    XCC_ARCHS = "sm_89,gfx942"  # sm_90a out for 0.8.37 (gpu_plugins.py)
+    # sm_90a out for 0.8.37 (gpu_plugins.py); sm_80 is the PTX slot, compiled like any arch
+    # (Andrew 2026-10-10: PTX is a normal target; no flag).
+    XCC_ARCHS = ",".join(arch for _, arch in RELEASE_LEG_SETS)
 
     def gh(self, *args, log=None):
         """(exit code, stdout) of one `gh` call; stdout also to `log` when given."""
