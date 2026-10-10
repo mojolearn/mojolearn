@@ -137,6 +137,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IVF_COARSE_INIT_QOLD`](#mojolearn_ivf_coarse_init_qold) | Neighbors | DROPPED-quality | 2026-10-09 | no code (no patch) |
 | [`MOJOLEARN_IVF_REFINE_TEAM`](#mojolearn_ivf_refine_team) | Neighbors | DROPPED-noise | 2026-10-09 | [MOJOLEARN_IVF_REFINE_TEAM.patch](../experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch) |
 | [`MOJOLEARN_KAPPROX_DEVICE`](#mojolearn_kapprox_device) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_KAPPROX_DEVICE.patch](../experiments/removed/MOJOLEARN_KAPPROX_DEVICE.patch) |
+| [`MOJOLEARN_SPARSE_RP_DEVICE`](#mojolearn_sparse_rp_device) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_SPARSE_RP_DEVICE.patch](../experiments/removed/MOJOLEARN_SPARSE_RP_DEVICE.patch) |
 | [`MOJOLEARN_ACHI2_FAST_DEVCHECK`](#mojolearn_achi2_fast_devcheck) | Prep | DROPPED | Oct 3 | lane only |
 | [`MOJOLEARN_CLASSICAL_C55_CLASS_GROUP`](#mojolearn_classical_c55_class_group) | Prep | quality loss | 2026-10-07 | [MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
@@ -1045,6 +1046,15 @@ in the tables after the sections.
 - Files the deletion touched (comments only): `bindings/_mojolearn_x_neighbors.mojo`, `bindings/_mojolearn_x_neighbors_host.mojo`, `python/mojolearn/_expansion_neighbors.py`, `python/mojolearn/_surface_neighbors.py`, `x_neighbors/gen.py`, `x_neighbors/kapprox_dev.mojo`, `x_neighbors/kapprox_host.mojo`, `x_neighbors/kapprox_items.mojo`
 - EXPERIMENTS.md:555: `KAPPROX_DEVICE` | additive-chi2 / istella; skewed-chi2 / taxi | lane/apple-fast-kapprox @ 10d5a7970 | kap-schi2-taxi, kap-achi2-istella | skewed-chi2 taxi 2.8 -> 1.3; additive-chi2 istella 11.0 -> 12.5 | DROPPED-quality | kernel_rel_error .0378 -> .0480 (worse) / slower; code removed from main 9d5baaa9b; recover at lane/apple-fast-kapprox@10d5a7970
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KAPPROX_DEVICE (AdditiveChi2Sampler / SkewedChi2Sampler device ops) LOST quality: kernel_rel_error .0378 -> .0480 and additive-chi2 istella 11.0 -> 12.5 ms; code deleted 2026-10-03 by 9d5baaa9b; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_SPARSE_RP_DEVICE
+
+- Verdict: DROPPED-quality. Code deleted 2026-10-03 by `e58326562` (x_neighbors/decomp: remove dropped SPARSE_RP_DEVICE one-launch SparseRandomProjection draw (DROPPED-quality; recover lane/apple-fast-kapprox@10d5a7970)); recorded here 2026-10-09 by lane/owed-deletions-D3 (comments still named it, so it was listed as owed).
+- Recoverable at `e58326562^`. Patch: `experiments/removed/MOJOLEARN_SPARSE_RP_DEVICE.patch` (`git diff e58326562 e58326562^` on the code files; main moved on, use `git apply -3`).
+- What it tried: SparseRandomProjection's fit as one device launch drawing the sparse matrix (x_neighbors kapprox_dev / kapprox_host / kapprox_items, gen.py, the _surface_neighbors.py route), FAST + Apple.
+- Files the deletion touched (comments only): `bindings/_mojolearn_x_neighbors.mojo`, `bindings/_mojolearn_x_neighbors_host.mojo`, `python/mojolearn/_expansion_decomp.py`, `python/mojolearn/_surface_neighbors.py`, `x_neighbors/gen.py`, `x_neighbors/kapprox_dev.mojo`, `x_neighbors/kapprox_host.mojo`, `x_neighbors/kapprox_items.mojo`
+- EXPERIMENTS.md:557: `SPARSE_RP_DEVICE` | sparse-rp / taxi | lane/apple-fast-kapprox @ 10d5a7970 | kap-srp-taxi | sparse-rp taxi 4.9 -> 1.2 | DROPPED-quality | mean_abs_distortion .147 -> .236 (worse); code removed from main e58326562; recover at lane/apple-fast-kapprox@10d5a7970
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): SPARSE_RP_DEVICE (one-launch SparseRandomProjection draw) LOST quality: mean_abs_distortion .147 -> .236; code deleted 2026-10-03 by e58326562; code at main b639a2bd2; see docs/TOMBSTONES.md
 
 ## Prep
 
@@ -1988,7 +1998,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_SEQ_FAST_MAP_DOWN` | EXPERIMENTS.md:662 DROPPED-slower 2026-10-04 on layernorm (see rec-optim table) (lane/apple-fast-gap-optim @ cf4513f8a) | `sequence/exec_device.mojo:139` |
 | `MOJOLEARN_SEQ_FAST_RAW_DOWN` | EXPERIMENTS.md:1196 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/exec_device.mojo:151` |
 | `MOJOLEARN_SEQ_FAST_VAR_NODRAIN` | EXPERIMENTS.md:1411 DROPPED-slower (lane/apple-fast-s-ts) | `sequence/exec_device.mojo:150` |
-| `MOJOLEARN_SPARSE_RP_DEVICE` | EXPERIMENTS.md:557 DROPPED-quality (lane/apple-fast-kapprox @ 10d5a7970) | `x_neighbors/kapprox_dev.mojo:10` |
 | `MOJOLEARN_SVD_FAST_CHOLQR` | EXPERIMENTS.md:454 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1567` |
 | `MOJOLEARN_SVD_QFIX` | EXPERIMENTS.md:1216 DROPPED-slower (lane/apple-fast-q-linalg @ aaebc0ab8) | `x_decomp/qfix.mojo:10` |
 | `MOJOLEARN_SVD_QOLD` | EXPERIMENTS.md:1216 DROPPED-slower (lane/apple-fast-q-linalg @ aaebc0ab8) | `x_decomp/qfix.mojo:10` |

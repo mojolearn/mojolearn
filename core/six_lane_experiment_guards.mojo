@@ -255,6 +255,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IVF_COARSE_INIT_QOLD"](), "removed 2026-10-09 (lane/owed-deletions-D3): IVF_COARSE_INIT_QOLD was the opt-out name of IVF_COARSE_FAISS_INIT while that was briefly the default; FAISS_INIT was reverted (DROPPED-quality, ivf-sq recall istella 0.60895 -> 0.51065) and QOLD was already a no-op; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_IVF_REFINE_TEAM"](), "removed 2026-10-09 (lane/owed-deletions-D3): IVF_REFINE_TEAM (ivf refine with one threadgroup per query, dataset uploaded from the caller's array) was NOISE: ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_KAPPROX_DEVICE"](), "removed 2026-10-09 (lane/owed-deletions-D3): KAPPROX_DEVICE (AdditiveChi2Sampler / SkewedChi2Sampler device ops) LOST quality: kernel_rel_error .0378 -> .0480 and additive-chi2 istella 11.0 -> 12.5 ms; code deleted 2026-10-03 by 9d5baaa9b; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_SPARSE_RP_DEVICE"](), "removed 2026-10-09 (lane/owed-deletions-D3): SPARSE_RP_DEVICE (one-launch SparseRandomProjection draw) LOST quality: mean_abs_distortion .147 -> .236; code deleted 2026-10-03 by e58326562; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
