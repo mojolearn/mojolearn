@@ -18,6 +18,15 @@
 #   3. regenerates python/mojolearn/verify_reference/table.json from every
 #      committed column (`verify --all --emit-reference`; newest commit wins per
 #      cell part and device class, older classes kept as superseded)
+#      INCREMENTAL RE-RECORD (Andrew 2026-10-10): re-record only what changed;
+#      every other row is kept. Records of only the changed lanes
+#      (record_identity_column.sh ONLY_CHANGED=table) are admitted here like a
+#      full column: their cells win for those lanes (newest commit), and every
+#      other lane keeps the rows its older committed columns already give it.
+#      Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never
+#      a reason to rerun. One sample per part is admissible (min_repeats=1);
+#      the second witness is the other GPU vendor (NVIDIA == AMD). This admit
+#      IS the release's identity check: no later release step re-runs it.
 #   4. tools/identity_columns.py report: routine-profile reference parts taken
 #      from the new commit vs. still resting on an older one
 #   5. `verify --self-test --cpu-threads 3` and `verify --coverage` against the
@@ -195,7 +204,7 @@ mkdir -p "$DEST"
     echo "# Reference columns at ${C:0:12} ($DATE)"
     echo
     echo "Written by \`tools/record_identity_column.sh\` (identity_break.py --json, identical tier,"
-    echo "default fixture, one device, every part, every fixture, --repeats 2) and admitted by"
+    echo "default fixture, one device, every part, every fixture, --repeats 1) and admitted by"
     echo "\`tools/admit_identity_columns.sh\`, which regenerated"
     echo "\`python/mojolearn/verify_reference/table.json\` from every committed column."
     echo "Source commit: \`$C\`."

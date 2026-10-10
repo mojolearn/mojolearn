@@ -533,6 +533,10 @@ def _fits(cell, part):
 
 def _corroborated(by_cls, ref):
     """Two witnesses of `ref`: two device classes, or one class fitted twice."""
+    # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a
+    # reason to rerun. Records are taken at --repeats 1, so the witness that
+    # admits a reference is a second device class (NVIDIA == AMD); "one class
+    # fitted twice" stays readable only for the older two-sample records.
     if ref.startswith("n/a:"):
         return True          # a declaration the harness makes, not a measurement
     agree = [won for won in by_cls.values() if won[2] == ref]

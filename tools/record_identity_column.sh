@@ -7,7 +7,8 @@
 # table" require: tools/identity_break.py --json in the identical tier, a
 # commit witness, the default fixture size, one device (par_devices 0), no
 # sabotage, every part collected (never --partial-column), every fixture,
-# --repeats 2 (two identical samples per part), input and held-out witnesses
+# --repeats 1 (one sample per part; the second witness is the other GPU
+# vendor's column, never a second fit here), input and held-out witnesses
 # and the batch/property protocols recorded by the harness itself.
 #
 # Runs in a BUILT checkout of a committed tree (every binding built for this
@@ -35,7 +36,17 @@
 #                           complete record <label>.s<i>of<N>.identical.json;
 #                           each shard is admissible alone
 #   LANES=a,b               an explicit lane list instead of SCOPE/SHARD
-#   REPEATS=2               fits per cell (default 2; never below 2 for a table)
+#   REPEATS=1               fits per cell (default 1). Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
+#                           NVIDIA == AMD is the identity rule; a second fit on
+#                           one box adds nothing the other vendor's column does not
+#   ONLY_CHANGED=table|<sha> INCREMENTAL RE-RECORD: only the lanes whose source
+#                           closure (tools/lane_select.py) changed between the
+#                           commit each lane's admitted rows rest on (`table`)
+#                           or one named <sha>, and HEAD; re-record
+#                           only what changed; every other row is kept (the
+#                           table builder takes the newest commit per cell, so
+#                           the unchanged lanes keep their admitted rows).
+#                           Prints NOTHING-CHANGED and exits 0 when no lane moved
 #   CPU_THREADS=3           every CPU thread pool (MOJOLEARN_CPU_THREADS, OMP...)
 #   PYTHON=...              the interpreter (default: `pixi run -e default python`
 #                           when pixi and pixi.toml are present, else python3)
@@ -135,6 +146,24 @@ fi
 
 # --- which lanes -----------------------------------------------------------
 NAME=$LABEL
+if [ -n "${ONLY_CHANGED:-}" ]; then
+    # INCREMENTAL RE-RECORD: re-record only what changed; every other row is kept.
+    # The lanes whose source closure (tools/lane_select.py, the release lane
+    # selection's map) changed since the commit each lane's admitted rows rest
+    # on (ONLY_CHANGED=table), or since one named commit (ONLY_CHANGED=<sha>).
+    # admit_identity_columns.sh then rebuilds the table from every committed
+    # column, newest commit per cell, so the rows of every other lane are kept.
+    [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ] || die "ONLY_CHANGED excludes LANES and SHARD"
+    since_arg=()
+    [ "$ONLY_CHANGED" = table ] || since_arg=(--since "$ONLY_CHANGED")
+    LANES=$("${PY[@]}" tools/identity_columns.py changed-lanes --scope "${SCOPE:-routine}" ${since_arg[@]+"${since_arg[@]}"} \
+            2> "$OUT/$LABEL.changed-lanes.txt" | tail -n 1) || die "could not list the changed lanes (see $OUT/$LABEL.changed-lanes.txt)"
+    grep -m 1 'CHANGED-LANES' "$OUT/$LABEL.changed-lanes.txt"
+    if [ -z "$LANES" ]; then
+        echo "NOTHING-CHANGED $LABEL: no lane's closure moved since the admitted table; every row is kept"
+        exit 0
+    fi
+fi
 if [ -n "${LANES:-}" ]; then
     LANE_LIST=$LANES
     NAME="$LABEL.lanes-$(printf '%s' "$LANES" | shasum -a 256 | cut -c1-8)"
@@ -149,8 +178,11 @@ else
         || die "could not list the ${SCOPE:-routine} lanes"
 fi
 [ -n "$LANE_LIST" ] || die "empty lane list"
-REPEATS=${REPEATS:-2}
-[ "$REPEATS" -ge 2 ] 2>/dev/null || die "REPEATS=$REPEATS: a reference record needs two samples per part"
+# Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
+# One sample per part (the old ">= 2" refusal is gone): the second witness of a
+# reference is the other GPU vendor's column, and NVIDIA == AMD is the rule.
+REPEATS=${REPEATS:-1}
+[ "$REPEATS" -ge 1 ] 2>/dev/null || die "REPEATS=$REPEATS: must be a positive integer"
 
 JSON=$OUT/$NAME.identical.json
 LOG=$OUT/$NAME.log
