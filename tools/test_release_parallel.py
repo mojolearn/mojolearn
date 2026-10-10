@@ -1,8 +1,8 @@
 """A release is LIGHT and PARALLEL (2026-09-25), proved without a
 rental: the NVIDIA and AMD wheel columns are launched together and both
-awaited, one failing does not stop the other, they are diffed against the
-Apple column (the CPU column only with --cpu-column), a DIVERGENT cell
-anywhere stops the release. Nothing here
+awaited, one failing does not stop the other. Each column is the installed
+wheel's smoke against the admitted reference table only (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun):
+no second identity pass, no Apple reference, no joint diff. Nothing here
 reaches a cloud: the runner stands in for every process."""
 import argparse
 import hashlib
@@ -33,11 +33,6 @@ def args(**kw):
     return argparse.Namespace(**base)
 
 
-def column(vendor, h="aaaa"):
-    return dict(mode="identical", repeats=1, vendor=vendor, commit=COMMIT, complete=True,
-                cells={"rf-clf/base": {"verdict": "STABLE", "hashes": [h], "parts": [{"predict": h}]}})
-
-
 class Columns(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()
@@ -62,7 +57,6 @@ class Columns(unittest.TestCase):
         r.state["commit"] = COMMIT
         r.lines = []
         r.say = r.lines.append
-        r.gpu_selection = lambda vendor: self.tmp / f"selection-{vendor}.json"
 
         def sleep(s):
             self.events.append("sleep")
@@ -86,19 +80,11 @@ class Columns(unittest.TestCase):
         return r
 
     def columns(self, r):
-        """Both GPU columns launched and awaited together, then the joint diff:
-        what the gpu-column-nvidia, gpu-column-amd and linux-joint-diff steps
-        run between them."""
-        r.run_columns(("nvidia", "amd"))
-        return r.joint_diff()
+        """Both GPU columns launched and awaited together: what the
+        gpu-column-nvidia and gpu-column-amd steps run between them."""
+        return r.run_columns(("nvidia", "amd"))
 
-    def reference(self, backend, h="aaaa"):
-        d = self.check / COMMIT[:12] / backend
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "column.json").write_text(json.dumps(column("apple-m4" if backend == "metal" else "cpu-m4", h)))
-        (d / "run-summary.json").write_text(json.dumps(dict(complete=True, validation_failures=[])))
-
-    def finish(self, r, name, rc=0, h="aaaa", diff="summary: IDENTICAL=1\n", log=""):
+    def finish(self, r, name, rc=0, log=""):
         """What a column leg leaves behind when it exits."""
         vendor = "cuda" if name == "nvidia" else "hip"
         out = r.rel / ("smoke-linux" if name == "nvidia" else "column-amd")
@@ -112,15 +98,12 @@ class Columns(unittest.TestCase):
                 wheel_sha256=hashlib.sha256(self.final.read_bytes()).hexdigest(),
                 plugins=[dict(wheel=str(p), wheel_sha256=hashlib.sha256(p.read_bytes()).hexdigest())
                          for p in self.plugins.values()])))
-            (out / f"column-{vendor}.json").write_text(json.dumps(column(vendor, h)))
-            (out / f"diff-ref-{vendor}.txt").write_text(diff)
         (r.rel / "columns").mkdir(parents=True, exist_ok=True)
         (r.rel / "columns" / f"{name}.log").write_text(log)
         (r.rel / "columns" / f"{name}.exit").write_text(f"{rc}\n")
 
     # ------------------------------------------------------------------ tests
     def test_both_columns_launch_together_and_both_are_awaited(self):
-        self.reference("metal")
         r = self.release()
         # AMD fails first; NVIDIA is still running and must still be awaited
         self.hooks = [lambda r: self.finish(r, "amd", rc=1, log="boom"),
@@ -136,18 +119,16 @@ class Columns(unittest.TestCase):
         self.assertIn(f"--gpu '{release.NVIDIA_WALK['sm_89'][0]}'", nv)   # the sm_89 walk's head
         self.assertIn("--vendor hip", amd)
         self.assertIn("--provider auto", amd)
-        # both diffed against the Apple column, not the CPU column
+        # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun: the smoke only, no second identity pass
         for c in (nv, amd):
-            self.assertIn("--ref-column " + str(self.check / COMMIT[:12] / "metal" / "column.json"), c)
-            self.assertNotIn("cpu/column.json", c)
-            self.assertNotIn("--cpu-column", c)
+            self.assertNotIn("--column", c)
+            self.assertNotIn("--ref-column", c)
         msg = str(cm.exception)
         self.assertIn("amd column", msg)
         self.assertNotIn("nvidia column", msg)
-        self.assertIn("nvidia column: PASSED", "\n".join(r.lines))
+        self.assertIn("nvidia column: wheel smoke PASSED", "\n".join(r.lines))
 
     def test_both_failing_are_both_reported(self):
-        self.reference("metal")
         r = self.release()
         self.hooks = [lambda r: (self.finish(r, "amd", rc=1), self.finish(r, "nvidia", rc=3))]
         with self.assertRaises(release.StepFailed) as cm:
@@ -156,39 +137,7 @@ class Columns(unittest.TestCase):
         self.assertIn("amd column", str(cm.exception))
         self.assertIn("exit 3", str(cm.exception))
 
-    def test_all_identical_passes_and_a_divergent_amd_cell_fails(self):
-        self.reference("metal")
-        r = self.release()
-        self.hooks = [lambda r: (self.finish(r, "amd"), self.finish(r, "nvidia"))]
-        result = self.columns(r)
-        self.assertIn("no DIVERGENT cell across the columns", result)
-        self.assertTrue(any(l.startswith("  summary: IDENTICAL=1") for l in r.lines), r.lines)
-        # NVIDIA and AMD each agreed with Apple in their own diff, but disagree with
-        # each other: the all-columns diff must stop the release
-        r2 = self.release_again()
-        self.hooks = [lambda r: (self.finish(r, "amd", h="bbbb"), self.finish(r, "nvidia"))]
-        with self.assertRaises(release.StepFailed) as cm:
-            self.columns(r2)
-        self.assertIn("DIVERGENT", str(cm.exception))
-        self.assertIn("rf-clf/base", str(cm.exception))
-
-    def release_again(self):
-        self._t2 = tempfile.TemporaryDirectory()
-        self.addCleanup(self._t2.cleanup)
-        self.tmp = pathlib.Path(self._t2.name)
-        return self.release()
-
-    def test_a_divergent_reference_diff_is_not_a_pass(self):
-        self.reference("metal")
-        r = self.release()
-        self.hooks = [lambda r: (self.finish(r, "amd", diff="| x/base | DIVERGENT |\nsummary: DIVERGENT=1\n"),
-                                 self.finish(r, "nvidia"))]
-        with self.assertRaises(release.StepFailed) as cm:
-            self.columns(r)
-        self.assertIn("amd column", str(cm.exception))
-
     def test_a_passed_column_is_not_rerun(self):
-        self.reference("metal")
         r = self.release()
         (r.rel / "columns").mkdir(parents=True)
         self.finish(r, "nvidia")
@@ -199,7 +148,6 @@ class Columns(unittest.TestCase):
         self.assertIn("  nvidia: PASSED for this wheel (record exists), not rerun", r.lines)
 
     def test_nvidia_walks_to_the_next_gpu_on_no_stock(self):
-        self.reference("metal")
         r = self.release()
         self.hooks = [lambda r: (self.finish(r, "amd"),
                                  self.finish(r, "nvidia", rc=1, log="create: There are no instances currently available")),
@@ -212,7 +160,6 @@ class Columns(unittest.TestCase):
 
     def test_the_walk_does_not_wait_for_the_other_column(self):
         # 0.8.19: an out-of-stock leg sat idle until every other leg finished
-        self.reference("metal")
         r = self.release()
         seen = []
         self.hooks = [lambda r: self.finish(r, "nvidia", rc=1, log="create: There are no instances currently available"),
@@ -221,74 +168,11 @@ class Columns(unittest.TestCase):
         self.columns(r)
         self.assertEqual(seen, [3], "the NVIDIA walk launched while AMD was still running")
 
-    def test_no_reference_column_refuses_before_any_rental(self):
-        r = self.release()
-        with self.assertRaises(release.StepFailed) as cm:
-            self.columns(r)
-        self.assertIn("metal/column.json", str(cm.exception))
-        self.assertEqual(self.spawned, [])
-
-    def test_cpu_column_is_opt_in(self):
-        self.reference("metal")
-        r = self.release()
-        self.assertEqual(r.check_backends(), ("metal",))
-        self.assertEqual(r.column_refs(), [self.check / COMMIT[:12] / "metal" / "column.json"])
-        # complete WITHOUT any CPU record: the GPU columns no longer need one
-        self.assertTrue(r.release_check_complete())
-        calls = []
-        r.runner = lambda cmd, env, log, detach=False: calls.append([str(c) for c in cmd]) or 0
-        self.assertIn("complete", r.step_release_check())
-        self.assertEqual(calls, [])
-        (self.check / COMMIT[:12] / "metal" / "column.json").unlink()
-        with mock.patch.object(release, "git", return_value=COMMIT):
-            with self.assertRaises(release.StepFailed):   # the stand-in runner writes no record
-                r.step_release_check()
-        self.assertEqual(calls[-1], ["pixi", "run", "-e", "test", "release-check"])
-
-        on = self.release_again()
-        on.args.cpu_column = True
-        self.assertEqual(on.check_backends(), ("metal", "cpu"))
-        self.assertFalse(on.release_check_complete(), "the CPU record is required once asked for")
-        self.reference("metal")
-        self.reference("cpu")
-        self.assertTrue(on.release_check_complete())
-        self.assertIn(self.check / COMMIT[:12] / "cpu" / "column.json", on.column_refs())
-        (self.check / COMMIT[:12] / "cpu" / "column.json").unlink()
-        calls.clear()
-        on.runner = lambda cmd, env, log, detach=False: calls.append([str(c) for c in cmd]) or 0
-        with mock.patch.object(release, "git", return_value=COMMIT):
-            with self.assertRaises(release.StepFailed):
-                on.step_release_check()
-        self.assertEqual(calls[-1][-1], "--cpu-column")
-        # and the GPU columns are diffed against both
-        self.reference("cpu")
-        legs = on.column_legs()
-        for l in legs:
-            joined = " ".join(l.command)
-            self.assertIn("metal/column.json", joined)
-            self.assertIn("cpu/column.json", joined)
-
     def test_the_flag_parses(self):
         with mock.patch.object(release.Release, "go", lambda self: self.args):
             self.assertFalse(release.main(["0.8.14"]).cpu_column)
             self.assertTrue(release.main(["0.8.14", "--cpu-column"]).cpu_column)
             self.assertEqual(release.main(["0.8.14"]).build_backend, "github")
-
-
-class JointDiff(unittest.TestCase):
-    def test_verdicts(self):
-        p = pathlib.Path("diff-columns.txt")
-        ok = "summary: IDENTICAL=3, ONE-COLUMN=2\nsummary (infer/model): IDENTICAL=6\n"
-        self.assertIn("2 cell(s) hashed by one column only", release.judge_joint_diff(ok, p, say=lambda m: None))
-        self.assertTrue(release.judge_joint_diff(ok, p, say=lambda m: None, passed="NVIDIA column")
-                        .startswith("NVIDIA column PASSED"))
-        for bad in ("summary: IDENTICAL=3, DIVERGENT=1\n",
-                    "summary: IDENTICAL=3\nsummary (infer/model): RELOAD-MOVED=1\n",
-                    "summary: IDENTICAL=3\nsummary (batch): BATCH_MOVED=2\n",
-                    "| a/base | DIVERGENT |\nsummary: IDENTICAL=3\n",
-                    "Traceback: refused a mix of columns\n"):
-            with self.assertRaises(release.StepFailed, msg=bad):
-                release.judge_joint_diff(bad, p, say=lambda m: None)
 
 
 class ReleaseCheck(unittest.TestCase):
@@ -325,70 +209,3 @@ class ReleaseCheck(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class MacCrossCheck(unittest.TestCase):
-    """publish-macos diffs the Apple column against the previous release's
-    recorded NVIDIA and AMD columns first (seconds, nothing rented)."""
-
-    def setUp(self):
-        self._t = tempfile.TemporaryDirectory()
-        self.tmp = pathlib.Path(self._t.name)
-        self._env = mock.patch.dict(os.environ, MOJOLEARN_RELEASE_CHECK_DIR=str(self.tmp / "release-check"),
-                                    MOJOLEARN_EVIDENCE_ROOT=str(self.tmp / "evidence"))
-        self._env.start()
-
-    def tearDown(self):
-        self._env.stop()
-        self._t.cleanup()
-
-    def release(self, apple="aaaa", previous=("aaaa", "aaaa"), **kw):
-        r = release.Release(args(version="0.8.14", state_dir=str(self.tmp / "evidence" / "release" / "0.8.14"),
-                                 **kw), runner=lambda *a, **k: 0)
-        r.state["commit"] = COMMIT
-        r.lines = []
-        r.say = r.lines.append
-        d = self.tmp / "release-check" / COMMIT[:12] / "metal"
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "column.json").write_text(json.dumps(column("apple-m4", apple)))
-        if previous:
-            prev = self.tmp / "evidence" / "release" / "0.8.13" / "bbbbbbbbbbbb"
-            for sub, vendor, h in (("smoke-linux", "cuda", previous[0]), ("column-amd", "hip", previous[1])):
-                (prev / sub).mkdir(parents=True, exist_ok=True)
-                (prev / sub / f"column-{vendor}.json").write_text(json.dumps(column(vendor, h)))
-        return r
-
-    def test_equal_bits_pass_and_name_the_release(self):
-        out = self.release().mac_cross_check()
-        self.assertIn("PASSED", out)
-        self.assertIn("0.8.13", out)
-
-    def test_a_divergent_cell_holds_the_macos_publish(self):
-        r = self.release(previous=("aaaa", "bbbb"))
-        with self.assertRaises(release.StepFailed) as cm:
-            r.mac_cross_check()
-        self.assertIn("macOS publish is held", str(cm.exception))
-        self.assertIn("rf-clf/base", str(cm.exception))
-        with self.assertRaises(release.StepFailed):
-            self.release(apple="cccc").mac_cross_check()
-
-    def test_accept_moved_lets_a_deliberate_change_through(self):
-        out = self.release(apple="cccc", accept_moved=True).mac_cross_check()
-        self.assertIn("accepted (--accept-moved)", out)
-
-    def test_no_earlier_columns_is_said_not_held(self):
-        out = self.release(previous=None).mac_cross_check()
-        self.assertIn("not compared", out)
-
-    def test_only_an_earlier_version_is_a_reference(self):
-        r = self.release(previous=None)
-        later = self.tmp / "evidence" / "release" / "0.8.15" / "dddddddddddd"
-        for sub, vendor in (("smoke-linux", "cuda"), ("column-amd", "hip")):
-            (later / sub).mkdir(parents=True)
-            (later / sub / f"column-{vendor}.json").write_text(json.dumps(column(vendor, "zzzz")))
-        self.assertEqual(r.previous_gpu_columns(), [])
-
-    def test_the_flag_parses(self):
-        with mock.patch.object(release.Release, "go", lambda self: self.args):
-            self.assertFalse(release.main(["0.8.14"]).accept_moved)
-            self.assertTrue(release.main(["0.8.14", "--accept-moved"]).accept_moved)

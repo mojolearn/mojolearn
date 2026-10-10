@@ -996,7 +996,7 @@ Three scripts carry the whole procedure from one pushed commit:
 
 `record_identity_column.sh` runs `tools/identity_break.py --json` with the
 identical tier, the backend the label names (`--require-backend`), the default
-fixture size on one device, every part and every fixture, `--repeats 2`, and
+fixture size on one device, every part and every fixture, `--repeats 1` (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun; the second witness is the other GPU vendor), and
 CPU pools at 3 threads, over the routine profile's lanes (`SCOPE=all` adds
 neural training; `SHARD=i/N` splits the lanes into records that are each
 admissible alone). It refuses harness overrides, sabotage switches and a tree

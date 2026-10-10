@@ -12452,8 +12452,8 @@ def _owed_status(cols, key, col):
     lane/cpu-gate-owed-cells). GPU records are taken only at PyPI releases,
     so a CPU lane can carry a cell part no committed GPU record hashes yet.
     DERIVED, never hand-listed: the part is OWED only when
-      - every CPU column (a JSON with `host`) hashes it STABLE over at least
-        two repeats, and at least one CPU column is given;
+      - every CPU column (a JSON with `host`) hashes it STABLE (one repeat is
+        enough since 2026-10-10), and at least one CPU column is given;
       - every other column either hashes it or has NO hash for it: the cell
         is absent (a lane not in that record), the part key is absent, or
         the part is n/a;
@@ -12488,8 +12488,10 @@ def _owed_status(cols, key, col):
             missing.append(name); continue
         if is_cpu:
             cpu_seen = True
-            if v != "STABLE" or len(values) < 2 or len(set(values)) != 1:
-                return [], f"CPU column {name} is not STABLE over two or more repeats ({v}, {len(values)} repeat(s))"
+            # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix,
+            # never a reason to rerun. One STABLE sample is a value.
+            if v != "STABLE" or len(values) < 1 or len(set(values)) != 1:
+                return [], f"CPU column {name} is not STABLE ({v}, {len(values)} repeat(s))"
     if not cpu_seen:
         return [], "no CPU column hashes it"
     if not missing:
@@ -13044,7 +13046,11 @@ def main():
     ap.add_argument("--lanes", default="")
     ap.add_argument("--skip", default="", help="lanes to leave out, comma separated; each is reported as SKIPPED")
     ap.add_argument("--fixtures", default="")
-    ap.add_argument("--repeats", type=int, default=2)
+    # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a
+    # reason to rerun. One fit per cell by default; the second witness is the
+    # other GPU vendor's column. --repeats 2 stays for the in-process
+    # second-call tests that ask for it by name.
+    ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--vendor", default=None,
                     help="the box label, ^[a-z0-9][a-z0-9_.-]*$ and not a placeholder; default "
                          "cpu-<cpu model slug> on a CPU-only install, platform.machine() elsewhere")

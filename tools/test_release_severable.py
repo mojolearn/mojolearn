@@ -2,7 +2,7 @@
 Linux pipelines run at once and each publishes on its own gates; the shipped
 source commit is pinned and the tooling runs from a newer checkout; a build
 leg of an earlier freeze is taken only when its set identity and build
-tooling are unchanged; a column only for a byte-identical wheel; the PASS
+tooling are unchanged; the PASS
 ledger (R2 stood in for by a dict); --status. Nothing here reaches a cloud or
 the real evidence directory: the runner stands in for every process."""
 import argparse
@@ -106,7 +106,7 @@ class Pipelines(Base):
         r, order = self.staged(fail={"linux-wait"})
         self.assertEqual(r.go(), 1)
         self.assertTrue(r.recorded("publish-macos"))
-        for later in ("linux-assemble", "linux-pack", "gpu-column-nvidia", "gpu-column-amd", "linux-joint-diff",
+        for later in ("linux-assemble", "linux-pack", "gpu-column-nvidia", "gpu-column-amd",
                       "publish-nvidia", "publish-amd", "publish-core-linux"):
             self.assertIn(later, r.STEPS)
             self.assertNotIn(later, order)
@@ -124,24 +124,12 @@ class Pipelines(Base):
         for step in ("publish-nvidia", "publish-amd", "publish-core-linux"):
             self.assertTrue(r.recorded(step), step)
         self.assertFalse(r.recorded("publish-macos"))
-        self.assertIn("release-check", order, "the Apple column still runs: the Linux columns are diffed against it")
         self.assertIn("gpu-column-nvidia", order)
         self.assertIn("gpu-column-amd", order)
         self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "nvidia"])
         text = "\n".join(r.lines)
         self.assertIn("macos: FAILED at macos-smoke", text)
         self.assertIn("core-linux: PUBLISHED", text)
-
-    def test_a_failed_apple_column_holds_both(self):
-        r, order = self.staged(fail={"release-check"})
-        self.assertEqual(r.go(), 1)
-        self.assertFalse(any(r.recorded(s) for s in ("publish-nvidia", "publish-amd", "publish-core-linux") + ("publish-macos",)))
-        self.assertIn("linux-pack", order, "the Linux builds and pack still run")
-        self.assertNotIn("gpu-column-nvidia", order)
-        self.assertNotIn("gpu-column-amd", order)
-        text = "\n".join(r.lines)
-        self.assertIn("core-linux: FAILED at release-check", text)
-        self.assertIn("macos: FAILED at release-check", text)
 
     def test_linux_waits_never_delay_the_mac_publish(self):
         published = threading.Event()
@@ -160,7 +148,7 @@ class Pipelines(Base):
         self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "macos", "nvidia"])
 
     def test_a_rerun_resumes_only_what_is_not_done(self):
-        r, _ = self.staged(fail={"linux-joint-diff"})
+        r, _ = self.staged(fail={"linux-pack"})
         self.assertEqual(r.go(), 1)
         self.assertEqual(r.recorded("record")["platforms"], ["macos"])
         r2, order = self.staged()
@@ -168,11 +156,11 @@ class Pipelines(Base):
         self.assertEqual(r2.go(), 0)
         self.assertNotIn("publish-macos", order, "a recorded publish is not repeated")
         self.assertNotIn("rehearsal", order)
-        self.assertIn("linux-joint-diff", order)
+        self.assertIn("linux-pack", order)
         # the finish line and the record run again for the newly published platforms
         self.assertIn("finish-line", order)
         self.assertEqual(sorted(r2.recorded("record")["platforms"]), ["amd", "linux", "macos", "nvidia"])
-        self.assertNotIn("linux-joint-diff", r2.state.get("failures", {}))
+        self.assertNotIn("linux-pack", r2.state.get("failures", {}))
 
     def test_without_publish_both_pipelines_are_held(self):
         r, order = self.staged(publish=None)
@@ -193,9 +181,13 @@ class Pipelines(Base):
             for s in p["builds"] + p["checks"] + [p["publish"]]:
                 self.assertIn(s, release.Release.STEPS)
         self.assertEqual(release.RESOURCE["macos-build"], "mac")
-        self.assertEqual(release.NEEDS["gpu-column-nvidia"], ["linux-pack", "release-check"])
-        self.assertEqual(release.NEEDS["gpu-column-amd"], ["linux-pack", "release-check"])
-        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke", "macos-self-test", "release-check"])
+        # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a
+        # reason to rerun. No release-check, macos-self-test or joint diff.
+        self.assertEqual(release.NEEDS["gpu-column-nvidia"], ["linux-pack"])
+        self.assertEqual(release.NEEDS["gpu-column-amd"], ["linux-pack"])
+        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke"])
+        for gone in ("release-check", "macos-self-test", "linux-joint-diff"):
+            self.assertNotIn(gone, release.Release.STEPS)
 
 
 # ---------------------------------------------------------------- legs
@@ -363,98 +355,6 @@ class Legs(Base):
         self.assertEqual((entry["source_commit"], entry["tooling_commit"], entry["verdict"]), (Y, HEAD, "PASS"))
 
 
-# ---------------------------------------------------------------- (d) columns
-def column(vendor, h="aaaa"):
-    return dict(mode="identical", repeats=1, vendor=vendor, commit=Y, complete=True,
-                cells={"rf-clf/base": {"verdict": "STABLE", "hashes": [h], "parts": [{"predict": h}]}})
-
-
-class Columns(Base):
-    def setup_release(self, wheel_bytes=b"payload"):
-        r = self.release()
-        final = r.rel / "linux" / "final" / "mojolearn-0.8.99-py3-none-manylinux_2_35_x86_64.whl"
-        final.parent.mkdir(parents=True)
-        with zipfile.ZipFile(final, "w") as z:
-            z.writestr("mojolearn/identity_columns/COMMIT", Y + "\n")
-            z.writestr("x", wheel_bytes)
-        # the split set: both plugins beside the core
-        self.plugins = []
-        for prefix in ("mojolearn_nvidia", "mojolearn_amd"):
-            p = final.parent / f"{prefix}-0.8.99-py3-none-manylinux_2_35_x86_64.whl"
-            with zipfile.ZipFile(p, "w") as z:
-                z.writestr(f"mojolearn/{prefix}.txt", prefix)
-            self.plugins.append(p)
-        ref = self.tmp / "release-check" / Y[:12] / "metal"
-        ref.mkdir(parents=True)
-        (ref / "column.json").write_text(json.dumps(column("apple-m4")))
-        (ref / "run-summary.json").write_text(json.dumps(dict(complete=True, validation_failures=[])))
-
-        def selection(vendor):
-            p = r.rel / f"selection-{vendor}.json"
-            p.write_text(json.dumps(dict(backend=vendor, column=vendor, fixtures="base", lanes=["rf-clf"], commit=Y)))
-            return p
-        r.gpu_selection = selection
-        # NVIDIA is PASSED for these wheels already; the AMD column is the one under test
-        out = r.rel / "smoke-linux"
-        out.mkdir(parents=True)
-        (out / "results.json").write_text(json.dumps(self.receipt(final)))
-        (out / "column-cuda.json").write_text(json.dumps(column("cuda")))
-        (out / "diff-ref-cuda.txt").write_text("summary: IDENTICAL=1\n")
-        return r, final
-
-    def receipt(self, core, arch="sm_89"):
-        """A PASSED smoke of the core with both plugins installed beside it."""
-        return dict(status="PASSED", scope="expanded", source_commit=Y, wheel_sha256=release.sha256(core),
-                    installed=dict(gpu_arch=arch),
-                    plugins=[dict(wheel=str(p), wheel_sha256=release.sha256(p)) for p in self.plugins])
-
-    def earlier_amd(self, wheel_sha, core, lanes=("rf-clf",)):
-        d = self.tmp / "state" / X[:12] / "column-amd"
-        d.mkdir(parents=True)
-        (d / "column-hip.json").write_text(json.dumps(column("hip")))
-        (d / "results.json").write_text(json.dumps(self.receipt(core, "gfx942")))
-        sel = dict(backend="hip", column="hip", fixtures="base", lanes=list(lanes), commit=X)
-        seld = hashlib.sha256(json.dumps({k: sel[k] for k in ("backend", "column", "fixtures", "lanes")},
-                                         sort_keys=True).encode()).hexdigest()
-        (d / "column-provenance.json").write_text(json.dumps(dict(
-            vendor="hip", wheel_sha256=wheel_sha, core_sha256=release.sha256(core), selection_digest=seld,
-            source_commit=X, column_sha256=hashlib.sha256((d / "column-hip.json").read_bytes()).hexdigest())))
-        return d
-
-    def test_a_column_is_taken_for_a_byte_identical_wheel(self):
-        r, final = self.setup_release()
-        self.earlier_amd(release.sha256(r.split_final("amd")), final)
-        self.assertIn("AMD column PASSED", r.step_gpu_column_amd())
-        self.assertEqual(self.spawned, [], "nothing launched")
-        out = r.rel / "column-amd"
-        self.assertTrue((out / "reused.json").is_file())
-        self.assertIn("summary", (out / "diff-ref-hip.txt").read_text(), "diffed again against this release's Apple column")
-        doc = json.loads((out / "reused.json").read_text())
-        self.assertEqual(doc["admitted_for"], Y)
-        self.assertIn("byte-identical", doc["because"])
-        self.assertIn("no DIVERGENT cell across the columns", r.step_linux_joint_diff())
-
-    def test_a_column_of_another_wheel_or_other_lanes_is_not_taken(self):
-        r, final = self.setup_release()
-        self.earlier_amd("0" * 64, final)
-        with self.assertRaises(release.StepFailed):     # the stand-in launch writes no column
-            r.step_gpu_column_amd()
-        self.assertEqual(len(self.spawned), 1)
-        self.assertIn("--vendor hip", self.spawned[0][0][2])
-        self.assertFalse((r.rel / "column-amd" / "reused.json").exists())
-
-        self.spawned.clear()
-        self._t2 = tempfile.TemporaryDirectory()
-        self.addCleanup(self._t2.cleanup)
-        self.tmp = pathlib.Path(self._t2.name)
-        with mock.patch.dict(os.environ, MOJOLEARN_RELEASE_CHECK_DIR=str(self.tmp / "release-check")):
-            r, final = self.setup_release()
-            self.earlier_amd(release.sha256(r.split_final("amd")), final, lanes=("rf-clf", "knn"))
-            with self.assertRaises(release.StepFailed):
-                r.step_gpu_column_amd()
-        self.assertEqual(len(self.spawned), 1, "another lane selection: launched")
-
-
 # ---------------------------------------------------------------- (e) --status
 class Status(Base):
     def test_status_reports_and_writes_nothing(self):
@@ -590,10 +490,10 @@ class SourceAndTooling(Base):
         with zipfile.ZipFile(whl, "w") as z:
             z.writestr("mojolearn/identity_columns/COMMIT", Y + "\n")
         r.on_pypi = lambda w: False
-        import wheel_self_test
-        receipt = r.self_test_receipt()
+        # the bundled-table gate is macos-smoke's own receipt (its self-test job)
+        receipt = r.rel / "smoke-macos" / "results.json"
         receipt.parent.mkdir(parents=True, exist_ok=True)
-        receipt.write_text(json.dumps(dict(format=wheel_self_test.FORMAT, status="PASSED",
+        receipt.write_text(json.dumps(dict(status="PASSED", scope="expanded", source_commit=Y,
                                           wheel_sha256=release.sha256(whl))))
         out = r.step_publish_macos()
         (cmd, env), = calls

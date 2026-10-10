@@ -140,7 +140,7 @@ class CrossCompileStep(unittest.TestCase):
         self.assertIn("cross-compile", release.NEEDS["linux-builds"])
         self.assertEqual(release.NEEDS["cross-compile"], ["freeze-commit"])
         self.assertEqual(release.PIPELINE_OF["cross-compile"], "core-linux")
-        for mac in ("macos-build", "macos-smoke", "release-check", "publish-macos", "reuse-plan", "rehearsal"):
+        for mac in ("macos-build", "macos-smoke", "publish-macos", "reuse-plan", "rehearsal"):
             self.assertNotIn("cross-compile", release.NEEDS[mac])
         self.assertIn("cross-compile", release.Release.SKIP_IF_RECORDED)
 

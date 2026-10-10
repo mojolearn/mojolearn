@@ -121,3 +121,9 @@ All runtime work is Mojo: on the device for GPU routes, in the host binding for 
 that cannot be Mojo is an explicit CPU-only input step before the runtime, marked `# cpu-route: <reason>`.
 Every existing violation is debt to remove (the checker baseline `tools/hooks/host_routes_baseline.tsv`, class py-compute),
 and no change may add one.
+
+## Release cost rules (Andrew, 2026-10-10)
+
+- Identity records and checks run ONCE (`REPEATS=1`); a mismatch is a bug to fix, never a reason to rerun.
+- Re-record only the lanes whose bits can have changed (`ONLY_CHANGED=table tools/record_identity_column.sh`); every other table row is kept.
+- One identity check per release: the table admit. No release step re-fits or re-diffs identity after it.

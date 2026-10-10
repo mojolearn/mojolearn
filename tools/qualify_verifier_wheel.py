@@ -173,11 +173,14 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
     """The smoke's jobs against an installed package: the same for a wheel
     installed here and for a package pip resolved from an index."""
     manifest["installed"] = run("installed", [python, "-c", INSTALLED_GUARD, version], work, True)
+    # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a
+    # reason to rerun. One fit per cell (--repeats 1), and the `batch` job is
+    # deleted: `extended` runs the same knn/base train, infer and batch cells
+    # (admit() asserts them IDENTICAL) plus the batch checks.
     commands = {
         "coverage": ["--coverage"],
-        "models": ["--models-only", "--repeats", "2"],
-        "batch": ["--lanes", "knn", "--fixtures", "base", "--repeats", "2", "--no-models"],
-        "extended": ["--lanes", "knn", "--fixtures", "base", "--repeats", "2", "--batch-checks", "--no-models"],
+        "models": ["--models-only", "--repeats", "1"],
+        "extended": ["--lanes", "knn", "--fixtures", "base", "--repeats", "1", "--batch-checks", "--no-models"],
         "self-test": ["--self-test"],
     }
     if scope == 'cpu-only':

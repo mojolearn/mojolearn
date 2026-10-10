@@ -45,8 +45,11 @@ the table's `3d1d7c30b12d9872`). In order, from one pushed commit:
    `tools/record_identity_column.sh <gpu-label> <outdir> --models`; then here
    `tools/admit_identity_columns.sh --models <outdir>/models`. Commit and push.
 
-The macos-self-test step below fails a wheel whose table is stale; it cannot
-regenerate one.
+macos-smoke's self-test job fails a wheel whose table is stale; it cannot
+regenerate one. Re-record only what changed: `ONLY_CHANGED=table
+tools/record_identity_column.sh ...` records just the lanes whose closure moved
+since the admitted table; every other row is kept. The admit is THE identity
+check of the release (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun).
 
 ## The one command
 
@@ -63,19 +66,13 @@ version files, runs `write-docs-facts`, commits and pushes exactly those files,
 freezes HEAD, runs the rehearsal (step 0) and the reuse plan, and then runs
 FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 
-- **macos**: macos-build, macos-smoke, macos-self-test (the built wheel in a
-  fresh venv, `verify --self-test --cpu-threads 3`; publish-macos refuses
-  without its PASSED receipt), `release-check` (the Apple column,
-  step 5b), publish-macos. These share the Mac and run one at a time.
-  publish-macos first diffs the Apple column against the newest earlier
-  release's recorded NVIDIA and AMD columns on this machine (seconds, nothing
-  rented); a DIVERGENT or MOVED cell holds the macOS publish unless
-  `--accept-moved` says the release changes those bits on purpose.
+- **macos**: macos-build, macos-smoke (its self-test job is the bundled-table
+  gate: publish-macos refuses without its PASSED receipt), publish-macos.
 - **core-linux**: cross-compile (step 0b, beside the rehearsal; it gates
   linux-builds, the first rental), linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
-  plugins, 3b), linux-joint-diff, publish-core-linux (last, after both plugins).
-- **nvidia**: gpu-column-nvidia (the expanded smoke plus the column, on the
+  plugins, 3b), publish-core-linux (last, after both plugins).
+- **nvidia**: gpu-column-nvidia (the expanded smoke, on the
   nv box we hold, the RunPod L40S sm_89), gpu-column-nvidia-hopper (only with
   `--hopper-box <ssh>`, a Hopper box we hold; otherwise SKIPPED), publish-nvidia.
 - **amd**: gpu-column-amd (on the amd box we hold, the DigitalOcean MI325X
@@ -83,36 +80,30 @@ FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 
   **RELEASES RENT NOTHING (2026-10-08).** The per-architecture rented smoke is
   deprecated. `--smoke-via lq` (the default) runs each column through
-  `tools/release_lq_smoke.py`: it copies the final core, both plugins, the lane
-  selection and the reference columns to `/root/release-smoke/<version>/<column>/in`
+  `tools/release_lq_smoke.py`: it copies the final core and both plugins to `/root/release-smoke/<version>/<column>/in`
   on the box (sha256 checked there), queues
   `lq add --front <nv|amd> CMD main rel-<version>-<column>-<stamp> bash tools/release_wheel_smoke.sh ... --local BUILDS=none`
   (next in the box queue, after the running job and ahead of every grid line;
   no binding build, no pixi env), polls `lq results <box> <tag>`, fetches the out
-  directory back and is judged exactly as the rented run was (same receipts,
-  same selection files, rediffed here). A relaunch while the job is queued polls
+  directory back and is judged exactly as the rented run was (same receipt). A relaunch while the job is queued polls
   it again (`<commit12>/columns/<column>.lq.json`); it never queues twice.
   Hopper (sm_90a) is unsmoked unless a Hopper box is held: publish-nvidia then
   needs only the Ada column, the sm_90a payload publishes on its GitHub build
   receipt, the alpha manifest carries `"smoke": {"sm_90a": "not run (no Hopper box held)"}`
   and the vendor wheel's README says so. `--smoke-via rent` keeps the old
   rented route (`--smoke-gpu`, `--amd-provider`) for an emergency only.
-  Both columns run at once as detached legs from
-  the installed core and both plugins, each diffed against the Apple column;
-  linux-joint-diff then diffs every PASSED column together
-  (`<version>/<commit12>/diff-columns.txt`). Any DIVERGENT or MOVED cell stops
-  all three Linux packages.
+  Both columns run at once as detached legs from the installed core and both
+  plugins. ONE IDENTITY CHECK PER RELEASE (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun):
+  the admitted table decided NVIDIA == AMD; the release no longer re-fits the
+  changed lanes (release-check, the column pass) or diffs them again
+  (linux-joint-diff, the macOS cross-diff).
 
-A failure in one pipeline never blocks or undoes the other, with one
-dependency by design: the Linux columns are diffed against the Apple column,
-so a failed `release-check` holds the Linux publish too. The run ends with
+A failure in one pipeline never blocks or undoes the other. The run ends with
 every outcome and exits non-zero unless every package published. The finish line
 checks each published platform (`pip install` on this Mac for macOS; `pip
 download` of the Linux file with its sha256 compared) and the
 `bench/results/release_verification/<date>_pypi_<v>/` record covers what is
-published; both run again when the other platform publishes. The CPU pass is
-opt-in: `--cpu-column` runs it in `release-check` and adds the CPU column to
-every diff. Only changed lanes run, each cell fitted once.
+published; both run again when the other platform publishes.
 
 **The shipped source and the release tooling are two commits.** The freeze
 pins the source commit in `state.json`; it never moves because main moved,
@@ -120,8 +111,8 @@ and only `--refreeze` moves it to HEAD (refused once a wheel of it is
 published). `tools/release.py` and everything it drives (the leg runners, the
 guards, the wheel smoke, the publisher) run from the checkout the command is
 run in, normally current main, so a tooling fix lands without a refreeze. The
-steps that read the source (the macOS build, `release-check`, the pack, the
-rehearsal, the lane selection) run in the source checkout: this one when HEAD
+steps that read the source (the macOS build, the pack, the
+rehearsal) run in the source checkout: this one when HEAD
 is the source commit, else a detached worktree under
 `<version>/source/<commit12>/` (or `--source-checkout`). A build leg's box
 unpacks the source archive and then the route overlay
@@ -155,8 +146,7 @@ It is resumable: rerun the same command after any stop, and only what is not
 done runs. State lives in `~/mojolearn-evidence/release/<version>/state.json`,
 and everything after the freeze in `<version>/<commit12>/` (legs, wheels,
 smoke receipts, logs). Each step checks its own output (a wheel of the frozen
-commit, a PASSED receipt for that wheel's sha256, complete release-check
-records, the file already on PyPI) and skips when it is there. A running
+commit, a PASSED receipt for that wheel's sha256, the file already on PyPI) and skips when it is there. A running
 build leg is never relaunched; a failed one is moved aside, never deleted, and
 relaunched. `--only STEP[,STEP]` runs some steps, `--redo STEP` discards a
 step's record, `--amd-expect-from <NVIDIA release-build dir>` restores the AMD

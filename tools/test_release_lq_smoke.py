@@ -183,7 +183,6 @@ class ReleaseRoute(unittest.TestCase):
         r.state["commit"] = COMMIT
         r.lines = []
         r.say = r.lines.append
-        r.gpu_selection = lambda vendor: self.tmp / f"selection-{vendor}.json"
         return r
 
     def test_lq_is_the_default_and_the_hopper_column_does_not_gate_publish_nvidia(self):
@@ -208,16 +207,17 @@ class ReleaseRoute(unittest.TestCase):
 
     def test_lq_column_commands(self):
         r = self.release()
-        cmd = r.lq_smoke_command("nvidia", "cuda", "/f/core.whl", self.tmp / "out", self.tmp / "columns",
-                                 self.tmp / "selection-cuda.json", ["--ref-column", "/c/metal/column.json"])
+        cmd = r.lq_smoke_command("nvidia", "cuda", "/f/core.whl", self.tmp / "out", self.tmp / "columns")
         self.assertEqual(cmd[1:12], ["tools/release_lq_smoke.py", "--box", "nv", "--tag", "rel-0.8.14-nvidia",
                                      "--remote-dir", "/root/release-smoke/0.8.14/nvidia", "--out", str(self.tmp / "out"),
                                      "--state", str(self.tmp / "columns" / "nvidia.lq.json")])
         tail = cmd[cmd.index("--") + 1:]
-        self.assertEqual(tail[:6], ["/f/core.whl", "--expected-source-commit", COMMIT, "--vendor", "cuda", "--column"])
+        self.assertEqual(tail[:6], ["/f/core.whl", "--expected-source-commit", COMMIT, "--vendor", "cuda", "--plugin"])
+        # Andrew 2026-10-10: identity runs ONCE; the smoke carries no second identity pass
+        self.assertNotIn("--column", tail)
+        self.assertNotIn("--ref-column", tail)
         self.assertNotIn("--rent", cmd)
-        amd = r.lq_smoke_command("amd", "hip", "/f/core.whl", self.tmp / "out", self.tmp / "columns",
-                                 self.tmp / "selection-hip.json", [])
+        amd = r.lq_smoke_command("amd", "hip", "/f/core.whl", self.tmp / "out", self.tmp / "columns")
         self.assertEqual(amd[amd.index("--box") + 1], "amd")
         self.assertEqual(amd[amd.index("--vendor") + 1], "hip")
 

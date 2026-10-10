@@ -331,8 +331,8 @@ class RunTests(unittest.TestCase):
         self.assertIn("legs to launch:", out.stdout)
         legs = out.stdout.split("legs to launch:", 1)[1].splitlines()[0]
         # one column step per vendor, each installing the core and both
-        # plugins, against the Apple column (never the CPU column by default),
-        # then one joint diff of every column
+        # plugins; the smoke only (Andrew 2026-10-10: identity runs ONCE; the
+        # admitted table is the identity check, no Apple column, no joint diff)
         gpu = out.stdout.split("-- gpu-column-nvidia", 1)[1].split("-- publish-nvidia", 1)[0]
         self.assertIn("nvidia: ", gpu)
         self.assertIn("amd: ", gpu)
@@ -346,10 +346,10 @@ class RunTests(unittest.TestCase):
         self.assertIn("--box nv", gpu)
         self.assertIn("--box amd", gpu)
         self.assertIn("no Hopper box held", gpu)
-        self.assertIn("metal/column.json", gpu)
-        self.assertNotIn("cpu/column.json", gpu)
-        self.assertIn("identity_break.py --diff", gpu.split("-- linux-joint-diff", 1)[1])
-        self.assertNotIn("--cpu-column", out.stdout.split("-- release-check", 1)[1].split("-- linux-wait", 1)[0])
+        self.assertNotIn("column.json", gpu)
+        self.assertNotIn("--ref-column", gpu)
+        self.assertNotIn("-- linux-joint-diff", out.stdout)
+        self.assertNotIn("-- release-check", out.stdout)
         # the default route is GitHub's runners (2026-09-27): nothing is rented to build
         self.assertNotIn("gemm_remote_leg.sh", out.stdout.split("-- linux-builds", 1)[1].split("-- ", 1)[0])
         for name in ("cuda-sm_90a", "cuda-sm_89", "hip-gfx942"):

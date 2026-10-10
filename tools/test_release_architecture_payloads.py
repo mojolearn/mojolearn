@@ -32,9 +32,9 @@ def test_payloads_cannot_publish_before_own_architecture_checks():
                 assert 'gpu-column-nvidia-hopper' in release.AFTER['publish-nvidia']
                 continue
             assert 'gpu-column-' + column in release.NEEDS['publish-' + vendor]
-        assert 'linux-joint-diff' in release.NEEDS['publish-' + vendor]
+        assert 'linux-joint-diff' not in release.NEEDS['publish-' + vendor]   # deleted 2026-10-10: identity runs ONCE
     assert {'publish-nvidia', 'publish-amd'} <= set(release.NEEDS['publish-core-linux'])
-    assert 'gpu-column-nvidia-hopper' in release.AFTER['linux-joint-diff']
+    assert 'linux-joint-diff' not in release.AFTER
 
 
 def test_target_admission_requires_actual_installed_arch(tmp_path):
