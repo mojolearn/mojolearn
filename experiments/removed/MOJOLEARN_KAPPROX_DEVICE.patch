@@ -1,0 +1,809 @@
+diff --git a/bindings/_mojolearn_x_neighbors.mojo b/bindings/_mojolearn_x_neighbors.mojo
+index 2805c7d13..6918b4b6c 100644
+--- a/bindings/_mojolearn_x_neighbors.mojo
++++ b/bindings/_mojolearn_x_neighbors.mojo
+@@ -15,8 +15,12 @@ from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kerne
+ from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
+ from x_neighbors.ocsvm_dev import op_ocsvm
+ from x_neighbors.graph_dev import op_louvain
++from x_neighbors.kapprox_dev import op_kapprox_check
++from x_neighbors.kapprox_dev import op_kapprox_achi2
++from x_neighbors.kapprox_dev import op_kapprox_skew_fit
++from x_neighbors.kapprox_dev import op_kapprox_skew_transform
+ from x_neighbors.kapprox_dev import op_kapprox_sparse_rp
+-from x_neighbors.kapprox_dev import kpca_resident_binding, sparse_rp_device_binding
++from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding
+ from x_neighbors.iter_device import lp_fast_resident_binding
+ from x_neighbors.sort_items import purity_flags_binding
+ 
+@@ -1125,6 +1129,57 @@ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
+     return PythonObject(None)
+ 
+ 
++def kapprox_check_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_flag = _a(a_, 1)
++    var v_n = _n(i_, 0)
++    var v_d = _n(i_, 1)
++    var v_strict = _n(i_, 2)
++    var v_floor = _f(f_, 0)
++    with GILReleased(Python()):
++        op_kapprox_check(v_x, v_flag, v_n, v_d, v_strict, v_floor)
++    return PythonObject(None)
++
++
++def kapprox_achi2_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_res = _a(a_, 1)
++    var v_flag = _a(a_, 2)
++    var v_n = _n(i_, 0)
++    var v_d = _n(i_, 1)
++    var v_steps = _n(i_, 2)
++    var v_interval = _f(f_, 0)
++    with GILReleased(Python()):
++        op_kapprox_achi2(v_x, v_res, v_flag, v_n, v_d, v_steps, v_interval)
++    return PythonObject(None)
++
++
++def kapprox_skew_fit_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_w = _a(a_, 0)
++    var v_off = _a(a_, 1)
++    var v_d = _n(i_, 0)
++    var v_nc = _n(i_, 1)
++    var v_seed = _n(i_, 2)
++    with GILReleased(Python()):
++        op_kapprox_skew_fit(v_w, v_off, v_d, v_nc, v_seed)
++    return PythonObject(None)
++
++
++def kapprox_skew_transform_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_w = _a(a_, 1)
++    var v_off = _a(a_, 2)
++    var v_res = _a(a_, 3)
++    var v_flag = _a(a_, 4)
++    var v_n = _n(i_, 0)
++    var v_d = _n(i_, 1)
++    var v_nc = _n(i_, 2)
++    var v_skew = _f(f_, 0)
++    with GILReleased(Python()):
++        op_kapprox_skew_transform(v_x, v_w, v_off, v_res, v_flag, v_n, v_d, v_nc, v_skew)
++    return PythonObject(None)
++
++
+ def kapprox_sparse_rp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+     var v_res = _a(a_, 0)
+     var v_kc = _n(i_, 0)
+@@ -1221,6 +1276,10 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
+     m.def_function[ocsvm_binding]("xn_ocsvm")
+     m.def_function[louvain_binding]("xn_louvain")
++    m.def_function[kapprox_check_binding]("xn_kapprox_check")
++    m.def_function[kapprox_achi2_binding]("xn_kapprox_achi2")
++    m.def_function[kapprox_skew_fit_binding]("xn_kapprox_skew_fit")
++    m.def_function[kapprox_skew_transform_binding]("xn_kapprox_skew_transform")
+     m.def_function[kapprox_sparse_rp_binding]("xn_kapprox_sparse_rp")
+     m.def_function[eigh_binding]("xn_eigh")
+     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
+@@ -1237,6 +1296,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
+         var m = PythonModuleBuilder("_mojolearn_x_neighbors")
+         _add_ops(m)
+         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
++        m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+diff --git a/bindings/_mojolearn_x_neighbors_host.mojo b/bindings/_mojolearn_x_neighbors_host.mojo
+index 6e610c55e..8ba476f9f 100644
+--- a/bindings/_mojolearn_x_neighbors_host.mojo
++++ b/bindings/_mojolearn_x_neighbors_host.mojo
+@@ -15,8 +15,12 @@ from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sq
+ from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
+ from x_neighbors.ocsvm_host import op_ocsvm
+ from x_neighbors.graph_host import op_louvain
++from x_neighbors.kapprox_host import op_kapprox_check
++from x_neighbors.kapprox_host import op_kapprox_achi2
++from x_neighbors.kapprox_host import op_kapprox_skew_fit
++from x_neighbors.kapprox_host import op_kapprox_skew_transform
+ from x_neighbors.kapprox_host import op_kapprox_sparse_rp
+-from x_neighbors.kapprox_host import kpca_resident_binding, sparse_rp_device_binding
++from x_neighbors.kapprox_host import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding
+ from x_neighbors.iter_host import lp_fast_resident_binding
+ from x_neighbors.sort_items import purity_flags_binding
+ 
+@@ -1125,6 +1129,57 @@ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
+     return PythonObject(None)
+ 
+ 
++def kapprox_check_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_flag = _a(a_, 1)
++    var v_n = _n(i_, 0)
++    var v_d = _n(i_, 1)
++    var v_strict = _n(i_, 2)
++    var v_floor = _f(f_, 0)
++    with GILReleased(Python()):
++        op_kapprox_check(v_x, v_flag, v_n, v_d, v_strict, v_floor)
++    return PythonObject(None)
++
++
++def kapprox_achi2_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_res = _a(a_, 1)
++    var v_flag = _a(a_, 2)
++    var v_n = _n(i_, 0)
++    var v_d = _n(i_, 1)
++    var v_steps = _n(i_, 2)
++    var v_interval = _f(f_, 0)
++    with GILReleased(Python()):
++        op_kapprox_achi2(v_x, v_res, v_flag, v_n, v_d, v_steps, v_interval)
++    return PythonObject(None)
++
++
++def kapprox_skew_fit_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_w = _a(a_, 0)
++    var v_off = _a(a_, 1)
++    var v_d = _n(i_, 0)
++    var v_nc = _n(i_, 1)
++    var v_seed = _n(i_, 2)
++    with GILReleased(Python()):
++        op_kapprox_skew_fit(v_w, v_off, v_d, v_nc, v_seed)
++    return PythonObject(None)
++
++
++def kapprox_skew_transform_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_w = _a(a_, 1)
++    var v_off = _a(a_, 2)
++    var v_res = _a(a_, 3)
++    var v_flag = _a(a_, 4)
++    var v_n = _n(i_, 0)
++    var v_d = _n(i_, 1)
++    var v_nc = _n(i_, 2)
++    var v_skew = _f(f_, 0)
++    with GILReleased(Python()):
++        op_kapprox_skew_transform(v_x, v_w, v_off, v_res, v_flag, v_n, v_d, v_nc, v_skew)
++    return PythonObject(None)
++
++
+ def kapprox_sparse_rp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+     var v_res = _a(a_, 0)
+     var v_kc = _n(i_, 0)
+@@ -1221,6 +1276,10 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
+     m.def_function[ocsvm_binding]("xn_ocsvm")
+     m.def_function[louvain_binding]("xn_louvain")
++    m.def_function[kapprox_check_binding]("xn_kapprox_check")
++    m.def_function[kapprox_achi2_binding]("xn_kapprox_achi2")
++    m.def_function[kapprox_skew_fit_binding]("xn_kapprox_skew_fit")
++    m.def_function[kapprox_skew_transform_binding]("xn_kapprox_skew_transform")
+     m.def_function[kapprox_sparse_rp_binding]("xn_kapprox_sparse_rp")
+     m.def_function[eigh_binding]("xn_eigh")
+     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
+@@ -1258,6 +1317,7 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
+         m.def_function[x_neighbors_host_sabotage_binding]("x_neighbors_host_sabotage")
+         _add_ops(m)
+         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
++        m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+diff --git a/python/mojolearn/_expansion_neighbors.py b/python/mojolearn/_expansion_neighbors.py
+index b88c03ce1..2fda38016 100644
+--- a/python/mojolearn/_expansion_neighbors.py
++++ b/python/mojolearn/_expansion_neighbors.py
+@@ -105,6 +105,16 @@ def _f32_scalar(v):
+     return Array.from_list([float(v)], "<f4").tolist()[0]
+ 
+ 
++def _kapprox_fast(est):
++    """lane/apple-fast-kapprox: whether the bound binary takes the chi2
++    samplers' device fit / transform (FAST + Apple, built with
++    `-D MOJOLEARN_KAPPROX_DEVICE`), read back from the binding's compile-time
++    constant `x_neighbors_kapprox_fast` (no env read). 0 on IDENTICAL, on
++    the host binding and on a build without the define: main's path."""
++    fn = getattr(est._bind(), "x_neighbors_kapprox_fast", None)
++    return fn is not None and int(fn()) != 0
++
++
+ def _kpca_resident(est):
+     """lane/apple-fast-kapprox: whether KernelPCA.fit builds, centers and
+     solves its kernel matrix on x_decomp's resident kit with one upload of X
+@@ -147,6 +157,25 @@ def _kpca_resident_center(kit, X, n, kernel, gamma, coef0, degree):
+     return Kc, cols, all_
+ 
+ 
++def _kapprox_op(est, name, bufs, ints, floats, message):
++    """One kapprox op with its refusal flag appended (the op's last buffer):
++    the device sets flag[0] when a cell fails the sampler's check, and the
++    caller's ValueError is raised here, as sklearn's would be."""
++    flag = zeros((1,), "<i4")
++    est._op(name, list(bufs) + [(flag, 1)], ints, floats)
++    if flag.tolist()[0] != 0:
++        raise ValueError(message)
++
++
++def _kapprox_seed(random_state):
++    """The device stream's 31-bit seed: the int itself, else one draw from
++    sklearn's check_random_state of `random_state` (None: numpy's global
++    stream, as theirs; a RandomState: one draw from it)."""
++    if isinstance(random_state, int) and not isinstance(random_state, bool):
++        return random_state & 0x7FFFFFFF
++    return int(_random_state(random_state).randint(1 << 31, 1)[0])
++
++
+ def _labels_of(y):
+     y = y.tolist() if hasattr(y, "tolist") else list(y)
+     classes = sorted(set(y))
+@@ -1192,6 +1221,15 @@ class AdditiveChi2Sampler(_XNeighbors):
+ 
+     def fit(self, X, y=None):
+         X = _f32(X)
++        if _kapprox_fast(self):
++            # lane/apple-fast-kapprox: the negative check on the device (one
++            # upload, a grid over every cell, a one-int flag); no host min.
++            self._interval()
++            n, d = X.shape
++            _kapprox_op(self, "kapprox_check", [(X, 0)], (n, d, 0), (0.0,),
++                        "Negative values in data passed to AdditiveChi2Sampler")
++            self.n_features_in_ = d
++            return self
+         if X.size and X.min() < 0:
+             raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
+         self._interval()
+@@ -1204,9 +1242,15 @@ class AdditiveChi2Sampler(_XNeighbors):
+         n, d = X.shape
+         steps = int(self.sample_steps)
+         out = _empty_out((n, d * (2 * steps - 1)), "<f4")
+-        if X.size and X.min() < 0:
+-            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
+-        self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
++        if _kapprox_fast(self):
++            # lane/apple-fast-kapprox: the map and the negative check in one launch
++            _kapprox_op(self, "kapprox_achi2", [(X, 0), (out, 1)], (n, d, steps),
++                        (_f32_scalar(self._interval()),),
++                        "Negative values in data passed to AdditiveChi2Sampler")
++        else:
++            if X.size and X.min() < 0:
++                raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
++            self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
+         if sparse is not None:
+             # Preserve the caller's sparse container type; dense inputs need
+             # neither SciPy nor NumPy. SciPy owns this optional format conversion.
+@@ -1250,6 +1294,17 @@ class SkewedChi2Sampler(_XNeighbors):
+         X = _f32(X)
+         d = X.shape[1]
+         nc = int(self.n_components)
++        if _kapprox_fast(self):
++            # lane/apple-fast-kapprox: the weights and offsets drawn on the
++            # device, one thread per draw (a counter-based uniform of the same
++            # law, not sklearn's MT19937 numbers; the fitted map is as random)
++            w = _empty_out((d, nc), "<f4")
++            off = _empty_out((nc,), "<f4")
++            self._op("kapprox_skew_fit", [(w, 1), (off, 1)], (d, nc, _kapprox_seed(self.random_state)))
++            self.random_weights_ = w
++            self.random_offset_ = off
++            self.n_features_in_ = d
++            return self
+         rs = _random_state(self.random_state)
+         u = rs.random_sample(d * nc)
+         z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
+@@ -1263,9 +1318,19 @@ class SkewedChi2Sampler(_XNeighbors):
+     def transform(self, X):
+         X = _f32(X)
+         n, d = X.shape
++        nc = int(self.n_components)
++        if _kapprox_fast(self):
++            # lane/apple-fast-kapprox: log(X + skewedness) into a device
++            # scratch (the -skewedness check fused), then the product and the
++            # cosine on the same stream: one upload of X, one download
++            out = _empty_out((n, nc), "<f4")
++            _kapprox_op(self, "kapprox_skew_transform",
++                        [(X, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)],
++                        (n, d, nc), (_f32_scalar(self.skewedness),),
++                        "X may not contain entries smaller than -skewedness.")
++            return out
+         if X.size and X.min() <= -float(self.skewedness):
+             raise ValueError("X may not contain entries smaller than -skewedness.")
+-        nc = int(self.n_components)
+         lx = self._unary(X, _U_LOG, 1.0, _f32_scalar(self.skewedness))
+         out = _empty_out((n, nc), "<f4")
+         self._op("skew_transform", [(lx, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)], (n, d, nc))
+diff --git a/python/mojolearn/_surface_neighbors.py b/python/mojolearn/_surface_neighbors.py
+index b37188212..4951ae2b8 100644
+--- a/python/mojolearn/_surface_neighbors.py
++++ b/python/mojolearn/_surface_neighbors.py
+@@ -116,11 +116,16 @@ FAMILIES = (
+             "xn_kernel_tiled",
+             "xn_ocsvm",
+             "xn_louvain",
++            "xn_kapprox_check",
++            "xn_kapprox_achi2",
++            "xn_kapprox_skew_fit",
++            "xn_kapprox_skew_transform",
+             "xn_kapprox_sparse_rp",
+             "xn_eigh",
+             "x_neighbors_numeric_mode",
+             "x_neighbors_py2mojo_off",
+             "x_neighbors_vendor",
++            "x_neighbors_kapprox_fast",
+             "x_neighbors_kpca_resident",
+             "x_neighbors_sparse_rp_device",
+             "x_neighbors_purity_flags",
+diff --git a/x_neighbors/gen.py b/x_neighbors/gen.py
+index 3ef08aba5..b2cd34adf 100644
+--- a/x_neighbors/gen.py
++++ b/x_neighbors/gen.py
+@@ -346,10 +346,21 @@ OWN_DRIVERS = {
+     "louvain": ("graph_dev", "graph_host",
+                 [("a", "fin", "n * n"), ("labels", "iout", "n"), ("info", "fout", "2"),
+                  ("n", "int"), ("max_level", "int"), ("resolution", "float"), ("threshold", "float")]),
+-    # lane/apple-fast-kapprox (2026-10-02): SparseRandomProjection's matrix in
+-    # one launch (x_neighbors/kapprox_dev.mojo, FAST + Apple only behind
+-    # -D MOJOLEARN_SPARSE_RP_DEVICE; other builds refuse by name). The host
+-    # module is the CPU binding's twin of the export.
++    # lane/apple-fast-kapprox (2026-10-02): the chi2 samplers' device fit and
++    # transform (x_neighbors/kapprox_dev.mojo, FAST + Apple only behind
++    # -D MOJOLEARN_KAPPROX_DEVICE; other builds refuse by name). The host
++    # module is the CPU binding's twin of the exports.
++    "kapprox_check": ("kapprox_dev", "kapprox_host",
++                      [("x", "fin", "n * d"), ("flag", "iinout", "1"), ("n", "int"), ("d", "int"),
++                       ("strict", "int"), ("floor", "float")]),
++    "kapprox_achi2": ("kapprox_dev", "kapprox_host",
++                      [("x", "fin", "n * d"), ("res", "fout", "n * d * (2 * steps - 1)"), ("flag", "iinout", "1"),
++                       ("n", "int"), ("d", "int"), ("steps", "int"), ("interval", "float")]),
++    "kapprox_skew_fit": ("kapprox_dev", "kapprox_host",
++                         [("w", "fout", "d * nc"), ("off", "fout", "nc"), ("d", "int"), ("nc", "int"), ("seed", "int")]),
++    "kapprox_skew_transform": ("kapprox_dev", "kapprox_host",
++                               [("x", "fin", "n * d"), ("w", "fin", "d * nc"), ("off", "fin", "nc"), ("res", "fout", "n * nc"),
++                                ("flag", "iinout", "1"), ("n", "int"), ("d", "int"), ("nc", "int"), ("skew", "float")]),
+     "kapprox_sparse_rp": ("kapprox_dev", "kapprox_host",
+                           [("res", "fout", "kc * d"), ("kc", "int"), ("d", "int"), ("seed", "int"),
+                            ("dens", "float"), ("scale", "float")]),
+@@ -724,7 +735,7 @@ def gpu_binding():
+             + BIND_HEAD % "eigh_device" + "from checks.vendor import COMPILED_VENDOR\n"
+             + f"from x_neighbors.device_ops import {ops}\n"
+             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
+-            + "from x_neighbors.kapprox_dev import kpca_resident_binding, sparse_rp_device_binding\n"
++            + "from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
+             + "from x_neighbors.iter_device import lp_fast_resident_binding\n"
+             + "from x_neighbors.sort_items import purity_flags_binding\n"
+             + wrappers() + """
+@@ -739,6 +750,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
+         var m = PythonModuleBuilder("_mojolearn_x_neighbors")
+         _add_ops(m)
+         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
++        m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+@@ -755,7 +767,7 @@ def host_binding():
+             + BIND_HEAD % "eigh" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
+             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
+             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
+-            + "from x_neighbors.kapprox_host import kpca_resident_binding, sparse_rp_device_binding\n"
++            + "from x_neighbors.kapprox_host import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
+             + "from x_neighbors.iter_host import lp_fast_resident_binding\n"
+             + "from x_neighbors.sort_items import purity_flags_binding\n"
+             + wrappers() + """
+@@ -791,6 +803,7 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
+         m.def_function[x_neighbors_host_sabotage_binding]("x_neighbors_host_sabotage")
+         _add_ops(m)
+         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
++        m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+@@ -812,7 +825,7 @@ if __name__ == "__main__":
+     b = t.index("# END GENERATED EXPORTS")
+     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
+              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode", "x_neighbors_py2mojo_off",
+-                                                                            "x_neighbors_vendor",
++                                                                            "x_neighbors_vendor", "x_neighbors_kapprox_fast",
+                                                                             "x_neighbors_kpca_resident", "x_neighbors_sparse_rp_device",
+                                                                             "x_neighbors_purity_flags"]
+     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
+diff --git a/x_neighbors/kapprox_dev.mojo b/x_neighbors/kapprox_dev.mojo
+index 471018ef3..8ab0a9b94 100644
+--- a/x_neighbors/kapprox_dev.mojo
++++ b/x_neighbors/kapprox_dev.mojo
+@@ -1,23 +1,44 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""lane/apple-fast-kapprox: SparseRandomProjection's device draw and the
+-KernelPCA resident switch (GPU binding).
+-
+-FAST + Apple only, behind `-D MOJOLEARN_SPARSE_RP_DEVICE` /
+-`-D MOJOLEARN_KPCA_RESIDENT`; any other build exports the same names and
+-refuses by name, and the Python layer asks the binding's constants before
+-taking these paths, so IDENTICAL runs main's code. The chi2 samplers' device
+-ops (`-D MOJOLEARN_KAPPROX_DEVICE`) were DROPPED-quality; their code is on
+-lane/apple-fast-kapprox @ 10d5a7970.
++"""lane/apple-fast-kapprox: the chi2 samplers' device drivers (GPU binding).
++
++FAST + Apple only, behind `-D MOJOLEARN_KAPPROX_DEVICE` (`XN_KAPPROX_FAST`);
++any other build exports the same names and refuses by name, and the Python
++layer asks `x_neighbors_kapprox_fast()` once per call before taking this
++path, so IDENTICAL runs main's code. Every op is one upload, grid launches
++over every cell, one download: no host loop, no host min, no host draw and
++no device-to-host round trip inside the op (x_neighbors/kapprox_items.mojo).
+ """
+ from std.python import PythonObject
+ from std.sys.compile import is_defined
+ from std.sys.info import has_apple_gpu_accelerator
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+-from x_neighbors.items import FP
+-from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK
+-from x_neighbors.kapprox_items import kapprox_sparse_rp_item
++from x_neighbors.items import FP, IP
++from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK, skew_transform_kernel
++from x_neighbors.kapprox_items import (
++    kapprox_check_item,
++    kapprox_achi2_item,
++    kapprox_skew_fit_item,
++    kapprox_skew_log_item,
++    kapprox_sparse_rp_item,
++)
++
++#: The switch: FAST, an Apple GPU and `-D MOJOLEARN_KAPPROX_DEVICE`. Default
++#: OFF; IDENTICAL never takes it.
++comptime XN_KAPPROX_FAST = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_KAPPROX_DEVICE"]()
++)
++
++
++def kapprox_fast_binding() raises -> PythonObject:
++    """1 when this binary takes the device fit/transform of the chi2 samplers."""
++    comptime if XN_KAPPROX_FAST:
++        return PythonObject(1)
++    return PythonObject(0)
++
+ 
+ #: KernelPCA.fit resident on x_decomp's kit (one upload of X; the kernel
+ #: matrix, its centering and the top-k solve never leave the device):
+@@ -55,7 +76,7 @@ def sparse_rp_device_binding() raises -> PythonObject:
+ 
+ 
+ def _refuse() raises:
+-    raise Error("x_neighbors: the kapprox device ops are FAST + Apple only (-D MOJOLEARN_SPARSE_RP_DEVICE)")
++    raise Error("x_neighbors: the kapprox device ops are FAST + Apple only (-D MOJOLEARN_KAPPROX_DEVICE)")
+ 
+ 
+ # One plain enqueue_copy per buffer on the lane's stream (graph_dev.mojo's
+@@ -67,11 +88,57 @@ def _dev_f(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> De
+     return buf^
+ 
+ 
++def _dev_i(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> DeviceBuffer[DType.int32]:
++    var buf = ctx.enqueue_create_buffer[DType.int32](count if count > 0 else 1)
++    if upload and count > 0:
++        ctx.enqueue_copy(dst_buf=buf, src_ptr=IP(unsafe_from_address=addr))
++    return buf^
++
++
+ def _back_f(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count: Int) raises:
+     if count > 0:
+         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
+ 
+ 
++def _back_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count: Int) raises:
++    if count > 0:
++        ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=addr), src_buf=buf)
++
++
++def kapprox_check_kernel(x: FP, flag: IP, n_: Int64, d_: Int64, strict_: Int64, floor_: Float32):
++    var n = Int(n_)
++    var d = Int(d_)
++    var strict = Int(strict_)
++    var t = _tid()
++    if t < n * d:
++        kapprox_check_item(t, x, flag, n, d, strict, floor_)
++
++
++def kapprox_achi2_kernel(x: FP, res: FP, flag: IP, n_: Int64, d_: Int64, steps_: Int64, interval_: Float32):
++    var n = Int(n_)
++    var d = Int(d_)
++    var steps = Int(steps_)
++    var t = _tid()
++    if t < n * d:
++        kapprox_achi2_item(t, x, res, flag, n, d, steps, interval_)
++
++
++def kapprox_skew_fit_kernel(w: FP, off: FP, d_: Int64, nc_: Int64, seed_: Int64):
++    var d = Int(d_)
++    var nc = Int(nc_)
++    var seed = Int(seed_)
++    var t = _tid()
++    if t < d * nc + nc:
++        kapprox_skew_fit_item(t, w, off, d, nc, seed)
++
++
++def kapprox_skew_log_kernel(x: FP, lx: FP, flag: IP, count_: Int64, skew_: Float32):
++    var count = Int(count_)
++    var t = _tid()
++    if t < count:
++        kapprox_skew_log_item(t, x, lx, flag, skew_)
++
++
+ def kapprox_sparse_rp_kernel(res: FP, kc_: Int64, d_: Int64, seed_: Int64, dens_: Float32, scale_: Float32):
+     var kc = Int(kc_)
+     var d = Int(d_)
+@@ -97,3 +164,102 @@ def op_kapprox_sparse_rp(res: Int, kc: Int, d: Int, seed: Int, dens: Float32, sc
+     ctx.synchronize()
+     _ = d_res^
+     _ = ctx^
++
++
++def op_kapprox_check(x: Int, flag: Int, n: Int, d: Int, strict: Int, floor: Float32) raises:
++    """flag[0] = 1 when any cell of x[n x d] is below `floor` (strict == 0:
++    x < floor; else x <= floor). The fit of both samplers."""
++    comptime if not XN_KAPPROX_FAST:
++        _refuse()
++        return
++    var ctx = xn_ctx()
++    var d_x = _dev_f(ctx, x, n * d, True)
++    var d_flag = _dev_i(ctx, flag, 1, True)
++    ctx.enqueue_function[kapprox_check_kernel](
++        d_x.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(n), Int64(d), Int64(strict), floor,
++        grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
++    )
++    _back_i(ctx, d_flag, flag, 1)
++    ctx.synchronize()
++    _ = d_x^
++    _ = d_flag^
++    _ = ctx^
++
++
++def op_kapprox_achi2(x: Int, res: Int, flag: Int, n: Int, d: Int, steps: Int, interval: Float32) raises:
++    """AdditiveChi2Sampler.transform: the map and the negative check in one launch."""
++    comptime if not XN_KAPPROX_FAST:
++        _refuse()
++        return
++    var ctx = xn_ctx()
++    var d_x = _dev_f(ctx, x, n * d, True)
++    var d_res = _dev_f(ctx, res, n * d * (2 * steps - 1), False)
++    var d_flag = _dev_i(ctx, flag, 1, True)
++    ctx.enqueue_function[kapprox_achi2_kernel](
++        d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(n), Int64(d), Int64(steps), interval,
++        grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
++    )
++    _back_f(ctx, d_res, res, n * d * (2 * steps - 1))
++    _back_i(ctx, d_flag, flag, 1)
++    ctx.synchronize()
++    _ = d_x^
++    _ = d_res^
++    _ = d_flag^
++    _ = ctx^
++
++
++def op_kapprox_skew_fit(w: Int, off: Int, d: Int, nc: Int, seed: Int) raises:
++    """SkewedChi2Sampler.fit: random_weights_[d x nc] and random_offset_[nc]
++    drawn on the device, one thread per draw."""
++    comptime if not XN_KAPPROX_FAST:
++        _refuse()
++        return
++    var ctx = xn_ctx()
++    var count = d * nc + nc
++    var d_w = _dev_f(ctx, w, d * nc, False)
++    var d_off = _dev_f(ctx, off, nc, False)
++    ctx.enqueue_function[kapprox_skew_fit_kernel](
++        d_w.unsafe_ptr(), d_off.unsafe_ptr(), Int64(d), Int64(nc), Int64(seed),
++        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
++    )
++    _back_f(ctx, d_w, w, d * nc)
++    _back_f(ctx, d_off, off, nc)
++    ctx.synchronize()
++    _ = d_w^
++    _ = d_off^
++    _ = ctx^
++
++
++def op_kapprox_skew_transform(x: Int, w: Int, off: Int, res: Int, flag: Int, n: Int, d: Int, nc: Int, skew: Float32) raises:
++    """SkewedChi2Sampler.transform: log(x + skewedness) into a device scratch
++    (with the -skewedness check fused), then the product and cosine
++    (`skew_transform_kernel`) on the same stream. One upload of X, one
++    download of the map."""
++    comptime if not XN_KAPPROX_FAST:
++        _refuse()
++        return
++    var ctx = xn_ctx()
++    var d_x = _dev_f(ctx, x, n * d, True)
++    var d_w = _dev_f(ctx, w, d * nc, True)
++    var d_off = _dev_f(ctx, off, nc, True)
++    var d_res = _dev_f(ctx, res, n * nc, False)
++    var d_flag = _dev_i(ctx, flag, 1, True)
++    var d_lx = _dev_f(ctx, 0, n * d, False)
++    ctx.enqueue_function[kapprox_skew_log_kernel](
++        d_x.unsafe_ptr(), d_lx.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(n * d), skew,
++        grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
++    )
++    ctx.enqueue_function[skew_transform_kernel](
++        d_lx.unsafe_ptr(), d_w.unsafe_ptr(), d_off.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(d), Int64(nc),
++        grid_dim=_grid(n * nc), block_dim=(BLOCK if n * nc > 1 else 1),
++    )
++    _back_f(ctx, d_res, res, n * nc)
++    _back_i(ctx, d_flag, flag, 1)
++    ctx.synchronize()
++    _ = d_x^
++    _ = d_w^
++    _ = d_off^
++    _ = d_res^
++    _ = d_flag^
++    _ = d_lx^
++    _ = ctx^
+diff --git a/x_neighbors/kapprox_host.mojo b/x_neighbors/kapprox_host.mojo
+index 781eb3eef..478ca3904 100644
+--- a/x_neighbors/kapprox_host.mojo
++++ b/x_neighbors/kapprox_host.mojo
+@@ -3,10 +3,21 @@
+ """The host column of x_neighbors/kapprox_dev.mojo: the same items in a plain
+ loop, so the CPU binding exports the same names over the same address
+ contract. HOST ONLY. The Python layer never takes the kapprox device path on
+-this binding (`x_neighbors_sparse_rp_device()` is 0 here)."""
++this binding (`x_neighbors_kapprox_fast()` is 0 here)."""
+ from std.python import PythonObject
+-from x_neighbors.items import FP
+-from x_neighbors.kapprox_items import kapprox_sparse_rp_item
++from x_neighbors.items import FP, IP, skew_transform_item
++from x_neighbors.kapprox_items import (
++    kapprox_check_item,
++    kapprox_achi2_item,
++    kapprox_skew_fit_item,
++    kapprox_skew_log_item,
++    kapprox_sparse_rp_item,
++)
++
++
++def kapprox_fast_binding() raises -> PythonObject:
++    """The host column never takes the device fit/transform."""
++    return PythonObject(0)
+ 
+ 
+ def kpca_resident_binding() raises -> PythonObject:
+@@ -21,3 +32,40 @@ def op_kapprox_sparse_rp(res: Int, kc: Int, d: Int, seed: Int, dens: Float32, sc
+     var p_res = FP(unsafe_from_address=res)
+     for t in range(kc * d):
+         kapprox_sparse_rp_item(t, p_res, kc, d, seed, dens, scale)
++
++
++def op_kapprox_check(x: Int, flag: Int, n: Int, d: Int, strict: Int, floor: Float32) raises:
++    var p_x = FP(unsafe_from_address=x)
++    var p_flag = IP(unsafe_from_address=flag)
++    for t in range(n * d):
++        kapprox_check_item(t, p_x, p_flag, n, d, strict, floor)
++
++
++def op_kapprox_achi2(x: Int, res: Int, flag: Int, n: Int, d: Int, steps: Int, interval: Float32) raises:
++    var p_x = FP(unsafe_from_address=x)
++    var p_res = FP(unsafe_from_address=res)
++    var p_flag = IP(unsafe_from_address=flag)
++    for t in range(n * d):
++        kapprox_achi2_item(t, p_x, p_res, p_flag, n, d, steps, interval)
++
++
++def op_kapprox_skew_fit(w: Int, off: Int, d: Int, nc: Int, seed: Int) raises:
++    var p_w = FP(unsafe_from_address=w)
++    var p_off = FP(unsafe_from_address=off)
++    for t in range(d * nc + nc):
++        kapprox_skew_fit_item(t, p_w, p_off, d, nc, seed)
++
++
++def op_kapprox_skew_transform(x: Int, w: Int, off: Int, res: Int, flag: Int, n: Int, d: Int, nc: Int, skew: Float32) raises:
++    var s_lx = List[Float32](length=(n * d) if (n * d) > 0 else 1, fill=Float32(0))
++    var p_x = FP(unsafe_from_address=x)
++    var p_w = FP(unsafe_from_address=w)
++    var p_off = FP(unsafe_from_address=off)
++    var p_res = FP(unsafe_from_address=res)
++    var p_flag = IP(unsafe_from_address=flag)
++    var p_lx = FP(unsafe_from_address=Int(s_lx.unsafe_ptr()))
++    for t in range(n * d):
++        kapprox_skew_log_item(t, p_x, p_lx, p_flag, skew)
++    for t in range(n * nc):
++        skew_transform_item(t, p_lx, p_w, p_off, p_res, n, d, nc)
++    _ = s_lx^
+diff --git a/x_neighbors/kapprox_items.mojo b/x_neighbors/kapprox_items.mojo
+index fd67ae8f7..fc1e99b41 100644
+--- a/x_neighbors/kapprox_items.mojo
++++ b/x_neighbors/kapprox_items.mojo
+@@ -1,19 +1,38 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""lane/apple-fast-kapprox (2026-10-02): SparseRandomProjection's device item.
++"""lane/apple-fast-kapprox (2026-10-02): the chi2 samplers' device items.
+ 
+-  * `kapprox_sparse_rp_item`: one entry of the projection matrix from two
+-    counter-based uniforms (`kapprox_uniform`), one thread per entry.
++AdditiveChi2Sampler and SkewedChi2Sampler spent their clocked fit on the
++host: `_f32(X)` then `X.min()` over every cell (a host pass), and the skewed
++sampler's d x n_components uniforms drawn one by one in Python. These items
++move that work to the device, one thread per cell:
+ 
+-The chi2 samplers' items (check, additive map, skewed fit and log) were
+-DROPPED-quality with `-D MOJOLEARN_KAPPROX_DEVICE`; their code is on
+-lane/apple-fast-kapprox @ 10d5a7970. FAST + Apple only
+-(x_neighbors/kapprox_dev.mojo, `-D MOJOLEARN_SPARSE_RP_DEVICE`). Same
+-spellings as x_neighbors/items.mojo; no float64 (Apple GPUs have none).
++  * `kapprox_check_item`: the samplers' refusal (x < floor, or x <= floor)
++    as a device flag, no host min;
++  * `kapprox_achi2_item`: the additive map with the refusal fused in;
++  * `kapprox_skew_fit_item`: the skewed sampler's weights and offsets from a
++    counter-based uniform (`kapprox_uniform`) instead of sklearn's serial
++    MT19937 stream: the fitted parameters are i.i.d. uniforms of the same
++    law, not sklearn's numbers (FAST only; IDENTICAL keeps the legacy stream);
++  * `kapprox_skew_log_item`: log(x + skewedness) with the refusal fused in,
++    into a device scratch the transform's product reads (no host round trip
++    between the log and the product).
++
++FAST + Apple only (x_neighbors/kapprox_dev.mojo, `-D MOJOLEARN_KAPPROX_DEVICE`).
++Same spellings as x_neighbors/items.mojo; no float64 (Apple GPUs have none).
+ """
+-from checks.numerics import ftz, identical_mul
+-from x_neighbors.items import FP, _add
++from checks.numerics import (
++    ftz,
++    identical_mul,
++    identical_div,
++    identical_log,
++    identical_cos,
++    identical_sin,
++)
++from x_neighbors.items import FP, IP, PI_F32, _add, achi2_item
+ 
++comptime KAPPROX_HALF_PI_F32 = Float32(1.57079632679489661923)
++comptime KAPPROX_TWO_PI_F32 = Float32(6.28318530717958647692)
+ #: 2^-24: the top 24 bits of a hash, plus a half, scaled into (0, 1).
+ comptime KAPPROX_U24_F32 = Float32(5.9604644775390625e-08)
+ 
+@@ -41,6 +60,49 @@ def kapprox_uniform(seed: UInt32, t: Int) -> Float32:
+     return ftz(identical_mul(_add(top, Float32(0.5)), KAPPROX_U24_F32))
+ 
+ 
++def kapprox_check_item(t: Int, x: FP, flag: IP, n: Int, d: Int, strict: Int, floor: Float32):
++    """Cell t against a sampler's refusal: x < floor (strict == 0, the
++    additive sampler's negative check) or x <= floor (strict != 0, the
++    skewed sampler's -skewedness check). A NaN passes both, as the
++    comparisons on sklearn's `X.min()` do. A refused cell stores 1 into
++    flag[0]; every writer stores the same value, so the order is free."""
++    var v = x.unsafe_load(t)
++    var bad = (v <= floor) if strict != 0 else (v < floor)
++    if bad:
++        flag.unsafe_store(0, Int32(1))
++
++
++def kapprox_achi2_item(t: Int, x: FP, res: FP, flag: IP, n: Int, d: Int, steps: Int, interval: Float32):
++    """`achi2_item` for cell t, with the negative check fused in (flag[0] = 1
++    on x < 0; the map is still written and the caller discards it)."""
++    if x.unsafe_load(t) < Float32(0):
++        flag.unsafe_store(0, Int32(1))
++    achi2_item(t, x, res, n, d, steps, interval)
++
++
++def kapprox_skew_fit_item(t: Int, w: FP, off: FP, d: Int, nc: Int, seed: Int):
++    """Draw t of SkewedChi2Sampler.fit on stream `seed`: t < d * nc is
++    random_weights_[t] = (1/pi) log(tan(pi/2 u)) (the inverse sech CDF, the
++    statements of `skew_weights_item`); the next nc draws are
++    random_offset_[t - d * nc] = 2 pi u."""
++    var u = kapprox_uniform(UInt32(seed), t)
++    if t < d * nc:
++        var z = ftz(identical_mul(KAPPROX_HALF_PI_F32, u))
++        var tn = ftz(identical_div(ftz(identical_sin(z)), ftz(identical_cos(z))))
++        w.unsafe_store(t, ftz(identical_mul(ftz(identical_div(Float32(1), PI_F32)), ftz(identical_log(tn)))))
++    else:
++        off.unsafe_store(t - d * nc, ftz(identical_mul(KAPPROX_TWO_PI_F32, u)))
++
++
++def kapprox_skew_log_item(t: Int, x: FP, lx: FP, flag: IP, skew: Float32):
++    """lx[t] = log(x[t] + skewedness), with the refusal fused in (flag[0] = 1
++    on x <= -skewedness, the log of a non-positive number is then discarded)."""
++    var v = x.unsafe_load(t)
++    if v <= -skew:
++        flag.unsafe_store(0, Int32(1))
++    lx.unsafe_store(t, ftz(identical_log(_add(v, skew))))
++
++
+ def kapprox_sparse_rp_item(t: Int, res: FP, kc: Int, d: Int, seed: Int, dens: Float32, scale: Float32):
+     """Entry t of SparseRandomProjection's kc x d matrix (Achlioptas / Li):
+     +-scale with probability dens / 2 each, else 0, from two counter-based

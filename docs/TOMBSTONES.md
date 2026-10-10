@@ -136,6 +136,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IVF_COARSE_FAISS_INIT`](#mojolearn_ivf_coarse_faiss_init) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_IVF_COARSE_FAISS_INIT.patch](../experiments/removed/MOJOLEARN_IVF_COARSE_FAISS_INIT.patch) |
 | [`MOJOLEARN_IVF_COARSE_INIT_QOLD`](#mojolearn_ivf_coarse_init_qold) | Neighbors | DROPPED-quality | 2026-10-09 | no code (no patch) |
 | [`MOJOLEARN_IVF_REFINE_TEAM`](#mojolearn_ivf_refine_team) | Neighbors | DROPPED-noise | 2026-10-09 | [MOJOLEARN_IVF_REFINE_TEAM.patch](../experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch) |
+| [`MOJOLEARN_KAPPROX_DEVICE`](#mojolearn_kapprox_device) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_KAPPROX_DEVICE.patch](../experiments/removed/MOJOLEARN_KAPPROX_DEVICE.patch) |
 | [`MOJOLEARN_ACHI2_FAST_DEVCHECK`](#mojolearn_achi2_fast_devcheck) | Prep | DROPPED | Oct 3 | lane only |
 | [`MOJOLEARN_CLASSICAL_C55_CLASS_GROUP`](#mojolearn_classical_c55_class_group) | Prep | quality loss | 2026-10-07 | [MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
@@ -1035,6 +1036,15 @@ in the tables after the sections.
 - Files the patch restores: `bindings/_mojolearn_x_ann.mojo`, `x_ann/ivf_pq_device.mojo`, `x_ann/vsearch_fast.mojo`
 - EXPERIMENTS.md:326: `IVF_REFINE_TEAM` | ivf-refine / taxi | lane/apple-fast-batch @ 3150d75c1 | vsearch-refine-team-istella, vsearch-refine-team-taxi | ivf-refine taxi 1,208.3 -> 1,201.8 (-0.5%) | DROPPED-noise | NEUTRAL (M3, 2026-10-04, 1 run per arm); stays opt-in under its own define, no default change; no longer in VSEARCH_ALL
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): IVF_REFINE_TEAM (ivf refine with one threadgroup per query, dataset uploaded from the caller's array) was NOISE: ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_KAPPROX_DEVICE
+
+- Verdict: DROPPED-quality. Code deleted 2026-10-03 by `9d5baaa9b` (x_neighbors: remove dropped KAPPROX_DEVICE chi2 sampler device ops (DROPPED-quality; recover lane/apple-fast-kapprox@10d5a7970)); recorded here 2026-10-09 by lane/owed-deletions-D3 (comments still named it, so it was listed as owed).
+- Recoverable at `9d5baaa9b^`. Patch: `experiments/removed/MOJOLEARN_KAPPROX_DEVICE.patch` (`git diff 9d5baaa9b 9d5baaa9b^` on the code files; main moved on, use `git apply -3`).
+- What it tried: the chi2 kernel-approximation samplers (AdditiveChi2Sampler, SkewedChi2Sampler) as device ops in x_neighbors (kapprox_dev / kapprox_host / kapprox_items, gen.py, the _surface_neighbors.py route), FAST + Apple.
+- Files the deletion touched (comments only): `bindings/_mojolearn_x_neighbors.mojo`, `bindings/_mojolearn_x_neighbors_host.mojo`, `python/mojolearn/_expansion_neighbors.py`, `python/mojolearn/_surface_neighbors.py`, `x_neighbors/gen.py`, `x_neighbors/kapprox_dev.mojo`, `x_neighbors/kapprox_host.mojo`, `x_neighbors/kapprox_items.mojo`
+- EXPERIMENTS.md:555: `KAPPROX_DEVICE` | additive-chi2 / istella; skewed-chi2 / taxi | lane/apple-fast-kapprox @ 10d5a7970 | kap-schi2-taxi, kap-achi2-istella | skewed-chi2 taxi 2.8 -> 1.3; additive-chi2 istella 11.0 -> 12.5 | DROPPED-quality | kernel_rel_error .0378 -> .0480 (worse) / slower; code removed from main 9d5baaa9b; recover at lane/apple-fast-kapprox@10d5a7970
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KAPPROX_DEVICE (AdditiveChi2Sampler / SkewedChi2Sampler device ops) LOST quality: kernel_rel_error .0378 -> .0480 and additive-chi2 istella 11.0 -> 12.5 ms; code deleted 2026-10-03 by 9d5baaa9b; code at main b639a2bd2; see docs/TOMBSTONES.md
 
 ## Prep
 
@@ -1942,7 +1952,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
-| `MOJOLEARN_KAPPROX_DEVICE` | EXPERIMENTS.md:555 DROPPED-quality (lane/apple-fast-kapprox @ 10d5a7970) | `x_neighbors/kapprox_dev.mojo:9` |
 | `MOJOLEARN_KDE2_ALL` | EXPERIMENTS.md:327 DROP (lane/apple-fast-batch @ 3150d75c1) | `kde/impl/neighbors/kernel_density.mojo:2740` |
 | `MOJOLEARN_KDE_KERNEL_VARIANTS` | EXPERIMENTS.md:330 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2757` |
 | `MOJOLEARN_KDE_LSE_FUSED` | EXPERIMENTS.md:331 DROP (lane/apple-fast-kde2 @ 659400b94) | `kde/impl/neighbors/kernel_density.mojo:2745` |
