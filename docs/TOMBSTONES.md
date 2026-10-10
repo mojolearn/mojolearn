@@ -277,6 +277,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SEQ_FAST_MAP_DOWN`](#mojolearn_seq_fast_map_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SEQ_FAST_MAP_DOWN.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_MAP_DOWN.patch) |
 | [`MOJOLEARN_SEQ_FAST_RAW_DOWN`](#mojolearn_seq_fast_raw_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SEQ_FAST_RAW_DOWN.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_RAW_DOWN.patch) |
 | [`MOJOLEARN_IDN_CNN_BN_FUSE`](#mojolearn_idn_cnn_bn_fuse) | Neural | DROPPED-noise | 2026-10-10 | [MOJOLEARN_IDN_CNN_BN_FUSE.patch](../experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch) |
+| [`MOJOLEARN_IDN_EMB_SCAN_DEFERRED`](#mojolearn_idn_emb_scan_deferred) | Neural | DROPPED-slower | 2026-10-10 | [MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch](../experiments/removed/MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_NT_TILED`](#mojolearn_apple_fast_gemm_nt_tiled) | GEMM | DROPPED-slower | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_PINNED`](#mojolearn_apple_fast_gemm_pinned) | GEMM | DROPPED-noise | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch) |
 | [`MOJOLEARN_BGMM_FAST_MAHAL_GEMM`](#mojolearn_bgmm_fast_mahal_gemm) | GEMM | DROPPED-slower |  | lane only |
@@ -2338,6 +2339,16 @@ in the tables after the sections.
 - Files the patch restores: `x_cnn/ops.mojo`, `x_cnn/device.mojo`, `bindings/_mojolearn_x_cnn.mojo`, `python/mojolearn/_expansion_cnn.py`
 - grid_controls: `gap-gemm-layers.json` `cnn_bn_fuse` moved to `removed`.
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): IDN_CNN_BN_FUSE was NOISE/slower; code at main 9f83ea479.
+
+### MOJOLEARN_IDN_EMB_SCAN_DEFERRED
+
+- Verdict: DROPPED-slower (the default-on switch lost to its own _OFF arm). Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit 2509bcb6f). Both `MOJOLEARN_IDN_EMB_SCAN_DEFERRED` and `MOJOLEARN_IDN_EMB_SCAN_DEFERRED_OFF` are refused.
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch` (reverse of the deletion commit, code files only).
+- What it tried: lane neural-io-2: the resident embedding backward's dY non-finite refusal scan (a device scan that waited for its partials before the fold was queued) deferred for a fresh gradient: the scan kernel and its partials' copy queued first, the fold behind them, the partials read after the call's one final wait (`_scan_enqueue`, `_refuse_scanned`, `_backward_dev_deferred`). IDENTICAL default, no bit change.
+- Verdict numbers: post-merge neural A/B, one run per arm (nv2 L40S v1056 -> v1059 on main 9f83ea479, amd MI325X a1156 -> a1159 on main 0a7b206f1; synthetic): embedding NV 2.70 -> 2.28 ms (0.84x) / AMD 2.09 -> 1.94 ms (0.92x) with `_OFF` (the eager scans); digest 2753e61a unchanged. The eager scans are now the only path.
+- Files the patch restores: `bindings/_mojolearn_embedding.mojo`
+- grid_controls: `neural-io-2.json` `idn_emb_scan_deferred_off` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): both defines; code at main 9f83ea479.
 
 ## GEMM
 
