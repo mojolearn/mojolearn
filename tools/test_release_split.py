@@ -1,8 +1,7 @@
 """THE SPLIT LINUX PACKAGES IN `pixi run release` (the only Linux layout),
 proved without a rental: the per-package
 pipelines and their gates (each plugin on its own vendor's column, the core
-LAST, after both plugins published, so only when both columns passed; all
-three held by a divergent joint diff), the pack of the
+LAST, after both plugins published, so only when both columns passed), the pack of the
 three wheels through audit.sh and the strip, the columns' --plugin, and the
 per-package publication. The runner stands in for every process; the pack
 stand-in is the real packer (profile split) over test_split_wheels.py's
@@ -63,15 +62,16 @@ class Switch(SplitBase):
             for s in p["builds"] + p["checks"] + [p["publish"]]:
                 self.assertIn(s, r.STEPS)
         # THE PLUGINS FIRST, THE CORE LAST: the core requires both plugins
-        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"gpu-column-nvidia", "linux-joint-diff", "gpu-column-nvidia-hopper"})
-        self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd", "linux-joint-diff"})
-        self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"linux-joint-diff", "publish-nvidia", "publish-amd"})
-        self.assertEqual(set(r.AFTER["linux-joint-diff"]), {"gpu-column-nvidia", "gpu-column-nvidia-hopper", "gpu-column-amd"})
+        # Andrew 2026-10-10: identity runs ONCE; linux-joint-diff is deleted
+        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"gpu-column-nvidia", "gpu-column-nvidia-hopper"})
+        self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd"})
+        self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"publish-nvidia", "publish-amd"})
+        self.assertNotIn("linux-joint-diff", r.AFTER)
 
 
 class Gates(SplitBase):
-    """Every step stood in for; which packages publish when a column, the
-    joint diff or the core's publish fails."""
+    """Every step stood in for; which packages publish when a column or the
+    core's publish fails."""
 
     def staged(self, fail=()):
         r = self.release(publish="pypi")
@@ -127,13 +127,6 @@ class Gates(SplitBase):
         for step in ("publish-nvidia", "publish-core-linux"):
             self.assertNotIn(step, order)
 
-    def test_a_divergent_joint_diff_holds_all_three(self):
-        r, order = self.staged(fail={"linux-joint-diff"})
-        self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["macos"])
-        for s in ("publish-core-linux", "publish-nvidia", "publish-amd"):
-            self.assertNotIn(s, order)
-
     def test_a_failed_nvidia_publish_holds_the_core(self):
         r, order = self.staged(fail={"publish-nvidia"})
         self.assertEqual(r.go(), 1)
@@ -150,13 +143,6 @@ class Gates(SplitBase):
         r, order = self.staged(fail={"publish-core-linux"})
         self.assertEqual(r.go(), 1)
         self.assertEqual(self.published(r), ["amd", "macos", "nvidia"])
-
-    def test_the_joint_diff_waits_for_both_columns_to_settle(self):
-        r, order = self.staged(fail={"gpu-column-nvidia"})
-        r.go()
-        self.assertGreater(order.index("linux-joint-diff"), order.index("gpu-column-amd"))
-        self.assertGreater(order.index("linux-joint-diff"), order.index("gpu-column-nvidia"))
-
 
 class Pack(SplitBase):
     """linux-pack: pack (the real packer over fake sets), audit
@@ -234,21 +220,10 @@ class ColumnsAndPublish(SplitBase):
             status="PASSED", scope="expanded", source_commit=sev.Y, wheel=str(core), wheel_sha256=release.sha256(core),
             installed=dict(vendor=vendor, gpu_arch=arch or ("sm_89" if vendor == "cuda" else "gfx942")),
             plugins=[dict(wheel="/box/" + p.name, wheel_sha256=release.sha256(p)) for p in plugins])))
-        (out / f"column-{vendor}.json").write_text(json.dumps(sev.column(vendor)))
-        (out / f"diff-ref-{vendor}.txt").write_text("summary: IDENTICAL=1\n")
 
     def test_each_column_installs_its_own_plugin(self):
         r = self.release()
         core, cuda, rocm = self.finals(r)
-        ref = self.tmp / "release-check" / sev.Y[:12] / "metal"
-        ref.mkdir(parents=True)
-        (ref / "column.json").write_text(json.dumps(sev.column("apple-m4")))
-
-        def selection(vendor):
-            p = r.rel / f"selection-{vendor}.json"
-            p.write_text(json.dumps(dict(backend=vendor, column=vendor, fixtures="base", lanes=["rf-clf"])))
-            return p
-        r.gpu_selection = selection
         legs = {l.name: l for l in r.column_legs()}
         nv, amd = legs["nvidia"].command, legs["amd"].command
 

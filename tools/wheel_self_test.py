@@ -9,9 +9,10 @@ The self-test fits `ols/base` twice through the ordinary comparison (untouched
 -> must read DIVERGENT). A wheel whose bundled table no longer matches its own
 bits fails here, which is how 0.8.35 shipped a `verify --quick` that stopped
 at the comparator self-test (ols/base 23eecb87d9e84cc7 vs table
-3d1d7c30b12d9872). tools/release.py runs it as `macos-self-test` and refuses
-to publish the macOS wheel without a PASSED receipt; the preverified flows run
-this command by hand on the Mac (docs/RELEASE_CHECKLIST.md).
+3d1d7c30b12d9872). tools/release.py no longer runs it (Andrew 2026-10-10: identity runs ONCE; a
+mismatch is a bug to fix, never a reason to rerun): macos-smoke's self-test
+job runs the same `verify --self-test` on the same wheel and gates publish-macos.
+The preverified flows may still run this by hand (docs/RELEASE_CHECKLIST.md).
 
 Writes DIR/results.json {status PASSED|FAILED, wheel, wheel_sha256, rc, ...}
 and DIR/self-test.log. Exit 0 only when PASSED. Stdlib only.
