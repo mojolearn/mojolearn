@@ -5,9 +5,8 @@
 own define (default off except SI_ONEPASS, a FAST + Apple default with
 _OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
 
-  -D MOJOLEARN_PT_FOLD_NOX        x_prep/fastred.mojo pt_fold_fast_kernel reads X
-                                  only at K = 0 (the unit's rule); later
-                                  evaluations fold T alone.
+  (-D MOJOLEARN_PT_FOLD_NOX, pt_fold_fast_kernel reading X only at K = 0,
+   was deleted 2026-10-09: DROP; see the TOMBSTONE below.)
   -D MOJOLEARN_PT_COLBATCH        the (pt_map, pt_fold) pair as `pt_tile_kernel`
                                   + `pt_tile_finish_kernel`: no T block, no LG
                                   block, one coalesced read of X per evaluation.
@@ -67,7 +66,9 @@ comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SC
 # TOMBSTONE: MOJOLEARN_PTIMPUTE_ALL (DROP quality: M3 batchv-pt-all-istella 2,258 -> 512 ms, but M2 lambda max relative
 # shift 9.5e-3, sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate) deleted 2026-10-09 on lane/owed-deletions-D2:
 # the bundle alias; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch
-comptime PT_FOLD_NOX = _FAST_APPLE and is_defined["MOJOLEARN_PT_FOLD_NOX"]()
+# TOMBSTONE: MOJOLEARN_PT_FOLD_NOX (DROP: moot under COLBATCH, notes/ptimpute.md; ptimpute-pt-nox-* no recorded gain)
+# deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_PT_FOLD_NOX.patch
 # TOMBSTONE: MOJOLEARN_PT_SPEC (DROP: M3 ptimpute-pt-spec-istella +10% vs COLBATCH, ptimpute-pt-spec-vs-colbatch-istella
 # 910 -> 1,012 ms) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_PT_SPEC.patch
@@ -87,9 +88,9 @@ comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]()
                                        or not is_defined["MOJOLEARN_SI_ONEPASS_OFF"]())
 #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
 #: the Python layer shrinks the buffers the device no longer touches by them
-#: (bit 2 was PT_SPEC and bit 4 PT_FUSED_TRANSFORM, both deleted 2026-10-09)
+#: (bit 2 was PT_SPEC, bit 4 PT_FUSED_TRANSFORM and bit 16 PT_FOLD_NOX, all deleted 2026-10-09)
 comptime PTIMPUTE_FLAGS = ((1 if PT_COLBATCH else 0)
-                           + (8 if SI_ONEPASS else 0) + (16 if PT_FOLD_NOX else 0) + (32 if PT_SCORE_STABLE else 0))
+                           + (8 if SI_ONEPASS else 0) + (32 if PT_SCORE_STABLE else 0))
 
 #: threads per block of the finish kernels (a block a column, a tree)
 comptime TGR = 256

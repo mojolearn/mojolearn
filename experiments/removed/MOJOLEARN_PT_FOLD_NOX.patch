@@ -1,0 +1,99 @@
+diff --git a/bindings/_mojolearn_x_prep.mojo b/bindings/_mojolearn_x_prep.mojo
+index fc01fb3d5..a42c43f62 100644
+--- a/bindings/_mojolearn_x_prep.mojo
++++ b/bindings/_mojolearn_x_prep.mojo
+@@ -286,7 +286,7 @@ def pool_arena_binding() raises -> PythonObject:
+ def ptimpute_flags_binding() raises -> PythonObject:
+     """Lane af-ptimpute (FAST + Apple, each switch its own define, default off):
+     the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 unused
+-    (PT_SPEC, deleted), 4 unused (PT_FUSED_TRANSFORM, deleted), 8 SI_ONEPASS, 16 unused (PT_FOLD_NOX, deleted), 32 PT_SCORE_STABLE); registered only
++    (PT_SPEC, deleted), 4 unused (PT_FUSED_TRANSFORM, deleted), 8 SI_ONEPASS, 16 PT_FOLD_NOX); registered only
+     when one is on, so the Python layer's probe is the switch."""
+     return PythonObject(PTIMPUTE_FLAGS)
+ 
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index 276fe586c..15079d20a 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -283,7 +283,7 @@ def _col_stats(pr, xo, n, d, out, var=True):
+ 
+ #: lane af-ptimpute (2026-10-03): binding -> the bits of `x_prep_ptimpute_flags`
+ #: (bindings/_mojolearn_x_prep.mojo, x_prep/fastpt.mojo PTIMPUTE_FLAGS: 1
+-#: PT_COLBATCH, 8 SI_ONEPASS, 32 PT_SCORE_STABLE),
++#: PT_COLBATCH, 8 SI_ONEPASS, 16 PT_FOLD_NOX),
+ #: probed once per binding; 0 on a build without them (every other tier and
+ #: vendor, and the host). The device's own comptime switches do the fusing;
+ #: a program only shrinks the arena blocks the device no longer touches.
+diff --git a/x_prep/fastpt.mojo b/x_prep/fastpt.mojo
+index 8dc83f254..ba31bfb71 100644
+--- a/x_prep/fastpt.mojo
++++ b/x_prep/fastpt.mojo
+@@ -5,8 +5,9 @@
+ own define (default off except SI_ONEPASS, a FAST + Apple default with
+ _OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
+ 
+-  (-D MOJOLEARN_PT_FOLD_NOX, pt_fold_fast_kernel reading X only at K = 0,
+-   was deleted 2026-10-09: DROP; see the TOMBSTONE below.)
++  -D MOJOLEARN_PT_FOLD_NOX        x_prep/fastred.mojo pt_fold_fast_kernel reads X
++                                  only at K = 0 (the unit's rule); later
++                                  evaluations fold T alone.
+   -D MOJOLEARN_PT_COLBATCH        the (pt_map, pt_fold) pair as `pt_tile_kernel`
+                                   + `pt_tile_finish_kernel`: no T block, no LG
+                                   block, one coalesced read of X per evaluation.
+@@ -66,9 +67,7 @@ comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SC
+ # TOMBSTONE: MOJOLEARN_PTIMPUTE_ALL (DROP quality: M3 batchv-pt-all-istella 2,258 -> 512 ms, but M2 lambda max relative
+ # shift 9.5e-3, sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate) deleted 2026-10-09 on lane/owed-deletions-D2:
+ # the bundle alias; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch
+-# TOMBSTONE: MOJOLEARN_PT_FOLD_NOX (DROP: moot under COLBATCH, notes/ptimpute.md; ptimpute-pt-nox-* no recorded gain)
+-# deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+-# Restore: git apply experiments/removed/MOJOLEARN_PT_FOLD_NOX.patch
++comptime PT_FOLD_NOX = _FAST_APPLE and is_defined["MOJOLEARN_PT_FOLD_NOX"]()
+ # TOMBSTONE: MOJOLEARN_PT_SPEC (DROP: M3 ptimpute-pt-spec-istella +10% vs COLBATCH, ptimpute-pt-spec-vs-colbatch-istella
+ # 910 -> 1,012 ms) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+ # Restore: git apply experiments/removed/MOJOLEARN_PT_SPEC.patch
+@@ -88,9 +87,9 @@ comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]()
+                                        or not is_defined["MOJOLEARN_SI_ONEPASS_OFF"]())
+ #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
+ #: the Python layer shrinks the buffers the device no longer touches by them
+-#: (bit 2 was PT_SPEC, bit 4 PT_FUSED_TRANSFORM and bit 16 PT_FOLD_NOX, all deleted 2026-10-09)
++#: (bit 2 was PT_SPEC and bit 4 PT_FUSED_TRANSFORM, both deleted 2026-10-09)
+ comptime PTIMPUTE_FLAGS = ((1 if PT_COLBATCH else 0)
+-                           + (8 if SI_ONEPASS else 0) + (32 if PT_SCORE_STABLE else 0))
++                           + (8 if SI_ONEPASS else 0) + (16 if PT_FOLD_NOX else 0) + (32 if PT_SCORE_STABLE else 0))
+ 
+ #: threads per block of the finish kernels (a block a column, a tree)
+ comptime TGR = 256
+diff --git a/x_prep/fastred.mojo b/x_prep/fastred.mojo
+index a7364105f..400dbf21c 100644
+--- a/x_prep/fastred.mojo
++++ b/x_prep/fastred.mojo
+@@ -19,6 +19,7 @@ from x_prep.common import FP, IP, p, is_nan
+ from x_prep.prims import add, sub, mul, div
+ from x_prep.transform import PT_STATE, pt_finish, log1pf
+ from x_prep.prims import logf
++from x_prep.fastpt import PT_FOLD_NOX
+ from std.sys.compile import is_defined
+ from std.sys.info import has_apple_gpu_accelerator
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+@@ -157,9 +158,18 @@ def pt_fold_fast_kernel(f: FP, q: IP):
+     var sm = Float32(0)
+     var sj = Float32(0)
+     for i in range(tid, nn, TGR):
+-        # TOMBSTONE: MOJOLEARN_PT_FOLD_NOX (DROP: moot under COLBATCH, notes/ptimpute.md; ptimpute-pt-nox-* no recorded gain)
+-        # deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
+-        # Restore: git apply experiments/removed/MOJOLEARN_PT_FOLD_NOX.patch
++        comptime if PT_FOLD_NOX:
++            # lane af-ptimpute, -D MOJOLEARN_PT_FOLD_NOX: after K = 0 fold T alone, as
++            # `pt_fold_unit` does (a row is NaN exactly where its T word is, pt_map_unit). The
++            # X read below is d words apart per thread, a cache line a word at Istella's d = 220,
++            # 220M lines per evaluation for a NaN test (docs/apple-fast/notes/ptimpute.md).
++            if not first:
++                var tvx = f[T + c * nn + i]
++                if is_nan(tvx):
++                    continue
++                cnt += 1
++                sm = add(sm, tvx)
++                continue
+         var x = f[X + i * dd + c]
+         if is_nan(x):
+             continue

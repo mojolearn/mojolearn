@@ -283,7 +283,7 @@ def _col_stats(pr, xo, n, d, out, var=True):
 
 #: lane af-ptimpute (2026-10-03): binding -> the bits of `x_prep_ptimpute_flags`
 #: (bindings/_mojolearn_x_prep.mojo, x_prep/fastpt.mojo PTIMPUTE_FLAGS: 1
-#: PT_COLBATCH, 8 SI_ONEPASS, 16 PT_FOLD_NOX),
+#: PT_COLBATCH, 8 SI_ONEPASS, 32 PT_SCORE_STABLE),
 #: probed once per binding; 0 on a build without them (every other tier and
 #: vendor, and the host). The device's own comptime switches do the fusing;
 #: a program only shrinks the arena blocks the device no longer touches.
