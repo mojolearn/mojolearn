@@ -191,7 +191,6 @@ in the tables after the sections.
 | [`MOJOLEARN_X_PREP_FAST_NONEG`](#mojolearn_x_prep_fast_noneg) | Prep | DROPPED-noise | 2026-10-03 | [MOJOLEARN_X_PREP_FAST_NONEG.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_NONEG.patch) |
 | [`MOJOLEARN_X_PREP_PINNED_OUT`](#mojolearn_x_prep_pinned_out) | Prep | DROPPED | 2026-10-04 | lane only |
 | [`MOJOLEARN_AFCL_L09`](#mojolearn_afcl_l09) | Decomp | never run (sub-arm) | 2026-10-09 | [MOJOLEARN_QR_FAST_DEV.patch](../experiments/removed/MOJOLEARN_QR_FAST_DEV.patch) |
-| [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 | [`MOJOLEARN_CLASSICAL_PCA_COV=23`](#mojolearn_classical_pca_cov-arm23) | Decomp | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_PCA_COV-arm23.patch](../experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm23.patch) |
 | [`MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2`](#mojolearn_decomp_fast_small_eigh_j2) | Decomp | DROPPED-semantics |  | lane only |
 | [`MOJOLEARN_EIGH_TANGENT_CACHE`](#mojolearn_eigh_tangent_cache) | Decomp | DROPPED-speed | 2026-10-04 | lane only |
@@ -301,6 +300,14 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_NN20_SPLIT_KV`](#mojolearn_idn_nn20_split_kv) | Other | slower | 2026-10-08 | [MOJOLEARN_IDN_NN20_SPLIT_KV.patch](../experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV.patch) |
 | [`MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES`](#mojolearn_idn_nn20_split_kv_leaves) | Other | slower | 2026-10-08 | [MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES.patch](../experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES.patch) |
 
+
+## Restored
+
+Deletions reversed by new evidence. The code is back on main; the section and the patch are kept as the record.
+
+| define | area | deleted | restored | now | patch |
+|---|---|---|---|---|---|
+| [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 
 ## Trees
 
@@ -1580,6 +1587,7 @@ in the tables after the sections.
 
 ### MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE
 
+- **RESTORED 2026-10-10** (lane/c25-restore-promote) from this patch with `git apply -3` (hand-resolved: the inline tombstones were replaced), and promoted to the IDENTICAL default; `-D MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF` restores the old path and the old on-define gets a `promoted` refusal. Reason: grid pass 2 (run `ge123e6f9r2`, NVIDIA) with pass 1 makes every vendor-averaged cell faster: nystroem istella 0.890x, taxi 0.937x; rbf-sampler istella 0.891x, taxi 0.895x; 8 vendor cells, geo-mean 0.903x, worst 0.983x (consistent small win), kernel_rel_error SAME -> PROMOTE (`~/mojolearn-evidence/grid-lq/decisions_act_0600_c25.json`). The deletion below was decided on pass 1 alone. The record below is kept as it was.
 - Verdict: slower. Deleted 2026-10-08 by `ab4e8e543` (grid-losers-1: delete C25_PROJECTION_REUSE (grid ge123e6f9 noise on nystroem/rbf-sampler); refuse the define).
 - Recoverable at `ad7ed2370` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `experiments/classical_identical_ideas/linear_controls.mojo`, `kernel_methods/estimator.mojo`, `kernel_methods/rbf_fused.mojo`
