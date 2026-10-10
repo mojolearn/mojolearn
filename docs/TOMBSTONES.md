@@ -249,6 +249,8 @@ in the tables after the sections.
 | [`MOJOLEARN_KMEANS_FAST_LAZY_SHIFT`](#mojolearn_kmeans_fast_lazy_shift) | Cluster | DROPPED-slower | 2026-10-09 | [MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch](../experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch) |
 | [`MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG`](#mojolearn_x_cluster_fast_w2_mbk_labrg) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch) |
 | [`MOJOLEARN_DBSCAN_FAST_DENSEBALL`](#mojolearn_dbscan_fast_denseball) | Cluster | DROPPED-slower | 2026-10-09 | [MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch](../experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE`](#mojolearn_idn_dbscan_batch_sample) | Cluster | DROPPED-noise | 2026-10-10 | [MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_CC_HOOK`](#mojolearn_idn_dbscan_cc_hook) | Cluster | DROPPED-noise | 2026-10-10 | [MOJOLEARN_IDN_DBSCAN_CC_HOOK.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_HOOK.patch) |
 | [`MOJOLEARN_ARIMA_FAST_LS_NOREAD`](#mojolearn_arima_fast_ls_noread) | Time series | DROPPED-noise | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch) |
 | [`MOJOLEARN_ARIMA_FAST_P_FIX`](#mojolearn_arima_fast_p_fix) | Time series | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_P_FIX.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_P_FIX.patch) |
 | [`MOJOLEARN_ARIMA_FAST_STEPWISE`](#mojolearn_arima_fast_stepwise) | Time series | DROPPED-slower | 2026-10-09 | [MOJOLEARN_ARIMA_FAST_STEPWISE.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_STEPWISE.patch) |
@@ -2043,6 +2045,28 @@ in the tables after the sections.
 - EXPERIMENTS.md:488: `DBSCAN_FAST_DENSEBALL` | dbscan / taxi, istella | lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc | dbscantaxi-ab-x, dbscantaxi-ab-ist-x | n=0 on both arms (no times) | DROPPED-slower | reconciled 2026-10-05: rab3-denseball istella A 247185.2 ms, B timed out, Verdicts batch 4 ("RECORD: stays off"). Was READY-AB: rec-misc 2026-10-04: arm A times out at the classical driver's 600 s warmup on taxi (expected, no board FAST row); arm B also timed out: its pair kernel stopped a whole landmark pair at the first hook, so rounds grew with rows per ball. Fixed: one hook per row per round (components at least halve per round). Awaiting M2 build + M3 A/B (AFC_FAMILY=classical, b
 - EXPERIMENTS.md:1278: `DBSCAN_FAST_DENSEBALL` | dbscan / istella | lane/apple-fast-verdicts-4 | rab3-denseball | A 247185.2; B timed out | RECORD: stays off | B arm timed out
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): DBSCAN_FAST_DENSEBALL (no-edge-list dbscan: dense-ball cliques and union-find over landmark pairs, dbscan/impl/denseball.mojo) was SLOWER: dbscan istella arm A 247,185 ms, arm B timed out (rab3-denseball); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE
+
+- Verdict: DROPPED-noise. Deleted 2026-10-10 by lane/postmerge-act-7 (deletion commit aad09633e).
+- Recoverable at `ca8ea1f8d` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.patch` (reverse of the deletion commit, code files only: `git diff aad09633e aad09633e^ -- dbscan/impl/runner.mojo`).
+- What it tried: lane fg-tsne-dbscan D4 (2026-10-09, IDENTICAL, NVIDIA and AMD): on the ball-cover arm, count 1,024 rows at a fixed stride first (`ds_gather_rows_kernel` + one `rbc_eps_nn_query_count` launch) and size the first ranges to edge_cap / (2 x the sampled mean degree), so a dense graph is not counted once per halving level of loop 1. Batch boundaries are not data: same labels; n_iter_ follows the batch count.
+- Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X default a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor; `~/mojolearn-evidence/flagship-gaps-20261009/requeue2/tab_latest.txt`), measured on top of EPS_TILE (arm v1044 / a1184): dbscan istella NV 0.42x / AMD 0.35x against EPS_TILE alone NV 0.42x / AMD 0.34x (v1042 / a1182): no gain. Hash 7494ce8e, n_clusters 40131 and noise_fraction 0.219391 unchanged. dbscan taxi timed out (board-bridge timeout) in every arm and in the default on both vendors.
+- Files the patch restores: `dbscan/impl/runner.mojo`
+- grid_controls: `fg-tsne-dbscan.json` `dbscan_batch_sample` moved to `removed`.
+- EXPERIMENTS.md: `MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE` row (lane/fg-tsne-dbscan @ 566f78ab1) and the lane/postmerge-act-7 section.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-7): IDN_DBSCAN_BATCH_SAMPLE was NOISE on top of EPS_TILE; code at main ca8ea1f8d.
+
+### MOJOLEARN_IDN_DBSCAN_CC_HOOK
+
+- Verdict: DROPPED-noise. Deleted 2026-10-10 by lane/postmerge-act-7 (deletion commit 14f0fb5f8).
+- Recoverable at `ca8ea1f8d` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_HOOK.patch` (reverse of the deletion commit, code files only: `git diff 14f0fb5f8 14f0fb5f8^ -- dbscan/impl/sparse/detail/csr.mojo`).
+- What it tried: lane fg-tsne-dbscan D5 (2026-10-09, IDENTICAL, every GPU column but Apple): `weak_cc_batched` built the batch's label fixed point directly instead of the push / pull label passes: a lock-free union-find held in the labels (`_cc_find`, `_cc_union`, `weak_cc_hook_kernel`, larger root linked under the smaller by CAS), `weak_cc_compress_kernel` and `weak_cc_border_kernel`; four launches and one drain per batch, no flag readback. Same labels; n_iter_ = 1 per batch.
+- Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X default a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor; `~/mojolearn-evidence/flagship-gaps-20261009/requeue2/tab_latest.txt`), arm v1045 / a1185: dbscan istella NV 1.00x / AMD 0.96x: noise. Hash 7494ce8e unchanged. dbscan taxi timed out in every arm and in the default on both vendors.
+- Files the patch restores: `dbscan/impl/sparse/detail/csr.mojo`
+- grid_controls: `fg-tsne-dbscan.json` `dbscan_cc_hook` moved to `removed`.
+- EXPERIMENTS.md: `MOJOLEARN_IDN_DBSCAN_CC_HOOK` row (lane/fg-tsne-dbscan @ 566f78ab1) and the lane/postmerge-act-7 section.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-7): IDN_DBSCAN_CC_HOOK was NOISE; code at main ca8ea1f8d.
 
 ## Time series
 

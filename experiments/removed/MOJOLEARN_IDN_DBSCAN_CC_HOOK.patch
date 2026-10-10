@@ -1,0 +1,200 @@
+diff --git a/dbscan/impl/sparse/detail/csr.mojo b/dbscan/impl/sparse/detail/csr.mojo
+index 601a791a8..28c2fe8aa 100644
+--- a/dbscan/impl/sparse/detail/csr.mojo
++++ b/dbscan/impl/sparse/detail/csr.mojo
+@@ -67,7 +67,7 @@ from checks.numerics import (
+     PIN_DETERMINISM,
+     numeric_mode_name,
+ )
+-from std.atomic import Atomic
++from std.atomic import Atomic, Ordering
+ from std.gpu import block_dim, block_idx, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+ from std.sys.compile import is_defined
+@@ -355,10 +355,168 @@ def weak_cc_shortcut_gated_kernel(
+                     _ = Atomic.min(labels.unsafe_offset(tid), up)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_HOOK (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-7; code recoverable at ca8ea1f8d.
+-# Tried: D5, comptime IDN_DBSCAN_CC_HOOK, _cc_find / _cc_union, weak_cc_hook_kernel, weak_cc_compress_kernel,
+-# weak_cc_border_kernel and _weak_cc_hook (weak_cc by union-find hook and compress, 4 launches + 1 drain per batch).
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_HOOK.patch; record in docs/TOMBSTONES.md.
++#: fg-tsne-dbscan D5 (IDENTICAL, every GPU column, DEFAULT OFF, lane
++#: fg-tsne-dbscan 2026-10-09): THE BATCH'S COMPONENTS BY HOOK AND COMPRESS.
++#: The label passes push a smaller label to every neighbour and pull the
++#: smallest one (two atomics per edge per pass) and repeat until a pass
++#: changes nothing, a flag readback per chunk of passes; a long chain needs
++#: many passes. The fixed point they reach is: a core vertex's label is
++#: 1 + the smallest core vertex joined to it by core-core edges of the
++#: batch's rows, a border vertex's is the smallest final label of a core
++#: neighbour along those rows (pushed by a core row, or pulled by its own
++#: row), and MAX_LABEL otherwise. Here that fixed point is built directly:
++#:   1. init (the same kernel);
++#:   2. hook: one thread per batch row unions, for every core-core edge, the
++#:      two trees of a lock-free union-find held in the labels themselves
++#:      (parent(v) = labels[v] - 1), always linking the larger root under
++#:      the smaller with one CAS (retried on a lost race), so a root is the
++#:      smallest vertex of its tree and a tree's final root is its
++#:      component's minimum, whatever the order of the unions;
++#:   3. compress: every core vertex takes 1 + its root;
++#:   4. border: core rows min-push their label to non-core neighbours,
++#:      non-core rows pull the smallest core neighbour label (one atomic per
++#:      row or per core-to-border edge).
++#: Four launches and one drain per batch, no flag readback, no pass loop.
++#: The same labels (the minimum over a set does not depend on the order it
++#: is taken in), so bits none; the returned pass count (n_iter_, summed over
++#: batches) is 1 per batch. -D MOJOLEARN_IDN_DBSCAN_CC_HOOK.
++comptime IDN_DBSCAN_CC_HOOK = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_IDN_DBSCAN_CC_HOOK"]()
++)
++
++
++@always_inline
++def _cc_find(labels: MutPointer[Int32, MutAnyOrigin], v0: Int32) -> Int32:
++    """D5: the root of v0's tree (parent(v) = labels[v] - 1)."""
++    var v = v0
++    while True:
++        var p = Atomic.load[ordering = Ordering.RELAXED](labels + Int(v)) - Int32(1)
++        if p == v:
++            return v
++        v = p
++
++
++@always_inline
++def _cc_union(labels: MutPointer[Int32, MutAnyOrigin], a: Int32, b: Int32):
++    """D5: join the trees of a and b, the larger root under the smaller."""
++    var x = a
++    var y = b
++    while True:
++        x = _cc_find(labels, x)
++        y = _cc_find(labels, y)
++        if x == y:
++            return
++        if x < y:
++            var t = x
++            x = y
++            y = t
++        var expected = x + Int32(1)
++        if Atomic.compare_exchange[
++            success_ordering = Ordering.RELAXED,
++            failure_ordering = Ordering.RELAXED,
++            weak=True,
++        ](labels + Int(x), expected, y + Int32(1)):
++            return
++
++
++def weak_cc_hook_kernel(
++    labels: MutPointer[Int32, MutAnyOrigin],
++    row_ind: MutPointer[Int32, MutAnyOrigin],
++    col_ind: MutPointer[Int32, MutAnyOrigin],
++    core: MutPointer[UInt8, MutAnyOrigin],
++    start_vertex_id_in: Int32,
++    batch_size_in: Int32,
++    n_in: Int32,
++):
++    """D5 step 2: the core-core edges of the batch's rows, unioned."""
++    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var g = tid + Int(start_vertex_id_in)
++    if tid >= Int(batch_size_in) or g >= Int(n_in):
++        return
++    if core.unsafe_load(g) == 0:
++        return
++    for j in range(Int(row_ind.unsafe_load(tid)), Int(row_ind.unsafe_load(tid + 1))):
++        var u = Int(col_ind.unsafe_load(j))
++        if u != g and core.unsafe_load(u) != 0:
++            _cc_union(labels, Int32(g), Int32(u))
++
++
++def weak_cc_compress_kernel(
++    labels: MutPointer[Int32, MutAnyOrigin],
++    core: MutPointer[UInt8, MutAnyOrigin],
++    n_in: Int32,
++):
++    """D5 step 3: every core vertex's label is 1 + its tree's root."""
++    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if v < Int(n_in) and core.unsafe_load(v) != 0:
++        var r = _cc_find(labels, Int32(v))
++        labels.unsafe_store(v, r + Int32(1))
++
++
++def weak_cc_border_kernel(
++    labels: MutPointer[Int32, MutAnyOrigin],
++    row_ind: MutPointer[Int32, MutAnyOrigin],
++    col_ind: MutPointer[Int32, MutAnyOrigin],
++    core: MutPointer[UInt8, MutAnyOrigin],
++    start_vertex_id_in: Int32,
++    batch_size_in: Int32,
++    n_in: Int32,
++):
++    """D5 step 4: border labels from the final core labels (push from core
++    rows, pull by non-core rows); core labels are read only."""
++    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var g = tid + Int(start_vertex_id_in)
++    if tid >= Int(batch_size_in) or g >= Int(n_in):
++        return
++    var start = Int(row_ind.unsafe_load(tid))
++    var end = Int(row_ind.unsafe_load(tid + 1))
++    if core.unsafe_load(g) != 0:
++        var ci = labels.unsafe_load(g)
++        for j in range(start, end):
++            var u = Int(col_ind.unsafe_load(j))
++            if core.unsafe_load(u) == 0:
++                _ = Atomic.min(labels.unsafe_offset(u), ci)
++    else:
++        var m = MAX_LABEL
++        for j in range(start, end):
++            var u = Int(col_ind.unsafe_load(j))
++            if core.unsafe_load(u) != 0:
++                var cu = labels.unsafe_load(u)
++                if cu < m:
++                    m = cu
++        if m < MAX_LABEL:
++            _ = Atomic.min(labels.unsafe_offset(g), m)
++
++
++def _weak_cc_hook(
++    ctx: DeviceContext,
++    mut labels: DeviceBuffer[DType.int32],
++    mut row_ind: DeviceBuffer[DType.int32],
++    mut col_ind: DeviceBuffer[DType.int32],
++    mut core: DeviceBuffer[DType.uint8],
++    n_rows: Int,
++    start_vertex_id: Int,
++    batch_size: Int,
++) raises:
++    """D5's steps 2-4 after the init; one drain."""
++    var bgrid = (batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB
++    ctx.enqueue_function[weak_cc_hook_kernel](
++        labels.unsafe_ptr(), row_ind.unsafe_ptr(), col_ind.unsafe_ptr(), core.unsafe_ptr(),
++        Int32(start_vertex_id), Int32(batch_size), Int32(n_rows),
++        grid_dim=(bgrid, 1, 1), block_dim=(WEAK_CC_TPB, 1, 1),
++    )
++    ctx.enqueue_function[weak_cc_compress_kernel](
++        labels.unsafe_ptr(), core.unsafe_ptr(), Int32(n_rows),
++        grid_dim=((n_rows + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1), block_dim=(WEAK_CC_TPB, 1, 1),
++    )
++    ctx.enqueue_function[weak_cc_border_kernel](
++        labels.unsafe_ptr(), row_ind.unsafe_ptr(), col_ind.unsafe_ptr(), core.unsafe_ptr(),
++        Int32(start_vertex_id), Int32(batch_size), Int32(n_rows),
++        grid_dim=(bgrid, 1, 1), block_dim=(WEAK_CC_TPB, 1, 1),
++    )
++    ctx.synchronize()
+ 
+ 
+ def weak_cc_batched(
+@@ -397,9 +555,10 @@ def weak_cc_batched(
+     )
+     var passes = 0
+     var converged = False
+-    # TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_HOOK (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-7; code recoverable at ca8ea1f8d.
+-    # Tried: D5, the batch fixed point by lock-free hook / compress / border (_weak_cc_hook) before the label passes.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_HOOK.patch; record in docs/TOMBSTONES.md.
++    comptime if IDN_DBSCAN_CC_HOOK:
++        # fg-tsne-dbscan D5: the fixed point by hook and compress
++        _weak_cc_hook(ctx, labels, row_ind, col_ind, core, n_rows, start_vertex_id, batch_size)
++        return 1
+     comptime if IDN_DBSCAN_CC_GATED:
+         # The caller's flag buffers hold `DBSCAN_CC_FLAG_CELLS` cells. One
+         # upload, `runs` gated passes and one download per chunk; the host
