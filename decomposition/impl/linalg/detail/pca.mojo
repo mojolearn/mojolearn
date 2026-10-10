@@ -55,17 +55,13 @@ from core.device_zero import enqueue_fill
 # TOMBSTONE: MOJOLEARN_IDN_PCA_RR_ONE_BLOCK_STEPS (broken) deleted 2026-10-09 by 16a2c0dd3; code recoverable at 16a2c0dd3^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_RR_ONE_BLOCK.patch; record in docs/TOMBSTONES.md.
 from decomposition.pca_rr_switch import (
-    PCA_DEVICE_TRUNCATE,
     PCA_RR_EIGH,
     PCA_RR_FLAG_TEST,
     PCA_RR_SWEEPS,
 )
-from decomposition.spectrum_order_device import (
-    _TPB as _SO_TPB,
-    _blocks as _so_blocks,
-    _gather_diag_kernel,
-    _rank_kernel,
-)
+# TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: the spectrum_order_device kernel imports of the device truncate.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_off_fold_kernel,
@@ -821,124 +817,9 @@ def _eig_info_check(info0: Float32, info1: Float32, n_cols: Int) raises:
 
 
 
-def pca_inv_order_kernel(pos: MutPointer[Int32, MutAnyOrigin], n_in: Int32, inv: MutPointer[Int32, MutAnyOrigin]):
-    """inv[pos[i]] = i: the index at each place of the descending order
-    (`_rank_kernel`'s ranks are a permutation). One thread a value."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        inv.unsafe_store(Int(pos.unsafe_load(i)), Int32(i))
-
-
-def pca_gather_components_kernel(
-    vec: F32Ptr, inv: MutPointer[Int32, MutAnyOrigin], n_in: Int32, k_in: Int32, comp: F32Ptr
-):
-    """comp[c, f] = vec[f, inv[c]] for the first k places: component c is the
-    eigenvector column at place c (`order_truncate_spectrum`'s gather). One
-    thread a cell, no arithmetic."""
-    var n = Int(n_in)
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < Int(k_in) * n:
-        var c = t // n
-        var f = t - c * n
-        comp.unsafe_store(t, vec.unsafe_load(f * n + Int(inv.unsafe_load(c))))
-
-
-def _device_truncate(
-    ctx: DeviceContext,
-    mut cov: DeviceBuffer[DType.float32],
-    mut vec_buf: DeviceBuffer[DType.float32],
-    mut info_buf: DeviceBuffer[DType.float32],
-    n_cols: Int,
-    n_components: Int,
-    singular_scale: Int,
-) raises -> PCAResult:
-    """P5: `eig_and_truncate`'s tail with the order (`spectrum_rank_desc`,
-    ties to the lower index) and the component gather on the device; the
-    Float64 tail on the downloaded diagonal is `order_truncate_spectrum`'s
-    statements given that order."""
-    var n = n_cols
-    var k = n_components
-    var ddiag = ctx.enqueue_create_buffer[DType.float32](n)
-    var dpos = ctx.enqueue_create_buffer[DType.int32](n)
-    var dinv = ctx.enqueue_create_buffer[DType.int32](n)
-    var dcomp = ctx.enqueue_create_buffer[DType.float32](max(k * n, 1))
-    var cp = cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var vp = vec_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var gp = ddiag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pp = dpos.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var ip = dinv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var op = dcomp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    ctx.enqueue_function[_gather_diag_kernel](cp, Int32(n), gp, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
-    ctx.enqueue_function[_rank_kernel](gp, Int32(n), pp, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
-    ctx.enqueue_function[pca_inv_order_kernel](pp, Int32(n), ip, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
-    ctx.enqueue_function[pca_gather_components_kernel](
-        vp, ip, Int32(n), Int32(k), op, grid_dim=_so_blocks(k * n), block_dim=_SO_TPB
-    )
-    var h_diag = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var h_inv = ctx.enqueue_create_host_buffer[DType.int32](n)
-    var h_comp = ctx.enqueue_create_host_buffer[DType.float32](max(k * n, 1))
-    var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
-    ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=ddiag)
-    ctx.enqueue_copy(dst_ptr=h_inv.unsafe_ptr(), src_buf=dinv)
-    ctx.enqueue_copy(dst_ptr=h_comp.unsafe_ptr(), src_buf=dcomp)
-    ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
-    ctx.synchronize()
-    _eig_info_check(h_info.unsafe_ptr().unsafe_load(0), h_info.unsafe_ptr().unsafe_load(1), n)
-    _ = ddiag^
-    _ = dpos^
-    _ = dinv^
-    _ = dcomp^
-    var result = truncate_in_order(
-        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_diag.unsafe_ptr())),
-        MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(h_inv.unsafe_ptr())),
-        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_comp.unsafe_ptr())),
-        n, k, singular_scale,
-    )
-    _ = h_diag^
-    _ = h_inv^
-    _ = h_comp^
-    _ = h_info^
-    return result^
-
-
-def truncate_in_order(
-    diag32: MutPointer[Float32, MutAnyOrigin],
-    order32: MutPointer[Int32, MutAnyOrigin],
-    comp32: MutPointer[Float32, MutAnyOrigin],
-    n_cols: Int,
-    n_components: Int,
-    singular_scale: Int,
-) raises -> PCAResult:
-    """`order_truncate_spectrum`'s tail (its Float64 statements, unchanged)
-    on P5's downloads: the diagonal, the order (`order32[c]` the index at
-    place c) and the gathered k x n components. The same host tail main runs
-    after `eig_and_truncate`, over n values instead of n^2."""
-    var count = n_cols
-    var diag = List[Float64]()
-    for i in range(count):
-        diag.append(Float64(diag32.unsafe_load(i)))
-    var total = 0.0
-    for i in range(count):
-        total += diag[i]
-    var components = List[Float64]()
-    var explained_var = List[Float64]()
-    var explained_var_ratio = List[Float64]()
-    var singular_vals = List[Float64]()
-    for c in range(n_components):
-        var lam = diag[Int(order32.unsafe_load(c))]
-        for f in range(n_cols):
-            components.append(Float64(comp32.unsafe_load(c * n_cols + f)))
-        explained_var.append(lam)
-        explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
-        singular_vals.append(sqrt(lam * Float64(singular_scale)))
-    var noise = 0.0
-    if n_components < count and n_components <= singular_scale:
-        for c in range(n_components, count):
-            noise += diag[Int(order32.unsafe_load(c))]
-        noise /= Float64(count - n_components)
-    return PCAResult(
-        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
-    )
+# TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: pca_inv_order_kernel, pca_gather_components_kernel, _device_truncate and truncate_in_order (P5's device order + gather and its n-value host tail).
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
 
 
 def eig_and_truncate(
@@ -985,10 +866,9 @@ def eig_and_truncate(
     ctx.synchronize()
     _ = dfac^
 
-    comptime if PCA_DEVICE_TRUNCATE:
-        # P5 (MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE): order and gather on the
-        # device, only k x n components + 2 n words + the info cross
-        return _device_truncate(ctx, cov, vec_buf, info_buf, n_cols, n_components, singular_scale)
+    # TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+    # Tried: the P5 branch to _device_truncate.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
 
     var h_cov = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
     var h_vec = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)

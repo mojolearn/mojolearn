@@ -85,28 +85,6 @@
    "status": "new",
    "note": "P3: past the split-K Gram width, the covariance Gram centers at its tile load on the v1 SPLIT plan's arithmetic (same leaf partition, per-cell chain, partial and fold launch), X read-only; falls back to shift + gemm_tn when the shipped dispatch would not run a split plan. Same staged words as shift_columns_kernel, so no bit should move; the ID check settles it."
   },
-  "pca_device_truncate": {
-   "define": "MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "decomposition/pca_rr_switch.mojo:77",
-    "decomposition/impl/linalg/detail/pca.mojo:863",
-    "decomposition/impl/linalg/detail/pca.mojo:1005",
-    "decomposition/host/pca_oracle.mojo:641",
-    "decomposition/host/pca_oracle.mojo:736"
-   ],
-   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "bits_change": true,
-   "status": "new",
-   "note": "P5: spectrum order (spectrum_rank_desc, ties to the lower index) and top-k component gather on the device; only k x n components + 2 n words cross. Bits move only on tied eigenvalues (the old exchange sort's tie order); the host column reads the same switch: build the host binding with it too."
-  },
   "colvar_fused": {
    "define": "MOJOLEARN_IDN_COLVAR_FUSED_OFF",
    "kind": "switch",
@@ -131,11 +109,10 @@
  "algorithms": {
   "classical:pca": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "route": "fit: PCA.fit -> pca_fit_binding -> pca_fit_host [pca_lean_scratch] -> compute_covariance (column_mean_launch; split-K centered Gram | [gemm_tn_centered] | shift + gemm_tn_identical_v1) -> eig_and_truncate (_eig_rr_device [pca_rr_one_block]; host tail | [pca_device_truncate])",
+   "route": "fit: PCA.fit -> pca_fit_binding -> pca_fit_host [pca_lean_scratch] -> compute_covariance (column_mean_launch; split-K centered Gram | [gemm_tn_centered] | shift + gemm_tn_identical_v1) -> eig_and_truncate (_eig_rr_device [pca_rr_one_block]; host tail |)",
    "controls": [
     "pca_lean_scratch",
-    "gemm_tn_centered",
-    "pca_device_truncate"
+    "gemm_tn_centered"
    ],
    "interaction_groups": [
     [
@@ -143,14 +120,13 @@
      "gemm_tn_centered"
     ]
    ],
-   "note": "gemm_tn_centered reads x_alias2, which pca_lean_scratch sizes; it only acts past the split-K width (d > 128). pca_rr_one_block and pca_device_truncate are independent of the Gram switches."
+   "note": "gemm_tn_centered reads x_alias2, which pca_lean_scratch sizes; it only acts past the split-K width (d > 128). (pca_rr_one_block and pca_device_truncate, independent of the Gram switches, were removed 2026-10-09 / 2026-10-10.)"
   },
   "more:tsvd": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "route": "fit: TruncatedSVD.fit -> tsvd_fit_explained [tsvd_one_upload] (tsvd_fit_device: gemm_tn + eig_and_truncate [pca_rr_one_block, pca_device_truncate]; _tsvd_explained_tail: gemm_nt + 2x _column_variance [colvar_fused])",
+   "route": "fit: TruncatedSVD.fit -> tsvd_fit_explained [tsvd_one_upload] (tsvd_fit_device: gemm_tn + eig_and_truncate; _tsvd_explained_tail: gemm_nt + 2x _column_variance [colvar_fused])",
    "controls": [
     "tsvd_one_upload",
-    "pca_device_truncate",
     "colvar_fused"
    ],
    "interaction_groups": [
@@ -176,6 +152,11 @@
    "define": "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK",
    "control": "pca_rr_one_block",
    "reason": "DELETED 2026-10-09 (lane postmerge-act-5): fg2 board-bridge A/B on main 0a7b206f1 found P1+P1b BROKEN on NVIDIA (nv2 v1030): pca and tsvd on taxi and istella REFUSED at decomposition/impl/linalg/detail/pca.mojo:734:55. x_decomp/rr_one_block.mojo and the pca.mojo launch deleted; define (and _STEPS) refused in core/six_lane_experiment_guards.mojo; code recoverable at main 0a7b206f1."
+  },
+  {
+   "define": "MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE",
+   "control": "pca_device_truncate",
+   "reason": "DELETED 2026-10-10 (lane postmerge-act-6): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): pca istella NV 1.00x / AMD 1.00x, pca taxi 1.01x / 1.00x, tsvd istella 1.00x / 1.00x, tsvd taxi NV 0.91x / AMD 1.00x: noise, hashes unchanged. P5 device order + gather (pca.mojo _device_truncate, truncate_in_order, the two kernels) and the host twin host_order_truncate_spectrum_ranked deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch)."
   }
  ],
  "notes": [

@@ -169,8 +169,7 @@ from core.host_predict_threads import (
     host_predict_task_count,
 )
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
-from decomposition.pca_rr_switch import PCA_DEVICE_TRUNCATE, PCA_RR_EIGH, PCA_RR_SWEEPS
-from decomposition.spectrum_order_device import spectrum_rank_desc
+from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_SWEEPS
 from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
 from x_decomp.rr import host_eigh_rr
 from x_decomp.eigh_scale import host_es_scale, host_es_unscale_diag
@@ -638,49 +637,9 @@ def host_order_truncate_spectrum(
     )
 
 
-def host_order_truncate_spectrum_ranked(
-    diag32: List[Float32],
-    vecs: List[Float64],
-    n_cols: Int,
-    n_components: Int,
-    singular_scale: Int,
-) raises -> PCAHostResult:
-    """P5 (PCA_DEVICE_TRUNCATE, lane fg-pca): `host_order_truncate_spectrum`
-    with the device's order, `spectrum_rank_desc` over the Float32 diagonal
-    (descending, ties to the lower index; decomposition/
-    spectrum_order_device.mojo, the `_argsort_desc` rule), then the same
-    Float64 tail."""
-    var count = n_cols
-    var order = List[Int](length=count, fill=0)
-    var kp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(diag32.unsafe_ptr()))
-    for i in range(count):
-        order[spectrum_rank_desc(kp, count, i)] = i
-    var diag = List[Float64]()
-    for i in range(count):
-        diag.append(Float64(diag32[i]))
-    var total = 0.0
-    for i in range(count):
-        total += diag[i]
-    var components = List[Float64]()
-    var explained_var = List[Float64]()
-    var explained_var_ratio = List[Float64]()
-    var singular_vals = List[Float64]()
-    for c in range(n_components):
-        var src = order[c]
-        var lam = diag[src]
-        for f in range(n_cols):
-            components.append(vecs[f * n_cols + src])
-        explained_var.append(lam)
-        explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
-        singular_vals.append(sqrt(lam * Float64(singular_scale)))
-    var noise = 0.0
-    if n_components < count and n_components <= singular_scale:
-        for c in range(n_components, count):
-            noise += diag[order[c]]
-        noise /= Float64(count - n_components)
-    return PCAHostResult(
-        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
-    )
+# TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: host_order_truncate_spectrum_ranked, the host twin of P5's device order (ties to the lower index).
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
 
 
 def host_pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
@@ -733,14 +692,9 @@ def host_eig_and_truncate(
         var rvecs = List[Float64]()
         for i in range(n_cols * n_cols):
             rvecs.append(Float64(rv[i]))
-        comptime if PCA_DEVICE_TRUNCATE:
-            # P5: the device column's order (ties to the lower index)
-            var d32 = List[Float32]()
-            for i in range(n_cols):
-                d32.append(cov[i * n_cols + i])
-            return host_order_truncate_spectrum_ranked(
-                d32, rvecs, n_cols, n_components, singular_scale
-            )
+        # TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+        # Tried: the host twin's P5 branch.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
         return host_order_truncate_spectrum(
             rdiag, rvecs, n_cols, n_components, singular_scale
         )

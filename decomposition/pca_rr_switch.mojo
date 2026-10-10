@@ -50,20 +50,7 @@ comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not (
 #: on taxi and istella REFUSED at decomposition/impl/linalg/detail/pca.mojo:734). Deleted,
 #: refused in core/six_lane_experiment_guards.mojo; recoverable at main 0a7b206f1.
 
-#: P5, lane fg-pca (2026-10-09), DEFAULT OFF: `-D MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE`.
-#: `eig_and_truncate` downloaded the whole n x n covariance and eigenvector
-#: matrices and ordered the spectrum on the host (an O(n^2) exchange sort on
-#: `>` over Float64 lists, the components gathered on the host). Here the
-#: order is formed on the device (decomposition/spectrum_order_device.mojo
-#: `spectrum_rank_desc`: descending, ties to the LOWER index, one thread a
-#: value), the top n_components columns are gathered on the device, and only
-#: the diagonal (n), the order (n) and the k x n components cross; the
-#: Float64 tail (total, ratios, singular values, noise) is the same statements
-#: on the same words. Cost: 2 n^2 floats of download become k n + 2 n; the
-#: host loops over n^2 Float64 values go. BITS: the same, except where two
-#: eigenvalues tie (or a NaN): the exchange sort's tie order was not the
-#: lower index (`decomposition/host/linalg_public.mojo` `_argsort_desc` made
-#: the same move for eigh), so tied components may swap. The host column
-#: (`host_eig_and_truncate`, decomposition/host/pca_oracle.mojo) reads this
-#: switch and takes the same order: build the host binding with it too.
+# TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: P5 (lane fg-pca): eig_and_truncate's spectrum order (spectrum_rank_desc) and component gather on the device, only k x n + 2 n words crossing; pca / tsvd NV 0.91-1.01x, AMD 1.00x (fg2 nv2 v1021-v1050, amd a1161-a1190): noise, hashes unchanged.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
 comptime PCA_DEVICE_TRUNCATE = PCA_RR_EIGH and is_defined["MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE"]()
