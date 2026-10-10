@@ -2943,7 +2943,10 @@ def sym_argmax_blocks_for(hist_cells_per_leaf: Int) -> Int:
     reference sizing. The workspace allocation and the level loop both size
     through here so the partials always fit. (The FAST one-thread-per-bin-
     feature grid, `-D MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID`, was
-    DROPPED-noise; lane/apple-fast-yetirank @ c7b35fd7c.)"""
+    DROPPED-noise; lane/apple-fast-yetirank @ c7b35fd7c.)
+    TOMBSTONE: MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID (DROPPED-noise: yetirank 5,304 -> 5,288 ms, -0.3%) deleted
+    2026-10-03 by 99da8a08f; code recoverable at 99da8a08f^.
+    Restore: git apply experiments/removed/MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID.patch; record in docs/TOMBSTONES.md."""
     var argmax_blocks = (hist_cells_per_leaf + 255) // 256
     if argmax_blocks > 64:
         argmax_blocks = 64

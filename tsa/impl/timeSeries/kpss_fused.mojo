@@ -7,6 +7,10 @@ n_obs <= KPSS_FUSED_MAX_N). The first form, `kpss_fused` behind
 `-D MOJOLEARN_TSA2_KPSS`, was DROPPED-noise; its code is on
 lane/apple-fast-gap-tsa @ e9da47064.
 
+TOMBSTONE: MOJOLEARN_TSA2_KPSS (DROPPED-noise: kpss taxi-hourly -73%, synthetic -62%, the same gain as the kept
+TSA_FAST_KPSS_PACK) deleted 2026-10-03 by 7ff2caf99; code recoverable at 7ff2caf99^.
+Restore: git apply experiments/removed/MOJOLEARN_TSA2_KPSS.patch; record in docs/TOMBSTONES.md.
+
 `stationarity.mojo::_kpss_test` is eight launches over eight buffers with a
 wait, after an upload that waits and a host scan of the input for
 non-finite values that waits again, then a download that waits: four waits
