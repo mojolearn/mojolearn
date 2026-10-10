@@ -83,25 +83,10 @@ comptime ARIMA_ORDER_IC_DEVICE = (
 )
 comptime ORDER_TPB = 128
 
-#: MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT (FAST+Apple via ARIMA_ORDER_BATCH,
-#: default off, READY-AB). The grouped search ran its Kalman-dimension groups
-#: one after another, each to its own convergence, so the search's wall time
-#: was the SUM of the groups' optimizer loops, each paying its own polls and
-#: drain waits. Every group's optimizer is per-series and independent, so all
-#: groups now advance in ONE round loop (`_search_tasks`): each round enqueues
-#: every live group's prepare / filter / finish / step, one poll covers all
-#: groups, and a group stops being enqueued once its own poll shows no running
-#: series. Per-group rounds, polls and stopping are the ones the sequential
-#: loop had, so every order's optimum is unchanged; only the overlap differs
-#: (rounds = max over groups, not sum). Merge 2026-10-05: rebuilt on main's
-#: device search (device start + finite flag, chunked groups, the final
-#: grouped re-evaluation into the device log-likelihood table).
-#: GROUPS_CONCURRENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
-#: 2026-10-05, verdicts batch 6): autoarima +14-16% slower. DROPPED: stays
-#: off (opt-in only).
-comptime ARIMA_FAST_GROUPS_CONCURRENT = (
-    ARIMA_ORDER_BATCH and is_defined["MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT"]()
-)
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT and MOJOLEARN_ARIMA_FAST_D_CONCURRENT (DROPPED-slower) deleted 2026-10-09
+# on lane/owed-deletions-D1 (one round loop over every Kalman group / every d group); code recoverable at b639a2bd2.
+# Verdicts batch 6 (M3, 1 run per arm): autoarima +14-16% (GROUPS) and +5-7% (D) slower.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT.patch; record in docs/TOMBSTONES.md.
 
 #: MOJOLEARN_ARIMA_FAST_SEARCH_REUSE (FAST+Apple via ARIMA_ORDER_BATCH; the
 #: default since verdicts batch 6, rollback -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF). The search already runs every candidate order to
@@ -120,25 +105,12 @@ comptime ARIMA_FAST_GROUPS_CONCURRENT = (
 #: device-written aic/bic (ARIMA._adopt_fit got no `ics`), so FAST AutoARIMA failed on main (NameError, then TypeError on M3 rab23/rab24).
 #: Computing aic/bic in Python is not allowed (no-host-routes). Lane arima-ics (2026-10-05): ARIMA._adopt_fit now gets them from the
 #: plain fit's device kernel (`arima_ic_kernel` via `arima_ic_from_loglike`) over the adopted log-likelihood; still opt-in pending the M3 A/B.
-#: The bundle with GROUPS/D_CONCURRENT (rab16-arimaall) was slower than this
+#: The bundle with GROUPS/D_CONCURRENT (rab16-arimaall, both deleted) was slower than this
 #: alone, so only this one is on.
 comptime ARIMA_FAST_SEARCH_REUSE = (
     ARIMA_ORDER_BATCH and is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"]()
 )
 
-#: MOJOLEARN_ARIMA_FAST_D_CONCURRENT (needs GROUPS_CONCURRENT; default off,
-#: READY-AB). AutoARIMA searched each KPSS d group in its own native call,
-#: one after another (python/mojolearn/_x_sequence_autoarima.py's d loop), so
-#: the d = 0 and d = 1 grids' optimizer loops ran back to back. With this
-#: switch `order_search_multi` takes every d group at once and all their
-#: groups share one concurrent round loop (`_search_tasks`); each group's
-#: rounds and stopping are unchanged, so every order's optimum is.
-#: D_CONCURRENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
-#: 2026-10-05, verdicts batch 6): autoarima +5-7% slower. DROPPED: stays off
-#: (opt-in only).
-comptime ARIMA_FAST_D_CONCURRENT = (
-    ARIMA_FAST_GROUPS_CONCURRENT and is_defined["MOJOLEARN_ARIMA_FAST_D_CONCURRENT"]()
-)
 
 
 # TOMBSTONE: MOJOLEARN_ARIMA_FAST_CSS_SEARCH (DROPPED-quality) and MOJOLEARN_ARIMA_FAST_STEPWISE (DROPPED-slower) deleted
@@ -148,14 +120,12 @@ comptime ARIMA_FAST_D_CONCURRENT = (
 
 
 def fast_search_mode() -> Int:
-    """This build's FAST search switches, for the Python glue: bits 0 and 1
-    (ARIMA_FAST_CSS_SEARCH, ARIMA_FAST_STEPWISE) are always 0 since their
-    deletion (2026-10-09, lane/owed-deletions-D1), bit 2 the grouped final
-    fit (`order_search_multi` with fit output) for chosen orders, bits 3..5
-    `fast_arima_quality.quality_mode` (CONST_BOTH, ROOT_CHECK, KPSS_D)."""
+    """This build's FAST search switches, for the Python glue: bits 0..2
+    (ARIMA_FAST_CSS_SEARCH, ARIMA_FAST_STEPWISE, the grouped final fit) are
+    always 0 since their deletion (2026-10-09, lane/owed-deletions-D1),
+    bits 3..5 `fast_arima_quality.quality_mode` (CONST_BOTH, ROOT_CHECK,
+    KPSS_D)."""
     var mode = 0
-    comptime if ARIMA_FAST_D_CONCURRENT:
-        mode |= 4
     # lane/apple-fast-arima-quality: bit 3 ARIMA_FAST_CONST_BOTH, bit 4
     # ARIMA_FAST_ROOT_CHECK, bit 5 ARIMA_FAST_KPSS_D (fast_arima_quality.mojo)
     mode |= quality_mode()
@@ -366,206 +336,10 @@ def _keep_x0(ctx: DeviceContext, want_fit: Bool, n: Int,
     return keep^
 
 
-struct _OrderGroup(Movable):
-    """One Kalman-dimension group's shared filter buffers (concurrent search)."""
-    var rd: Int
-    var k: Int
-    var members: Int
-    var live: Bool
-    var ws: KalmanWorkspace
-    var y: DeviceBuffer[DType.float32]
-    var params: ARIMAParams
-
-    def __init__(out self, ctx: DeviceContext, rd: Int, k: Int, members: Int, nkf: Int) raises:
-        var group_order = ARIMAOrder(rd, 0, 0, 0, 0, 0, 0, 1, 0)
-        self.rd = rd
-        self.k = k
-        self.members = members
-        self.live = True
-        self.ws = KalmanWorkspace(ctx, group_order, members, nkf, 0)
-        self.y = ctx.enqueue_create_buffer[DType.float32](members * nkf)
-        self.params = ARIMAParams(ctx, group_order, members)
-
-
-struct _SearchTask(Movable):
-    """One same-differencing order grid on its own series (concurrent
-    search): its series, differenced series, device log-likelihood table
-    (grid order), start finite flag and, with `want_fit`, its fit buffers'
-    addresses."""
-    var y: DeviceBuffer[DType.float32]
-    var exog: DeviceBuffer[DType.float32]
-    var ykf: DeviceBuffer[DType.float32]
-    var ll_all: DeviceBuffer[DType.float32]
-    var x0_flag: DeviceBuffer[DType.int32]
-    var x0_flag_host: HostBuffer[DType.int32]
-    var orders: List[ARIMAOrder]
-    var bs: Int
-    var nobs: Int
-    var nkf: Int
-    var want_fit: Bool
-    var fit_f32: Int
-    var fit_i32: Int
-    var root_check: Bool
-    """ARIMA_FAST_ROOT_CHECK: reject this task's candidates whose fitted AR
-    or MA polynomial has a root of modulus < 1.01 (a search; False for the
-    final exact refit of chosen orders)."""
-
-    def __init__(out self, var y: DeviceBuffer[DType.float32], var exog: DeviceBuffer[DType.float32],
-                 var ykf: DeviceBuffer[DType.float32], var ll_all: DeviceBuffer[DType.float32],
-                 var x0_flag: DeviceBuffer[DType.int32], var x0_flag_host: HostBuffer[DType.int32],
-                 orders: List[ARIMAOrder], bs: Int, nobs: Int, nkf: Int,
-                 want_fit: Bool, fit_f32: Int, fit_i32: Int, root_check: Bool = True):
-        self.y = y^
-        self.exog = exog^
-        self.ykf = ykf^
-        self.ll_all = ll_all^
-        self.x0_flag = x0_flag^
-        self.x0_flag_host = x0_flag_host^
-        self.orders = orders.copy()
-        self.bs = bs
-        self.nobs = nobs
-        self.nkf = nkf
-        self.want_fit = want_fit
-        self.fit_f32 = fit_f32
-        self.fit_i32 = fit_i32
-        self.root_check = root_check
-
-
-def _search_tasks(ctx: DeviceContext, mut tasks: List[_SearchTask], hp: LBFGSParam) raises:
-    """ARIMA_FAST_GROUPS_CONCURRENT: `_order_search_core`'s group loop with
-    every (task, r, k, chunk) group advanced in one round loop. Each group
-    keeps its own filter launch, poll verdict and stop round, so every
-    order's optimum is the sequential loop's. The fitted log-likelihoods land
-    in each task's `ll_all` by the same grouped re-evaluation at x and
-    `order_ll_kernel`; with a task's `want_fit` its fit blocks are written
-    too. Several tasks (ARIMA_FAST_D_CONCURRENT: AutoARIMA's d groups) share
-    the loop. Leaves the queue drained."""
-    var groups = List[_OrderGroup]()
-    var gtask = List[Int]()     # the task of each group
-    var evals = List[FastEvalWS]()
-    var states = List[OrderOptimizer]()
-    var x0s = List[DeviceBuffer[DType.float32]]()
-    var owner = List[Int]()     # the group of each state
-    var row = List[Int]()       # the grid row (output index) of each state
-    for t in range(len(tasks)):  # small-loop(tasks: AutoARIMA's d groups, at most a few): plan entries, no series data
-        ref tk = tasks[t]
-        for rd in range(1, 6):
-            for k in range(2):
-                var chunks = _order_chunks(tk.orders, rd, k, tk.bs, tk.nkf)
-                for c in range(len(chunks)):  # small-loop(chunks: groups of the order grid): plan entries, no series data
-                    var ids = chunks[c].copy()
-                    var members = 0
-                    for j in range(len(ids)):  # small-loop(ids: orders in one chunk of the grid): member-count plan arithmetic, no data
-                        members += tk.bs * (tk.orders[ids[j]].complexity() + 1)
-                    groups.append(_OrderGroup(ctx, rd, k, members, tk.nkf))
-                    gtask.append(t)
-                    var g = len(groups) - 1
-                    var offset = 0
-                    for j in range(len(ids)):  # small-loop(ids: orders in one chunk of the grid): one optimizer per order, device work
-                        var order = tk.orders[ids[j]]
-                        var okf = order.without_diff()
-                        var x_dev = _initial_x_device(ctx, tk.y, tk.exog, tk.bs, tk.nobs, order, tk.x0_flag)
-                        x0s.append(_keep_x0(ctx, tk.want_fit, tk.bs * order.complexity(), x_dev))
-                        ref grp = groups[g]
-                        var ew = FastEvalWS(ctx, tk.ykf, tk.bs, tk.nkf, okf,
-                                            grp.ws, grp.y, grp.params.mu, offset)
-                        var state = OrderOptimizer(ctx, ew, tk.bs, Float32(tk.nobs - 1), okf,
-                                                   x_dev^, hp, ARIMA_FIT_H)
-                        offset += ew.eb
-                        evals.append(ew^)
-                        states.append(state^)
-                        owner.append(g)
-                        row.append(ids[j])
-        ctx.enqueue_copy(dst_ptr=tk.x0_flag_host.unsafe_ptr(), src_buf=tk.x0_flag)
-    var rounds = 0
-    var max_rounds = hp.max_iterations * max(1, hp.max_linesearch) + 1
-    while rounds < max_rounds:
-        if rounds % ASYNC_READ_EVERY == 0:
-            # one wait for every live group's poll
-            for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
-                if groups[owner[j]].live:
-                    states[j].enqueue_poll(ctx)
-            ctx.synchronize()
-            for t in range(len(tasks)):  # small-loop(tasks: AutoARIMA's d groups): one flag word each
-                if tasks[t].x0_flag_host.unsafe_ptr().unsafe_load(0) != Int32(0):
-                    raise Error("AutoARIMA: non-finite initial parameter")
-            for g in range(len(groups)):  # small-loop(groups: Kalman-dimension groups of the grid): poll verdicts, no series data
-                if not groups[g].live:
-                    continue
-                var running = False
-                for j in range(len(states)):  # small-loop(states: one optimizer per order): poll verdicts, no series data
-                    if owner[j] == g:
-                        running = running or states[j].running()
-                groups[g].live = running
-            var any_live = False
-            for g in range(len(groups)):  # small-loop(groups: Kalman-dimension groups of the grid): poll verdicts
-                any_live = any_live or groups[g].live
-            if not any_live:
-                break
-        for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
-            if not groups[owner[j]].live:
-                continue
-            ref state = states[j]
-            ref ew = evals[j]
-            ew.prepare(ctx, state.order, state.h, state.cand, state.bad)
-            fast_kalman_init_into(ctx, ew.t_params, state.order, ew.eb, ew.ws)
-        for g in range(len(groups)):  # small-loop(groups: Kalman-dimension groups of the grid): one filter launch each
-            ref grp = groups[g]
-            if not grp.live:
-                continue
-            _launch_loop_ll_only(ctx, grp.y, grp.params, grp.ws,
-                                 grp.rd, tasks[gtask[g]].nkf, grp.members, grp.k, 0, 32)
-        for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
-            if not groups[owner[j]].live:
-                continue
-            ref state = states[j]
-            ref ew = evals[j]
-            ew.finish(ctx, state.h, state.scale, state.cand, state.d_grad,
-                      state.d_x_pert, state.f_fxc, state.gradc, state.bad)
-            state.advance(ctx)
-        rounds += 1
-    # The fitted log-likelihood, re-evaluated as ARIMA.fit does (never
-    # recovered by rescaling fx): one more grouped evaluation AT x per group,
-    # member 0 of each order the unperturbed point (main's final pass).
-    for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
-        ref state = states[j]
-        ref ew = evals[j]
-        ew.prepare(ctx, state.order, state.h, state.x, state.bad)
-        fast_kalman_init_into(ctx, ew.t_params, state.order, ew.eb, ew.ws)
-    for g in range(len(groups)):  # small-loop(groups: Kalman-dimension groups of the grid): one filter launch each
-        ref grp = groups[g]
-        _launch_loop_ll_only(ctx, grp.y, grp.params, grp.ws,
-                             grp.rd, tasks[gtask[g]].nkf, grp.members, grp.k, 0, 32)
-    for j in range(len(states)):  # small-loop(states: one optimizer per order): one launch each
-        ref tk = tasks[gtask[owner[j]]]
-        ref ew = evals[j]
-        ctx.enqueue_function[order_ll_kernel](
-            tk.ll_all.unsafe_ptr(), ew.ws.loglike.unsafe_ptr(),
-            ew.ws.info_init.unsafe_ptr(), ew.ws.info_loop.unsafe_ptr(),
-            Int32(tk.bs), Int32(row[j]),
-            grid_dim=((tk.bs + ORDER_TPB - 1) // ORDER_TPB, 1, 1), block_dim=(ORDER_TPB, 1, 1),
-        )
-    # ARIMA_FAST_ROOT_CHECK: each candidate's fitted roots, its row -inf
-    # where a root has modulus < 1.01 (statsforecast `myarima`)
-    var root_keep = List[ARIMAParams]()
-    comptime if ARIMA_FAST_ROOT_CHECK:
-        for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
-            ref tk = tasks[gtask[owner[j]]]
-            if tk.root_check:
-                ref state = states[j]
-                enqueue_root_check(ctx, state.order, tk.bs, state.x, tk.ll_all, row[j], root_keep)
-    ctx.synchronize()
-    _ = root_keep^
-    for j in range(len(states)):  # small-loop(states: one optimizer per order): device-to-caller copies
-        ref tk = tasks[gtask[owner[j]]]
-        if tk.want_fit:
-            _enqueue_fit_block(ctx, states[j], tk.orders[row[j]], tk.bs, x0s[j],
-                               tk.fit_f32, tk.fit_i32,
-                               order_fit_f32_offset(tk.orders, row[j], tk.bs), row[j])
-    _ = x0s^
-    _ = states^
-    _ = evals^
-    _ = groups^
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT and MOJOLEARN_ARIMA_FAST_D_CONCURRENT (DROPPED-slower) deleted 2026-10-09
+# on lane/owed-deletions-D1 (one round loop over every Kalman group / every d group); code recoverable at b639a2bd2.
+# Verdicts batch 6 (M3, 1 run per arm): autoarima +14-16% (GROUPS) and +5-7% (D) slower.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT.patch; record in docs/TOMBSTONES.md.
 
 
 def _order_search_core(
@@ -632,17 +406,9 @@ def _order_search_core(
     x0_flag_host.unsafe_ptr().unsafe_store(0, Int32(0))
     var hp = arima_fit_params(maxiter)
     var ll_grid = (bs + ORDER_TPB - 1) // ORDER_TPB
-    comptime if ARIMA_FAST_GROUPS_CONCURRENT:
-        if not want_ic:
-            var tasks = List[_SearchTask]()
-            tasks.append(_SearchTask(y^, exog^, ykf^, ll_all^, x0_flag^, x0_flag_host^,
-                                     orders, bs, nobs, nkf, want_fit, fit_f32, fit_i32))
-            _search_tasks(ctx, tasks, hp)
-            ctx.enqueue_copy(dst_ptr=ll_out.unsafe_ptr(), src_buf=tasks[0].ll_all)
-            ctx.synchronize()
-            _ = tasks^
-            _ = ctx^
-            return n_orders * bs
+    # TOMBSTONE: MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT (DROPPED-slower, +14-16%) deleted 2026-10-09 on
+    # lane/owed-deletions-D1 (the concurrent group loop here); code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT.patch.
     # Grouping never changes the output index. k is uniform within a
     # filter launch, as are rd and observation count after differencing.
     for rd in range(1, 6):
@@ -860,77 +626,6 @@ def order_search_fit(
         if written > 0:
             _write_list_f32(out_ptr, ll, 0)
         return written
-
-
-def order_search_multi(
-    y_ptrs: List[Int], out_ptrs: List[Int], fit_f32s: List[Int], fit_i32s: List[Int],
-    task_orders: List[List[ARIMAOrder]], bss: List[Int], nobs: Int, maxiter: Int,
-    want_fit: Bool, root_check: Bool = True,
-) raises -> Int:
-    """ARIMA_FAST_D_CONCURRENT: `order_search_loglike` (or, with `want_fit`,
-    `order_search_fit`) for several same-d nonseasonal grids, one per task:
-    its own series y_ptrs[t] (bss[t] x nobs), its own output out_ptrs[t] and
-    fit buffers fit_f32s[t] / fit_i32s[t]; every group of every task in ONE
-    concurrent round loop (`_search_tasks`). `root_check`
-    (ARIMA_FAST_ROOT_CHECK builds): reject candidates by statsforecast's root
-    rule; the final exact refit of chosen orders passes False. Returns the
-    total number of log-likelihoods written."""
-    comptime if not ARIMA_FAST_D_CONCURRENT:
-        raise Error("AutoARIMA concurrent d groups were not compiled")
-    else:
-        var nt = len(y_ptrs)
-        if nt < 1 or len(out_ptrs) != nt or len(task_orders) != nt or len(bss) != nt:
-            raise Error("AutoARIMA concurrent d groups: inconsistent task lists")
-        if want_fit and (len(fit_f32s) != nt or len(fit_i32s) != nt):
-            raise Error("AutoARIMA concurrent d groups: fit output requested without buffers")
-        if nobs < 3 or maxiter < 1:
-            raise Error("AutoARIMA concurrent d groups: invalid shape or iteration count")
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var tasks = List[_SearchTask]()
-        var total = 0
-        for t in range(nt):  # small-loop(tasks: AutoARIMA's d groups, at most a few): uploads, no series compute
-            ref orders = task_orders[t]
-            var bs = bss[t]
-            if bs < 1 or len(orders) < 1:
-                raise Error("AutoARIMA concurrent d groups: empty task")
-            var d = orders[0].d
-            for i in range(len(orders)):  # small-loop(orders: the AutoARIMA order grid): plan validation, no series data
-                var o = orders[i]
-                validate_order(o)
-                if o.d != d or o.P != 0 or o.D != 0 or o.Q != 0 or o.s != 0 or o.n_exog != 0 or o.r() > 4:
-                    raise Error("AutoARIMA grouped orders require a nonseasonal same-d grid with r <= 4")
-            var nkf = nobs - d
-            if nkf < 3:
-                raise Error("AutoARIMA concurrent d groups: too few observations after differencing")
-            var yp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y_ptrs[t])
-            var y = _upload_f32(ctx, yp, bs * nobs)
-            _refuse_non_finite(ctx, y, bs * nobs, "y")
-            var exog = ctx.enqueue_create_buffer[DType.float32](1)
-            var ykf = ctx.enqueue_create_buffer[DType.float32](bs * nkf)
-            if d > 0:
-                prepare_data(ctx, ykf, y, bs, nobs, d, 0, 0)
-            else:
-                ctx.enqueue_copy(dst_buf=ykf, src_buf=y)
-            var ll_all = ctx.enqueue_create_buffer[DType.float32](len(orders) * bs)
-            var x0_flag = ctx.enqueue_create_buffer[DType.int32](1)
-            var x0_flag_host = ctx.enqueue_create_host_buffer[DType.int32](1)
-            ctx.enqueue_memset(x0_flag, Int32(0))
-            var ff = fit_f32s[t] if want_fit else 0
-            var fi = fit_i32s[t] if want_fit else 0
-            tasks.append(_SearchTask(y^, exog^, ykf^, ll_all^, x0_flag^, x0_flag_host^,
-                                     orders, bs, nobs, nkf, want_fit, ff, fi, root_check))
-            total += len(orders) * bs
-        ctx.synchronize()
-        for t in range(nt):  # small-loop(tasks: AutoARIMA's d groups): one flag word each
-            tasks[t].x0_flag_host.unsafe_ptr().unsafe_store(0, Int32(0))
-        _search_tasks(ctx, tasks, arima_fit_params(maxiter))
-        for t in range(nt):  # small-loop(tasks: AutoARIMA's d groups): one device-to-caller copy each
-            ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=out_ptrs[t]),
-                             src_buf=tasks[t].ll_all)
-        ctx.synchronize()
-        _ = tasks^
-        _ = ctx^
-        return total
 
 
 # TOMBSTONE: MOJOLEARN_ARIMA_FAST_CSS_SEARCH (DROPPED-quality) and MOJOLEARN_ARIMA_FAST_STEPWISE (DROPPED-slower) deleted

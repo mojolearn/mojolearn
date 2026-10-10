@@ -99,7 +99,7 @@ from arima.estimator import (
 
 from arima.impl.fast_order_search import (
     order_search_caps, order_search_device, order_search_loglike,
-    order_search_fit, order_search_multi, ARIMA_FAST_SEARCH_REUSE, ARIMA_FAST_D_CONCURRENT,
+    order_search_fit, ARIMA_FAST_SEARCH_REUSE,
     fast_search_mode,
 )
 from arima.impl.fast_arima_quality import ndiffs_kpss
@@ -216,67 +216,16 @@ def arima_order_search_fit_binding(y_addr: PythonObject, out_addr: PythonObject,
     return PythonObject(written)
 
 
-def arima_d_concurrent_enabled_binding() raises -> PythonObject:
-    """MOJOLEARN_ARIMA_FAST_D_CONCURRENT compiled in (FAST+Apple only)."""
-    var trace = IdentityTrace()
-    return PythonObject(ARIMA_FAST_D_CONCURRENT and not trace.enabled)
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT / _D_CONCURRENT (DROPPED-slower) deleted 2026-10-09 on
+# lane/owed-deletions-D1 (arima_d_concurrent_enabled, arima_order_search_multi); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT.patch; record in docs/TOMBSTONES.md.
 
-
-def arima_order_search_multi_binding(y_addrs: PythonObject, out_addrs: PythonObject,
-                                     fit_addrs: PythonObject, grids: PythonObject,
-                                     config: PythonObject) raises -> PythonObject:
-    """Every same-d task's grouped search in one concurrent loop
-    (fast_order_search.order_search_multi). y_addrs / out_addrs: one address
-    per task; fit_addrs: [] or [f32_0, i32_0, f32_1, i32_1, ...]; grids: one
-    flat (p, q, k) list per task; config: [nobs, maxiter, d_0, bs_0, d_1,
-    bs_1, ...], optionally one more word: 0 turns off the
-    MOJOLEARN_ARIMA_FAST_ROOT_CHECK rejection (the final exact refit of the
-    chosen orders; absent = on, a search)."""
-    var nt = len(y_addrs)
-    if nt < 1 or len(out_addrs) != nt or len(grids) != nt or (
-            len(config) != 2 + 2 * nt and len(config) != 3 + 2 * nt):
-        raise Error("arima_order_search_multi: inconsistent task lists")
-    var root_check = True
-    if len(config) == 3 + 2 * nt:
-        root_check = Int(py=config[2 + 2 * nt]) != 0
-    var want_fit = len(fit_addrs) > 0
-    if want_fit and len(fit_addrs) != 2 * nt:
-        raise Error("arima_order_search_multi: fit_addrs needs two addresses per task")
-    var nobs = Int(py=config[0])
-    var maxiter = Int(py=config[1])
-    var yps = List[Int]()
-    var ops = List[Int]()
-    var ffs = List[Int]()
-    var fis = List[Int]()
-    var task_orders = List[List[ARIMAOrder]]()
-    var bss = List[Int]()
-    for t in range(nt):  # small-loop(nt: AutoARIMA d groups, at most three): task plan entries and addresses, no series data
-        var d = Int(py=config[2 + 2 * t])
-        bss.append(Int(py=config[3 + 2 * t]))
-        yps.append(Int(py=y_addrs[t]))
-        ops.append(Int(py=out_addrs[t]))
-        if want_fit:
-            ffs.append(Int(py=fit_addrs[2 * t]))
-            fis.append(Int(py=fit_addrs[2 * t + 1]))
-        var g = grids[t]
-        if len(g) % 3 != 0:
-            raise Error("arima_order_search_multi: a grid is not (p, q, k) triples")
-        var orders = List[ARIMAOrder]()
-        for i in range(len(g) // 3):  # small-loop(g: one d group's p, q, k order triples, a few dozen): plan entries, no series data
-            orders.append(ARIMAOrder(Int(py=g[3*i]), d, Int(py=g[3*i+1]),
-                                     0, 0, 0, 0, Int(py=g[3*i+2]), 0))
-        task_orders.append(orders^)
-    var written = 0
-    with GILReleased(Python()):
-        written = order_search_multi(yps, ops, ffs, fis, task_orders, bss, nobs, maxiter, want_fit,
-                                     root_check)
-    return PythonObject(written)
 
 
 def arima_fast_search_mode_binding() raises -> PythonObject:
-    """lane/apple-fast-arima-sf: `fast_search_mode` (bits 0 and 1, the
-    deleted MOJOLEARN_ARIMA_FAST_CSS_SEARCH / _STEPWISE, are always 0;
-    bit 2 the grouped final fit through `arima_order_search_multi`, bit 3
+    """lane/apple-fast-arima-sf: `fast_search_mode` (bits 0..2, the
+    deleted MOJOLEARN_ARIMA_FAST_CSS_SEARCH / _STEPWISE and their grouped
+    final fit, are always 0; bit 3
     MOJOLEARN_ARIMA_FAST_CONST_BOTH, bit 4 MOJOLEARN_ARIMA_FAST_ROOT_CHECK,
     bit 5 MOJOLEARN_ARIMA_FAST_KPSS_D); 0 with an identity trace on."""
     var trace = IdentityTrace()
@@ -669,8 +618,6 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         m.def_function[arima_order_search_device_binding]("arima_order_search_device")
         m.def_function[arima_search_reuse_enabled_binding]("arima_search_reuse_enabled")
         m.def_function[arima_order_search_fit_binding]("arima_order_search_fit")
-        m.def_function[arima_d_concurrent_enabled_binding]("arima_d_concurrent_enabled")
-        m.def_function[arima_order_search_multi_binding]("arima_order_search_multi")
         m.def_function[arima_fast_search_mode_binding]("arima_fast_search_mode")
         m.def_function[arima_ndiffs_kpss_binding]("arima_ndiffs_kpss")
         m.def_function[arima_predict_binding]("arima_predict")

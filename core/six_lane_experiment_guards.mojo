@@ -240,6 +240,8 @@ def _check_configuration() -> Bool:
     # Lane owed-deletions-D1 (2026-10-09): DROPPED rows in docs/apple-fast/EXPERIMENTS.md whose code was still on main (docs/TOMBSTONES.md). Deleted code recoverable at main b639a2bd2.
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_CSS_SEARCH"](), "removed 2026-10-09 (lane/owed-deletions-D1): AutoARIMA CSS-scored order search was DROPPED-quality: rab26 synthetic -45.2% / taxi-hourly -30.5% ms but forecast_rmse 2.465 -> 3.485 / 75.71 -> 76.06; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_STEPWISE"](), "removed 2026-10-09 (lane/owed-deletions-D1): AutoARIMA Hyndman-Khandakar stepwise device search was DROPPED-slower: rab26 synthetic +51.6% / taxi-hourly +102.5% ms, taxi forecast_rmse 75.71 -> 90.54; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT"](), "removed 2026-10-09 (lane/owed-deletions-D1): AutoARIMA Kalman groups in one concurrent round loop was DROPPED-slower: autoarima +14-16% (M3 verdicts batch 6, 1 run per arm); code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_D_CONCURRENT"](), "removed 2026-10-09 (lane/owed-deletions-D1): AutoARIMA d groups in one native search call was DROPPED-slower: autoarima +5-7% (M3 verdicts batch 6, 1 run per arm); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

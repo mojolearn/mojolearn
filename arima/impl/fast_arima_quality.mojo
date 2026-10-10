@@ -71,11 +71,9 @@ comptime ARIMA_FAST_CONST_BOTH = (
     _FAST_APPLE and ARIMA_ORDER_BATCH and is_defined["MOJOLEARN_ARIMA_FAST_CONST_BOTH"]()
 )
 #: MOJOLEARN_ARIMA_FAST_ROOT_CHECK (default off, READY-AB). After each
-#: candidate's fit in the device searches (grouped exact, GROUPS/D
-#: concurrent), a candidate whose AR or MA polynomial
+#: candidate's fit in the device search (grouped exact), a candidate whose AR or MA polynomial
 #: has a root of modulus < 1.01 gets log-likelihood -inf (ic +inf), as
-#: statsforecast's `myarima` / R's auto.arima. The final exact refit of the
-#: chosen order is not re-checked (`order_search_multi(root_check=False)`).
+#: statsforecast's `myarima` / R's auto.arima.
 #: UNMEASURED as of 2026-10-05, merged on compile by Andrew's decision. A/B:
 #: lane autoarima, taxi-hourly + synthetic, forecast_rmse must not go up.
 comptime ARIMA_FAST_ROOT_CHECK = (
