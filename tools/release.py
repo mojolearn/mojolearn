@@ -11,15 +11,19 @@
 SEVERABLE PIPELINES (2026-09-25). After the common steps a release is four
 pipelines that run at once in one invocation, each publishing as soon as ITS
 OWN gates pass; a failure in one never blocks or undoes another:
-  macos       macos-build -> macos-smoke + macos-self-test -> release-check (the Apple column)
-              -> publish-macos
-  core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack -> linux-joint-diff
+  macos       macos-build -> macos-smoke -> publish-macos
+  core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack
               -> publish-core-linux (after publish-nvidia AND publish-amd)
   nvidia      gpu-column-nvidia -> publish-nvidia
   amd         gpu-column-amd -> publish-amd
-The Linux columns are diffed against the Apple column, so a failed
-release-check holds the Linux publish too (bitwise identity across GPUs is the
-point); a failed macOS build or smoke does not. The finish line and the record
+ONE IDENTITY CHECK PER RELEASE (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun).
+The admitted reference table (tools/record_identity_column.sh on NVIDIA and AMD,
+tools/admit_identity_columns.sh: NVIDIA == AMD) IS the release's identity check,
+and every wheel smoke verifies the installed wheel against that table. The
+release no longer re-fits the changed lanes on Apple (release-check), on the
+installed GPU wheels (the column pass) or diffs them again (linux-joint-diff,
+the macOS cross-check), and macos-self-test is gone: macos-smoke's self-test
+job runs the same `verify --self-test` on the same wheel. The finish line and the record
 cover whichever platforms are published, and run again when another is. The
 run ends with every outcome and exits non-zero if any did not publish. A
 pipeline is PIPELINES' named builds, checks and one publish.
@@ -29,8 +33,8 @@ the source commit in state.json and it never moves because main moved:
 publication ships exactly it, and only `--refreeze` moves it to HEAD. This
 script and everything it drives (the leg runners, the guards, the wheel smoke,
 the publisher) run from THIS checkout, the tooling checkout, normally current
-main. Steps that read the source (the macOS build, release-check, the pack,
-the rehearsal, the lane selection) run in the source checkout: this one when
+main. Steps that read the source (the macOS build, the pack,
+the rehearsal) run in the source checkout: this one when
 HEAD is the source commit, else a detached worktree of it under
 <version>/source/<commit12>/ (or --source-checkout). A build leg's box gets
 the SOURCE archive plus the route overlay (tools/release_tooling.py,
@@ -53,8 +57,7 @@ on this machine and verifies.
 State lives in ~/mojolearn-evidence/release/<version>/state.json
 (MOJOLEARN_EVIDENCE_ROOT moves it); everything after the freeze is under
 <version>/<commit12>/. A step is done when its OUTPUT checks out (a wheel of the
-right commit, a PASSED receipt for that wheel's sha256, a complete
-release-check record, the file on PyPI), not merely because the state file says
+right commit, a PASSED receipt for that wheel's sha256, the file on PyPI), not merely because the state file says
 so. A rerun resumes only what is not done.
 
 THE STEPS
@@ -92,14 +95,10 @@ THE STEPS
                      pods) and `github` (GitHub's free runners,
                      tools/release_github_build.py) are opt-in
   macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
-  macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock
-  macos-self-test    tools/wheel_self_test.py: the built macOS wheel in a fresh venv,
-                     `python -m mojolearn verify --self-test --cpu-threads 3`; the
-                     bundled reference table must reproduce this wheel's own bits
-                     (0.8.35 shipped a stale table). No PASSED receipt for these
-                     wheel bytes, no publish-macos
-  release-check      pixi run -e test release-check: the Apple (Metal) column of
-                     the changed lanes, one fit per cell (CPU pass: --cpu-column)
+  macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock;
+                     its self-test job is the bundled-table gate (0.8.35 shipped a
+                     stale table): no PASSED receipt for these wheel bytes, no
+                     publish-macos
   linux-wait         every launched leg finished, its proof complete for this
                      commit, its route overlay verified on the box, and every
                      host binding byte-identical across the legs (taken ones too)
@@ -107,11 +106,10 @@ THE STEPS
                      leg's set, or one synthesized from the published wheel
   linux-pack         pixi run -e pkg pack-linux-wheel --profile release-split
                      (the core and both plugins), audit.sh, strip, split_audit
-  gpu-column-nvidia  } the NVIDIA and AMD wheel columns AT ONCE (detached
-  gpu-column-amd     } tools/release_wheel_smoke.sh on the changed lanes, the
-                       core and both plugins installed), each against Apple
-  linux-joint-diff   ONE diff of every PASSED column with the Apple column:
-                     any DIVERGENT or MOVED cell stops all three Linux packages
+  gpu-column-nvidia  } the NVIDIA and AMD wheel smokes AT ONCE (detached
+  gpu-column-amd     } tools/release_wheel_smoke.sh, the core and both plugins
+                       installed, verified against the admitted table; no
+                       second identity pass of the changed lanes)
   publish-nvidia     }
   publish-amd        } tools/release_linux_publish.sh ... --light-smoke, only
   publish-core-linux }   with --publish; the plugins first, the core last
@@ -130,10 +128,7 @@ removed; 0.8.20 and earlier stay installable). `pip install mojolearn` WORKS FOR
 core requires BOTH plugins at its own version exactly, so pip can resolve
 `mojolearn==<v>` only once mojolearn-nvidia and mojolearn-amd <v> are both on
 the index. The PLUGINS PUBLISH FIRST and the CORE LAST. Each column gates its
-own plugin; linux-joint-diff waits for both columns to settle, needs at least
-one PASSED and diffs every PASSED column with the Apple column (any DIVERGENT
-cell stops all three); a plugin publishes on the joint diff and its own
-column; the core publishes only after BOTH plugins did, so only when both
+own plugin (its wheel smoke against the admitted reference table); the core publishes only after BOTH plugins did, so only when both
 vendors' columns passed (on the NVIDIA receipt). A failed vendor holds the
 core; the other plugin may still upload, harmless and unresolvable alone
 (it requires the core). Each package is its own GitHub
@@ -716,16 +711,6 @@ def host_digest_mismatches(legs):
             if len(row) != len(legs) or len(set(row.values())) != 1}
 
 
-def selection_digest(path):
-    """The lanes a GPU column runs (verify_lanes --write-selection), as one
-    digest: backend, column, fixtures and lanes; never the commit that asked."""
-    doc = read_json(path)
-    if not doc or not isinstance(doc.get("lanes"), list):
-        return None
-    keep = {k: doc.get(k) for k in ("backend", "column", "fixtures", "lanes")}
-    return hashlib.sha256(json.dumps(keep, sort_keys=True).encode()).hexdigest()
-
-
 # ---------------------------------------------------------------- the pipelines
 #: (step, pipeline, needs, resource). A step runs once every step it NEEDS is
 #: done; a failed or blocked need blocks it. Steps sharing a RESOURCE run one
@@ -746,34 +731,37 @@ STEP_TABLE = [
     ("linux-builds", "core-linux", ["reuse-plan", "cross-compile"], None),
     ("macos-build", "macos", ["reuse-plan"], "mac"),
     ("macos-smoke", "macos", ["macos-build"], "mac"),
-    ("macos-self-test", "macos", ["macos-build"], "mac"),
-    ("release-check", "macos", ["reuse-plan"], "mac"),
+    # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
+    # macos-self-test (the same `verify --self-test` macos-smoke runs on the same
+    # wheel) and release-check (an Apple re-fit of the lanes the admitted table
+    # already holds) are deleted: the table admit is the identity check.
     ("linux-wait", "core-linux", ["linux-builds"], None),
     ("linux-assemble", "core-linux", ["linux-wait"], None),
     ("linux-pack", "core-linux", ["linux-assemble"], "mac"),
-    ("gpu-column-nvidia", "nvidia", ["linux-pack", "release-check"], None),
-    ("gpu-column-amd", "amd", ["linux-pack", "release-check"], None),
-    ("linux-joint-diff", "core-linux", ["linux-pack", "release-check"], None),
+    ("gpu-column-nvidia", "nvidia", ["linux-pack"], None),
+    ("gpu-column-amd", "amd", ["linux-pack"], None),
+    # linux-joint-diff is deleted (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun):
+    # it re-diffed a second identity pass of the changed lanes against the Apple
+    # re-fit; NVIDIA == AMD is decided once, by the admitted table.
     # THE PLUGINS FIRST, THE CORE LAST: the core requires both plugins at its
     # version, so it is resolvable only once both are on the index
-    ("publish-nvidia", "nvidia", ["gpu-column-nvidia", "linux-joint-diff"], "dispatch"),
-    ("publish-amd", "amd", ["gpu-column-amd", "linux-joint-diff"], "dispatch"),
-    ("publish-core-linux", "core-linux", ["linux-joint-diff", "publish-nvidia", "publish-amd"], "dispatch"),
-    ("publish-macos", "macos", ["macos-smoke", "macos-self-test", "release-check"], "dispatch"),
+    ("publish-nvidia", "nvidia", ["gpu-column-nvidia"], "dispatch"),
+    ("publish-amd", "amd", ["gpu-column-amd"], "dispatch"),
+    ("publish-core-linux", "core-linux", ["publish-nvidia", "publish-amd"], "dispatch"),
+    ("publish-macos", "macos", ["macos-smoke"], "dispatch"),
     ("finish-line", "finish", ["freeze-commit"], None),
     ("record", "finish", ["finish-line"], None),
 ]
 #: Steps that wait for others to SETTLE (done, failed or blocked), not succeed.
-AFTER = {"linux-joint-diff": ["gpu-column-nvidia", "gpu-column-amd"],
-               "finish-line": ["publish-core-linux", "publish-nvidia", "publish-amd", "publish-macos"]}
+AFTER = {"finish-line": ["publish-core-linux", "publish-nvidia", "publish-amd", "publish-macos"]}
 #: A PIPELINE: named builds, named checks, one publish, and the platform it
 #: ships (what published_platforms() says: `linux` is the core's).
 PIPELINES = {
-    "macos": dict(builds=["macos-build"], checks=["macos-smoke", "macos-self-test", "release-check"],
+    "macos": dict(builds=["macos-build"], checks=["macos-smoke"],
                   publish="publish-macos",
                   platform="macos"),
     "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "linux-pack"],
-                       checks=["cross-compile", "linux-joint-diff"], publish="publish-core-linux", platform="linux"),
+                       checks=["cross-compile"], publish="publish-core-linux", platform="linux"),
     "nvidia": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-nvidia", platform="nvidia"),
     "amd": dict(builds=[], checks=["gpu-column-amd"], publish="publish-amd", platform="amd"),
 }
@@ -786,7 +774,7 @@ NATIVE_COLUMNS = {"nvidia": ("nvidia", "nvidia-hopper"), "amd": ("amd",)}
 if set(NATIVE_COLUMNS) != {r["profile"] for r in GPU_PACKAGES["distribution_rows"]()}:
     raise RuntimeError("every released vendor requires hardware qualification columns")
 STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gpu-column-amd")),
-                  ("gpu-column-nvidia-hopper", "nvidia", ["linux-pack", "release-check"], None))
+                  ("gpu-column-nvidia-hopper", "nvidia", ["linux-pack"], None))
 # RELEASES RENT NOTHING (2026-10-08, Andrew: "let's deprecate the per-architecture
 # rented smoke"). The Ada and AMD columns run on the nv and amd boxes we hold
 # (--smoke-via lq); the Hopper column runs only on a held Hopper box
@@ -795,7 +783,6 @@ STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gpu-co
 # (Release.hopper_required). Without one the sm_90a payload publishes on its
 # GitHub build receipt and the alpha manifest says "smoke: not run".
 PIPELINES["nvidia"]["checks"].append("gpu-column-nvidia-hopper")
-AFTER["linux-joint-diff"].append("gpu-column-nvidia-hopper")
 AFTER["publish-nvidia"] = ["gpu-column-nvidia-hopper"]
 #: where --smoke-via lq runs each column: the lq box and the column's tag stem
 #: the held lq box per GPU column; MOJOLEARN_RELEASE_NV_BOX / _AMD_BOX pick another held box of the same
@@ -865,7 +852,7 @@ class Release:
     STEPS = [s for s, _, _, _ in STEP_TABLE]
     #: Every other step checks its own OUTPUT each time and returns at once when
     #: it is already there (a wheel of this commit, a PASSED receipt for that
-    #: wheel, complete release-check records); these are skipped on their record
+    #: wheel); these are skipped on their record
     #: (finish-line and record: when the platforms they covered are still the
     #: published ones).
     SKIP_IF_RECORDED = {"rehearsal", "cross-compile", "finish-line", "record", *PUBLISH_STEPS}
@@ -1575,78 +1562,6 @@ class Release:
             raise StepFailed(f"macOS smoke receipt is not PASSED for this wheel: {out / 'results.json'}")
         return "PASSED"
 
-    def self_test_receipt(self):
-        return self.rel / "self-test-macos" / "results.json"
-
-    def self_test_passed(self, wheel):
-        sys.path.insert(0, str(ROOT / "tools"))
-        import wheel_self_test
-        return bool(wheel) and wheel_self_test.passed(self.self_test_receipt(), wheel)
-
-    def step_macos_self_test(self):
-        """The bundled reference table against the wheel's own bits, before
-        any publish: a fresh venv, the built wheel, `verify --self-test`."""
-        w = self.macos_wheel()
-        if w and self.self_test_passed(w):
-            return "PASSED (receipt exists)"
-        if not w and not self.dry:
-            raise StepFailed("no macOS wheel; run macos-build")
-        out = self.self_test_receipt().parent
-        if out.exists() and not self.dry:
-            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
-        self.must([PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
-                   PY, str(ROOT / "tools" / "wheel_self_test.py"), w or "<macos wheel>", "--out", out,
-                   "--python", self.smoke_python() if not self.dry else "python3.12", "--cpu-threads", "3"],
-                  log=self.rel / "macos-self-test.log", what="macOS verify --self-test")
-        if not self.dry and not self.self_test_passed(w):
-            raise StepFailed(f"verify --self-test did not pass on the built macOS wheel: {self.self_test_receipt()}; "
-                             "regenerate the reference table (tools/record_identity_column.sh, "
-                             "tools/admit_identity_columns.sh)")
-        return "PASSED"
-
-    def release_check_dir(self):
-        base = os.environ.get("MOJOLEARN_RELEASE_CHECK_DIR") or os.path.expanduser("~/mojolearn-evidence/release-check")
-        return Path(base) / self.commit[:12]
-
-    def check_backends(self):
-        """The release-check passes this release runs: the Apple (Metal) column
-        always, the CPU column only with --cpu-column (opt-in, 2026-09-25)."""
-        return ("metal", "cpu") if getattr(self.args, "cpu_column", False) else ("metal",)
-
-    def release_check_complete(self):
-        for backend in self.check_backends():
-            d = self.release_check_dir() / backend
-            try:
-                s = json.loads((d / "run-summary.json").read_text())
-            except (OSError, ValueError):
-                return False
-            if not (s.get("complete") and not s.get("validation_failures") and (d / "column.json").is_file()):
-                return False
-        return True
-
-    def record_apple_column(self):
-        col = self.release_check_dir() / "metal" / "column.json"
-        if col.is_file():
-            self.ledger_put(release_ledger.apple_key(self.commit), dict(
-                verdict="PASS", kind="column", vendor="metal", source_commit=self.commit,
-                tooling_commit=self.tooling_commit, evidence=dict(dir=str(col.parent), column_sha256=sha256(col))))
-
-    def step_release_check(self):
-        if self.release_check_complete():
-            self.record_apple_column()
-            return "complete at " + str(self.release_check_dir())
-        src = self.src
-        if not self.dry and self.head_of(src) != self.commit:
-            raise StepFailed(f"the source checkout {src} is not at the frozen commit; release-check verifies it")
-        cmd = ["pixi", "run", "-e", "test", "release-check"]
-        if "cpu" in self.check_backends():
-            cmd.append("--cpu-column")
-        self.must(cmd, log=self.rel / "release-check.log", what="release-check", cwd=src)
-        if not self.dry and not self.release_check_complete():
-            raise StepFailed("release-check exited 0 but its records are not complete")
-        self.record_apple_column()
-        return "complete"
-
     # ------------------------------------------------------------ Linux
     def step_linux_wait(self):
         legs = [l for l in linux_legs(self) if not self.admitted_leg(l.name)]
@@ -1871,31 +1786,9 @@ class Release:
         return ", ".join(f"{w.name} sha256 {sha256(w)}" for w in finals.values())
 
     # ------------------------------------------------------------ GPU columns
-    def gpu_selection(self, vendor):
-        """The release pass's lanes for this vendor, worked out by the selector
-        exactly as the pass would (verify_lanes --gpu-pass --write-selection),
-        in the source checkout (the lanes the SOURCE changed)."""
-        path = self.rel / f"selection-{vendor}.json"
-        self.must([PY, "tools/verify_lanes.py", "--gpu-pass", vendor, "--write-selection", path],
-                  log=self.rel / f"selection-{vendor}.log", what=f"{vendor} lane selection", cwd=self.src)
-        return path
-
-    def column_refs(self):
-        """The columns the NVIDIA and AMD columns are diffed against: the Apple
-        (Metal) column of this release, and the CPU column with --cpu-column."""
-        d = self.release_check_dir()
-        return [d / b / "column.json" for b in self.check_backends()]
-
-    def ref_names(self):
-        return " and ".join({"metal": "Apple", "cpu": "CPU"}[b] for b in self.check_backends())
-
-    def gpu_column_ok(self, out, vendor):
-        d = out / f"diff-ref-{vendor}.txt"
-        return (out / f"column-{vendor}.json").is_file() and d.is_file() and "DIVERGENT" not in d.read_text()
-
     def nvidia_column_ok(self):
         final, out = self.linux_final(), self.rel / "smoke-linux"
-        return (bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "cuda")
+        return (bool(final) and smoke_passed(out / "results.json", final)
                 and self.plugin_installed(out / "results.json", "nvidia")
                 and self.column_arch_ok(out, ("sm_89",)))
 
@@ -1907,7 +1800,6 @@ class Release:
     def hopper_column_ok(self):
         final, out = self.linux_final(), self.rel / "column-nvidia-hopper"
         return (bool(final) and smoke_passed(out / "results.json", final)
-                and self.gpu_column_ok(out, "cuda")
                 and self.plugin_installed(out / "results.json", "nvidia")
                 and self.column_arch_ok(out, ("sm_90", "sm_90a")))
 
@@ -1915,7 +1807,7 @@ class Release:
         out = self.rel / "column-amd"
         # the amd plugin publishes on its own receipt: the smoke runs on hip too
         final = self.linux_final()
-        return (bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "hip")
+        return (bool(final) and smoke_passed(out / "results.json", final)
                 and self.plugin_installed(out / "results.json", "amd")
                 and self.column_arch_ok(out, ("gfx942",)))
 
@@ -1937,58 +1829,6 @@ class Release:
                 ("nvidia-hopper", "cuda", self.hopper_column_ok, self.rel / "column-nvidia-hopper"),
                 ("amd", "hip", self.amd_column_ok, self.rel / "column-amd")]
 
-    def column_candidates(self, vendor, outname, wsha, sel_digest):
-        out, here = [], (self.rel / outname).resolve()
-        for d in sorted(self.base.glob(f"*/{outname}")):
-            if d.resolve() != here and (d / "column-provenance.json").is_file():
-                out.append((str(d), d))
-        e = self.ledger().get(release_ledger.column_key(vendor, wsha, sel_digest))
-        if e and e.get("verdict") == "PASS" and (e.get("evidence") or {}).get("dir"):
-            out.append(("ledger " + e.get("key", "?"), Path(e["evidence"]["dir"])))
-        return out
-
-    def rediff(self, col, vendor, out):
-        cmd = [PY, str(ROOT / "tools" / "identity_break.py"), "--diff", *[str(r) for r in self.column_refs()], str(col)]
-        got = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
-        (out / f"diff-ref-{vendor}.txt").write_text(got.stdout + got.stderr)
-
-    def reuse_column(self, name, vendor, out, sel_digest):
-        """Take a PASSED column of an earlier freeze (or another machine's, from
-        the ledger) only for a BYTE-IDENTICAL wheel (sha256) and the same lane
-        selection, its column file verified against its provenance; it is
-        diffed again against this release's reference columns here."""
-        final, keyed = self.linux_final(), self.column_wheel(vendor, name)
-        if not final or not keyed or not sel_digest:
-            return None
-        wsha = sha256(keyed)
-        for where, d in self.column_candidates(vendor, out.name, wsha, sel_digest):
-            prov = read_json(d / "column-provenance.json") or {}
-            col = d / f"column-{vendor}.json"
-            if (prov.get("vendor") != vendor or prov.get("wheel_sha256") != wsha
-                    or prov.get("selection_digest") != sel_digest or not col.is_file()
-                    or sha256(col) != prov.get("column_sha256")):
-                continue
-            if prov.get("core_sha256") != sha256(final):
-                continue
-            if not smoke_passed(d / "results.json", final):
-                continue
-            if out.exists():
-                out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
-            out.mkdir(parents=True)
-            for f in (col.name, "results.json"):
-                if (d / f).is_file():
-                    shutil.copy2(d / f, out / f)
-            self.rediff(out / col.name, vendor, out)
-            doc = dict(prov, reused_from=str(d), found_by=where, admitted_for=self.commit,
-                       admitted_with_tooling=self.tooling_commit,
-                       because="the wheel is byte-identical (sha256) and the lane selection is the same")
-            write_json(out / "column-provenance.json", doc)
-            write_json(out / "reused.json", doc)
-            self.say(f"  {name}: TAKEN from {d} ({where}): wheel {wsha[:12]} byte-identical, same lanes; "
-                     f"diffed again against {self.ref_names()}")
-            return doc
-        return None
-
     def column_legs(self, names=("nvidia", "nvidia-hopper", "amd")):
         """The two GPU wheel columns as detached legs, each only when its
         record for this wheel is not already there and no PASSED column of a
@@ -1999,23 +1839,23 @@ class Release:
         final_path = self.linux_final()
         final = str(final_path or "<final linux wheel>")
         work = self.rel / "columns"
-        refs = [a for r in self.column_refs() for a in ("--ref-column", str(r))]
+        # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
+        # A column is the installed-wheel smoke only (verify against the
+        # admitted table). The second identity pass of the changed lanes
+        # (--column <selection> --ref-column <Apple column>) is deleted: the
+        # table admit already decided NVIDIA == AMD for this source commit.
         legs = []
         for name, vendor, ok, out in self.column_specs():
             if name not in names or ok():
                 continue
-            sel = self.gpu_selection(vendor)
-            sel_digest = selection_digest(sel)
-            if not self.dry and self.reuse_column(name, vendor, out, sel_digest) and ok():
-                continue
             if self.smoke_via() == "lq" and name in LQ_COLUMN_BOX:
-                leg = ColumnLeg(name, vendor, self.lq_smoke_command(name, vendor, final, out, work, sel, refs),
+                leg = ColumnLeg(name, vendor, self.lq_smoke_command(name, vendor, final, out, work),
                                 work, out, ok)
             elif self.smoke_via() == "lq" and name == "nvidia-hopper":
                 # a Hopper box we hold, reached by ssh; nothing is rented
                 leg = ColumnLeg(name, "cuda",
                                 ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit", self.commit,
-                                 "--out", str(out), "--ssh", self.args.hopper_box, "--column", str(sel), *refs,
+                                 "--out", str(out), "--ssh", self.args.hopper_box,
                                  *self.plugin_args("nvidia")], work, out, ok)
             elif vendor == "cuda":
                 arch = "sm_90a" if name == "nvidia-hopper" else "sm_89"
@@ -2027,22 +1867,20 @@ class Release:
                     at = 0
                 leg = ColumnLeg(name, "cuda",
                                 ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit", self.commit,
-                                 "--out", str(out), "--rent", "--column", str(sel), *refs,
+                                 "--out", str(out), "--rent",
                                  *self.plugin_args("nvidia"), "--gpu", walk[at]], work, out, ok)
                 leg.walk, leg.at = walk, at
             else:
                 leg = ColumnLeg("amd", "hip",
                                 ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit",
                                  self.commit, "--out", str(out), "--rent", "--vendor", "hip",
-                                 "--provider", self.args.amd_provider,
-                                 "--column", str(sel), *refs, *self.plugin_args("amd")],
+                                 "--provider", self.args.amd_provider, *self.plugin_args("amd")],
                                 work, out, ok)
             keyed = self.column_wheel(vendor, name)
             leg.provenance = dict(schema="mojolearn.release-column-provenance.v1", column=name, vendor=vendor,
                                   wheel=str(keyed) if keyed else final,
                                   wheel_sha256=sha256(keyed) if keyed and not self.dry else None,
-                                  selection=str(sel), selection_digest=sel_digest, source_commit=self.commit,
-                                  tooling_commit=self.tooling_commit, refs=[str(r) for r in self.column_refs()])
+                                  source_commit=self.commit, tooling_commit=self.tooling_commit)
             leg.provenance["core_sha256"] = sha256(final_path) if final_path and not self.dry else None
             legs.append(leg)
         return legs
@@ -2057,7 +1895,7 @@ class Release:
         Hopper box (--hopper-box), or the old rented route."""
         return self.smoke_via() == "rent" or bool(getattr(self.args, "hopper_box", ""))
 
-    def lq_smoke_command(self, name, vendor, final, out, work, sel, refs):
+    def lq_smoke_command(self, name, vendor, final, out, work):
         """tools/release_lq_smoke.py for one column: the wheels, selection and
         reference columns copied to the box, `lq add --front <box> CMD` of the
         smoke with --local, the result polled, the out directory fetched."""
@@ -2066,7 +1904,7 @@ class Release:
                 "--remote-dir", f"/root/release-smoke/{self.version}/{name}", "--out", str(out),
                 "--state", str(work / f"{name}.lq.json"),
                 "--branch", getattr(self.args, "smoke_branch", None) or "main", "--",
-                final, "--expected-source-commit", self.commit, "--vendor", vendor, "--column", str(sel), *refs,
+                final, "--expected-source-commit", self.commit, "--vendor", vendor,
                 *self.plugin_args("nvidia" if vendor == "cuda" else "amd")]
 
     def plugin_args(self, package):
@@ -2079,25 +1917,10 @@ class Release:
             out += ["--plugin", str(plugin) if plugin else f"<final {SPLIT_PACKAGES[k][1]} wheel>"]
         return out
 
-    def record_column(self, name, vendor, out):
-        """A PASSED column: its provenance beside it, and the ledger entry."""
-        prov = read_json(self.rel / "columns" / f"{name}.provenance.json") or read_json(out / "column-provenance.json")
-        col = out / f"column-{vendor}.json"
-        if not prov or not col.is_file():
-            return
-        if not (out / "reused.json").is_file():
-            prov = dict(prov, column_sha256=sha256(col), verdict="PASS")
-            write_json(out / "column-provenance.json", prov)
-        if prov.get("wheel_sha256") and prov.get("selection_digest"):
-            self.ledger_put(release_ledger.column_key(vendor, prov["wheel_sha256"], prov["selection_digest"]), dict(
-                verdict="PASS", kind="column", vendor=vendor, source_commit=self.commit,
-                tooling_commit=prov.get("tooling_commit"), provenance=prov,
-                evidence=dict(dir=str(out), column_sha256=sha256(col))))
-
     def step_gpu_column_nvidia(self):
         """The NVIDIA column alone (core + both plugins, as pip installs them); it gates mojolearn-nvidia."""
         self.run_columns(("nvidia",))
-        return "NVIDIA column PASSED: no DIVERGENT cell against " + self.ref_names()
+        return "NVIDIA wheel smoke PASSED against the admitted reference table"
 
     def step_gpu_column_nvidia_hopper(self):
         if not self.hopper_required():
@@ -2110,33 +1933,7 @@ class Release:
     def step_gpu_column_amd(self):
         """The AMD column alone (core + both plugins, with the smoke); it gates mojolearn-amd."""
         self.run_columns(("amd",))
-        return "AMD column PASSED: no DIVERGENT cell against " + self.ref_names()
-
-    def passed_columns(self):
-        """[(name, vendor, column file)] of the columns PASSED for this release's wheels."""
-        return [(name, vendor, out / f"column-{vendor}.json") for name, vendor, ok, out in self.column_specs() if ok()]
-
-    def step_linux_joint_diff(self):
-        """After both columns settle, at least one PASSED, and
-        every PASSED column diffed with the Apple (and CPU) column together;
-        any DIVERGENT or MOVED cell stops the core and both plugins."""
-        passed = self.passed_columns()
-        if self.dry:
-            return self.joint_diff([self.rel / "smoke-linux" / "column-cuda.json",
-                                    self.rel / "column-nvidia-hopper" / "column-cuda.json",
-                                    self.rel / "column-amd" / "column-hip.json"])
-        if not passed:
-            raise StepFailed("neither the NVIDIA nor the AMD column PASSED for this release's wheels; "
-                             "the core publishes on at least one")
-        missing = [str(r) for r in self.column_refs() if not r.is_file()]
-        if missing:
-            raise StepFailed("no reference column " + ", ".join(missing) + "; run release-check")
-        # Name only the columns that PASSED: 0.8.22 printed "NVIDIA and AMD
-        # columns PASSED" with the AMD column never run (no MI300X anywhere).
-        label = " and ".join({"nvidia": "NVIDIA", "amd": "AMD"}.get(n, n) for n, _, _ in passed) \
-            + (" column" if len(passed) == 1 else " columns")
-        verdict = self.joint_diff([col for _, _, col in passed], passed=label)
-        return verdict + " (columns " + ", ".join(n for n, _, _ in passed) + ")"
+        return "AMD wheel smoke PASSED against the admitted reference table"
 
     def run_columns(self, names):
         """Launch (or take) the named columns at once, wait for every one, and
@@ -2144,9 +1941,6 @@ class Release:
         final = self.linux_final()
         if not final and not self.dry:
             raise StepFailed("no final Linux wheel; run linux-pack")
-        missing = [str(r) for r in self.column_refs() if not r.is_file()]
-        if missing and not self.dry:
-            raise StepFailed("no reference column " + ", ".join(missing) + "; run release-check")
         legs = self.column_legs(names)
         for name in names:
             if not any(l.name == name for l in legs):
@@ -2166,11 +1960,10 @@ class Release:
             if name not in names:
                 continue
             if ok():
-                self.say(f"  {label} column: PASSED, no DIVERGENT cell against {self.ref_names()}")
-                self.record_column(name, vendor, out)
+                self.say(f"  {label} column: wheel smoke PASSED against the admitted reference table")
                 continue
             leg = next((l for l in legs if l.name == name), None)
-            failed.append(f"{label} column missing, not PASSED or DIVERGENT: {out}"
+            failed.append(f"{label} column missing or not PASSED: {out}"
                           + (f" (exit {leg.exit_code()}, log {leg.log})" if leg else ""))
             self.say(f"  {failed[-1]}")
         if failed:
@@ -2204,24 +1997,6 @@ class Release:
             self.say("  waiting: " + ", ".join(f"{l.name}={'running' if l.running() else l.exit_code()}"
                                                 for l in legs))
             self.sleep(60)
-
-    def joint_diff(self, columns=None, passed="NVIDIA and AMD columns"):
-        """Every column of this release in ONE tools/identity_break.py --diff:
-        Apple, NVIDIA, AMD (and CPU with --cpu-column). Any DIVERGENT or MOVED
-        cell stops the release; the diff is kept at <release>/diff-columns.txt.
-        `columns` narrows the GPU columns (the PASSED ones)."""
-        cols = self.column_refs() + (columns if columns is not None else [
-            self.rel / "smoke-linux" / "column-cuda.json", self.rel / "column-amd" / "column-hip.json"])
-        cmd = [PY, str(ROOT / "tools" / "identity_break.py"), "--diff", *[str(c) for c in cols]]
-        path = self.rel / "diff-columns.txt"
-        self.say("  $ " + " ".join(shlex.quote(c) for c in cmd) + " > " + str(path))
-        self.commands_shown += 1
-        if self.dry:
-            return "pending: would run the command(s) above"
-        got = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
-        text = got.stdout + got.stderr
-        path.write_text(text)
-        return judge_joint_diff(text, path, say=self.say, passed=passed)
 
     # ------------------------------------------------------------ publication
     def on_pypi(self, wheel):
@@ -2304,59 +2079,15 @@ class Release:
         smoke = self.rel / "column-amd" / "results.json"
         return self.publish("amd", self.split_final("amd"), smoke), dict(smoke=str(smoke))
 
-    def previous_gpu_columns(self):
-        """The NVIDIA and AMD columns of the newest EARLIER release recorded on
-        this machine (<evidence>/release/<v>/<commit12>/), or []."""
-        base = self.evidence / "release"
-        key = lambda p: tuple(int(n) for n in re.findall(r"\d+", p.name))
-        versions = sorted((p for p in base.glob("*") if p.is_dir() and VERSION_RE.match(p.name)
-                           and key(p) < key(Path(self.version))), key=key, reverse=True) if base.is_dir() else []
-        for v in versions:
-            for c in sorted(v.glob("*/"), key=lambda d: d.stat().st_mtime, reverse=True):
-                cols = [c / "smoke-linux" / "column-cuda.json", c / "column-amd" / "column-hip.json"]
-                if all(x.is_file() for x in cols):
-                    return cols
-        return []
-
-    def mac_cross_check(self):
-        """THE MAC WHEEL AGAINST THE OTHER VENDORS BEFORE IT PUBLISHES
-        (2026-09-26: light). publish-macos waits on no GPU column, so
-        until now the Apple column was compared with nothing before the macOS
-        wheel went up. It is diffed here, in seconds and with nothing rented,
-        against the newest earlier release's recorded NVIDIA and AMD columns:
-        any DIVERGENT or MOVED cell holds the macOS publish unless
-        --accept-moved says the release changes those bits on purpose. A lane
-        new since then has nothing to compare with and is reported, not held;
-        no earlier columns on this machine is said, not held."""
-        prev = self.previous_gpu_columns()
-        apple = self.release_check_dir() / "metal" / "column.json"
-        if not prev:
-            return "no earlier release's NVIDIA and AMD columns on this machine; not compared"
-        cmd = [PY, str(ROOT / "tools" / "identity_break.py"), "--diff", str(apple), *map(str, prev)]
-        path = self.rel / "diff-macos-vs-previous.txt"
-        self.say("  $ " + " ".join(shlex.quote(c) for c in cmd) + " > " + str(path))
-        if self.dry:
-            return "would diff the Apple column against " + ", ".join(map(str, prev))
-        got = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(got.stdout + got.stderr)
-        try:
-            return judge_joint_diff(path.read_text(), path, say=self.say,
-                                    passed="the Apple column against " + prev[0].parents[2].name + "'s")
-        except StepFailed as exc:
-            if getattr(self.args, "accept_moved", False):
-                return f"cells differ from {prev[0].parents[2].name}, accepted (--accept-moved): {path}"
-            raise StepFailed(f"the macOS publish is held: {exc} (--accept-moved when the release changes these "
-                             "bits on purpose)")
-
     def step_publish_macos(self):
-        # The self-test gate holds even when publish-macos is run alone
-        # (--only publish-macos): no PASSED receipt for these bytes, no upload.
-        if not self.dry and not self.self_test_passed(self.macos_wheel()):
-            raise StepFailed("no PASSED verify --self-test receipt for this macOS wheel "
-                             f"({self.self_test_receipt()}); run macos-self-test")
-        checked = self.mac_cross_check()
-        self.say("  " + checked)
+        # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
+        # The bundled-table gate is macos-smoke's own self-test job (same wheel,
+        # same `verify --self-test`); its PASSED receipt for these bytes is
+        # required even when publish-macos is run alone. The Apple-vs-previous
+        # release cross-diff is deleted: identity is decided by the table admit.
+        smoke = self.rel / "smoke-macos" / "results.json"
+        if not self.dry and not smoke_passed(smoke, self.macos_wheel()):
+            raise StepFailed(f"no PASSED macOS smoke receipt for this wheel ({smoke}); run macos-smoke")
         return self.publish("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")
 
     def finish_macos(self, venv):
@@ -2427,7 +2158,8 @@ class Release:
                                   tooling_commit=prov.get("tooling_commit"), tooling_digest=prov.get("tooling_digest"),
                                   overlay=prov.get("overlay"),
                                   set_identity_digest=(prov.get("set_identity") or {}).get("digest"))
-        cols = {name: read_json(out / "column-provenance.json") for name, _, _, out in self.column_specs()}
+        cols = {name: read_json(self.rel / "columns" / f"{name}.provenance.json")
+                for name, _, _, out in self.column_specs()}
         return dict(schema="mojolearn.release-provenance.v1", version=self.version, source_commit=self.commit,
                     tooling_commit=self.tooling_commit, earlier_commits=self.state.get("earlier_commits", []),
                     published=self.published_platforms(), legs=legs, columns=cols)
@@ -2489,26 +2221,6 @@ class Release:
         return rows + [("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")]
 
     def readme(self):
-        check = self.release_check_dir()
-        rows, sums = [], []
-        cols = [(check / b / "column.json", {"metal": "Apple Metal", "cpu": "CPU"}[b], b + "/column.json")
-                for b in self.check_backends()]
-        cols += [(self.rel / "smoke-linux" / "column-cuda.json", "NVIDIA (installed wheel)", "column-cuda.json"),
-                 (self.rel / "column-amd" / "column-hip.json", "AMD (installed wheel)", "column-hip.json")]
-        for col, label, name in cols:
-            try:
-                cells = json.loads(col.read_text()).get("cells", {})
-            except (OSError, ValueError):
-                cells = {}
-            lanes = {k.split("/")[0] for k in cells}
-            rows.append(f"| {label} | {len(lanes)} | {len(cells)} | {'yes' if cells else 'no'} |")
-            if col.is_file():
-                sums.append(f"- {name} sha256 {sha256(col)}")
-        try:
-            diff = (self.rel / "diff-columns.txt").read_text()
-        except OSError:
-            diff = ""
-        summary = [ln for ln in diff.splitlines() if ln.startswith("summary")]
         wheels = []
         published = self.published_platforms()
         for platform, wheel, smoke in self.platform_wheels():
@@ -2529,10 +2241,12 @@ class Release:
             f"# mojolearn {self.version}", "",
             f"Source commit {self.commit}; release tooling at {self.tooling_commit}. Published {date}. "
             "See CHANGELOG.md.", "",
-            "## Release verification (the changed lanes, one fit per cell)", "",
-            "| column | lanes | cells | complete |", "|---|---|---|---|", *rows, "",
-            "Every column together (`tools/identity_break.py --diff`, diff-columns.txt):", "",
-            *[f"    {s}" for s in summary], "", *sums, "",
+            "## Identity", "",
+            # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
+            "One identity check per release: the admitted reference table "
+            "(python/mojolearn/verify_reference/table.json, NVIDIA == AMD, "
+            "tools/admit_identity_columns.sh). Every wheel smoke below verifies the "
+            "installed wheel against it.", "",
             "## Wheels (light route)", "",
             "| platform | sha256 | smoke | published |", "|---|---|---|---|", *wheels, "",
             f"Finish line: {(self.recorded('finish-line') or {}).get('result', 'not run')}.", "",
@@ -2754,20 +2468,11 @@ class Release:
         leg = ColumnLeg(name, vendor, [], work, out, ok)
         final = self.linux_final()
         if ok():
-            return "done", f"PASSED for wheel {sha256(final)[:12]}, no DIVERGENT cell against {self.ref_names()}" \
-                + (" (taken: " + (read_json(out / "reused.json") or {}).get("reused_from", "") + ")"
-                   if (out / "reused.json").is_file() else ""), "skip"
+            return "done", f"wheel smoke PASSED for wheel {sha256(final)[:12]}", "skip"
         if leg.running():
             return "running", f"pid {leg.pid()}, log {leg.log}", "wait for it"
         if leg.exit_code() is not None:
             return "failed", f"exit {leg.exit_code()}, log {leg.log}", "relaunch it (the failed attempt is moved aside)"
-        sel = selection_digest(self.rel / f"selection-{vendor}.json")
-        keyed = self.column_wheel(vendor, name)
-        if final and keyed and sel:
-            e = self.ledger().get(release_ledger.column_key(vendor, sha256(keyed), sel))
-            if e and e.get("verdict") == "PASS":
-                return "owed", f"ledger PASS for this wheel at {(e.get('evidence') or {}).get('dir')}", \
-                    "take it if its evidence verifies here, else launch it"
         return "owed", "" if final else "no final Linux wheel yet", "launch it" if final else "launch it after linux-pack"
 
     def status(self):
@@ -2842,32 +2547,6 @@ class Release:
         return 0
 
 
-def judge_joint_diff(text, path, say=print, passed="NVIDIA and AMD columns"):
-    """The verdict of the all-columns diff: a StepFailed on any DIVERGENT or
-    MOVED cell (any part), else a one-line summary. Cells only one column
-    hashed (a lane one vendor alone selects or can run) are counted in the
-    result, never read as agreement."""
-    bad, one = [], 0
-    for line in text.splitlines():
-        if line.startswith("summary"):
-            say("  " + line)
-            for key, n in re.findall(r"([A-Z_-]+)=(\d+)", line):
-                if int(n) and ("DIVERGENT" in key or "MOVED" in key):
-                    bad.append(f"{line.split(':')[0]} {key}={n}")
-                if key == "ONE-COLUMN" and line.startswith("summary:"):
-                    one += int(n)
-    if "DIVERGENT" in text and not any("DIVERGENT" in b for b in bad):
-        bad.append("DIVERGENT")
-    if bad:
-        rows = [l for l in text.splitlines() if "DIVERGENT" in l or "MOVED" in l][:20]
-        raise StepFailed("the columns of this release disagree (" + ", ".join(bad) + f"), {path}:\n  "
-                         + "\n  ".join(rows))
-    if "summary:" not in text:
-        raise StepFailed(f"the all-columns diff printed no summary; see {path}")
-    return (f"{passed} PASSED; no DIVERGENT cell across the columns ({path})"
-            + (f"; {one} cell(s) hashed by one column only" if one else ""))
-
-
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
@@ -2887,11 +2566,11 @@ def main(argv=None):
                     help="an existing checkout at the frozen source commit (default: this checkout when its HEAD "
                          "is the source commit, else a worktree under the release directory)")
     ap.add_argument("--build-backend", default="github", choices=sorted(BUILD_BACKENDS))
-    ap.add_argument("--accept-moved", action="store_true",
-                    help="publish the macOS wheel although its Apple column differs from the previous release's "
-                         "NVIDIA and AMD columns (the release changes those bits on purpose)")
-    ap.add_argument("--cpu-column", action="store_true",
-                    help="also run release-check's CPU pass (opt-in) and diff the GPU columns against it too")
+    # Inert since 2026-10-10 (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun): the
+    # Apple cross-diff and release-check they steered are deleted; kept so
+    # existing invocations still parse.
+    ap.add_argument("--accept-moved", action="store_true", help="inert since 2026-10-10")
+    ap.add_argument("--cpu-column", action="store_true", help="inert since 2026-10-10")
     ap.add_argument("--amd-expect-from", default="",
                     help="an NVIDIA release-build dir: run the AMD core-host probe against its STAGED copy")
     ap.add_argument("--smoke-via", default="lq", choices=["lq", "rent"],
