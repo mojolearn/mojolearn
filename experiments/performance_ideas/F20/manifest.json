@@ -58,9 +58,6 @@
     "default": [
       "MOJOLEARN_AFN_OPT_MULTITENSOR"
     ],
-    "status": [
-      "MOJOLEARN_AFN_OPT_FUSE_SCAN"
-    ],
     "normalization": [
       "MOJOLEARN_LN_FAST_BLOCK_FOLD"
     ]

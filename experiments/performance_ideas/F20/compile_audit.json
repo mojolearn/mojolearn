@@ -40,21 +40,6 @@
       "compiler_status": "pending_current_source_instantiation",
       "device_quality": "pending",
       "performance": "pending"
-    },
-    {
-      "name": "status",
-      "binding": "training",
-      "baseline_defines": [],
-      "candidate_defines": [
-        "MOJOLEARN_AFN_OPT_FUSE_SCAN"
-      ],
-      "caller": "caller.py",
-      "prerequisites": [
-        "core"
-      ],
-      "compiler_status": "pending_current_source_instantiation",
-      "device_quality": "pending",
-      "performance": "pending"
     }
   ],
   "native_checks": [],

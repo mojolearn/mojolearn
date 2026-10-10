@@ -23,17 +23,10 @@ claim), no approximation anywhere.
 Candidates (one define each, default OFF, `MOJOLEARN_AFN_OPTIM_ALL` turns
 on every one):
 
-  MOJOLEARN_AFN_OPT_FUSE_SCAN      the four non-finite refusal scans of
-      `opt_refuse_device_inputs` (4 launches, 1 host readback, 1 wait,
-      then the update and a second wait) become ONE scan launch over all
-      four buffers, one fold launch that writes a device gate, and an
-      update launch that reads the gate and does nothing when the step is
-      refused. One wait per step, after which the host reads 32 bytes of
-      cells and raises the oracle's message when the gate is set. The
-      state is never partially updated.
+  (MOJOLEARN_AFN_OPT_FUSE_SCAN, the fused refusal scan, was deleted
+      2026-10-09: DROPPED-noise; see the TOMBSTONE at the guards below.)
   MOJOLEARN_AFN_OPT_CLIP_FUSE      the global-norm clip: the squared norm
-      is folded in free order (block partials inside the scan launch when
-      FUSE_SCAN is on, else one partials launch), one fold launch turns it
+      is folded in free order (one partials launch), one fold launch turns it
       into `total_norm` and the clamped `coef` on the device, and the
       update kernel multiplies the gradient by `coef` as it loads it and
       writes the clipped gradient back. No per-tensor GEMVs, no sqrt
@@ -123,15 +116,9 @@ comptime AFN_APPLE_FAST = (
 #: +-2%, the output digest changes, no quality metric. DROPPED: each stays off
 #: (opt-in only).
 comptime AFN_OPTIM_ALL = is_defined["MOJOLEARN_AFN_OPTIM_ALL"]()
-# F20 M3 2026-10-06 two-head fixed task (41x17,classes7/11,12steps,seed197),
-# one warmup+score: scan-fusion trajectory B/A1.0514, final losses equal and
-# deliberate NaN refusal preserves parameters. Remains OFF (regression).
-# Evidence ab-20261006/repairs-f20-3e19f734e/F20/status.
-# T06 AFN26 alias: not tested in this campaign; historical evidence stands.
-comptime AFN_OPT_FUSE_SCAN = AFN_APPLE_FAST and (
-    AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_FUSE_SCAN"]()
-    or is_defined["MOJOLEARN_AFN26_OPT_FUSE_SCAN"]()
-)
+# TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality
+# metric) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2. Also retires its aliases
+# MOJOLEARN_AFN26_OPT_FUSE_SCAN and the AFN_OPTIM_ALL share. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
 # T06 AFN26 alias: not tested in this campaign; select clipping independently.
 comptime AFN_OPT_CLIP_FUSE = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_CLIP_FUSE"]()
@@ -163,8 +150,7 @@ comptime AFN_LOSS_FUSED = AFN_APPLE_FAST and (
 )
 #: Any optimizer candidate: `identical_optimizer_step` dispatches here.
 comptime AFN_OPT_ANY = (
-    AFN_OPT_FUSE_SCAN
-    or AFN_OPT_CLIP_FUSE
+    AFN_OPT_CLIP_FUSE
     or AFN_OPT_MULTITENSOR
     or AFN_OPT_VEC4
     or AFN_OPT_RESIDENT_STATE
@@ -384,27 +370,18 @@ def afn_scratch_host_i32(
 # ===========================================================================
 
 
-def afn_scan4_kernel[SCAN: Bool, FOUR: Bool, CLIP: Bool](
-    part: MutPointer[Int32, MutAnyOrigin],
+def afn_clip_sums_kernel(
     sums: MutPointer[Float32, MutAnyOrigin],
-    param: MutPointer[Float32, MutAnyOrigin],
     grad: MutPointer[Float32, MutAnyOrigin],
-    m_state: MutPointer[Float32, MutAnyOrigin],
-    v_state: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
-    """ONE grid-striding pass over the step's inputs. Under `SCAN`, each
-    block writes the smallest non-finite index it saw in `param`, `grad`,
-    `m_state` and (`FOUR`) `v_state` to `part[k * blocks + block]` (or
-    `NONFINITE_NONE`): main's four `nonfinite_partial_kernel` launches as
-    one. Under `CLIP`, each block also writes its partial sum of squared
-    gradients to `sums[block]` (free fold order, f32)."""
+    """ONE grid-striding pass over the gradient: each block writes its
+    partial sum of squared gradients to `sums[block]` (free fold order,
+    f32)."""
+    # TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+    # lane/owed-deletions-D2: the SCAN/FOUR refusal-scan arms of this kernel (was afn_scan4_kernel); code
+    # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
     var n = Int(n_in)
-    var red = stack_allocation[
-        AFN_TPB,
-        Scalar[DType.int32],
-        address_space = AddressSpace.SHARED,
-    ]()
     var redf = stack_allocation[
         AFN_TPB,
         Scalar[DType.float32],
@@ -414,75 +391,37 @@ def afn_scan4_kernel[SCAN: Bool, FOUR: Bool, CLIP: Bool](
     var blocks = Int(grid_dim.x)
     var stride = blocks * AFN_TPB
     var i = Int(block_idx.x) * AFN_TPB + tid
-    var best = SIMD[DType.int32, 4](NONFINITE_NONE)
     var acc = Float32(0.0)
     while i < n:
         var gv = grad.unsafe_load(i)
-        comptime if SCAN:
-            if best[0] == NONFINITE_NONE and _nonfinite_bits(
-                param.unsafe_load(i)
-            ):
-                best[0] = Int32(i)
-            if best[1] == NONFINITE_NONE and _nonfinite_bits(gv):
-                best[1] = Int32(i)
-            if best[2] == NONFINITE_NONE and _nonfinite_bits(
-                m_state.unsafe_load(i)
-            ):
-                best[2] = Int32(i)
-            comptime if FOUR:
-                if best[3] == NONFINITE_NONE and _nonfinite_bits(
-                    v_state.unsafe_load(i)
-                ):
-                    best[3] = Int32(i)
-        comptime if CLIP:
-            acc = fma(gv, gv, acc)
+        acc = fma(gv, gv, acc)
         i += stride
-    comptime if SCAN:
-        comptime for k in range(4):
-            comptime if k < 3 or FOUR:
-                red.unsafe_store(tid, best[k])
-                barrier()
-                var active = AFN_TPB // 2
-                while active > 0:
-                    if tid < active:
-                        var o = red.unsafe_load(tid + active)
-                        if o < red.unsafe_load(tid):
-                            red.unsafe_store(tid, o)
-                    barrier()
-                    active = active // 2
-                if tid == 0:
-                    part.unsafe_store(
-                        k * blocks + Int(block_idx.x), red.unsafe_load(0)
-                    )
-                barrier()
-    comptime if CLIP:
-        redf.unsafe_store(tid, acc)
+    redf.unsafe_store(tid, acc)
+    barrier()
+    var activef = AFN_TPB // 2
+    while activef > 0:
+        if tid < activef:
+            redf.unsafe_store(
+                tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + activef)
+            )
         barrier()
-        var activef = AFN_TPB // 2
-        while activef > 0:
-            if tid < activef:
-                redf.unsafe_store(
-                    tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + activef)
-                )
-            barrier()
-            activef = activef // 2
-        if tid == 0:
-            sums.unsafe_store(Int(block_idx.x), redf.unsafe_load(0))
+        activef = activef // 2
+    if tid == 0:
+        sums.unsafe_store(Int(block_idx.x), redf.unsafe_load(0))
 
 
-def afn_fold_kernel[SCAN: Bool, FOUR: Bool, CLIP: Bool](
+def afn_clip_fold_kernel(
     cells: MutPointer[Int32, MutAnyOrigin],
     fcells: MutPointer[Float32, MutAnyOrigin],
     out2: MutPointer[Float32, MutAnyOrigin],
-    part: MutPointer[Int32, MutAnyOrigin],
     sums: MutPointer[Float32, MutAnyOrigin],
     blocks_in: Int32,
     max_norm: Float32,
     eps_clip: Float32,
 ):
-    """ONE block. Under `SCAN`, the minimum over the scan partials per
-    buffer into `cells[0..3]` and the gate `cells[4]` (nonzero when any
-    buffer holds a non-finite value). Under `CLIP`, the sum of the partials
+    """ONE block (was afn_fold_kernel; its SCAN arm went with
+    MOJOLEARN_AFN_OPT_FUSE_SCAN, see the TOMBSTONE at afn_clip_sums_kernel).
+    `cells[0..3]` are written as NONFINITE_NONE. The sum of the partials
     (free order), `total_norm = sqrt(sum)`, `coef = min(1, max_norm /
     (total_norm + eps))` into `fcells[0..1]` and `out2[0..1]` (the cells
     main's callers read `total_norm` and `coef` from), and `cells[5]` plus
@@ -490,11 +429,6 @@ def afn_fold_kernel[SCAN: Bool, FOUR: Bool, CLIP: Bool](
     the host; here the update is withheld on the device and the host
     raises after its one wait)."""
     var blocks = Int(blocks_in)
-    var red = stack_allocation[
-        AFN_TPB,
-        Scalar[DType.int32],
-        address_space = AddressSpace.SHARED,
-    ]()
     var redf = stack_allocation[
         AFN_TPB,
         Scalar[DType.float32],
@@ -504,60 +438,34 @@ def afn_fold_kernel[SCAN: Bool, FOUR: Bool, CLIP: Bool](
     var gate = Int32(0)
     var bad = Int32(0)
     var hits = SIMD[DType.int32, 4](NONFINITE_NONE)
-    comptime if SCAN:
-        comptime for k in range(4):
-            comptime if k < 3 or FOUR:
-                var best = NONFINITE_NONE
-                var b = tid
-                while b < blocks:
-                    var o = part.unsafe_load(k * blocks + b)
-                    if o < best:
-                        best = o
-                    b += AFN_TPB
-                red.unsafe_store(tid, best)
-                barrier()
-                var active = AFN_TPB // 2
-                while active > 0:
-                    if tid < active:
-                        var o2 = red.unsafe_load(tid + active)
-                        if o2 < red.unsafe_load(tid):
-                            red.unsafe_store(tid, o2)
-                    barrier()
-                    active = active // 2
-                var hit = red.unsafe_load(0)
-                hits[k] = hit
-                if hit != NONFINITE_NONE:
-                    gate = Int32(1)
-                barrier()
-    comptime if CLIP:
-        var acc = Float32(0.0)
-        var bb = tid
-        while bb < blocks:
-            acc = acc + sums.unsafe_load(bb)
-            bb += AFN_TPB
-        redf.unsafe_store(tid, acc)
+    var acc = Float32(0.0)
+    var bb = tid
+    while bb < blocks:
+        acc = acc + sums.unsafe_load(bb)
+        bb += AFN_TPB
+    redf.unsafe_store(tid, acc)
+    barrier()
+    var activef = AFN_TPB // 2
+    while activef > 0:
+        if tid < activef:
+            redf.unsafe_store(
+                tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + activef)
+            )
         barrier()
-        var activef = AFN_TPB // 2
-        while activef > 0:
-            if tid < activef:
-                redf.unsafe_store(
-                    tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + activef)
-                )
-            barrier()
-            activef = activef // 2
-        var tn = sqrt(redf.unsafe_load(0))
-        var denom = tn + eps_clip
-        var coef = max_norm / denom
-        if not (coef < Float32(1.0)):
-            coef = Float32(1.0)
-        if _nonfinite_bits(tn):
-            bad = Int32(1)
-            gate = Int32(1)
-        if tid == 0:
-            fcells.unsafe_store(0, tn)
-            fcells.unsafe_store(1, coef)
-            out2.unsafe_store(0, tn)
-            out2.unsafe_store(1, coef)
+        activef = activef // 2
+    var tn = sqrt(redf.unsafe_load(0))
+    var denom = tn + eps_clip
+    var coef = max_norm / denom
+    if not (coef < Float32(1.0)):
+        coef = Float32(1.0)
+    if _nonfinite_bits(tn):
+        bad = Int32(1)
+        gate = Int32(1)
+    if tid == 0:
+        fcells.unsafe_store(0, tn)
+        fcells.unsafe_store(1, coef)
+        out2.unsafe_store(0, tn)
+        out2.unsafe_store(1, coef)
     if tid == 0:
         cells.unsafe_store(0, hits[0])
         cells.unsafe_store(1, hits[1])
@@ -807,10 +715,10 @@ def afn_optimizer_step(
     sc: StepScalars,
 ) raises:
     """One step under the `AFN_OPT_*` candidates that are on. The caller
-    (`identical_optimizer_step`) has already run main's refusal scan when
-    `AFN_OPT_FUSE_SCAN` is off and main's clip when `AFN_OPT_CLIP_FUSE` is
+    (`identical_optimizer_step`) has already run main's refusal scan and
+    main's clip when `AFN_OPT_CLIP_FUSE` is
     off, and has checked `offsets`. Synchronizes ONCE before it returns;
-    with the fused scan or the fused clip on, the host reads the gate cells
+    with the fused clip on, the host reads the gate cells
     after that wait and raises the oracle's message when the step was
     refused (the kernels withheld every write)."""
     var j_count = len(offsets) - 1
@@ -825,25 +733,20 @@ def afn_optimizer_step(
     var keep_i = List[DeviceBuffer[DType.int32]]()
     var keep_f = List[DeviceBuffer[DType.float32]]()
     var keep_h = List[HostBuffer[DType.int32]]()
-    var part_n = 4 * blocks if AFN_OPT_FUSE_SCAN else 1
     var sums_n = blocks if clipf else 1
     var table_n = 2 * j_count + 1 if (AFN_OPT_MULTITENSOR and is_sgd) else 1
-    var part: MutPointer[Int32, MutAnyOrigin]
     var sums: MutPointer[Float32, MutAnyOrigin]
     var cells: MutPointer[Int32, MutAnyOrigin]
     var fcells: MutPointer[Float32, MutAnyOrigin]
     var table: MutPointer[Int32, MutAnyOrigin]
     var host: MutPointer[Int32, MutAnyOrigin]
     comptime if AFN_OPT_RESIDENT_STATE:
-        part = afn_scratch_i32(ctx, AFN_SI_PART, part_n)
         cells = afn_scratch_i32(ctx, AFN_SI_CELLS, AFN_CELLS)
         table = afn_scratch_i32(ctx, AFN_SI_TABLE, table_n)
         sums = afn_scratch_f32(ctx, AFN_SF_SUMS, sums_n)
         fcells = afn_scratch_f32(ctx, AFN_SF_FCELLS, AFN_FCELLS)
         host = afn_scratch_host_i32(ctx, AFN_SH_CELLS, AFN_CELLS)
     else:
-        step_count_device_alloc()
-        keep_i.append(ctx.enqueue_create_buffer[DType.int32](part_n))
         step_count_device_alloc()
         keep_i.append(ctx.enqueue_create_buffer[DType.int32](AFN_CELLS))
         step_count_device_alloc()
@@ -854,55 +757,20 @@ def afn_optimizer_step(
         keep_f.append(ctx.enqueue_create_buffer[DType.float32](AFN_FCELLS))
         step_count_host_alloc()
         keep_h.append(ctx.enqueue_create_host_buffer[DType.int32](AFN_CELLS))
-        part = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        cells = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        table = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        cells = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        table = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         sums = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         fcells = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
-    # ---- the one scan / partial-sum pass and the fold into the cells.
-    var fused = AFN_OPT_FUSE_SCAN or clipf
+    # ---- the fused clip: the partial sums and the coefficient.
+    # TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+    # lane/owed-deletions-D2: the fused refusal-scan arms; code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
+    var fused = clipf
     if fused:
-        comptime if AFN_OPT_FUSE_SCAN:
-            if clipf:
-                if is_sgd:
-                    _afn_launch_scan[True, False, True](
-                        ctx, part, sums, param, grad, m_state, v_state, n, blocks
-                    )
-                    _afn_launch_fold[True, False, True](
-                        ctx, cells, fcells, out2, part, sums, blocks, cfg.max_norm
-                    )
-                else:
-                    _afn_launch_scan[True, True, True](
-                        ctx, part, sums, param, grad, m_state, v_state, n, blocks
-                    )
-                    _afn_launch_fold[True, True, True](
-                        ctx, cells, fcells, out2, part, sums, blocks, cfg.max_norm
-                    )
-            else:
-                if is_sgd:
-                    _afn_launch_scan[True, False, False](
-                        ctx, part, sums, param, grad, m_state, v_state, n, blocks
-                    )
-                    _afn_launch_fold[True, False, False](
-                        ctx, cells, fcells, out2, part, sums, blocks, cfg.max_norm
-                    )
-                else:
-                    _afn_launch_scan[True, True, False](
-                        ctx, part, sums, param, grad, m_state, v_state, n, blocks
-                    )
-                    _afn_launch_fold[True, True, False](
-                        ctx, cells, fcells, out2, part, sums, blocks, cfg.max_norm
-                    )
-        else:
-            # the fused clip alone: the partial sums and the coefficient
-            _afn_launch_scan[False, False, True](
-                ctx, part, sums, param, grad, m_state, v_state, n, blocks
-            )
-            _afn_launch_fold[False, False, True](
-                ctx, cells, fcells, out2, part, sums, blocks, cfg.max_norm
-            )
+        _afn_launch_clip_sums(ctx, sums, grad, n, blocks)
+        _afn_launch_clip_fold(ctx, cells, fcells, out2, sums, blocks, cfg.max_norm)
 
     # ---- the update.
     var p_ptr = param.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -924,7 +792,7 @@ def afn_optimizer_step(
                     dst_buf=s[].i32[AFN_SI_TABLE], src_ptr=tab.unsafe_ptr()
                 )
             else:
-                ctx.enqueue_copy(dst_buf=keep_i[2], src_ptr=tab.unsafe_ptr())
+                ctx.enqueue_copy(dst_buf=keep_i[1], src_ptr=tab.unsafe_ptr())
             _afn_launch_sgd_multi(
                 ctx, p_ptr, g_ptr, m_ptr, cells, fcells, table, j_count, n,
                 nest, cfg, sc, fused, clipf,
@@ -955,7 +823,7 @@ def afn_optimizer_step(
             ctx.enqueue_copy(dst_ptr=host, src_buf=s2[].i32[AFN_SI_CELLS])
         else:
             step_count_d2h()
-            ctx.enqueue_copy(dst_ptr=host, src_buf=keep_i[1])
+            ctx.enqueue_copy(dst_ptr=host, src_buf=keep_i[0])
     step_count_sync()
     ctx.synchronize()
     _ = tab^
@@ -974,49 +842,39 @@ def afn_optimizer_step(
     _ = out2
 
 
-def _afn_launch_scan[SCAN: Bool, FOUR: Bool, CLIP: Bool](
+def _afn_launch_clip_sums(
     ctx: DeviceContext,
-    part: MutPointer[Int32, MutAnyOrigin],
     sums: MutPointer[Float32, MutAnyOrigin],
-    mut param: DeviceBuffer[DType.float32],
     mut grad: DeviceBuffer[DType.float32],
-    mut m_state: DeviceBuffer[DType.float32],
-    mut v_state: DeviceBuffer[DType.float32],
     n: Int,
     blocks: Int,
 ) raises:
-    comptime kern = afn_scan4_kernel[SCAN, FOUR, CLIP]
+    comptime kern = afn_clip_sums_kernel
     step_count_launch()
     ctx.enqueue_function[kern](
-        part,
         sums,
-        param.unsafe_ptr(),
         grad.unsafe_ptr(),
-        m_state.unsafe_ptr(),
-        v_state.unsafe_ptr(),
         Int32(n),
         grid_dim=(blocks, 1, 1),
         block_dim=(AFN_TPB, 1, 1),
     )
 
 
-def _afn_launch_fold[SCAN: Bool, FOUR: Bool, CLIP: Bool](
+def _afn_launch_clip_fold(
     ctx: DeviceContext,
     cells: MutPointer[Int32, MutAnyOrigin],
     fcells: MutPointer[Float32, MutAnyOrigin],
     mut out2: DeviceBuffer[DType.float32],
-    part: MutPointer[Int32, MutAnyOrigin],
     sums: MutPointer[Float32, MutAnyOrigin],
     blocks: Int,
     max_norm: Float32,
 ) raises:
-    comptime kern = afn_fold_kernel[SCAN, FOUR, CLIP]
+    comptime kern = afn_clip_fold_kernel
     step_count_launch()
     ctx.enqueue_function[kern](
         cells,
         fcells,
         out2.unsafe_ptr(),
-        part,
         sums,
         Int32(blocks),
         max_norm,

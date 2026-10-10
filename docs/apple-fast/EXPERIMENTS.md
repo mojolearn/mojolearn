@@ -1813,3 +1813,11 @@ fg2.* board-bridge A/B on main 0a7b206f1 (NVIDIA nv2 L40S v1021-v1050, AMD MI325
 | `MOJOLEARN_IDN_RIDGE_RESIDENT_OFF` (absent = resident eig fallback, IDENTICAL default) | more:ridge / istella, taxi | main @ 0a7b206f1 | fg2 (nv2 v1021-v1050, amd a1161-a1190) | _OFF arm ratios: ridge istella NV 2.22x / AMD 1.28x slower; taxi NV 0.87x / AMD 0.99x | CONFIRMED | default stays on; hashes unchanged in every arm. |
 | `MOJOLEARN_IDN_PCA_RR_ONE_BLOCK` (+ knob `_STEPS`) | classical:pca, more:tsvd / istella, taxi | lane/fg-pca @ 385b276e8, on main @ 0a7b206f1 | fg2 (nv2 v1030) | REFUSED on NVIDIA (no time) | DROPPED | BROKEN at runtime on NVIDIA: pca and tsvd on taxi and istella REFUSED with "decomposition/impl/linalg/detail/pca.mojo:734:55 failed calling ...". x_decomp/rr_one_block.mojo and the pca.mojo launch deleted; define refused; recoverable at main 0a7b206f1. |
 | `MOJOLEARN_IDN_AF_VEC_FUSED` | neural:adafactor / synthetic | lane/neural-io-2 @ bf06ffdb3, on main @ 0a7b206f1 | nv2 v1010/v1012, amd a1141/a1143 | NV 13.671 -> 13.738 (1.00x), AMD 8.620 -> 8.186 (0.95x); avg 0.98x | DROPPED | noise; digest aa99a3dc unchanged. sequence/af_fused.mojo, OP_AF_VFUSE/OP_AF_VFIN, the dispatch/exec entries and the pyapi route deleted; define refused; recoverable at main 0a7b206f1. |
+
+## Owed deletions: DROPPED defines deleted from main (lane/owed-deletions-D2, 2026-10-09)
+
+Defines whose DROP verdict was recorded above while their code stayed on main (docs/TOMBSTONES.md "Owed deletions"). Code only, no new measurement: each row repeats the deciding A/B. Deleted code is recoverable at main b639a2bd2; each define has a reverse patch in experiments/removed/ and a refusal in core/six_lane_experiment_guards.mojo.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_AFN_OPT_FUSE_SCAN` (+ alias `AFN26_OPT_FUSE_SCAN`; the SCAN/FOUR arms of the scan and fold kernels, define refused) | sgd, adam, adamw / synthetic | lane/owed-deletions-D2 from main @ b639a2bd2 | rab19 (row 1415) | within +-2% | DELETED (noise) | digest moves, no quality metric; CLIP_FUSE keeps the clip-only kernels; main's refusal scan always runs before afn_optimizer_step |
