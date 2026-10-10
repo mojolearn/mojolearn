@@ -12,13 +12,11 @@ from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins, _radix_pass
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 from gbdt.methods.kernel.sym_fast import (
-    SYM_PART_STATS_PAR,
     SYM_SORT_SWAP,
 )
 from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
 from gbdt.methods.kernel.pointwise_scores import (
     update_partition_props,
-    update_partition_props_chunked,
 )
 from gbdt.gpu_util.partitions_reduce import (
     compute_partition_stats,
@@ -522,34 +520,21 @@ def update_subsets_stats(
         GATHER_NO_MASK,
     )
 
-    comptime if SYM_PART_STATS_PAR:
-        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_PART_STATS_PAR` (FAST +
-        # Apple only): a fill, then a (partitions x chunks) grid that adds
-        # per-chunk block sums into `partition_stats` with global float
-        # atomics, instead of one 1024-thread block per partition.
-        enqueue_fill(ctx, subsets.partition_stats, Float32(0.0))
-        update_partition_props_chunked(
-            ctx,
-            subsets.gathered_target,
-            subsets.gathered_weight,
-            subsets.partitions,
-            subsets.partition_stats,
-            part_count,
-            subsets.sm_count,
-        )
-    else:
-        update_partition_props(
-            ctx,
-            subsets.gathered_target,
-            subsets.gathered_weight,
-            subsets.count_dummy,
-            True,
-            True,
-            False,
-            subsets.partitions,
-            subsets.partition_stats,
-            part_count,
-        )
+    # TOMBSTONE: MOJOLEARN_SYM_PART_STATS_PAR (DROPPED-noise: symhist-part-stats istella/taxi noise, old base) deleted 2026-10-09
+    # on lane/owed-deletions-D1 (per-partition sums on a partitions x chunks grid with atomics); code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_PART_STATS_PAR.patch; record in docs/TOMBSTONES.md.
+    update_partition_props(
+        ctx,
+        subsets.gathered_target,
+        subsets.gathered_weight,
+        subsets.count_dummy,
+        True,
+        True,
+        False,
+        subsets.partitions,
+        subsets.partition_stats,
+        part_count,
+    )
 
 
 def create_subsets(

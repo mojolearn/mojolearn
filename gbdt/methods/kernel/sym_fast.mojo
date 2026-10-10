@@ -57,20 +57,9 @@ comptime SYM_RESOLVE_BLOCK = SYM_FAST_APPLE and (
 #: lane/owed-deletions-D1 (sizes + both gathers in one launch); code recoverable at b639a2bd2.
 #: Restore: git apply experiments/removed/MOJOLEARN_SYM_GATHER_FUSED.patch; record in docs/TOMBSTONES.md.
 
-#: the per-partition weight / target sums run on a (partitions x chunks)
-#: grid with a shared-memory reduce per block and a global float atomic
-#: add per block, after a fill, instead of one 1024-thread block per
-#: partition (`pointwise_scores.mojo::partition_update_chunked_kernel`).
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
-#: arms never reached the queue). KNOWN: the per-block float atomic add
-#: makes the partition sums' fold order run-dependent (FAST only; check auc
-#: and run-to-run on the A/B).
-#: apple-fast LEDGER 2026-10-03 batchv: DROP symhist part-stats (noise), old base;
-#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
-comptime SYM_PART_STATS_PAR = SYM_FAST_APPLE and (
-    is_defined["MOJOLEARN_SYM_PART_STATS_PAR"]()
-)
+#: TOMBSTONE: MOJOLEARN_SYM_PART_STATS_PAR (DROPPED-noise: symhist-part-stats istella/taxi noise, old base) deleted 2026-10-09
+#: on lane/owed-deletions-D1 (per-partition sums on a partitions x chunks grid with atomics); code recoverable at b639a2bd2.
+#: Restore: git apply experiments/removed/MOJOLEARN_SYM_PART_STATS_PAR.patch; record in docs/TOMBSTONES.md.
 
 #: on a partial pass the fold scan and the sibling subtraction are one
 #: launch: the thread that scans a feature's folds for the computed child
@@ -99,11 +88,3 @@ comptime SYM_HIST_MULT = SYM_FAST_APPLE and (
 )
 comptime SYM_HIST_MULT_FACTOR = 2
 
-#: the block the chunked partition stats kernel runs at
-comptime SYM_PART_STATS_BLOCK = 256
-
-#: the most chunks one partition is cut into (SYM_PART_STATS_PAR)
-comptime SYM_PART_STATS_MAX_CHUNKS = 64
-
-#: blocks per SM the chunked partition stats grid aims for
-comptime SYM_PART_STATS_BLOCKS_PER_SM = 8

@@ -264,11 +264,6 @@ from checks.numerics import (
 from std.memory import stack_allocation
 from std.atomic import Atomic, Ordering
 
-from gbdt.methods.kernel.sym_fast import (
-    SYM_PART_STATS_BLOCK,
-    SYM_PART_STATS_BLOCKS_PER_SM,
-    SYM_PART_STATS_MAX_CHUNKS,
-)
 
 from gbdt.gpu_util.kernel.random_gen import (
     advance_seed_k,
@@ -1943,98 +1938,9 @@ def gather_histogram_by_leaves(
         )
 
 
-def partition_update_chunked_kernel[
-    block_size: Int
-](
-    target: MutPointer[Float32, MutAnyOrigin],
-    weights: MutPointer[Float32, MutAnyOrigin],
-    parts: MutPointer[UInt32, MutAnyOrigin],
-    part_stats: MutPointer[Float32, MutAnyOrigin],
-):
-    """lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_PART_STATS_PAR` (FAST +
-    Apple only): `partition_update_kernel` on a (partition, chunk) grid.
-    Block (p, c) sums chunk `c` of partition `p`'s rows (`_compute_sum` +
-    `_block_reduce_sum`, the one-block kernel's two reductions) and adds its
-    two partials into `part_stats` with a global float atomic; chunk 0 also
-    writes the Count, which with no counts column is the partition SIZE.
-    The launcher fills `part_stats` with zeros first. Float atomics across
-    chunks: the sums' bits depend on block finish order (FAST only; the
-    m > 1 histogram writeback already does this on FAST)."""
-    var part = Int(block_idx.x)
-    var chunk = Int(block_idx.y)
-    var chunks = Int(grid_dim.y)
-    var tid = Int(thread_idx.x)
-    var offset = Int(parts.unsafe_load(2 * part))
-    var size = Int(parts.unsafe_load(2 * part + 1))
-    var per = (size + chunks - 1) // chunks
-    var start = chunk * per
-    var n = size - start
-    if n > per:
-        n = per
-    if n < 0:
-        n = 0
-
-    var buf = stack_allocation[
-        block_size,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-
-    buf[unsafe_offset=tid] = _compute_sum[block_size](
-        weights.unsafe_offset(offset + start), n
-    )
-    barrier()
-    var w = _block_reduce_sum[block_size](buf, tid)
-
-    buf[unsafe_offset=tid] = _compute_sum[block_size](
-        target.unsafe_offset(offset + start), n
-    )
-    barrier()
-    var t = _block_reduce_sum[block_size](buf, tid)
-
-    if tid == 0:
-        if n > 0:
-            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
-                part_stats.unsafe_offset(3 * part + 0), w
-            )
-            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
-                part_stats.unsafe_offset(3 * part + 1), t
-            )
-        if chunk == 0:
-            part_stats.unsafe_store(3 * part + 2, Float32(size))
-
-
-def update_partition_props_chunked(
-    ctx: DeviceContext,
-    mut target: DeviceBuffer[DType.float32],
-    mut weights: DeviceBuffer[DType.float32],
-    mut parts: DeviceBuffer[DType.uint32],
-    mut part_stats: DeviceBuffer[DType.float32],
-    parts_count: Int,
-    sm_count: Int,
-) raises:
-    """`partition_update_chunked_kernel`'s launch (SYM_PART_STATS_PAR): the
-    grid aims at `SYM_PART_STATS_BLOCKS_PER_SM * sm_count` blocks, at most
-    `SYM_PART_STATS_MAX_CHUNKS` chunks per partition. The caller fills
-    `part_stats` with zeros before this; every call site is inside the
-    FAST + Apple guard."""
-    if parts_count == 0:
-        return
-    var chunks = (sm_count * SYM_PART_STATS_BLOCKS_PER_SM) // parts_count
-    if chunks < 1:
-        chunks = 1
-    if chunks > SYM_PART_STATS_MAX_CHUNKS:
-        chunks = SYM_PART_STATS_MAX_CHUNKS
-    ctx.enqueue_function[
-        partition_update_chunked_kernel[SYM_PART_STATS_BLOCK]
-    ](
-        target.unsafe_ptr(),
-        weights.unsafe_ptr(),
-        parts.unsafe_ptr(),
-        part_stats.unsafe_ptr(),
-        grid_dim=(parts_count, chunks, 1),
-        block_dim=(SYM_PART_STATS_BLOCK, 1, 1),
-    )
+# TOMBSTONE: MOJOLEARN_SYM_PART_STATS_PAR (DROPPED-noise: symhist-part-stats istella/taxi noise, old base) deleted 2026-10-09
+# on lane/owed-deletions-D1 (per-partition sums on a partitions x chunks grid with atomics); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_PART_STATS_PAR.patch; record in docs/TOMBSTONES.md.
 
 
 def update_partition_props(
