@@ -55,6 +55,15 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
 - A loser (slower, noise, quality or semantics change) never reaches main: delete its code from the lane before merging. It stays recoverable at the lane's recorded sha.
 - Every experiment, kept or dropped, gets one row in `docs/apple-fast/EXPERIMENTS.md` (define, algorithm/dataset, branch@sha, A/B tag, before -> after ms, verdict, reason). Search it before writing a new experiment.
 
+### Deleting an experiment
+
+Andrew, 2026-10-10: a deleted experiment is documented both inline and centrally. The deletion commit (or its lane) leaves all four:
+
+1. **Inline tombstone** at every deletion site: `# TOMBSTONE: MOJOLEARN_<DEFINE> (<verdict>) deleted <date> by <sha>; code recoverable at <sha>^.` plus a `# Restore:` line naming the patch.
+2. **`docs/TOMBSTONES.md` entry**: an index row and a section with what it tried, the files, the verdict with NV/AMD ratios per dataset and the quality change, run ids, the recoverable sha and the patch path.
+3. **`experiments/removed/<DEFINE>.patch`**: the reverse of the deletion restricted to code files (`git diff <sha> <sha>^ -- <files>`), so `git apply` restores the code. Code that never reached main gets no patch; record the lane branch@sha instead.
+4. **Refusal and records**: a `removed` refusal in `core/six_lane_experiment_guards.mojo`, the entry moved to `removed` in its `grid_controls/*.json`, and the `docs/apple-fast/EXPERIMENTS.md` row.
+
 - Measurements run ONE run per arm (Andrew, Oct 3). tools/aft_ab.sh, afc_ab.sh and afc_ab_def.sh force it; AB_MULTI_RUN=1 is the only override. Queue A/B lines with reps 1, rounds 1, pairs 1.
 
 ## Briefs
