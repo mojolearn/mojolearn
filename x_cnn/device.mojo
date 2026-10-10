@@ -64,7 +64,6 @@ from x_cnn.ops import (
     conv_out_val, pool_relu_row_val, bn_mean_row, BN_MEAN, BN_VAR, BN_INVSTD, BN_SUMG, BN_SUMGX,
     relu_fwd_at, relu_bwd_at, relu_val, conv_relu_out_at, relu_rows_bwd_at, add_at, bias_rows_at, linear_bias_val, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
-    bn_apply_relu_at, bn_apply_add_val, bn_blk_red_relu_val, bn_bwd_dx_relu_val, bn_bwd_eval_dx_relu_val,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
     bn_blk_red_at, bn_blk_red_fin_at, DROPOUT2D_CH_MASK, dropout2d_chan_at, dropout2d_apply_at,
@@ -100,15 +99,9 @@ comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and NI14_COL2IM == NI14_COL2IM_BO
 comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
 comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and IDN_CNN_CONV_RELU_ARM == 2  # arm 2 of MOJOLEARN_IDN_CNN_CONV_RELU (x_cnn/ops.mojo)
 comptime NI18_FUSED_EPOCH_GATHER = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"]()
-# lane gap-gemm-layers (2026-10-08): the ResNet BasicBlock's BatchNorm
-# epilogues fused (x_cnn/ops.mojo "THE BATCHNORM EPILOGUES FUSED"): bn1's
-# apply + relu1 in one launch (the BN output never stored), bn2's apply + the
-# identity add + relu2 in one launch (the sum stored for relu2's backward,
-# the output written), relu1's backward folded into bn1's backward reads
-# (the masked gradient never stored). Same words; `x_cnn_idn_flags` bit 6
-# tells the glue (`_expansion_cnn.BasicBlock`) to take the fused entries.
-# Default off; speed A/B on nv and amd (resnet-block).
-comptime IDN_CNN_BN_FUSE = _NI_CNN_ENABLED and is_defined["MOJOLEARN_IDN_CNN_BN_FUSE"]()
+# TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: IDN_CNN_BN_FUSE, the BasicBlock's BatchNorm epilogues fused (x_cnn_idn_flags bit 6); resnet-block NV 0.94x / AMD 1.02x, conv2d NV 1.14x / AMD 1.03x: noise / slower.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 #: lane/cnn-apple2: the FAST tier on Apple measures its GEMM plans (the
 #: simdgroup matrix plans among them). `-D MOJOLEARN_XCNN_NO_FAST_TUNE` is
 #: the before arm (round 1's FAST: the 4090 split plans and the dispatcher).
@@ -2241,160 +2234,9 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, prm: List[Int32], training: B
     batchnorm_backward_m([_a(x), _a(g), _a(aux), _a(dx_out)], 0, prm, training)
 
 
-# ---------------------------------------------------------------------------
-# lane gap-gemm-layers (2026-10-08): THE FUSED BATCHNORM ENTRIES
-# (IDN_CNN_BN_FUSE; x_cnn/ops.mojo "THE BATCHNORM EPILOGUES FUSED"). The
-# statistics launches are `batchnorm_forward_m`'s / `batchnorm_backward_m`'s
-# character for character; only the apply / dx launch changes its epilogue.
-# ---------------------------------------------------------------------------
-
-
-def bn_apply_add_relu_kernel(x: FP, aux: FP, addend: FP, s_out: FP, y_out: FP, p: IP, total: Int32):
-    """s = bn(x) + addend (`add_at`'s word, stored: relu's backward reads it);
-    y = relu(s) (`relu_fwd_at`'s word)."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(total):
-        var s = bn_apply_add_val(i, x, aux, addend, p)
-        s_out.unsafe_store(i, s)
-        y_out.unsafe_store(i, relu_val(ftz(s)))
-
-
-def bn_bwd_red_relu_kernel(x: FP, g: FP, mask: FP, aux: FP, part: FP, p: IP, total: Int32):
-    """`bn_blk_red_at` on relu_bwd(mask, g), one thread per (channel, block)."""
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < Int(total):
-        bn_blk_red_relu_val(t, x, g, mask, aux, part, p)
-
-
-def bn_bwd_dx_relu_kernel(x: FP, g: FP, mask: FP, aux: FP, dst: FP, p: IP, total: Int32, training: Int32):
-    """`bn_bwd_dx_at` / `bn_bwd_eval_dx_at` on relu_bwd(mask, g)."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(total):
-        if training != 0:
-            dst.unsafe_store(i, bn_bwd_dx_relu_val(i, x, g, mask, aux, p))
-        else:
-            dst.unsafe_store(i, bn_bwd_eval_dx_relu_val(i, g, mask, aux, p))
-
-
-def batchnorm_forward_fused_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool, fuse: Int) raises:
-    """a = [x, y, running (2C, in place), aux (2 + 7C, in place), addend,
-    relu_out] (the binding's order; `dev` bit i says a[i] is a device
-    address). fuse 1: y = relu(bn(x)) (addend, relu_out unused). fuse 2:
-    y = bn(x) + addend (stored), relu_out = relu(y)."""
-    var C = Int(prm[1])
-    var total = Int(prm[0]) * C * Int(prm[2])
-    var nr = 2 * C
-    var na = 2 + 7 * C
-    var ctx = cnn_ctx()
-    var dx = m_in(ctx, 0, a[0], total, isdev(dev, 0))
-    var dr = m_in(ctx, 1, a[2], nr, isdev(dev, 2))
-    var da = m_in(ctx, 2, a[3], na, isdev(dev, 3))
-    var dp = put_prm(ctx, 3, prm)
-    var dout = m_out(ctx, 4, a[1], total, isdev(dev, 1))
-    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
-    var dpart = ws(ctx, 5, nblk)
-    # the statistics: batchnorm_forward_m's launches
-    if training:
-        comptime if BN_FOLD_BLOCK:
-            launch[bn_blk_sum_at](ctx, fp(dx), fp(dpart), fp(dpart), fp(dpart), ip(dp), ip(dp), nblk)
-            launch[bn_blk_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
-            launch[bn_blk_sq_at](ctx, fp(dx), fp(dpart), fp(da), fp(da), ip(dp), ip(dp), nblk)
-            launch[bn_blk_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
-        else:
-            var blk = False
-            comptime if BN_BLOCK:
-                blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
-            if blk:
-                ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
-            else:
-                launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
-    else:
-        launch[bn_eval_stats_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
-    # the apply with its epilogue
-    if fuse == 2:
-        var dadd = m_in(ctx, 6, a[4], total, isdev(dev, 4))
-        var drelu = m_out(ctx, 7, a[5], total, isdev(dev, 5))
-        if total > 0:
-            ctx.enqueue_function[bn_apply_add_relu_kernel](
-                fp(dx), fp(da), fp(dadd), fp(dout), fp(drelu), ip(dp), Int32(total),
-                grid_dim=((total + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
-            )
-        m_fetch(ctx, drelu, a[5], total, isdev(dev, 5))
-        _ = dadd^
-        _ = drelu^
-    else:
-        launch[bn_apply_relu_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
-    if training:
-        launch[bn_running_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
-    m_fetch(ctx, dout, a[1], total, isdev(dev, 1))
-    m_fetch(ctx, dr, a[2], nr, isdev(dev, 2))
-    m_fetch(ctx, da, a[3], na, isdev(dev, 3))
-    ctx.synchronize()
-    _ = dx^
-    _ = dr^
-    _ = dpart^
-    _ = da^
-    _ = dp^
-    _ = dout^
-    _ = ctx^
-
-
-def batchnorm_backward_relu_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool) raises:
-    """a = [x, g, dx, aux (in place), mask] (the binding's order; `dev` bit i
-    says a[i] is a device address): `batchnorm_backward_m` on
-    g' = relu_bwd(mask, g), g' never stored."""
-    var C = Int(prm[1])
-    var total = Int(prm[0]) * C * Int(prm[2])
-    var na = 2 + 7 * C
-    var ctx = cnn_ctx()
-    var dx = m_in(ctx, 0, a[0], total, isdev(dev, 0))
-    var dg = m_in(ctx, 1, a[1], total, isdev(dev, 1))
-    var da = m_in(ctx, 2, a[3], na, isdev(dev, 3))
-    var dp = put_prm(ctx, 3, prm)
-    var dout = m_out(ctx, 4, a[2], total, isdev(dev, 2))
-    var dmask = m_in(ctx, 6, a[4], total, isdev(dev, 4))
-    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
-    var dpart = ws(ctx, 5, 2 * nblk)
-    comptime if BN_FOLD_BLOCK:
-        if nblk > 0:
-            ctx.enqueue_function[bn_bwd_red_relu_kernel](
-                fp(dx), fp(dg), fp(dmask), fp(da), fp(dpart), ip(dp), Int32(nblk),
-                grid_dim=((nblk + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
-            )
-        launch[bn_blk_red_fin_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
-        if total > 0:
-            ctx.enqueue_function[bn_bwd_dx_relu_kernel](
-                fp(dx), fp(dg), fp(dmask), fp(da), fp(dout), ip(dp), Int32(total), Int32(1 if training else 0),
-                grid_dim=((total + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
-            )
-    else:
-        # the single-chain / threadgroup folds read a stored g: materialize
-        # relu's backward (the unfused launches) and run batchnorm_backward_m's body
-        var dge = ws(ctx, 7, total)
-        launch[relu_bwd_at](ctx, fp(dmask), fp(dg), fp(dge), fp(dge), ip(dp), ip(dp), total)
-        var blk = False
-        comptime if BN_BLOCK:
-            blk = _bn_use_block[False](ctx, dx, dge, da, dp, Int(prm[0]), C, Int(prm[2]))
-        if blk:
-            ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dge), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
-        else:
-            launch[bn_bwd_red_at](ctx, fp(dx), fp(dge), fp(da), fp(da), ip(dp), ip(dp), C)
-        if training:
-            launch[bn_bwd_dx_at](ctx, fp(dx), fp(dge), fp(da), fp(dout), ip(dp), ip(dp), total)
-        else:
-            launch[bn_bwd_eval_dx_at](ctx, fp(dx), fp(dge), fp(da), fp(dout), ip(dp), ip(dp), total)
-        _ = dge^
-    m_fetch(ctx, dout, a[2], total, isdev(dev, 2))
-    m_fetch(ctx, da, a[3], na, isdev(dev, 3))
-    ctx.synchronize()
-    _ = dx^
-    _ = dg^
-    _ = dmask^
-    _ = dpart^
-    _ = da^
-    _ = dp^
-    _ = dout^
-    _ = ctx^
+# TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: the fused BatchNorm entries batchnorm_forward_fused_m / batchnorm_backward_relu_m and their kernels.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 
 
 def dropout2d_m(a: List[Int], dev: Int, n: Int, prm: List[Int32], hyper: List[Float32]) raises:
@@ -2746,8 +2588,9 @@ def idn_flags() -> Int:
         f |= 16
     comptime if IDN_PIN_WEIGHTS:
         f |= 32
-    comptime if IDN_CNN_BN_FUSE:
-        f |= 64
+    # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+    # Tried: bit 6 (64) of x_cnn_idn_flags, the fused BatchNorm entries.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
     return f
 
 

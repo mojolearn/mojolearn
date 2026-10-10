@@ -34,8 +34,9 @@ from x_cnn.device import csr_build_device as csr_build_impl
 from x_cnn.device import gcn_loops_device
 # lane fam-neural (2026-10-04): the `_m` forms of the entries that had none
 from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad2d_m, chan_copy_m
-# lane gap-gemm-layers (2026-10-08): the fused BatchNorm entries (IDN_CNN_BN_FUSE)
-from x_cnn.device import batchnorm_forward_fused_m, batchnorm_backward_relu_m
+# TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: the fused BatchNorm entries' imports.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 # lane fam2-neural (2026-10-04): the device epoch (order, Adam scalars and losses on the device)
 from x_cnn.ops import idn2_flags, epoch_key, adam_hyper_base, AH_ROW, neural_tape_budget_bytes, neural_numerical_profile
 from x_cnn.device import (
@@ -987,41 +988,9 @@ def batchnorm_backward_m_binding(addrs: PythonObject, dev: PythonObject, params:
     return PythonObject(Int(prm[0]) * Int(prm[1]) * Int(prm[2]))
 
 
-# lane gap-gemm-layers (2026-10-08): the fused BatchNorm entries of the
-# ResNet BasicBlock (x_cnn/device.mojo IDN_CNN_BN_FUSE; the glue takes them
-# when `x_cnn_idn_flags` bit 6 is set). `dev` bit i says addrs[i] is a
-# device address, in the order given (no reorder).
-def batchnorm_forward_fused_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
-    """addrs = [x, y, running, aux, addend, relu_out]; params = [N, C, HW,
-    training, fuse]: fuse 1 y = relu(bn(x)) (addend, relu_out may be 0);
-    fuse 2 y = bn(x) + addend, relu_out = relu(y)."""
-    var prm = _bn_prm(params)
-    var training = Int(py=params[3]) != 0
-    var fuse = Int(py=params[4])
-    if fuse < 1 or fuse > 2:
-        raise Error("x_cnn batchnorm fused: fuse in {1, 2}")
-    if training and Int(prm[0]) * Int(prm[2]) < 2:
-        raise Error("x_cnn batchnorm: expected more than 1 value per channel when training")
-    var a = _addrs(addrs, 6)
-    if fuse == 2 and (a[4] == 0 or a[5] == 0):
-        raise Error("x_cnn batchnorm fused: fuse 2 needs the addend and relu_out addresses")
-    var d = Int(py=dev)
-    with GILReleased(Python()):
-        batchnorm_forward_fused_m(a, d, prm, training, fuse)
-    return PythonObject(Int(prm[0]) * Int(prm[1]) * Int(prm[2]))
-
-
-def batchnorm_backward_relu_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
-    """addrs = [x, g, dx, aux, mask]; params = [N, C, HW, training]: the
-    backward on relu_bwd(mask, g) (mask = the ReLU's input or output: the
-    sign test is the same)."""
-    var prm = _bn_prm(params)
-    var training = Int(py=params[3]) != 0
-    var a = _addrs(addrs, 5)
-    var d = Int(py=dev)
-    with GILReleased(Python()):
-        batchnorm_backward_relu_m(a, d, prm, training)
-    return PythonObject(Int(prm[0]) * Int(prm[1]) * Int(prm[2]))
+# TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: x_cnn_batchnorm_forward_fused_m / x_cnn_batchnorm_backward_relu_m bindings.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 
 
 def dropout2d_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject, drop_p: PythonObject) raises -> PythonObject:
@@ -1616,8 +1585,9 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[linear_backward_m_binding]("x_cnn_linear_backward_m")
         m.def_function[batchnorm_forward_m_binding]("x_cnn_batchnorm_forward_m")
         m.def_function[batchnorm_backward_m_binding]("x_cnn_batchnorm_backward_m")
-        m.def_function[batchnorm_forward_fused_m_binding]("x_cnn_batchnorm_forward_fused_m")
-        m.def_function[batchnorm_backward_relu_m_binding]("x_cnn_batchnorm_backward_relu_m")
+        # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+        # Tried: the two fused BatchNorm module functions.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
         m.def_function[dropout2d_m_binding]("x_cnn_dropout2d_m")
         m.def_function[csr_upload_binding]("x_cnn_csr_upload")
         m.def_function[csr_build_binding]("x_cnn_csr_build")

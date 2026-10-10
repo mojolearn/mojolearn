@@ -110,9 +110,9 @@ def _mixed(b):
 # such entry). The glue takes a new path only when its bit is set; otherwise
 # every layer runs exactly the calls it ran before.
 _F_ADAPT, _F_GRAPH, _F_PAD, _F_GROUP, _F_LAYER_IO = 1, 2, 4, 8, 16
-# lane gap-gemm-layers (2026-10-08): bit 6, the BasicBlock's BatchNorm
-# epilogues fused (x_cnn/device.mojo IDN_CNN_BN_FUSE; the same words)
-_F_BN_FUSE = 64
+# TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: _F_BN_FUSE = 64, the fused BatchNorm flag bit.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 _IDN_FLAGS = {}
 
 
@@ -1697,34 +1697,9 @@ class BatchNorm2d(_Layer):
             self.grad_weight_[:] = 0
             self.grad_bias_[:] = 0
 
-    # lane gap-gemm-layers (2026-10-08): the fused entries of the BasicBlock
-    # chain (`x_cnn_idn_flags` bit _F_BN_FUSE). Glue: the same arguments,
-    # one binding call each; the words are the unfused calls'.
-    def _forward_dev_fused(self, b, xh, yh, n, c, hw, fuse, addh=0, reluh=0, dev_relu=True):
-        """fuse 1: resident y = relu(bn(x)). fuse 2: resident y = bn(x) +
-        resident `addh`, and relu(y) into `reluh` (resident, or a host
-        array's address with `dev_relu` False)."""
-        aux, running, batch_stats = self._prep(n, c, hw)
-        dev = 0b000011 | (0b010000 if fuse == 2 else 0) | (0b100000 if fuse == 2 and dev_relu else 0)
-        b.x_cnn_batchnorm_forward_fused_m([xh, yh, running.ctypes.data, aux.ctypes.data, addh, reluh], dev,
-                                          [n, c, hw, 1 if batch_stats else 0, fuse])
-        self._finish(running)
-        self._aux, self._mode, self._x3shape = aux, batch_stats, (n, c, hw)
-        return aux
-
-    def _backward_dev_relu(self, b, xh, gh, maskh, dxh):
-        """The backward from resident relu_bwd(mask, g) (never stored) into
-        resident dx; sets the gradients."""
-        n, c, hw = self._x3shape
-        C = self.num_features
-        aux = self._aux.copy()
-        b.x_cnn_batchnorm_backward_relu_m([xh, gh, dxh, aux.ctypes.data, maskh], 0b10111,
-                                          [n, c, hw, 1 if self._mode else 0])
-        self.grad_bias_ = aux[2 + 3 * C:2 + 4 * C].copy()
-        self.grad_weight_ = aux[2 + 4 * C:2 + 5 * C].copy()
-        if not self.affine:
-            self.grad_weight_[:] = 0
-            self.grad_bias_[:] = 0
+    # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+    # Tried: BatchNorm2d._forward_dev_fused / _backward_dev_relu (the fused entries' glue).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 
     def forward(self, x):
         np = _np()
@@ -2185,16 +2160,9 @@ class BasicBlock(_Layer):
         bn._xdev, bn._x, bn._shape, bn._xdev_dev = xh, None, tuple(shape), dev
         return yh
 
-    def _bn_dev_fused(self, b, bn, xh, yh, shape, dev, fuse, addh=0, reluh=0, dev_relu=True):
-        """lane gap-gemm-layers: `_bn_dev` through the fused entry into the
-        resident `yh` (fuse 1: relu(bn(x)); fuse 2: bn(x) + addh, relu into reluh)."""
-        n, c = shape[:2]
-        hw = int(_np().prod(shape[2:]))  # glue: product of the spatial shape entries
-        if c != bn.num_features:
-            raise ValueError(f"mojolearn: input has {c} channels, the layer {bn.num_features}")
-        bn._forward_dev_fused(b, xh, yh, n, c, hw, fuse, addh, reluh, dev_relu)
-        bn._xdev, bn._x, bn._shape, bn._xdev_dev = xh, None, tuple(shape), dev
-        return yh
+    # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+    # Tried: BasicBlock._bn_dev_fused.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 
     def _forward_chain(self, b, x):
         np = _np()
@@ -2206,23 +2174,17 @@ class BasicBlock(_Layer):
         # lane idn-cnn-resident: a `DeviceTensor` x is read where it lives
         xt = _is_t(x)
         xh = x.h if xt else dev.upload("x", x)
-        # lane gap-gemm-layers: with the fused BatchNorm entries (flag bit
-        # _F_BN_FUSE) bn1's output and the ReLU'd sum are never stored:
-        # relu1's backward masks on r1 (r1 > 0 iff b1 > 0), bn2's apply, the
-        # identity add and relu2 are one launch.
-        fuse = _idn(b, _F_BN_FUSE)
+        # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+        # Tried: the fused bn1 -> relu1 and bn2 -> add -> relu2 chain (flag bit _F_BN_FUSE).
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
         c1, s1 = self._conv_dev(b, self.conv1, xh, x.shape, "c1", dev)
         n1 = int(np.prod(s1))  # glue: product of the output shape entries
         r1 = dev.get("r1", n1)
-        if fuse:
-            b1 = None
-            self._bn_dev_fused(b, self.bn1, c1, r1, s1, dev, 1)
-        else:
-            b1 = self._bn_dev(b, self.bn1, c1, s1, "b1", dev)
-            b.x_cnn_map2_m([b1, b1, r1], 0b111, [0, n1])
+        b1 = self._bn_dev(b, self.bn1, c1, s1, "b1", dev)
+        b.x_cnn_map2_m([b1, b1, r1], 0b111, [0, n1])
         c2, s2 = self._conv_dev(b, self.conv2, r1, s1, "c2", dev)
         n2 = int(np.prod(s2))  # glue: product of the output shape entries
-        b2 = None if fuse else self._bn_dev(b, self.bn2, c2, s2, "b2", dev)
+        b2 = self._bn_dev(b, self.bn2, c2, s2, "b2", dev)
         idh = xh
         if self.downsample:
             d1, sd = self._conv_dev(b, self.downsample[0], xh, x.shape, "d1", dev)
@@ -2230,19 +2192,15 @@ class BasicBlock(_Layer):
         elif x.size != n2:
             raise ValueError("mojolearn: the identity's shape is not the block's output shape")
         sh = dev.get("s", n2)
-        if fuse:
-            y = DeviceTensor._new(b, s2) if xt else np.empty(s2, np.float32)
-            self._bn_dev_fused(b, self.bn2, c2, sh, s2, dev, 2, idh, y.h if xt else y.ctypes.data, xt)
+        b.x_cnn_map2_m([b2, idh, sh], 0b111, [2, n2])
+        if xt:
+            y = DeviceTensor._new(b, s2)
+            b.x_cnn_map2_m([sh, sh, y.h], 0b111, [0, n2])
         else:
-            b.x_cnn_map2_m([b2, idh, sh], 0b111, [2, n2])
-            if xt:
-                y = DeviceTensor._new(b, s2)
-                b.x_cnn_map2_m([sh, sh, y.h], 0b111, [0, n2])
-            else:
-                y = np.empty(s2, np.float32)
-                b.x_cnn_map2_m([sh, sh, y.ctypes.data], 0b011, [0, n2])
+            y = np.empty(s2, np.float32)
+            b.x_cnn_map2_m([sh, sh, y.ctypes.data], 0b011, [0, n2])
         self._chain = dict(x=tuple(x.shape), xt=x if xt else None, s1=s1, s2=s2, xh=xh, c1=c1, b1=b1, r1=r1, c2=c2, s=sh,
-                           d1=self.downsample and d1, sd=self.downsample and sd, fuse=fuse)
+                           d1=self.downsample and d1, sd=self.downsample and sd)
         self.conv1._x = self.conv1._xp = x
         return y
 
@@ -2278,13 +2236,9 @@ class BasicBlock(_Layer):
         gr1 = self._conv_back_dev(b, self.conv2, k["r1"], k["s1"], gb2, k["s2"], "gr1", dev)
         n1 = int(np.prod(k["s1"]))  # glue: product of the saved shape entries
         gc1 = dev.get("gc1", n1)
-        if k.get("fuse"):
-            # lane gap-gemm-layers: relu1's backward inside bn1's (mask r1)
-            self.bn1._backward_dev_relu(b, k["c1"], gr1, k["r1"], gc1)
-        else:
-            gb1 = dev.get("gb1", n1)
-            b.x_cnn_map2_m([k["b1"], gr1, gb1], 0b111, [1, n1])           # relu1
-            self.bn1._backward_dev(b, k["c1"], gb1, gc1)
+        gb1 = dev.get("gb1", n1)
+        b.x_cnn_map2_m([k["b1"], gr1, gb1], 0b111, [1, n1])           # relu1
+        self.bn1._backward_dev(b, k["c1"], gb1, gc1)
         gx1 = self._conv_back_dev(b, self.conv1, k["xh"], k["x"], gc1, k["s1"], "gx1", dev)
         gi = gs
         if self.downsample:

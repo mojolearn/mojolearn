@@ -321,6 +321,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_LN_ROW_WARP"](), "promoted 2026-10-10 (post-merge A/B nv2 v1056 -> v1057, amd a1156 -> a1157, lane/postmerge-act-6): the 32-lane LayerNorm row fold is the IDENTICAL default (layernorm NV 0.77x / AMD 0.79x; digest 5fe9165c -> 2a8100a0 on both vendors, host twin with them); drop -D MOJOLEARN_IDN_LN_ROW_WARP, use -D MOJOLEARN_IDN_LN_ROW_WARP_OFF for the one-chain row"
     comptime assert not is_defined["MOJOLEARN_IDN_COLVAR_FUSED"](), "promoted 2026-10-10 (fg2 A/B nv2 v1021-v1050, amd a1161-a1190, lane/postmerge-act-6): the fused column variance (centering and squaring in registers) is the IDENTICAL default (tsvd taxi NV 0.76x / AMD 0.97x, istella 0.97x / 0.97x, pca 1.00-1.03x, same bits); drop -D MOJOLEARN_IDN_COLVAR_FUSED, use -D MOJOLEARN_IDN_COLVAR_FUSED_OFF for the shift + square passes"
     # Lane postmerge-act-6 (2026-10-10), removed: losers of the same A/B (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main 9f83ea479.
+    comptime assert not is_defined["MOJOLEARN_IDN_CNN_BN_FUSE"](), "removed 2026-10-10 (lane/postmerge-act-6): IDN_CNN_BN_FUSE (the ResNet BasicBlock BatchNorm epilogues fused, x_cnn_idn_flags bit 6) was NOISE/slower: resnet-block NV 0.94x / AMD 1.02x, conv2d NV 1.14x / AMD 1.03x (nv2 v1052 -> v1054, amd a1152 -> a1154); code at main 9f83ea479; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

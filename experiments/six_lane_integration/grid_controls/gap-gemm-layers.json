@@ -29,29 +29,6 @@
    "board": "neural:moe (synthetic)",
    "note": "Plan gaps-2026-10-08 section 8: each expert's gate|up and down products through identical_gemm_into (OP_NT on the slot-ordered pairs, one launch per expert), replacing moe_reg's one-chain tile; the combine reads s through slot_of in the same pick order. Bits: the contract's leaves + balanced tree over d and f instead of one chain (NV, AMD and the host twin sequence/moe.mojo together; build the host twin with the same define). One download of the E+1 pair offsets per forward (launch sizing). IDENTICAL only; FAST and Apple keep moe_reg / moe_mma. PROMOTED: moe NV 23.16 -> 14.22 ms (0.61x) / AMD 18.79 -> 15.15 ms (0.81x); digest 393fefe9 -> c7c1ee2c on BOTH vendors (bits change; host twin _mojolearn_x_sequence_host follows). The off arm restores moe_reg one-chain tile.",
    "reach": "neural:moe: sequence/pyapi.mojo moe_forward_run -> _moe_devgroup_rest (MOE_DEVGROUP, E <= 127) -> DeviceExec.launch[OP_MOE_HIDDEN|OP_MOE_OUT] a.i6 == 1"
-  },
-  "cnn_bn_fuse": {
-   "define": "MOJOLEARN_IDN_CNN_BN_FUSE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_CNN_BN_FUSE=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_cnn/device.mojo:103",
-    "x_cnn/ops.mojo:1224",
-    "bindings/_mojolearn_x_cnn.mojo:988",
-    "python/mojolearn/_expansion_cnn.py:1687"
-   ],
-   "binding": "_mojolearn_x_cnn",
-   "bits_change": false,
-   "status": "new",
-   "board": "neural:resnet-block (synthetic)",
-   "note": "The BasicBlock's BatchNorm epilogues fused: bn1 apply + relu1 (one launch, the BN output never stored), bn2 apply + identity add + relu2 (one launch), relu1 backward inside bn1's backward reads (the masked gradient never stored). Same words through the same element functions; x_cnn_idn_flags bit 6 routes the glue to x_cnn_batchnorm_forward_fused_m / x_cnn_batchnorm_backward_relu_m. The fused backward fold needs BN_FOLD_BLOCK (the IDENTICAL default); with it off the entry materializes relu's backward and runs the unfused folds.",
-   "reach": "neural:resnet-block: python/mojolearn/_expansion_cnn.py BasicBlock._forward_chain / _backward_chain (mixed binding only)"
   }
  },
  "modified_controls": {
@@ -79,12 +56,10 @@
    "binding": "_mojolearn_x_cnn",
    "route": "python/mojolearn/_expansion_cnn.py BasicBlock -> x_cnn_conv2d_forward_m/_backward_m (x_cnn/device.mojo _conv_relu_on_device: NI12 implicit_conv_kernel when on) + x_cnn_batchnorm_*_m (fused entries when cnn_bn_fuse on)",
    "controls": [
-    "cnn_bn_fuse",
     "ni12_implicit_conv"
    ],
    "interaction_groups": [
     [
-     "cnn_bn_fuse",
      "ni12_implicit_conv"
     ]
    ]
@@ -98,5 +73,11 @@
    "interaction_groups": []
   }
  },
- "removed": []
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_CNN_BN_FUSE",
+   "control": "cnn_bn_fuse",
+   "reason": "DELETED 2026-10-10 (lane postmerge-act-6): post-merge neural A/B, one run per arm (nv2 L40S v1052 -> v1054 on main 9f83ea479, amd MI325X a1152 -> a1154 on main 0a7b206f1): resnet-block NV 21.43 -> 20.24 ms (0.94x) / AMD 22.06 -> 22.51 ms (1.02x), conv2d NV 9.62 -> 10.99 ms (1.14x) / AMD 9.02 -> 9.26 ms (1.03x): noise / slower. Fused BatchNorm entries, their kernels, bindings and glue deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch)."
+  }
+ ]
 }
