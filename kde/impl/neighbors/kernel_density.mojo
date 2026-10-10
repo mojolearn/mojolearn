@@ -2726,7 +2726,6 @@ def kde_score_samples_fused_identical(
 # main's code unchanged: nothing below is reachable unless `_KDE2_FAST_APPLE`.
 #
 # The sibling defines compose on top of it (each also turns it on):
-#   MOJOLEARN_KDE_SAMPLE_FUSED    the resident score call drains once (kde/resident_fit.mojo)
 comptime _KDE2_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 )
@@ -2742,12 +2741,9 @@ comptime _KDE2_FAST_APPLE = (
 # TOMBSTONE: MOJOLEARN_KDE_KERNEL_VARIANTS (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: the kde2 tile kernel instantiated per metric (and gaussian x euclidean) at compile time; with DIMTILE no istella gain, taxi jitter-dominated (kde2-variants-*).
 # Restore: git apply experiments/removed/MOJOLEARN_KDE_KERNEL_VARIANTS.patch; record in docs/TOMBSTONES.md.
-# DROP-speed, M3 old-base kde2-sample-taxi-x: taxi +354%; not a
-# current-main result. With DIMTILE (kde2-sample-ontile-istella), no
-# gain over DIMTILE. See docs/apple-fast/EXPERIMENTS.md (KDE_SAMPLE_FUSED).
-comptime KDE2_SAMPLE_FUSED = _KDE2_FAST_APPLE and (
-    is_defined["MOJOLEARN_KDE_SAMPLE_FUSED"]()
-)
+# TOMBSTONE: MOJOLEARN_KDE_SAMPLE_FUSED (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the resident kde score enqueued with its download behind it and ONE drain per call (kde2_score_samples_fast_apple_to_host); taxi +354% (old base), no istella gain over DIMTILE.
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_SAMPLE_FUSED.patch; record in docs/TOMBSTONES.md.
 #: KDE2_DIMTILE_ANY_D: the explicit defines take the tile pass at every d.
 comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and is_defined["MOJOLEARN_KDE_DIMTILE"]()
 #: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03) for
@@ -3429,36 +3425,9 @@ def kde2_score_samples_fast_apple(
     _ = keep^
 
 
-def kde2_score_samples_fast_apple_to_host(
-    ctx: DeviceContext,
-    mut train: DeviceBuffer[DType.float32],
-    mut query: DeviceBuffer[DType.float32],
-    mut weights: DeviceBuffer[DType.float32],
-    has_weights: Bool,
-    sum_weights: Float32,
-    n_train: Int,
-    n_query: Int,
-    n_features: Int,
-    bandwidth: Float32,
-    kernel: Int,
-    metric: Int,
-    metric_arg: Float32,
-    mut scores: DeviceBuffer[DType.float32],
-    elem_tpb: Int,
-    scores_host: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    """SAMPLE_FUSED's resident score: the enqueue above, the download of
-    `scores` into the caller's rows enqueued behind it, ONE drain for the
-    whole call (main drains once inside the fused flow and once more for the
-    download), the scratch freed after it."""
-    var keep = List[DeviceBuffer[DType.float32]]()
-    _kde2_enqueue(
-        ctx, train, query, weights, has_weights, sum_weights, n_train, n_query,
-        n_features, bandwidth, kernel, metric, metric_arg, scores, elem_tpb, keep,
-    )
-    ctx.enqueue_copy(dst_ptr=scores_host, src_buf=scores)
-    ctx.synchronize()
-    _ = keep^
+# TOMBSTONE: MOJOLEARN_KDE_SAMPLE_FUSED (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: kde2_score_samples_fast_apple_to_host (one drain for score + download).
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_SAMPLE_FUSED.patch; record in docs/TOMBSTONES.md.
 
 
 # ===========================================================================

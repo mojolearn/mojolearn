@@ -260,6 +260,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KDE_KERNEL_VARIANTS"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE_KERNEL_VARIANTS (kde2 tile kernel instantiated per metric at compile time) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated (~10 ms), quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_KDE_LSE_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE_LSE_FUSED (kde2 chunk merge and score normalization in one launch) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated, quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_KDE_NORM_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE_NORM_FUSED (euclidean kde2 cells as |q|^2 + |t|^2 - 2 q.t) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated, quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_KDE_SAMPLE_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE_SAMPLE_FUSED (resident kde score with its download behind it, one drain per call) was DROPPED: kde taxi +354% (old base), with DIMTILE no istella gain; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

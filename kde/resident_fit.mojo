@@ -50,11 +50,8 @@ from core.device_fold import device_sum_f32_fixed
 from kde.impl.kde import score_samples
 from kde.impl.chunk_workspace import KDE_CHUNK_POOL_ON,KdeChunkWorkspace
 from kde.impl.neighbors.kernel_density import (
-    KDE2_SAMPLE_FUSED,
     KDE_ELEM_TPB,
-    KDE_FUSED_TILE_FLOATS,
     KDE_LSE_TPB,
-    kde2_score_samples_fast_apple_to_host,
     kde_chunk_lse_metric_applies,
     kde_score_samples_chunk_lse_reused,
     host_sum_weights,
@@ -283,22 +280,9 @@ def kde_score_samples_resident(
         + " metric=" + metric + " metric_arg=" + String(metric_arg)
         + " weighted=" + String(entry.has_weights)
     )
-    # lane/apple-fast-kde2, -D MOJOLEARN_KDE_SAMPLE_FUSED (FAST + Apple only):
-    # the score enqueued without its own drain, the download enqueued behind
-    # it straight into `scores`, one synchronize for the call. Every other
-    # build runs main's sequence below unchanged.
-    comptime if KDE2_SAMPLE_FUSED:
-        # `want_total` (KernelDensity.score) takes main's sequence: its device sum needs `dout`
-        if not trace.enabled and not want_total and n_features <= KDE_FUSED_TILE_FLOATS:
-            kde2_score_samples_fast_apple_to_host(
-                entry.ctx, entry.train, dquery, entry.weights, entry.has_weights,
-                entry.sum_w, entry.n_train, n_query, n_features, bandwidth, k, m,
-                metric_arg, dout, elem_tpb, scores,
-            )
-            _ = host^
-            _ = dquery^
-            _ = dout^
-            return Float32(0)
+    # TOMBSTONE: MOJOLEARN_KDE_SAMPLE_FUSED (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: the one-drain score + download branch here.
+    # Restore: git apply experiments/removed/MOJOLEARN_KDE_SAMPLE_FUSED.patch; record in docs/TOMBSTONES.md.
     var pooled=False
     comptime if KDE_CHUNK_POOL_ON:
         if entry.partial_pool and not trace.enabled and kde_chunk_lse_metric_applies(m):
