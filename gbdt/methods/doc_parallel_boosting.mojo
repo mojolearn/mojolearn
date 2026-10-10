@@ -83,12 +83,9 @@ from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
 from gbdt.methods.sym_iter_fast import (
     SYM_BUF_ARENA,
     SYM_ITER_ANY,
-    SYM_LEAF_FROM_STATS,
     SYM_REUSE_PARTITION,
     SymIterPool,
     sym_compute_bins_pooled,
-    sym_estimate_leaves_device,
-    sym_leaf_from_stats_ok,
     sym_objective_is_pointwise,
     sym_pool_get,
     sym_scale_from_mags,
@@ -3466,11 +3463,9 @@ def fit_with_test(
         var ns_trees = List[TNonSymmetricTree]()
         # lane/apple-fast-sym-iter, per-tree state (constant False / a
         # handle onto `row_index` under every build without the defines):
-        # `sym_leaf_device`: the leaves came from the searcher's statistics
-        # (SYM_LEAF_FROM_STATS) and are read back at the tail; `sym_rows`:
-        # the estimator's row order. (`sym_fuse` / `sym_fv_now`: the deleted
-        # MOJOLEARN_SYM_DERIV_FUSED, 2026-10-09.)
-        var sym_leaf_device = False
+        # `sym_rows`: the estimator's row order. (`sym_fuse` / `sym_fv_now`
+        # and `sym_leaf_device`: the deleted MOJOLEARN_SYM_DERIV_FUSED and
+        # MOJOLEARN_SYM_LEAF_FROM_STATS, 2026-10-09.)
         var sym_rows = row_index.copy()
 
         if non_symmetric:
@@ -4057,29 +4052,10 @@ def fit_with_test(
                     leaf_offsets = part.offsets.copy()
                     row_index = part.row_index.copy()
                 sym_rows = row_index.copy()
-            # SYM_LEAF_FROM_STATS: one Newton step from the searcher's own
-            # partition statistics, on the device, applied through its
-            # partition; the leaf values ride the tail drain back
-            comptime if SYM_LEAF_FROM_STATS:
-                if (
-                    sym_reuse and perm_count == 1
-                    and sym_leaf_from_stats_ok(
-                        objective, leaf_estimation_method,
-                        leaf_estimation_iterations, approx_dim,
-                    )
-                ):
-                    sym_estimate_leaves_device(
-                        ctx, objective, 1 << max_depth,
-                        pw_pool[0].subsets.partitions,
-                        pw_pool[0].subsets.partition_stats,
-                        pw_pool[0].subsets.indices,
-                        weights, has_weights, lcur,
-                        l2_leaf_reg, learning_rate,
-                        est_sm if est_sm > 0 else 1,
-                        sym_pool[0],
-                    )
-                    sym_leaf_device = True
-            if not need_estimation and not sym_leaf_device:
+            # TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (one
+            # Newton step from the searcher's statistics); code recoverable at b639a2bd2.
+            # Restore: git apply experiments/removed/MOJOLEARN_SYM_LEAF_FROM_STATS.patch.
+            if not need_estimation:
                 # the greedy arm estimates and applies INSIDE
                 # `run_tree_layout` when the method is Simple; this arm has
                 # to do it explicitly, through the same estimator.
@@ -4159,12 +4135,7 @@ def fit_with_test(
                 sym_defer_est = perm_count == 1 and not has_test
             for p in range(perm_count):
                 var pv = List[Float32]()
-                if sym_leaf_device and p == learn_p:
-                    # lane/apple-fast-sym-iter, SYM_LEAF_FROM_STATS: the
-                    # learn permutation's leaves are already on the device;
-                    # `leaf_values` is filled from the tail readback below
-                    pass
-                elif p == learn_p:
+                if p == learn_p:
                     var q_est = Optional[QuerywiseTargetBuffers]()
                     if is_querywise:
                         q_est = Optional(query_buffers.value().handles())
@@ -4236,22 +4207,9 @@ def fit_with_test(
                     leaf_values.clear()
                     for i in range(len(pv)):
                         leaf_values.append(pv[i])
-        # lane/apple-fast-sym-iter: THE TREE'S TAIL. Under SYM_LEAF_FROM_STATS
-        # one drain delivers the 2^depth leaf values for the model.
-        # TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the next
-        # tree's gradient pass enqueued here); code recoverable at b639a2bd2.
-        # Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch.
-        comptime if SYM_ITER_ANY:
-            if sym_leaf_device:
-                ctx.synchronize()
-                leaf_values.clear()
-                var sym_he = sym_pool[0].h_est.unsafe_ptr()
-                for i in range(1 << max_depth):
-                    leaf_values.append(sym_he.unsafe_load(i))
-                trace.record_list_f32(
-                    _tree_tag(iteration) + ".leaves.estimated",
-                    leaf_values,
-                )
+        # TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED and MOJOLEARN_SYM_LEAF_FROM_STATS (both DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
+        # tree's fused tail: the next gradient pass and the stats-leaf readback); code recoverable at b639a2bd2.
+        # Restore: git apply experiments/removed/MOJOLEARN_SYM_DERIV_FUSED.patch / MOJOLEARN_SYM_LEAF_FROM_STATS.patch.
         loop_times.stop_host("iter_symmetric_estimate", t_sym_est)
         _ = len(sizes)
 

@@ -254,6 +254,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_RESAMPLE_FAST_RANK_SORT"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple bootstrap distribution sorted by one rank launch was DROPPED-slower: bootstrap taxi 14.38 -> 13.64 ms, istella 11.59 -> 14.46 ms (M3 afc_ab_def ab1 d51f4b4bf, mixed: slower on istella); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_RESAMPLE_FAST_ONE_FOLD"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple bootstrap mean / diff_means replicates folded once per block was DROPPED-slower: bootstrap taxi 16.31 -> 13.89 ms, istella 12.84 -> 14.23 ms (M3 afc_ab_def ab1 d51f4b4bf, mixed: slower on istella); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_SYM_DERIV_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple symmetric next-tree gradient pass behind the tail drain was DROPPED-noise: sym-iter-fused istella/taxi -0.1% (old base); F12 re-runs 2026-10-06 kept it OFF; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_SYM_LEAF_FROM_STATS"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple symmetric leaves as one Newton step from the searcher partition stats was DROPPED-noise: sym-iter-leaf istella/taxi -0.2% (old base); F12 re-runs 2026-10-06 kept it OFF; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
