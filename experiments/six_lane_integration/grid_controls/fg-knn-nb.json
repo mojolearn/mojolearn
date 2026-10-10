@@ -4,39 +4,6 @@
  "branch": "lane/fg-knn-nb",
  "head": "3b59db56a",
  "controls": {
-  "knn_amd_legacy_schedule": {
-   "define": "MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "checks/kernel_matrix.mojo:knn_nvidia_schedule_column",
-    "neighbors/estimator.mojo:270",
-    "neighbors/impl/detail/knn_brute_force.mojo:use_vector"
-   ],
-   "binding": [
-    "_mojolearn",
-    "_mojolearn_estimators",
-    "_mojolearn_hdbscan",
-    "_mojolearn_metrics",
-    "_mojolearn_x_ann",
-    "_mojolearn_ivf",
-    "_mojolearn_x_cluster",
-    "_mojolearn_estimators_host",
-    "_mojolearn_hdbscan_host",
-    "_mojolearn_metrics_host",
-    "_mojolearn_x_ann_host",
-    "_mojolearn_x_cluster_host"
-   ],
-   "bits_change": false,
-   "status": "new default K1 (plan flagship-gaps-2026-10-09 kNN K1)",
-   "note": "Rollback arm: AMD back to its old IDENTICAL kNN rows (query tile 256, no radix scratch shrink, no resident derived cache, generic-K selector without warp-bound guard, no bound-and-compact at k>=17, 4 register rows, scalar index loads). Default: AMD takes NVIDIA's rows. Kept per-vendor: hardware FTZ FMA (NVVM instruction, no AMD spelling) and the AMD smem tile d>=32 gate (measured AMD loss). NVIDIA build unchanged by this control."
-  },
   "knn_scratch_pool_off": {
    "define": "MOJOLEARN_KNN_SCRATCH_POOL_OFF",
    "kind": "switch",
@@ -192,7 +159,6 @@
    "binding": "_mojolearn",
    "route": "neighbors.py kneighbors -> knn_search_resident -> _knn_search_on_device_index (K4 pool) -> brute_force_knn_impl -> tiled_brute_force_knn (resident cache) -> smem/register distance tile + bound-compact | small-k | radix (K2) | block top-k (K3) + partial merges",
    "controls": [
-    "knn_amd_legacy_schedule",
     "knn_scratch_pool_off",
     "knn_widek_radix",
     "knn_amd_block_topk_all_k",
@@ -200,12 +166,10 @@
    ],
    "interaction_groups": [
     [
-     "knn_amd_legacy_schedule",
      "knn_widek_radix",
      "knn_amd_block_topk_all_k"
     ],
     [
-     "knn_amd_legacy_schedule",
      "knn_amd_exact_chain"
     ]
    ],
@@ -236,6 +200,11 @@
    "define": "MOJOLEARN_XPREP_NO_SLOT_HOP",
    "control": "xprep_no_slot_hop",
    "reason": "DELETED 2026-10-09 (lane postmerge-act-2): post-merge A/B on main (one run per arm) found G3 (large direct inputs as host spans straight into the arena) slower on the average: default -> on ms gaussian-nb istella NV 92.1 -> 114.7 (1.25x) / AMD 46.4 -> 46.3 (1.00x), taxi NV 20.0 -> 20.4 (1.02x) / AMD 14.1 -> 14.5 (1.03x) (nv n0668 -> n0630, amd a1066 -> a1090); accuracy SAME, same digests. x_prep_run_ranges_host, run_program_device_ranges_host, core/arena_io.mojo upload_ranges_host, DeviceStore.stage_upload and the _Prog.run glue are deleted; the define is refused in core/six_lane_experiment_guards.mojo; code recoverable at main 5c137b55e."
+  },
+  {
+   "define": "MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE",
+   "control": "knn_amd_legacy_schedule",
+   "reason": "DELETED 2026-10-10 (lane postmerge-act-6): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 39.32x / NV 1.01x, knn taxi AMD 97.96x / NV 1.00x (slower on AMD), recall and hashes unchanged (842a646a, cd7ff955). The AMD column takes the NVIDIA kNN schedule only (checks/kernel_matrix.mojo knn_nvidia_schedule_column); define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE.patch)."
   }
  ]
 }

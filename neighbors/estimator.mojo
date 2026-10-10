@@ -275,8 +275,8 @@ from neighbors.impl.ball_cover.ball_cover import (
 # Other columns retain 256 unless explicitly opting into qualification.
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, knn_query_tile_for, knn_nvidia_schedule_column
 # K1 (lane fg-knn-nb): the AMD column takes NVIDIA's scope too
-# (`knn_nvidia_schedule_column`; `-D MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE=1`
-# restores AMD's 256). Query tiling never moves a bit.
+# (`knn_nvidia_schedule_column`; AMD's legacy 256 arm was removed
+# 2026-10-10, docs/TOMBSTONES.md). Query tiling never moves a bit.
 comptime QUERY_TILE_512_CANDIDATE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_KNN_LEGACY_QUERY_TILE"]()

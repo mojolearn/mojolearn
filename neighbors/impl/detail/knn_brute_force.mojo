@@ -1157,7 +1157,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     # checked below, so any n_index that is not a multiple of 4 stays scalar.
     # K1 (lane fg-knn-nb): the AMD column takes NVIDIA's vector index
     # transport too (`knn_nvidia_schedule_column`, same chain, same bits);
-    # `-D MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE=1` restores the scalar loads.
+    # AMD's legacy scalar-load arm was removed 2026-10-10 (docs/TOMBSTONES.md).
     var use_vector = knn_nvidia_schedule_column(TARGET_COLUMN) and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries, n_features, k)
     comptime if is_defined["MOJOLEARN_KNN_VECTOR_REQUEST_CHECK"]():
         # Named same-process check exercises scalar, vector and actual default.
