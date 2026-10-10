@@ -161,6 +161,7 @@ in the tables after the sections.
 | [`MOJOLEARN_PCA_FAST_TOPK`](#mojolearn_pca_fast_topk) | Decomp | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_TSNE_FAST_SPLIT`](#mojolearn_tsne_fast_split) | Decomp | DROPPED-quality | 2026-09-28 | [MOJOLEARN_TSNE_FAST_SPLIT.patch](../experiments/removed/MOJOLEARN_TSNE_FAST_SPLIT.patch) |
 | [`MOJOLEARN_CHOL_FAST_BLOCKED`](#mojolearn_chol_fast_blocked) | Decomp | DROPPED-slower+quality | 2026-10-09 | [MOJOLEARN_CHOL_FAST_BLOCKED.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch) |
+| [`MOJOLEARN_DECOMP_FAST_GEMM_TILED`](#mojolearn_decomp_fast_gemm_tiled) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch) |
 | [`MOJOLEARN_AFFINITY_FAST_LOOP`](#mojolearn_affinity_fast_loop) | Cluster | DROPPED-noise | 2026-10-02 | [MOJOLEARN_AFFINITY_FAST_LOOP.patch](../experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch) |
 | [`MOJOLEARN_BGMM_ENT`](#mojolearn_bgmm_ent) | Cluster | DROPPED-noise | 2026-10-03 | [MOJOLEARN_BGMM_ENT.patch](../experiments/removed/MOJOLEARN_BGMM_ENT.patch) |
 | [`MOJOLEARN_BISECT_FAST_RESIDENT`](#mojolearn_bisect_fast_resident) | Cluster | DROPPED-slower | 2026-10-02 | [MOJOLEARN_BISECT_FAST_RESIDENT.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch) |
@@ -1214,6 +1215,15 @@ in the tables after the sections.
 - EXPERIMENTS.md:1241: `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | 259.4 -> 330.7 | DROPPED-slower+quality | relative_residual 1.66e-7 -> 1.98e-6 (M3, full board, 1 run per arm, 2026-10-04); stays off
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): CHOL_FAST_BLOCKED (blocked right-looking Cholesky, x_decomp/fast_chol.mojo) was SLOWER and less accurate: cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6 (M3, 1 run per arm); code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_DECOMP_FAST_GEMM_TILED
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: x_decomp launch_gemm as a threadgroup-tiled kernel (32 x 32 output tile, 16-deep K slab, 2 x 2 micro-tiles, FOLD_BLOCK partials kept), FAST + Apple. The never-run AFCL-L08 knob (K slab 32, -D MOJOLEARN_AFCL_L08, which required this define in both arms) lived in the same file and is deleted with it.
+- Files the patch restores: `x_decomp/device.mojo`, `x_decomp/fast_gemm.mojo`
+- EXPERIMENTS.md:425: `DECOMP_FAST_GEMM_TILED` | als / taxi-zones; lstsq / istella; nmf / istella; randomized-svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-lstsq-tiled-istella, dlin-rsvd-tiled-istella, dlin-nmf-tiled-istella, dlin-als-tiled-taxizones | old-head B rsvd istella 683 vs board FAST 533 (no same-build A) | DROPPED-slower | reconciled 2026-10-05: rab3-gemmtiled randomized-svd istella 483.56 -> 640.22 (+32.4%), reconstruction error equal (ab_all_latest.txt); stays off; lstsq/nmf/als callers not timed. Was READY-AB: ported to main (x_decomp/fast_gemm.mojo, launch_gemm ahead of DECOMP_FAST_GEMM_MMA, so the A/B is tiled vs MMA); default off; awaiting M2 build
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): DECOMP_FAST_GEMM_TILED (threadgroup-tiled x_decomp launch_gemm, x_decomp/fast_gemm.mojo) was SLOWER: randomized-svd istella 483.56 -> 640.22 ms (+32.4%), reconstruction error equal; its child knob MOJOLEARN_AFCL_L08 went with it; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Cluster
 
 ### MOJOLEARN_AFFINITY_FAST_LOOP
@@ -1834,7 +1844,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT` | EXPERIMENTS.md:1408 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:103` |
 | `MOJOLEARN_ARIMA_FAST_STEPWISE` | EXPERIMENTS.md:1417 DROPPED-slower (main a6ff25ff8) | `arima/impl/fast_order_search.mojo:201` |
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
-| `MOJOLEARN_DECOMP_FAST_GEMM_TILED` | EXPERIMENTS.md:425 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `x_decomp/fast_gemm.mojo:6` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
 | `MOJOLEARN_FA_ALL` | EXPERIMENTS.md:1264 DROPPED-slower: stays off (lane/apple-fast-fa-quality) | `x_decomp/fa_fast.mojo:51` |
