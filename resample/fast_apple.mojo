@@ -9,11 +9,8 @@ never move.
 
 Three kernels, all one launch, all parallel, no host step:
 
-  * `rank_sort_f32_kernel` (-D MOJOLEARN_RESAMPLE_FAST_RANK_SORT): the
-    sorted bootstrap distribution by RANK (one thread per replicate, the keys
-    staged 256 at a time in threadgroup memory) in the same total order
-    `(float_to_sortable(theta_r), r)` the LSD radix of
-    `core/segmented_sort.mojo` produces, so the same bits at every rank.
+  * (`rank_sort_f32_kernel`, -D MOJOLEARN_RESAMPLE_FAST_RANK_SORT, was
+    deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
   * `bootstrap_mean_fast_kernel` (-D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD): mean
     / diff_means replicates with ONE block fold per replicate (each thread
     folds its own draws in registers, then `block.sum`) instead of one
@@ -64,13 +61,6 @@ comptime RESAMPLE_FAST_APPLE = (
 #: Threads per block of every kernel here.
 comptime FAST_TPB = 256
 
-#: The rank sort is O(n) compares per thread (O(n^2) in all). Its bound is
-#: the kernel's own shape, not a benchmark size: at most FAST_TPB staged
-#: slabs per thread (n <= FAST_TPB^2 = 65,536), past which the radix sort's
-#: O(n log n) work wins and a single Metal launch grows toward macOS's
-#: command-buffer watchdog. Above it the caller keeps `_sort_segments`.
-comptime RANK_SORT_MAX = FAST_TPB * FAST_TPB
-
 #: The radix select's digit: 4 bits, 16 bins, 16 counters per thread.
 #: Threadgroup memory: PERM_BINS * FAST_TPB * 4 B = 16 KB + 64 B, inside
 #: Apple's 32 KB per threadgroup.
@@ -78,85 +68,9 @@ comptime PERM_DIGIT_BITS = 4
 comptime PERM_BINS = 16
 
 
-# ===========================================================================
-# 1. The sorted distribution by rank (one launch)
-# ===========================================================================
-
-
-def rank_sort_f32_kernel(
-    src: MutPointer[Float32, MutAnyOrigin],
-    dst: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`dst[rank(i)] = src[i]` with `rank(i)` the number of positions below
-    `i` in the total order `(float_to_sortable(bits), position)`: the order
-    `core/segmented_sort.mojo` pins (`-0.0` below `+0.0`, equal bits in
-    ascending position order), so every rank carries the same bits the
-    radix sort would put there. One thread per position; the keys are
-    staged `FAST_TPB` at a time in threadgroup memory. Every thread of the
-    block reaches both barriers on every chunk."""
-    var n = Int(n_in)
-    var tid = Int(thread_idx.x)
-    var i = Int(block_idx.x) * FAST_TPB + tid
-    var slab = stack_allocation[
-        FAST_TPB,
-        Scalar[DType.uint32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var mine = UInt32(0)
-    var value = Float32(0.0)
-    if i < n:
-        value = src.unsafe_load(i)
-        mine = float_to_sortable(bitcast[DType.uint32](value))
-    var rank = 0
-    var base = 0
-    while base < n:
-        var j = base + tid
-        barrier()
-        if j < n:
-            slab[unsafe_offset=tid] = float_to_sortable(
-                bitcast[DType.uint32](src.unsafe_load(j))
-            )
-        barrier()
-        var limit = n - base
-        if limit > FAST_TPB:
-            limit = FAST_TPB
-        if i < n:
-            for t in range(limit):
-                var kj = slab[unsafe_offset=t]
-                if kj < mine or (kj == mine and base + t < i):
-                    rank += 1
-        base += FAST_TPB
-    if i < n:
-        dst.unsafe_store(rank, value)
-
-
-def rank_sort_f32(
-    ctx: DeviceContext,
-    mut src: DeviceBuffer[DType.float32],
-    mut dst: DeviceBuffer[DType.float32],
-    n: Int,
-) raises -> Bool:
-    """`dst` = `src` sorted by `rank_sort_f32_kernel`, one launch, drained.
-    False (nothing enqueued): n is past `RANK_SORT_MAX`, the caller sorts."""
-    comptime if RESAMPLE_FAST_APPLE:
-        if n > RANK_SORT_MAX:
-            return False
-        if n <= 0:
-            return True
-        ctx.enqueue_function[rank_sort_f32_kernel](
-            src.unsafe_ptr(),
-            dst.unsafe_ptr(),
-            Int32(n),
-            grid_dim=(ceildiv(n, FAST_TPB), 1, 1),
-            block_dim=(FAST_TPB, 1, 1),
-        )
-        _ = src.unsafe_ptr()
-        _ = dst.unsafe_ptr()
-        ctx.synchronize()
-        return True
-    else:
-        return False
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower: bootstrap taxi 14.38 -> 13.64 ms but istella 11.59 -> 14.46)
+# deleted 2026-10-09 on lane/owed-deletions-D1 (the bootstrap distribution sorted by one rank launch); code recoverable at
+# b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch; record in docs/TOMBSTONES.md.
 
 
 # ===========================================================================

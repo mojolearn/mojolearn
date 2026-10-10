@@ -40,7 +40,6 @@ from resample.fast_apple import (
     RESAMPLE_FAST_APPLE,
     bootstrap_mean_fast,
     perm_select_fast,
-    rank_sort_f32,
 )
 from std.math import ceildiv
 from std.os import getenv
@@ -187,23 +186,9 @@ comptime RESAMPLE_MAP_TPB = 256
 # and RESAMPLE_FAST_GATHER (main carries its own recovery, RESAMPLE_GPU_GATHER).
 # ===========================================================================
 
-#: `-D MOJOLEARN_RESAMPLE_FAST_RANK_SORT` (bootstrap, bootstrap_unpaired):
-#: the sorted distribution by ONE rank launch (fast_apple.mojo
-#: rank_sort_f32_kernel, the same total order `(float_to_sortable(theta), r)`
-#: and so the same bits at every rank) instead of `_sort_segments`' 32
-#: one-bit radix passes x 4 launches over a single segment of n_resamples
-#: keys. Source lane/apple-fast-resample@50b96e795. Known: never compiled,
-#: never measured (EXPERIMENTS row OPEN); the old cause also named a
-#: one-thread `seg_scan_block_sums_kernel`, which main's SEG_SUMS_BLOCK_SCAN
-#: (KEPT) has since replaced, so the remaining gain is launch count only.
-#: Fixed here: the kernel's own bound RANK_SORT_MAX (= 256^2; O(n^2) work)
-#: above which the radix sort stays; old code had no bound.
-#: DROPPED-slower, stays OFF (M3 afc_ab_def, full board size, 1 run per arm,
-#: 2026-10-04): bootstrap taxi 14.38 -> 13.64 ms, istella 11.59 -> 14.46 ms
-#: (mixed: slower on istella).
-comptime RESAMPLE_FAST_RANK_SORT = (
-    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_RANK_SORT"]()
-)
+#: TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower: bootstrap taxi 14.38 -> 13.64 ms but istella 11.59 -> 14.46)
+#: deleted 2026-10-09 on lane/owed-deletions-D1 (the bootstrap distribution sorted by one rank launch); code recoverable at
+#: b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch; record in docs/TOMBSTONES.md.
 
 #: `-D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` (bootstrap, _bootstrap_theta):
 #: mean / diff_means replicates folded once per block (each thread's draws in
@@ -281,15 +266,14 @@ comptime CV_FAST_TRUST_FOLDS = (
 
 def resample_fast_defines() -> Int:
     """The FAST + Apple candidate defines this build was compiled with, as a
-    bit mask (0 on every IDENTICAL and every non-Apple build): 1 RANK_SORT,
+    bit mask (0 on every IDENTICAL and every non-Apple build): 1 RANK_SORT (deleted),
     2 ONE_FOLD, 4 PERM_SELECT, 32 CV_SLICE, 64 CV_TRUST_FOLDS, 128
     GATHER_NARROW (8 and 16 were
     the old branch's IDX_BULK and GATHER, not ported). Read by the
     `resample_fast_defines` binding; python/mojolearn/model_selection.py
     switches on it instead of an environment variable."""
     var m = 0
-    comptime if RESAMPLE_FAST_RANK_SORT:
-        m |= 1
+    # bit 1 (RESAMPLE_FAST_RANK_SORT) is always 0 since its deletion (2026-10-09)
     comptime if RESAMPLE_FAST_ONE_FOLD:
         m |= 2
     comptime if RESAMPLE_FAST_PERM_SELECT:
@@ -1550,13 +1534,9 @@ def bootstrap_host(
 
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
-    # -D MOJOLEARN_RESAMPLE_FAST_RANK_SORT (FAST + Apple, default OFF): one
-    # rank launch, same order and bits, up to RANK_SORT_MAX keys.
-    var rank_sorted = False
-    comptime if RESAMPLE_FAST_RANK_SORT:
-        rank_sorted = rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
-    if not rank_sorted:
-        _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
+    # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
+    # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch.
+    _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
     trace.record_device(ctx, "resample.sorted", sorted_buf, n_resamples)
     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
 
@@ -1717,12 +1697,8 @@ def bootstrap_unpaired_host(
     var dist = _download_f32(ctx, theta, n_resamples)
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
-    # -D MOJOLEARN_RESAMPLE_FAST_RANK_SORT: see bootstrap_host.
-    var rank_sorted = False
-    comptime if RESAMPLE_FAST_RANK_SORT:
-        rank_sorted = rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
-    if not rank_sorted:
-        _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
+    # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1: see bootstrap_host.
+    _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
 
     var mx = point_estimate_device(ctx, dxb, n_x, 1, STAT_MEAN, Float32(0.5))
