@@ -1,14 +1,14 @@
 # mojolearn benchmark board
 
-Generated 2026-10-09T19:45:54Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-10T01:34:32Z from `board.json` (schema `mojolearn-bench-board/1`).
 
-> MAIN BOARD nvidia-l40s, version label main@444f0b96e. Unreleased: not reproducible by pip install; the release boards are the reference.
+> MAIN BOARD nvidia-l40s, version label main@0a7b206f1. Unreleased: not reproducible by pip install; the release boards are the reference.
 
-> Cells: 139 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@444f0b96e (2026-10-09T14:31:44Z). Boxes: nv (RunPod L40S), nv2 (RunPod L40S).
+> Cells: 154 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@0a7b206f1 (2026-10-09T20:23:58Z). Boxes: nv (RunPod L40S), nv2 (RunPod L40S).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 149 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 174 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
-> Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 42, n/a 97).
+> Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 54, n/a 100).
 
 > Opponents: copied from the stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 2 races.
 
@@ -16,19 +16,20 @@ Generated 2026-10-09T19:45:54Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Identity
 
-Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 42, n/a 97.
+Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 54, n/a 100.
 
 DIFFER: none.
 
 ## FAILED
 
-Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 48 failed runs.
+Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 56 failed runs.
 
 | lane | dataset | commit | box/job | reason | ok cell on the board |
 |---|---|---|---|---|---|
 | avgpool1d | synthetic | main@de2b2b739 | nv/n0316 | not_ready | none |
 | avgpool2d | synthetic | main@de2b2b739 | nv/n0316 | not_ready | none |
 | batchnorm1d | synthetic | main@de2b2b739 | nv/n0316 | not_ready | none |
+| batchnorm2d | synthetic | main@9440ea75b | nv2/v1010 | not_ready | main@432d6e8ff nv/n0666 stays |
 | bernoulli-nb | istella | main@89485bc96 | nv/n0314 | error | none |
 | bernoulli-nb | taxi | main@89485bc96 | nv/n0314 | error | none |
 | categorical-nb | istella | main@89485bc96 | nv/n0314 | error | none |
@@ -37,7 +38,10 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | complement-nb | istella | main@de2b2b739 | nv/n0315 | error | none |
 | complement-nb | taxi | main@de2b2b739 | nv/n0315 | error | none |
 | conv1d | synthetic | main@de2b2b739 | nv/n0316 | not_ready | none |
+| conv2d | synthetic | main@9440ea75b | nv2/v1010 | not_ready | main@432d6e8ff nv/n0666 stays |
 | conv2d | synthetic | main@444f0b96e | nv2/v1002 | not_ready | main@432d6e8ff nv/n0666 stays |
+| dropout2d | synthetic | main@9440ea75b | nv2/v1010 | not_ready | main@432d6e8ff nv/n0666 stays |
+| embedding | synthetic | main@9440ea75b | nv2/v1010 | not_ready | main@432d6e8ff nv/n0666 stays |
 | gcn | istella | main@4303e1bfb | nv/n0491 | not_ready | none |
 | gcn | istella | main@89485bc96 | nv/n0314 | not_ready | none |
 | gcn | taxi | main@4303e1bfb | nv/n0491 | not_ready | none |
@@ -52,6 +56,7 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | gru-clf | taxi-hourly | main@de2b2b739 | nv/n0317 | error | none |
 | gru-reg | synthetic | main@de2b2b739 | nv/n0317 | error | none |
 | gru-reg | taxi-hourly | main@de2b2b739 | nv/n0317 | error | none |
+| layernorm | synthetic | main@9440ea75b | nv2/v1010 | not_ready | main@432d6e8ff nv/n0666 stays |
 | lstm-clf | synthetic | main@de2b2b739 | nv/n0317 | error | none |
 | lstm-clf | taxi-hourly | main@de2b2b739 | nv/n0317 | error | none |
 | lstm-reg | synthetic | main@de2b2b739 | nv/n0317 | error | none |
@@ -59,9 +64,11 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | maxpool1d | synthetic | main@de2b2b739 | nv/n0316 | not_ready | none |
 | maxpool2d | synthetic | main@4303e1bfb | nv/n0490 | not_ready | none |
 | maxpool2d | synthetic | main@de2b2b739 | nv/n0316 | not_ready | none |
+| moe | synthetic | main@9440ea75b | nv2/v1010 | not_ready | main@432d6e8ff nv/n0666 stays |
 | moe | synthetic | main@444f0b96e | nv2/v1002 | not_ready | main@432d6e8ff nv/n0666 stays |
 | multinomial-nb | istella | main@de2b2b739 | nv/n0315 | error | none |
 | multinomial-nb | taxi | main@de2b2b739 | nv/n0315 | error | none |
+| resnet-block | synthetic | main@9440ea75b | nv2/v1010 | not_ready | main@432d6e8ff nv/n0666 stays |
 | resnet-block | synthetic | main@444f0b96e | nv2/v1002 | not_ready | main@432d6e8ff nv/n0666 stays |
 | rnn-clf | synthetic | main@de2b2b739 | nv/n0317 | error | none |
 | rnn-clf | taxi-hourly | main@de2b2b739 | nv/n0317 | error | none |
@@ -69,6 +76,7 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | rnn-reg | taxi-hourly | main@de2b2b739 | nv/n0317 | error | none |
 | standard-scaler | istella | main@89485bc96 | nv/n0314 | error | none |
 | standard-scaler | taxi | main@89485bc96 | nv/n0314 | error | none |
+| dbscan | taxi | main@0a7b206f1 | nv2/v1023 | REFUSED(timeout:_null) | none |
 | conv2d | synthetic | main@e5f3f2ed8 | nv/n0570 | NO-RECORD | none |
 | moe | synthetic | main@e5f3f2ed8 | nv/n0570 | NO-RECORD | none |
 | resnet-block | synthetic | main@e5f3f2ed8 | nv/n0570 | NO-RECORD | none |
@@ -86,8 +94,8 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | memory bytes | - |
 | OS | - |
 | Python | - |
-| mojolearn | main@444f0b96e (wheel none (unreleased; built from source at each cell's commit), sha256 -) |
-| script commit | 444f0b96e7d9f49add4c1cf96204d2ac0d4418da |
+| mojolearn | main@0a7b206f1 (wheel none (unreleased; built from source at each cell's commit), sha256 -) |
+| script commit | 0a7b206f18feddc0cbdc925bc6f4af498587a016 |
 | patch sync | - |
 | modes | identical |
 | rounds | 1 timed after 1 warm-up, arms interleaved round by round |
@@ -110,7 +118,7 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 
 ## Coverage
 
-Races: 139 planned, 139 done, 0 failed, 0 unsupported, 0 pending. Cells: 484 (REFUSED 25, ok 459).
+Races: 154 planned, 154 done, 0 failed, 0 unsupported, 0 pending. Cells: 518 (REFUSED 25, ok 493).
 
 ## Quality at a glance
 
@@ -118,8 +126,11 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 
 | family | lane | dataset | metric | ours FAST | ours IDENTICAL | opponents |
 |---|---|---|---|---|---|---|
+| algos | adafactor | synthetic | relative_error_vs_own_host | - | 0.000000 | torch-eager-fp32 -; torch-compile-fp32 - |
 | algos | adafactor | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
+| algos | adagrad | synthetic | relative_error_vs_own_host | - | 0.000000 | torch-eager-fp32 -; torch-compile-fp32 - |
 | algos | adagrad | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
+| algos | adamax | synthetic | relative_error_vs_own_host | - | 0.000000 | torch-eager-fp32 -; torch-compile-fp32 - |
 | algos | adamax | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 6.395e-09 |
 | algos | batchnorm2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.001863; torch-eager-tf32 0.000000; torch-compile-tf32 0.001863; torch-eager-bf16 0.000000; torch-compile-bf16 0.001863 |
 | algos | batchnorm2d | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 4.327e-08; torch-eager-tf32 0.000000; torch-compile-tf32 4.327e-08; torch-eager-bf16 0.000000; torch-compile-bf16 4.327e-08 |
@@ -148,7 +159,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | gaussian-rp | taxi | mean_abs_distortion | - | 0.345752 | cuml-gpu 0.302259; sklearn-cpu 0.339791 |
 | algos | incremental-pca | istella | explained_variance_fraction | - | 1.000000 | cuml-gpu 1.000000; sklearn-cpu 1.000000 |
 | algos | incremental-pca | taxi | explained_variance_fraction | - | 0.999995 | cuml-gpu 0.999995; sklearn-cpu 0.999995 |
-| algos | ivf-pq | istella | recall_at_10 (higher is better) | - | 0.748925 | cuvs-gpu 0.791300; faiss-cpu - |
+| algos | ivf-pq | istella | recall_at_10 (higher is better) | - | 0.802100 | cuvs-gpu 0.791300; faiss-cpu - |
 | algos | ivf-pq | taxi | recall_at_10 (higher is better) | - | 0.981250 | cuvs-gpu 0.976875; faiss-cpu 0.979450 |
 | algos | ivf-refine | istella | recall_at_10 (higher is better) | - | 0.809175 | cuvs-gpu 0.993625; faiss-cpu - |
 | algos | ivf-refine | taxi | recall_at_10 (higher is better) | - | 0.999675 | cuvs-gpu 0.999050; faiss-cpu 0.999375 |
@@ -183,6 +194,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | moe | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 1.548e-07; torch-eager-tf32 0.017534; torch-compile-tf32 0.017534; torch-eager-bf16 0.055222; torch-compile-bf16 0.055199 |
 | algos | multinomial-nb | text | accuracy (higher is better) | - | 0.983067 | cuml-gpu 0.983067; sklearn-cpu 0.983067 |
 | algos | multinomial-nb | text | logloss (lower is better) | - | 0.559529 | cuml-gpu 0.559524; sklearn-cpu 0.557319 |
+| algos | nadam | synthetic | relative_error_vs_own_host | - | 0.000000 | torch-eager-fp32 -; torch-compile-fp32 - |
 | algos | nadam | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 1.498e-07 |
 | algos | optimized-theta | synthetic | forecast_rmse (lower is better) | - | 1.438855 | statsforecast-cpu 1.437815 |
 | algos | optimized-theta | taxi-hourly | forecast_rmse (lower is better) | - | 49.150860 | statsforecast-cpu 49.356608 |
@@ -204,6 +216,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | ridge-cv | istella | rmse (lower is better) | - | 0.684422 | sklearn-cpu 0.684423 |
 | algos | ridge-cv | taxi | r2 (higher is better) | - | 0.908981 | sklearn-cpu 0.908983 |
 | algos | ridge-cv | taxi | rmse (lower is better) | - | 4.805109 | sklearn-cpu 4.805055 |
+| algos | rmsprop | synthetic | relative_error_vs_own_host | - | 0.000000 | torch-eager-fp32 -; torch-compile-fp32 - |
 | algos | rmsprop | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
 | algos | sgd-clf | istella | accuracy (higher is better) | - | 0.920330 | cuml-gpu 0.809350; sklearn-cpu 0.910200 |
 | algos | sgd-clf | taxi | accuracy (higher is better) | - | 0.755330 | cuml-gpu 0.703120; sklearn-cpu 0.752520 |
@@ -227,30 +240,63 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | tree-shap | taxi | max_additivity_error | - | 3.858e-05 | xgboost-gpu 5.402e-05; shap-cpu 0.0001201; xgboost-cpu 0.0001201; lightgbm-cpu 5.684e-13 |
 | algos | tsne | istella | trustworthiness_k15 (higher is better, 1 at most) | - | 0.992124 | cuml-gpu 0.990033; sklearn-cpu 0.992182 |
 | algos | tsne | taxi | trustworthiness_k15 (higher is better, 1 at most) | - | 0.998921 | cuml-gpu 0.998353; sklearn-cpu 0.998823 |
+| classical | dbscan | istella | n_clusters | - | 40131 | cuml-gpu 40131 |
+| classical | dbscan | istella | noise_fraction | - | 0.219391 | cuml-gpu 0.219391 |
+| classical | dbscan | istella | rows | - | 1000000 | cuml-gpu 1000000 |
+| classical | hdbscan | istella | n_clusters | - | 47 | cuml-gpu 53 |
+| classical | hdbscan | istella | noise_fraction | - | 0.253810 | cuml-gpu 0.256280 |
+| classical | hdbscan | istella | rows | - | 100000 | cuml-gpu 100000 |
+| classical | hdbscan | taxi | n_clusters | - | 161 | cuml-gpu 159 |
+| classical | hdbscan | taxi | noise_fraction | - | 0.140550 | cuml-gpu 0.130970 |
+| classical | hdbscan | taxi | rows | - | 100000 | cuml-gpu 100000 |
 | classical | kmeans | istella | inertia (lower is better) | - | 6.051e+17 | cuml-gpu 6.111e+17; torch-gpu 5.991e+17 |
 | classical | kmeans | istella | inertia_over_ours | - | 1.000000 | cuml-gpu -; torch-gpu - |
 | classical | kmeans | istella | n_iter | - | 33 | cuml-gpu 21; torch-gpu 55 |
 | classical | kmeans | taxi | inertia (lower is better) | - | 3.093e+08 | cuml-gpu 3.06e+08; torch-gpu 3.06e+08 |
 | classical | kmeans | taxi | inertia_over_ours | - | 1.000000 | cuml-gpu -; torch-gpu - |
 | classical | kmeans | taxi | n_iter | - | 91 | cuml-gpu 32; torch-gpu 58 |
+| classical | knn | istella | recall_at_k (higher is better) | - | 0.976250 | cuml-gpu 0.976402; torch-gpu 0.981012 |
+| classical | knn | istella | rows_with_repeated_ids | - | 0 | cuml-gpu 0; torch-gpu 0 |
+| classical | knn | taxi | recall_at_k (higher is better) | - | 0.999754 | cuml-gpu 0.999742; torch-gpu 0.999773 |
+| classical | knn | taxi | rows_with_repeated_ids | - | 0 | cuml-gpu 0; torch-gpu 0 |
 | classical | ols | istella | r2 (higher is better) | - | 0.332506 | cuml-gpu -11031.855105; torch-gpu nan; torch-gpu-eigh 0.151604 |
 | classical | ols | istella | rmse (lower is better) | - | 0.681740 | cuml-gpu 87.647429; torch-gpu nan; torch-gpu-eigh 0.768590 |
 | classical | ols | taxi | r2 (higher is better) | - | 0.908836 | cuml-gpu 0.908836; torch-gpu 0.908836; torch-gpu-eigh 0.908836 |
 | classical | ols | taxi | rmse (lower is better) | - | 4.696479 | cuml-gpu 4.696488; torch-gpu 4.696480; torch-gpu-eigh 4.696490 |
+| classical | pca | istella | explained_variance_ratio_sum (higher is better) | - | 1.000000 | cuml-gpu 1.000000; torch-gpu 1.000000 |
+| classical | pca | taxi | explained_variance_ratio_sum (higher is better) | - | 0.999997 | cuml-gpu 0.999996; torch-gpu 0.999996 |
+| classical2 | elasticnet | istella | r2 (higher is better) | - | 0.260922 | cuml-gpu 0.260922 |
+| classical2 | elasticnet | istella | rmse (lower is better) | - | 0.718134 | cuml-gpu 0.718134 |
+| classical2 | elasticnet | taxi | r2 (higher is better) | - | 0.907378 | cuml-gpu 0.907378 |
+| classical2 | elasticnet | taxi | rmse (lower is better) | - | 4.847225 | cuml-gpu 4.847224 |
 | classical2 | gmm | istella | bic (lower is better) | - | -3.851e+07 | - |
 | classical2 | gmm | istella | mean_log_likelihood (higher is better) | - | 200.794500 | - |
 | classical2 | gmm | istella | n_iter | - | 24 | - |
 | classical2 | gmm | taxi | bic (lower is better) | - | -3.668e+06 | - |
 | classical2 | gmm | taxi | mean_log_likelihood (higher is better) | - | 12.807640 | - |
 | classical2 | gmm | taxi | n_iter | - | 29 | - |
-| classical2 | ivf | istella | recall_at_k (higher is better) | - | 1.000000 | cuvs-gpu 0.999975 |
+| classical2 | ivf | istella | recall_at_k (higher is better) | - | 0.999925 | cuvs-gpu 0.999975 |
 | classical2 | ivf | istella | rows_with_repeated_ids | - | 0 | cuvs-gpu 0 |
-| classical2 | ivf | taxi | recall_at_k (higher is better) | - | 0.999675 | cuvs-gpu 0.999450 |
+| classical2 | ivf | taxi | recall_at_k (higher is better) | - | 0.999650 | cuvs-gpu 0.999450 |
 | classical2 | ivf | taxi | rows_with_repeated_ids | - | 0 | cuvs-gpu 0 |
+| classical2 | lasso | istella | r2 (higher is better) | - | 0.310837 | cuml-gpu 0.310837 |
+| classical2 | lasso | istella | rmse (lower is better) | - | 0.693460 | cuml-gpu 0.693460 |
+| classical2 | lasso | taxi | r2 (higher is better) | - | 0.908995 | cuml-gpu 0.908995 |
+| classical2 | lasso | taxi | rmse (lower is better) | - | 4.804744 | cuml-gpu 4.804745 |
+| classical2 | logreg | istella | accuracy (higher is better) | - | 0.924590 | cuml-gpu 0.924430 |
+| classical2 | logreg | istella | logloss (lower is better) | - | 0.181249 | cuml-gpu 0.181268 |
+| classical2 | logreg | istella | nonfinite_proba_rows | - | 0 | cuml-gpu 0 |
+| classical2 | logreg | taxi | accuracy (higher is better) | - | 0.763350 | cuml-gpu 0.763350 |
+| classical2 | logreg | taxi | logloss (lower is better) | - | 0.538985 | cuml-gpu 0.538986 |
+| classical2 | logreg | taxi | nonfinite_proba_rows | - | 0 | cuml-gpu 0 |
 | classical2 | ridge | istella | r2 (higher is better) | - | 0.328682 | cuml-gpu -0.251259 |
 | classical2 | ridge | istella | rmse (lower is better) | - | 0.684423 | cuml-gpu 0.934403 |
 | classical2 | ridge | taxi | r2 (higher is better) | - | 0.908983 | cuml-gpu 0.908983 |
 | classical2 | ridge | taxi | rmse (lower is better) | - | 4.805050 | cuml-gpu 4.805051 |
+| classical2 | tsvd | istella | explained_variance_ratio_sum (higher is better) | - | 1.000000 | cuml-gpu 1.000000 |
+| classical2 | tsvd | istella | relative_reconstruction_error (lower is better) | - | 0.0001314 | cuml-gpu 0.0001472 |
+| classical2 | tsvd | taxi | explained_variance_ratio_sum (higher is better) | - | 0.999965 | cuml-gpu 0.999964 |
+| classical2 | tsvd | taxi | relative_reconstruction_error (lower is better) | - | 0.003257 | cuml-gpu 0.003257 |
 | neural | lm-forward | bytes | mean_nll (lower is better) | - | 9.018733 | torch-eager-fp32 9.018733; torch-eager-tf32 9.018733; torch-compile-fp32 9.018733; torch-compile-tf32 9.018732; torch-eager-bf16 9.018664; torch-compile-bf16 9.018669 |
 | neural | lm-train-step | bytes | loss_first_step (same init and batches on every arm) | - | 9.018733 | torch-eager-fp32 9.018733; torch-eager-tf32 9.018732; torch-compile-fp32 9.018734; torch-compile-tf32 9.018732; torch-eager-bf16 9.018402; torch-compile-bf16 9.018669 |
 | neural | lm-train-step | bytes | loss_last_step (same init and batches on every arm) | - | 8.418446 | torch-eager-fp32 8.418449; torch-eager-tf32 8.418548; torch-compile-fp32 8.418448; torch-compile-tf32 8.418557; torch-eager-bf16 8.417328; torch-compile-bf16 8.417006 |
@@ -307,9 +353,9 @@ What customers run is torch in bf16. The headline divides our IDENTICAL median b
 
 | lane | dataset | ours IDENTICAL ms | torch bf16 ms (fastest arm) | ours / torch bf16 | torch fp32 twin ms (fastest arm) | ours / torch fp32 | note |
 |---|---|---|---|---|---|---|---|
-| adafactor | synthetic | 17.3 | - | - | 15.3 (torch-eager-fp32) | 1.137 | no torch bf16 arm on this lane |
-| adagrad | synthetic | 10.8 | - | - | 14.9 (torch-eager-fp32) | 0.729 | no torch bf16 arm on this lane |
-| adamax | synthetic | 13.9 | - | - | 20.2 (torch-eager-fp32) | 0.689 | no torch bf16 arm on this lane |
+| adafactor | synthetic | 13.7 | - | - | 15.3 (torch-eager-fp32) | 0.896 | no torch bf16 arm on this lane |
+| adagrad | synthetic | 8.4 | - | - | 14.9 (torch-eager-fp32) | 0.567 | no torch bf16 arm on this lane |
+| adamax | synthetic | 10.7 | - | - | 20.2 (torch-eager-fp32) | 0.530 | no torch bf16 arm on this lane |
 | batchnorm2d | synthetic | 1.6 | 1.4 (torch-eager-bf16) | 1.208 | 1.3 (torch-eager-fp32) | 1.231 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | conv2d | synthetic | 9.7 | 1.3 (torch-eager-bf16) | 7.249 | 2.3 (torch-eager-fp32) | 4.195 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | dropout2d | synthetic | 1.4 | - | - | 1.0 (torch-eager-fp32) | 1.385 | no torch bf16 arm on this lane |
@@ -318,9 +364,9 @@ What customers run is torch in bf16. The headline divides our IDENTICAL median b
 | layernorm | synthetic | 50.6 | 1.9 (torch-eager-bf16) | 27.039 | 3.4 (torch-eager-fp32) | 14.690 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | lion | synthetic | 11.0 | - | - | - | - | no torch bf16 arm on this lane |
 | moe | synthetic | 32.5 | 4.3 (torch-eager-bf16) | 7.476 | 11.9 (torch-compile-fp32) | 2.723 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
-| nadam | synthetic | 13.0 | - | - | 20.8 (torch-eager-fp32) | 0.625 | no torch bf16 arm on this lane |
+| nadam | synthetic | 10.7 | - | - | 20.8 (torch-eager-fp32) | 0.516 | no torch bf16 arm on this lane |
 | resnet-block | synthetic | 21.0 | 2.8 (torch-eager-bf16) | 7.362 | 5.3 (torch-compile-fp32) | 3.974 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
-| rmsprop | synthetic | 10.6 | - | - | 13.3 (torch-eager-fp32) | 0.803 | no torch bf16 arm on this lane |
+| rmsprop | synthetic | 8.5 | - | - | 13.3 (torch-eager-fp32) | 0.641 | no torch bf16 arm on this lane |
 | lm-forward | bytes | 48.5 | 42.5 (torch-compile-bf16) | 1.144 | 45.8 (torch-compile-fp32) | 1.059 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | lm-train-step | bytes | 36.5 | 10.8 (torch-compile-bf16) | 3.390 | 21.6 (torch-compile-fp32) | 1.693 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | mamba1-forward | gaussian | 13.0 | 193.2 (torch-eager-bf16) | 0.067 | 150.9 (torch-eager-fp32) | 0.086 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
@@ -623,15 +669,94 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ## Classical
 
-### kmeans / istella (rows full, shape 2043304x220)
+### dbscan / istella (rows full, shape 1000000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt (nv/n0329)`, ran on nv (RunPod L40S) job n0329
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1023)`, ran on nv2 (RunPod L40S) job v1023
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 570.3 | 570.3..570.3 | 1 | - | - | 570.3 | - | - (stored whole) | - | - | - | - | inertia=6.051e+17, inertia_over_ours=1.000000, n_iter=33 | - | main board, one scored run | - | ok (main@de2b2b739 nv/n0329 2026-10-08; identity vs amd-mi325x: MATCH) |
-| cuml-gpu | cuml | gpu | opponent | 509.0 | 509.0..509.0 | 1 | 1.120 | - | 1782.2 | 509.0 | 1273.19 (upload_ms_untimed) | 0.320 (whole/whole) | - | 4957.5 | 2154.0 | inertia=6.111e+17, n_iter=21 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
-| torch-gpu | torch | gpu | opponent | 849.0 | 849.0..849.0 | 1 | 0.672 | - | 924.5 | 849.0 | 75.47 (upload_ms_untimed) | 0.617 (whole/whole (kernel not derivable)) | - | 3162.6 | 3468.9 | inertia=5.991e+17, n_iter=55 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 414646.9 | 414646.9..414646.9 | 1 | - | - | 414646.9 | - | - (stored whole) | - | - | - | - | n_clusters=40131, noise_fraction=0.219391, rows=1000000 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 73482.1 | 73482.1..73482.1 | 1 | 5.643 | - | 74125.8 | 73482.1 | 643.73 (upload_ms_untimed) | 5.594 (whole/whole) | - | 2599.3 | 1272.0 | n_clusters=40131, noise_fraction=0.219391, rows=1000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: eps=3, min_samples=2 (the cuML benchmark's DBSCAN) on every arm; metric='euclidean'. Rows: dbscan block: 1,000,000 rows, standardized. Timed: fit.
+
+mismatch: seed: no arm has a seed argument (deterministic)
+
+mismatch: algorithm (an exact neighbor search on every arm, results unchanged): ours 'rbc' (its default), scikit-learn 'brute' (the cuML benchmark's cpu_args; it has no 'rbc'), cuml-gpu 'brute', cuml-gpu-rbc 'rbc'
+
+mismatch: leaf_size=30 and n_jobs=-1: scikit-learn only
+
+config: cuML benchmark (RAPIDS), DBSCAN (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### hdbscan / istella (rows full, shape 1000000x220)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1023)`, ran on nv2 (RunPod L40S) job v1023
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 1774.0 | 1774.0..1774.0 | 1 | - | - | 1774.0 | - | - (stored whole) | - | - | - | - | n_clusters=47, noise_fraction=0.253810, rows=100000 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 899.7 | 899.7..899.7 | 1 | 1.972 | - | 992.4 | 899.7 | 92.66 (upload_ms_untimed) | 1.788 (whole/whole) | - | 1866.3 | 526.0 | n_clusters=53, noise_fraction=0.256280, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: min_samples=10 (scikit-learn 11: the same core distance, the 10th neighbour besides the point), min_cluster_size=100, metric='euclidean', cluster_selection_method='eom', cluster_selection_epsilon=0.0, alpha=1.0, allow_single_cluster=False. Rows: the dbscan block's first 100,000 rows. Timed: fit.
+
+mismatch: seed: no arm has a seed argument (deterministic)
+
+mismatch: max_cluster_size: ours and cuML 0, scikit-learn None (both mean no limit)
+
+mismatch: min_samples: ours and cuML 10, scikit-learn 11. The SAME k-th neighbour: cuML's runner.h:68-80 (ours transcribes it) runs the k-NN at min_samples + 1 including the point itself; scikit-learn's kneighbors(X, min_samples) counts the point itself (its HDBSCAN Notes say so). tools/bench_board_params.py maps both to one canonical value
+
+mismatch: scikit-learn algorithm='auto', leaf_size=40, n_jobs=-1: its own; cuML build_algo at its default
+
+config: cuML benchmark (RAPIDS), HDBSCAN (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### hdbscan / taxi (rows full, shape 1000000x11)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1023)`, ran on nv2 (RunPod L40S) job v1023
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 505.9 | 505.9..505.9 | 1 | - | - | 505.9 | - | - (stored whole) | - | - | - | - | n_clusters=161, noise_fraction=0.140550, rows=100000 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 369.1 | 369.1..369.1 | 1 | 1.371 | - | 381.7 | 369.1 | 12.57 (upload_ms_untimed) | 1.326 (whole/whole) | - | 940.5 | 448.0 | n_clusters=159, noise_fraction=0.130970, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: min_samples=10 (scikit-learn 11: the same core distance, the 10th neighbour besides the point), min_cluster_size=100, metric='euclidean', cluster_selection_method='eom', cluster_selection_epsilon=0.0, alpha=1.0, allow_single_cluster=False. Rows: the dbscan block's first 100,000 rows. Timed: fit.
+
+mismatch: seed: no arm has a seed argument (deterministic)
+
+mismatch: max_cluster_size: ours and cuML 0, scikit-learn None (both mean no limit)
+
+mismatch: min_samples: ours and cuML 10, scikit-learn 11. The SAME k-th neighbour: cuML's runner.h:68-80 (ours transcribes it) runs the k-NN at min_samples + 1 including the point itself; scikit-learn's kneighbors(X, min_samples) counts the point itself (its HDBSCAN Notes say so). tools/bench_board_params.py maps both to one canonical value
+
+mismatch: scikit-learn algorithm='auto', leaf_size=40, n_jobs=-1: its own; cuML build_algo at its default
+
+config: cuML benchmark (RAPIDS), HDBSCAN (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### kmeans / istella (rows full, shape 2043304x220)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1023)`, ran on nv2 (RunPod L40S) job v1023
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 465.8 | 465.8..465.8 | 1 | - | - | 465.8 | - | - (stored whole) | - | - | - | - | inertia=6.051e+17, inertia_over_ours=1.000000, n_iter=33 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 509.0 | 509.0..509.0 | 1 | 0.915 | - | 1782.2 | 509.0 | 1273.19 (upload_ms_untimed) | 0.261 (whole/whole) | - | 4957.5 | 2154.0 | inertia=6.111e+17, n_iter=21 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| torch-gpu | torch | gpu | opponent | 849.0 | 849.0..849.0 | 1 | 0.549 | - | 924.5 | 849.0 | 75.47 (upload_ms_untimed) | 0.504 (whole/whole (kernel not derivable)) | - | 3162.6 | 3468.9 | inertia=5.991e+17, n_iter=55 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -653,13 +778,13 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### kmeans / taxi (rows full, shape 4000000x11)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt (nv/n0329)`, ran on nv (RunPod L40S) job n0329
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1023)`, ran on nv2 (RunPod L40S) job v1023
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 203.7 | 203.7..203.7 | 1 | - | - | 203.7 | - | - (stored whole) | - | - | - | - | inertia=3.093e+08, inertia_over_ours=1.000000, n_iter=91 | - | main board, one scored run | - | ok (main@de2b2b739 nv/n0329 2026-10-08; identity vs amd-mi325x: MATCH) |
-| cuml-gpu | cuml | gpu | opponent | 306.6 | 306.6..306.6 | 1 | 0.664 | - | 481.2 | 306.6 | 174.58 (upload_ms_untimed) | 0.423 (whole/whole) | - | 1227.4 | 614.0 | inertia=3.06e+08, n_iter=32 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
-| torch-gpu | torch | gpu | opponent | 609.7 | 609.7..609.7 | 1 | 0.334 | - | 618.9 | 609.7 | 9.25 (upload_ms_untimed) | 0.329 (whole/whole (kernel not derivable)) | - | 1251.1 | 438.0 | inertia=3.06e+08, n_iter=58 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 189.0 | 189.0..189.0 | 1 | - | - | 189.0 | - | - (stored whole) | - | - | - | - | inertia=3.093e+08, inertia_over_ours=1.000000, n_iter=91 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 306.6 | 306.6..306.6 | 1 | 0.616 | - | 481.2 | 306.6 | 174.58 (upload_ms_untimed) | 0.393 (whole/whole) | - | 1227.4 | 614.0 | inertia=3.06e+08, n_iter=32 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| torch-gpu | torch | gpu | opponent | 609.7 | 609.7..609.7 | 1 | 0.310 | - | 618.9 | 609.7 | 9.25 (upload_ms_untimed) | 0.305 (whole/whole (kernel not derivable)) | - | 1251.1 | 438.0 | inertia=3.06e+08, n_iter=58 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -679,16 +804,68 @@ config: cuML benchmark (RAPIDS), KMeans (https://github.com/rapidsai/cuml/blob/e
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### ols / istella (rows full, shape 2043304x220)
+### knn / istella (rows full, shape 400000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt (nv/n0363)`, ran on nv (RunPod L40S) job n0363
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1022)`, ran on nv2 (RunPod L40S) job v1022
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 1029.2 | 1029.2..1029.2 | 1 | - | - | 1029.2 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.332506, rmse=0.681740 | - | main board, one scored run | - | ok (main@de2b2b739 nv/n0363 2026-10-08; identity vs amd-mi325x: MATCH) |
-| cuml-gpu | cuml | gpu | opponent | 78.5 | 78.5..78.5 | 1 | 13.106 | - | 1328.2 | 78.5 | 1249.71 (upload_ms_untimed) | 0.775 (whole/whole) | - | 5075.9 | 2154.0 | finite=True, r2=-11031.855105, rmse=87.647429 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
-| torch-gpu | torch | gpu | opponent | 580.8 | 580.8..580.8 | 1 | 1.772 | - | 733.1 | 580.8 | 152.30 (upload_ms_untimed) | 1.404 (whole/whole (kernel not derivable)) | - | 3013.5 | 8894.4 | finite=False, r2=nan, rmse=nan | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
-| torch-gpu-eigh | torch | gpu | opponent | 19.8 | 19.8..19.8 | 1 | 51.878 | - | 159.6 | 19.8 | 139.80 (upload_ms_untimed) | 6.447 (whole/whole (kernel not derivable)) | - | 3044.8 | 3455.2 | finite=True, r2=0.151604, rmse=0.768590 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 44.9 | 44.9..44.9 | 1 | - | - | 44.9 | - | - (stored whole) | - | - | - | - | recall_at_k=0.976250, rows_with_repeated_ids=0 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1022 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 78.4 | 78.4..78.4 | 1 | 0.573 | - | 421.9 | 78.4 | 343.41 (upload_ms_untimed) | 0.106 (whole/whole) | - | 1622.3 | 772.0 | recall_at_k=0.976402, rows_with_repeated_ids=0 | yes | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok (copied from opponents-specific-20261006; measured this run) |
+| torch-gpu | torch | gpu | opponent | 116.0 | 116.0..116.0 | 1 | 0.387 | - | 132.0 | 116.0 | 16.03 (upload_ms_untimed) | 0.340 (whole/whole (kernel not derivable)) | - | 1223.8 | 3816.8 | recall_at_k=0.981012, rows_with_repeated_ids=0 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk. Rows: knn block: 400,000 index rows, 4,000 queries, raw. Timed: kneighbors; the fit (index) is before the clock on every arm.
+
+mismatch: seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)
+
+mismatch: query_tile: ours only (tiling, results unchanged); n_jobs=-1: scikit-learn only
+
+config: cuML benchmark (RAPIDS), NearestNeighbors (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### knn / taxi (rows full, shape 400000x11)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1022)`, ran on nv2 (RunPod L40S) job v1022
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 24.5 | 24.5..24.5 | 1 | - | - | 24.5 | - | - (stored whole) | - | - | - | - | recall_at_k=0.999754, rows_with_repeated_ids=0 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1022 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 33.3 | 33.3..33.3 | 1 | 0.736 | - | 58.4 | 33.3 | 25.06 (upload_ms_untimed) | 0.420 (whole/whole) | - | 818.1 | 452.0 | recall_at_k=0.999742, rows_with_repeated_ids=0 | yes | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok (copied from opponents-default-20261006; measured this run) |
+| torch-gpu | torch | gpu | opponent | 96.5 | 96.5..96.5 | 1 | 0.254 | - | 98.3 | 96.5 | 1.78 (upload_ms_untimed) | 0.249 (whole/whole (kernel not derivable)) | - | 891.5 | 3174.8 | recall_at_k=0.999773, rows_with_repeated_ids=0 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk. Rows: knn block: 400,000 index rows, 4,000 queries, raw. Timed: kneighbors; the fit (index) is before the clock on every arm.
+
+mismatch: seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)
+
+mismatch: query_tile: ours only (tiling, results unchanged); n_jobs=-1: scikit-learn only
+
+config: cuML benchmark (RAPIDS), NearestNeighbors (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### ols / istella (rows full, shape 2043304x220)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 653.1 | 653.1..653.1 | 1 | - | - | 653.1 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.332506, rmse=0.681740 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 78.5 | 78.5..78.5 | 1 | 8.316 | - | 1328.2 | 78.5 | 1249.71 (upload_ms_untimed) | 0.492 (whole/whole) | - | 5075.9 | 2154.0 | finite=True, r2=-11031.855105, rmse=87.647429 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| torch-gpu | torch | gpu | opponent | 580.8 | 580.8..580.8 | 1 | 1.124 | - | 733.1 | 580.8 | 152.30 (upload_ms_untimed) | 0.891 (whole/whole (kernel not derivable)) | - | 3013.5 | 8894.4 | finite=False, r2=nan, rmse=nan | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| torch-gpu-eigh | torch | gpu | opponent | 19.8 | 19.8..19.8 | 1 | 32.917 | - | 159.6 | 19.8 | 139.80 (upload_ms_untimed) | 4.091 (whole/whole (kernel not derivable)) | - | 3044.8 | 3455.2 | finite=True, r2=0.151604, rmse=0.768590 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -710,14 +887,14 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### ols / taxi (rows full, shape 4000000x11)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt (nv/n0363)`, ran on nv (RunPod L40S) job n0363
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 17.5 | 17.5..17.5 | 1 | - | - | 17.5 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.908836, rmse=4.696479 | - | main board, one scored run | - | ok (main@de2b2b739 nv/n0363 2026-10-08; identity vs amd-mi325x: MATCH) |
-| cuml-gpu | cuml | gpu | opponent | 22.1 | 22.1..22.1 | 1 | 0.794 | - | 196.3 | 22.1 | 174.26 (upload_ms_untimed) | 0.089 (whole/whole) | - | 1356.3 | 614.0 | finite=True, r2=0.908836, rmse=4.696488 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
-| torch-gpu | torch | gpu | opponent | 39.0 | 39.0..39.0 | 1 | 0.449 | - | 53.6 | 39.0 | 14.66 (upload_ms_untimed) | 0.326 (whole/whole (kernel not derivable)) | - | 1081.6 | 4649.6 | finite=True, r2=0.908836, rmse=4.696480 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
-| torch-gpu-eigh | torch | gpu | opponent | 2.0 | 2.0..2.0 | 1 | 8.961 | - | 16.2 | 2.0 | 14.27 (upload_ms_untimed) | 1.079 (whole/whole (kernel not derivable)) | - | 1098.7 | 376.4 | finite=True, r2=0.908836, rmse=4.696490 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 14.3 | 14.3..14.3 | 1 | - | - | 14.3 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.908836, rmse=4.696479 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 22.1 | 22.1..22.1 | 1 | 0.650 | - | 196.3 | 22.1 | 174.26 (upload_ms_untimed) | 0.073 (whole/whole) | - | 1356.3 | 614.0 | finite=True, r2=0.908836, rmse=4.696488 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| torch-gpu | torch | gpu | opponent | 39.0 | 39.0..39.0 | 1 | 0.368 | - | 53.6 | 39.0 | 14.66 (upload_ms_untimed) | 0.267 (whole/whole (kernel not derivable)) | - | 1081.6 | 4649.6 | finite=True, r2=0.908836, rmse=4.696480 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| torch-gpu-eigh | torch | gpu | opponent | 2.0 | 2.0..2.0 | 1 | 7.337 | - | 16.2 | 2.0 | 14.27 (upload_ms_untimed) | 0.883 (whole/whole (kernel not derivable)) | - | 1098.7 | 376.4 | finite=True, r2=0.908836, rmse=4.696490 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -737,7 +914,109 @@ config: cuML benchmark (RAPIDS), LinearRegression (https://github.com/rapidsai/c
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
+### pca / istella (rows full, shape 2043304x220)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1022)`, ran on nv2 (RunPod L40S) job v1022
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 101.5 | 101.5..101.5 | 1 | - | - | 101.5 | - | - (stored whole) | - | - | - | - | explained_variance_ratio_sum=1.000000 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1022 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 74.6 | 74.6..74.6 | 1 | 1.360 | - | 1328.3 | 74.6 | 1253.74 (upload_ms_untimed) | 0.076 (whole/whole) | - | 5058.4 | 2190.0 | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| torch-gpu | torch | gpu | opponent | 17.0 | 17.0..17.0 | 1 | 5.962 | - | 93.5 | 17.0 | 76.49 (upload_ms_untimed) | 1.085 (whole/whole (kernel not derivable)) | - | 2998.2 | 3439.6 | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'. Rows: big block, raw. Timed: fit.
+
+mismatch: svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'
+
+mismatch: torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)
+
+mismatch: random_state is read by none of the covariance solvers; set to 7 on every arm
+
+config: cuML benchmark (RAPIDS), PCA (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### pca / taxi (rows full, shape 4000000x11)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1022)`, ran on nv2 (RunPod L40S) job v1022
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 9.6 | 9.6..9.6 | 1 | - | - | 9.6 | - | - (stored whole) | - | - | - | - | explained_variance_ratio_sum=0.999997 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1022 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 20.5 | 20.5..20.5 | 1 | 0.467 | - | 191.8 | 20.5 | 171.29 (upload_ms_untimed) | 0.050 (whole/whole) | - | 1308.2 | 642.0 | explained_variance_ratio_sum=0.999996 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| torch-gpu | torch | gpu | opponent | 1.4 | 1.4..1.4 | 1 | 6.652 | - | 10.6 | 1.4 | 9.19 (upload_ms_untimed) | 0.900 (whole/whole (kernel not derivable)) | - | 1057.9 | 344.4 | explained_variance_ratio_sum=0.999996 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'. Rows: big block, raw. Timed: fit.
+
+mismatch: svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'
+
+mismatch: torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)
+
+mismatch: random_state is read by none of the covariance solvers; set to 7 on every arm
+
+config: cuML benchmark (RAPIDS), PCA (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
 ## Classical, wave 2
+
+### elasticnet / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 96.9 | 96.9..96.9 | 1 | - | - | 96.9 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.260922, rmse=0.718134 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 319.5 | 319.5..319.5 | 1 | 0.303 | - | 1024.9 | 319.5 | 705.36 (upload_ms_untimed) | 0.095 (whole/whole) | - | 2918.9 | 1374.0 | finite=True, r2=0.260922, rmse=0.718134 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=0.1, l1_ratio=0.5 (the cuML benchmark's ElasticNet), fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; ours and cuML solver='cd'. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: ours refuses random_state (it selects nothing with selection='cyclic'), cuML has none; scikit-learn random_state=7
+
+mismatch: tol: each library's own stopping rule reads it
+
+config: cuML benchmark (RAPIDS), ElasticNet (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### elasticnet / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 5.6 | 5.6..5.6 | 1 | - | - | 5.6 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.907378, rmse=4.847225 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 5.8 | 5.8..5.8 | 1 | 0.965 | - | 63.8 | 5.8 | 57.95 (upload_ms_untimed) | 0.088 (whole/whole) | - | 968.0 | 498.0 | finite=True, r2=0.907378, rmse=4.847224 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=0.1, l1_ratio=0.5 (the cuML benchmark's ElasticNet), fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; ours and cuML solver='cd'. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: ours refuses random_state (it selects nothing with selection='cyclic'), cuML has none; scikit-learn random_state=7
+
+mismatch: tol: each library's own stopping rule reads it
+
+config: cuML benchmark (RAPIDS), ElasticNet (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
 ### gmm / istella (rows full, shape -)
 
@@ -773,12 +1052,12 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### ivf / istella (rows full, shape index 400000x220; queries 4000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt (nv/n0566)`, ran on nv (RunPod L40S) job n0566
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1023)`, ran on nv2 (RunPod L40S) job v1023
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 1123.2 | 1123.2..1123.2 | 1 | - | - | 1123.2 | - | - (stored whole) | - | - | - | - | recall_at_k=1.000000, rows_with_repeated_ids=0 | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0566 2026-10-08; identity vs amd-mi325x: MATCH) |
-| cuvs-gpu | cuvs | gpu | opponent | 301.6 | 301.6..301.6 | 1 | 3.723 | - | 635.6 | 301.6 | 333.95 (upload_ms_untimed) | 1.767 (whole/whole) | - | 1730.7 | 770.0 | recall_at_k=0.999975, rows_with_repeated_ids=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 322.2 | 322.2..322.2 | 1 | - | - | 322.2 | - | - (stored whole) | - | - | - | - | recall_at_k=0.999925, rows_with_repeated_ids=0 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuvs-gpu | cuvs | gpu | opponent | 301.6 | 301.6..301.6 | 1 | 1.068 | - | 635.6 | 301.6 | 333.95 (upload_ms_untimed) | 0.507 (whole/whole) | - | 1730.7 | 770.0 | recall_at_k=0.999975, rows_with_repeated_ids=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -796,12 +1075,12 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### ivf / taxi (rows full, shape index 400000x11; queries 4000x11)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt (nv/n0566)`, ran on nv (RunPod L40S) job n0566
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1023)`, ran on nv2 (RunPod L40S) job v1023
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 155.9 | 155.9..155.9 | 1 | - | - | 155.9 | - | - (stored whole) | - | - | - | - | recall_at_k=0.999675, rows_with_repeated_ids=0 | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0566 2026-10-08; identity vs amd-mi325x: MATCH) |
-| cuvs-gpu | cuvs | gpu | opponent | 297.5 | 297.5..297.5 | 1 | 0.524 | - | 323.7 | 297.5 | 26.15 (upload_ms_untimed) | 0.482 (whole/whole) | - | 933.3 | 450.0 | recall_at_k=0.999450, rows_with_repeated_ids=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 43.1 | 43.1..43.1 | 1 | - | - | 43.1 | - | - (stored whole) | - | - | - | - | recall_at_k=0.999650, rows_with_repeated_ids=0 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuvs-gpu | cuvs | gpu | opponent | 297.5 | 297.5..297.5 | 1 | 0.145 | - | 323.7 | 297.5 | 26.15 (upload_ms_untimed) | 0.133 (whole/whole) | - | 933.3 | 450.0 | recall_at_k=0.999450, rows_with_repeated_ids=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -817,14 +1096,110 @@ config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### ridge / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+### lasso / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt (nv/n0329)`, ran on nv (RunPod L40S) job n0329
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 1520.2 | 1520.2..1520.2 | 1 | - | - | 1520.2 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.328682, rmse=0.684423 | - | main board, one scored run | - | ok (main@de2b2b739 nv/n0329 2026-10-08; identity vs amd-mi325x: MATCH) |
-| cuml-gpu | cuml | gpu | opponent | 48.2 | 48.2..48.2 | 1 | 31.517 | - | 754.2 | 48.2 | 705.96 (upload_ms_untimed) | 2.016 (whole/whole) | - | 2969.7 | 1410.0 | finite=True, r2=-0.251259, rmse=0.934403 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 106.1 | 106.1..106.1 | 1 | - | - | 106.1 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.310837, rmse=0.693460 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 935.1 | 935.1..935.1 | 1 | 0.113 | - | 1631.6 | 935.1 | 696.44 (upload_ms_untimed) | 0.065 (whole/whole) | - | 2918.9 | 1374.0 | finite=True, r2=0.310837, rmse=0.693460 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; ours and cuML solver='cd'. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: ours refuses random_state (it selects nothing with selection='cyclic'), cuML has none; scikit-learn random_state=7
+
+mismatch: tol: each library's own stopping rule reads it
+
+config: cuML benchmark (RAPIDS), Lasso (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### lasso / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 5.1 | 5.1..5.1 | 1 | - | - | 5.1 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.908995, rmse=4.804744 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 10.2 | 10.2..10.2 | 1 | 0.496 | - | 67.5 | 10.2 | 57.21 (upload_ms_untimed) | 0.075 (whole/whole) | - | 968.5 | 498.0 | finite=True, r2=0.908995, rmse=4.804745 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; ours and cuML solver='cd'. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: ours refuses random_state (it selects nothing with selection='cyclic'), cuML has none; scikit-learn random_state=7
+
+mismatch: tol: each library's own stopping rule reads it
+
+config: cuML benchmark (RAPIDS), Lasso (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### logreg / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 1797.6 | 1797.6..1797.6 | 1 | - | - | 1797.6 | - | - (stored whole) | - | - | - | - | accuracy=0.924590, logloss=0.181249, nonfinite_proba_rows=0 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 1854.6 | 1854.6..1854.6 | 1 | 0.969 | - | 2556.2 | 1854.6 | 701.60 (upload_ms_untimed) | 0.703 (whole/whole) | - | 3047.8 | 1374.0 | accuracy=0.924430, logloss=0.181268, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: penalty='l2', C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True, class_weight=None; scikit-learn random_state=7. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: solver: ours 'qn' (L-BFGS, cuML's), scikit-learn 'lbfgs', cuML 'qn'; each library's own stopping rule reads tol
+
+mismatch: seed: ours and cuML LogisticRegression have no seed argument
+
+mismatch: l1_ratio: ours None, scikit-learn None or 0.0 (its l2 spelling from 1.8)
+
+config: cuML benchmark (RAPIDS), LogisticRegression (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### logreg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 20.4 | 20.4..20.4 | 1 | - | - | 20.4 | - | - (stored whole) | - | - | - | - | accuracy=0.763350, logloss=0.538985, nonfinite_proba_rows=0 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 9.7 | 9.7..9.7 | 1 | 2.095 | - | 71.9 | 9.7 | 62.19 (upload_ms_untimed) | 0.283 (whole/whole) | - | 1084.8 | 498.0 | accuracy=0.763350, logloss=0.538986, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: penalty='l2', C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True, class_weight=None; scikit-learn random_state=7. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: solver: ours 'qn' (L-BFGS, cuML's), scikit-learn 'lbfgs', cuML 'qn'; each library's own stopping rule reads tol
+
+mismatch: seed: ours and cuML LogisticRegression have no seed argument
+
+mismatch: l1_ratio: ours None, scikit-learn None or 0.0 (its l2 spelling from 1.8)
+
+config: cuML benchmark (RAPIDS), LogisticRegression (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### ridge / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 549.4 | 549.4..549.4 | 1 | - | - | 549.4 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.328682, rmse=0.684423 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 48.2 | 48.2..48.2 | 1 | 11.391 | - | 754.2 | 48.2 | 705.96 (upload_ms_untimed) | 0.729 (whole/whole) | - | 2969.7 | 1410.0 | finite=True, r2=-0.251259, rmse=0.934403 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -842,12 +1217,12 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### ridge / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt (nv/n0329)`, ran on nv (RunPod L40S) job n0329
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1021)`, ran on nv2 (RunPod L40S) job v1021
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 4.5 | 4.5..4.5 | 1 | - | - | 4.5 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.908983, rmse=4.805050 | - | main board, one scored run | - | ok (main@de2b2b739 nv/n0329 2026-10-08; identity vs amd-mi325x: MATCH) |
-| cuml-gpu | cuml | gpu | opponent | 15.2 | 15.2..15.2 | 1 | 0.294 | - | 71.7 | 15.2 | 56.48 (upload_ms_untimed) | 0.062 (whole/whole) | - | 1000.4 | 534.0 | finite=True, r2=0.908983, rmse=4.805051 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 5.0 | 5.0..5.0 | 1 | - | - | 5.0 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.908983, rmse=4.805050 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 15.2 | 15.2..15.2 | 1 | 0.328 | - | 71.7 | 15.2 | 56.48 (upload_ms_untimed) | 0.069 (whole/whole) | - | 1000.4 | 534.0 | finite=True, r2=0.908983, rmse=4.805051 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -860,6 +1235,48 @@ mismatch: solver, named on every arm: ours and cuML 'eig' (eigendecomposition of
 mismatch: seed: ours and cuML Ridge have no seed argument
 
 config: cuML benchmark (RAPIDS), Ridge (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### tsvd / istella (rows full, shape X 1000000x220)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1022)`, ran on nv2 (RunPod L40S) job v1022
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 59.4 | 59.4..59.4 | 1 | - | - | 59.4 | - | - (stored whole) | - | - | - | - | explained_variance_ratio_sum=1.000000, relative_reconstruction_error=0.0001314 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1022 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 35.3 | 35.3..35.3 | 1 | 1.683 | - | 699.3 | 35.3 | 664.00 (upload_ms_untimed) | 0.085 (whole/whole) | - | 2749.0 | 1314.0 | explained_variance_ratio_sum=1.000000, relative_reconstruction_error=0.0001472 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7. Rows: 1000000 stride rows of the train split, raw (sentinel cleaned, not scaled). Timed: fit.
+
+mismatch: algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'
+
+config: cuML benchmark (RAPIDS), tSVD (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### tsvd / taxi (rows full, shape X 1000000x11)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1022)`, ran on nv2 (RunPod L40S) job v1022
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 5.3 | 5.3..5.3 | 1 | - | - | 5.3 | - | - (stored whole) | - | - | - | - | explained_variance_ratio_sum=0.999965, relative_reconstruction_error=0.003257 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1022 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuml-gpu | cuml | gpu | opponent | 5.9 | 5.9..5.9 | 1 | 0.895 | - | 54.4 | 5.9 | 48.44 (upload_ms_untimed) | 0.098 (whole/whole) | - | 982.5 | 516.0 | explained_variance_ratio_sum=0.999964, relative_reconstruction_error=0.003257 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7. Rows: 1000000 stride rows of the train split, raw (sentinel cleaned, not scaled). Timed: fit.
+
+mismatch: algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'
+
+config: cuML benchmark (RAPIDS), tSVD (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
@@ -1088,15 +1505,15 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### adafactor / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1010)`, ran on nv2 (RunPod L40S) job v1010
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 15.3 ms) = 1.137. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 15.3 ms) = 0.896. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 17.3 | 17.3..17.3 | 1 | - | - | 17.3 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0526/work-adafactor-synthetic-def/adafactor-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH) |
-| torch-eager-fp32 | torch | gpu | opponent | 15.3 | 15.3..15.3 | 1 | 1.137 | - | - | 15.3 | - (stored kernel) | 1.137 (MIXED ours whole / arm kernel) | - | 1035.9 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 169.7 | 169.7..169.7 | 1 | 0.102 | - | - | 169.7 | - (stored kernel) | 0.102 (MIXED ours whole / arm kernel) | - | 1118.9 | 1024.0 | rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 13.7 | 13.7..13.7 | 1 | - | - | 13.7 | - | - (stored whole) | - | - | - | - | relative_error_vs_own_host=0.000000 | - | main board, one scored run | - | ok (main@9440ea75b nv2/v1010 2026-10-09; identity vs amd-mi325x: n/a) |
+| torch-eager-fp32 | torch | gpu | opponent | 15.3 | 15.3..15.3 | 1 | 0.896 | - | - | 15.3 | - (stored kernel) | 0.896 (MIXED ours whole / arm kernel) | - | 1035.9 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 169.7 | 169.7..169.7 | 1 | 0.081 | - | - | 169.7 | - (stored kernel) | 0.081 (MIXED ours whole / arm kernel) | - | 1118.9 | 1024.0 | rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -1110,15 +1527,15 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### adagrad / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1010)`, ran on nv2 (RunPod L40S) job v1010
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 14.9 ms) = 0.729. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 14.9 ms) = 0.567. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 10.8 | 10.8..10.8 | 1 | - | - | 10.8 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0526/work-adagrad-synthetic-def/adagrad-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH) |
-| torch-eager-fp32 | torch | gpu | opponent | 14.9 | 14.9..14.9 | 1 | 0.729 | - | - | 14.9 | - (stored kernel) | 0.729 (MIXED ours whole / arm kernel) | - | 968.5 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 115.6 | 115.6..115.6 | 1 | 0.094 | - | - | 115.6 | - (stored kernel) | 0.094 (MIXED ours whole / arm kernel) | - | 1302.1 | 832.0 | rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 8.4 | 8.4..8.4 | 1 | - | - | 8.4 | - | - (stored whole) | - | - | - | - | relative_error_vs_own_host=0.000000 | - | main board, one scored run | - | ok (main@9440ea75b nv2/v1010 2026-10-09; identity vs amd-mi325x: n/a) |
+| torch-eager-fp32 | torch | gpu | opponent | 14.9 | 14.9..14.9 | 1 | 0.567 | - | - | 14.9 | - (stored kernel) | 0.567 (MIXED ours whole / arm kernel) | - | 968.5 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 115.6 | 115.6..115.6 | 1 | 0.073 | - | - | 115.6 | - (stored kernel) | 0.073 (MIXED ours whole / arm kernel) | - | 1302.1 | 832.0 | rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -1132,15 +1549,15 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### adamax / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1010)`, ran on nv2 (RunPod L40S) job v1010
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 20.2 ms) = 0.689. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 20.2 ms) = 0.530. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 13.9 | 13.9..13.9 | 1 | - | - | 13.9 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0526/work-adamax-synthetic-def/adamax-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH) |
-| torch-eager-fp32 | torch | gpu | opponent | 20.2 | 20.2..20.2 | 1 | 0.689 | - | - | 20.2 | - (stored kernel) | 0.689 (MIXED ours whole / arm kernel) | - | 981.9 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 146.9 | 146.9..146.9 | 1 | 0.095 | - | - | 146.9 | - (stored kernel) | 0.095 (MIXED ours whole / arm kernel) | - | 1445.6 | 896.0 | rel_fro_vs_torch_eager_fp32=6.395e-09 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 10.7 | 10.7..10.7 | 1 | - | - | 10.7 | - | - (stored whole) | - | - | - | - | relative_error_vs_own_host=0.000000 | - | main board, one scored run | - | ok (main@9440ea75b nv2/v1010 2026-10-09; identity vs amd-mi325x: n/a) |
+| torch-eager-fp32 | torch | gpu | opponent | 20.2 | 20.2..20.2 | 1 | 0.530 | - | - | 20.2 | - (stored kernel) | 0.530 (MIXED ours whole / arm kernel) | - | 981.9 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 146.9 | 146.9..146.9 | 1 | 0.073 | - | - | 146.9 | - (stored kernel) | 0.073 (MIXED ours whole / arm kernel) | - | 1445.6 | 896.0 | rel_fro_vs_torch_eager_fp32=6.395e-09 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -1160,7 +1577,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.4 ms) = 1.208; fp32 t
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 1.6 | 1.6..1.6 | 1 | - | - | 1.6 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-batchnorm2d-synthetic-def/batchnorm2d-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 1.6 | 1.6..1.6 | 1 | - | - | 1.6 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-batchnorm2d-synthetic-def/batchnorm2d-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 9440ea75b/v1010 failed: not_ready) |
 | torch-eager-fp32 | torch | gpu | opponent | 1.3 | 1.3..1.3 | 1 | 1.231 | - | - | 1.3 | - (stored kernel) | 1.231 (MIXED ours whole / arm kernel) | - | 761.8 | 250.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-compile-fp32 | torch | gpu | opponent | 1.4 | 1.4..1.4 | 1 | 1.152 | - | - | 1.4 | - (stored kernel) | 1.152 (MIXED ours whole / arm kernel) | - | 965.4 | 246.0 | max_rel_diff_vs_torch_eager_fp32=0.001863, rel_fro_vs_torch_eager_fp32=4.327e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-eager-tf32 | torch | gpu | opponent | 1.2 | 1.2..1.2 | 1 | 1.395 | - | - | 1.2 | - (stored kernel) | 1.395 (MIXED ours whole / arm kernel) | - | 761.8 | 250.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
@@ -1325,7 +1742,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.3 ms) = 7.249; fp32 t
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 9.7 | 9.7..9.7 | 1 | - | - | 9.7 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-conv2d-synthetic-def/conv2d-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 444f0b96e/v1002 failed: not_ready) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 9.7 | 9.7..9.7 | 1 | - | - | 9.7 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-conv2d-synthetic-def/conv2d-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 9440ea75b/v1010 failed: not_ready; newer run 444f0b96e/v1002 failed: not_ready) |
 | torch-eager-fp32 | torch | gpu | opponent | 2.3 | 2.3..2.3 | 1 | 4.195 | - | - | 2.3 | - (stored kernel) | 4.195 (MIXED ours whole / arm kernel) | - | 910.5 | 250.5 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-compile-fp32 | torch | gpu | opponent | 2.5 | 2.5..2.5 | 1 | 3.887 | - | - | 2.5 | - (stored kernel) | 3.887 (MIXED ours whole / arm kernel) | - | 1131.1 | 346.8 | max_rel_diff_vs_torch_eager_fp32=0.506768, rel_fro_vs_torch_eager_fp32=5.007e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-eager-tf32 | torch | gpu | opponent | 1.8 | 1.8..1.8 | 1 | 5.458 | - | - | 1.8 | - (stored kernel) | 5.458 (MIXED ours whole / arm kernel) | - | 927.7 | 354.2 | max_rel_diff_vs_torch_eager_fp32=382.931903, rel_fro_vs_torch_eager_fp32=0.0003021 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
@@ -1391,7 +1808,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 1.4 | 1.4..1.4 | 1 | - | - | 1.4 | - | - (stored whole) | - | - | - | - | - | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 1.4 | 1.4..1.4 | 1 | - | - | 1.4 | - | - (stored whole) | - | - | - | - | - | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 9440ea75b/v1010 failed: not_ready) |
 | torch-eager-fp32 | torch | gpu | opponent | 1.0 | 1.0..1.0 | 1 | 1.385 | - | - | 1.0 | - (stored kernel) | 1.385 (MIXED ours whole / arm kernel) | - | 697.8 | 250.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-compile-fp32 | torch | gpu | opponent | 1.2 | 1.2..1.2 | 1 | 1.128 | - | - | 1.2 | - (stored kernel) | 1.128 (MIXED ours whole / arm kernel) | - | 916.4 | 247.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-eager-tf32 | torch | gpu | opponent | 1.1 | 1.1..1.1 | 1 | 1.277 | - | - | 1.1 | - (stored kernel) | 1.277 (MIXED ours whole / arm kernel) | - | 697.7 | 250.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
@@ -1440,7 +1857,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 2.6 | 2.6..2.6 | 1 | - | - | 2.6 | - | - (stored whole) | - | - | - | - | identical_to=torch-eager-fp32 | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 2.6 | 2.6..2.6 | 1 | - | - | 2.6 | - | - (stored whole) | - | - | - | - | identical_to=torch-eager-fp32 | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 9440ea75b/v1010 failed: not_ready) |
 | torch-eager-fp32 | torch | gpu | opponent | 1.9 | 1.9..1.9 | 1 | 1.411 | - | - | 1.9 | - (stored kernel) | 1.411 (MIXED ours whole / arm kernel) | - | 838.7 | 782.6 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-compile-fp32 | torch | gpu | opponent | 2.1 | 2.1..2.1 | 1 | 1.278 | - | - | 2.1 | - (stored kernel) | 1.278 (MIXED ours whole / arm kernel) | - | 1167.7 | 640.2 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 
@@ -1626,12 +2043,12 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### ivf-pq / istella (rows full, shape index 400000x220; queries 4000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v0996)`, ran on nv2 (RunPod L40S) job v0996
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1020)`, ran on nv2 (RunPod L40S) job v1020
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 1008.1 | 1008.1..1008.1 | 1 | - | - | 1008.1 | - | - (stored whole) | - | - | - | - | recall_at_10=0.748925 | - | main board, one scored run | - | ok (main@17edad642 nv2/v0996 2026-10-09; identity vs amd-mi325x: n/a) |
-| cuvs-gpu | cuvs | gpu | opponent | 1905.2 | 1905.2..1905.2 | 1 | 0.529 | - | 2248.5 | 1905.2 | 343.31 (upload_ms_untimed) | 0.448 (whole/whole) | - | 1793.1 | 822.0 | recall_at_10=0.791300 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 755.7 | 755.7..755.7 | 1 | - | - | 755.7 | - | - (stored whole) | - | - | - | - | recall_at_10=0.802100 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1020 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuvs-gpu | cuvs | gpu | opponent | 1905.2 | 1905.2..1905.2 | 1 | 0.397 | - | 2248.5 | 1905.2 | 343.31 (upload_ms_untimed) | 0.336 (whole/whole) | - | 1793.1 | 822.0 | recall_at_10=0.791300 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 | faiss-cpu | faiss | cpu | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(timeout: null) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours, faiss-cpu: host not sampled; GPU not sampled
@@ -1646,13 +2063,13 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### ivf-pq / taxi (rows full, shape index 400000x11; queries 4000x11)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v0996)`, ran on nv2 (RunPod L40S) job v0996
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1020)`, ran on nv2 (RunPod L40S) job v1020
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 157.2 | 157.2..157.2 | 1 | - | - | 157.2 | - | - (stored whole) | - | - | - | - | recall_at_10=0.981250 | - | main board, one scored run | - | ok (main@17edad642 nv2/v0996 2026-10-09; identity vs amd-mi325x: n/a) |
-| cuvs-gpu | cuvs | gpu | opponent | 471.5 | 471.5..471.5 | 1 | 0.333 | - | 502.2 | 471.5 | 30.72 (upload_ms_untimed) | 0.313 (whole/whole) | - | 995.4 | 466.0 | recall_at_10=0.976875 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
-| faiss-cpu | faiss | cpu | opponent | 67512.8 | 67512.8..67512.8 | 1 | 0.002 | - | 67512.8 | 67512.8 | 0.00 (cpu-arm) | 0.002 (whole/whole) | - | 135.3 | - | recall_at_10=0.979450 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 100.1 | 100.1..100.1 | 1 | - | - | 100.1 | - | - (stored whole) | - | - | - | - | recall_at_10=0.981250 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1020 2026-10-09; identity vs amd-mi325x: MATCH) |
+| cuvs-gpu | cuvs | gpu | opponent | 471.5 | 471.5..471.5 | 1 | 0.212 | - | 502.2 | 471.5 | 30.72 (upload_ms_untimed) | 0.199 (whole/whole) | - | 995.4 | 466.0 | recall_at_10=0.976875 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| faiss-cpu | faiss | cpu | opponent | 67512.8 | 67512.8..67512.8 | 1 | 0.001 | - | 67512.8 | 67512.8 | 0.00 (cpu-arm) | 0.001 (whole/whole) | - | 135.3 | - | recall_at_10=0.979450 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -1820,12 +2237,12 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### knn-imputer / istella (rows full, shape X 100000x220; X_true 100000x220; Xq 20000x220; Xq_true 20000x220; y 100000; yq 20000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0524)`, ran on nv (RunPod L40S) job n0524
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1020)`, ran on nv2 (RunPod L40S) job v1020
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 67.4 | 67.4..67.4 | 1 | - | - | 67.4 | - | - (stored whole) | - | - | - | - | masked_rmse=323953.237332 | - | main board, one scored run | - | ok (main@4df610f3b nv/n0524 2026-10-08; identity vs amd-mi325x: MATCH) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 23.2 | 23.2..23.2 | 1 | 2.908 | - | 23.2 | 23.2 | 0.00 (cpu-arm) | 2.908 (whole/whole) | - | 3499.1 | - | masked_rmse=986208.700423 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 82.6 | 82.6..82.6 | 1 | - | - | 82.6 | - | - (stored whole) | - | - | - | - | masked_rmse=323953.237332 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1020 2026-10-09; identity vs amd-mi325x: MATCH) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 23.2 | 23.2..23.2 | 1 | 3.562 | - | 23.2 | 23.2 | 0.00 (cpu-arm) | 3.562 (whole/whole) | - | 3499.1 | - | masked_rmse=986208.700423 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -1839,12 +2256,12 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### knn-imputer / taxi (rows full, shape X 100000x11; X_true 100000x11; Xq 20000x11; Xq_true 20000x11; y 100000; yq 20000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0524)`, ran on nv (RunPod L40S) job n0524
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1020)`, ran on nv2 (RunPod L40S) job v1020
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 7.6 | 7.6..7.6 | 1 | - | - | 7.6 | - | - (stored whole) | - | - | - | - | masked_rmse=6.151696 | - | main board, one scored run | - | ok (main@4df610f3b nv/n0524 2026-10-08; identity vs amd-mi325x: MATCH) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 6.0 | 6.0..6.0 | 1 | 1.267 | - | 6.0 | 6.0 | 0.00 (cpu-arm) | 1.267 (whole/whole) | - | 1952.7 | - | masked_rmse=5.263919 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 2.7 | 2.7..2.7 | 1 | - | - | 2.7 | - | - (stored whole) | - | - | - | - | masked_rmse=6.151696 | - | main board, one scored run | - | ok (main@0a7b206f1 nv2/v1020 2026-10-09; identity vs amd-mi325x: MATCH) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 6.0 | 6.0..6.0 | 1 | 0.452 | - | 6.0 | 6.0 | 0.00 (cpu-arm) | 0.452 (whole/whole) | - | 1952.7 | - | masked_rmse=5.263919 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -2048,7 +2465,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.9 ms) = 27.039; fp32 
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 50.6 | 50.6..50.6 | 1 | - | - | 50.6 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-layernorm-synthetic-def/layernorm-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 50.6 | 50.6..50.6 | 1 | - | - | 50.6 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-layernorm-synthetic-def/layernorm-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 9440ea75b/v1010 failed: not_ready) |
 | torch-eager-fp32 | torch | gpu | opponent | 3.4 | 3.4..3.4 | 1 | 14.690 | - | - | 3.4 | - (stored kernel) | 14.690 (MIXED ours whole / arm kernel) | - | 734.0 | 320.1 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 | torch-compile-fp32 | torch | gpu | opponent | 7.1 | 7.1..7.1 | 1 | 7.086 | - | - | 7.1 | - (stored kernel) | 7.086 (MIXED ours whole / arm kernel) | - | 984.7 | 336.1 | max_rel_diff_vs_torch_eager_fp32=0.006419, rel_fro_vs_torch_eager_fp32=5.316e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 | torch-eager-tf32 | torch | gpu | opponent | 2.0 | 2.0..2.0 | 1 | 25.847 | - | - | 2.0 | - (stored kernel) | 25.847 (MIXED ours whole / arm kernel) | - | 734.2 | 320.1 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
@@ -2322,7 +2739,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 4.3 ms) = 7.476; fp32 t
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 32.5 | 32.5..32.5 | 1 | - | - | 32.5 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-moe-synthetic-def/moe-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 444f0b96e/v1002 failed: not_ready) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 32.5 | 32.5..32.5 | 1 | - | - | 32.5 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-moe-synthetic-def/moe-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 9440ea75b/v1010 failed: not_ready; newer run 444f0b96e/v1002 failed: not_ready) |
 | torch-eager-fp32 | torch | gpu | opponent | 12.0 | 12.0..12.0 | 1 | 2.698 | - | - | 12.0 | - (stored kernel) | 2.698 (MIXED ours whole / arm kernel) | - | 1008.6 | 469.1 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-compile-fp32 | torch | gpu | opponent | 11.9 | 11.9..11.9 | 1 | 2.723 | - | - | 11.9 | - (stored kernel) | 2.723 (MIXED ours whole / arm kernel) | - | 1273.6 | 446.7 | max_rel_diff_vs_torch_eager_fp32=0.026193, rel_fro_vs_torch_eager_fp32=1.548e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 | torch-eager-tf32 | torch | gpu | opponent | 9.8 | 9.8..9.8 | 1 | 3.302 | - | - | 9.8 | - (stored kernel) | 3.302 (MIXED ours whole / arm kernel) | - | 1004.4 | 469.1 | max_rel_diff_vs_torch_eager_fp32=1004.691291, rel_fro_vs_torch_eager_fp32=0.017534 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
@@ -2364,15 +2781,15 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### nadam / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1010)`, ran on nv2 (RunPod L40S) job v1010
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 20.8 ms) = 0.625. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 20.8 ms) = 0.516. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 13.0 | 13.0..13.0 | 1 | - | - | 13.0 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0526/work-nadam-synthetic-def/nadam-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH) |
-| torch-eager-fp32 | torch | gpu | opponent | 20.8 | 20.8..20.8 | 1 | 0.625 | - | - | 20.8 | - (stored kernel) | 0.625 (MIXED ours whole / arm kernel) | - | 971.0 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 174.5 | 174.5..174.5 | 1 | 0.074 | - | - | 174.5 | - (stored kernel) | 0.074 (MIXED ours whole / arm kernel) | - | 1443.1 | 896.0 | rel_fro_vs_torch_eager_fp32=1.498e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 10.7 | 10.7..10.7 | 1 | - | - | 10.7 | - | - (stored whole) | - | - | - | - | relative_error_vs_own_host=0.000000 | - | main board, one scored run | - | ok (main@9440ea75b nv2/v1010 2026-10-09; identity vs amd-mi325x: n/a) |
+| torch-eager-fp32 | torch | gpu | opponent | 20.8 | 20.8..20.8 | 1 | 0.516 | - | - | 20.8 | - (stored kernel) | 0.516 (MIXED ours whole / arm kernel) | - | 971.0 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 174.5 | 174.5..174.5 | 1 | 0.061 | - | - | 174.5 | - (stored kernel) | 0.061 (MIXED ours whole / arm kernel) | - | 1443.1 | 896.0 | rel_fro_vs_torch_eager_fp32=1.498e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -2854,7 +3271,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 2.8 ms) = 7.362; fp32 t
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 21.0 | 21.0..21.0 | 1 | - | - | 21.0 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-resnet-block-synthetic-def/resnet-block-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 444f0b96e/v1002 failed: not_ready) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 21.0 | 21.0..21.0 | 1 | - | - | 21.0 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0666/work-resnet-block-synthetic-def/resnet-block-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@432d6e8ff nv/n0666 2026-10-09; identity vs amd-mi325x: n/a; newer run 9440ea75b/v1010 failed: not_ready; newer run 444f0b96e/v1002 failed: not_ready) |
 | torch-eager-fp32 | torch | gpu | opponent | 5.3 | 5.3..5.3 | 1 | 3.973 | - | - | 5.3 | - (stored kernel) | 3.973 (MIXED ours whole / arm kernel) | - | 942.5 | 450.7 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 | torch-compile-fp32 | torch | gpu | opponent | 5.3 | 5.3..5.3 | 1 | 3.974 | - | - | 5.3 | - (stored kernel) | 3.974 (MIXED ours whole / arm kernel) | - | 1146.2 | 409.2 | max_rel_diff_vs_torch_eager_fp32=0.818182, rel_fro_vs_torch_eager_fp32=5.381e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
 | torch-eager-tf32 | torch | gpu | opponent | 4.4 | 4.4..4.4 | 1 | 4.763 | - | - | 4.4 | - (stored kernel) | 4.763 (MIXED ours whole / arm kernel) | - | 959.7 | 554.3 | max_rel_diff_vs_torch_eager_fp32=1532.793045, rel_fro_vs_torch_eager_fp32=0.0003478 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
@@ -2912,15 +3329,15 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### rmsprop / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt (nv/n0526)`, ran on nv (RunPod L40S) job n0526
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1010)`, ran on nv2 (RunPod L40S) job v1010
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 13.3 ms) = 0.803. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 13.3 ms) = 0.641. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 10.6 | 10.6..10.6 | 1 | - | - | 10.6 | - | - (stored whole) | - | - | - | - | error=Own host reference failed; see /root/lq/out/n0526/work-rmsprop-synthetic-def/rmsprop-synthetic-host-quality/host.log | - | main board, one scored run | - | ok (main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH) |
-| torch-eager-fp32 | torch | gpu | opponent | 13.3 | 13.3..13.3 | 1 | 0.803 | - | - | 13.3 | - (stored kernel) | 0.803 (MIXED ours whole / arm kernel) | - | 958.5 | 896.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 118.3 | 118.3..118.3 | 1 | 0.090 | - | - | 118.3 | - (stored kernel) | 0.090 (MIXED ours whole / arm kernel) | - | 1308.8 | 832.0 | rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 8.5 | 8.5..8.5 | 1 | - | - | 8.5 | - | - (stored whole) | - | - | - | - | relative_error_vs_own_host=0.000000 | - | main board, one scored run | - | ok (main@9440ea75b nv2/v1010 2026-10-09; identity vs amd-mi325x: n/a) |
+| torch-eager-fp32 | torch | gpu | opponent | 13.3 | 13.3..13.3 | 1 | 0.641 | - | - | 13.3 | - (stored kernel) | 0.641 (MIXED ours whole / arm kernel) | - | 958.5 | 896.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 118.3 | 118.3..118.3 | 1 | 0.072 | - | - | 118.3 | - (stored kernel) | 0.072 (MIXED ours whole / arm kernel) | - | 1308.8 | 832.0 | rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 

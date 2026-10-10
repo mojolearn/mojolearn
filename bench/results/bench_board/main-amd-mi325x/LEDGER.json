@@ -8,6 +8,36 @@
    "reason": "older commit",
    "replaced": {
     "box": "amd",
+    "commit_date": "2026-10-09T15:53:14Z",
+    "digest": "aa99a3dc8c61a3b4",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1141",
+    "kind": "algos",
+    "median_ms": 8.620120992418379,
+    "reason": null,
+    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "aa99a3dc8c61a3b4",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 8.599005988799036,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/adafactor/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
     "digest": "aa99a3dc8c61a3b4",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
@@ -20,14 +50,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "aa99a3dc8c61a3b4",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1141",
+    "job": "a1156",
     "kind": "algos",
-    "median_ms": 8.620120992418379,
+    "median_ms": 8.599005988799036,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -50,14 +80,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "aa99a3dc8c61a3b4",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1141",
+    "job": "a1156",
     "kind": "algos",
-    "median_ms": 8.620120992418379,
+    "median_ms": 8.599005988799036,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -80,14 +110,44 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "aa99a3dc8c61a3b4",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 8.599005988799036,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/adagrad/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T15:53:14Z",
+    "digest": "7eac92c7ee8f1322",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
     "job": "a1141",
     "kind": "algos",
-    "median_ms": 8.620120992418379,
+    "median_ms": 3.376628999831155,
     "reason": null,
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "7eac92c7ee8f1322",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 3.271273977588862,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -110,14 +170,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "7eac92c7ee8f1322",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1141",
+    "job": "a1156",
     "kind": "algos",
-    "median_ms": 3.376628999831155,
+    "median_ms": 3.271273977588862,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -140,14 +200,44 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "7eac92c7ee8f1322",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 3.271273977588862,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/adamax/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T15:53:14Z",
+    "digest": "2d21cdf4e97f6655",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
     "job": "a1141",
     "kind": "algos",
-    "median_ms": 3.376628999831155,
+    "median_ms": 3.75975199858658,
     "reason": null,
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "2d21cdf4e97f6655",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 3.69278498692438,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -170,14 +260,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "2d21cdf4e97f6655",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1141",
+    "job": "a1156",
     "kind": "algos",
-    "median_ms": 3.75975199858658,
+    "median_ms": 3.69278498692438,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -200,14 +290,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "2d21cdf4e97f6655",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1141",
+    "job": "a1156",
     "kind": "algos",
-    "median_ms": 3.75975199858658,
+    "median_ms": 3.69278498692438,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -215,7 +305,7 @@
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/batchnorm2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -228,13 +318,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "aca20cab4bac0749",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.186916011851281,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/batchnorm2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -247,13 +348,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "aca20cab4bac0749",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.186916011851281,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/batchnorm2d/synthetic/rows=full",
-   "reason": "infrastructure status REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"}) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"}) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -266,13 +378,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"})"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "aca20cab4bac0749",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.186916011851281,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/batchnorm2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -285,13 +408,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "aca20cab4bac0749",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.186916011851281,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/batchnorm2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:47:27Z",
@@ -304,7 +438,18 @@
     "sha": "530498ea86cfcfdb2bf05c63cd01180fd620f30c",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "aca20cab4bac0749",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.186916011851281,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -477,9 +622,39 @@
   },
   {
    "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/conv2d/synthetic/rows=full",
+   "reason": "same commit date, earlier job",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "9782257b7436241b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1152",
+    "kind": "algos",
+    "median_ms": 9.019748016726226,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "9782257b7436241b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 8.825549972243607,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
    "failed": true,
    "race": "algos/conv2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -492,13 +667,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "9782257b7436241b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 8.825549972243607,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/conv2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -511,13 +697,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "9782257b7436241b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 8.825549972243607,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/conv2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -530,13 +727,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "9782257b7436241b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 8.825549972243607,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/conv2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -549,13 +757,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "9782257b7436241b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 8.825549972243607,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/dropout2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -568,13 +787,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 0.36343198735266924,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/dropout2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -587,13 +817,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 0.36343198735266924,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/dropout2d/synthetic/rows=full",
-   "reason": "infrastructure status REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"}) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"}) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -606,13 +847,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"})"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 0.36343198735266924,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/dropout2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -625,13 +877,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 0.36343198735266924,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/dropout2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:47:27Z",
@@ -644,7 +907,18 @@
     "sha": "530498ea86cfcfdb2bf05c63cd01180fd620f30c",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 0.36343198735266924,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -680,7 +954,7 @@
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/embedding/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -693,13 +967,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "2753e61a6dde36e3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.0942279952578247,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/embedding/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -712,13 +997,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "2753e61a6dde36e3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.0942279952578247,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/embedding/synthetic/rows=full",
-   "reason": "infrastructure status REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"}) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"}) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -731,13 +1027,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"})"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "2753e61a6dde36e3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.0942279952578247,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/embedding/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -750,13 +1057,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "2753e61a6dde36e3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.0942279952578247,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/embedding/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:47:27Z",
@@ -769,7 +1087,18 @@
     "sha": "530498ea86cfcfdb2bf05c63cd01180fd620f30c",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "2753e61a6dde36e3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 2.0942279952578247,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -987,7 +1316,37 @@
    "column": "amd-mi325x",
    "failed": false,
    "race": "algos/ivf-pq/istella/rows=full",
-   "reason": "same commit date, earlier job",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T15:53:14Z",
+    "digest": "925740284b3e3e9a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1131",
+    "kind": "algos",
+    "median_ms": 853.1211959780194,
+    "reason": null,
+    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "7a39a98cdca7dc6e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1160",
+    "kind": "algos",
+    "median_ms": 541.4884749916382,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/ivf-pq/istella/rows=full",
+   "reason": "older commit",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -1002,14 +1361,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
-    "digest": "925740284b3e3e9a",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "7a39a98cdca7dc6e",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1131",
+    "job": "a1160",
     "kind": "algos",
-    "median_ms": 853.1211959780194,
+    "median_ms": 541.4884749916382,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -1032,14 +1391,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
-    "digest": "925740284b3e3e9a",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "7a39a98cdca7dc6e",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1131",
+    "job": "a1160",
     "kind": "algos",
-    "median_ms": 853.1211959780194,
+    "median_ms": 541.4884749916382,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -1062,14 +1421,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
-    "digest": "925740284b3e3e9a",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "7a39a98cdca7dc6e",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1131",
+    "job": "a1160",
     "kind": "algos",
-    "median_ms": 853.1211959780194,
+    "median_ms": 541.4884749916382,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -1077,7 +1436,37 @@
    "column": "amd-mi325x",
    "failed": false,
    "race": "algos/ivf-pq/taxi/rows=full",
-   "reason": "same commit date, earlier job",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T15:53:14Z",
+    "digest": "d6bed412edbb89f1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1131",
+    "kind": "algos",
+    "median_ms": 195.015348988818,
+    "reason": null,
+    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5c793de3ec021c64",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1160",
+    "kind": "algos",
+    "median_ms": 84.55579000292346,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/ivf-pq/taxi/rows=full",
+   "reason": "older commit",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -1092,14 +1481,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
-    "digest": "d6bed412edbb89f1",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5c793de3ec021c64",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1131",
+    "job": "a1160",
     "kind": "algos",
-    "median_ms": 195.015348988818,
+    "median_ms": 84.55579000292346,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -1122,14 +1511,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
-    "digest": "d6bed412edbb89f1",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5c793de3ec021c64",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1131",
+    "job": "a1160",
     "kind": "algos",
-    "median_ms": 195.015348988818,
+    "median_ms": 84.55579000292346,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -1152,14 +1541,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
-    "digest": "d6bed412edbb89f1",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5c793de3ec021c64",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1131",
+    "job": "a1160",
     "kind": "algos",
-    "median_ms": 195.015348988818,
+    "median_ms": 84.55579000292346,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -1225,9 +1614,69 @@
   },
   {
    "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/knn-imputer/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-08T20:52:50Z",
+    "digest": "3496d0b7eb87320a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a0871",
+    "kind": "algos",
+    "median_ms": 23.97113300685305,
+    "reason": null,
+    "sha": "4df610f3b5c79ea7b7600783484e251f07988553",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "3496d0b7eb87320a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1160",
+    "kind": "algos",
+    "median_ms": 25.241683004423976,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/knn-imputer/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-08T20:52:50Z",
+    "digest": "bdfb3566162a2d53",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a0871",
+    "kind": "algos",
+    "median_ms": 1.0787089995574206,
+    "reason": null,
+    "sha": "4df610f3b5c79ea7b7600783484e251f07988553",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "bdfb3566162a2d53",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1160",
+    "kind": "algos",
+    "median_ms": 1.1258680024184287,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
    "failed": true,
    "race": "algos/layernorm/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -1240,13 +1689,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5fe9165ce22888e6",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 1.4464010018855333,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/layernorm/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -1259,13 +1719,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5fe9165ce22888e6",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 1.4464010018855333,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/layernorm/synthetic/rows=full",
-   "reason": "infrastructure status REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"}) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"}) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -1278,13 +1749,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready:_{\"error\":_\"ModuleNotFoundError(\\\"No_module_named_'torch'\\\")\",_\"event\":_\"error\",_\"stage\":_\"ready\"})"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5fe9165ce22888e6",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 1.4464010018855333,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/layernorm/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -1297,13 +1779,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5fe9165ce22888e6",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 1.4464010018855333,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/layernorm/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:47:27Z",
@@ -1316,7 +1809,18 @@
     "sha": "530498ea86cfcfdb2bf05c63cd01180fd620f30c",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5fe9165ce22888e6",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 1.4464010018855333,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -1715,9 +2219,39 @@
   },
   {
    "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/moe/synthetic/rows=full",
+   "reason": "same commit date, earlier job",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "393fefe91af8350f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1152",
+    "kind": "algos",
+    "median_ms": 18.785821011988446,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "393fefe91af8350f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 18.736710015218705,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
    "failed": true,
    "race": "algos/moe/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -1730,13 +2264,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "393fefe91af8350f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 18.736710015218705,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/moe/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -1749,13 +2294,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "393fefe91af8350f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 18.736710015218705,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/moe/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -1768,13 +2324,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "393fefe91af8350f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 18.736710015218705,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/moe/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -1787,13 +2354,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "393fefe91af8350f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 18.736710015218705,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/moe/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:47:27Z",
@@ -1806,7 +2384,18 @@
     "sha": "530498ea86cfcfdb2bf05c63cd01180fd620f30c",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "393fefe91af8350f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 18.736710015218705,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -1845,6 +2434,36 @@
    "reason": "older commit",
    "replaced": {
     "box": "amd",
+    "commit_date": "2026-10-09T15:53:14Z",
+    "digest": "ae1d284e7a58aec9",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1141",
+    "kind": "algos",
+    "median_ms": 4.025617003208026,
+    "reason": null,
+    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "ae1d284e7a58aec9",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 4.027768998639658,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/nadam/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
     "digest": "ae1d284e7a58aec9",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
@@ -1857,14 +2476,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "ae1d284e7a58aec9",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1141",
+    "job": "a1156",
     "kind": "algos",
-    "median_ms": 4.025617003208026,
+    "median_ms": 4.027768998639658,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -1887,14 +2506,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "ae1d284e7a58aec9",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1141",
+    "job": "a1156",
     "kind": "algos",
-    "median_ms": 4.025617003208026,
+    "median_ms": 4.027768998639658,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -2260,9 +2879,39 @@
   },
   {
    "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/resnet-block/synthetic/rows=full",
+   "reason": "same commit date, earlier job",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "263c26c1c15e1170",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1152",
+    "kind": "algos",
+    "median_ms": 22.064356016926467,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "263c26c1c15e1170",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 21.32811798946932,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
    "failed": true,
    "race": "algos/resnet-block/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -2275,13 +2924,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "263c26c1c15e1170",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 21.32811798946932,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/resnet-block/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -2294,13 +2954,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "263c26c1c15e1170",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 21.32811798946932,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/resnet-block/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T15:53:14Z",
@@ -2313,13 +2984,24 @@
     "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "263c26c1c15e1170",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 21.32811798946932,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/resnet-block/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
@@ -2332,13 +3014,24 @@
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "263c26c1c15e1170",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 21.32811798946932,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/resnet-block/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:47:27Z",
@@ -2351,7 +3044,18 @@
     "sha": "530498ea86cfcfdb2bf05c63cd01180fd620f30c",
     "status": "REFUSED(not_ready)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "263c26c1c15e1170",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 21.32811798946932,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -2390,6 +3094,36 @@
    "reason": "older commit",
    "replaced": {
     "box": "amd",
+    "commit_date": "2026-10-09T15:53:14Z",
+    "digest": "38367b9a080a852f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1141",
+    "kind": "algos",
+    "median_ms": 3.3730999857652932,
+    "reason": null,
+    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "38367b9a080a852f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "job": "a1156",
+    "kind": "algos",
+    "median_ms": 3.3847510057967156,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/rmsprop/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
     "digest": "38367b9a080a852f",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
@@ -2402,14 +3136,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "38367b9a080a852f",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1141",
+    "job": "a1156",
     "kind": "algos",
-    "median_ms": 3.3730999857652932,
+    "median_ms": 3.3847510057967156,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -2432,14 +3166,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T15:53:14Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "38367b9a080a852f",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-    "job": "a1141",
+    "job": "a1156",
     "kind": "algos",
-    "median_ms": 3.3730999857652932,
+    "median_ms": 3.3847510057967156,
     "reason": null,
-    "sha": "a47bd9fb2f91d290467a00e0c155b51e98d66d04",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -2702,6 +3436,115 @@
   {
    "column": "amd-mi325x",
    "failed": true,
+   "race": "classical/dbscan/taxi/rows=full",
+   "reason": "failed run (REFUSED(timeout:_null)) never replaces an ok cell; no ok run of this race: FAILED table",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1163",
+    "kind": "gridbb",
+    "median_ms": null,
+    "reason": "REFUSED(timeout:_null)",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "REFUSED(timeout:_null)"
+   },
+   "replaced_by": null
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/kmeans/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "6b0540e8f8723c1e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a0536",
+    "kind": "gridbb",
+    "median_ms": 412.86088699416723,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "6b0540e8f8723c1e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1163",
+    "kind": "gridbb",
+    "median_ms": 296.1340740148444,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/kmeans/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "c9250e0922f657c9",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a0536",
+    "kind": "gridbb",
+    "median_ms": 209.75987600104418,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "c9250e0922f657c9",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1163",
+    "kind": "gridbb",
+    "median_ms": 187.21763501525857,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/ols/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "f0e4626007118ade",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a0565",
+    "kind": "gridbb",
+    "median_ms": 495.1582299981965,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "cc3f6b242d5116a6",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1161",
+    "kind": "gridbb",
+    "median_ms": 543.9328520151321,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": true,
    "race": "classical/ols/istella/rows=full",
    "reason": "failed run (REFUSED(error:_{\"error\":_\"ImportError(\\\"mojolearn:_numeric_mode='identical'_needs_python/mojolearn/identical/_mojolearn_x_decomp.so,_which_is_not_built._Build_it_with\\\\n____MOJOLEARN_NUMERIC_MODE=identical_bash_bind)) never replaces an ok cell",
    "replaced": {
@@ -2718,14 +3561,14 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-08T13:42:40Z",
-    "digest": "f0e4626007118ade",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "cc3f6b242d5116a6",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
-    "job": "a0565",
+    "job": "a1161",
     "kind": "gridbb",
-    "median_ms": 495.1582299981965,
+    "median_ms": 543.9328520151321,
     "reason": null,
-    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -2733,7 +3576,37 @@
    "column": "amd-mi325x",
    "failed": false,
    "race": "classical/ols/taxi/rows=full",
-   "reason": "same commit date, earlier job",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "5c12b7291d055762",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a0565",
+    "kind": "gridbb",
+    "median_ms": 7.914753994555213,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "5c12b7291d055762",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1161",
+    "kind": "gridbb",
+    "median_ms": 12.176513992017135,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/ols/taxi/rows=full",
+   "reason": "older commit",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -2748,14 +3621,44 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-08T13:42:40Z",
+    "commit_date": "2026-10-09T20:23:58Z",
     "digest": "5c12b7291d055762",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
-    "job": "a0565",
+    "job": "a1161",
     "kind": "gridbb",
-    "median_ms": 7.914753994555213,
+    "median_ms": 12.176513992017135,
     "reason": null,
-    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical2/ivf/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-08T21:47:18Z",
+    "digest": "e9da4792be81a494",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a0881",
+    "kind": "gridbb",
+    "median_ms": 1144.018598992261,
+    "reason": null,
+    "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "cd5630b4fdd5fcea",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1163",
+    "kind": "gridbb",
+    "median_ms": 194.8934049869422,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -2778,14 +3681,44 @@
    },
    "replaced_by": {
     "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "cd5630b4fdd5fcea",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1163",
+    "kind": "gridbb",
+    "median_ms": 194.8934049869422,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical2/ivf/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
     "commit_date": "2026-10-08T21:47:18Z",
-    "digest": "e9da4792be81a494",
+    "digest": "4900a770c128c0b5",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
     "job": "a0881",
     "kind": "gridbb",
-    "median_ms": 1144.018598992261,
+    "median_ms": 168.646207996062,
     "reason": null,
     "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "d498b320bb4623b9",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1163",
+    "kind": "gridbb",
+    "median_ms": 44.67995499726385,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -2808,14 +3741,74 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-08T21:47:18Z",
-    "digest": "4900a770c128c0b5",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "d498b320bb4623b9",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
-    "job": "a0881",
+    "job": "a1163",
     "kind": "gridbb",
-    "median_ms": 168.646207996062,
+    "median_ms": 44.67995499726385,
     "reason": null,
-    "sha": "42d1e42c65c34493a4b78c131bc499d93c8f6fc6",
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical2/ridge/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "ff4ab841dbee5dda",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a0536",
+    "kind": "gridbb",
+    "median_ms": 1075.6985939951846,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "ff4ab841dbee5dda",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1161",
+    "kind": "gridbb",
+    "median_ms": 861.8641570210457,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical2/ridge/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": "520d0ae160524677",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a0536",
+    "kind": "gridbb",
+    "median_ms": 3.089167003054172,
+    "reason": null,
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "ok"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "520d0ae160524677",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "job": "a1161",
+    "kind": "gridbb",
+    "median_ms": 4.614147997926921,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok"
    }
   },
@@ -3017,5 +4010,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-09T19:45:54Z"
+ "updated": "2026-10-10T01:34:32Z"
 }

@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-09T19:45:54Z",
+ "generated": "2026-10-10T01:34:32Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-09T19:45:54Z",
+  "generated": "2026-10-10T01:34:32Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -218,11 +218,12 @@
   "GRIDBB: branch freeze-20261007: nv/n0095 ge123e6f9.P004.bb"
  ],
  "skipped": {
-  "ALGOS: A/B or grid arm (MOJOLEARN_BUILD_DEFINES)": 166,
+  "ALGOS: A/B or grid arm (ENV)": 4,
+  "ALGOS: A/B or grid arm (MOJOLEARN_BUILD_DEFINES)": 198,
   "ALGOS: branch other than main": 2061,
-  "GRIDBB: A/B or switched build": 46,
+  "GRIDBB: A/B or switched build": 108,
   "GRIDBB: branch freeze-20261007": 4344,
   "GRIDBB: branch gbdt-categorical-oom": 6
  },
- "summary": "MAINBOARD column=amd-mi325x label=main@a47bd9fb2 races=89 add=3 change=12 drop=0 failed=56 ledger=121 withheld_opponents=2 identity=MATCH:37,n/a:52"
+ "summary": "MAINBOARD column=amd-mi325x label=main@0a7b206f1 races=111 add=22 change=17 drop=0 failed=23 ledger=142 withheld_opponents=2 identity=MATCH:54,n/a:57"
 }
