@@ -262,6 +262,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KDE_NORM_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE_NORM_FUSED (euclidean kde2 cells as |q|^2 + |t|^2 - 2 q.t) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated, quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_KDE_SAMPLE_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D3): KDE_SAMPLE_FUSED (resident kde score with its download behind it, one drain per call) was DROPPED: kde taxi +354% (old base), with DIMTILE no istella gain; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_KMEANS_FAST_LAZY_SHIFT"](), "removed 2026-10-09 (lane/owed-deletions-D3): KMEANS_FAST_LAZY_SHIFT (lazy convergence read on the KMeans estimator's fits) was SLOWER: kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8 ms, inertia equal; the IVF callers' lazy_shift stays; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_LLE_FAST_NULL_CANON"](), "removed 2026-10-09 (lane/owed-deletions-D3): LLE_FAST_NULL_CANON (canonical LLE answer when the null space is wider than n_components) LOST quality: lle trustworthiness down on taxi and istella (verdicts batch 6); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
