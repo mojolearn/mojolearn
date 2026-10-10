@@ -61,19 +61,9 @@ comptime SYM_RESOLVE_BLOCK = SYM_FAST_APPLE and (
 #: on lane/owed-deletions-D1 (per-partition sums on a partitions x chunks grid with atomics); code recoverable at b639a2bd2.
 #: Restore: git apply experiments/removed/MOJOLEARN_SYM_PART_STATS_PAR.patch; record in docs/TOMBSTONES.md.
 
-#: on a partial pass the fold scan and the sibling subtraction are one
-#: launch: the thread that scans a feature's folds for the computed child
-#: also writes parent - child for the sibling
-#: (`split_properties_helpers.mojo::scan_sub_pointwise_histograms_kernel`).
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
-#: arms never reached the queue).
-#: apple-fast LEDGER 2026-10-03 batchv: DROP symhist scan-sub (noise), old base;
-#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
-comptime SYM_SCAN_SUB_FUSED = SYM_FAST_APPLE and (
-    is_defined["MOJOLEARN_SYM_SCAN_SUB_FUSED"]()
-)
-
+#: TOMBSTONE: MOJOLEARN_SYM_SCAN_SUB_FUSED (DROPPED-noise: symhist-scan-sub istella/taxi noise, old base) deleted 2026-10-09
+#: on lane/owed-deletions-D1 (fold scan + sibling subtraction in one launch); code recoverable at b639a2bd2.
+#: Restore: git apply experiments/removed/MOJOLEARN_SYM_SCAN_SUB_FUSED.patch; record in docs/TOMBSTONES.md.
 #: TOMBSTONE: MOJOLEARN_SYM_HIST_MULT (DROPPED-noise: symhist-hist-mult istella/taxi noise, old base) deleted 2026-10-09 on
 #: lane/owed-deletions-D1 (2x the SM count's worth of histogram blocks); code recoverable at b639a2bd2.
 #: Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_MULT.patch; record in docs/TOMBSTONES.md.

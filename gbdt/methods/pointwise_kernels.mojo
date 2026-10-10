@@ -193,13 +193,9 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
 )
-from gbdt.methods.kernel.sym_fast import (
-    SYM_SCAN_SUB_FUSED,
-)
 from gbdt.methods.kernel.split_properties_helpers import (
     AFT_SCAN_LANES,
     aft_cooperative_scan_kernel,
-    scan_sub_pointwise_histograms_kernel,
     PW_PRIVATE_DOC_SLOTS,
     PointwisePartOffsetsHelper,
     estimate_block_per_feature_multiplier,
@@ -2180,34 +2176,9 @@ def compute_hist2_dev[
             + String(policy)
         )
 
-    comptime if SYM_SCAN_SUB_FUSED:
-        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_SCAN_SUB_FUSED` (FAST +
-        # Apple only): on a partial pass at one fold over the whole line,
-        # the scan and the sibling subtraction are one launch
-        # (`scan_sub_pointwise_histograms_kernel`); every other case keeps
-        # the two launches below.
-        if (
-            policy != POLICY_BINARY
-            and not full_pass
-            and fold_count == 1
-            and bin_features_slice_left == 0
-            and bin_features_slice_size == hist_line_size
-        ):
-            var fx = (feature_count + PW_SCAN_BLOCK - 1) // PW_SCAN_BLOCK
-            var fy = part_count // 2
-            if not is_grid_empty(fx, fy, 1):
-                ctx.enqueue_function[scan_sub_pointwise_histograms_kernel](
-                    feature_first_fold_index,
-                    feature_folds,
-                    feature_one_hot,
-                    Int32(feature_count),
-                    Int32(hist_line_size),
-                    partition,
-                    bin_sums,
-                    grid_dim=(fx, fy, 1),
-                    block_dim=(PW_SCAN_BLOCK, 1, 1),
-                )
-            return
+    # TOMBSTONE: MOJOLEARN_SYM_SCAN_SUB_FUSED (DROPPED-noise: symhist-scan-sub istella/taxi noise, old base) deleted 2026-10-09
+    # on lane/owed-deletions-D1 (fold scan + sibling subtraction in one launch); code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_SCAN_SUB_FUSED.patch; record in docs/TOMBSTONES.md.
 
     if policy != POLICY_BINARY:
         scan_pointwise_histograms(
