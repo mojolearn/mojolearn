@@ -138,7 +138,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_NN44_STABLE_GROUP"](), "retired define MOJOLEARN_NN44_STABLE_GROUP: use IDN_MOE_STABLE_PACK"
     comptime assert not is_defined["MOJOLEARN_NN52_CE_WEIGHT_GRAD"](), "retired define MOJOLEARN_NN52_CE_WEIGHT_GRAD: use IDN_CE_GRAD_FUSED"
     comptime assert not is_defined["MOJOLEARN_NN54_LOSS_PROFILE"](), "retired define MOJOLEARN_NN54_LOSS_PROFILE: use IDN_CE_TOKEN_FOLD=1"
-    comptime assert not is_defined["MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2"](), "retired define MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2: use IDN_CE_TOKEN_FOLD=2"
+    comptime assert not is_defined["MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2"](), "retired define MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2: its successor MOJOLEARN_IDN_CE_TOKEN_FOLD=2 was removed 2026-10-10 (noise); see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION"](), "retired define MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION: use IDN_LM_RESIDENT_TOKENS=2"
     comptime assert not is_defined["MOJOLEARN_IDN_LM_OWNED_TOKENS"](), "retired define MOJOLEARN_IDN_LM_OWNED_TOKENS: use IDN_LM_RESIDENT_TOKENS=1"
     comptime assert not is_defined["MOJOLEARN_NN60_BLOCK_VIEWS"](), "retired define MOJOLEARN_NN60_BLOCK_VIEWS: use IDN_LM_VIEWS=1"
@@ -158,7 +158,10 @@ def _check_configuration() -> Bool:
     comptime assert get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU",0]() == 1 or get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU",0]() == 2, "invalid MOJOLEARN_IDN_CNN_CONV_RELU arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD",0]() == 1 or get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD",0]() == 2, "invalid MOJOLEARN_IDN_SEQ_WGRAD arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_SEQ_LN_LEAF",64]() == 32 or get_defined_int["MOJOLEARN_IDN_SEQ_LN_LEAF",64]() == 64, "invalid MOJOLEARN_IDN_SEQ_LN_LEAF arm (legal: 32|64)"
-    comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 1 or get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 2, "invalid MOJOLEARN_IDN_CE_TOKEN_FOLD arm (legal: 0|1|2)"
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
+    comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() != 2, "removed: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (NI35 token-tree256 v2) retired 2026-10-10: noise, avg 1.00x lm-forward (NV 0.99x / AMD 1.01x), 1.01x lm-train-step (NV 1.01x / AMD 1.00x), mean_nll SAME (main ca25d9321, A/B nv2 v1229/v1231/v1232, amd a1555/a1556/a1557, default v1232/a1557); see docs/TOMBSTONES.md"
+    comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 1, "invalid MOJOLEARN_IDN_CE_TOKEN_FOLD arm (legal: 0|1; 2 removed 2026-10-10)"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 2, "invalid MOJOLEARN_IDN_LM_RESIDENT_TOKENS arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 2 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 3, "invalid MOJOLEARN_IDN_LM_VIEWS arm (legal: 0|1|2|3)"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 2, "invalid MOJOLEARN_IDN_LM_GROUPED_ADAM arm (legal: 0|1|2)"

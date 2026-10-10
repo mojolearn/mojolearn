@@ -843,7 +843,7 @@ def neural_rng_binding(
 # ===========================================================================
 
 
-from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2, IDN_LOSS_TOKEN_TREE_V2, IDN_ATTENTION_V2
+from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2, IDN_ATTENTION_V2
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 
@@ -854,8 +854,7 @@ def training_experiment_profile_binding() raises -> PythonObject:
         profile += "+attention-online-tile32-v2"
     if IDN_CHUNKED_LM_HEAD_V2:
         profile += "+head-serial-logit-chunked-v2"
-    if IDN_LOSS_TOKEN_TREE_V2:
-        profile += "+ce-token-tree256-v2"
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
     if CONTRACT_K_LEAF_MIN != 128:
         profile += "+gemm-leaf" + String(CONTRACT_K_LEAF_MIN)
     return PythonObject(profile)

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only shape and registry for the configured decoder language model."""
-from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2, IDN_CHUNKED_LM_HEAD_V2, IDN_ATTENTION_V2
+from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2, IDN_ATTENTION_V2
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 from training.neural_arithmetic_profile import neural_arithmetic_suffix
@@ -183,8 +183,8 @@ def byte_lm_arithmetic_suffix() -> String:
     built with belongs to the serialized arithmetic version even when one
     model does not use it. A no-argument suffix keeps the loader check
     shape-free."""
-    # NI35 owns a different numerical loss profile.
-    var loss_version = String("-ce-token-tree256-v2") if IDN_LOSS_TOKEN_TREE_V2 else String("")
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+    var loss_version = String("")
     # NI08/I04 are new GEMM graphs on every column. Keep checkpoint
     # identity distinct from leaf128 even when architecture is unchanged.
     var gemm_version = String("") if CONTRACT_K_LEAF_MIN == 128 else String("-gemm-leaf") + String(CONTRACT_K_LEAF_MIN)

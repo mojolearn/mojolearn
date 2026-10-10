@@ -1007,8 +1007,8 @@ def hidden_fast(
     return x^
 
 
-from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2
-from training.loss_reduction_v2 import loss_token_tree_v2_host
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
 
 
 def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab: Int) raises -> Float32:
@@ -1080,9 +1080,8 @@ def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab:
     comptime if NN54_LOSS_PROFILE:
         total[0] = nn_reduce_host_admitted[128,False](
             rebind[MutPointer[Float32,MutAnyOrigin]](rows.unsafe_ptr()),n)
-    elif IDN_LOSS_TOKEN_TREE_V2:
-        total[0] = loss_token_tree_v2_host(rows, 0, n)
     else:
+        # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
         gemm_nt_rows(rows, ones_n, 1, n, 0, 1, total)
     var divisor = ce_divisor(cfg.reduction, ce_count(targets, cfg.ignore_index), cfg.num_items)
     return ftz(identical_div(ftz(total[0]), divisor))

@@ -41,8 +41,8 @@ from training.checks.loss_contract import (
 
 
 
-from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2
-from training.loss_reduction_v2 import loss_token_tree_v2_host
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
 
 
 def ce_fold(
@@ -60,8 +60,7 @@ def ce_total_fold(values: List[Float32], count: Int, ones: List[Float32]) -> Flo
     """NN54 v2 changes only row-total order; normalization stays unchanged."""
     comptime if NN54_LOSS_PROFILE:
         return nn_reduce_host_admitted[128, False](rebind[MutPointer[Float32, MutAnyOrigin]](values.unsafe_ptr()), count)
-    comptime if IDN_LOSS_TOKEN_TREE_V2:
-        return loss_token_tree_v2_host(values, 0, count)
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
     return ce_fold(values, 0, count, ones)
 
 

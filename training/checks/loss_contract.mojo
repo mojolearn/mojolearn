@@ -17,15 +17,10 @@ from checks.numerics import (
     identical_log,
     identical_mul,
 )
-from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2
-from training.loss_reduction_v2 import LOSS_TOKEN_TREE_V2_PROFILE
 
-# NI35 explicitly changes the loss profile; cross-version equality is not
-# required. Every column must choose the same profile within one version.
-comptime CE_NUMERICAL_PROFILE = (
-    LOSS_TOKEN_TREE_V2_PROFILE if IDN_LOSS_TOKEN_TREE_V2
-    else "mojolearn.identical.loss.ce.fp32.v1"
-)
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by DELSHA_CE; code recoverable at ca25d9321.
+# (it set the token-tree256 v2 loss profile here.) Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
+comptime CE_NUMERICAL_PROFILE = "mojolearn.identical.loss.ce.fp32.v1"
 
 
 def ce_numerical_profile() -> String:
