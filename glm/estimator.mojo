@@ -924,6 +924,8 @@ def qn_predict_binary_host(
     ctx.synchronize()
     _ = codes^
     _ = scores^
+# TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
+# Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
 
 #: lane fam2-linear (2026-10-04): multiclass `LogisticRegression.predict`

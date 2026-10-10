@@ -21,6 +21,8 @@ from gemm.checks.gemm_identical import (
 
 comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime NI07_GROUPED_PROJECTIONS = _NEURAL_ARMS and is_defined["MOJOLEARN_NI07_GROUPED_PROJECTIONS"]()
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1 (slower) deleted 2026-10-09 by d48c5eaaf; code recoverable at d48c5eaaf^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE-arm1.patch; record in docs/TOMBSTONES.md.
 # NI09 = the CNN arm (mask bit 2) of MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE, now
 # its only arm. TOMBSTONE (lane grid-act-5, 2026-10-08): the MLP arm (bit 1,
 # NN06, gemm/experiments/neural_epilogue.mojo + training/mlp_ops.mojo's fused

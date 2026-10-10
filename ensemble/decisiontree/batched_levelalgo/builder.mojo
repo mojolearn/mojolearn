@@ -1020,6 +1020,10 @@ comptime IDN_RF_FUSED_PARTITION = (
 # Differences are small, single-sample observations: no variance/significance claim.
 # Original AMD Taxi evidence failures retained; four scoped receipt repairs used.
 # Evidence: experiments/identical_speed/results/20261005/forest-final-decisions/board.json.
+# TOMBSTONE: MOJOLEARN_IDN_RF_DEVICE_LOOP_K8 (noise) deleted 2026-10-07 by d631a057c; code recoverable at d631a057c^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_RF_DEVICE_LOOP_K2 (noise) deleted 2026-10-07 by d631a057c; code recoverable at d631a057c^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch; record in docs/TOMBSTONES.md.
 comptime LOOP_K = max(1, T11_LEVELS) if T11 else 4
 
 

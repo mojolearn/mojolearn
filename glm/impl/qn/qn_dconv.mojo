@@ -481,6 +481,10 @@ def dconv_run(
         _ = len(dst)
         _ = hs.unsafe_ptr()
         return outcome
+# TOMBSTONE: MOJOLEARN_QN_IDN_DCONV_POLL_8 (slower) deleted 2026-10-08 by 687938771; code recoverable at 687938771^.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_DCONV.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_QN_IDN_DCONV_POLL_2 (slower) deleted 2026-10-08 by 687938771; code recoverable at 687938771^.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_DCONV.patch; record in docs/TOMBSTONES.md.
 
 
 # Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;

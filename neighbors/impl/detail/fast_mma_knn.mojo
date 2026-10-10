@@ -93,6 +93,10 @@ comptime FAST_MMA_KNN_ENABLED = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_KNN_FAST_MMA_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_KNN_FAST_CLS1_SLICES2 (DROPPED-slower) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_KNN_FAST_CLS1_PRESEED (DROPPED-noise) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch; record in docs/TOMBSTONES.md.
 
 comptime _M64 = SIMD[DType.float32, 64]
 comptime _V2 = SIMD[DType.int64, 2]

@@ -545,6 +545,8 @@ def _ols_tsqr(x, y, rows, cols, mode):
     k = _Kit(_mode(mode))
     X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True)
     return X.out((cols,))
+# TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
+# Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
 
 def _ols_tsqr_centered(x, y, rows, cols, mode):

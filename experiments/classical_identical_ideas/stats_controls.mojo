@@ -31,6 +31,8 @@ comptime C56_QDA_PROJECT = get_defined_int["MOJOLEARN_CLASSICAL_C56_QDA_PROJECT"
 # C57: retain each robust candidate's mean for its covariance computation.
 comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57_CANDIDATE_STATE"]()
 # C58/59: only independent classical series/trials, no neural sequence callers.
+# TOMBSTONE: MOJOLEARN_C58_SHARED_PREP (slower) deleted 2026-10-08 by 3978db7ce; code recoverable at 3978db7ce^.
+# Restore: git apply experiments/removed/MOJOLEARN_C58_SHARED_PREP.patch; record in docs/TOMBSTONES.md.
 comptime C58_SERIES4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SERIES4"]()
 # C58_FORECAST4 (four theta/ets/garch series per thread) tried 2026-10-08, run ge123e6f9: NV/AMD 2.93x/2.58x
 # synthetic, 2.81x/2.13x taxi-hourly (auto-theta), 2.2-3.1x on every theta/damped-ets cell, quality SAME. Deleted and

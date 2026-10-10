@@ -52,6 +52,8 @@ comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_PCA_FA
 comptime PCA_GRAM_BLOCK_TARGET = 640
 from checks.numerics import ftz, identical_div, identical_mul
 from core.device_zero import enqueue_fill
+# TOMBSTONE: MOJOLEARN_IDN_PCA_RR_ONE_BLOCK_STEPS (broken) deleted 2026-10-09 by 16a2c0dd3; code recoverable at 16a2c0dd3^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_RR_ONE_BLOCK.patch; record in docs/TOMBSTONES.md.
 from decomposition.pca_rr_switch import (
     PCA_DEVICE_TRUNCATE,
     PCA_RR_EIGH,

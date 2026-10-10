@@ -2010,6 +2010,8 @@ def _knn_regressor_vote(
     var h = ctx.enqueue_create_host_buffer[DType.float32](n_queries * n_outputs)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out)
     ctx.synchronize()
+    # TOMBSTONE: MOJOLEARN_RADIUS_FAST_REUSE_COUNT (DROPPED-noise) deleted 2026-10-03 by f9af6028e; code recoverable at f9af6028e^.
+    # Restore: git apply experiments/removed/MOJOLEARN_RADIUS_FAST_REUSE_COUNT.patch; record in docs/TOMBSTONES.md.
     for j in range(n_queries * n_outputs):
         out_ptr.unsafe_store(j, h.unsafe_ptr().unsafe_load(j))
 

@@ -21,6 +21,8 @@ from gemm.checks.gemm_identical import (
     PLAN_FLAT,PLAN_TUNED_32_2X2,PLAN_TUNED_64_4X4,PLAN_TUNED_128_8X8,
 )
 from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8 (slower) deleted 2026-10-07 by 225398f14; code recoverable at 225398f14^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm8.patch; record in docs/TOMBSTONES.md.
 from gemm.experiments.neural_switches import (
     NEURAL_GEMM_SCHEDULE,SCHED_GEOMETRY,SCHED_STREAM,SCHED_STREAM_EXACT,
     SCHED_PAGES,SCHED_COST,SCHED_FOLD_EXACT,SCHED_THREADMAP,SCHED_PAGES_THREADMAP,

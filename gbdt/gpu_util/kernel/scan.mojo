@@ -53,6 +53,8 @@ only input this implementation scans is a 0/1 flag per row.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+# TOMBSTONE: MOJOLEARN_GBDT_CTR_FAST_SCAN (DROPPED-noise) deleted 2026-10-03 by afda7b9ce; code recoverable at afda7b9ce^.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_CTR_FAST_SCAN.patch; record in docs/TOMBSTONES.md.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
 

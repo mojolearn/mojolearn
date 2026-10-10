@@ -48,6 +48,8 @@ comptime C13_FOLD_STATS = CLASSICAL_IDN
 # rule. Changes bits (host column and both GPU vendors together).
 comptime ENETCV_FOLD_BLOCKS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS"]()
 comptime ENETCV_FB_CHUNKS = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS", 32]() if ENETCV_FOLD_BLOCKS else 32
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS (quality loss) deleted 2026-10-07 by f4de82db4; code recoverable at f4de82db4^.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
 comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"]()
 # lane/classical-cv-folds (2026-10-07), NEW, opt-in, NOT MEASURED: RidgeCV's
 # float-float fallback (x_linear/ridge_ff_blocks.mojo). The incumbent runs one
@@ -141,6 +143,8 @@ comptime C18_RESIDUAL_NEXT = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C
 # per-sample updates are unchanged; only the launch/witness granularity moves.
 # Legal set enforced in core/six_lane_experiment_guards.mojo.
 comptime C19_SGD_CHUNK = get_defined_int["MOJOLEARN_CLASSICAL_C19_SGD_CHUNK", 2048]() if CLASSICAL_IDN else 2048
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C20_ROW_CACHE (serial shape) deleted 2026-10-07 by fc5c573f7; code recoverable at fc5c573f7^.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_ROW_CACHE.patch; record in docs/TOMBSTONES.md.
 # C20_ROW_CACHE deleted 2026-10-07 (serial per-row host loop); refused in core/six_lane_experiment_guards.mojo.
 comptime C20_PAIR_LOAD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"]()
 comptime C21_EXTREMA = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"]()
@@ -195,12 +199,18 @@ comptime C24_PANEL8 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_PANE
 # old opt-in define is refused in core/six_lane_experiment_guards.mojo.
 comptime C24_ROWS2048 = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF"]()
 comptime C24_TREE4 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_TREE4"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE (slower) deleted 2026-10-08 by ab4e8e543; code recoverable at ab4e8e543^.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch; record in docs/TOMBSTONES.md.
 comptime C26_PRODUCTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_PRODUCTS"]()
 comptime C26_UPDATE_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED"]()
 comptime C27_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_COMPONENTS"]()
 comptime C28_BUCKET_SOLVES = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES"]()
 
 # Additional independent component/residual sub-arms; the header status applies.
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C18_TILE64 (unmeasured) deleted 2026-10-07 by f4de82db4; code recoverable at f4de82db4^.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH (unmeasured) deleted 2026-10-07 by f4de82db4; code recoverable at f4de82db4^.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
 comptime C27_FA_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS"]()
 comptime C27_NORM_VECTOR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_NORM_VECTOR"]()
 comptime C13_LOGCV_WEIGHTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"]()

@@ -443,6 +443,8 @@ def cc_jump_kernel(lab: IP, n: Int32):
         while Int(lab.unsafe_load(p)) != p:
             p = Int(lab.unsafe_load(p))
         lab.unsafe_store(v, Int32(p))
+# TOMBSTONE: MOJOLEARN_CC_FAST_OFF (removed) deleted 2026-10-08 by 2851a6627; code recoverable at 2851a6627^.
+# Restore: git apply experiments/removed/MOJOLEARN_CC_FAST_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 # lane/apple-fast-graph (2026-10-02), FAST on Apple since 2026-10-04 and on
@@ -786,6 +788,8 @@ def pcs_conv_row_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_
         if h0 + 3 < nc:
             res.unsafe_store(r * nc + h0 + 3, s3)
         h0 += PCS_ROW_TPB * 4
+# TOMBSTONE: MOJOLEARN_XN_PCS_SPARSE (DROPPED-noise) deleted 2026-10-03 by 3d1c6bd73; code recoverable at 3d1c6bd73^.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_PCS_SPARSE.patch; record in docs/TOMBSTONES.md.
 
 
 

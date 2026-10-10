@@ -30,3 +30,5 @@ def sgd_avg_fin_kernel(w: FP, bias: FP, acc: FP, d: Int32, inv: Float32):
         st(w, j, fm(ld(acc, j), inv))
     elif j == dd:
         st(bias, 0, fm(ld(acc, dd), inv))
+# TOMBSTONE: MOJOLEARN_SGD_PERC_QOLD (DROPPED-quality) deleted 2026-10-04 by 170cbedc0; code recoverable at 170cbedc0^.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch; record in docs/TOMBSTONES.md.

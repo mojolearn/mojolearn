@@ -8,6 +8,12 @@ The source integration ledger is experiments/trees_identical_20261006/forest/.
 from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
+# TOMBSTONE: MOJOLEARN_TREES_T01_ROWS (removed) deleted 2026-10-07 by e5ad4d891; code recoverable at e5ad4d891^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T01_REPLICAS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T01_REPLICAS (removed) deleted 2026-10-07 by e5ad4d891; code recoverable at e5ad4d891^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T01_REPLICAS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T01 (slower) deleted 2026-10-07 by e5ad4d891; code recoverable at e5ad4d891^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T01.patch; record in docs/TOMBSTONES.md.
 # Every switch below is default OFF and IDENTICAL-only. The shared status above
 # applies individually to every switch and its parameter/sub-arm.
 # T01 (streamed exact histogram replicas, = N07) DELETED 2026-10-07: lost on
@@ -23,6 +29,8 @@ comptime T07 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEAR
 comptime T08 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T08"]()
 comptime T08_LAYOUT = get_defined_int["MOJOLEARN_TREES_T08_LAYOUT", 1]()
 comptime T08_BITS = get_defined_int["MOJOLEARN_TREES_T08_BITS", 8]()
+# TOMBSTONE: MOJOLEARN_TREES_T09 (dead code) deleted 2026-10-07 by eb8efb83a; code recoverable at eb8efb83a^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T09.patch; record in docs/TOMBSTONES.md.
 # T09 (the ExtraTrees bootstrap-locality sort) was deleted by lane/grid-prune
 # (2026-10-07): unreachable on the board, host sync inside the fit.
 # RF bootstrap sample route: ONE switch with three arms (trees-cleanup

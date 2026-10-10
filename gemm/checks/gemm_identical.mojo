@@ -5432,6 +5432,8 @@ def identical_gemm_into[allow_vendor: Bool = True](
         if afn_gemm_fp32_into(ctx, c, a, b, m, n, k, op):
             return
     comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        # TOMBSTONE: MOJOLEARN_APPLE_FAST_GEMM_PINNED (DROPPED-noise) deleted 2026-10-03 by 75c59ea26; code recoverable at 75c59ea26^.
+        # Restore: git apply experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch; record in docs/TOMBSTONES.md.
         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
     # DEVIATION 2542 -- THE GEMM STEP ARM HOOK. Compiled only under

@@ -70,6 +70,14 @@ comptime C33_CHUNK = 4 if is_defined["MOJOLEARN_C33_CHUNK_4"]() else 16
 comptime C34_PARALLEL_EDGES = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C34_PARALLEL_EDGES"]()
 comptime C35_PACKED_LISTS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C35_PACKED_LISTS"]()
 comptime C35_TASK_ROWS = 128 if is_defined["MOJOLEARN_C35_ROWS_128"]() else 256
+# TOMBSTONE: MOJOLEARN_C38_REUSE_NEAREST (dead code) deleted 2026-10-07 by d7c9736f0; code recoverable at d7c9736f0^.
+# Restore: git apply experiments/removed/MOJOLEARN_C37_PANEL_128.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_C38_DEVICE_POTENTIAL (dead code) deleted 2026-10-07 by d7c9736f0; code recoverable at d7c9736f0^.
+# Restore: git apply experiments/removed/MOJOLEARN_C37_PANEL_128.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_C37_ROW_PANELS (serial shape) deleted 2026-10-07 by d7c9736f0; code recoverable at d7c9736f0^.
+# Restore: git apply experiments/removed/MOJOLEARN_C37_PANEL_128.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_C37_PANEL_128 (DROPPED) deleted 2026-10-07 by d7c9736f0; code recoverable at d7c9736f0^.
+# Restore: git apply experiments/removed/MOJOLEARN_C37_PANEL_128.patch; record in docs/TOMBSTONES.md.
 # C36 x_cluster half: MiniBatchKMeans / BisectingKMeans nearest-center as a
 # row-register kernel, R rows per thread. Arms off|2|4 (one define, int value).
 comptime XCLUSTER_ROW_ASSIGN_ROWS = get_defined_int["MOJOLEARN_XCLUSTER_ROW_ASSIGN", 0]()

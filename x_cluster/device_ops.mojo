@@ -1257,6 +1257,8 @@ comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST and not is_defined["MOJOLEARN_BGMM_FA
 comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and not is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF"]()
 
 
+# TOMBSTONE: MOJOLEARN_AFFINITY_FAST_LOOP (DROPPED-noise) deleted 2026-10-02 by c5d0ef805; code recoverable at c5d0ef805^.
+# Restore: git apply experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch; record in docs/TOMBSTONES.md.
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
 # OPTICS_FAST_DEVICE_ORDER (DEFAULT ON since the M3 A/B: optics istella
 # 432.7 -> 260.7 ms, n=1, quality identical; off with
@@ -1289,6 +1291,8 @@ def _opt_key(v: Float32, j: Int) -> UInt64:
     if b == UInt32(0x80000000):
         b = UInt32(0)
     return (UInt64(b) << 32) | UInt64(UInt32(j))
+# TOMBSTONE: MOJOLEARN_BISECT_FAST_RESIDENT (DROPPED-slower) deleted 2026-10-02 by 50cb0d970; code recoverable at 50cb0d970^.
+# Restore: git apply experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline

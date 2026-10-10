@@ -5,6 +5,8 @@ A defines a selector below; B omits it and keeps the incumbent settings.
 This module imports no device API: host/device units share the same gates.
 NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 """
+# TOMBSTONE: MOJOLEARN_TREES_T16 (slower) deleted 2026-10-07 by 359df2d05; code recoverable at 359df2d05^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T16.patch; record in docs/TOMBSTONES.md.
 from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -26,6 +28,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # "32" arm); 64 stays a sweep arm; `=0` still selects the pre-T17 rule.
 comptime T17_BATCH = get_defined_int["MOJOLEARN_TREES_T17_BATCH", 128]() if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
 
+# TOMBSTONE: MOJOLEARN_TREES_T20 (DROPPED) deleted 2026-10-07 by 359df2d05; code recoverable at 359df2d05^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T20.patch; record in docs/TOMBSTONES.md.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime T18 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T18"]()
 
@@ -93,6 +97,8 @@ comptime T24 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEAR
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime T26 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T26"]()
+# TOMBSTONE: MOJOLEARN_TREES_T29_YETI (dead code) deleted 2026-10-07 by d631a057c; code recoverable at d631a057c^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T29_YETI.patch; record in docs/TOMBSTONES.md.
 
 # T29_YETI (YetiRank block-parallel tasks) DELETED by lane trees-small 2026-10-07:
 # a no-op on NVIDIA and AMD, where `yeti_rank.yeti_block_parallel_for` already

@@ -81,6 +81,8 @@ from checks.kernel_matrix import (
 #: IDENTICAL two-stat fit at the default 254 borders) kept its literal 512.
 #: No bit moves with the block: the addends are position-dithered Int32 and
 #: every sum is an Int32 sum (one slice per 128 threads, `H8_SLICES` of them).
+# TOMBSTONE: MOJOLEARN_SYM_HIST_FAST (DROPPED-noise) deleted 2026-10-03 by 6f5ace7fa; code recoverable at 6f5ace7fa^.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_FAST.patch; record in docs/TOMBSTONES.md.
 comptime H8_BLOCK = (
     APPLE_HIST2_SHARED_I32_BLOCK_CAP if TARGET_COLUMN == COLUMN_APPLE else 512
 )
@@ -88,6 +90,8 @@ comptime H8_SLICE = 2048
 comptime H8_SLICES = H8_BLOCK // 128
 comptime H8_SMEM = H8_SLICE * H8_SLICES
 comptime H8_LANE = 32
+# TOMBSTONE: MOJOLEARN_YETI_SYM_HIST_UNROLL8 (DROPPED-slower) deleted 2026-10-03 by 4f634c5d0; code recoverable at 4f634c5d0^.
+# Restore: git apply experiments/removed/MOJOLEARN_YETI_SYM_HIST_UNROLL8.patch; record in docs/TOMBSTONES.md.
 comptime H8_UNROLL = 4
 comptime H8_LOAD = 4
 comptime H8_POINTS = H8_UNROLL * H8_LOAD

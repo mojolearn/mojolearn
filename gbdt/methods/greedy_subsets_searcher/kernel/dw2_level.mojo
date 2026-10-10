@@ -486,3 +486,5 @@ def dw2_scan_histograms_smem_kernel(
                 for i in range(folds):
                     running = ftz(running + histogram.unsafe_load(b + i))
                     histogram.unsafe_store(b + i, running)
+# TOMBSTONE: MOJOLEARN_GBDT_DW2_COPY_ZERO (DROPPED-slower) deleted 2026-10-03 by 4037c6b9a; code recoverable at 4037c6b9a^.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_DW2_COPY_ZERO.patch; record in docs/TOMBSTONES.md.

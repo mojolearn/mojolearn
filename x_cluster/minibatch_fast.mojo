@@ -72,6 +72,10 @@ comptime MBF_MAX_KD = 4096
 comptime MBF_MAX_K = 256
 comptime MBF_MAX_BATCH = 4096
 """The reassignment's pool lives in threadgroup memory (16 KB)."""
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128 (DROPPED) deleted 2026-10-03 by 2b40bf184; code recoverable at 2b40bf184^.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN (DROPPED) deleted 2026-10-03 by 2b40bf184; code recoverable at 2b40bf184^.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch; record in docs/TOMBSTONES.md.
 # Bound speculative stopping work more tightly while retaining the same
 # batch schedule and convergence tests; group size is independent of data
 # dimensions. Qualification must compare reported completed iterations.

@@ -122,6 +122,8 @@ from checks.soft_f64 import (
     sf64_sub,
     sf64_to_f32,
 )
+# TOMBSTONE: MOJOLEARN_GBDT_CTR_PERM_PTRS (DROPPED-noise) deleted 2026-10-03 by 4722f0a88; code recoverable at 4722f0a88^.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_CTR_PERM_PTRS.patch; record in docs/TOMBSTONES.md.
 from gbdt.methods.doc_parallel_boosting import (
     TAdditiveModel,
     fit_with_test,

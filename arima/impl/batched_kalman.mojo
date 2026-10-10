@@ -240,6 +240,8 @@ the serial filter is the FAST default; `-D MOJOLEARN_KALMAN_TIME_SCAN=1` is
 the trial arm (20,000-point fits ~0.46 -> ~0.14 s on the M4)."""
 comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_P_FIX (DROPPED-slower) deleted 2026-10-03 by dd47c5df0; code recoverable at dd47c5df0^.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_P_FIX.patch; record in docs/TOMBSTONES.md.
 #: lane/apple-fast-tsa (2026-10-02). `batched_kalman_loop_kernel` stores
 #: `pred`, `vs` and `Fs` to device memory at EVERY step (:548-563 of this
 #: file) on a kernel of one thread per (series, member) with nothing to hide

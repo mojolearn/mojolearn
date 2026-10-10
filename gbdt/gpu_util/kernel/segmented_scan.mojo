@@ -117,6 +117,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+# TOMBSTONE: MOJOLEARN_GBDT_CTR_FAST_SCAN (DROPPED-noise) deleted 2026-10-03 by afda7b9ce; code recoverable at afda7b9ce^.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_CTR_FAST_SCAN.patch; record in docs/TOMBSTONES.md.
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 

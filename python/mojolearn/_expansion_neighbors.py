@@ -177,6 +177,8 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
 #: dangling rows in Python).
 _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
+# TOMBSTONE: MOJOLEARN_XN_FAST_TILED_RBF (DROPPED-noise) deleted 2026-10-03 by f103d7381; code recoverable at f103d7381^.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_TILED_RBF.patch; record in docs/TOMBSTONES.md.
 #: lane/apple-fast-neighbors2 (2026-10-02): LabelPropagation /
 #: LabelSpreading's kNN-graph loop as one resident op (`lp_iterate_knn`) is
 #: the FAST + Apple default, read back from the binding (`_lp_fast_resident`,
@@ -617,6 +619,8 @@ class NearestCentroid(_XNeighbors):
         if self._uniform():
             D = self._sqdist(Q, self.centroids_) if self.metric == "euclidean" else self._l1dist(Q, self.centroids_)
             _, idx = self._knn_select(D, 1, False)
+            # TOMBSTONE: MOJOLEARN_NC_FAST_CLS1_PREDICT (DROPPED-noise) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
+            # Restore: git apply experiments/removed/MOJOLEARN_NC_FAST_CLS1_PREDICT.patch; record in docs/TOMBSTONES.md.
             return _class_array(self.classes_, idx.reshape((idx.shape[0],)))
         return _argmax_labels(self, self.classes_, self.decision_function(Q))
 
@@ -1833,6 +1837,8 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         # and labels as the dense matrix's, without building or scanning it
         indptr, indices, n = csr
         lab = _p2m_iota(est, n)
+        # TOMBSTONE: MOJOLEARN_CC_FAST_OFF (removed) deleted 2026-10-08 by 2851a6627; code recoverable at 2851a6627^.
+        # Restore: git apply experiments/removed/MOJOLEARN_CC_FAST_OFF.patch; record in docs/TOMBSTONES.md.
         # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.3): the
         # GPU binding on every vendor and tier runs the batched rounds and
         # compacts the labels itself in order of first appearance

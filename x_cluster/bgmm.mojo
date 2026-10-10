@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# TOMBSTONE: MOJOLEARN_BGMM_ENT (DROPPED-noise) deleted 2026-10-03 by 31b0cf94c; code recoverable at 31b0cf94c^.
+# Restore: git apply experiments/removed/MOJOLEARN_BGMM_ENT.patch; record in docs/TOMBSTONES.md.
 """BayesianGaussianMixture and the EM GaussianMixture, every covariance
 type. Reference: scikit-learn `sklearn/mixture/_bayesian_mixture.py` (the
 variational updates, `_estimate_log_weights`, `_estimate_log_prob`,

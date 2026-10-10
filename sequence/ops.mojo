@@ -93,6 +93,8 @@ comptime SEQ_SOFTMAX_ONE_EXP = not (
 comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime TSA2_VAR = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_VAR_OFF"]()
 comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_SPEC (DROPPED-noise) deleted 2026-10-03 by dfbdc7943; code recoverable at dfbdc7943^.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_SPEC.patch; record in docs/TOMBSTONES.md.
 #: lane/apple-fast-gap-tsa (docs/apple-fast/notes/gap-tsa.md), on the
 #: TSA2_VAR fit, FAST + Apple only.
 #: SEQ_FAST_VAR_ONECOPY: params, resid, sigma_u and the status word lie in

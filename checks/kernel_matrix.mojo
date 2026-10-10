@@ -1018,6 +1018,8 @@ def hist2_block_size_for[column: Int, smem_mode: Int]() -> Int:
         comptime want = (
             APPLE_HIST2_SHARED_I32_BLOCK_CAP if column == COLUMN_APPLE else 512
         )
+        # TOMBSTONE: MOJOLEARN_SYM_HIST_FAST (DROPPED-noise) deleted 2026-10-03 by 6f5ace7fa; code recoverable at 6f5ace7fa^.
+        # Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_FAST.patch; record in docs/TOMBSTONES.md.
         comptime by_smem = want if limit >= want else limit
         return by_smem if by_smem < hard else hard
     else:

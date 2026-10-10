@@ -1028,6 +1028,8 @@ comptime GMM_ESTEP_STACK = (
     and not is_defined["MOJOLEARN_GMM_ESTEP_STACK_OFF"]()
 )
 comptime GMM_ESTEP_STACK_MAX_FLOATS = 1 << 28
+# TOMBSTONE: MOJOLEARN_GMM_FAST_ESTEP_STACK (DROPPED-slower) deleted 2026-10-03 by 7b2638a38; code recoverable at 7b2638a38^.
+# Restore: git apply experiments/removed/MOJOLEARN_GMM_FAST_ESTEP_STACK.patch; record in docs/TOMBSTONES.md.
 
 
 def stack_prec_kernel(

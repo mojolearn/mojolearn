@@ -531,6 +531,8 @@ comptime SMALL_NODE_FUSED_DEFAULT = T05 or (
 `small_node_split_kernel` (histogram in shared memory + split search in
 one launch) instead of zero + histogram + find_best_splits."""
 
+# TOMBSTONE: MOJOLEARN_RF_SMALL_NODE_1024 (DROPPED-noise) deleted 2026-10-03 by baa477878; code recoverable at baa477878^.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_SMALL_NODE_1024.patch; record in docs/TOMBSTONES.md.
 comptime SMALL_NODE_ROWS = 256 if is_defined[
     "MOJOLEARN_RF_SMALL_NODE_256"
 ]() else 4096
@@ -577,6 +579,8 @@ model. `-D MOJOLEARN_RF_FAST_HIST_ZERO_OFF` restores the per-round launch."""
 # slowdown measured locally."
 comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 
+# TOMBSTONE: MOJOLEARN_IDN_RF_STREAM_REPLICAS (DROPPED) deleted 2026-10-07 by e5ad4d891; code recoverable at e5ad4d891^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_STREAM_REPLICAS.patch; record in docs/TOMBSTONES.md.
 # ================= DEVIATION BLOCK 2012 =================
 # PRIVATIZED SHARED SUB-HISTOGRAMS -- NOT theirs (2026-09-01). OFF BY
 # DEFAULT (1 compiles cuML's single shared histogram byte-for-byte).
@@ -859,6 +863,8 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
 # other two writes ran at 128 (initSplit) and as a memset. Every write
 # below is a pure function of its flat index, so the width moves no value.
 comptime PHASE_SETUP_TPB = 256
+# TOMBSTONE: MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ (DROPPED-noise) deleted 2026-10-03 by 931143bf8; code recoverable at 931143bf8^.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ.patch; record in docs/TOMBSTONES.md.
 
 def phase_setup_kernel[
     dtype: DType

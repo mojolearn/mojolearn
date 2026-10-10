@@ -34,6 +34,8 @@ MOJOLEARN_XPREP_ARENA_POOL_OFF=1` makes live device memory exactly the live
 slots again. Where bytes live moves no bit.
 """
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+# TOMBSTONE: MOJOLEARN_XPREP_PINNED_UPLOAD_OFF (slower) deleted 2026-10-09 by fd7e86b46; code recoverable at fd7e86b46^.
+# Restore: git apply experiments/removed/MOJOLEARN_XPREP_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 

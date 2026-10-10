@@ -217,6 +217,8 @@ def _check_criterion(
     )
 
 
+# TOMBSTONE: MOJOLEARN_RF_FAST_BATCH16K (DROPPED-noise) deleted 2026-10-03 by 288809ef8; code recoverable at 288809ef8^.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_BATCH16K.patch; record in docs/TOMBSTONES.md.
 #: FAST on Apple (trees-apple3): a wider node batch. A tree deeper than 12
 #: levels has levels of more than 4096 nodes, and every batch of a level is
 #: one more round of launches, uploads and a host wait for nodes of a few

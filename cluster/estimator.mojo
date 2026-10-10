@@ -471,6 +471,8 @@ def _kmeans_fit_tail(
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
+    # TOMBSTONE: MOJOLEARN_KMEANS_FAST_SKIP_PREDICT (DROPPED-noise) deleted 2026-10-03 by a595988e8; code recoverable at a595988e8^.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_SKIP_PREDICT.patch; record in docs/TOMBSTONES.md.
     ctx.enqueue_function[row_norm_kernel](
         x_norm.unsafe_ptr(),
         x.unsafe_ptr(),
@@ -479,6 +481,8 @@ def _kmeans_fit_tail(
         grid_dim=(n_samples, 1, 1),
         block_dim=(NORM_TPB, 1, 1),
     )
+    # TOMBSTONE: MOJOLEARN_KMEANS_FAST_ROWNORM (DROPPED-noise) deleted 2026-10-03 by 073bd0029; code recoverable at 073bd0029^.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_ROWNORM.patch; record in docs/TOMBSTONES.md.
     ctx.synchronize()
 
     var params = KMeansParams.default()

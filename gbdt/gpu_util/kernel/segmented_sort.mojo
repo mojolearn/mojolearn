@@ -76,6 +76,8 @@ binary search that follows it (`exact_estimation.cu:31-39`).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+# TOMBSTONE: MOJOLEARN_GBDT_SEG_SUMS_BLOCK (DROPPED-noise) deleted 2026-10-03 by 7ca37fd0b; code recoverable at 7ca37fd0b^.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_SEG_SUMS_BLOCK.patch; record in docs/TOMBSTONES.md.
 from std.memory import bitcast
 from max.gpu.primitives.block import prefix_sum
 from std.gpu import block_dim, block_idx, thread_idx

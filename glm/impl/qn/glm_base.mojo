@@ -91,6 +91,8 @@ from glm.impl.qn.glm_logistic import logistic_loss_dz_kernel, logistic_lz, logis
 from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu
 from max.gpu.sync import barrier
+# TOMBSTONE: MOJOLEARN_QN_FAST_GRID_SUMS (DROPPED-noise) deleted 2026-10-03 by 5f1e86fd0; code recoverable at 5f1e86fd0^.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_GRID_SUMS.patch; record in docs/TOMBSTONES.md.
 from glm.impl.qn.multi_gpu import gradient_columns
 from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies, fast_xtdz_into, fast_xtdz_workspace_floats
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL

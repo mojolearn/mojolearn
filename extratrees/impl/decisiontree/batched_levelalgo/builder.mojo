@@ -2307,6 +2307,8 @@ def transpose_to_row_major_kernel(
     out_rm[unsafe_offset=o] = in_cm[unsafe_offset = c * nr + r]
 
 
+# TOMBSTONE: MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF (removed) deleted 2026-10-07 by d631a057c; code recoverable at d631a057c^.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF.patch; record in docs/TOMBSTONES.md.
 #: FAST on Apple, REGRESSION with the row-major tiled search on wide data:
 #: the range and score passes read X as 16-bit codes over up to ET_BINS
 #: quantile borders per feature (half the bytes per row). The range pass
@@ -7593,3 +7595,5 @@ def train_loop_shape() -> String:
     docstrings cite -- a citation, no longer a placeholder.
     """
     return "see docstring"
+# TOMBSTONE: MOJOLEARN_ET_TPB_256 (DROPPED-slower) deleted 2026-10-03 by 4a78e109a; code recoverable at 4a78e109a^.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_TPB_256.patch; record in docs/TOMBSTONES.md.

@@ -171,3 +171,5 @@ def c1_codes_targets_kernel(codes: IP, n: Int32, t_n: Int32, dst: FP):
         else:
             for t in range(tn):
                 st(dst, i * tn + t, Float32(1) if c == t else Float32(-1))
+# TOMBSTONE: MOJOLEARN_RIDGE_FAST_CLS1_PREDICT (DROPPED-noise) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
+# Restore: git apply experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch; record in docs/TOMBSTONES.md.

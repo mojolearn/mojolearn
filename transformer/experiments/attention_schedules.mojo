@@ -19,6 +19,8 @@ from checks.numerics import (
 )
 
 comptime NN_AB_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_NN22_EAGER_DKDV_PAIR (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+# Restore: git apply experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch; record in docs/TOMBSTONES.md.
 # Each flag below is OFF: full transformer/LM/Samba train-step NVIDIA+AMD
 # ratios, host/three-GPU words, task quality and sample counts are pending.
 # NN25 = arms 2 and 4 of MOJOLEARN_IDN_NORM (norm_profile_contract.mojo).
@@ -185,6 +187,8 @@ def qk_rope_pair_kernel(
         k_out.unsafe_store(ki, ftz(ftz(ka) + ftz(kb)))
 
 comptime NN21_SCALE_MASK = NN_AB_ENABLED and is_defined["MOJOLEARN_NN21_SCALE_MASK"]()
+# TOMBSTONE: MOJOLEARN_NN23_ROWDOT_DS (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+# Restore: git apply experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch; record in docs/TOMBSTONES.md.
 
 
 def score_scale_mask_kernel(

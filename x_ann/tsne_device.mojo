@@ -142,6 +142,8 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
         row_z.unsafe_store(i, z)
         rep.unsafe_store(2 * i, r0)
         rep.unsafe_store(2 * i + 1, r1)
+# TOMBSTONE: MOJOLEARN_TSNE_FAST_SPLIT (DROPPED-quality) deleted 2026-09-28 by 2c209a63f; code recoverable at 2c209a63f^.
+# Restore: git apply experiments/removed/MOJOLEARN_TSNE_FAST_SPLIT.patch; record in docs/TOMBSTONES.md.
 
 
 comptime TS_STEP_ROWS = _FAST_APPLE and ANN3_TSNE_STEP_ROWS

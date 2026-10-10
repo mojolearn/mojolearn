@@ -662,6 +662,8 @@ class _Prog:
 
 def _mode():
     return _backend.default_mode()
+# TOMBSTONE: MOJOLEARN_X_PREP_FAST_NONEG (DROPPED-noise) deleted 2026-10-03 by 10a9ab8eb; code recoverable at 10a9ab8eb^.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_NONEG.patch; record in docs/TOMBSTONES.md.
 
 
 #: binding -> whether it exports `x_prep_fast_unique` (FAST + Apple default,

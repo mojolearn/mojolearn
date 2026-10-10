@@ -184,6 +184,8 @@ from gbdt.methods.kernel.two_level_leaves import (
     two_level_leaf_values_kernel,
     two_level_prep_kernel,
 )
+# TOMBSTONE: MOJOLEARN_SYM_CTR_PERM_BATCH (DROPPED-noise) deleted 2026-10-04 by f4ac2ee28; code recoverable at f4ac2ee28^.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_CTR_PERM_BATCH.patch; record in docs/TOMBSTONES.md.
 from gbdt.models.kernel.add_bin_values import (
     IDN_APPLY_WIDE,
     IDN_PREDICT_FOUR,

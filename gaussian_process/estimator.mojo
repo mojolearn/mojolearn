@@ -724,6 +724,8 @@ def gpr_fit_host(
         + " sabotage="
         + gp_sabotage_name(sabotage)
     )
+    # TOMBSTONE: MOJOLEARN_KERNEL_FAST_GPR_RESIDENT (DROPPED-semantics) deleted 2026-10-03 by cc300add8; code recoverable at cc300add8^.
+    # Restore: git apply experiments/removed/MOJOLEARN_KERNEL_FAST_GPR_RESIDENT.patch; record in docs/TOMBSTONES.md.
     trace.record_list_f32("gp.x_train", x)
     trace.record_list_f32("gp.y_train", y)
 

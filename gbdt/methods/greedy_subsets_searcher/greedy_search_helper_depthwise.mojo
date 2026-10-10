@@ -286,6 +286,10 @@ comptime DW_FUSED_CHAIN = (
     and not is_defined["MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF"]()
 )
 
+# TOMBSTONE: MOJOLEARN_GBDT_DW_TREE_SYNC_CHECK (DROPPED-noise) deleted 2026-10-03 by 951bf48da; code recoverable at 951bf48da^.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_DW_TREE_SYNC.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_GBDT_DW_TREE_SYNC (DROPPED-noise) deleted 2026-10-03 by 951bf48da; code recoverable at 951bf48da^.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_DW_TREE_SYNC.patch; record in docs/TOMBSTONES.md.
 #: FAST on Apple, opt-in, stacked on DW_FUSED_CHAIN (lane
 #: apple-fast-depthwise, second pass): a Depthwise level takes ONE host wait
 #: instead of two. The winner fold's records stay on the device;
@@ -345,6 +349,8 @@ comptime DW2_SCAN_SMEM = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_GBDT_DW2_COPY_ZERO (DROPPED-slower) deleted 2026-10-03 by 4037c6b9a; code recoverable at 4037c6b9a^.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_DW2_COPY_ZERO.patch; record in docs/TOMBSTONES.md.
 
 
 def _dw_dev_u32(
@@ -1250,6 +1256,8 @@ comptime _LG_EXACT_BATCH128 = (
 # the default candidate slots. This trades scratch bytes for fewer rounds;
 # the existing exact replay still admits leaves in global best-first order.
 # No performance/quality evidence; source only, default OFF.
+# TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH16 (DROPPED-slower) deleted 2026-10-03 by dc23f13c8; code recoverable at dc23f13c8^.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH16.patch; record in docs/TOMBSTONES.md.
 comptime LG_EXACT_BATCH_WIDTH = 256 if AFT_N01 else (
     128 if _LG_EXACT_BATCH128 else (
         32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
@@ -1961,6 +1969,10 @@ def fit_non_symmetric_tree[
     # DEVIATION 2007a: no override, so the pool's cached machine constant.
     if sm_count <= 0:
         sm_count = ws[0].sm_count
+    # TOMBSTONE: MOJOLEARN_GBDT_SM_X8 (DROPPED-slower) deleted 2026-10-03 by eccc9be7e; code recoverable at eccc9be7e^.
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_SM_X8.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_GBDT_SM_X4 (DROPPED-noise) deleted 2026-10-03 by e1b520e88; code recoverable at e1b520e88^.
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_SM_X4.patch; record in docs/TOMBSTONES.md.
     # ============ DEVIATION 1911/1912: is the quantized family running? ====
     # The vendor/mode half is COMPTIME (`QUANTIZED_HIST_LIVE`, the
     # `greedy_quantized_hist_for` row -- False under IDENTICAL, so that
@@ -2304,6 +2316,8 @@ def fit_non_symmetric_tree[
     # LG_EXACT_ID: each node's partition stats as of its score wait, the
     # stats a folded-back leaf keeps (`stat_count` per node)
     var lg_node_stats = List[Float32]()
+    # TOMBSTONE: MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT (DROPPED) deleted 2026-10-07 by 359df2d05; code recoverable at 359df2d05^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT.patch; record in docs/TOMBSTONES.md.
     # I17/T16 resident Lossguide frontier: removed 2026-10-07 (trees-cleanup) after
     # losing on both vendors (AMD 1.041/1.292/1.083, NVIDIA 1.114/1.111/1.116,
     # source 5b467815b). Row in docs/apple-fast/EXPERIMENTS.md.

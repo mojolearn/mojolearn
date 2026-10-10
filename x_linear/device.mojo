@@ -193,6 +193,8 @@ def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, re
         var i = t // Int(k)
         var c = t % Int(k)
         res.unsafe_store(t, decision_one(x, i, Int(d), wb, c, Int(link)))
+# TOMBSTONE: MOJOLEARN_RIDGE_FAST_CLS1_PREDICT (DROPPED-noise) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
+# Restore: git apply experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch; record in docs/TOMBSTONES.md.
 
 
 comptime XG_TPB = 256

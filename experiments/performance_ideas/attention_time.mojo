@@ -18,6 +18,8 @@ def main() raises:
     var kept=ctx.enqueue_create_buffer[DType.float32](1);var kept_cells=0;var ran=-1
     ctx.enqueue_memset(q,Float32(.03125));ctx.enqueue_memset(k,Float32(-.0625));ctx.enqueue_memset(v,Float32(.125));ctx.enqueue_memset(dy,Float32(.015625));ctx.synchronize()
     var arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf"))
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE (slower) deleted 2026-10-07 by 52aecf2f3; code recoverable at 52aecf2f3^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE.patch; record in docs/TOMBSTONES.md.
     comptime if is_defined["MOJOLEARN_IDN_ATTN_HEAD_SHARE"]():
         arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"))
     # Isolate I06's forward GQA reuse: both variants must keep the same

@@ -6,6 +6,8 @@ VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED. No device-specific arithmeti
 """
 from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_TREES_T31_PACKED_A (dead code) deleted 2026-10-07 by bad9c74ce; code recoverable at bad9c74ce^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T31_PACKED_A.patch; record in docs/TOMBSTONES.md.
 
 # T31_PACKED_A/B removed (trees-cleanup 2026-10-07): packed nodes are already
 # the default layout (core/forest_inference.mojo FOREST_PACKED_NODES), so A was

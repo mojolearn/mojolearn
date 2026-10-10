@@ -1,5 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# TOMBSTONE: MOJOLEARN_IVF_FAST_SCAN_SELECT (DROPPED-noise) deleted 2026-10-02 by 59afb759a; code recoverable at 59afb759a^.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_SCAN_SELECT.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IVF_FAST_DEVICE_TRAINSET (DROPPED-noise) deleted 2026-10-02 by 59afb759a; code recoverable at 59afb759a^.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_DEVICE_TRAINSET.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IVF_FAST_DEVICE_CSR (DROPPED-slower) deleted 2026-10-02 by 59afb759a; code recoverable at 59afb759a^.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_DEVICE_CSR.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_TEAM (DROPPED-noise) deleted 2026-10-02 by 59afb759a; code recoverable at 59afb759a^.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_TEAM.patch; record in docs/TOMBSTONES.md.
 """The ann family's FAST-on-Apple defaults (lane/apple-fast-ann, 2026-10-02).
 
 Each switch is `True` only in a FAST build on the Apple column
@@ -33,6 +41,12 @@ comptime FAST_KNN_BIGD = ANN_FAST_APPLE and not is_defined["MOJOLEARN_ANN_FAST_K
 #: .6527 -> .801). `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF` restores
 #: the host codebooks.
 comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF"]()
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_WIDE (DROPPED-semantics) deleted 2026-10-03 by 3852df59b; code recoverable at 3852df59b^.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_P32 (DROPPED-quality) deleted 2026-10-03 by 3852df59b; code recoverable at 3852df59b^.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_DOT (DROPPED-semantics) deleted 2026-10-03 by 3852df59b; code recoverable at 3852df59b^.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch; record in docs/TOMBSTONES.md.
 
 #: lane/apple-fast-gap-cagra (2026-10-03), the CAGRA build's k-NN graph on
 #: rows wider than 64 features (x_ann/cagra_fast_knn.mojo,

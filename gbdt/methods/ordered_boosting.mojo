@@ -1775,6 +1775,8 @@ def _ordered_device_leaves(
     return leaves^
 
 
+# TOMBSTONE: MOJOLEARN_ORDERED_FOLD_DERIVS (DROPPED-slower) deleted 2026-10-03 by 219ae194a; code recoverable at 219ae194a^.
+# Restore: git apply experiments/removed/MOJOLEARN_ORDERED_FOLD_DERIVS.patch; record in docs/TOMBSTONES.md.
 # ===========================================================================
 # APPLE FAST (lane/apple-fast-ordered, 2026-10-02): the per-fold loops of a
 # tree as one launch per stage. Compiled only under FAST on an Apple GPU;

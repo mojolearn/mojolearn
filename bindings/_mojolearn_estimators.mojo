@@ -648,6 +648,8 @@ def ols_fit_resident_binding(
         ols_fit_resident_host(ctx, xp, yp, wp, mp, ymp, nr, nf, center)
         ctx.synchronize()
     return PythonObject(0)
+# TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
+# Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
 
 def lm_classical_stats_binding() raises -> PythonObject:

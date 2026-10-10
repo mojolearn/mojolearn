@@ -483,6 +483,8 @@ def _et_device_batch() -> Int:
     grid axis y (65535). The workspace grows as batch x n_cols cells
     (DEVIATION 205's survey reads every column). None is set by a build script.
     """
+    # TOMBSTONE: MOJOLEARN_ET_DEVICE_BATCH_65536 (DROPPED-slower) deleted 2026-10-03 by e242fb001; code recoverable at e242fb001^.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch; record in docs/TOMBSTONES.md.
     if is_defined["MOJOLEARN_ET_DEVICE_BATCH_32768"]():
         return 32768
     if is_defined["MOJOLEARN_ET_DEVICE_BATCH_4096"]():
