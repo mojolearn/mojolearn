@@ -211,6 +211,7 @@ in the tables after the sections.
 | [`MOJOLEARN_HDB_DEV_BORUVKA`](#mojolearn_hdb_dev_boruvka) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_HDB_DEV_BORUVKA.patch](../experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch) |
 | [`MOJOLEARN_KMEANS_FAST_LAZY_SHIFT`](#mojolearn_kmeans_fast_lazy_shift) | Cluster | DROPPED-slower | 2026-10-09 | [MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch](../experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch) |
 | [`MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG`](#mojolearn_x_cluster_fast_w2_mbk_labrg) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch) |
+| [`MOJOLEARN_DBSCAN_FAST_DENSEBALL`](#mojolearn_dbscan_fast_denseball) | Cluster | DROPPED-slower | 2026-10-09 | [MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch](../experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch) |
 | [`MOJOLEARN_ARIMA_FAST_LS_NOREAD`](#mojolearn_arima_fast_ls_noread) | Time series | DROPPED-noise | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch) |
 | [`MOJOLEARN_ARIMA_FAST_P_FIX`](#mojolearn_arima_fast_p_fix) | Time series | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_P_FIX.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_P_FIX.patch) |
 | [`MOJOLEARN_C58_FORECAST4`](#mojolearn_c58_forecast4) | Time series | slower | 2026-10-08 | [MOJOLEARN_C58_FORECAST4.patch](../experiments/removed/MOJOLEARN_C58_FORECAST4.patch) |
@@ -1667,6 +1668,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:882: `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | minibatch-kmeans | lane/apple-fast-w2-clres 4d80737b1 | w2-mbk-labrg-* | quality PASS; istella 146.6 -> 144.0, taxi 45.3 -> 46.3 ms | DROP-speed (noise), opt-in only
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): X_CLUSTER_FAST_W2_MBK_LABRG (MiniBatchKMeans' last labelling as a 32-thread-per-row assignment) was NOISE: istella 146.6 -> 144.0 ms, taxi 45.3 -> 46.3 ms, quality PASS; F15 M3 2026-10-06 B/A 0.947..1.125 mixed; code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_DBSCAN_FAST_DENSEBALL
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: dbscan on the sparse RBC route without an edge list: dense-ball cliques, early-exit core counts and union-find over landmark pairs (dbscan/impl/denseball.mojo), FAST + Apple, unweighted fits.
+- Files the patch restores: `dbscan/impl/denseball.mojo`, `dbscan/impl/runner.mojo`
+- EXPERIMENTS.md:488: `DBSCAN_FAST_DENSEBALL` | dbscan / taxi, istella | lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc | dbscantaxi-ab-x, dbscantaxi-ab-ist-x | n=0 on both arms (no times) | DROPPED-slower | reconciled 2026-10-05: rab3-denseball istella A 247185.2 ms, B timed out, Verdicts batch 4 ("RECORD: stays off"). Was READY-AB: rec-misc 2026-10-04: arm A times out at the classical driver's 600 s warmup on taxi (expected, no board FAST row); arm B also timed out: its pair kernel stopped a whole landmark pair at the first hook, so rounds grew with rows per ball. Fixed: one hook per row per round (components at least halve per round). Awaiting M2 build + M3 A/B (AFC_FAMILY=classical, b
+- EXPERIMENTS.md:1278: `DBSCAN_FAST_DENSEBALL` | dbscan / istella | lane/apple-fast-verdicts-4 | rab3-denseball | A 247185.2; B timed out | RECORD: stays off | B arm timed out
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): DBSCAN_FAST_DENSEBALL (no-edge-list dbscan: dense-ball cliques and union-find over landmark pairs, dbscan/impl/denseball.mojo) was SLOWER: dbscan istella arm A 247,185 ms, arm B timed out (rab3-denseball); code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Time series
 
 ### MOJOLEARN_ARIMA_FAST_LS_NOREAD
@@ -2095,7 +2106,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_ARIMA_FAST_D_CONCURRENT` | EXPERIMENTS.md:1409 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:140` |
 | `MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT` | EXPERIMENTS.md:1408 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:103` |
 | `MOJOLEARN_ARIMA_FAST_STEPWISE` | EXPERIMENTS.md:1417 DROPPED-slower (main a6ff25ff8) | `arima/impl/fast_order_search.mojo:201` |
-| `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
 | `MOJOLEARN_KSHAP_FAST_OVERLAP` | EXPERIMENTS.md:1412 DROPPED-noise (lane/apple-fast-s-shap) | `python/mojolearn/_expansion_trees.py:3403` |

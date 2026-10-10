@@ -269,6 +269,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SVD_QOLD"](), "removed 2026-10-09 (lane/owed-deletions-D3): SVD_QOLD was the opt-out name of SVD_QFIX while that was briefly the FAST default; SVD_QFIX was reverted (DROPPED-slower, svd taxi +13.2%) and SVD_QOLD was already a no-op; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_TSVD_FAST_CHOLQR3"](), "removed 2026-10-09 (lane/owed-deletions-D3): TSVD_FAST_CHOLQR3 (TruncatedSVD's R from shifted CholeskyQR3, x_decomp/tsvd_fast.mojo) was SLOWER: tsvd istella +19.9% (verdicts batch 6); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"](), "removed 2026-10-09 (lane/owed-deletions-D3): X_CLUSTER_FAST_W2_MBK_LABRG (MiniBatchKMeans' last labelling as a 32-thread-per-row assignment) was NOISE: istella 146.6 -> 144.0 ms, taxi 45.3 -> 46.3 ms, quality PASS; F15 M3 2026-10-06 B/A 0.947..1.125 mixed; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_FAST_DENSEBALL"](), "removed 2026-10-09 (lane/owed-deletions-D3): DBSCAN_FAST_DENSEBALL (no-edge-list dbscan: dense-ball cliques and union-find over landmark pairs, dbscan/impl/denseball.mojo) was SLOWER: dbscan istella arm A 247,185 ms, arm B timed out (rab3-denseball); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
