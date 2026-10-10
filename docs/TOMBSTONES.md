@@ -124,6 +124,7 @@ in the tables after the sections.
 | [`MOJOLEARN_RIDGE_FAST_CLS1_PREDICT`](#mojolearn_ridge_fast_cls1_predict) | Linear | DROPPED-noise | 2026-10-03 | [MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch](../experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch) |
 | [`MOJOLEARN_SGD_PERC_QOLD`](#mojolearn_sgd_perc_qold) | Linear | DROPPED-quality | 2026-10-04 | [MOJOLEARN_SGD_PERC_QOLD.patch](../experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch) |
 | [`MOJOLEARN_QN_FAST_COALESCED_OFF`](#mojolearn_qn_fast_coalesced_off) | Linear | DROPPED-slower | 2026-10-09 | [MOJOLEARN_QN_FAST_COALESCED_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_COALESCED_OFF.patch) |
+| [`MOJOLEARN_IDN_CD_GRAM_EPOCHS_64`](#mojolearn_idn_cd_gram_epochs_64) | Linear | DROPPED-slower | 2026-10-10 | [MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch](../experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch) |
 | [`MOJOLEARN_C29_STREAM_TOPK`](#mojolearn_c29_stream_topk) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_STREAM_TOPK.patch](../experiments/removed/MOJOLEARN_C29_STREAM_TOPK.patch) |
 | [`MOJOLEARN_C29_TILE`](#mojolearn_c29_tile) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_TILE.patch](../experiments/removed/MOJOLEARN_C29_TILE.patch) |
 | [`MOJOLEARN_CAGRA_FAST_DOT`](#mojolearn_cagra_fast_dot) | Neighbors | DROPPED-semantics | 2026-10-03 | [MOJOLEARN_CAGRA_FAST_DOT.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch) |
@@ -1013,6 +1014,16 @@ in the tables after the sections.
 - Files the patch restores: `glm/impl/qn/glm_base.mojo`
 - EXPERIMENTS.md:247: `QN_FAST_COALESCED_OFF` | logreg / istella | lane/apple-fast-linear @ 1c7c213f8 | linear-logreg-nocoal-istella | logreg istella 3,889 -> 4,996 | DROPPED-slower | +28.5% (turning coalescing off)
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): QN_FAST_COALESCED_OFF (rollback from the row-coalesced qn gradient X^T dZ to fast_xtdz) is SLOWER: logreg istella 3,889 -> 4,996 ms (+28.5%); the coalesced route is the only FAST Apple route (QN_FAST_XTDZ_OFF still turns both off); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_IDN_CD_GRAM_EPOCHS_64
+
+- Verdict: DROPPED-slower. Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit 512707dc3).
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch` (reverse of the deletion commit, code files only).
+- What it tried: lane fg-linear C2 (2026-10-09): Lasso / ElasticNet's IDENTICAL Gram sweep (`cd_idn_gram_sweep_kernel`) ran 64 epochs a launch instead of CD_IDN_GRAM_EPOCHS = 16 when n_cols <= CD_EK_SMALL_COLS (64), to amortize the host's per-launch state read; no bit change (convergence and freeze decided on the device per epoch).
+- Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): lasso taxi NV 1.39x / AMD 1.01x (avg 1.20x, slower), lasso istella NV 1.00x / AMD 1.00x, elasticnet taxi NV 1.02x / AMD 1.01x, elasticnet istella 1.00x / 1.00x. Hashes unchanged (lasso 6bb43acc / f90c38ec, elasticnet ffdff5a8 / 1fe5e9b4); r2 unchanged.
+- Files the patch restores: `experiments/classical_identical_ideas/fg_linear_controls.mojo`, `solver/impl/cd.mojo`
+- grid_controls: `fg-linear.json` `cd_gram_epochs_64` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): IDN_CD_GRAM_EPOCHS_64 was SLOWER; code at main 9f83ea479.
 
 ## Neighbors
 
