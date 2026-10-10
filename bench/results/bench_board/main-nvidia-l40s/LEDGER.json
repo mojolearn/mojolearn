@@ -1942,6 +1942,74 @@
   {
    "column": "nvidia-l40s",
    "failed": false,
+   "race": "algos/enet-cv/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T05:48:36Z",
+    "digest": "6bad69c7220fdd4a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0606",
+    "kind": "algos",
+    "median_ms": 568.0582635104656,
+    "reason": null,
+    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@d3c0fd72b)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "e5e971f37d610673",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
+    "kind": "algos",
+    "median_ms": 461.39784157276154,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/enet-cv/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T05:48:36Z",
+    "digest": "4edd65fa4798a10d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0606",
+    "kind": "algos",
+    "median_ms": 98.42594899237156,
+    "reason": null,
+    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@d3c0fd72b)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "9d5523b531fc8331",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
+    "kind": "algos",
+    "median_ms": 19.74630355834961,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
    "race": "algos/gaussian-nb/istella/rows=full",
    "reason": "older commit",
    "replaced": {
@@ -3025,6 +3093,74 @@
     "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/lasso-cv/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T05:48:36Z",
+    "digest": "8e27048f784efba9",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0606",
+    "kind": "algos",
+    "median_ms": 569.7083659470081,
+    "reason": null,
+    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@d3c0fd72b)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "f918dace27dbe71b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
+    "kind": "algos",
+    "median_ms": 429.1304647922516,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/lasso-cv/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-09T05:48:36Z",
+    "digest": "be9659e7d1cce147",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0606",
+    "kind": "algos",
+    "median_ms": 96.77278250455856,
+    "reason": null,
+    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@d3c0fd72b)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "c3f1c34c123e8466",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
+    "kind": "algos",
+    "median_ms": 18.24253425002098,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -4700,6 +4836,40 @@
    "reason": "older commit",
    "replaced": {
     "box": "nv",
+    "commit_date": "2026-10-09T05:48:36Z",
+    "digest": "f77b6adbd430b6d1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0607",
+    "kind": "algos",
+    "median_ms": 291.70823469758034,
+    "reason": null,
+    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@d3c0fd72b)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "2a553d8d2d118080",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
+    "kind": "algos",
+    "median_ms": 161.5271531045437,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/randomized-svd/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
     "digest": "f77b6adbd430b6d1",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
@@ -4713,18 +4883,18 @@
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-09T05:48:36Z",
-    "digest": "f77b6adbd430b6d1",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0607",
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "2a553d8d2d118080",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
     "kind": "algos",
-    "median_ms": 291.70823469758034,
+    "median_ms": 161.5271531045437,
     "reason": null,
-    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@d3c0fd72b)"
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -4747,18 +4917,52 @@
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
    "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "2a553d8d2d118080",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
+    "kind": "algos",
+    "median_ms": 161.5271531045437,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/randomized-svd/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
     "box": "nv",
     "commit_date": "2026-10-09T05:48:36Z",
-    "digest": "f77b6adbd430b6d1",
+    "digest": "259e42835cf88e89",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
     "hardware": "NVIDIA L40S (nv, RunPod)",
     "job": "n0607",
     "kind": "algos",
-    "median_ms": 291.70823469758034,
+    "median_ms": 88.24122603982687,
     "reason": null,
     "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@d3c0fd72b)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "d37724808fc8b55d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
+    "kind": "algos",
+    "median_ms": 51.437389105558395,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -4781,18 +4985,18 @@
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-09T05:48:36Z",
-    "digest": "259e42835cf88e89",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0607",
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "d37724808fc8b55d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
     "kind": "algos",
-    "median_ms": 88.24122603982687,
+    "median_ms": 51.437389105558395,
     "reason": null,
-    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@d3c0fd72b)"
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -4815,18 +5019,18 @@
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-09T05:48:36Z",
-    "digest": "259e42835cf88e89",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0607",
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "d37724808fc8b55d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1228",
     "kind": "algos",
-    "median_ms": 88.24122603982687,
+    "median_ms": 51.437389105558395,
     "reason": null,
-    "sha": "d3c0fd72b0b3df885963229dcdb412a246582d27",
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@d3c0fd72b)"
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -5851,9 +6055,43 @@
   },
   {
    "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical/dbscan/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "7494ce8e17368282",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1023",
+    "kind": "gridbb",
+    "median_ms": 414646.90585806966,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "7494ce8e17368282",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1234",
+    "kind": "gridbb",
+    "median_ms": 84826.3176009059,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
    "failed": true,
    "race": "classical/dbscan/taxi/rows=full",
-   "reason": "failed run (REFUSED(timeout:_null)) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (REFUSED(timeout:_null)) never replaces an ok cell",
    "replaced": {
     "box": "nv2",
     "commit_date": "2026-10-09T20:23:58Z",
@@ -5868,7 +6106,20 @@
     "status": "REFUSED(timeout:_null)",
     "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "d6fa652f25a01af8",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1234",
+    "kind": "gridbb",
+    "median_ms": 13336.420118808746,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -6217,6 +6468,40 @@
    "reason": "older commit",
    "replaced": {
     "box": "nv2",
+    "commit_date": "2026-10-10T05:06:10Z",
+    "digest": "3cc2b456a642ff2d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1079",
+    "kind": "gridbb",
+    "median_ms": 101.3362817466259,
+    "reason": null,
+    "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:03:04Z",
+    "digest": "3cc2b456a642ff2d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1226",
+    "kind": "gridbb",
+    "median_ms": 101.98752209544182,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical/pca/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
     "commit_date": "2026-10-10T02:40:03Z",
     "digest": "3cc2b456a642ff2d",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -6231,17 +6516,17 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T05:06:10Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "3cc2b456a642ff2d",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "v1079",
+    "job": "v1226",
     "kind": "gridbb",
-    "median_ms": 101.3362817466259,
+    "median_ms": 101.98752209544182,
     "reason": null,
-    "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -6265,17 +6550,51 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T05:06:10Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "3cc2b456a642ff2d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1226",
+    "kind": "gridbb",
+    "median_ms": 101.98752209544182,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical/pca/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T05:06:10Z",
+    "digest": "187a68d332ae640a",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
     "job": "v1079",
     "kind": "gridbb",
-    "median_ms": 101.3362817466259,
+    "median_ms": 9.915325790643692,
     "reason": null,
     "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:03:04Z",
+    "digest": "187a68d332ae640a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1226",
+    "kind": "gridbb",
+    "median_ms": 10.442741215229034,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -6299,17 +6618,17 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T05:06:10Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "187a68d332ae640a",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "v1079",
+    "job": "v1226",
     "kind": "gridbb",
-    "median_ms": 9.915325790643692,
+    "median_ms": 10.442741215229034,
     "reason": null,
-    "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -6333,17 +6652,17 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T05:06:10Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "187a68d332ae640a",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "v1079",
+    "job": "v1226",
     "kind": "gridbb",
-    "median_ms": 9.915325790643692,
+    "median_ms": 10.442741215229034,
     "reason": null,
-    "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -6693,6 +7012,40 @@
    "reason": "older commit",
    "replaced": {
     "box": "nv2",
+    "commit_date": "2026-10-10T05:06:10Z",
+    "digest": "3747911d4ae8ebdf",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1079",
+    "kind": "gridbb",
+    "median_ms": 54.12694439291954,
+    "reason": null,
+    "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:03:04Z",
+    "digest": "3747911d4ae8ebdf",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1226",
+    "kind": "gridbb",
+    "median_ms": 53.97562310099602,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical2/tsvd/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
     "commit_date": "2026-10-10T02:40:03Z",
     "digest": "3747911d4ae8ebdf",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -6707,17 +7060,17 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T05:06:10Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "3747911d4ae8ebdf",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "v1079",
+    "job": "v1226",
     "kind": "gridbb",
-    "median_ms": 54.12694439291954,
+    "median_ms": 53.97562310099602,
     "reason": null,
-    "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -6741,17 +7094,51 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T05:06:10Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "3747911d4ae8ebdf",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1226",
+    "kind": "gridbb",
+    "median_ms": 53.97562310099602,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical2/tsvd/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T05:06:10Z",
+    "digest": "8e8dc2a1775e2ddd",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
     "job": "v1079",
     "kind": "gridbb",
-    "median_ms": 54.12694439291954,
+    "median_ms": 2.94368714094162,
     "reason": null,
     "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:03:04Z",
+    "digest": "8e8dc2a1775e2ddd",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1226",
+    "kind": "gridbb",
+    "median_ms": 2.9165148735046387,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -6775,17 +7162,17 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T05:06:10Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "8e8dc2a1775e2ddd",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "v1079",
+    "job": "v1226",
     "kind": "gridbb",
-    "median_ms": 2.94368714094162,
+    "median_ms": 2.9165148735046387,
     "reason": null,
-    "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -6809,17 +7196,17 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T05:06:10Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "8e8dc2a1775e2ddd",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "v1079",
+    "job": "v1226",
     "kind": "gridbb",
-    "median_ms": 2.94368714094162,
+    "median_ms": 2.9165148735046387,
     "reason": null,
-    "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -6850,6 +7237,40 @@
    "reason": "older commit",
    "replaced": {
     "box": "nv2",
+    "commit_date": "2026-10-10T02:40:03Z",
+    "digest": "4a8e781b0739a038",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1049",
+    "kind": "gridbb",
+    "median_ms": 47.77167737483978,
+    "reason": null,
+    "sha": "9f83ea4798fe487a99e3b0f493dbc3edad16266a",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "4a8e781b0739a038",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1232",
+    "kind": "gridbb",
+    "median_ms": 48.55528473854065,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "neural/lm-forward/bytes/shape=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
     "commit_date": "2026-10-09T14:31:44Z",
     "digest": "4a8e781b0739a038",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -6864,17 +7285,51 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T02:40:03Z",
+    "commit_date": "2026-10-10T19:37:56Z",
     "digest": "4a8e781b0739a038",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1232",
+    "kind": "gridbb",
+    "median_ms": 48.55528473854065,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "neural/lm-train-step/bytes/shape=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T02:40:03Z",
+    "digest": "f927a24caecacef1",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
     "job": "v1049",
     "kind": "gridbb",
-    "median_ms": 47.77167737483978,
+    "median_ms": 35.51299124956131,
     "reason": null,
     "sha": "9f83ea4798fe487a99e3b0f493dbc3edad16266a",
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "f927a24caecacef1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1232",
+    "kind": "gridbb",
+    "median_ms": 35.43063998222351,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -6898,17 +7353,17 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-10T02:40:03Z",
+    "commit_date": "2026-10-10T19:37:56Z",
     "digest": "f927a24caecacef1",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "v1049",
+    "job": "v1232",
     "kind": "gridbb",
-    "median_ms": 35.51299124956131,
+    "median_ms": 35.43063998222351,
     "reason": null,
-    "sha": "9f83ea4798fe487a99e3b0f493dbc3edad16266a",
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -7371,5 +7826,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-10T18:52:44Z"
+ "updated": "2026-10-10T23:00:40Z"
 }

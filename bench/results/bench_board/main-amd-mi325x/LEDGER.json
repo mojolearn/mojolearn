@@ -1398,6 +1398,74 @@
   {
    "column": "amd-mi325x",
    "failed": false,
+   "race": "algos/enet-cv/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T04:43:28Z",
+    "digest": "6bad69c7220fdd4a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1065",
+    "kind": "algos",
+    "median_ms": 837.3433640081203,
+    "reason": null,
+    "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "e5e971f37d610673",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1554",
+    "kind": "algos",
+    "median_ms": 835.5289499741048,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/enet-cv/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T04:43:28Z",
+    "digest": "4edd65fa4798a10d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1065",
+    "kind": "algos",
+    "median_ms": 328.62224700511433,
+    "reason": null,
+    "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "9d5523b531fc8331",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1554",
+    "kind": "algos",
+    "median_ms": 256.9534280046355,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
    "race": "algos/gaussian-nb/istella/rows=full",
    "reason": "older commit",
    "replaced": {
@@ -2141,6 +2209,74 @@
     "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/lasso-cv/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T04:43:28Z",
+    "digest": "8e27048f784efba9",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1065",
+    "kind": "algos",
+    "median_ms": 853.6848730000202,
+    "reason": null,
+    "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "f918dace27dbe71b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1554",
+    "kind": "algos",
+    "median_ms": 793.0375129799359,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/lasso-cv/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T04:43:28Z",
+    "digest": "be9659e7d1cce147",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1065",
+    "kind": "algos",
+    "median_ms": 414.7837099881144,
+    "reason": null,
+    "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "c3f1c34c123e8466",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1554",
+    "kind": "algos",
+    "median_ms": 203.79283500369638,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -3510,6 +3646,40 @@
    "reason": "older commit",
    "replaced": {
     "box": "amd",
+    "commit_date": "2026-10-09T04:43:28Z",
+    "digest": "f77b6adbd430b6d1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1066",
+    "kind": "algos",
+    "median_ms": 212.73524899152108,
+    "reason": null,
+    "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "2a553d8d2d118080",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1554",
+    "kind": "algos",
+    "median_ms": 125.55704999249429,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/randomized-svd/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
     "digest": "f77b6adbd430b6d1",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
@@ -3524,17 +3694,17 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T04:43:28Z",
-    "digest": "f77b6adbd430b6d1",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "2a553d8d2d118080",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1066",
+    "job": "a1554",
     "kind": "algos",
-    "median_ms": 212.73524899152108,
+    "median_ms": 125.55704999249429,
     "reason": null,
-    "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -3558,17 +3728,51 @@
    },
    "replaced_by": {
     "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "2a553d8d2d118080",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1554",
+    "kind": "algos",
+    "median_ms": 125.55704999249429,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "algos/randomized-svd/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
     "commit_date": "2026-10-09T04:43:28Z",
-    "digest": "f77b6adbd430b6d1",
+    "digest": "259e42835cf88e89",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
     "job": "a1066",
     "kind": "algos",
-    "median_ms": 212.73524899152108,
+    "median_ms": 98.17392099648714,
     "reason": null,
     "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "d37724808fc8b55d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1554",
+    "kind": "algos",
+    "median_ms": 47.416860004886985,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -3592,17 +3796,17 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T04:43:28Z",
-    "digest": "259e42835cf88e89",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "d37724808fc8b55d",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1066",
+    "job": "a1554",
     "kind": "algos",
-    "median_ms": 98.17392099648714,
+    "median_ms": 47.416860004886985,
     "reason": null,
-    "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -3626,17 +3830,17 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-09T04:43:28Z",
-    "digest": "259e42835cf88e89",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "d37724808fc8b55d",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1066",
+    "job": "a1554",
     "kind": "algos",
-    "median_ms": 98.17392099648714,
+    "median_ms": 47.416860004886985,
     "reason": null,
-    "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
    }
   },
   {
@@ -4423,9 +4627,43 @@
   },
   {
    "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/dbscan/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-09T20:23:58Z",
+    "digest": "7494ce8e17368282",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1163",
+    "kind": "gridbb",
+    "median_ms": 275321.57522198395,
+    "reason": null,
+    "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "7494ce8e17368282",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1558",
+    "kind": "gridbb",
+    "median_ms": 54245.1092779811,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
    "failed": true,
    "race": "classical/dbscan/taxi/rows=full",
-   "reason": "failed run (REFUSED(timeout:_null)) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (REFUSED(timeout:_null)) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-09T20:23:58Z",
@@ -4440,7 +4678,20 @@
     "status": "REFUSED(timeout:_null)",
     "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "d6fa652f25a01af8",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1558",
+    "kind": "gridbb",
+    "median_ms": 7056.528268003603,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -4786,7 +5037,41 @@
    "column": "amd-mi325x",
    "failed": false,
    "race": "classical/pca/istella/rows=full",
-   "reason": "same commit date, earlier job",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-10T06:56:04Z",
+    "digest": "3cc2b456a642ff2d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1199",
+    "kind": "gridbb",
+    "median_ms": 51.48909700801596,
+    "reason": null,
+    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:03:04Z",
+    "digest": "3cc2b456a642ff2d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1553",
+    "kind": "gridbb",
+    "median_ms": 51.81605200050399,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/pca/istella/rows=full",
+   "reason": "older commit",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-10T06:56:04Z",
@@ -4803,17 +5088,17 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-10T06:56:04Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "3cc2b456a642ff2d",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1199",
+    "job": "a1553",
     "kind": "gridbb",
-    "median_ms": 51.48909700801596,
+    "median_ms": 51.81605200050399,
     "reason": null,
-    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -4837,24 +5122,58 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-10T06:56:04Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "3cc2b456a642ff2d",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1199",
+    "job": "a1553",
     "kind": "gridbb",
-    "median_ms": 51.48909700801596,
+    "median_ms": 51.81605200050399,
     "reason": null,
-    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
    "column": "amd-mi325x",
    "failed": false,
    "race": "classical/pca/taxi/rows=full",
-   "reason": "same commit date, earlier job",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-10T06:56:04Z",
+    "digest": "187a68d332ae640a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1199",
+    "kind": "gridbb",
+    "median_ms": 7.881131023168564,
+    "reason": null,
+    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:03:04Z",
+    "digest": "187a68d332ae640a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1553",
+    "kind": "gridbb",
+    "median_ms": 7.515175006119534,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/pca/taxi/rows=full",
+   "reason": "older commit",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-10T06:56:04Z",
@@ -4871,17 +5190,17 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-10T06:56:04Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "187a68d332ae640a",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1199",
+    "job": "a1553",
     "kind": "gridbb",
-    "median_ms": 7.881131023168564,
+    "median_ms": 7.515175006119534,
     "reason": null,
-    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -4905,17 +5224,17 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-10T06:56:04Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "187a68d332ae640a",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1199",
+    "job": "a1553",
     "kind": "gridbb",
-    "median_ms": 7.881131023168564,
+    "median_ms": 7.515175006119534,
     "reason": null,
-    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -5262,7 +5581,41 @@
    "column": "amd-mi325x",
    "failed": false,
    "race": "classical2/tsvd/istella/rows=full",
-   "reason": "same commit date, earlier job",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-10T06:56:04Z",
+    "digest": "3747911d4ae8ebdf",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1199",
+    "kind": "gridbb",
+    "median_ms": 30.29643400805071,
+    "reason": null,
+    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:03:04Z",
+    "digest": "3747911d4ae8ebdf",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1553",
+    "kind": "gridbb",
+    "median_ms": 30.199166998500004,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical2/tsvd/istella/rows=full",
+   "reason": "older commit",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-10T06:56:04Z",
@@ -5279,17 +5632,17 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-10T06:56:04Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "3747911d4ae8ebdf",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1199",
+    "job": "a1553",
     "kind": "gridbb",
-    "median_ms": 30.29643400805071,
+    "median_ms": 30.199166998500004,
     "reason": null,
-    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -5313,24 +5666,58 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-10T06:56:04Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "3747911d4ae8ebdf",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1199",
+    "job": "a1553",
     "kind": "gridbb",
-    "median_ms": 30.29643400805071,
+    "median_ms": 30.199166998500004,
     "reason": null,
-    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
    "column": "amd-mi325x",
    "failed": false,
    "race": "classical2/tsvd/taxi/rows=full",
-   "reason": "same commit date, earlier job",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-10T06:56:04Z",
+    "digest": "8e8dc2a1775e2ddd",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1199",
+    "kind": "gridbb",
+    "median_ms": 3.902766009559855,
+    "reason": null,
+    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:03:04Z",
+    "digest": "8e8dc2a1775e2ddd",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1553",
+    "kind": "gridbb",
+    "median_ms": 3.9096290129236877,
+    "reason": null,
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical2/tsvd/taxi/rows=full",
+   "reason": "older commit",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-10T06:56:04Z",
@@ -5347,17 +5734,17 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-10T06:56:04Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "8e8dc2a1775e2ddd",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1199",
+    "job": "a1553",
     "kind": "gridbb",
-    "median_ms": 3.902766009559855,
+    "median_ms": 3.9096290129236877,
     "reason": null,
-    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -5381,17 +5768,17 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-10T06:56:04Z",
+    "commit_date": "2026-10-10T19:03:04Z",
     "digest": "8e8dc2a1775e2ddd",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "a1199",
+    "job": "a1553",
     "kind": "gridbb",
-    "median_ms": 3.902766009559855,
+    "median_ms": 3.9096290129236877,
     "reason": null,
-    "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "sha": "a8e0548a5488ff7058fa6258c84690c6a5a157d2",
     "status": "ok",
-    "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+    "version": "mojolearn 0.8.38 (source build, main@a8e0548a5)"
    }
   },
   {
@@ -5414,6 +5801,74 @@
     "version": "mojolearn 0.8.37 (source build, main@e5f3f2ed8)"
    },
    "replaced_by": null
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "neural/lm-forward/bytes/shape=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-10T02:40:03Z",
+    "digest": "4a8e781b0739a038",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1189",
+    "kind": "gridbb",
+    "median_ms": 35.20244799437933,
+    "reason": null,
+    "sha": "9f83ea4798fe487a99e3b0f493dbc3edad16266a",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "4a8e781b0739a038",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1557",
+    "kind": "gridbb",
+    "median_ms": 34.67108597396873,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "neural/lm-train-step/bytes/shape=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-10T02:40:03Z",
+    "digest": "f927a24caecacef1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1189",
+    "kind": "gridbb",
+    "median_ms": 42.85642001195811,
+    "reason": null,
+    "sha": "9f83ea4798fe487a99e3b0f493dbc3edad16266a",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T19:37:56Z",
+    "digest": "f927a24caecacef1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1557",
+    "kind": "gridbb",
+    "median_ms": 42.84943998209201,
+    "reason": null,
+    "sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@ca25d9321)"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -5616,5 +6071,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-10T18:52:44Z"
+ "updated": "2026-10-10T23:00:40Z"
 }
