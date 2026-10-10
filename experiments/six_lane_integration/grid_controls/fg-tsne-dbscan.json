@@ -90,27 +90,6 @@
    "status": "promoted 2026-10-10 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): IDENTICAL default (needs dbscan_eps_tile on); the old on-define is refused in core/six_lane_experiment_guards.mojo",
    "note": "D2, needs D1 (the on arm sets both). Count pass writes word-major bit words; loop 1 keeps each range's bit-scanned CSR (kept total <= edge_cap edges); loop 2, batch 0 and the border pass copy it. Ranges capped at 25% of free memory over n/8 + 8*landmarks bytes a row (more batches at large n). PROMOTED 2026-10-10: dbscan istella with EPS_TILE NV 0.20x / AMD 0.20x (v1043 / a1183) against EPS_TILE alone 0.42x / 0.34x; hash 7494ce8e unchanged. The off arm keeps D1 and restores its second distance pass."
   },
-  "dbscan_batch_sample": {
-   "define": "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "dbscan/impl/runner.mojo:293"
-   ],
-   "binding": [
-    "_mojolearn_estimators",
-    "_mojolearn_estimators_host"
-   ],
-   "bits_change": false,
-   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
-   "note": "D4. IDENTICAL, NVIDIA+AMD. First ranges = edge_cap / (2 x sampled mean degree) from 1,024 strided rows; avoids count-split-recount levels on dense graphs. n_iter_ follows the batch count."
-  },
   "dbscan_cc_hook": {
    "define": "MOJOLEARN_IDN_DBSCAN_CC_HOOK",
    "kind": "switch",
@@ -265,5 +244,11 @@
    ]
   }
  },
- "removed": []
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE",
+   "control": "dbscan_batch_sample",
+   "reason": "DELETED 2026-10-10 (lane postmerge-act-7): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023 -> v1044, amd MI325X a1163 -> a1184; ratio = arm / fg2.default-ivf-cluster): measured on top of EPS_TILE, dbscan istella NV 0.42x / AMD 0.35x against EPS_TILE alone NV 0.42x / AMD 0.34x: no gain (noise); hash 7494ce8e unchanged; taxi timed out in every arm and the default. D4 sampled-degree range plan (dbscan/impl/runner.mojo IDN_DBSCAN_BATCH_SAMPLE, DS_SAMPLE, ds_gather_rows_kernel) deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main ca8ea1f8d (experiments/removed/MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.patch)."
+  }
+ ]
 }

@@ -274,49 +274,9 @@ comptime EPS_NN_RBC = 1
 comptime TPB = 256
 
 
-#: fg-tsne-dbscan D4 (IDENTICAL, NVIDIA and AMD, DEFAULT OFF, lane
-#: fg-tsne-dbscan 2026-10-09): THE RANGE SIZE FROM A SAMPLED DEGREE. On the
-#: ball-cover arm the planned batch is a MEMORY figure (one batch of all rows
-#: under IDN_DBSCAN_RBC_ONE_BATCH, cuML's dense 5-bytes-per-cell estimate
-#: otherwise) that knows nothing of the edge count, and loop 1 halves a range
-#: over `edge_cap` and COUNTS IT AGAIN: a graph whose edges are many times
-#: the cap is counted once per halving level (log2(edges / cap) full count
-#: passes). Here DS_SAMPLE rows at a fixed stride (row s * n / DS_SAMPLE) are
-#: counted first (one count launch over a gathered copy, the loop's own count
-#: kernel), and the first ranges hold edge_cap / (2 x the sampled mean degree)
-#: rows, never more than the planned batch: the factor 2 is headroom for a
-#: degree spread around the mean; a range still over the cap is split as
-#: before, so the exact edge test is unchanged. 1,024 rows put the sampled
-#: mean within a few percent for a degree distribution of moderate spread at
-#: the cost of one launch over 1,024 queries. Batch boundaries are not data
-#: (the block above loop 1; `dbscan_edge_split_check`), so no label moves;
-#: n_iter_ (passes summed over batches) follows the batch count as it already
-#: follows the device's memory. -D MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.
-comptime IDN_DBSCAN_BATCH_SAMPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and is_defined["MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE"]()
-)
-comptime DS_SAMPLE = 1024
-
-
-def ds_gather_rows_kernel(
-    src: MutPointer[Float32, MutAnyOrigin],
-    dst: MutPointer[Float32, MutAnyOrigin],
-    n_rows_in: Int32,
-    n_cols_in: Int32,
-    n_sample_in: Int32,
-):
-    """D4: sample row s is row s * n_rows / n_sample (one thread per cell)."""
-    var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var n_cols = Int(n_cols_in)
-    var ns = Int(n_sample_in)
-    if e >= ns * n_cols:
-        return
-    var srow = e // n_cols
-    var c = e - srow * n_cols
-    var row = srow * Int(n_rows_in) // ns
-    dst.unsafe_store(e, src.unsafe_load(row * n_cols + c))
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-7; code recoverable at ca8ea1f8d.
+# Tried: D4, comptime IDN_DBSCAN_BATCH_SAMPLE, DS_SAMPLE and ds_gather_rows_kernel (the sampled-degree range plan).
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.patch; record in docs/TOMBSTONES.md.
 
 
 #: fg-tsne-dbscan D2 (with D1, see `neighbors/impl/ball_cover/registers.mojo`,
@@ -741,38 +701,9 @@ their code branches on is this Bool.
     var maxklen = List[Int]()
     var pend_start = List[Int]()
     var pend_rows = List[Int]()
-    # fg-tsne-dbscan D4: the first ranges sized from a sampled degree (see
-    # IDN_DBSCAN_BATCH_SAMPLE); `batch` only shrinks, so the caller's `vd` /
-    # `ex_scan` (batch + 1 cells) still hold a range
-    comptime if IDN_DBSCAN_BATCH_SAMPLE:
-        if sparse_rbc_mode and not has_weights and batch >= DS_SAMPLE and n_rows > DS_SAMPLE:
-            var ds_x = ctx.enqueue_create_buffer[DType.float32](DS_SAMPLE * n_features)
-            ctx.enqueue_function[ds_gather_rows_kernel](
-                x.unsafe_ptr(), ds_x.unsafe_ptr(), Int32(n_rows), Int32(n_features), Int32(DS_SAMPLE),
-                grid_dim=((DS_SAMPLE * n_features + TPB - 1) // TPB, 1, 1),
-                block_dim=(TPB, 1, 1),
-            )
-            var ds_nnz = rbc_eps_nn_query_count(
-                ctx, rbc_xr, ds_x, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
-                ex_scan, vd, DS_SAMPLE, n_features, n_landmarks, eps_radius,
-            )
-            ctx.synchronize()
-            _ = ds_x^
-            # rows per range = edge_cap / (2 x mean degree), mean = ds_nnz / DS_SAMPLE
-            var ds_rows = batch
-            if ds_nnz > 0:
-                ds_rows = (edge_cap * DS_SAMPLE) // (2 * ds_nnz)
-            if ds_rows < 1:
-                ds_rows = 1
-            if ds_rows < batch:
-                batch = ds_rows
-                n_batches = (n_rows + batch - 1) // batch
-            if phase_timing:
-                print(
-                    "PHASE plan.sample edges " + String(ds_nnz) + " of "
-                    + String(DS_SAMPLE) + " rows batch " + String(batch)
-                    + " n_batches " + String(n_batches)
-                )
+    # TOMBSTONE: MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-7; code recoverable at ca8ea1f8d.
+    # Tried: D4, the first ranges sized from a 1,024-row sampled degree (edge_cap / (2 x mean degree)).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.patch; record in docs/TOMBSTONES.md.
     # fg-tsne-dbscan D2: the bit matrix (IDN_DBSCAN_ADJ_BITMAP) caps a range
     # at DB_BM_SHARE_PCT of the free memory over its bytes per query row
     var use_bm = False
