@@ -210,6 +210,7 @@ in the tables after the sections.
 | [`MOJOLEARN_HDB_CORE_TILE`](#mojolearn_hdb_core_tile) | Cluster | DROP | 2026-10-09 | [MOJOLEARN_HDB_CORE_TILE.patch](../experiments/removed/MOJOLEARN_HDB_CORE_TILE.patch) |
 | [`MOJOLEARN_HDB_DEV_BORUVKA`](#mojolearn_hdb_dev_boruvka) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_HDB_DEV_BORUVKA.patch](../experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch) |
 | [`MOJOLEARN_KMEANS_FAST_LAZY_SHIFT`](#mojolearn_kmeans_fast_lazy_shift) | Cluster | DROPPED-slower | 2026-10-09 | [MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch](../experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch) |
+| [`MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG`](#mojolearn_x_cluster_fast_w2_mbk_labrg) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch) |
 | [`MOJOLEARN_ARIMA_FAST_LS_NOREAD`](#mojolearn_arima_fast_ls_noread) | Time series | DROPPED-noise | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch) |
 | [`MOJOLEARN_ARIMA_FAST_P_FIX`](#mojolearn_arima_fast_p_fix) | Time series | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_P_FIX.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_P_FIX.patch) |
 | [`MOJOLEARN_C58_FORECAST4`](#mojolearn_c58_forecast4) | Time series | slower | 2026-10-08 | [MOJOLEARN_C58_FORECAST4.patch](../experiments/removed/MOJOLEARN_C58_FORECAST4.patch) |
@@ -1656,6 +1657,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:325: `KMEANS_FAST_LAZY_SHIFT` | kmeans / taxi, istella | lane/apple-fast-vsv-promote | M3 afc_ab_def, full board, 1 run/arm, 2026-10-04 | istella 1451.5 -> 1527.7; taxi 977.6 -> 974.8 | DROPPED-slower | slower on istella, flat on taxi; inertia equal. Stays opt-in OFF (cluster/impl/detail/kmeans.mojo)
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KMEANS_FAST_LAZY_SHIFT (lazy convergence read on the KMeans estimator's fits) was SLOWER: kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8 ms, inertia equal; the IVF callers' lazy_shift stays; code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG
+
+- Verdict: DROPPED-noise. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: MiniBatchKMeans' final all-rows labelling as the CLS3_ROWGRP batch assignment (_mbf_label_rg_kernel: a 32-thread group per row, coalesced reads) instead of DeviceOps.nearest, FAST + Apple, k <= MBF_RG_MAXK.
+- Files the patch restores: `x_cluster/minibatch_fast.mojo`, `x_cluster/minibatch_ptr.mojo`
+- EXPERIMENTS.md:872: `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | MiniBatchKMeans / istella, taxi | (not promoted) | n/a here | DROPPED-noise | reconciled 2026-10-05: w2-mbk-labrg: quality PASS, istella 146.6 -> 144.0, taxi 45.3 -> 46.3 (Manager verdicts session 2: DROP-speed noise); opt-in only. Was OPEN, opt-in: Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode).
+- EXPERIMENTS.md:882: `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | minibatch-kmeans | lane/apple-fast-w2-clres 4d80737b1 | w2-mbk-labrg-* | quality PASS; istella 146.6 -> 144.0, taxi 45.3 -> 46.3 ms | DROP-speed (noise), opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): X_CLUSTER_FAST_W2_MBK_LABRG (MiniBatchKMeans' last labelling as a 32-thread-per-row assignment) was NOISE: istella 146.6 -> 144.0 ms, taxi 45.3 -> 46.3 ms, quality PASS; F15 M3 2026-10-06 B/A 0.947..1.125 mixed; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Time series
 
 ### MOJOLEARN_ARIMA_FAST_LS_NOREAD
@@ -2123,7 +2134,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_SYM_SCAN_SUB_FUSED` | EXPERIMENTS.md:194 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/split_properties_helpers.mojo:483` |
 | `MOJOLEARN_TREES_T29` | EXPERIMENTS.md:1710 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `gbdt/trees_identical_switches.mojo:74` |
 | `MOJOLEARN_TSA2_KPSS` | EXPERIMENTS.md:544 DROPPED-noise (lane/apple-fast-gap-tsa @ e9da47064) | `tsa/impl/timeSeries/kpss_fused.mojo:7` |
-| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | EXPERIMENTS.md:872 reconciled 2026-10-05: w2-mbk-labrg: quality PASS, istella 146.6 -> 144.0, taxi 45.3 -> 46.3 (Manager verdicts session 2: DROP-speed noise); opt-in only. Was OPEN, opt-in: Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode). ((not promoted)) | `x_cluster/minibatch_fast.mojo:160` |
 | `MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID` | EXPERIMENTS.md:150 DROPPED-noise (lane/apple-fast-yetirank @ c7b35fd7c) | `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2945` |
 
 
