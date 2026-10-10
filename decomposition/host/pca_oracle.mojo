@@ -139,7 +139,7 @@ pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
 brief records what it has shown.
 """
 from experiments.classical_identical_ideas.shared_controls import C01_MEAN
-from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04
+# TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
 from core.blocked_moments_host import host_bm_column_mean
 # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
 from core.classical_centered import centered_gram_v1_cell
@@ -745,26 +745,16 @@ def host_pca_fit(
     var cov: List[Float32]
     # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
     # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
-    # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
-    comptime if PCA_COV_C04:
-        # MOJOLEARN_CLASSICAL_PCA_COV=4: the reference cell the device's
-        # row-parallel leaves and binary-counter fold reproduce
-        mu = host_column_mean_launch(x, n_rows, n_cols)
-        cov = List[Float32](length=n_cols*n_cols, fill=Float32(0))
-        var xp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
-        var mp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(mu.unsafe_ptr()))
-        for i in range(n_cols):
-            for j in range(n_cols):
-                cov[i*n_cols+j] = centered_gram_v1_cell(xp, mp, n_rows, n_cols, i, j)
-        host_scale_in_place(cov, Float32(1.0) / Float32(n_rows - 1))
+    # Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch; record in docs/TOMBSTONES.md.
+    mu = host_column_mean_launch(x, n_rows, n_cols)
+    if host_gram_applies(n_cols):
+        cov = host_gram_splitk(x, mu, True, n_cols, n_rows)
     else:
-        mu = host_column_mean_launch(x, n_rows, n_cols)
-        if host_gram_applies(n_cols):
-            cov = host_gram_splitk(x, mu, True, n_cols, n_rows)
-        else:
-            var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
-            cov = host_gemm_tn(centered, n_cols, n_rows)
-        host_scale_in_place(cov, Float32(1.0) / Float32(n_rows - 1))
+        var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
+        cov = host_gemm_tn(centered, n_cols, n_rows)
+    host_scale_in_place(cov, Float32(1.0) / Float32(n_rows - 1))
     var result = host_eig_and_truncate(cov, n_cols, n_components, n_rows - 1)
     return PCAHostFit(result^, mu^)
 

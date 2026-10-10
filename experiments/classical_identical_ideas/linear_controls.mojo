@@ -181,20 +181,16 @@ comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TR
 # counter: the old C23 cell's value (x_decomp/classical_cells.mojo, the host
 # column), now computed in parallel. NOT MEASURED.
 comptime C23_MCD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_MCD"]()
-# PCA covariance, ONE switch with a named arm (the old C04-over-C23 silent
-# priority is gone): -D MOJOLEARN_CLASSICAL_PCA_COV=4 is the C04 arm
-# (two passes: the column mean, then the centered Gram around it read
-# straight from X, leaves of contract_leaf_size(n) rows, binary-counter
-# fold: the old C04 cell's value, computed in parallel, no shift/unshift
-# passes). Absent = the incumbent (column_mean_launch, then split-K or
-# shift + gemm_tn). The arm replaces the incumbent's routing at every
-# width. NOT MEASURED.
+# PCA covariance: MOJOLEARN_CLASSICAL_PCA_COV is gone; the incumbent
+# (column_mean_launch, then split-K or shift + gemm_tn) is the only route.
 # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
-# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
-# (c04 stays; C23_MCD is separate). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
-comptime _PCA_COV_RAW = get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV", 0]()
-comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4
-comptime PCA_COV_C04 = CLASSICAL_IDN and _PCA_COV_RAW == 4
+# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted.
+# Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+# TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch; record in docs/TOMBSTONES.md.
+# Grid g50ebe26a5 (2026-10-10): c04 (two-pass centered Gram read straight from X) pca NV/AMD istella 1.31x/1.25x
+# SLOWER (1.281x combined), taxi 0.94x/0.82x (0.878x); geo-mean ~1.06x: noise/slower. Both arms are deleted; any
+# -D MOJOLEARN_CLASSICAL_PCA_COV is refused in core/six_lane_experiment_guards.mojo.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
 # Grid g50ebe26a5: tsvd NV/AMD istella 2.34x/3.46x, taxi 1.83x/1.38x SLOWER (combined 2.84x / 1.59x).
