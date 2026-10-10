@@ -36,7 +36,7 @@ from x_cluster.common import nearest_all, sum_f64
 from x_cluster.post_bodies import FM_VAL
 from x_cluster.device_ops import DeviceOps
 from x_cluster.minibatch import MiniBatchParams
-from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL, MBK_W2_LABRG, MBF_RG_MAXK, mbk_labels_rg
+from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 from x_cluster.out import ClusterOut
@@ -254,19 +254,10 @@ def minibatch_entry_ptr(
                 raise Error("MiniBatchKMeans: the device steps refused a shape the zero-copy path admitted")
         var labels = List[Int32]()
         var dist = List[Float32]()
-        var labeled = False
-        comptime if MBK_W2_LABRG:
-            # lane/apple-fast-w2-clres, opt-in: the all-rows labelling as a
-            # 32-thread group per row (x_cluster/minibatch_fast.mojo)
-            if k <= MBF_RG_MAXK:
-                var cs = ops.put(c)
-                var ls = ops.zeros_i(n)
-                var ds = ops.zeros(n)
-                labeled = mbk_labels_rg(ops.ctx, ops._fp(xs), n, ops._fp(cs), k, d, ops._ip(ls), ops._fp(ds))
-                if labeled:
-                    ops.get_if(ls, n, ds, n, labels, dist)
-        if not labeled:
-            nearest_all(ops, xs, n, c, k, d, labels, dist)
+        # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+        # Tried: the row-group all-rows labelling here.
+        # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch; record in docs/TOMBSTONES.md.
+        nearest_all(ops, xs, n, c, k, d, labels, dist)
         comptime if MBK_CLS2_POOL:
             # nearest_all read its labels back (a synchronize): no launch
             # still reads X; the slot's later entries are not used again

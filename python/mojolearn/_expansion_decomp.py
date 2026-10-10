@@ -565,8 +565,8 @@ class _Kit:
 
     def qfix_flags(self):
         """lane/apple-fast-q-linalg: the binding's FAST quality repairs
-        (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 1 SVD_QFIX, bit 2
-        TSVD_QFIX, bit 4 LU_QFIX; each off with its -D MOJOLEARN_*_QOLD; 0 on
+        (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 2 TSVD_QFIX, bit 4
+        LU_QFIX (bit 1, SVD_QFIX, deleted 2026-10-09); each off with its -D MOJOLEARN_*_QOLD; 0 on
         an IDENTICAL or host binding, which keep the old routes)."""
         f = self.__dict__.get("_qfix_flags")
         if f is None:
@@ -4361,13 +4361,9 @@ _LLE_NULL_GUARD = 1e-3
 #: constant, and any basis of it is the answer (sklearn's ARPACK returns
 #: its own); the iteration stops there from its third step.
 _LLE_NULL_FLOOR = 8.0
-#: LLE_FAST_NULL_CANON (x_decomp/w4_fast.mojo): a Ritz value at most
-#: _LLE_CANON_NULL floors is in the null space N; one in (_LLE_CANON_NULL,
-#: _LLE_CANON_GAP] floors means N has no clear edge (no canonical answer);
-#: when every column is null, p widens 4x up to _LLE_CANON_MAX_P columns.
-_LLE_CANON_NULL = 4.0
-_LLE_CANON_GAP = 64.0
-_LLE_CANON_MAX_P = 160
+# TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the _LLE_CANON_* thresholds of the canonical null-space answer.
+# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
 
 
 def _lle_orth(k, Z):
@@ -4493,40 +4489,16 @@ def _lle_smallest(k, F, nc, max_iter, seed=0, Xd=None):
         return None
     z = k.ew("scale", z, s=1.0 / zn)
 
-    # lane/apple-fast-s-shap LLE_FAST_NULL_CANON (-D MOJOLEARN_LLE_FAST_NULL_CANON,
-    # FAST + Apple, x_decomp/w4_fast.mojo): a null space wider than nc gets a
-    # canonical answer (a function of N and Xd) instead of the one the LU's
-    # last-bit rounding picks inside N
-    canon = Xd is not None and bool(k.w4_flags() & 4)
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: the canonical null-space answer in this loop (bit 4 of w4_flags).
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
 
     def back(Yc):           # back to R^n: H [Yc; 0] = [Yc; 0] - coef h (h^T [Yc; 0])
         t = k.mm(hrow, Yc)
         full = k.pad_zero_row(Yc)
         return k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
 
-    while True:
-        X, Y, S, null = _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor)
-        if not (canon and null):
-            break
-        # N = the Ritz vectors whose values are numerically zero (under
-        # _LLE_CANON_NULL floors). A value in the band up to _LLE_CANON_GAP
-        # floors leaves N's edge unclear: the iteration's answer stays.
-        sl = [float(v) for v in S.s]  # glue: the p Ritz values
-        if any(_LLE_CANON_NULL * floor < v <= _LLE_CANON_GAP * floor for v in sl):  # glue: p <= 160 scalars
-            break
-        idx = [j for j in range(p) if sl[j] <= _LLE_CANON_NULL * floor]  # glue: p <= 160 column numbers
-        if len(idx) == p and p < min(n1, _LLE_CANON_MAX_P):
-            p = min(n1, 4 * p, _LLE_CANON_MAX_P)    # every column null: N may be wider, iterate wider
-            continue
-        if nc < len(idx) < p:
-            # all of N (c orthonormal columns): its nc directions along which
-            # the data varies most, the top left singular vectors of
-            # V_N^T Xd (c x d), from the c x c Gram's SVD (descending)
-            Z = X.take_cols(idx)
-            C = k.mm(back(Z), Xd, ta=True)
-            _, Ut = k.svd(k.mm(C, C, tb=True))
-            Y = k.mm(Z, Ut.rows(0, nc), tb=True)
-        break
+    X, Y, S, null = _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor)
     sv = S.take_cols(list(range(p - 1, p - 1 - nc, -1)))
     V = back(Y)
     # the columns are unit vectors or the solve is not an answer (an

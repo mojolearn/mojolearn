@@ -1,0 +1,133 @@
+diff --git b/python/mojolearn/_expansion_decomp.py a/python/mojolearn/_expansion_decomp.py
+index 495a00db8..9b0cd3bba 100644
+--- b/python/mojolearn/_expansion_decomp.py
++++ a/python/mojolearn/_expansion_decomp.py
+@@ -4361,9 +4361,13 @@ _LLE_NULL_GUARD = 1e-3
+ #: constant, and any basis of it is the answer (sklearn's ARPACK returns
+ #: its own); the iteration stops there from its third step.
+ _LLE_NULL_FLOOR = 8.0
+-# TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: the _LLE_CANON_* thresholds of the canonical null-space answer.
+-# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
++#: LLE_FAST_NULL_CANON (x_decomp/w4_fast.mojo): a Ritz value at most
++#: _LLE_CANON_NULL floors is in the null space N; one in (_LLE_CANON_NULL,
++#: _LLE_CANON_GAP] floors means N has no clear edge (no canonical answer);
++#: when every column is null, p widens 4x up to _LLE_CANON_MAX_P columns.
++_LLE_CANON_NULL = 4.0
++_LLE_CANON_GAP = 64.0
++_LLE_CANON_MAX_P = 160
+ 
+ 
+ def _lle_orth(k, Z):
+@@ -4489,16 +4493,40 @@ def _lle_smallest(k, F, nc, max_iter, seed=0, Xd=None):
+         return None
+     z = k.ew("scale", z, s=1.0 / zn)
+ 
+-    # TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-    # Tried: the canonical null-space answer in this loop (bit 4 of w4_flags).
+-    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
++    # lane/apple-fast-s-shap LLE_FAST_NULL_CANON (-D MOJOLEARN_LLE_FAST_NULL_CANON,
++    # FAST + Apple, x_decomp/w4_fast.mojo): a null space wider than nc gets a
++    # canonical answer (a function of N and Xd) instead of the one the LU's
++    # last-bit rounding picks inside N
++    canon = Xd is not None and bool(k.w4_flags() & 4)
+ 
+     def back(Yc):           # back to R^n: H [Yc; 0] = [Yc; 0] - coef h (h^T [Yc; 0])
+         t = k.mm(hrow, Yc)
+         full = k.pad_zero_row(Yc)
+         return k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
+ 
+-    X, Y, S, null = _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor)
++    while True:
++        X, Y, S, null = _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor)
++        if not (canon and null):
++            break
++        # N = the Ritz vectors whose values are numerically zero (under
++        # _LLE_CANON_NULL floors). A value in the band up to _LLE_CANON_GAP
++        # floors leaves N's edge unclear: the iteration's answer stays.
++        sl = [float(v) for v in S.s]  # glue: the p Ritz values
++        if any(_LLE_CANON_NULL * floor < v <= _LLE_CANON_GAP * floor for v in sl):  # glue: p <= 160 scalars
++            break
++        idx = [j for j in range(p) if sl[j] <= _LLE_CANON_NULL * floor]  # glue: p <= 160 column numbers
++        if len(idx) == p and p < min(n1, _LLE_CANON_MAX_P):
++            p = min(n1, 4 * p, _LLE_CANON_MAX_P)    # every column null: N may be wider, iterate wider
++            continue
++        if nc < len(idx) < p:
++            # all of N (c orthonormal columns): its nc directions along which
++            # the data varies most, the top left singular vectors of
++            # V_N^T Xd (c x d), from the c x c Gram's SVD (descending)
++            Z = X.take_cols(idx)
++            C = k.mm(back(Z), Xd, ta=True)
++            _, Ut = k.svd(k.mm(C, C, tb=True))
++            Y = k.mm(Z, Ut.rows(0, nc), tb=True)
++        break
+     sv = S.take_cols(list(range(p - 1, p - 1 - nc, -1)))
+     V = back(Y)
+     # the columns are unit vectors or the solve is not an answer (an
+diff --git b/x_decomp/w4_fast.mojo a/x_decomp/w4_fast.mojo
+index 27ab1d1a9..a2b695710 100644
+--- b/x_decomp/w4_fast.mojo
++++ a/x_decomp/w4_fast.mojo
+@@ -58,7 +58,7 @@ from x_decomp.resident import _id, _n, _ptr
+ #: taxi 1783.8 -> 1039.0 ms, but trustworthiness_k15 0.8662 -> 0.8410 vs FAST
+ #: main (arm A) is a real drop, not noise, so default OFF (FAST quality must
+ #: not go down vs FAST main and must match the best opponent).
+-#: 2026-10-05 re-check with LLE_FAST_NULL_CANON (deleted 2026-10-09; M3 rab14, 1 run per arm), DEV_LU + CANON vs FAST main:
++#: 2026-10-05 re-check with LLE_FAST_NULL_CANON (M3 rab14, 1 run per arm), DEV_LU + CANON vs FAST main:
+ #:   lle istella 1803.9 -> 1048.9 ms (-41.9%), trustworthiness_k15 0.8851 -> 0.8615 (-2.7%, consistent across runs);
+ #:   lle taxi    1745.1 ->  968.0 ms (-44.5%), trustworthiness_k15 0.8105 -> 0.8420 (arm A itself ranges 0.81-0.87 run to run).
+ #:   sklearn-cpu trustworthiness: istella 0.8491, taxi 0.7708, so DEV_LU stays above the opponent on both.
+@@ -68,9 +68,32 @@ comptime LLE_FAST_DEV_LU = (
+     and has_apple_gpu_accelerator()
+     and is_defined["MOJOLEARN_LLE_FAST_DEV_LU"]()
+ )
+-# TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: a canonical LLE answer when the null space is wider than n_components (all of N, then its nc directions of most data variance); trustworthiness down on lle taxi and istella (verdicts batch 6).
+-# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
++#: lane/apple-fast-s-shap (2026-10-04), READY-AB, opt-in
++#: (`-D MOJOLEARN_LLE_FAST_NULL_CANON`, FAST + Apple): a canonical answer when
++#: LLE's null space is wider than n_components. Why LLE_FAST_DEV_LU moved
++#: trustworthiness: taxi's kNN graph has several components (near-duplicate
++#: rows), so F^'s numerical null space N has more than nc dimensions and ANY
++#: nc of them is a correct answer (`_LLE_NULL_FLOOR`). Inside N the
++#: shift-invert operator's values are 1 / sigma^2 of float32 rounding noise,
++#: so WHICH nc directions the iteration settles on is decided by the LU's
++#: last-bit rounding: a rounding-level LU change (LU_FAST_MMA's sum order,
++#: the device LU's words, the trisolve order) re-draws the embedding. That
++#: is how FAST main itself went 0.826 (scalar LU, digest 68a3bf15) -> 0.866
++#: (MMA LU, 75f6322f) and DEV_LU 0.841 (45185107): three draws, not three
++#: precisions (w4q-v1 on non-degenerate 3,000-row fixtures: trust |A - B|
++#: 1.3e-5, angle 2.9e-5 rad). With this on, once the wanted Ritz values are
++#: under the floor, `_lle_smallest` takes ALL of N (every Ritz value under
++#: the floor, p widened when every column is null) and returns the nc
++#: directions of N along which the input data varies most (top left singular
++#: vectors of V_N^T X): a function of N and X only, the same on any LU.
++#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
++#: verdicts batch 6): lle trustworthiness down on both datasets. DROPPED:
++#: stays off (opt-in only).
++comptime LLE_FAST_NULL_CANON = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_LLE_FAST_NULL_CANON"]()
++)
+ #: FAST Apple default, measured source e9d72edb5 (2026-10-04).
+ #: M3 afc_ab_def, full board size, 1 run per arm: randomized-svd istella
+ #: 517.3 -> 501.3 ms, taxi 200.8 -> 198.5 ms; relative_reconstruction_error
+@@ -103,13 +126,15 @@ comptime RSVD_IDN_DIRECT_IN = (
+ 
+ def w4_flags_py() raises -> PythonObject:
+     """Which w4 candidates this build compiled in (bit 1 LLE_FAST_DEV_LU,
+-    bit 2 RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN; bit 4, LLE_FAST_NULL_CANON,
+-    was deleted 2026-10-09)."""
++    bit 2 RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN, bit 4
++    LLE_FAST_NULL_CANON)."""
+     var f = 0
+     comptime if LLE_FAST_DEV_LU:
+         f |= 1
+     comptime if RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN:
+         f |= 2
++    comptime if LLE_FAST_NULL_CANON:
++        f |= 4
+     return PythonObject(f)
+ 
+ 

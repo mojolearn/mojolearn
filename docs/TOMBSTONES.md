@@ -123,6 +123,7 @@ in the tables after the sections.
 | [`MOJOLEARN_QN_IDN_DCONV_POLL_8`](#mojolearn_qn_idn_dconv_poll_8) | Linear | slower | 2026-10-08 | [MOJOLEARN_QN_IDN_DCONV.patch](../experiments/removed/MOJOLEARN_QN_IDN_DCONV.patch) |
 | [`MOJOLEARN_RIDGE_FAST_CLS1_PREDICT`](#mojolearn_ridge_fast_cls1_predict) | Linear | DROPPED-noise | 2026-10-03 | [MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch](../experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch) |
 | [`MOJOLEARN_SGD_PERC_QOLD`](#mojolearn_sgd_perc_qold) | Linear | DROPPED-quality | 2026-10-04 | [MOJOLEARN_SGD_PERC_QOLD.patch](../experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch) |
+| [`MOJOLEARN_QN_FAST_COALESCED_OFF`](#mojolearn_qn_fast_coalesced_off) | Linear | DROPPED-slower | 2026-10-09 | [MOJOLEARN_QN_FAST_COALESCED_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_COALESCED_OFF.patch) |
 | [`MOJOLEARN_C29_STREAM_TOPK`](#mojolearn_c29_stream_topk) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_STREAM_TOPK.patch](../experiments/removed/MOJOLEARN_C29_STREAM_TOPK.patch) |
 | [`MOJOLEARN_C29_TILE`](#mojolearn_c29_tile) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_TILE.patch](../experiments/removed/MOJOLEARN_C29_TILE.patch) |
 | [`MOJOLEARN_CAGRA_FAST_DOT`](#mojolearn_cagra_fast_dot) | Neighbors | DROPPED-semantics | 2026-10-03 | [MOJOLEARN_CAGRA_FAST_DOT.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch) |
@@ -146,6 +147,18 @@ in the tables after the sections.
 | [`MOJOLEARN_XN_FAST_MMA_ROUTE`](#mojolearn_xn_fast_mma_route) | Neighbors | DROPPED-slower |  | lane only |
 | [`MOJOLEARN_XN_FAST_TILED_RBF`](#mojolearn_xn_fast_tiled_rbf) | Neighbors | DROPPED-noise | 2026-10-03 | [MOJOLEARN_XN_FAST_TILED_RBF.patch](../experiments/removed/MOJOLEARN_XN_FAST_TILED_RBF.patch) |
 | [`MOJOLEARN_XN_PCS_SPARSE`](#mojolearn_xn_pcs_sparse) | Neighbors | DROPPED-noise | 2026-10-03 | [MOJOLEARN_XN_PCS_SPARSE.patch](../experiments/removed/MOJOLEARN_XN_PCS_SPARSE.patch) |
+| [`MOJOLEARN_CAGRA_FAST_IVFG_LOWD`](#mojolearn_cagra_fast_ivfg_lowd) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch) |
+| [`MOJOLEARN_CAGRA_FAST_SEEDS4`](#mojolearn_cagra_fast_seeds4) | Neighbors | DROPPED-semantics | 2026-10-09 | [MOJOLEARN_CAGRA_FAST_SEEDS4.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS4.patch) |
+| [`MOJOLEARN_IVF_COARSE_FAISS_INIT`](#mojolearn_ivf_coarse_faiss_init) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_IVF_COARSE_FAISS_INIT.patch](../experiments/removed/MOJOLEARN_IVF_COARSE_FAISS_INIT.patch) |
+| [`MOJOLEARN_IVF_COARSE_INIT_QOLD`](#mojolearn_ivf_coarse_init_qold) | Neighbors | DROPPED-quality | 2026-10-09 | no code (no patch) |
+| [`MOJOLEARN_IVF_REFINE_TEAM`](#mojolearn_ivf_refine_team) | Neighbors | DROPPED-noise | 2026-10-09 | [MOJOLEARN_IVF_REFINE_TEAM.patch](../experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch) |
+| [`MOJOLEARN_KAPPROX_DEVICE`](#mojolearn_kapprox_device) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_KAPPROX_DEVICE.patch](../experiments/removed/MOJOLEARN_KAPPROX_DEVICE.patch) |
+| [`MOJOLEARN_SPARSE_RP_DEVICE`](#mojolearn_sparse_rp_device) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_SPARSE_RP_DEVICE.patch](../experiments/removed/MOJOLEARN_SPARSE_RP_DEVICE.patch) |
+| [`MOJOLEARN_KDE2_ALL`](#mojolearn_kde2_all) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE2_ALL.patch](../experiments/removed/MOJOLEARN_KDE2_ALL.patch) |
+| [`MOJOLEARN_KDE_KERNEL_VARIANTS`](#mojolearn_kde_kernel_variants) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE_KERNEL_VARIANTS.patch](../experiments/removed/MOJOLEARN_KDE_KERNEL_VARIANTS.patch) |
+| [`MOJOLEARN_KDE_LSE_FUSED`](#mojolearn_kde_lse_fused) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE_LSE_FUSED.patch](../experiments/removed/MOJOLEARN_KDE_LSE_FUSED.patch) |
+| [`MOJOLEARN_KDE_NORM_FUSED`](#mojolearn_kde_norm_fused) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE_NORM_FUSED.patch](../experiments/removed/MOJOLEARN_KDE_NORM_FUSED.patch) |
+| [`MOJOLEARN_KDE_SAMPLE_FUSED`](#mojolearn_kde_sample_fused) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE_SAMPLE_FUSED.patch](../experiments/removed/MOJOLEARN_KDE_SAMPLE_FUSED.patch) |
 | [`MOJOLEARN_ACHI2_FAST_DEVCHECK`](#mojolearn_achi2_fast_devcheck) | Prep | DROPPED | Oct 3 | lane only |
 | [`MOJOLEARN_CLASSICAL_C55_CLASS_GROUP`](#mojolearn_classical_c55_class_group) | Prep | quality loss | 2026-10-07 | [MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
@@ -186,6 +199,16 @@ in the tables after the sections.
 | [`MOJOLEARN_QR_FAST_DEV`](#mojolearn_qr_fast_dev) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_QR_FAST_DEV.patch](../experiments/removed/MOJOLEARN_QR_FAST_DEV.patch) |
 | [`MOJOLEARN_SVD_FAST_CHOLQR`](#mojolearn_svd_fast_cholqr) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SVD_FAST_CHOLQR.patch](../experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch) |
 | [`MOJOLEARN_TSNE_FAST_SPLIT`](#mojolearn_tsne_fast_split) | Decomp | DROPPED-quality | 2026-09-28 | [MOJOLEARN_TSNE_FAST_SPLIT.patch](../experiments/removed/MOJOLEARN_TSNE_FAST_SPLIT.patch) |
+| [`MOJOLEARN_CHOL_FAST_BLOCKED`](#mojolearn_chol_fast_blocked) | Decomp | DROPPED-slower+quality | 2026-10-09 | [MOJOLEARN_CHOL_FAST_BLOCKED.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch) |
+| [`MOJOLEARN_DECOMP_FAST_GEMM_TILED`](#mojolearn_decomp_fast_gemm_tiled) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch) |
+| [`MOJOLEARN_FA_ALL`](#mojolearn_fa_all) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_FA_ALL.patch](../experiments/removed/MOJOLEARN_FA_ALL.patch) |
+| [`MOJOLEARN_FA_EIG_SMALL`](#mojolearn_fa_eig_small) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_FA_EIG_SMALL.patch](../experiments/removed/MOJOLEARN_FA_EIG_SMALL.patch) |
+| [`MOJOLEARN_FA_LL_DEVICE`](#mojolearn_fa_ll_device) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_FA_LL_DEVICE.patch](../experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch) |
+| [`MOJOLEARN_LLE_FAST_NULL_CANON`](#mojolearn_lle_fast_null_canon) | Decomp | DROPPED-quality | 2026-10-09 | [MOJOLEARN_LLE_FAST_NULL_CANON.patch](../experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch) |
+| [`MOJOLEARN_MCD_DEVICE_CSTEPS`](#mojolearn_mcd_device_csteps) | Decomp | DROPPED-quality | 2026-10-09 | [MOJOLEARN_MCD_DEVICE_CSTEPS.patch](../experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch) |
+| [`MOJOLEARN_SVD_QFIX`](#mojolearn_svd_qfix) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SVD_QFIX.patch](../experiments/removed/MOJOLEARN_SVD_QFIX.patch) |
+| [`MOJOLEARN_SVD_QOLD`](#mojolearn_svd_qold) | Decomp | DROPPED-slower | 2026-10-09 | no code (no patch) |
+| [`MOJOLEARN_TSVD_FAST_CHOLQR3`](#mojolearn_tsvd_fast_cholqr3) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_TSVD_FAST_CHOLQR3.patch](../experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch) |
 | [`MOJOLEARN_AFFINITY_FAST_LOOP`](#mojolearn_affinity_fast_loop) | Cluster | DROPPED-noise | 2026-10-02 | [MOJOLEARN_AFFINITY_FAST_LOOP.patch](../experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch) |
 | [`MOJOLEARN_BGMM_ENT`](#mojolearn_bgmm_ent) | Cluster | DROPPED-noise | 2026-10-03 | [MOJOLEARN_BGMM_ENT.patch](../experiments/removed/MOJOLEARN_BGMM_ENT.patch) |
 | [`MOJOLEARN_BISECT_FAST_RESIDENT`](#mojolearn_bisect_fast_resident) | Cluster | DROPPED-slower | 2026-10-02 | [MOJOLEARN_BISECT_FAST_RESIDENT.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch) |
@@ -213,6 +236,13 @@ in the tables after the sections.
 | [`MOJOLEARN_ARIMA_FAST_CSS_SEARCH`](#mojolearn_arima_fast_css_search) | Time series | DROPPED-quality | 2026-10-09 | [MOJOLEARN_ARIMA_FAST_CSS_SEARCH.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_CSS_SEARCH.patch) |
 | [`MOJOLEARN_ARIMA_FAST_D_CONCURRENT`](#mojolearn_arima_fast_d_concurrent) | Time series | DROPPED-slower | 2026-10-09 | [MOJOLEARN_ARIMA_FAST_D_CONCURRENT.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_D_CONCURRENT.patch) |
 | [`MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT`](#mojolearn_arima_fast_groups_concurrent) | Time series | DROPPED-slower | 2026-10-09 | [MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT.patch) |
+| [`MOJOLEARN_BGMM_ESTEP1`](#mojolearn_bgmm_estep1) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_BGMM_ESTEP1.patch](../experiments/removed/MOJOLEARN_BGMM_ESTEP1.patch) |
+| [`MOJOLEARN_HDBSCAN2_ALL`](#mojolearn_hdbscan2_all) | Cluster | DROP (bundle) | 2026-10-09 | [MOJOLEARN_HDBSCAN2_ALL.patch](../experiments/removed/MOJOLEARN_HDBSCAN2_ALL.patch) |
+| [`MOJOLEARN_HDB_CORE_TILE`](#mojolearn_hdb_core_tile) | Cluster | DROP | 2026-10-09 | [MOJOLEARN_HDB_CORE_TILE.patch](../experiments/removed/MOJOLEARN_HDB_CORE_TILE.patch) |
+| [`MOJOLEARN_HDB_DEV_BORUVKA`](#mojolearn_hdb_dev_boruvka) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_HDB_DEV_BORUVKA.patch](../experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch) |
+| [`MOJOLEARN_KMEANS_FAST_LAZY_SHIFT`](#mojolearn_kmeans_fast_lazy_shift) | Cluster | DROPPED-slower | 2026-10-09 | [MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch](../experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch) |
+| [`MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG`](#mojolearn_x_cluster_fast_w2_mbk_labrg) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch) |
+| [`MOJOLEARN_DBSCAN_FAST_DENSEBALL`](#mojolearn_dbscan_fast_denseball) | Cluster | DROPPED-slower | 2026-10-09 | [MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch](../experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch) |
 | [`MOJOLEARN_ARIMA_FAST_LS_NOREAD`](#mojolearn_arima_fast_ls_noread) | Time series | DROPPED-noise | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch) |
 | [`MOJOLEARN_ARIMA_FAST_P_FIX`](#mojolearn_arima_fast_p_fix) | Time series | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_P_FIX.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_P_FIX.patch) |
 | [`MOJOLEARN_ARIMA_FAST_STEPWISE`](#mojolearn_arima_fast_stepwise) | Time series | DROPPED-slower | 2026-10-09 | [MOJOLEARN_ARIMA_FAST_STEPWISE.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_STEPWISE.patch) |
@@ -972,6 +1002,15 @@ in the tables after the sections.
 - EXPERIMENTS.md:1228 (Quality fixes, classifiers (lane/apple-fast-q-clf, 2026-10-0): `MOJOLEARN_SGD_PERC_QOLD` on perceptron / taxi, istella (x_linear/sgd.mojo `SGD_PERC_AVG`, x_linear/sgd_avg.mojo), lane/apple-fast-q-clf @ a3bd71a65, A/B (owed), (owed) ms, **DROPPED-quality**: reconciled 2026-10-05: rab5-perc taxi 1401.12 -> 1400.29, accuracy .76219 -> .74097, Verdicts batch 4; reverted, opt-in MOJOLEARN_SGD_PERC_AVG. Was QUALITY-FIX, READY-AB: minibatch Perceptron returns the mean of its epoch-end iterates from epoch max_iter//2 on; audit accuracy 0.465 vs sklearn 0.751; float32 numpy model of the step (taxi 1M rows): last iterate 0.543/0.774/0.668/0.757 over seeds, mean 0.771/0.769/0.774; device grid + FAST host column
 
 
+### MOJOLEARN_QN_FAST_COALESCED_OFF
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_QN_FAST_COALESCED_OFF.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the rollback define that sent the FAST Apple qn gradient's X^T dZ back to fast_xtdz instead of the row-coalesced xtdz_coalesced.
+- Files the patch restores: `glm/impl/qn/glm_base.mojo`
+- EXPERIMENTS.md:247: `QN_FAST_COALESCED_OFF` | logreg / istella | lane/apple-fast-linear @ 1c7c213f8 | linear-logreg-nocoal-istella | logreg istella 3,889 -> 4,996 | DROPPED-slower | +28.5% (turning coalescing off)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): QN_FAST_COALESCED_OFF (rollback from the row-coalesced qn gradient X^T dZ to fast_xtdz) is SLOWER: logreg istella 3,889 -> 4,996 ms (+28.5%); the coalesced route is the only FAST Apple route (QN_FAST_XTDZ_OFF still turns both off); code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Neighbors
 
 ### MOJOLEARN_C29_STREAM_TOPK
@@ -1142,6 +1181,118 @@ in the tables after the sections.
 - Files the patch restores: `x_neighbors/iter_device.mojo`, `x_neighbors/pcs_sparse.mojo`
 - EXPERIMENTS.md:560 (Kernel / GP (11)): `XN_PCS_SPARSE` on poly-count-sketch / taxi, lane/apple-fast-neighbors2 @ 5fb6edd3f, A/B n2-pcs-sparse-taxi, poly-count-sketch taxi 0.3 -> 0.3 ms, **DROPPED-noise**: no change; code removed from main 3d1c6bd73; recover at lane/apple-fast-neighbors2@5fb6edd3f
 
+
+### MOJOLEARN_CAGRA_FAST_IVFG_LOWD
+
+- Verdict: DROPPED-quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch` (reverse of the lane's deletion commit; applies to the lane head).
+- What it tried: the IVFG candidate graph for d <= 64 without the 4x search seeds, as an opt-in beside the LOWD_SEEDS4 default (only reachable with -D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF).
+- Files the patch restores: `x_ann/fast_env.mojo`
+- EXPERIMENTS.md:314: `CAGRA_FAST_IVFG_LOWD` | cagra / taxi (istella must be identical) | lane/apple-fast-w2-cagra (base b2b1c22bc) | w2-cagra-lowd-q, w2-cagra-lowd-taxi | cagra taxi 2,900 -> ? | DROPPED-quality | reconciled 2026-10-05: w2-cagra-lowd-q taxi recall@10 .997925 -> .997125 (gate B >= A), Manager verdicts session 2; LOWD_SEEDS4 (row below) is the default. Was OPEN: IVFG graph for d <= 64 (taxi d = 11 still built the exact 1.6e11-pair graph); gate recall@10 B >= A (tools/cagra_lowd_pair.py)
+- EXPERIMENTS.md:879: `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | cagra taxi | lane/apple-fast-w2-cagra 5d7d79cb5 | w2-cagra-lowd-q | taxi recall@10 A 0.997925 -> B 0.997125 (gate: B >= A); istella identical | DROP-quality; LOWD_SEEDS4 queued
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): CAGRA_FAST_IVFG_LOWD alone (low-d IVFG graph without SEEDS4, opt-in with _LOWD_SEEDS4_OFF) lost recall: cagra taxi recall@10 .997925 -> .997125 (gate B >= A); the low-d graph stays inside the LOWD_SEEDS4 FAST default; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_CAGRA_FAST_SEEDS4
+
+- Verdict: DROPPED-semantics. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS4.patch` (reverse of the lane's deletion commit; applies to the lane head).
+- What it tried: four times the CAGRA search seed work as a standalone opt-in define (taxi recall .9997).
+- Files the patch restores: `x_ann/fast_env.mojo`
+- EXPERIMENTS.md:308: `CAGRA_FAST_SEEDS4` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seeds4-taxi | 2,887 -> ? | DROPPED-semantics | rec-misc 2026-10-04: never judged alone; SEEDS (in the 3852df59b bundle) kept; `_CAGRA_SEEDS4` survives only inside the opt-in LOWD_SEEDS4 candidate
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): CAGRA_FAST_SEEDS4 alone (4x search seeds without the low-d graph) was never judged alone (DROPPED-semantics, gapcagra-seeds4-taxi); the 4x seeds stay inside the LOWD_SEEDS4 FAST default; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_IVF_COARSE_FAISS_INIT
+
+- Verdict: DROPPED-quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IVF_COARSE_FAISS_INIT.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the FAST Apple IVF coarse quantizer started from IVF_FAST_RANDOM_INIT's n_lists distinct seeded rows (FAISS's Clustering rule) with the IVF_FAST_SEED k-means++ seeding skipped.
+- Files the patch restores: `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo`
+- EXPERIMENTS.md:1219: `IVF_COARSE_FAISS_INIT` (old: `MOJOLEARN_IVF_COARSE_INIT_QOLD`) | ivf-sq / taxi, ivf-filter / istella (+ every IVF kind on Apple FAST) (ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo) | lane/apple-fast-q-misc @ ab9acf0e8 | - | - | DROPPED-quality | reconciled 2026-10-05: rab5-ivfinit ivf-sq recall istella .60895 -> .51065, taxi .83325 -> .76685, Verdicts batch 4; reverted, opt-in MOJOLEARN_IVF_COARSE_FAISS_INIT. Was QUALITY-FIX, READY-AB: audit: ivf-sq taxi 0.83325 vs faiss 0.857025 (0.902 before IVF_FAST_SEED default f2e71e548), ivf-filter istella 0.801 vs 0.84195; the promoted FAISS random-row start was dead code under IVF_FAST_SEED; paired recall check on all IVF rows
+- EXPERIMENTS.md:1273: `IVF_COARSE_FAISS_INIT` (now opt-in `MOJOLEARN_IVF_COARSE_FAISS_INIT`) | ivf-sq, ivf-filter, ivf-pq / istella, taxi | lane/apple-fast-verdicts-4 | rab5-ivfinit | -3.0% .. -20.8% | REVERTED: IVF_FAST_SEED k-means++ start is the default | ivf-sq recall istella 0.60895 -> 0.51065, taxi 0.83325 -> 0.76685 (worse)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): IVF_COARSE_FAISS_INIT (FAISS random-row coarse start, k-means++ seeding skipped) LOST quality: ivf-sq recall@10 istella 0.60895 -> 0.51065, taxi 0.83325 -> 0.76685 (rab5-ivfinit); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_IVF_COARSE_INIT_QOLD
+
+- Verdict: DROPPED-quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- No code read the define at `b639a2bd2` (only comments named it); no patch.
+- What it tried: the old opt-out of IVF_COARSE_FAISS_INIT (keep the k-means++ start) while FAISS_INIT was the default for a day; after the revert no code read it (only the FAISS_INIT docstring named it, deleted with FAISS_INIT).
+- Files the deletion touched (comments only): 
+- EXPERIMENTS.md:1219: `IVF_COARSE_FAISS_INIT` (old: `MOJOLEARN_IVF_COARSE_INIT_QOLD`) | ivf-sq / taxi, ivf-filter / istella (+ every IVF kind on Apple FAST) (ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo) | lane/apple-fast-q-misc @ ab9acf0e8 | - | - | DROPPED-quality | reconciled 2026-10-05: rab5-ivfinit ivf-sq recall istella .60895 -> .51065, taxi .83325 -> .76685, Verdicts batch 4; reverted, opt-in MOJOLEARN_IVF_COARSE_FAISS_INIT. Was QUALITY-FIX, READY-AB: audit: ivf-sq taxi 0.83325 vs faiss 0.857025 (0.902 before IVF_FAST_SEED default f2e71e548), ivf-filter istella 0.801 vs 0.84195; the promoted FAISS random-row start was dead code under IVF_FAST_SEED; paired recall check on all IVF rows
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): IVF_COARSE_INIT_QOLD was the opt-out name of IVF_COARSE_FAISS_INIT while that was briefly the default; FAISS_INIT was reverted (DROPPED-quality, ivf-sq recall istella 0.60895 -> 0.51065) and QOLD was already a no-op; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_IVF_REFINE_TEAM
+
+- Verdict: DROPPED-noise. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: x_ann refine with one REFINE_T = 128 threadgroup per query (one thread per candidate, query row staged in threadgroup memory; refine_team_kernel) and the dataset uploaded straight from the caller's array (refine_device_team), FAST + Apple.
+- Files the patch restores: `bindings/_mojolearn_x_ann.mojo`, `x_ann/ivf_pq_device.mojo`, `x_ann/vsearch_fast.mojo`
+- EXPERIMENTS.md:326: `IVF_REFINE_TEAM` | ivf-refine / taxi | lane/apple-fast-batch @ 3150d75c1 | vsearch-refine-team-istella, vsearch-refine-team-taxi | ivf-refine taxi 1,208.3 -> 1,201.8 (-0.5%) | DROPPED-noise | NEUTRAL (M3, 2026-10-04, 1 run per arm); stays opt-in under its own define, no default change; no longer in VSEARCH_ALL
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): IVF_REFINE_TEAM (ivf refine with one threadgroup per query, dataset uploaded from the caller's array) was NOISE: ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_KAPPROX_DEVICE
+
+- Verdict: DROPPED-quality. Code deleted 2026-10-03 by `9d5baaa9b` (x_neighbors: remove dropped KAPPROX_DEVICE chi2 sampler device ops (DROPPED-quality; recover lane/apple-fast-kapprox@10d5a7970)); recorded here 2026-10-09 by lane/owed-deletions-D3 (comments still named it, so it was listed as owed).
+- Recoverable at `9d5baaa9b^`. Patch: `experiments/removed/MOJOLEARN_KAPPROX_DEVICE.patch` (`git diff 9d5baaa9b 9d5baaa9b^` on the code files; main moved on, use `git apply -3`).
+- What it tried: the chi2 kernel-approximation samplers (AdditiveChi2Sampler, SkewedChi2Sampler) as device ops in x_neighbors (kapprox_dev / kapprox_host / kapprox_items, gen.py, the _surface_neighbors.py route), FAST + Apple.
+- Files the deletion touched (comments only): `bindings/_mojolearn_x_neighbors.mojo`, `bindings/_mojolearn_x_neighbors_host.mojo`, `python/mojolearn/_expansion_neighbors.py`, `python/mojolearn/_surface_neighbors.py`, `x_neighbors/gen.py`, `x_neighbors/kapprox_dev.mojo`, `x_neighbors/kapprox_host.mojo`, `x_neighbors/kapprox_items.mojo`
+- EXPERIMENTS.md:555: `KAPPROX_DEVICE` | additive-chi2 / istella; skewed-chi2 / taxi | lane/apple-fast-kapprox @ 10d5a7970 | kap-schi2-taxi, kap-achi2-istella | skewed-chi2 taxi 2.8 -> 1.3; additive-chi2 istella 11.0 -> 12.5 | DROPPED-quality | kernel_rel_error .0378 -> .0480 (worse) / slower; code removed from main 9d5baaa9b; recover at lane/apple-fast-kapprox@10d5a7970
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KAPPROX_DEVICE (AdditiveChi2Sampler / SkewedChi2Sampler device ops) LOST quality: kernel_rel_error .0378 -> .0480 and additive-chi2 istella 11.0 -> 12.5 ms; code deleted 2026-10-03 by 9d5baaa9b; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_SPARSE_RP_DEVICE
+
+- Verdict: DROPPED-quality. Code deleted 2026-10-03 by `e58326562` (x_neighbors/decomp: remove dropped SPARSE_RP_DEVICE one-launch SparseRandomProjection draw (DROPPED-quality; recover lane/apple-fast-kapprox@10d5a7970)); recorded here 2026-10-09 by lane/owed-deletions-D3 (comments still named it, so it was listed as owed).
+- Recoverable at `e58326562^`. Patch: `experiments/removed/MOJOLEARN_SPARSE_RP_DEVICE.patch` (`git diff e58326562 e58326562^` on the code files; main moved on, use `git apply -3`).
+- What it tried: SparseRandomProjection's fit as one device launch drawing the sparse matrix (x_neighbors kapprox_dev / kapprox_host / kapprox_items, gen.py, the _surface_neighbors.py route), FAST + Apple.
+- Files the deletion touched (comments only): `bindings/_mojolearn_x_neighbors.mojo`, `bindings/_mojolearn_x_neighbors_host.mojo`, `python/mojolearn/_expansion_decomp.py`, `python/mojolearn/_surface_neighbors.py`, `x_neighbors/gen.py`, `x_neighbors/kapprox_dev.mojo`, `x_neighbors/kapprox_host.mojo`, `x_neighbors/kapprox_items.mojo`
+- EXPERIMENTS.md:557: `SPARSE_RP_DEVICE` | sparse-rp / taxi | lane/apple-fast-kapprox @ 10d5a7970 | kap-srp-taxi | sparse-rp taxi 4.9 -> 1.2 | DROPPED-quality | mean_abs_distortion .147 -> .236 (worse); code removed from main e58326562; recover at lane/apple-fast-kapprox@10d5a7970
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): SPARSE_RP_DEVICE (one-launch SparseRandomProjection draw) LOST quality: mean_abs_distortion .147 -> .236; code deleted 2026-10-03 by e58326562; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_KDE2_ALL
+
+- Verdict: DROP. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KDE2_ALL.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: one -D that turned on every kde2 FAST Apple define (LSE_FUSED, NORM_FUSED, KERNEL_VARIANTS, SAMPLE_FUSED and DIMTILE at every d).
+- Files the patch restores: `kde/impl/neighbors/kernel_density.mojo`
+- EXPERIMENTS.md:327: `KDE2_ALL` | kde / istella; kde / taxi | lane/apple-fast-batch @ 3150d75c1 | kde2-all-istella-x, kde2-all-vs-dimtile-istella-x | istella 139.5 -> 63.1; vs DIMTILE alone -0.6% | DROP | includes SAMPLE_FUSED (taxi +354%); the gain is DIMTILE
+- EXPERIMENTS.md:328: `KDE2_ALL + KDE_DIMTILE` | kde / istella | lane/apple-fast-kde2 @ 659400b94 | kde2-all-vs-dimtile-istella | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KDE2_ALL (every kde2 FAST Apple define at once) was DROPPED: kde istella 139.5 -> 63.1 ms but -0.6% vs KDE_DIMTILE alone (the gain is DIMTILE, now the default); it includes SAMPLE_FUSED (taxi +354%); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_KDE_KERNEL_VARIANTS
+
+- Verdict: DROP. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KDE_KERNEL_VARIANTS.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the kde2 tile kernel instantiated per metric (and per gaussian x euclidean epilog) at compile time, dispatched on the metric in the score call, FAST + Apple.
+- Files the patch restores: `kde/impl/neighbors/kernel_density.mojo`
+- EXPERIMENTS.md:330: `KDE_DIMTILE + KDE_KERNEL_VARIANTS` | kde / istella; kde / taxi | lane/apple-fast-kde2 @ 659400b94 | kde2-variants-istella, kde2-variants-taxi | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KDE_KERNEL_VARIANTS (kde2 tile kernel instantiated per metric at compile time) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated (~10 ms), quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_KDE_LSE_FUSED
+
+- Verdict: DROP. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KDE_LSE_FUSED.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the kde2 chunk merge and the score normalization in one launch (kde2_merge_kernel[True]), no n_query lse buffer, FAST + Apple.
+- Files the patch restores: `kde/impl/neighbors/kernel_density.mojo`
+- EXPERIMENTS.md:331: `KDE_DIMTILE + KDE_LSE_FUSED` | kde / istella; kde / taxi | lane/apple-fast-kde2 @ 659400b94 | kde2-lse-istella, kde2-lse-taxi | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KDE_LSE_FUSED (kde2 chunk merge and score normalization in one launch) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated, quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_KDE_NORM_FUSED
+
+- Verdict: DROP. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KDE_NORM_FUSED.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the euclidean kde2 tile cells accumulated as a dot and expanded with precomputed row norms (|q|^2 + |t|^2 - 2 q.t, one FMA per feature), FAST + Apple.
+- Files the patch restores: `kde/impl/neighbors/kernel_density.mojo`
+- EXPERIMENTS.md:332: `KDE_DIMTILE + KDE_NORM_FUSED` | kde / istella; kde / taxi | lane/apple-fast-kde2 @ 659400b94 | kde2-norm-istella, kde2-norm-taxi | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KDE_NORM_FUSED (euclidean kde2 cells as |q|^2 + |t|^2 - 2 q.t) was DROPPED: with DIMTILE no istella gain, taxi jitter-dominated, quality unchanged; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_KDE_SAMPLE_FUSED
+
+- Verdict: DROP. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KDE_SAMPLE_FUSED.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the resident KernelDensity score call enqueued without its own drain, the download into the caller's rows behind it and ONE synchronize (kde2_score_samples_fast_apple_to_host), FAST + Apple.
+- Files the patch restores: `kde/impl/neighbors/kernel_density.mojo`, `kde/resident_fit.mojo`
+- EXPERIMENTS.md:333: `KDE_DIMTILE + KDE_SAMPLE_FUSED` | kde / istella | lane/apple-fast-kde2 @ 659400b94 | kde2-sample-ontile-istella | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only
+- EXPERIMENTS.md:334: `KDE_SAMPLE_FUSED` | kde / istella; kde / taxi | lane/apple-fast-batch @ 3150d75c1 | kde2-sample-taxi-x | taxi +354% | DROP | opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KDE_SAMPLE_FUSED (resident kde score with its download behind it, one drain per call) was DROPPED: kde taxi +354% (old base), with DIMTILE no istella gain; code at main b639a2bd2; see docs/TOMBSTONES.md
 
 ## Prep
 
@@ -1477,6 +1628,105 @@ in the tables after the sections.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_QR_FAST_DEV.patch` (restores fast_qr.mojo with this define).
 - Guard refusal: core/six_lane_experiment_guards.mojo (with QR_FAST_DEV).
 
+### MOJOLEARN_CHOL_FAST_BLOCKED
+
+- Verdict: DROPPED-slower+quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch` (reverse of the lane's deletion commit; applies to the lane head).
+- What it tried: a blocked right-looking Cholesky (x_decomp/fast_chol.mojo: diagonal block, panel TRSM, trailing SYRK; 3 n / 32 launches) for potrf_lower's defer_ok callers and x_decomp's chol / CholeskyQR Gram factor, FAST + Apple.
+- Files the patch restores: `cholesky/checks/potrf.mojo`, `x_decomp/device.mojo`, `x_decomp/fast_chol.mojo`
+- EXPERIMENTS.md:422: `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-chol-blocked-synthetic | old-head B 476 vs board FAST 261 (no same-build A) | DROPPED-slower+quality 2026-10-04 (see verdicts batch 3) | ported to main (x_decomp/fast_chol.mojo, potrf_lower + DevExec.chol); default off; potrf route only for defer_ok callers with CHOL_FAST_NOSYNC on (LAPACK partial factor kept via the redo); awaiting M2 build + M3 A/B
+- EXPERIMENTS.md:1241: `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | 259.4 -> 330.7 | DROPPED-slower+quality | relative_residual 1.66e-7 -> 1.98e-6 (M3, full board, 1 run per arm, 2026-10-04); stays off
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): CHOL_FAST_BLOCKED (blocked right-looking Cholesky, x_decomp/fast_chol.mojo) was SLOWER and less accurate: cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6 (M3, 1 run per arm); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_DECOMP_FAST_GEMM_TILED
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: x_decomp launch_gemm as a threadgroup-tiled kernel (32 x 32 output tile, 16-deep K slab, 2 x 2 micro-tiles, FOLD_BLOCK partials kept), FAST + Apple. The never-run AFCL-L08 knob (K slab 32, -D MOJOLEARN_AFCL_L08, which required this define in both arms) lived in the same file and is deleted with it.
+- Files the patch restores: `x_decomp/device.mojo`, `x_decomp/fast_gemm.mojo`
+- EXPERIMENTS.md:425: `DECOMP_FAST_GEMM_TILED` | als / taxi-zones; lstsq / istella; nmf / istella; randomized-svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-lstsq-tiled-istella, dlin-rsvd-tiled-istella, dlin-nmf-tiled-istella, dlin-als-tiled-taxizones | old-head B rsvd istella 683 vs board FAST 533 (no same-build A) | DROPPED-slower | reconciled 2026-10-05: rab3-gemmtiled randomized-svd istella 483.56 -> 640.22 (+32.4%), reconstruction error equal (ab_all_latest.txt); stays off; lstsq/nmf/als callers not timed. Was READY-AB: ported to main (x_decomp/fast_gemm.mojo, launch_gemm ahead of DECOMP_FAST_GEMM_MMA, so the A/B is tiled vs MMA); default off; awaiting M2 build
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): DECOMP_FAST_GEMM_TILED (threadgroup-tiled x_decomp launch_gemm, x_decomp/fast_gemm.mojo) was SLOWER: randomized-svd istella 483.56 -> 640.22 ms (+32.4%), reconstruction error equal; its child knob MOJOLEARN_AFCL_L08 went with it; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_FA_ALL
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_FA_ALL.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: one -D that turned on every FactorAnalysis FAST define (GRAM_ONCE, ITER_DEVICE, EIG_SMALL, LIVEBUF, LL_DEVICE, TRANSFORM_FUSED).
+- Files the patch restores: `x_decomp/fa_fast.mojo`
+- EXPERIMENTS.md:430: `FA_ALL` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-all-taxi, fa-all-istella | - | HOLD-quality 2026-10-04 (see verdicts batch 3) | ported to lane/apple-fast-rec-fa-robust; every FA define; awaiting M2 build + M3 A/B
+- EXPERIMENTS.md:441: `FA_ALL` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-all-taxi, fa-all-istella | - | HOLD-quality 2026-10-04 (see verdicts batch 3) | A/B queued (lane/apple-fast-batch prebuilt arms)
+- EXPERIMENTS.md:1244: `FA_ALL` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> 9.54 s; taxi 358 -> 30.4 | HOLD-quality | same istella log-likelihood loss (M3, full board, 1 run per arm, 2026-10-04); stays off
+- EXPERIMENTS.md:1264: `FA_ALL` (with FA_GRAM_DF) | factor-analysis / istella, taxi | lane/apple-fast-fa-quality | rab6-faqfix | istella 10300.89 -> 20530.81 (+99.3%); taxi 345.06 -> 34.19 | DROPPED-slower: stays off | istella slower (EIG_SMALL one-threadgroup eigh); quality noise
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): FA_ALL (every FactorAnalysis FAST define at once) was SLOWER: factor-analysis istella 10300.89 -> 20530.81 ms (+99.3%, rab6-faqfix), taxi 345.06 -> 34.19, quality noise; the slowdown is EIG_SMALL's one-threadgroup eigh; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_FA_EIG_SMALL
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_FA_EIG_SMALL.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the FactorAnalysis EM loop's d x d eigh (fa_rr_eigh_block_kernel) and, under FA_GRAM_DF, its SVD (fa_rs_svd_block_kernel) as ONE launch of one threadgroup instead of the grid kernels and a sync per sweep.
+- Files the patch restores: `x_decomp/fa_fast.mojo`
+- EXPERIMENTS.md:431: `FA_EIG_SMALL + FA_ITER_DEVICE` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-eig-taxi, fa-eig-istella | taxi 39.5, istella 5884 (board 308 / 10351) | DROPPED-slower | reconciled 2026-10-05: never timed alone on current main; FA_ALL (includes EIG_SMALL) rab6-faqfix istella 10300.89 -> 20530.81 (+99.3%), slowdown from the one-threadgroup EIG_SMALL eigh (Verdicts batch 4 FA_ALL row; x_decomp/fa_fast.mojo `#:`); FA_ITER_DEVICE + FA_GRAM_DF is the default (rab7-faiterfix). Was READY-AB: ported to lane/apple-fast-rec-fa-robust (x_decomp/fa_fast.mojo) with main's two-pass mean and cancellation-free psi; EIG_SMALL implies ITER_DEVICE; awaiting M2 build + M3 A/B
+- EXPERIMENTS.md:442: `FA_EIG_SMALL + FA_ITER_DEVICE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-eig-taxi, fa-eig-istella | - | DROPPED-slower | reconciled 2026-10-05: never timed alone on current main; FA_ALL (includes EIG_SMALL) rab6-faqfix istella 10300.89 -> 20530.81 (+99.3%), slowdown from the one-threadgroup EIG_SMALL eigh (Verdicts batch 4 FA_ALL row; x_decomp/fa_fast.mojo `#:`); FA_ITER_DEVICE + FA_GRAM_DF is the default (rab7-faiterfix). Was OPEN: A/B queued (lane/apple-fast-batch prebuilt arms)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): FA_EIG_SMALL (one-threadgroup eigh / SVD inside the FactorAnalysis EM loop) was SLOWER: in FA_ALL factor-analysis istella 10300.89 -> 20530.81 ms (+99.3%), the slowdown from this one-threadgroup eigh on a 220 x 220; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_FA_LL_DEVICE
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the FactorAnalysis EM convergence test on the device: fa_finish_kernel summed the 2 d log terms in double-float float32, tested (ll - old_ll) < tol and set a flag later kernels check; the host read the flag every 4 iterations and the ll pairs once at the end.
+- Files the patch restores: `x_decomp/fa_fast.mojo`
+- EXPERIMENTS.md:432: `FA_EIG_SMALL + FA_ITER_DEVICE + FA_LL_DEVICE` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-lldev-taxi, fa-lldev-istella | taxi 30.2, istella 5879 | DROPPED-slower | reconciled 2026-10-05: contains EIG_SMALL: same evidence as the EIG_SMALL + ITER_DEVICE row (rab6-faqfix FA_ALL +99.3% istella); LL_DEVICE alone on the default loop not timed. Was READY-AB: ported to lane/apple-fast-rec-fa-robust; awaiting M2 build + M3 A/B
+- EXPERIMENTS.md:443: `FA_EIG_SMALL + FA_ITER_DEVICE + FA_LL_DEVICE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-lldev-taxi, fa-lldev-istella | - | DROPPED-slower | reconciled 2026-10-05: contains EIG_SMALL: same evidence as the EIG_SMALL + ITER_DEVICE row (rab6-faqfix FA_ALL +99.3% istella); LL_DEVICE alone on the default loop not timed. Was OPEN: A/B queued (lane/apple-fast-batch prebuilt arms)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): FA_LL_DEVICE (FactorAnalysis EM convergence test on the device) was DROPPED-slower with its EIG_SMALL arm (FA_ALL istella +99.3%, rab6-faqfix); never timed alone on the default loop; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_LLE_FAST_NULL_CANON
+
+- Verdict: DROPPED-quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: when LLE's numerical null space N is wider than n_components, _lle_smallest took all of N (widening p up to 160) and returned the nc directions of N along which the data varies most (top singular vectors of V_N^T X), so the answer no longer depended on the LU's rounding; FAST + Apple, bit 4 of w4_flags.
+- Files the patch restores: `python/mojolearn/_expansion_decomp.py`, `x_decomp/w4_fast.mojo`
+- EXPERIMENTS.md:1384: `LLE_FAST_NULL_CANON` (with `LLE_FAST_DEV_LU`) | lle / taxi, istella (x_decomp/w4_fast.mojo, python `_lle_smallest`) | lane/apple-fast-s-shap @ e3a9656bf, 9765c0008 | (owed) A: none; B1: `-D MOJOLEARN_LLE_FAST_NULL_CANON`; B2: B1 + `-D MOJOLEARN_LLE_FAST_DEV_LU` | - | READY-AB | why DEV_LU moved trustworthiness: taxi's kNN graph has several components, so F^'s numerical null space is wider than nc and any nc of its directions is a correct answer (`_LLE_NULL_FLOOR`); inside it the shift-invert values are 1/sigma^2 of rounding noise, so the LU's last bits pick the embedding. FAST main itself moved 0.826 (scalar LU, 68a3bf15) -> 0.866 (LU_FAST_MMA, 75f6322f) and DEV_LU drew 0.841 (45185107); on
+- EXPERIMENTS.md:1414: `LLE_FAST_NULL_CANON` | lle / taxi, istella | lane/apple-fast-s-shap | verdicts batch 6 | - | DROPPED-quality | trustworthiness down on both datasets; stays off
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): LLE_FAST_NULL_CANON (canonical LLE answer when the null space is wider than n_components) LOST quality: lle trustworthiness down on taxi and istella (verdicts batch 6); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_MCD_DEVICE_CSTEPS
+
+- Verdict: DROPPED-quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: every MinCovDet candidate's C-steps together on the device (fast_mcd_fast), switched on by its own define; min-cov-det taxi 79,925 -> 215 ms but a different robust fit.
+- Files the patch restores: `x_decomp/kit_device.mojo`, `x_decomp/mcd_fast.mojo`
+- EXPERIMENTS.md:451: `MCD_DEVICE_CSTEPS` | min-cov-det / taxi; elliptic-envelope / taxi | lane/apple-fast-robust @ cfdb95e48 | M3 min-cov-det taxi; robust-ee-taxi-x (M2) | M3 mcd 79,925 -> 215; M2 ee 64,578 -> 267.5 | DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) | tools/mcd_quality_ab.sh (M2, taxi 100k, mcdq4): Jaccard flagged Xq vs OFF .8805 mcd / .9645 ee (bar .99); OFF vs IDENTICAL .994 / .999; location_ 14%, covariance_ 18% rel Frobenius shift; mcd flag rate .231 -> .203; raw covariance rank 8 vs OFF/IDENTICAL 10 (all exact-fit singular)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): MCD_DEVICE_CSTEPS (legacy device C-steps by their own define) LOST quality: flagged-mask Jaccard vs OFF .8805 MinCovDet / .9645 EllipticEnvelope (bar .99); the device route stays under MCD_BATCH_COMPAT / MCD_BATCH_MMA; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_SVD_QFIX
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_SVD_QFIX.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: svd(full_matrices=False) of a tall matrix (the TSQR route): U_R kept every direction with s_j > 2^-40 s_0 (was 2^-20) and was orthonormalized by Householder QR (qfix bit 1, _svd_tsqr / _svd_tall's null_rtol and householder options).
+- Files the patch restores: `bindings/_mojolearn_x_decomp.mojo`, `python/mojolearn/_expansion_decomp.py`, `python/mojolearn/_linalg_impl.py`, `x_decomp/qfix.mojo`
+- EXPERIMENTS.md:1216: `SVD_QFIX` (QOLD `MOJOLEARN_SVD_QOLD`) | svd / istella, taxi | lane/apple-fast-q-linalg @ aaebc0ab8 | - | - | DROPPED-slower | reconciled 2026-10-05: rab5-svd taxi +13.2%, istella +0.3%, no quality gain, Verdicts batch 4; reverted, opt-in MOJOLEARN_SVD_QFIX. Was QUALITY-FIX, READY-AB: U_R null cut 2^-20 -> 2^-40 s_0 + Householder orthonormalization on the TSQR route; audit recon 3.84e-05 / 1.83e-06 vs numpy 4.1e-08 / 4.3e-08; float32 model 2.1e-06 -> 3.2e-07; max_rel_singular_value_error is an artifact (QUALITY_AUDIT_NOTES.md)
+- EXPERIMENTS.md:1271: `SVD_QFIX` (now opt-in `MOJOLEARN_SVD_QFIX`) | svd / istella, taxi | lane/apple-fast-verdicts-4 | rab5-svd | taxi 48.54 -> 54.96 (+13.2%); istella 1790.45 -> 1795.62 (+0.3%) | REVERTED: old route is the default | no quality gain (singular value and reconstruction errors unchanged)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): SVD_QFIX (TSQR-route svd keeping directions above 2^-40 s_0 with a Householder U_R) was SLOWER with no quality gain: svd taxi 48.54 -> 54.96 ms (+13.2%), istella 1790.45 -> 1795.62 (+0.3%), singular value and reconstruction errors unchanged (rab5-svd); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_SVD_QOLD
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- No code read the define at `b639a2bd2` (only comments named it); no patch.
+- What it tried: the old opt-out of SVD_QFIX (keep the 2^-20 orth route) while SVD_QFIX was the default; after the revert no code read it (only qfix.mojo's docstring named it).
+- Files the deletion touched (comments only): 
+- EXPERIMENTS.md:1216: `SVD_QFIX` (QOLD `MOJOLEARN_SVD_QOLD`) | svd / istella, taxi | lane/apple-fast-q-linalg @ aaebc0ab8 | - | - | DROPPED-slower | reconciled 2026-10-05: rab5-svd taxi +13.2%, istella +0.3%, no quality gain, Verdicts batch 4; reverted, opt-in MOJOLEARN_SVD_QFIX. Was QUALITY-FIX, READY-AB: U_R null cut 2^-20 -> 2^-40 s_0 + Householder orthonormalization on the TSQR route; audit recon 3.84e-05 / 1.83e-06 vs numpy 4.1e-08 / 4.3e-08; float32 model 2.1e-06 -> 3.2e-07; max_rel_singular_value_error is an artifact (QUALITY_AUDIT_NOTES.md)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): SVD_QOLD was the opt-out name of SVD_QFIX while that was briefly the FAST default; SVD_QFIX was reverted (DROPPED-slower, svd taxi +13.2%) and SVD_QOLD was already a no-op; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_TSVD_FAST_CHOLQR3
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: TSVD_QFIX's R of a tall x from shifted CholeskyQR3 (two diagonal-shifted and two plain passes, Gram and Y R^-1 on the matrix unit via launch_gemm, a device guard falling back to the TSQR) instead of the scalar Householder TSQR, FAST + Apple.
+- Files the patch restores: `bindings/_mojolearn_x_decomp.mojo`, `python/mojolearn/_linalg_impl.py`, `x_decomp/tsvd_fast.mojo`
+- EXPERIMENTS.md:1370: `MOJOLEARN_TSVD_FAST_CHOLQR3` | tsvd / istella, taxi (x_decomp/tsvd_fast.mojo, binding x_decomp) | lane/apple-fast-s-linalg | (owed) | istella 864 / taxi 42.2 (rab8-tsvd, TSVD_QFIX on) -> ? | READY-AB | TSVD_QFIX's R from shifted CholeskyQR3 (2 diagonal-shifted + 2 plain passes; Gram and Y R^-1 on the matrix unit via launch_gemm) instead of the scalar Householder TSQR; device guard (Cholesky info, last-pass Gram diagonal within 2^-6 of 1) falls back to the TSQR. Quality gate: istella relative_reconstruction_error stays ~1.22e-4 (not the Gram's 2.55e-3). Not SVD_FAST_CHOLQR (that was linalg.svd's U with an unshifted CholQR2 per orth pass)
+- EXPERIMENTS.md:1410: `TSVD_FAST_CHOLQR3` | tsvd / istella | lane/apple-fast-s-linalg | verdicts batch 6 | istella +19.9% | DROPPED-slower | stays off
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): TSVD_FAST_CHOLQR3 (TruncatedSVD's R from shifted CholeskyQR3, x_decomp/tsvd_fast.mojo) was SLOWER: tsvd istella +19.9% (verdicts batch 6); code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Cluster
 
 ### MOJOLEARN_AFFINITY_FAST_LOOP
@@ -1658,6 +1908,71 @@ in the tables after the sections.
 - Files the patch restores: `x_cluster/minibatch_fast.mojo`
 - EXPERIMENTS.md:505 (Cluster (38)): `MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128` on minibatch-kmeans / istella, taxi, lane/apple-fast-gap-cls2@72602a339 (deleted before merge), A/B gapcls2-g128-mbk-{istella,taxi}, +14%, +22% ms, **DROP, deleted before merge**: slower
 
+
+### MOJOLEARN_BGMM_ESTEP1
+
+- Verdict: DROPPED-noise. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_BGMM_ESTEP1.patch` (reverse of the lane's deletion commit; applies to the lane head).
+- What it tried: the bayesian-gmm E-step's three kernels (gauss_q, resp, exp) as one row-per-thread launch (ops.estep / _estep_row_kernel), FAST only.
+- Files the patch restores: `x_cluster/bgmm.mojo`, `x_cluster/device_ops.mojo`, `x_cluster/host/host_ops.mojo`, `x_cluster/ops.mojo`
+- EXPERIMENTS.md:482: `BGMM_ESTEP1` | bayesian-gmm / taxi | lane/apple-fast-cluster2 @ ded4ea07b | cluster2-bgmm-estep1-taxi | - | DROPPED-noise | reconciled 2026-10-05: cluster2-bgmm-estep1-taxi-b 309.7 -> 311.1 (+0.5%), mean_log_likelihood same (LEDGER 2026-10-03); define stays opt-in on main (x_cluster/bgmm.mojo). Was OPEN: A/B queued, no judged result yet
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): BGMM_ESTEP1 (one-launch row-per-thread E-step, ops.estep) was NOISE: bayesian-gmm taxi 309.7 -> 311.1 ms (+0.5%), mean_log_likelihood same; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_HDBSCAN2_ALL
+
+- Verdict: DROP (bundle). Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_HDBSCAN2_ALL.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: one -D that turned on every af-hdbscan2 FAST Apple switch (SMR_TILED, CORE_TILE, DEV_BORUVKA, ONE_SYNC, SELECT_DEVICE).
+- Files the patch restores: `hdbscan/impl/detail/fast_apple.mojo`
+- EXPERIMENTS.md:490: `HDBSCAN2_ALL` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-all-taxi, hdbscan2-all6-taxi, hdbscan2-all-istella, hdbscan2-all6-istella | - | DROP (as a bundle) | its gain is HDB_SMR_TILED (KEEP); CORE_TILE and ONE_SYNC lose vs main; opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): HDBSCAN2_ALL (every af-hdbscan2 FAST Apple switch at once) was DROPPED as a bundle: its gain is HDB_SMR_TILED (now the FAST Apple default), CORE_TILE and ONE_SYNC lose vs main; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_HDB_CORE_TILE
+
+- Verdict: DROP. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_HDB_CORE_TILE.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: HDBSCAN core distances from one tiled kernel with a register top-k (hdbscan/impl/detail/core_tile.mojo) instead of the k-NN route, FAST + Apple, d <= 64 and k <= 16. The never-run AFCL-G04 knob (tile 64 -> 32 rows, -D MOJOLEARN_AFCL_G04, which required this define in both arms) lived on it and is deleted with it.
+- Files the patch restores: `hdbscan/impl/cluster/detail/single_linkage.mojo`, `hdbscan/impl/detail/core_tile.mojo`, `hdbscan/impl/detail/fast_apple.mojo`, `hdbscan/impl/detail/reachability.mojo`
+- EXPERIMENTS.md:491: `HDB_CORE_TILE` | hdbscan / taxi; hdbscan / istella | lane/apple-fast-batchv @ c7ede6e47 | batchv-hdb-core-taxi, batchv-hdb-core-istella | taxi vs main +0.8%; istella 44,717 -> 45,590 (+2%) | DROP | old-base -11% did not carry to main; clusters identical; opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): HDB_CORE_TILE (tiled core-distance kernel with a register top-k, core_tile.mojo) was NOISE/slower vs main: hdbscan istella 44,717 -> 45,590 ms (+2%), taxi +0.8%, clusters identical; F15 M3 2026-10-06 mixed (B/A 0.95-1.04); its child knob MOJOLEARN_AFCL_G04 went with it; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_HDB_DEV_BORUVKA
+
+- Verdict: DROPPED-noise. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the d <= 64 HDBSCAN arm's Boruvka rounds driven on the device (hdbscan/impl/cluster/detail/fast_mr_mst_device.mojo), the same search kernels, FAST + Apple.
+- Files the patch restores: `hdbscan/impl/cluster/detail/fast_mr_mst_device.mojo`, `hdbscan/impl/cluster/detail/single_linkage.mojo`, `hdbscan/impl/detail/fast_apple.mojo`
+- EXPERIMENTS.md:492: `HDB_DEV_BORUVKA` | hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-boruvka-taxi | hdbscan taxi 434 -> 432.6 | DROPPED-noise | rec-misc 2026-10-04: hdbscan taxi B 432.6 vs board 434 (-0.3%, inside noise); still opt-in on main (no default), so a dead toggle for the cleanup lane
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): HDB_DEV_BORUVKA (d <= 64 Boruvka rounds driven on the device, fast_mr_mst_device.mojo) was NOISE: hdbscan taxi 434 -> 432.6 ms (-0.3%); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_KMEANS_FAST_LAZY_SHIFT
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: set KMeansParams.lazy_shift on the KMeans estimator's fits (bindings/_mojolearn.mojo kmeans_fit), so the Lloyd loop tested convergence every KMEANS_LAZY_EVERY iterations instead of every one.
+- Files the patch restores: `bindings/_mojolearn.mojo`, `cluster/impl/detail/kmeans.mojo`, `cluster/impl/kmeans_params.mojo`
+- EXPERIMENTS.md:325: `KMEANS_FAST_LAZY_SHIFT` | kmeans / taxi, istella | lane/apple-fast-vsv-promote | M3 afc_ab_def, full board, 1 run/arm, 2026-10-04 | istella 1451.5 -> 1527.7; taxi 977.6 -> 974.8 | DROPPED-slower | slower on istella, flat on taxi; inertia equal. Stays opt-in OFF (cluster/impl/detail/kmeans.mojo)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KMEANS_FAST_LAZY_SHIFT (lazy convergence read on the KMeans estimator's fits) was SLOWER: kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8 ms, inertia equal; the IVF callers' lazy_shift stays; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG
+
+- Verdict: DROPPED-noise. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: MiniBatchKMeans' final all-rows labelling as the CLS3_ROWGRP batch assignment (_mbf_label_rg_kernel: a 32-thread group per row, coalesced reads) instead of DeviceOps.nearest, FAST + Apple, k <= MBF_RG_MAXK.
+- Files the patch restores: `x_cluster/minibatch_fast.mojo`, `x_cluster/minibatch_ptr.mojo`
+- EXPERIMENTS.md:872: `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | MiniBatchKMeans / istella, taxi | (not promoted) | n/a here | DROPPED-noise | reconciled 2026-10-05: w2-mbk-labrg: quality PASS, istella 146.6 -> 144.0, taxi 45.3 -> 46.3 (Manager verdicts session 2: DROP-speed noise); opt-in only. Was OPEN, opt-in: Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode).
+- EXPERIMENTS.md:882: `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | minibatch-kmeans | lane/apple-fast-w2-clres 4d80737b1 | w2-mbk-labrg-* | quality PASS; istella 146.6 -> 144.0, taxi 45.3 -> 46.3 ms | DROP-speed (noise), opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): X_CLUSTER_FAST_W2_MBK_LABRG (MiniBatchKMeans' last labelling as a 32-thread-per-row assignment) was NOISE: istella 146.6 -> 144.0 ms, taxi 45.3 -> 46.3 ms, quality PASS; F15 M3 2026-10-06 B/A 0.947..1.125 mixed; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_DBSCAN_FAST_DENSEBALL
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: dbscan on the sparse RBC route without an edge list: dense-ball cliques, early-exit core counts and union-find over landmark pairs (dbscan/impl/denseball.mojo), FAST + Apple, unweighted fits.
+- Files the patch restores: `dbscan/impl/denseball.mojo`, `dbscan/impl/runner.mojo`
+- EXPERIMENTS.md:488: `DBSCAN_FAST_DENSEBALL` | dbscan / taxi, istella | lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc | dbscantaxi-ab-x, dbscantaxi-ab-ist-x | n=0 on both arms (no times) | DROPPED-slower | reconciled 2026-10-05: rab3-denseball istella A 247185.2 ms, B timed out, Verdicts batch 4 ("RECORD: stays off"). Was READY-AB: rec-misc 2026-10-04: arm A times out at the classical driver's 600 s warmup on taxi (expected, no board FAST row); arm B also timed out: its pair kernel stopped a whole landmark pair at the first hook, so rounds grew with rows per ball. Fixed: one hook per row per round (components at least halve per round). Awaiting M2 build + M3 A/B (AFC_FAMILY=classical, b
+- EXPERIMENTS.md:1278: `DBSCAN_FAST_DENSEBALL` | dbscan / istella | lane/apple-fast-verdicts-4 | rab3-denseball | A 247185.2; B timed out | RECORD: stays off | B arm timed out
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): DBSCAN_FAST_DENSEBALL (no-edge-list dbscan: dense-ball cliques and union-find over landmark pairs, dbscan/impl/denseball.mojo) was SLOWER: dbscan istella arm A 247,185 ms, arm B timed out (rab3-denseball); code at main b639a2bd2; see docs/TOMBSTONES.md
 
 ## Time series
 
@@ -2313,6 +2628,11 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_KMEANS_ROW_ASSIGN` | EXPERIMENTS.md:1706 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `cluster/impl/detail/classical_assignment.mojo:19` |
 | `MOJOLEARN_LLE_FAST_NULL_CANON` | EXPERIMENTS.md:1414 DROPPED-quality (lane/apple-fast-s-shap) | `x_decomp/w4_fast.mojo:95` |
 | `MOJOLEARN_MCD_DEVICE_CSTEPS` | EXPERIMENTS.md:451 DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) (lane/apple-fast-robust @ cfdb95e48) | `x_decomp/mcd_fast.mojo:13` |
+| `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
+| `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
+| `MOJOLEARN_KSHAP_FAST_OVERLAP` | EXPERIMENTS.md:1412 DROPPED-noise (lane/apple-fast-s-shap) | `python/mojolearn/_expansion_trees.py:3403` |
+| `MOJOLEARN_MC_CLASS_BATCH_DERIV` | EXPERIMENTS.md:165 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:763` |
+| `MOJOLEARN_MC_CLASS_BATCH_EST` | EXPERIMENTS.md:166 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:774` |
 | `MOJOLEARN_MI_ALL` | EXPERIMENTS.md:363 DROP (quality) (lane/apple-fast-miv @ 514401169) | `x_prep/device.mojo:201` |
 | `MOJOLEARN_MI_FAST_FOLDS` | EXPERIMENTS.md:366 DROP (speed + quality) (lane/apple-fast-batch @ 3150d75c1) | `x_prep/device.mojo:216` |
 | `MOJOLEARN_MOE_FAST_MMA` | EXPERIMENTS.md:1362 DROPPED-slower (bundle), toggles stay opt-in off (main @ 13246c64f) | `sequence/moe_mma.mojo:13` |
@@ -2326,6 +2646,9 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_PT_FUSED_TRANSFORM` | EXPERIMENTS.md:380 DROP (quality, with COLBATCH) (lane/apple-fast-batchv) | `x_prep/fastpt.mojo:18` |
 | `MOJOLEARN_PT_SPEC` | EXPERIMENTS.md:378 DROP (lane/apple-fast-batch @ 3150d75c1) | `x_prep/fastpt.mojo:14` |
 | `MOJOLEARN_QN_FAST_COALESCED_OFF` | EXPERIMENTS.md:247 DROPPED-slower (lane/apple-fast-linear @ 1c7c213f8) | `glm/impl/qn/glm_base.mojo:112` |
+| `MOJOLEARN_QR_FAST_DEV` | EXPERIMENTS.md:453 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1251` |
+| `MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` | EXPERIMENTS.md:384 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:221` |
+| `MOJOLEARN_RESAMPLE_FAST_RANK_SORT` | EXPERIMENTS.md:386 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:205` |
 | `MOJOLEARN_SEQ_FAST_LSTM_SCAN` | EXPERIMENTS.md:658 not measured alone; bundle DROPPED-quality 2026-10-04 (see rec-optim table) (lane/apple-fast-gap-lstm @ 0d6cbc821) | `sequence/recurrent_scan.mojo:17` |
 | `MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM` | EXPERIMENTS.md:659 not measured alone; bundle DROPPED-quality 2026-10-04 (see rec-optim table) (lane/apple-fast-gap-lstm @ 0d6cbc821) | `sequence/recurrent_scan.mojo:18` |
 | `MOJOLEARN_SEQ_FAST_LSTM_WGRAD` | EXPERIMENTS.md:660 DROPPED-quality 2026-10-04 (BROKEN; see rec-optim table) (lane/apple-fast-gap-lstm @ 0d6cbc821) | `sequence/recurrent_scan.mojo:23` |
@@ -2345,3 +2668,25 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_SVD_QOLD` | EXPERIMENTS.md:1216 DROPPED-slower (lane/apple-fast-q-linalg @ aaebc0ab8) | `x_decomp/qfix.mojo:10` |
 | `MOJOLEARN_TSVD_FAST_CHOLQR3` | EXPERIMENTS.md:1410 DROPPED-slower (lane/apple-fast-s-linalg) | `x_decomp/tsvd_fast.mojo:4` |
 | `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | EXPERIMENTS.md:872 reconciled 2026-10-05: w2-mbk-labrg: quality PASS, istella 146.6 -> 144.0, taxi 45.3 -> 46.3 (Manager verdicts session 2: DROP-speed noise); opt-in only. Was OPEN, opt-in: Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode). ((not promoted)) | `x_cluster/minibatch_fast.mojo:160` |
+| `MOJOLEARN_SVD_FAST_CHOLQR` | EXPERIMENTS.md:454 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1567` |
+| `MOJOLEARN_SYM_DERIV_FUSED` | EXPERIMENTS.md:182 DROPPED-noise (lane/apple-fast-sym-iter @ 4956a2234) | `gbdt/methods/sym_iter_fast.mojo:30` |
+| `MOJOLEARN_SYM_GATHER_FUSED` | EXPERIMENTS.md:185 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/sym_fast.mojo:65` |
+| `MOJOLEARN_SYM_HIST_MULT` | EXPERIMENTS.md:187 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/sym_fast.mojo:106` |
+| `MOJOLEARN_SYM_LEAF_FROM_STATS` | EXPERIMENTS.md:189 DROPPED-noise (lane/apple-fast-sym-iter @ 4956a2234) | `gbdt/methods/sym_iter_fast.mojo:36` |
+| `MOJOLEARN_SYM_PART_STATS_PAR` | EXPERIMENTS.md:191 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/pointwise_scores.mojo:1954` |
+| `MOJOLEARN_SYM_REUSE_PARTITION` | EXPERIMENTS.md:193 DROPPED-noise (lane/apple-fast-sym-iter @ 4956a2234) | `gbdt/methods/sym_iter_fast.mojo:21` |
+| `MOJOLEARN_SYM_SCAN_SUB_FUSED` | EXPERIMENTS.md:194 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/split_properties_helpers.mojo:483` |
+| `MOJOLEARN_TREES_T29` | EXPERIMENTS.md:1710 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `gbdt/trees_identical_switches.mojo:74` |
+| `MOJOLEARN_TSA2_KPSS` | EXPERIMENTS.md:544 DROPPED-noise (lane/apple-fast-gap-tsa @ e9da47064) | `tsa/impl/timeSeries/kpss_fused.mojo:7` |
+| `MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID` | EXPERIMENTS.md:150 DROPPED-noise (lane/apple-fast-yetirank @ c7b35fd7c) | `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2945` |
+
+
+## Owed deletions reviewed and kept (lane/owed-deletions-D3, 2026-10-09)
+
+A DROP row was listed as owed, but the define stays: the reason is in each row.
+
+| define | DROP row | why it stays |
+|---|---|---|
+| `MOJOLEARN_HDB_ONE_SYNC` | EXPERIMENTS.md:494 | its route (one wait per output download set, extract.mojo / runner.mojo) is the IDENTICAL default through IDN_HDB_ONE_SYNC (hdbscan/impl/detail/idn_switches.mojo), and a later FAST Apple measurement (F15/hdbscan-downloads, M3 2026-10-06) was faster: cold B/A 0.95 / 0.92 / 0.89, repeated 0.90 / 0.94 / 0.87, quality equal; combined timing with the promoted linkage is owed |
+| `MOJOLEARN_HDB_SELECT_DEVICE` | EXPERIMENTS.md:495 | the code it selects (extract.mojo _extract_one_read) is the IDENTICAL default through IDN_HDB_SELECT_ONE_READ (hdbscan/impl/detail/idn_switches.mojo, the same comptime if); the define is only the FAST Apple switch of that default route, so no loser code can be removed; F15/hdbscan-selection (M3 2026-10-06) B/A 0.917-1.030, mixed |
+| `MOJOLEARN_KMEANS_ROW_ASSIGN` | EXPERIMENTS.md:1706 | the DROP row (EXPERIMENTS.md:1706) is MOJOLEARN_KMEANS_DIRECT_DISTANCE's (direct4 = ROW_ASSIGN=4 + it), already deleted and refused (guard line 196: 'MOJOLEARN_KMEANS_ROW_ASSIGN=2|4 stays'); ROW_ASSIGN itself is a live grid control (grid_controls/classical-kmeans.json kmeans_assign, arm rows4) with no verdict of its own |

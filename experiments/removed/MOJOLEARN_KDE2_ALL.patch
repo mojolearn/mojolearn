@@ -1,0 +1,54 @@
+diff --git b/kde/impl/neighbors/kernel_density.mojo a/kde/impl/neighbors/kernel_density.mojo
+index 4bb7c2859..b8d61a8c6 100644
+--- b/kde/impl/neighbors/kernel_density.mojo
++++ a/kde/impl/neighbors/kernel_density.mojo
+@@ -2730,39 +2730,41 @@ def kde_score_samples_fused_identical(
+ #   MOJOLEARN_KDE_NORM_FUSED      euclidean as |q|^2 + |t|^2 - 2 q.t, one FMA per feature
+ #   MOJOLEARN_KDE_KERNEL_VARIANTS the tile kernel instantiated per metric at compile time
+ #   MOJOLEARN_KDE_SAMPLE_FUSED    the resident score call drains once (kde/resident_fit.mojo)
++#   MOJOLEARN_KDE2_ALL            all of them
+ comptime _KDE2_FAST_APPLE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+ )
+-# TOMBSTONE: MOJOLEARN_KDE2_ALL (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: every kde2 define at once; istella no gain over DIMTILE alone (-0.6%), includes SAMPLE_FUSED (taxi +354%).
+-# Restore: git apply experiments/removed/MOJOLEARN_KDE2_ALL.patch; record in docs/TOMBSTONES.md.
++# INCONCLUSIVE, M3 kde2-all-vs-dimtile-istella: no gain over DIMTILE;
++# taxi variants near 10 ms were jitter-dominated (A ranged 8.1-18.6 ms).
++# Quality unchanged; opt-in only. See docs/apple-fast/EXPERIMENTS.md.
++comptime KDE2_ALL = _KDE2_FAST_APPLE and is_defined["MOJOLEARN_KDE2_ALL"]()
+ # INCONCLUSIVE, M3 kde2-lse-istella / -taxi with DIMTILE: no istella
+ # gain over DIMTILE; taxi jitter-dominated, quality unchanged.
+ # See docs/apple-fast/EXPERIMENTS.md (KDE_DIMTILE + KDE_LSE_FUSED).
+ comptime KDE2_LSE_FUSED = _KDE2_FAST_APPLE and (
+-    is_defined["MOJOLEARN_KDE_LSE_FUSED"]()
++    KDE2_ALL or is_defined["MOJOLEARN_KDE_LSE_FUSED"]()
+ )
+ # INCONCLUSIVE, M3 kde2-norm-istella / -taxi with DIMTILE: no istella
+ # gain over DIMTILE; taxi jitter-dominated, quality unchanged.
+ # See docs/apple-fast/EXPERIMENTS.md (KDE_DIMTILE + KDE_NORM_FUSED).
+ comptime KDE2_NORM_FUSED = _KDE2_FAST_APPLE and (
+-    is_defined["MOJOLEARN_KDE_NORM_FUSED"]()
++    KDE2_ALL or is_defined["MOJOLEARN_KDE_NORM_FUSED"]()
+ )
+ # INCONCLUSIVE, M3 kde2-variants-istella / -taxi with DIMTILE: no
+ # istella gain over DIMTILE; taxi jitter-dominated, quality unchanged.
+ # See docs/apple-fast/EXPERIMENTS.md (KDE_KERNEL_VARIANTS).
+ comptime KDE2_KERNEL_VARIANTS = _KDE2_FAST_APPLE and (
+-    is_defined["MOJOLEARN_KDE_KERNEL_VARIANTS"]()
++    KDE2_ALL or is_defined["MOJOLEARN_KDE_KERNEL_VARIANTS"]()
+ )
+ # DROP-speed, M3 old-base kde2-sample-taxi-x: taxi +354%; not a
+ # current-main result. With DIMTILE (kde2-sample-ontile-istella), no
+ # gain over DIMTILE. See docs/apple-fast/EXPERIMENTS.md (KDE_SAMPLE_FUSED).
+ comptime KDE2_SAMPLE_FUSED = _KDE2_FAST_APPLE and (
+-    is_defined["MOJOLEARN_KDE_SAMPLE_FUSED"]()
++    KDE2_ALL or is_defined["MOJOLEARN_KDE_SAMPLE_FUSED"]()
+ )
+ #: KDE2_DIMTILE_ANY_D: the explicit defines take the tile pass at every d.
+ comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and (
+-    KDE2_LSE_FUSED or KDE2_NORM_FUSED or KDE2_KERNEL_VARIANTS
++    KDE2_ALL or KDE2_LSE_FUSED or KDE2_NORM_FUSED or KDE2_KERNEL_VARIANTS
+     or is_defined["MOJOLEARN_KDE_DIMTILE"]()
+ )
+ #: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03) for

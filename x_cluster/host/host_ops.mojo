@@ -701,13 +701,6 @@ struct HostOps(ClusterOps):
                 c += 1
         return c
 
-    def estep(
-        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
-    ) raises:
-        self.gauss_q(x, n, d, means, pchol, kc, q)
-        self.resp(q, c, n, kc, lpn)
-        self.exp(q, r, n * kc)
-
     def optics_order_fast(
         mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
     ) raises:

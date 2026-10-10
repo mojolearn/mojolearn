@@ -9,9 +9,8 @@ The initial experiment targets taxi (2 <= d <= 64); wide istella still
 uses main and needs a separate extension after narrow quality passes.
 
 MinCovDet's fast_mcd with every C-step of every candidate on the device
-(lane/apple-fast-robust, 2026-10-02; FAST + Apple only, OPT-IN since
-2026-10-03: `-D MOJOLEARN_MCD_DEVICE_CSTEPS` turns it on; the default is the
-per-candidate kit route). M3 A/B: min-cov-det taxi 79,925 -> 215 ms; M2 A/B
+(lane/apple-fast-robust, 2026-10-02; FAST + Apple only; its own opt-in
+define was deleted 2026-10-09: the route runs under MCD_BATCH_COMPAT). M3 A/B: min-cov-det taxi 79,925 -> 215 ms; M2 A/B
 robust-ee-taxi-x: elliptic-envelope taxi 64,578 -> 267.5 ms.
 
 DROPPED-quality (tools/mcd_quality_ab.sh, M2, taxi 100k, 2026-10-03): it
@@ -124,13 +123,13 @@ comptime MCD_BATCH_COMPAT = (
 # .8805 MCD / .9645 EE fails .99; location/covariance shift 14%/18%.
 # Opt-in pending a corrected C-step; evidence above and in
 # docs/apple-fast/EXPERIMENTS.md (MCD_DEVICE_CSTEPS).
-# The explicit legacy DEVICE_CSTEPS arm remains unvalidated/opt-in; this OR
-# also routes the independently accepted COMPAT+MMA implementation. The old
-# mcdq4 mask failure above does not revoke its separately measured defaults.
-comptime MCD_DEVICE_CSTEPS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and (is_defined["MOJOLEARN_MCD_DEVICE_CSTEPS"]() or MCD_BATCH_COMPAT)
-)
+# The route is taken only with MCD_BATCH_COMPAT (the accepted COMPAT+MMA
+# implementation); the mcdq4 mask failure above does not revoke its
+# separately measured defaults.
+# TOMBSTONE: MOJOLEARN_MCD_DEVICE_CSTEPS (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the legacy device C-step route switched on by its own define, without MCD_BATCH_COMPAT's repairs; flagged-mask Jaccard vs OFF .8805 MinCovDet / .9645 EllipticEnvelope (bar .99). The route stays as the MCD_BATCH_COMPAT / MCD_BATCH_MMA path.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch; record in docs/TOMBSTONES.md.
+comptime MCD_DEVICE_CSTEPS = MCD_BATCH_COMPAT
 
 # DEFAULT (FAST + Apple, on top of MCD_BATCH_MMA; lane/apple-fast-w2-mcd2):
 # each of the three per-candidate GEMM loops is ONE launch over the phase's

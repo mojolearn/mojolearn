@@ -1,0 +1,281 @@
+diff --git b/x_decomp/fa_fast.mojo a/x_decomp/fa_fast.mojo
+index 656a60aff..37fa77ef0 100644
+--- b/x_decomp/fa_fast.mojo
++++ a/x_decomp/fa_fast.mojo
+@@ -4,8 +4,8 @@
+ main 2026-10-04 by lane/apple-fast-rec-fa-robust, every define default OFF and
+ READY-AB): FactorAnalysis's fit and transform on device-resident operands.
+ The recovery keeps main's two-pass mean and its cancellation-free psi update
+-(lane/apple-fast-quality-glmfa) on these routes; LIVEBUF turns
+-ITER_DEVICE on. NOT an IDENTICAL path: the binding
++(lane/apple-fast-quality-glmfa) on these routes; LIVEBUF and
++LL_DEVICE each turn ITER_DEVICE on. NOT an IDENTICAL path: the binding
+ registers these entries only under `FA_FAST_APPLE` (a FAST build for the
+ Apple GPU), each route only when its `-D MOJOLEARN_FA_<NAME>` define is set
+ (read with `is_defined`, never an env read), and python/mojolearn/
+@@ -35,6 +35,11 @@ defines (docs/apple-fast/ab/fa.md):
+   host in main's order and the tol test is main's. Implies GRAM_ONCE's pass.
+ - MOJOLEARN_FA_LIVEBUF: ITER_DEVICE's scratch as one arena buffer (one live
+   Metal buffer instead of ~12) and W + psi read back in one copy.
++- MOJOLEARN_FA_LL_DEVICE: ITER_DEVICE's convergence test on the device:
++  `fa_finish_kernel` sums the 2 d terms in double-float float32 (Metal has
++  no float64), tests (ll - old_ll) < tol itself and sets a flag every kernel
++  after it checks at entry (the loop freezes at convergence); the host reads
++  the flag every FA_LL_STRIDE iterations, the ll pairs once at the end.
+ - MOJOLEARN_FA_TRANSFORM_FUSED: `fa_transform_kernel`, transform as one
+   launch over rows with P = (W / psi)^T cov_z (d x nc) and the mean in
+   threadgroup memory, one row per thread, the n x nc result read back once.
+@@ -117,8 +122,8 @@ comptime FA_GRAM_ONCE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_GRAM_ONCE"]()
+ #: LIVEBUF), istella about 1253 ms against board 308 / 10351: the largest
+ #: classical lead found, never recorded. Recovery fix: psi update in
+ #: `fa_finish_kernel` is main's cancellation-free form (see GRAM_ONCE).
+-#: LIVEBUF acts only inside this loop, so it
+-#: turns it on (a lone define never builds a no-op arm).
++#: LIVEBUF and LL_DEVICE act only inside this loop, so each of
++#: them turns it on (a lone define never builds a no-op arm).
+ #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+ #: rab7-faiterfix, with the double-float Gram FA_GRAM_DF of lane/apple-fast-
+ #: fa-quality): factor-analysis istella 10299.65 -> 5636.55 ms (-45.3%),
+@@ -127,10 +132,11 @@ comptime FA_GRAM_ONCE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_GRAM_ONCE"]()
+ #: -14.823710 (noise). KEEP: the FAST + Apple default since then (FA_GRAM_DF
+ #: with it, since FA_GRAM_DF follows FA_ITER_DEVICE); rollback
+ #: -D MOJOLEARN_FA_ITER_DEVICE_OFF (the old -D name is harmless; the
+-#: LIVEBUF arm still turns it on).
++#: LIVEBUF and LL_DEVICE arms still turn it on).
+ comptime FA_ITER_DEVICE = FA_FAST_APPLE and (
+     not is_defined["MOJOLEARN_FA_ITER_DEVICE_OFF"]()
+     or is_defined["MOJOLEARN_FA_LIVEBUF"]()
++    or is_defined["MOJOLEARN_FA_LL_DEVICE"]()
+ )
+ # TOMBSTONE: MOJOLEARN_FA_EIG_SMALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: the FA EM loop's d x d eigh / SVD as ONE launch of one threadgroup (fa_rr_eigh_block_kernel, fa_rs_svd_block_kernel); in FA_ALL istella 10300.9 -> 20530.8 ms (+99.3%).
+@@ -140,9 +146,15 @@ comptime FA_ITER_DEVICE = FA_FAST_APPLE and (
+ #: in one copy. Source lane/apple-fast-fa@3efbce2af. Prior M3 B arms
+ #: (ITER_DEVICE + LIVEBUF): istella 1258 ms, taxi 168.7 ms. No failure.
+ comptime FA_LIVEBUF = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LIVEBUF"]()
+-# TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: the FA EM convergence test on the device (double-float ll sum in fa_finish_kernel, a flag read every 4 iterations); only timed with EIG_SMALL (FA_ALL istella +99.3%), alone never timed.
+-# Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
++#: (FAST + Apple, default OFF; implies ITER_DEVICE) the convergence test on
++#: the device: `fa_finish_kernel` sums the 2 d terms in double-float float32
++#: (Metal has no float64), tests (ll - old_ll) < tol and sets a flag every
++#: later kernel checks at entry; the host reads the flag every FA_LL_STRIDE
++#: iterations. Source lane/apple-fast-fa@3efbce2af. Prior M3 B arms
++#: (EIG_SMALL + ITER_DEVICE + LL_DEVICE): taxi 30.2 ms, istella 5879 ms.
++#: The test may stop one iteration away from the float64 host test when a
++#: step sits within double-float error of tol; the quality check decides.
++comptime FA_LL_DEVICE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LL_DEVICE"]()
+ #: (FAST + Apple, default OFF; RECORD rab7-fatransform 2026-10-04: istella
+ #: 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical: stays off)
+ #: FactorAnalysis.transform as one launch over
+@@ -188,6 +200,8 @@ comptime FA_MAX_D = 256
+ #: threads of the one-threadgroup kernels (= RR_OFF_TPB: the convergence
+ #: test's fold keeps main's lane partition and tree)
+ comptime FA_TPB = 256
++#: iterations between two reads of the device convergence flag (LL_DEVICE)
++comptime FA_LL_STRIDE = 4
+ #: sklearn's SMALL and the kit's log floor (FLT_MIN), as FactorAnalysis.fit
+ comptime FA_SMALL = Float32(1.0e-12)
+ comptime FA_TINY = Float32(1.1754943508222875e-38)
+@@ -655,7 +669,16 @@ def _fa_v[SVD: Bool](v: F32Ptr, d: Int, i: Int, col: Int) -> Float32:
+         return v.unsafe_load(i * d + col)
+ 
+ 
+-def fa_finish_kernel[SVD: Bool = False](
++@always_inline
++def _two_sum(a: Float32, b: Float32) -> SIMD[DType.float32, 2]:
++    """(a + b rounded, its rounding error): Knuth's TwoSum, adds only."""
++    var s = a + b
++    var bb = s - a
++    var e = (a - (s - bb)) + (b - bb)
++    return SIMD[DType.float32, 2](s, e)
++
++
++def fa_finish_kernel[LL: Bool, SVD: Bool = False](
+     a: F32Ptr, v: F32Ptr, sp: F32Ptr, psi: F32Ptr, w: F32Ptr, psi_new: F32Ptr, small: F32Ptr,
+     stat: F32Ptr, llst: F32Ptr, llrec: F32Ptr, d_in: Int32, nc_in: Int32, it_in: Int32, half_n: Float32, tol: Float32,
+ ):
+@@ -670,8 +693,10 @@ def fa_finish_kernel[SVD: Bool = False](
+     nonnegative terms here), and small = [log(max(s2_j, FLT_MIN)) for
+     j < nc | s2_j for nc <= j < d | log(max(psi_i, FLT_MIN)) | stat]: the
+     terms of main's log-likelihood, which the host sums in float64.
+-    llst[0] (always zero since the device test went) and llrec are kept in
+-    the signature only.
++    LL: the sum in double-float float32 here (TwoSum, the same sequential
++    order), llrec[2 it, 2 it + 1] = (hi, lo), and the test
++    -(n / 2) (S - S_prev) < tol sets llst[0] = 1 and llst[1] = it + 1 (every
++    later launch is a no-op). llst = [flag, it_conv, S_hi_prev, S_lo_prev].
+     SVD (FA_GRAM_DF): a = the d singular values of R D / sqrt(n) (s2 their
+     squares) and v = V^T (vector p in row p), `_fa_ev` / `_fa_v`."""
+     if llst.unsafe_load(0) != Float32(0.0):
+@@ -741,9 +766,32 @@ def fa_finish_kernel[SVD: Bool = False](
+         small.unsafe_store(2 * d + 1, stat.unsafe_load(1))
+         small.unsafe_store(2 * d + 2, stat.unsafe_load(2))
+         small.unsafe_store(2 * d + 3, stat.unsafe_load(3))
+-    # TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-    # Tried: the double-float ll sum and the device tol test here.
+-    # Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
++    comptime if LL:
++        dev_barrier()
++        if tid == 0:
++            var hi = Float32(0.0)
++            var lo = Float32(0.0)
++            var dd2 = 2 * d
++            for k in range(dd2):
++                var ts = _two_sum(hi, small.unsafe_load(k))
++                hi = ts[0]
++                lo = lo + ts[1]
++            var it = Int(it_in)
++            llrec.unsafe_store(2 * it, hi)
++            llrec.unsafe_store(2 * it + 1, lo)
++            # an unconverged eigh stops the loop at once (the host raises)
++            var stop = stat.unsafe_load(0) == Float32(0.0)
++            if it > 0:
++                var dh = hi - llst.unsafe_load(2)
++                var dl = lo - llst.unsafe_load(3)
++                var step = -half_n * (dh + dl)
++                if step < tol:
++                    stop = True
++            if stop:
++                llst.unsafe_store(0, Float32(1.0))
++                llst.unsafe_store(1, Float32(it + 1))
++            llst.unsafe_store(2, hi)
++            llst.unsafe_store(3, lo)
+ 
+ 
+ @always_inline
+@@ -1005,6 +1053,7 @@ def fa_em_py(
+     var tol32 = Float32(tol64)
+     var old_ll = Float64.MIN_FINITE
+     var it = 0
++    var stopped = False
+     var cur = s_pa
+     var nxt = s_pb
+     var i = 0
+@@ -1019,7 +1068,7 @@ def fa_em_py(
+             )
+             est = _fa_svd_grid(ctx, mem, s_b, s_v, s_s, s_flags, hflags, d, s_es)
+             _fa_check_eigh(est[0], est[1], est[2], est[3], d)
+-            ctx.enqueue_function[fa_finish_kernel[True]](
++            ctx.enqueue_function[fa_finish_kernel[FA_LL_DEVICE, True]](
+                 mem.ptr(s_s), mem.ptr(s_v), mem.ptr(s_sp), mem.ptr(cur), mem.ptr(s_w), mem.ptr(nxt),
+                 mem.ptr(s_small), pstat, pllst, pllrec, Int32(d), Int32(nc), Int32(i), half_n, tol32,
+                 grid_dim=1, block_dim=FA_TPB,
+@@ -1030,45 +1079,79 @@ def fa_em_py(
+             )
+             est = _fa_eigh_grid(ctx, mem, s_b, s_v, s_cs, s_off, s_part, s_fold, hfold, d, s_es)
+             _fa_check_eigh(est[0], est[1], est[2], est[3], d)
+-            ctx.enqueue_function[fa_finish_kernel[False]](
++            ctx.enqueue_function[fa_finish_kernel[FA_LL_DEVICE]](
+                 mem.ptr(s_b), mem.ptr(s_v), mem.ptr(s_sp), mem.ptr(cur), mem.ptr(s_w), mem.ptr(nxt),
+                 mem.ptr(s_small), pstat, pllst, pllrec, Int32(d), Int32(nc), Int32(i), half_n, tol32,
+                 grid_dim=1, block_dim=FA_TPB,
+             )
+-        var ssm = mem.sub(s_small)
+-        ctx.enqueue_copy(dst_ptr=hsmall.unsafe_ptr(), src_buf=ssm)
+-        ctx.synchronize()
+-        var hp = F32Ptr(unsafe_from_address=Int(hsmall.unsafe_ptr()))
+-        var ll = _fa_ll(hp, d, nc, llconst, neg_half_n)
+-        ll_dst.unsafe_store(i, ll)
+-        if (ll - old_ll) < tol64:
+-            break
+-        old_ll = ll
++        comptime if FA_LL_DEVICE:
++            # the flag every FA_LL_STRIDE iterations and at the budget's end
++            if i % FA_LL_STRIDE == FA_LL_STRIDE - 1 or i == max_iter - 1:
++                var ssm = mem.sub(s_llst)
++                ctx.enqueue_copy(dst_ptr=hsmall.unsafe_ptr(), src_buf=ssm)
++                ctx.synchronize()
++                var hp = F32Ptr(unsafe_from_address=Int(hsmall.unsafe_ptr()))
++                if hp.unsafe_load(0) != Float32(0.0):
++                    it = Int(hp.unsafe_load(1))
++                    stopped = True
++                    break
++        else:
++            var ssm = mem.sub(s_small)
++            ctx.enqueue_copy(dst_ptr=hsmall.unsafe_ptr(), src_buf=ssm)
++            ctx.synchronize()
++            var hp = F32Ptr(unsafe_from_address=Int(hsmall.unsafe_ptr()))
++            var ll = _fa_ll(hp, d, nc, llconst, neg_half_n)
++            ll_dst.unsafe_store(i, ll)
++            if (ll - old_ll) < tol64:
++                break
++            old_ll = ll
+         var tmp = cur
+         cur = nxt
+         nxt = tmp
+         i += 1
+-    # TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-    # Tried: the stop iteration and ll pairs read back from the device here.
+-    # Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
+-    comptime if FA_LIVEBUF:
+-        # W, psi A and psi B are adjacent in the arena: one copy
+-        var span = (mem.offs[s_pb] + mem.lens[s_pb]) - mem.offs[s_w]
+-        var hout = ctx.enqueue_create_host_buffer[DType.float32](span)
+-        var sall = mem.bufs[0].create_sub_buffer[DType.float32](mem.offs[s_w], span)
+-        ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=sall)
+-        ctx.synchronize()
+-        var op = F32Ptr(unsafe_from_address=Int(hout.unsafe_ptr()))
+-        for k in range(nc * d):
+-            w_dst.unsafe_store(k, op.unsafe_load(k))
+-        var poff = mem.offs[cur] - mem.offs[s_w]
+-        for k in range(d):
+-            psi_dst.unsafe_store(k, op.unsafe_load(poff + k))
+-        _ = hout^
+-    else:
++    comptime if FA_LL_DEVICE:
++        # stopped at iteration c (1-based): psi is the one that iteration
++        # read (buffer (c - 1) % 2, A first; main breaks before its psi
++        # update); the budget run out: psi is the last update (cur, after
++        # the last swap), as main's loop leaves it. The ll pairs and the
++        # status come back with W and psi
++        var c = it
++        var used = cur
++        if stopped:
++            used = s_pa if (c - 1) % 2 == 0 else s_pb
++        var hrec = ctx.enqueue_create_host_buffer[DType.float32](2 * max_iter)
++        var srec = mem.sub(s_llrec)
++        ctx.enqueue_copy(dst_ptr=hrec.unsafe_ptr(), src_buf=srec)
++        var ssm2 = mem.sub(s_small)
++        ctx.enqueue_copy(dst_ptr=hsmall.unsafe_ptr(), src_buf=ssm2)
+         ctx.enqueue_copy(dst_ptr=w_dst, src_buf=mem.sub(s_w))
+-        ctx.enqueue_copy(dst_ptr=psi_dst, src_buf=mem.sub(cur))
++        ctx.enqueue_copy(dst_ptr=psi_dst, src_buf=mem.sub(used))
+         ctx.synchronize()
++        var hp2 = F32Ptr(unsafe_from_address=Int(hsmall.unsafe_ptr()))
++        var rp = F32Ptr(unsafe_from_address=Int(hrec.unsafe_ptr()))
++        for k in range(c):
++            var s = Float64(rp.unsafe_load(2 * k)) + Float64(rp.unsafe_load(2 * k + 1))
++            ll_dst.unsafe_store(k, (llconst + s) * neg_half_n)
++        _ = hrec^
++    else:
++        comptime if FA_LIVEBUF:
++            # W, psi A and psi B are adjacent in the arena: one copy
++            var span = (mem.offs[s_pb] + mem.lens[s_pb]) - mem.offs[s_w]
++            var hout = ctx.enqueue_create_host_buffer[DType.float32](span)
++            var sall = mem.bufs[0].create_sub_buffer[DType.float32](mem.offs[s_w], span)
++            ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=sall)
++            ctx.synchronize()
++            var op = F32Ptr(unsafe_from_address=Int(hout.unsafe_ptr()))
++            for k in range(nc * d):
++                w_dst.unsafe_store(k, op.unsafe_load(k))
++            var poff = mem.offs[cur] - mem.offs[s_w]
++            for k in range(d):
++                psi_dst.unsafe_store(k, op.unsafe_load(poff + k))
++            _ = hout^
++        else:
++            ctx.enqueue_copy(dst_ptr=w_dst, src_buf=mem.sub(s_w))
++            ctx.enqueue_copy(dst_ptr=psi_dst, src_buf=mem.sub(cur))
++            ctx.synchronize()
+     _ = hsmall^
+     _ = hfold^
+     _ = hflags^
+@@ -1145,6 +1228,8 @@ def fa_defines_py() raises -> PythonObject:
+         s += "MOJOLEARN_FA_ITER_DEVICE,"
+     comptime if FA_LIVEBUF:
+         s += "MOJOLEARN_FA_LIVEBUF,"
++    comptime if FA_LL_DEVICE:
++        s += "MOJOLEARN_FA_LL_DEVICE,"
+     comptime if FA_TRANSFORM_FUSED:
+         s += "MOJOLEARN_FA_TRANSFORM_FUSED,"
+     # not a -D name: the route ITER_DEVICE takes unless MOJOLEARN_FA_GRAM_QOLD

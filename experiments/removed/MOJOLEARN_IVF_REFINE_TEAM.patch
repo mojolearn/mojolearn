@@ -1,0 +1,192 @@
+diff --git b/bindings/_mojolearn_x_ann.mojo a/bindings/_mojolearn_x_ann.mojo
+index 3b714caae..f91de62c7 100644
+--- b/bindings/_mojolearn_x_ann.mojo
++++ a/bindings/_mojolearn_x_ann.mojo
+@@ -26,10 +26,9 @@ from x_ann.tsne_device import tsne_fit_device
+ from x_ann.resident import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
+ from x_ann.resident import x_ann_index_export_codes_binding, x_ann_register_pq_built
+ from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, ivf_sq_build_device, ivf_sq_search_device, refine_device, ivf_rabitq_build_device, ivf_rabitq_search_device
++from x_ann.ivf_pq_device import refine_device_team
+ from x_ann.ivf_pq_device import IvfPqDevice, ivf_pq_build_device_resident
+-# TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch; record in docs/TOMBSTONES.md.
++from x_ann.vsearch_fast import IVF_REFINE_TEAM
+ 
+ 
+ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+@@ -316,6 +315,19 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
+     var root = len(params) > 5 and p_int(params, 5) != 0
+     if n <= 0 or d <= 0 or m <= 0 or k0 <= 0 or k <= 0 or k > k0:
+         raise Error("refine: need positive shapes and 1 <= k <= n_candidates")
++    comptime if IVF_REFINE_TEAM:
++        # lane af-vsearch, FAST on Apple, OPT-IN: the dataset goes up from the
++        # caller's array (no List copy of n x d first); the array outlives the call
++        var x_addr = a_int(addrs, 0)
++        var tq = in_f32(addrs, 1, m * d)
++        var tcand = in_i32(addrs, 2, m * k0)
++        var tod = List[Float32]()
++        var toi = List[Int32]()
++        with GILReleased(Python()):
++            refine_device_team(x_addr, n, d, tq, m, tcand, k0, k, tod, toi, root)
++        out_f32(tod, addrs, 3)
++        out_i32(toi, addrs, 4)
++        return PythonObject(m)
+     var x = in_f32(addrs, 0, n * d)
+     var q = in_f32(addrs, 1, m * d)
+     var cand = in_i32(addrs, 2, m * k0)
+diff --git b/x_ann/ivf_pq_device.mojo a/x_ann/ivf_pq_device.mojo
+index 5bb30bfaf..62ada7925 100644
+--- b/x_ann/ivf_pq_device.mojo
++++ a/x_ann/ivf_pq_device.mojo
+@@ -37,6 +37,7 @@ from x_ann.ivf_pq_core import (
+     F32P, I32P, IvfPqIndex, pq_assign_cell, pq_inf, pq_insert, pq_labels_from_lists,
+     pq_len_of, pq_residual_cell, pq_validate,
+ )
++from x_ann.vsearch_fast import IVF_REFINE_TEAM
+ 
+ comptime TPB = 128
+ 
+@@ -791,9 +792,105 @@ def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I3
+         refine_cell(q, x, Int(n), Int(d), queries, cand, Int(k0), Int(k), out_d, out_i, root != 0)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch; record in docs/TOMBSTONES.md.
++#: the refine team (lane af-vsearch, OPT-IN, NEUTRAL on the M3 2026-10-04 at
++#: lane/apple-fast-batch 3150d75c1: ivf-refine taxi 1208.3->1201.8 ms): threads
++#: per query (the kernel's candidate cap, one thread per candidate) and the
++#: widest query row staged in threadgroup memory (2 KB of float32, a memory
++#: budget, not a board shape; wider rows take `refine_kernel`)
++comptime REFINE_T = 128
++comptime REFINE_DIM_MAX = 512
++
++
++def refine_team_kernel(
++    x: F32P, n: Int32, d: Int32, queries: F32P, cand: I32P, k0: Int32, k: Int32, out_d: F32P, out_i: I32P,
++    root: Int32,
++):
++    """FAST on Apple, OPT-IN (lane af-vsearch, `IVF_REFINE_TEAM`): `refine_cell`
++    with one threadgroup of REFINE_T per query (k0 <= REFINE_T, d <=
++    REFINE_DIM_MAX; the launch checks). The query row is staged in
++    threadgroup memory as ftz(q); thread t < k0 scores candidate t by the
++    cell's statements (a padding id or a repeat of an earlier slot is skipped;
++    the ascending fused square sum of `ftz(ftz(q) - ftz(x))`, the same words)
++    into threadgroup memory; thread 0 runs the cell's `pq_insert` over the
++    scored slots in slot order. The same words in the same insertion order:
++    the same result."""
++    var qi = Int(block_idx.x)
++    var t = Int(thread_idx.x)
++    var dd = Int(d)
++    var kk0 = Int(k0)
++    var kk = Int(k)
++    var sq = stack_allocation[REFINE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
++    var sd = stack_allocation[REFINE_T, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
++    var sv = stack_allocation[REFINE_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
++    for c in range(t, dd, REFINE_T):
++        sq[c] = ftz(queries.unsafe_load(qi * dd + c))
++    barrier()
++    if t < kk0:
++        var v = Int(cand.unsafe_load(qi * kk0 + t))
++        var keep = v >= 0 and v < Int(n)
++        if keep:
++            for u in range(t):
++                if Int(cand.unsafe_load(qi * kk0 + u)) == v:
++                    keep = False
++                    break
++        var acc = Float32(0.0)
++        if keep:
++            for c in range(dd):
++                var diff = ftz(sq[c] - ftz(x.unsafe_load(v * dd + c)))
++                acc = ftz(identical_mul_add(diff, diff, acc))
++        sd[t] = acc
++        sv[t] = Int32(v) if keep else Int32(-1)
++    barrier()
++    if t == 0:
++        var base = qi * kk
++        for s in range(kk):
++            out_d.unsafe_store(base + s, pq_inf())
++            out_i.unsafe_store(base + s, Int32(-1))
++        for u in range(kk0):
++            var id = sv[u]
++            if id >= 0:
++                pq_insert(kk, base, sd[u], id, out_d, out_i)
++        if root != 0:  # refine_cell's `root` rule (main, lane apple-fast-py2mojo-cluster)
++            for s in range(kk):
++                out_d.unsafe_store(base + s, identical_sqrt(out_d.unsafe_load(base + s)))
++
++
++def refine_device_team(
++    x_addr: Int, n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
++    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False,
++) raises:
++    """FAST on Apple, OPT-IN (lane af-vsearch, `IVF_REFINE_TEAM`): `refine_device`
++    with the dataset uploaded straight from the caller's n x d float32 array
++    at `x_addr` (no host copy into a List first; the binding holds the array
++    under the released GIL for the whole call) and `refine_team_kernel` when
++    it applies (k0 <= REFINE_T, d <= REFINE_DIM_MAX), `refine_kernel`
++    otherwise. The same words either way."""
++    var ctx = x_ann_ctx()
++    var dx = ctx.enqueue_create_buffer[DType.float32](n * d)
++    ctx.enqueue_copy(dst_buf=dx, src_ptr=F32P(unsafe_from_address=x_addr))
++    ctx.synchronize()
++    var dq = upload_f32(ctx, queries)
++    var dcand = upload_i32(ctx, cand)
++    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
++    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
++    if k0 <= REFINE_T and d <= REFINE_DIM_MAX:
++        ctx.enqueue_function[refine_team_kernel](
++            dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(), dcand.unsafe_ptr(), Int32(k0), Int32(k),
++            dd.unsafe_ptr(), di.unsafe_ptr(), Int32(1) if root else Int32(0), grid_dim=m, block_dim=REFINE_T,
++        )
++    else:
++        ctx.enqueue_function[refine_kernel](Int32(m), dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(),
++                                            dcand.unsafe_ptr(), Int32(k0), Int32(k), dd.unsafe_ptr(), di.unsafe_ptr(),
++                                            Int32(1) if root else Int32(0), grid_dim=_grid(m), block_dim=TPB)
++    ctx.synchronize()
++    out_d = download_f32(ctx, dd, m * k)
++    out_i = download_i32(ctx, di, m * k)
++    _ = di^
++    _ = dd^
++    _ = dcand^
++    _ = dq^
++    _ = dx^
++    _ = ctx^
+ 
+ 
+ def refine_device(
+diff --git b/x_ann/vsearch_fast.mojo a/x_ann/vsearch_fast.mojo
+index d551a2c30..07e2d0eb1 100644
+--- b/x_ann/vsearch_fast.mojo
++++ a/x_ann/vsearch_fast.mojo
+@@ -15,8 +15,9 @@ fits that set `KMeansParams.lazy_shift`) are FAST + Apple
+ DEFAULTS since 2026-10-04 (M3 A/B, the `-D MOJOLEARN_VSEARCH_ALL` bundle at
+ ad265a028: 9/9 rows faster, recall_at_10 identical); each has a rollback
+ define `-D MOJOLEARN_<FLAG>_OFF`. `-D MOJOLEARN_VSEARCH_ALL` is kept as a
+-no-op alias (every switch it bundled is a default now; IVF_REFINE_TEAM
+-measured neutral and was deleted 2026-10-09). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
++no-op alias (every switch it bundled is a default now, except
++IVF_REFINE_TEAM, which measured neutral and stays opt-in under its own
++define). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
+ they answer is docs/apple-fast/notes/vsearch.md; the record is
+ docs/apple-fast/EXPERIMENTS.md."""
+ from std.sys.compile import is_defined
+@@ -58,9 +59,14 @@ comptime PQ_LUT_TILED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_LUT_
+ #: the residual in threadgroup memory; no dimension window.
+ comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_SCAN_FUSED_OFF"]()
+ 
+-# TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch; record in docs/TOMBSTONES.md.
++#: refine: the dataset uploaded from the caller's array (no host copy into a
++#: List first) and one threadgroup per query (one thread per candidate, the
++#: cell's fold; thread 0 inserts in slot order) instead of one thread per
++#: query. Same words.
++#: OPT-IN, stays off: M3 A/B (lane/apple-fast-batch 3150d75c1, 2026-10-04,
++#: 1 run per arm) ivf-refine taxi 1208.3->1201.8 ms (-0.5%), NEUTRAL; no
++#: default change. No longer turned on by VSEARCH_ALL (a no-op alias now).
++comptime IVF_REFINE_TEAM = VSEARCH_FAST_APPLE and is_defined["MOJOLEARN_IVF_REFINE_TEAM"]()
+ 
+ #: lane fg-ivf (read_ivf.md idea A4), DEFAULT ON outside FAST
+ #: (`-D MOJOLEARN_IDN_PQ_LUT_TILED_OFF` restores `pq_score_kernel`):

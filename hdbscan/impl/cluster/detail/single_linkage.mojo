@@ -84,14 +84,13 @@ from hierarchy.impl.cluster.detail.single_linkage import (
     SL_FAST_BORUVKA_MIN_ROWS,
 )
 from checks.numerics import identical_div
-from hdbscan.impl.detail.core_tile import core_tile_applies
 from hdbscan.impl.detail.fast_apple import (
-    HDB_CORE_TILE,
-    HDB_DEV_BORUVKA,
     HDB_LINKAGE_DEVICE,
 )
 from hdbscan.impl.cluster.detail.dendrogram_union import build_dendrogram_union
-from hdbscan.impl.cluster.detail.fast_mr_mst_device import fast_mr_mst_device
+# TOMBSTONE: MOJOLEARN_HDB_DEV_BORUVKA (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the d <= 64 arm's Boruvka rounds driven on the device (fast_mr_mst_device.mojo); hdbscan taxi 434 -> 432.6 ms (-0.3%, noise).
+# Restore: git apply experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch; record in docs/TOMBSTONES.md.
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 from std.os import getenv
 from std.time import perf_counter_ns
@@ -247,8 +246,6 @@ def build_mr_linkage(
     # print the wall time of each part. Off, nothing changes.
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var st_t = Int(perf_counter_ns())
-    # lane af-hdbscan2: when the tiled core kernel runs (HDB_CORE_TILE) the
-    # k-NN's m x k outputs are never written, so they are one cell each.
     # fg-tsne-dbscan H2 (IDN_HDB_MST_SEED_KNN): the k-NN one neighbour wider
     # on the sparse arm, so round 1 can resolve points from their lists
     var knn_w = min_samples
@@ -262,13 +259,9 @@ def build_mr_linkage(
         ):
             knn_w = min_samples + 1
     var knn_cells = m * knn_w
-    comptime if HDB_CORE_TILE:
-        if (
-            core_tile_applies(n, min_samples)
-            and sabotage == HDB_SAB_NONE
-            and not trace.enabled
-        ):
-            knn_cells = 1
+    # TOMBSTONE: MOJOLEARN_HDB_CORE_TILE (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: one-cell k-NN outputs when the tiled core kernel ran.
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_CORE_TILE.patch; record in docs/TOMBSTONES.md.
     var knn_dists = ctx.enqueue_create_buffer[DType.float32](knn_cells)
     var knn_inds = ctx.enqueue_create_buffer[DType.int32](knn_cells)
     compute_core_dists(
@@ -358,20 +351,12 @@ def build_mr_linkage(
                 mst_weights, sabotage,
             )
     elif use_fast:
-        # lane af-hdbscan2 (-D MOJOLEARN_HDB_DEV_BORUVKA): the same search
-        # kernels, the rounds driven on the device (fast_mr_mst_device.mojo).
-        comptime if HDB_DEV_BORUVKA:
-            rounds = fast_mr_mst_device(
-                ctx, x, core_dists, m, n, inv_alpha, mst_rows, mst_cols,
-                mst_weights,
-            )
-        else:
-            rounds = fast_euclidean_mst(
-                ctx, x, m, n, True, mst_rows, mst_cols, mst_weights,
-                mutual_reach=True,
-                core_ptr=core_dists.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                inv_alpha=inv_alpha,
-            )
+        rounds = fast_euclidean_mst(
+            ctx, x, m, n, True, mst_rows, mst_cols, mst_weights,
+            mutual_reach=True,
+            core_ptr=core_dists.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            inv_alpha=inv_alpha,
+        )
     else:
         rounds = build_sorted_mst[DENSE=True](
             ctx, indptr, indices, mr, m, n,

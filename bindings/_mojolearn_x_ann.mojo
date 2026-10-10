@@ -26,9 +26,10 @@ from x_ann.tsne_device import tsne_fit_device
 from x_ann.resident import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
 from x_ann.resident import x_ann_index_export_codes_binding, x_ann_register_pq_built
 from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, ivf_sq_build_device, ivf_sq_search_device, refine_device, ivf_rabitq_build_device, ivf_rabitq_search_device
-from x_ann.ivf_pq_device import refine_device_team
 from x_ann.ivf_pq_device import IvfPqDevice, ivf_pq_build_device_resident
-from x_ann.vsearch_fast import IVF_REFINE_TEAM
+# TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch; record in docs/TOMBSTONES.md.
 
 
 def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -315,19 +316,6 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var root = len(params) > 5 and p_int(params, 5) != 0
     if n <= 0 or d <= 0 or m <= 0 or k0 <= 0 or k <= 0 or k > k0:
         raise Error("refine: need positive shapes and 1 <= k <= n_candidates")
-    comptime if IVF_REFINE_TEAM:
-        # lane af-vsearch, FAST on Apple, OPT-IN: the dataset goes up from the
-        # caller's array (no List copy of n x d first); the array outlives the call
-        var x_addr = a_int(addrs, 0)
-        var tq = in_f32(addrs, 1, m * d)
-        var tcand = in_i32(addrs, 2, m * k0)
-        var tod = List[Float32]()
-        var toi = List[Int32]()
-        with GILReleased(Python()):
-            refine_device_team(x_addr, n, d, tq, m, tcand, k0, k, tod, toi, root)
-        out_f32(tod, addrs, 3)
-        out_i32(toi, addrs, 4)
-        return PythonObject(m)
     var x = in_f32(addrs, 0, n * d)
     var q = in_f32(addrs, 1, m * d)
     var cand = in_i32(addrs, 2, m * k0)

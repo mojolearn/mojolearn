@@ -1,0 +1,67 @@
+diff --git b/hdbscan/impl/detail/fast_apple.mojo a/hdbscan/impl/detail/fast_apple.mojo
+index 25f0f6213..23ffda5a3 100644
+--- b/hdbscan/impl/detail/fast_apple.mojo
++++ a/hdbscan/impl/detail/fast_apple.mojo
+@@ -5,7 +5,8 @@
+ Every switch is a build define read at compile time and compiled ONLY under
+ `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`; an
+ IDENTICAL build, a FAST build off Apple and a FAST Apple build without the
+-define compile main's code unchanged. docs/apple-fast/notes/hdbscan.md has the profile each one
++define compile main's code unchanged. `-D MOJOLEARN_HDBSCAN2_ALL` turns every
++switch on at once. docs/apple-fast/notes/hdbscan.md has the profile each one
+ answers; docs/apple-fast/ab/hdbscan2.md the mechanism and the risk.
+ """
+ 
+@@ -20,9 +21,7 @@ comptime HDB_FAST_APPLE = (
+ )
+ """The FAST tier on the Apple GPU: the only place any switch below is true."""
+ 
+-# TOMBSTONE: MOJOLEARN_HDBSCAN2_ALL (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: every af-hdbscan2 switch at once; its gain was HDB_SMR_TILED alone (now the default), CORE_TILE and ONE_SYNC lost vs main.
+-# Restore: git apply experiments/removed/MOJOLEARN_HDBSCAN2_ALL.patch; record in docs/TOMBSTONES.md.
++comptime HDB_ALL = is_defined["MOJOLEARN_HDBSCAN2_ALL"]()
+ 
+ # AFCL-G04: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+ # Halve the core-distance reference tile to reduce threadgroup storage from
+@@ -32,7 +31,7 @@ comptime HDB_FAST_APPLE = (
+ comptime AFCL_G04 = HDB_FAST_APPLE and is_defined["MOJOLEARN_AFCL_G04"]()
+ 
+ comptime HDB_SMR_TILED = HDB_FAST_APPLE and (
+-    is_defined["MOJOLEARN_HDB_SMR_TILED"]()
++    is_defined["MOJOLEARN_HDB_SMR_TILED"]() or HDB_ALL
+     or not is_defined["MOJOLEARN_HDB_SMR_TILED_OFF"]()
+ )
+ """The sparse arm's tiled search kernel on Apple (sparse_mr_mst.mojo).
+@@ -49,12 +48,12 @@ main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
+ # B/A0.9529..1.0389, mixed; retain OFF. Same three-case quality contract,
+ # one warmup/one score, caller67d0efb29; results/F15/hdbscan-core.
+ comptime HDB_CORE_TILE = HDB_FAST_APPLE and (
+-    is_defined["MOJOLEARN_HDB_CORE_TILE"]()
++    is_defined["MOJOLEARN_HDB_CORE_TILE"]() or HDB_ALL
+ )
+ """Core distances from one tiled kernel with a register top-k (core_tile.mojo)."""
+ 
+ comptime HDB_DEV_BORUVKA = HDB_FAST_APPLE and (
+-    is_defined["MOJOLEARN_HDB_DEV_BORUVKA"]()
++    is_defined["MOJOLEARN_HDB_DEV_BORUVKA"]() or HDB_ALL
+ )
+ """The d <= 64 arm's Boruvka rounds on the device (fast_mr_mst_device.mojo)."""
+ 
+@@ -69,7 +68,7 @@ comptime HDB_DEV_BORUVKA = HDB_FAST_APPLE and (
+ # is present). Caller/build evidence: results/F15/hdbscan-downloads under
+ # the retained root above. Historical full-dataset inconclusive result stays.
+ comptime HDB_ONE_SYNC = HDB_FAST_APPLE and (
+-    is_defined["MOJOLEARN_HDB_ONE_SYNC"]()
++    is_defined["MOJOLEARN_HDB_ONE_SYNC"]() or HDB_ALL
+ )
+ """The extract's and the runner's output downloads under one wait each."""
+ 
+@@ -93,7 +92,7 @@ readbacks instead of eight waits (tree_device.mojo `_condensed_two_reads`)."""
+ # B/A0.9170..1.0298, mixed; retain OFF. Same three-case quality contract,
+ # one warmup/one score, caller67d0efb29; results/F15/hdbscan-selection.
+ comptime HDB_SELECT_DEVICE = HDB_FAST_APPLE and (
+-    is_defined["MOJOLEARN_HDB_SELECT_DEVICE"]()
++    is_defined["MOJOLEARN_HDB_SELECT_DEVICE"]() or HDB_ALL
+ )
+ """Stabilities, selection, labels, scores and probabilities with no wait in
+ between and ONE readback at the end (extract.mojo `_extract_one_read`);

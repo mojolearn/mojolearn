@@ -362,7 +362,9 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.contract import OP_NT
 from x_decomp.cells import F32Ptr
-from x_decomp.fast_chol import CHOL_FAST_BLOCKED, CH_NB, launch_chol_blocked
+# TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: blocked right-looking Cholesky (x_decomp/fast_chol.mojo, 3 n / 32 launches); cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6.
+# Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from checks.numerics import (
@@ -1984,31 +1986,6 @@ def _potrf_lower_blocked(
     return CholRun(info, CB_NB, n_panels)
 
 
-def _potrf_lower_fast_blocked(
-    ctx: DeviceContext,
-    mut a: DeviceBuffer[DType.float32],
-    n: Int,
-) raises -> CholRun:
-    """`potrf_lower` through x_decomp/fast_chol.mojo `launch_chol_blocked`
-    (CHOL_FAST_BLOCKED, default off, FAST + Apple; recovered from
-    lane/apple-fast-decomp-linalg@74d52352b): the launches enqueued, `info`
-    read once after them. The panel width that ran is CH_NB."""
-    var dinfo = ctx.enqueue_create_buffer[DType.float32](1)
-    var hinfo = ctx.enqueue_create_host_buffer[DType.float32](1)
-    launch_chol_blocked(
-        ctx,
-        F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
-        F32Ptr(unsafe_from_address=Int(dinfo.unsafe_ptr())),
-        n,
-    )
-    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-    ctx.synchronize()
-    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
-    _ = dinfo^
-    _ = hinfo^
-    return CholRun(info, CH_NB, (n + CH_NB - 1) // CH_NB)
-
-
 def potrf_lower(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -2118,24 +2095,9 @@ def potrf_lower(
             and String(getenv("MOJOLEARN_CHOL_STRIP_OFF")) != "1"
         ):
             return _potrf_lower_strips(ctx, a, n, elem_tpb, trace)
-    # -D MOJOLEARN_CHOL_FAST_BLOCKED (x_decomp/fast_chol.mojo, default off,
-    # FAST + Apple): the blocked right-looking route instead of the
-    # CHOL_FAST_NB route below. Only without a sabotage, a trace or a
-    # multi-GPU owner set, past one panel, and for a `defer_ok` caller: on a
-    # non-positive pivot the route continues the sweep (x_decomp's rule), and
-    # a `defer_ok` caller (cholesky/estimator.mojo `cholesky_factor_devio`)
-    # redoes a failed factor without `defer_ok`, so LAPACK's partial factor
-    # still comes from the route below (that redo is CHOL_FAST_NOSYNC's, so
-    # the route needs it on).
-    comptime if CHOL_FAST_BLOCKED and CHOL_FAST_NOSYNC:
-        if (
-            defer_ok
-            and sabotage == CHOL_SAB_NONE
-            and not trace.enabled
-            and chol_device_count() == 1
-            and n > CH_NB
-        ):
-            return _potrf_lower_fast_blocked(ctx, a, n)
+    # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: the blocked route here for defer_ok callers (with CHOL_FAST_NOSYNC).
+    # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
 
     var nt_max = n - nb
     if nt_max < 0:

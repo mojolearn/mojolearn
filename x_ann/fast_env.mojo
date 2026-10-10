@@ -85,12 +85,12 @@ comptime CAGRA_FAST_IVFG_EXACTD = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_
 #: w2-cagra-lowds4-q PASS (recall@10 B >= A on taxi and istella).
 #: `-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF` restores the exact low-d
 #: graph and the 1x seeds. Plain LOWD without SEEDS4 failed recall (taxi
-#: .997925 -> .997125, w2-cagra-lowd-q) and stays opt-in:
-#: `-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF -D MOJOLEARN_CAGRA_FAST_IVFG_LOWD`.
+#: .997925 -> .997125, w2-cagra-lowd-q); its opt-in define is deleted.
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_LOWD (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the low-d IVFG graph WITHOUT SEEDS4 (opt-in with LOWD_SEEDS4_OFF); taxi recall@10 .997925 -> .997125. The low-d graph stays as part of the LOWD_SEEDS4 default.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch; record in docs/TOMBSTONES.md.
 comptime _CAGRA_LOWD_SEEDS4 = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF"]()
-comptime CAGRA_FAST_IVFG_LOWD = CAGRA_FAST_IVFG and (
-    is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD"]() or _CAGRA_LOWD_SEEDS4
-)
+comptime CAGRA_FAST_IVFG_LOWD = _CAGRA_LOWD_SEEDS4
 
 #: lane/apple-fast-gap-cagra (2026-10-03), the CAGRA SEARCH (taxi recall .48
 #: vs faiss .93): taxi's 11 features are integer codes (zone ids 1..265,
@@ -103,9 +103,12 @@ comptime CAGRA_FAST_IVFG_LOWD = CAGRA_FAST_IVFG and (
 #: the walk converge). FAST+Apple default since the M3 A/B (one run per
 #: arm): taxi recall .4838 -> .9979 (SEEDS+ITERS), build 2,859 -> 2,900 ms
 #: (noise). `-D MOJOLEARN_CAGRA_FAST_SEEDS_OFF` / `_ITERS_OFF` turn each off.
-#: SEEDS4 (`-D MOJOLEARN_CAGRA_FAST_SEEDS4`): four times the seed work
-#: (taxi .9997); on by default with LOWD_SEEDS4 above.
-comptime _CAGRA_SEEDS4 = is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]() or _CAGRA_LOWD_SEEDS4
+#: SEEDS4: four times the seed work (taxi .9997); on by default with
+#: LOWD_SEEDS4 above.
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_SEEDS4 (DROPPED-semantics) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: 4x search seeds as a standalone opt-in, never judged alone (gapcagra-seeds4-taxi). The 4x seeds stay as part of the LOWD_SEEDS4 default.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS4.patch; record in docs/TOMBSTONES.md.
+comptime _CAGRA_SEEDS4 = _CAGRA_LOWD_SEEDS4
 comptime CAGRA_FAST_SEEDS = ANN_FAST_APPLE and (not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]() or _CAGRA_SEEDS4)
 comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if _CAGRA_SEEDS4 else 262144
 comptime CAGRA_FAST_ITERS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FAST_ITERS_OFF"]()

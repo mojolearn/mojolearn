@@ -1,0 +1,456 @@
+diff --git a/bindings/_mojolearn_x_neighbors.mojo b/bindings/_mojolearn_x_neighbors.mojo
+index 36fe2de9a..2805c7d13 100644
+--- a/bindings/_mojolearn_x_neighbors.mojo
++++ b/bindings/_mojolearn_x_neighbors.mojo
+@@ -15,7 +15,8 @@ from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kerne
+ from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
+ from x_neighbors.ocsvm_dev import op_ocsvm
+ from x_neighbors.graph_dev import op_louvain
+-from x_neighbors.kapprox_dev import kpca_resident_binding
++from x_neighbors.kapprox_dev import op_kapprox_sparse_rp
++from x_neighbors.kapprox_dev import kpca_resident_binding, sparse_rp_device_binding
+ from x_neighbors.iter_device import lp_fast_resident_binding
+ from x_neighbors.sort_items import purity_flags_binding
+ 
+@@ -1124,6 +1125,18 @@ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
+     return PythonObject(None)
+ 
+ 
++def kapprox_sparse_rp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_res = _a(a_, 0)
++    var v_kc = _n(i_, 0)
++    var v_d = _n(i_, 1)
++    var v_seed = _n(i_, 2)
++    var v_dens = _f(f_, 0)
++    var v_scale = _f(f_, 1)
++    with GILReleased(Python()):
++        op_kapprox_sparse_rp(v_res, v_kc, v_d, v_seed, v_dens, v_scale)
++    return PythonObject(None)
++
++
+ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[sqdist_binding]("xn_sqdist")
+     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
+@@ -1208,6 +1221,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
+     m.def_function[ocsvm_binding]("xn_ocsvm")
+     m.def_function[louvain_binding]("xn_louvain")
++    m.def_function[kapprox_sparse_rp_binding]("xn_kapprox_sparse_rp")
+     m.def_function[eigh_binding]("xn_eigh")
+     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
+     m.def_function[x_neighbors_py2mojo_off_binding]("x_neighbors_py2mojo_off")
+@@ -1226,6 +1240,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
++        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_neighbors: ", e))
+diff --git a/bindings/_mojolearn_x_neighbors_host.mojo b/bindings/_mojolearn_x_neighbors_host.mojo
+index 4ebad4c70..6e610c55e 100644
+--- a/bindings/_mojolearn_x_neighbors_host.mojo
++++ b/bindings/_mojolearn_x_neighbors_host.mojo
+@@ -15,7 +15,8 @@ from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sq
+ from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
+ from x_neighbors.ocsvm_host import op_ocsvm
+ from x_neighbors.graph_host import op_louvain
+-from x_neighbors.kapprox_host import kpca_resident_binding
++from x_neighbors.kapprox_host import op_kapprox_sparse_rp
++from x_neighbors.kapprox_host import kpca_resident_binding, sparse_rp_device_binding
+ from x_neighbors.iter_host import lp_fast_resident_binding
+ from x_neighbors.sort_items import purity_flags_binding
+ 
+@@ -1124,6 +1125,18 @@ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
+     return PythonObject(None)
+ 
+ 
++def kapprox_sparse_rp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_res = _a(a_, 0)
++    var v_kc = _n(i_, 0)
++    var v_d = _n(i_, 1)
++    var v_seed = _n(i_, 2)
++    var v_dens = _f(f_, 0)
++    var v_scale = _f(f_, 1)
++    with GILReleased(Python()):
++        op_kapprox_sparse_rp(v_res, v_kc, v_d, v_seed, v_dens, v_scale)
++    return PythonObject(None)
++
++
+ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[sqdist_binding]("xn_sqdist")
+     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
+@@ -1208,6 +1221,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
+     m.def_function[ocsvm_binding]("xn_ocsvm")
+     m.def_function[louvain_binding]("xn_louvain")
++    m.def_function[kapprox_sparse_rp_binding]("xn_kapprox_sparse_rp")
+     m.def_function[eigh_binding]("xn_eigh")
+     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
+     m.def_function[x_neighbors_py2mojo_off_binding]("x_neighbors_py2mojo_off")
+@@ -1247,6 +1261,7 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
++        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))
+diff --git a/python/mojolearn/_expansion_decomp.py b/python/mojolearn/_expansion_decomp.py
+index a34f0cf0e..1daa0c26d 100644
+--- a/python/mojolearn/_expansion_decomp.py
++++ b/python/mojolearn/_expansion_decomp.py
+@@ -1309,14 +1309,35 @@ def _rp_rand(k, r, c, seed, stream, kind, dev):
+     return out
+ 
+ 
++def _sparse_rp_device(mode):
++    """lane/apple-fast-kapprox: whether SparseRandomProjection.fit draws its
++    matrix in one x_neighbors launch and skips the host finiteness pass over
++    X (FAST + Apple, `-D MOJOLEARN_SPARSE_RP_DEVICE`), read back from that
++    binding's compile-time constant (no env read). The binding, or None."""
++    try:
++        b = _backend.binding("_mojolearn_x_neighbors", mode)
++    except Exception:
++        return None
++    fn = getattr(b, "x_neighbors_sparse_rp_device", None)
++    return b if fn is not None and int(fn()) != 0 else None
++
++
+ class _RandomProjection(_Base):
+     """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
+     drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
+     `rand_cell`), not numpy's generator: the same `random_state` gives the
+     same matrix on every box, and a different one than sklearn's."""
+ 
++    def _device_fit(self, X):
++        """lane/apple-fast-kapprox: the FAST + Apple fit of the sparse
++        projection (SparseRandomProjection overrides); None takes main's path."""
++        return None
++
+     def fit(self, X, y=None):
+         self.numeric_mode_ = _mode(self.numeric_mode)
++        got = self._device_fit(X)
++        if got is not None:
++            return got
+         # fit reads only the input's shape and refuses a non-finite input;
+         # the store (a copy of the whole input) is transform's to build
+         # (lane neural-pass27: fit_transform converted the 880 MB input
+@@ -1447,6 +1468,40 @@ class SparseRandomProjection(_RandomProjection):
+         # u < density keeps the signed value, else 0 (select: x > s -> y else z)
+         return k.ew("select", u, _M.zeros(1, 1), sgn, s=dens - 2.0 ** -25)
+ 
++    def _device_fit(self, X):
++        """lane/apple-fast-kapprox (FAST + Apple, -D MOJOLEARN_SPARSE_RP_DEVICE):
++        fit reads the input's shape from its own buffer (no host finiteness
++        pass over every cell: transform's tiled device projection flags a
++        non-finite X, as it does on main) and draws the kc x d matrix in ONE
++        x_neighbors launch (counter-based uniforms of the same law as the
++        kit's four-launch draw, not its Philox words). The matrix comes down
++        once as components_; transform's `_project` uploads it once and
++        keeps it on the device, as main does."""
++        if self.n_components == "auto" or self.compute_inverse_components or _is_sparse(X):
++            return None
++        b = _sparse_rp_device(self.numeric_mode_)
++        if b is None:
++            return None
++        a = as_f32_c(X, ndim=2, name="X")[0]
++        if a.ndim != 2 or min(a.shape) == 0:
++            raise ValueError("X: a nonempty two-dimensional input is required")
++        n, d = a.shape
++        kc = int(self.n_components)
++        if kc <= 0:
++            raise ValueError(f"n_components must be greater than 0, got {kc}")
++        dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
++        if not 0 < dens <= 1:
++            raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
++        self.density_ = dens
++        res = array.array("f", [0.0]) * (kc * d)
++        b.xn_kapprox_sparse_rp([res.buffer_info()[0]], [kc, d, _seed_of(self.random_state) & 0x7FFFFFFF],
++                               [float(dens), math.sqrt(1.0 / dens) / math.sqrt(kc)])
++        self.n_components_ = kc
++        self.n_features_in_ = d
++        self.components_m_ = _M(res, kc, d)
++        self.components_ = Array._owned(array.array("f", res), (kc, d), "<f4", "C")
++        return self
++
+ 
+ # ================================================================ thin SVD
+ def _thin_svd(k, X, nc, u_based=True):
+diff --git a/python/mojolearn/_surface_neighbors.py b/python/mojolearn/_surface_neighbors.py
+index 8f024a338..b37188212 100644
+--- a/python/mojolearn/_surface_neighbors.py
++++ b/python/mojolearn/_surface_neighbors.py
+@@ -116,11 +116,13 @@ FAMILIES = (
+             "xn_kernel_tiled",
+             "xn_ocsvm",
+             "xn_louvain",
++            "xn_kapprox_sparse_rp",
+             "xn_eigh",
+             "x_neighbors_numeric_mode",
+             "x_neighbors_py2mojo_off",
+             "x_neighbors_vendor",
+             "x_neighbors_kpca_resident",
++            "x_neighbors_sparse_rp_device",
+             "x_neighbors_purity_flags",
+             # END GENERATED EXPORTS
+         ),
+diff --git a/x_neighbors/gen.py b/x_neighbors/gen.py
+index 7bf2fa28c..3ef08aba5 100644
+--- a/x_neighbors/gen.py
++++ b/x_neighbors/gen.py
+@@ -346,6 +346,13 @@ OWN_DRIVERS = {
+     "louvain": ("graph_dev", "graph_host",
+                 [("a", "fin", "n * n"), ("labels", "iout", "n"), ("info", "fout", "2"),
+                  ("n", "int"), ("max_level", "int"), ("resolution", "float"), ("threshold", "float")]),
++    # lane/apple-fast-kapprox (2026-10-02): SparseRandomProjection's matrix in
++    # one launch (x_neighbors/kapprox_dev.mojo, FAST + Apple only behind
++    # -D MOJOLEARN_SPARSE_RP_DEVICE; other builds refuse by name). The host
++    # module is the CPU binding's twin of the export.
++    "kapprox_sparse_rp": ("kapprox_dev", "kapprox_host",
++                          [("res", "fout", "kc * d"), ("kc", "int"), ("d", "int"), ("seed", "int"),
++                           ("dens", "float"), ("scale", "float")]),
+ }
+ 
+ 
+@@ -717,7 +724,7 @@ def gpu_binding():
+             + BIND_HEAD % "eigh_device" + "from checks.vendor import COMPILED_VENDOR\n"
+             + f"from x_neighbors.device_ops import {ops}\n"
+             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
+-            + "from x_neighbors.kapprox_dev import kpca_resident_binding\n"
++            + "from x_neighbors.kapprox_dev import kpca_resident_binding, sparse_rp_device_binding\n"
+             + "from x_neighbors.iter_device import lp_fast_resident_binding\n"
+             + "from x_neighbors.sort_items import purity_flags_binding\n"
+             + wrappers() + """
+@@ -735,6 +742,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
++        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_neighbors: ", e))
+@@ -747,7 +755,7 @@ def host_binding():
+             + BIND_HEAD % "eigh" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
+             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
+             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
+-            + "from x_neighbors.kapprox_host import kpca_resident_binding\n"
++            + "from x_neighbors.kapprox_host import kpca_resident_binding, sparse_rp_device_binding\n"
+             + "from x_neighbors.iter_host import lp_fast_resident_binding\n"
+             + "from x_neighbors.sort_items import purity_flags_binding\n"
+             + wrappers() + """
+@@ -786,6 +794,7 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
++        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))
+@@ -804,7 +813,7 @@ if __name__ == "__main__":
+     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
+              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode", "x_neighbors_py2mojo_off",
+                                                                             "x_neighbors_vendor",
+-                                                                            "x_neighbors_kpca_resident",
++                                                                            "x_neighbors_kpca_resident", "x_neighbors_sparse_rp_device",
+                                                                             "x_neighbors_purity_flags"]
+     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
+     surf.write_text(t[:a] + body + t[b:])
+diff --git a/x_neighbors/kapprox_dev.mojo b/x_neighbors/kapprox_dev.mojo
+index 4eaee3147..471018ef3 100644
+--- a/x_neighbors/kapprox_dev.mojo
++++ b/x_neighbors/kapprox_dev.mojo
+@@ -1,19 +1,23 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""lane/apple-fast-kapprox: the KernelPCA resident switch (GPU binding).
++"""lane/apple-fast-kapprox: SparseRandomProjection's device draw and the
++KernelPCA resident switch (GPU binding).
+ 
+-FAST + Apple only, behind `-D MOJOLEARN_KPCA_RESIDENT`; any other build
+-answers 0, and the Python layer asks the binding's constant before taking
+-that path, so IDENTICAL runs main's code. The chi2 samplers' device ops
+-(`-D MOJOLEARN_KAPPROX_DEVICE`) and SparseRandomProjection's one-launch draw
+-(`-D MOJOLEARN_SPARSE_RP_DEVICE`) were DROPPED-quality; their code is on
++FAST + Apple only, behind `-D MOJOLEARN_SPARSE_RP_DEVICE` /
++`-D MOJOLEARN_KPCA_RESIDENT`; any other build exports the same names and
++refuses by name, and the Python layer asks the binding's constants before
++taking these paths, so IDENTICAL runs main's code. The chi2 samplers' device
++ops (`-D MOJOLEARN_KAPPROX_DEVICE`) were DROPPED-quality; their code is on
+ lane/apple-fast-kapprox @ 10d5a7970.
+ """
+ from std.python import PythonObject
+ from std.sys.compile import is_defined
+ from std.sys.info import has_apple_gpu_accelerator
++from max.gpu.host import DeviceBuffer, DeviceContext
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+-
++from x_neighbors.items import FP
++from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK
++from x_neighbors.kapprox_items import kapprox_sparse_rp_item
+ 
+ #: KernelPCA.fit resident on x_decomp's kit (one upload of X; the kernel
+ #: matrix, its centering and the top-k solve never leave the device):
+@@ -25,9 +29,71 @@ comptime XN_KPCA_RESIDENT = (
+     and is_defined["MOJOLEARN_KPCA_RESIDENT"]()
+ )
+ 
++#: SparseRandomProjection.fit: the sparse matrix in one launch
++#: (`op_kapprox_sparse_rp`) and no host finiteness pass over X (transform's
++#: device flag refuses a non-finite X): FAST + Apple +
++#: `-D MOJOLEARN_SPARSE_RP_DEVICE`.
++comptime XN_SPARSE_RP_DEVICE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_SPARSE_RP_DEVICE"]()
++)
++
+ 
+ def kpca_resident_binding() raises -> PythonObject:
+     """1 when KernelPCA.fit takes the resident kit route."""
+     comptime if XN_KPCA_RESIDENT:
+         return PythonObject(1)
+     return PythonObject(0)
++
++
++def sparse_rp_device_binding() raises -> PythonObject:
++    """1 when SparseRandomProjection.fit draws its matrix in one launch here."""
++    comptime if XN_SPARSE_RP_DEVICE:
++        return PythonObject(1)
++    return PythonObject(0)
++
++
++def _refuse() raises:
++    raise Error("x_neighbors: the kapprox device ops are FAST + Apple only (-D MOJOLEARN_SPARSE_RP_DEVICE)")
++
++
++# One plain enqueue_copy per buffer on the lane's stream (graph_dev.mojo's
++# shape): no staged host copy, no host threads.
++def _dev_f(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> DeviceBuffer[DType.float32]:
++    var buf = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
++    if upload and count > 0:
++        ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
++    return buf^
++
++
++def _back_f(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count: Int) raises:
++    if count > 0:
++        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
++
++
++def kapprox_sparse_rp_kernel(res: FP, kc_: Int64, d_: Int64, seed_: Int64, dens_: Float32, scale_: Float32):
++    var kc = Int(kc_)
++    var d = Int(d_)
++    var seed = Int(seed_)
++    var t = _tid()
++    if t < kc * d:
++        kapprox_sparse_rp_item(t, res, kc, d, seed, dens_, scale_)
++
++
++def op_kapprox_sparse_rp(res: Int, kc: Int, d: Int, seed: Int, dens: Float32, scale: Float32) raises:
++    """SparseRandomProjection's kc x d matrix in one launch, one thread per entry."""
++    comptime if not XN_SPARSE_RP_DEVICE:
++        _refuse()
++        return
++    var ctx = xn_ctx()
++    var count = kc * d
++    var d_res = _dev_f(ctx, res, count, False)
++    ctx.enqueue_function[kapprox_sparse_rp_kernel](
++        d_res.unsafe_ptr(), Int64(kc), Int64(d), Int64(seed), dens, scale,
++        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
++    )
++    _back_f(ctx, d_res, res, count)
++    ctx.synchronize()
++    _ = d_res^
++    _ = ctx^
+diff --git a/x_neighbors/kapprox_host.mojo b/x_neighbors/kapprox_host.mojo
+index bda621cb5..781eb3eef 100644
+--- a/x_neighbors/kapprox_host.mojo
++++ b/x_neighbors/kapprox_host.mojo
+@@ -1,10 +1,23 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The host column of x_neighbors/kapprox_dev.mojo: the CPU binding exports the
+-same name. HOST ONLY. The Python layer never takes the resident KernelPCA
+-path on this binding (`x_neighbors_kpca_resident()` is 0 here)."""
++"""The host column of x_neighbors/kapprox_dev.mojo: the same items in a plain
++loop, so the CPU binding exports the same names over the same address
++contract. HOST ONLY. The Python layer never takes the kapprox device path on
++this binding (`x_neighbors_sparse_rp_device()` is 0 here)."""
+ from std.python import PythonObject
++from x_neighbors.items import FP
++from x_neighbors.kapprox_items import kapprox_sparse_rp_item
+ 
+ 
+ def kpca_resident_binding() raises -> PythonObject:
+     return PythonObject(0)
++
++
++def sparse_rp_device_binding() raises -> PythonObject:
++    return PythonObject(0)
++
++
++def op_kapprox_sparse_rp(res: Int, kc: Int, d: Int, seed: Int, dens: Float32, scale: Float32) raises:
++    var p_res = FP(unsafe_from_address=res)
++    for t in range(kc * d):
++        kapprox_sparse_rp_item(t, p_res, kc, d, seed, dens, scale)
+diff --git a/x_neighbors/kapprox_items.mojo b/x_neighbors/kapprox_items.mojo
+new file mode 100644
+index 000000000..fd67ae8f7
+--- /dev/null
++++ b/x_neighbors/kapprox_items.mojo
+@@ -0,0 +1,54 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""lane/apple-fast-kapprox (2026-10-02): SparseRandomProjection's device item.
++
++  * `kapprox_sparse_rp_item`: one entry of the projection matrix from two
++    counter-based uniforms (`kapprox_uniform`), one thread per entry.
++
++The chi2 samplers' items (check, additive map, skewed fit and log) were
++DROPPED-quality with `-D MOJOLEARN_KAPPROX_DEVICE`; their code is on
++lane/apple-fast-kapprox @ 10d5a7970. FAST + Apple only
++(x_neighbors/kapprox_dev.mojo, `-D MOJOLEARN_SPARSE_RP_DEVICE`). Same
++spellings as x_neighbors/items.mojo; no float64 (Apple GPUs have none).
++"""
++from checks.numerics import ftz, identical_mul
++from x_neighbors.items import FP, _add
++
++#: 2^-24: the top 24 bits of a hash, plus a half, scaled into (0, 1).
++comptime KAPPROX_U24_F32 = Float32(5.9604644775390625e-08)
++
++
++@always_inline
++def _mix32(v: UInt32) -> UInt32:
++    """lowbias32: a 32-bit integer bijection (xorshift-multiply, two rounds)."""
++    var h = v
++    h = h ^ (h >> 16)
++    h = h * UInt32(0x7FEB352D)
++    h = h ^ (h >> 15)
++    h = h * UInt32(0x846CA68B)
++    h = h ^ (h >> 16)
++    return h
++
++
++@always_inline
++def kapprox_uniform(seed: UInt32, t: Int) -> Float32:
++    """Draw t of stream `seed`, a uniform in the OPEN interval (0, 1): the
++    top 24 bits of a counter hash plus one half, times 2^-24. Neither 0 nor 1
++    occurs, so tan(pi/2 u) is finite and positive and its log is finite."""
++    var h = _mix32(_mix32(seed) ^ UInt32(t))
++    h = _mix32(h + UInt32(0x9E3779B9))
++    var top = (h >> 8).cast[DType.float32]()
++    return ftz(identical_mul(_add(top, Float32(0.5)), KAPPROX_U24_F32))
++
++
++def kapprox_sparse_rp_item(t: Int, res: FP, kc: Int, d: Int, seed: Int, dens: Float32, scale: Float32):
++    """Entry t of SparseRandomProjection's kc x d matrix (Achlioptas / Li):
++    +-scale with probability dens / 2 each, else 0, from two counter-based
++    uniforms of stream `seed` (one for the keep test, one for the sign). One
++    launch, no host draw; FAST only (IDENTICAL keeps x_decomp's Philox words)."""
++    var keep = kapprox_uniform(UInt32(seed), t)
++    var sgn = kapprox_uniform(UInt32(seed) ^ UInt32(0x9E3779B9), t)
++    var v = Float32(0)
++    if keep < dens:
++        v = -scale if sgn < Float32(0.5) else scale
++    res.unsafe_store(t, v)

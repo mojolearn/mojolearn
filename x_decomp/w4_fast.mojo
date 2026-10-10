@@ -58,7 +58,7 @@ from x_decomp.resident import _id, _n, _ptr
 #: taxi 1783.8 -> 1039.0 ms, but trustworthiness_k15 0.8662 -> 0.8410 vs FAST
 #: main (arm A) is a real drop, not noise, so default OFF (FAST quality must
 #: not go down vs FAST main and must match the best opponent).
-#: 2026-10-05 re-check with LLE_FAST_NULL_CANON (M3 rab14, 1 run per arm), DEV_LU + CANON vs FAST main:
+#: 2026-10-05 re-check with LLE_FAST_NULL_CANON (deleted 2026-10-09; M3 rab14, 1 run per arm), DEV_LU + CANON vs FAST main:
 #:   lle istella 1803.9 -> 1048.9 ms (-41.9%), trustworthiness_k15 0.8851 -> 0.8615 (-2.7%, consistent across runs);
 #:   lle taxi    1745.1 ->  968.0 ms (-44.5%), trustworthiness_k15 0.8105 -> 0.8420 (arm A itself ranges 0.81-0.87 run to run).
 #:   sklearn-cpu trustworthiness: istella 0.8491, taxi 0.7708, so DEV_LU stays above the opponent on both.
@@ -68,32 +68,9 @@ comptime LLE_FAST_DEV_LU = (
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_LLE_FAST_DEV_LU"]()
 )
-#: lane/apple-fast-s-shap (2026-10-04), READY-AB, opt-in
-#: (`-D MOJOLEARN_LLE_FAST_NULL_CANON`, FAST + Apple): a canonical answer when
-#: LLE's null space is wider than n_components. Why LLE_FAST_DEV_LU moved
-#: trustworthiness: taxi's kNN graph has several components (near-duplicate
-#: rows), so F^'s numerical null space N has more than nc dimensions and ANY
-#: nc of them is a correct answer (`_LLE_NULL_FLOOR`). Inside N the
-#: shift-invert operator's values are 1 / sigma^2 of float32 rounding noise,
-#: so WHICH nc directions the iteration settles on is decided by the LU's
-#: last-bit rounding: a rounding-level LU change (LU_FAST_MMA's sum order,
-#: the device LU's words, the trisolve order) re-draws the embedding. That
-#: is how FAST main itself went 0.826 (scalar LU, digest 68a3bf15) -> 0.866
-#: (MMA LU, 75f6322f) and DEV_LU 0.841 (45185107): three draws, not three
-#: precisions (w4q-v1 on non-degenerate 3,000-row fixtures: trust |A - B|
-#: 1.3e-5, angle 2.9e-5 rad). With this on, once the wanted Ritz values are
-#: under the floor, `_lle_smallest` takes ALL of N (every Ritz value under
-#: the floor, p widened when every column is null) and returns the nc
-#: directions of N along which the input data varies most (top left singular
-#: vectors of V_N^T X): a function of N and X only, the same on any LU.
-#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
-#: verdicts batch 6): lle trustworthiness down on both datasets. DROPPED:
-#: stays off (opt-in only).
-comptime LLE_FAST_NULL_CANON = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_LLE_FAST_NULL_CANON"]()
-)
+# TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: a canonical LLE answer when the null space is wider than n_components (all of N, then its nc directions of most data variance); trustworthiness down on lle taxi and istella (verdicts batch 6).
+# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
 #: FAST Apple default, measured source e9d72edb5 (2026-10-04).
 #: M3 afc_ab_def, full board size, 1 run per arm: randomized-svd istella
 #: 517.3 -> 501.3 ms, taxi 200.8 -> 198.5 ms; relative_reconstruction_error
@@ -126,15 +103,13 @@ comptime RSVD_IDN_DIRECT_IN = (
 
 def w4_flags_py() raises -> PythonObject:
     """Which w4 candidates this build compiled in (bit 1 LLE_FAST_DEV_LU,
-    bit 2 RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN, bit 4
-    LLE_FAST_NULL_CANON)."""
+    bit 2 RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN; bit 4, LLE_FAST_NULL_CANON,
+    was deleted 2026-10-09)."""
     var f = 0
     comptime if LLE_FAST_DEV_LU:
         f |= 1
     comptime if RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN:
         f |= 2
-    comptime if LLE_FAST_NULL_CANON:
-        f |= 4
     return PythonObject(f)
 
 

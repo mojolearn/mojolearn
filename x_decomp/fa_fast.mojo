@@ -4,8 +4,8 @@
 main 2026-10-04 by lane/apple-fast-rec-fa-robust, every define default OFF and
 READY-AB): FactorAnalysis's fit and transform on device-resident operands.
 The recovery keeps main's two-pass mean and its cancellation-free psi update
-(lane/apple-fast-quality-glmfa) on these routes; EIG_SMALL, LIVEBUF and
-LL_DEVICE each turn ITER_DEVICE on. NOT an IDENTICAL path: the binding
+(lane/apple-fast-quality-glmfa) on these routes; LIVEBUF turns
+ITER_DEVICE on. NOT an IDENTICAL path: the binding
 registers these entries only under `FA_FAST_APPLE` (a FAST build for the
 Apple GPU), each route only when its `-D MOJOLEARN_FA_<NAME>` define is set
 (read with `is_defined`, never an env read), and python/mojolearn/
@@ -33,22 +33,11 @@ defines (docs/apple-fast/ab/fa.md):
   uses), `fa_finish_kernel` (W, the psi update, the 2 d log terms) and ONE
   readback of 2 d + 4 floats; the log-likelihood is summed in float64 on the
   host in main's order and the tol test is main's. Implies GRAM_ONCE's pass.
-- MOJOLEARN_FA_EIG_SMALL: `fa_rr_eigh_block_kernel`, the eigh of the d x d
-  (d <= FA_MAX_D) as ONE launch of one threadgroup: the same round-robin
-  rounds, cells (x_decomp/rr.mojo) and per-sweep test as main's grid eigh,
-  every round behind `dev_barrier`, in place of 2 (d - 1) launches and a
-  sync per sweep. Takes effect inside ITER_DEVICE's loop.
 - MOJOLEARN_FA_LIVEBUF: ITER_DEVICE's scratch as one arena buffer (one live
   Metal buffer instead of ~12) and W + psi read back in one copy.
-- MOJOLEARN_FA_LL_DEVICE: ITER_DEVICE's convergence test on the device:
-  `fa_finish_kernel` sums the 2 d terms in double-float float32 (Metal has
-  no float64), tests (ll - old_ll) < tol itself and sets a flag every kernel
-  after it checks at entry (the loop freezes at convergence); the host reads
-  the flag every FA_LL_STRIDE iterations, the ll pairs once at the end.
 - MOJOLEARN_FA_TRANSFORM_FUSED: `fa_transform_kernel`, transform as one
   launch over rows with P = (W / psi)^T cov_z (d x nc) and the mean in
   threadgroup memory, one row per thread, the n x nc result read back once.
-- MOJOLEARN_FA_ALL: every define above.
 - (QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) every ITER_DEVICE
   arm forms G in double-float (`fa_gram_tile_df_kernel`), factors it once
   (`fa_chol_df_kernel`, R^T R = G) and takes main's one-sided SVD of
@@ -103,21 +92,9 @@ from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
 
 #: the guard of every route in this file: a FAST build for the Apple GPU
 comptime FA_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-#: (FAST + Apple, default OFF) every FA define below at once. Source
-#: lane/apple-fast-fa@3efbce2af; built rc=0 there, never timed as one arm.
-#: Recovered 2026-10-04 (lane/apple-fast-rec-fa-robust): READY-AB.
-#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
-#: apple-fast-rec-ab3 @ 0ca521cc5): FA_GRAM_ONCE, FA_ITER_DEVICE and FA_ALL each:
-#: factor-analysis istella 10.4 s -> 1.95-2.0 s (GRAM, ITER; ALL 9.54 s) but
-#: mean_log_likelihood 99.487 -> 92.898 (worse); taxi -14.82365 -> -14.82371
-#: (noise) at 358 -> 30.4 ms (ALL), 192 ms (ITER), 325 ms (GRAM).
-#: HOLD-quality: all stay off; a fix lane is working on the istella loss.
-#: OUTCOME 2 (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
-#: rab6-faqfix, with the FA_GRAM_DF fix): FA_ALL istella 10300.9 -> 20530.8 ms
-#: (+99.3%, slower; mean_log_likelihood 99.487208 -> 99.487246), taxi 345.1 ->
-#: 34.2 ms. DROPPED-slower on istella: FA_ALL stays OFF. FA_ITER_DEVICE alone
-#: (with FA_GRAM_DF) is the FAST + Apple default, below.
-comptime FA_ALL = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_ALL"]()
+# TOMBSTONE: MOJOLEARN_FA_ALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: every FA define at once; factor-analysis istella 10300.9 -> 20530.8 ms (+99.3%, rab6-faqfix), quality noise.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_ALL.patch; record in docs/TOMBSTONES.md.
 #: (FAST + Apple, default OFF) FactorAnalysis.fit forms the centred Gram G
 #: (d x d) in ONE tiled pass over the resident X (`fa_gram_tile_kernel` +
 #: `fa_gram_fold_kernel`), and the Python EM loop takes the eigh of D G D / n
@@ -130,7 +107,7 @@ comptime FA_ALL = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_ALL"]()
 #: var - colsum(W^2), whose float32 floor near var * 1e-7 cost Istella's
 #: held-out log-likelihood. Quality risk: G squares the condition number the
 #: QR route sees; the A/B's quality check decides.
-comptime FA_GRAM_ONCE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_GRAM_ONCE"]() or FA_ALL)
+comptime FA_GRAM_ONCE = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_GRAM_ONCE"]()
 #: (FAST + Apple, default ON since 2026-10-04; implies GRAM_ONCE's pass) the whole EM loop as
 #: ONE binding call on the resident G (`fa_em_py`): per iteration
 #: `fa_scale_kernel`, main's round-robin eigh, `fa_finish_kernel` (order, sign,
@@ -140,8 +117,8 @@ comptime FA_GRAM_ONCE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_GRAM_ONCE"](
 #: LIVEBUF), istella about 1253 ms against board 308 / 10351: the largest
 #: classical lead found, never recorded. Recovery fix: psi update in
 #: `fa_finish_kernel` is main's cancellation-free form (see GRAM_ONCE).
-#: EIG_SMALL, LIVEBUF and LL_DEVICE act only inside this loop, so each of
-#: them turns it on (a lone define never builds a no-op arm).
+#: LIVEBUF acts only inside this loop, so it
+#: turns it on (a lone define never builds a no-op arm).
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
 #: rab7-faiterfix, with the double-float Gram FA_GRAM_DF of lane/apple-fast-
 #: fa-quality): factor-analysis istella 10299.65 -> 5636.55 ms (-45.3%),
@@ -150,37 +127,22 @@ comptime FA_GRAM_ONCE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_GRAM_ONCE"](
 #: -14.823710 (noise). KEEP: the FAST + Apple default since then (FA_GRAM_DF
 #: with it, since FA_GRAM_DF follows FA_ITER_DEVICE); rollback
 #: -D MOJOLEARN_FA_ITER_DEVICE_OFF (the old -D name is harmless; the
-#: EIG_SMALL, LIVEBUF, LL_DEVICE and FA_ALL arms still turn it on).
+#: LIVEBUF arm still turns it on).
 comptime FA_ITER_DEVICE = FA_FAST_APPLE and (
     not is_defined["MOJOLEARN_FA_ITER_DEVICE_OFF"]()
-    or is_defined["MOJOLEARN_FA_EIG_SMALL"]()
     or is_defined["MOJOLEARN_FA_LIVEBUF"]()
-    or is_defined["MOJOLEARN_FA_LL_DEVICE"]()
-    or FA_ALL
 )
-#: (FAST + Apple, default OFF; implies ITER_DEVICE) the d x d eigh inside the
-#: loop as ONE launch of one threadgroup (`fa_rr_eigh_block_kernel`): main's
-#: round-robin rounds, cells and per-sweep test, every round behind
-#: `dev_barrier`, in place of 2 (d - 1) launches and a host sync per sweep.
-#: d <= FA_MAX_D (one row per lane of the 256-lane threadgroup). Source
-#: lane/apple-fast-fa@3efbce2af. Prior M3 B arms (EIG_SMALL + ITER_DEVICE):
-#: taxi 39.5 ms, istella 5884 ms against board 308 / 10351 (istella slower
-#: than ITER_DEVICE alone: one threadgroup on a 220 x 220 eigh). No failure.
-comptime FA_EIG_SMALL = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_EIG_SMALL"]() or FA_ALL)
+# TOMBSTONE: MOJOLEARN_FA_EIG_SMALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the FA EM loop's d x d eigh / SVD as ONE launch of one threadgroup (fa_rr_eigh_block_kernel, fa_rs_svd_block_kernel); in FA_ALL istella 10300.9 -> 20530.8 ms (+99.3%).
+# Restore: git apply experiments/removed/MOJOLEARN_FA_EIG_SMALL.patch; record in docs/TOMBSTONES.md.
 #: (FAST + Apple, default OFF; implies ITER_DEVICE) the loop's scratch as one
 #: arena buffer (one live Metal buffer instead of ~14) and W + psi read back
 #: in one copy. Source lane/apple-fast-fa@3efbce2af. Prior M3 B arms
 #: (ITER_DEVICE + LIVEBUF): istella 1258 ms, taxi 168.7 ms. No failure.
-comptime FA_LIVEBUF = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_LIVEBUF"]() or FA_ALL)
-#: (FAST + Apple, default OFF; implies ITER_DEVICE) the convergence test on
-#: the device: `fa_finish_kernel` sums the 2 d terms in double-float float32
-#: (Metal has no float64), tests (ll - old_ll) < tol and sets a flag every
-#: later kernel checks at entry; the host reads the flag every FA_LL_STRIDE
-#: iterations. Source lane/apple-fast-fa@3efbce2af. Prior M3 B arms
-#: (EIG_SMALL + ITER_DEVICE + LL_DEVICE): taxi 30.2 ms, istella 5879 ms.
-#: The test may stop one iteration away from the float64 host test when a
-#: step sits within double-float error of tol; the quality check decides.
-comptime FA_LL_DEVICE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_LL_DEVICE"]() or FA_ALL)
+comptime FA_LIVEBUF = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LIVEBUF"]()
+# TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the FA EM convergence test on the device (double-float ll sum in fa_finish_kernel, a flag read every 4 iterations); only timed with EIG_SMALL (FA_ALL istella +99.3%), alone never timed.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
 #: (FAST + Apple, default OFF; RECORD rab7-fatransform 2026-10-04: istella
 #: 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical: stays off)
 #: FactorAnalysis.transform as one launch over
@@ -191,10 +153,9 @@ comptime FA_LL_DEVICE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_LL_DEVICE"](
 #: threadgroup page, checked against the column's page). Source
 #: lane/apple-fast-fa@3efbce2af. Prior M3 B arms: istella 6201 ms, taxi
 #: 243 ms against board 10351 / 308 (whole fit + transform lane). No failure.
-comptime FA_TRANSFORM_FUSED = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_TRANSFORM_FUSED"]() or FA_ALL)
+comptime FA_TRANSFORM_FUSED = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_TRANSFORM_FUSED"]()
 #: (FAST + Apple, QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) the
-#: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm (FA_ALL among
-#: them) takes it unless -D MOJOLEARN_FA_GRAM_QOLD keeps the float32 route.
+#: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm takes it unless -D MOJOLEARN_FA_GRAM_QOLD keeps the float32 route.
 #: Cause: the float32 Gram + float32 eigh of D G D / n resolve B = D G D / n
 #: only to eps ||B||, but the psi of a column the factors explain sits at
 #: relative psi_j / var_j (1e-8 on Istella) of B_jj; FA_ALL's Istella held-out
@@ -209,9 +170,8 @@ comptime FA_TRANSFORM_FUSED = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_TRANSF
 #:      float32 resolution), R^T rounded to float32;
 #:   3. per iteration main's spectral route on that R: the one-sided
 #:      round-robin Jacobi SVD of R D / sqrt(n) (x_decomp/rr_svd.mojo cells,
-#:      relative rotation test X_DECOMP_SVD_TOL), one threadgroup
-#:      (`fa_rs_svd_block_kernel`, with EIG_SMALL) or one launch a round
-#:      (`rs_round_kernel`, main's grid kernel, without). The SVD sees sqrt(B):
+#:      relative rotation test X_DECOMP_SVD_TOL), one launch a round
+#:      (`rs_round_kernel`, main's grid kernel). The SVD sees sqrt(B):
 #:      the residual it must resolve is sqrt(psi / var) ~ 1e-4 >> eps.
 #: float32 numpy model (~/mojolearn-evidence/fa-quality/fa_model.py, results
 #: beside it): see docs/apple-fast/EXPERIMENTS.md `FA_GRAM_DF`.
@@ -228,8 +188,6 @@ comptime FA_MAX_D = 256
 #: threads of the one-threadgroup kernels (= RR_OFF_TPB: the convergence
 #: test's fold keeps main's lane partition and tree)
 comptime FA_TPB = 256
-#: iterations between two reads of the device convergence flag (LL_DEVICE)
-comptime FA_LL_STRIDE = 4
 #: sklearn's SMALL and the kit's log floor (FLT_MIN), as FactorAnalysis.fit
 comptime FA_SMALL = Float32(1.0e-12)
 comptime FA_TINY = Float32(1.1754943508222875e-38)
@@ -647,88 +605,9 @@ def fa_scale_kernel(g: F32Ptr, psi: F32Ptr, b: F32Ptr, sp: F32Ptr, flag: F32Ptr,
             sp.unsafe_store(i, spi)
 
 
-def fa_rr_eigh_block_kernel(
-    a: F32Ptr, v: F32Ptr, cs: F32Ptr, stat: F32Ptr, flag: F32Ptr, d_in: Int32, dm_in: Int32, sweeps_in: Int32, tol: Float32
-):
-    """The round-robin two-sided Jacobi of x_decomp/rr.mojo as one launch of
-    one threadgroup (FA_TPB lanes) for d <= FA_MAX_D: V = I; before every
-    sweep the convergence test (`rr_row_off` one row per lane, the RR_OFF_TPB
-    tree, `rr_converged`: the words of `_eigh_par_test` for one block); each
-    round `rr_cs` for its dm / 2 pairs, `dev_barrier`, `rr_block` over the
-    blocks (i <= j) and `rr_vrow` over V's (row, pair) cells, `dev_barrier`.
-    The eigenvalues are a's diagonal (unordered), eigenvector i column i of v
-    (unsigned). stat = (converged, sweeps run, off, fro). A set convergence
-    flag (LL_DEVICE) makes the launch a no-op."""
-    if flag.unsafe_load(0) != Float32(0.0):
-        return
-    var d = Int(d_in)
-    var dm = Int(dm_in)
-    var h = dm // 2
-    var tid = Int(thread_idx.x)
-    var so = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var sd = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    for t in range(tid, d * d, FA_TPB):
-        var i = t // d
-        var j = t - i * d
-        v.unsafe_store(t, Float32(1.0) if i == j else Float32(0.0))
-    dev_barrier()
-    var converged = False
-    var executed = 0
-    var fro_in = Float32(-1.0)
-    var fro_now = Float32(0.0)
-    var off_last = Float32(0.0)
-    var budget = Int(sweeps_in)
-    for sweep in range(budget + 1):
-        var o = SIMD[DType.float32, 2](0.0, 0.0)
-        if tid < d:
-            o = rr_row_off(a, d, tid)
-        so[tid] = o[0]
-        sd[tid] = o[1]
-        barrier()
-        var w = RR_OFF_TPB // 2
-        while w > 0:
-            if tid < w:
-                so[tid] = ftz(so[tid] + so[tid + w])
-                sd[tid] = ftz(sd[tid] + sd[tid + w])
-            barrier()
-            w = w // 2
-        var off = so[0]
-        var dg = sd[0]
-        barrier()
-        off_last = off
-        fro_now = ftz(off + dg)
-        if fro_in < Float32(0.0):
-            fro_in = fro_now
-        if rr_converged(off, dg, tol):
-            converged = True
-            break
-        if sweep == budget:
-            break
-        executed += 1
-        for rd in range(dm - 1):
-            if tid < h:
-                var got = rr_cs(a, d, dm, rd, tid)
-                cs.unsafe_store(2 * tid, got[0])
-                cs.unsafe_store(2 * tid + 1, got[1])
-            dev_barrier()
-            for t in range(tid, h * h + d * h, FA_TPB):
-                if t < h * h:
-                    var i = t // h
-                    var j = t - i * h
-                    if i <= j:
-                        rr_block(a, cs, d, dm, rd, i, j)
-                else:
-                    var u = t - h * h
-                    var k = u // h
-                    rr_vrow(v, cs, d, dm, rd, k, u - k * h)
-            dev_barrier()
-    if converged and not rr_fro_kept(fro_in, fro_now):
-        converged = False
-    if tid == 0:
-        stat.unsafe_store(0, Float32(1.0) if converged else Float32(0.0))
-        stat.unsafe_store(1, Float32(executed))
-        stat.unsafe_store(2, off_last)
-        stat.unsafe_store(3, fro_now)
+# TOMBSTONE: MOJOLEARN_FA_EIG_SMALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: fa_rr_eigh_block_kernel (the eigh as one threadgroup launch).
+# Restore: git apply experiments/removed/MOJOLEARN_FA_EIG_SMALL.patch; record in docs/TOMBSTONES.md.
 
 
 def fa_svd_scale_kernel(
@@ -751,118 +630,9 @@ def fa_svd_scale_kernel(
             sp.unsafe_store(p, spp)
 
 
-def fa_rs_svd_block_kernel(
-    rt: F32Ptr, vt: F32Ptr, s: F32Ptr, stat: F32Ptr, flag: F32Ptr, d_in: Int32, dm_in: Int32, sweeps_in: Int32,
-    tol: Float32,
-):
-    """FA_GRAM_DF + EIG_SMALL: main's one-sided round-robin Jacobi SVD
-    (x_decomp/rr_svd.mojo: `rs_pair`, `rs_decide`, the `rr_sub` / `rr_add`
-    rotation) of C = rt^T as ONE launch of one threadgroup (FA_TPB lanes,
-    d <= FA_MAX_D): vt = I; each round lanes 2b and 2b + 1 fold pair b's
-    (||c_p||^2, ||c_q||^2, c_p . c_q) over alternate rows, lane 2b decides,
-    then every lane rotates (pair, row) cells of rt and vt, `dev_barrier`; a
-    sweep with no rotation is converged. s = the rows' norms (singular values,
-    unordered), right vector p = row p of vt. stat = (converged, sweeps run,
-    0, 0). A set convergence flag (LL_DEVICE) makes the launch a no-op."""
-    if flag.unsafe_load(0) != Float32(0.0):
-        return
-    var d = Int(d_in)
-    var dm = Int(dm_in)
-    var h = dm // 2
-    var tid = Int(thread_idx.x)
-    var s3 = stack_allocation[3 * FA_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var csb = stack_allocation[FA_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var pqb = stack_allocation[FA_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var rot = stack_allocation[FA_TPB // 2, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var anyb = stack_allocation[1, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    for t in range(tid, d * d, FA_TPB):
-        var i = t // d
-        var j = t - i * d
-        vt.unsafe_store(t, Float32(1.0) if i == j else Float32(0.0))
-    var converged = d < 2
-    var executed = 0
-    var budget = Int(sweeps_in)
-    while not converged and executed < budget:
-        executed += 1
-        if tid == 0:
-            anyb[0] = Int32(0)
-        dev_barrier()
-        for rd in range(dm - 1):
-            var b = tid // 2
-            var half = tid - 2 * b
-            var pp = Float32(0.0)
-            var qq = Float32(0.0)
-            var pq = Float32(0.0)
-            var p = 0
-            var q = d
-            if b < h:
-                var pr = rs_pair(rd, b, dm)
-                p = pr[0]
-                q = pr[1]
-                if q < d:
-                    var i = half
-                    while i < d:
-                        var xp = rt.unsafe_load(p * d + i)
-                        var xq = rt.unsafe_load(q * d + i)
-                        pp = identical_mul_add(xp, xp, pp)
-                        qq = identical_mul_add(xq, xq, qq)
-                        pq = identical_mul_add(xp, xq, pq)
-                        i += 2
-            s3[3 * tid] = pp
-            s3[3 * tid + 1] = qq
-            s3[3 * tid + 2] = pq
-            barrier()
-            if half == 0 and b < h:
-                var r = Int32(0)
-                var c = Float32(1.0)
-                var sn = Float32(0.0)
-                if q < d:
-                    var dec = rs_decide(
-                        s3[3 * tid] + s3[3 * tid + 3], s3[3 * tid + 1] + s3[3 * tid + 4],
-                        s3[3 * tid + 2] + s3[3 * tid + 5], tol,
-                    )
-                    if dec[0] > Float32(0.0):
-                        r = Int32(1)
-                        c = dec[1]
-                        sn = dec[2]
-                        anyb[0] = Int32(1)
-                rot[b] = r
-                csb[2 * b] = c
-                csb[2 * b + 1] = sn
-                pqb[2 * b] = Int32(p)
-                pqb[2 * b + 1] = Int32(q)
-            barrier()
-            for t in range(tid, h * d, FA_TPB):
-                var bb = t // d
-                if rot[bb] != Int32(0):
-                    var i = t - bb * d
-                    var pp2 = Int(pqb[2 * bb])
-                    var qq2 = Int(pqb[2 * bb + 1])
-                    var c = csb[2 * bb]
-                    var sn = csb[2 * bb + 1]
-                    var xp = rt.unsafe_load(pp2 * d + i)
-                    var xq = rt.unsafe_load(qq2 * d + i)
-                    rt.unsafe_store(pp2 * d + i, rr_sub(c, xp, sn, xq))
-                    rt.unsafe_store(qq2 * d + i, rr_add(sn, xp, c, xq))
-                    var vp = vt.unsafe_load(pp2 * d + i)
-                    var vq = vt.unsafe_load(qq2 * d + i)
-                    vt.unsafe_store(pp2 * d + i, rr_sub(c, vp, sn, vq))
-                    vt.unsafe_store(qq2 * d + i, rr_add(sn, vp, c, vq))
-            dev_barrier()
-        if anyb[0] == Int32(0):
-            converged = True
-        dev_barrier()
-    if tid < d:
-        var acc = Float32(0.0)
-        for i in range(d):
-            var x = rt.unsafe_load(tid * d + i)
-            acc = identical_mul_add(x, x, acc)
-        s.unsafe_store(tid, identical_sqrt(acc))
-    if tid == 0:
-        stat.unsafe_store(0, Float32(1.0) if converged else Float32(0.0))
-        stat.unsafe_store(1, Float32(executed))
-        stat.unsafe_store(2, Float32(0.0))
-        stat.unsafe_store(3, Float32(0.0))
+# TOMBSTONE: MOJOLEARN_FA_EIG_SMALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: fa_rs_svd_block_kernel (the FA_GRAM_DF SVD as one threadgroup launch).
+# Restore: git apply experiments/removed/MOJOLEARN_FA_EIG_SMALL.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -885,16 +655,7 @@ def _fa_v[SVD: Bool](v: F32Ptr, d: Int, i: Int, col: Int) -> Float32:
         return v.unsafe_load(i * d + col)
 
 
-@always_inline
-def _two_sum(a: Float32, b: Float32) -> SIMD[DType.float32, 2]:
-    """(a + b rounded, its rounding error): Knuth's TwoSum, adds only."""
-    var s = a + b
-    var bb = s - a
-    var e = (a - (s - bb)) + (b - bb)
-    return SIMD[DType.float32, 2](s, e)
-
-
-def fa_finish_kernel[LL: Bool, SVD: Bool = False](
+def fa_finish_kernel[SVD: Bool = False](
     a: F32Ptr, v: F32Ptr, sp: F32Ptr, psi: F32Ptr, w: F32Ptr, psi_new: F32Ptr, small: F32Ptr,
     stat: F32Ptr, llst: F32Ptr, llrec: F32Ptr, d_in: Int32, nc_in: Int32, it_in: Int32, half_n: Float32, tol: Float32,
 ):
@@ -909,10 +670,8 @@ def fa_finish_kernel[LL: Bool, SVD: Bool = False](
     nonnegative terms here), and small = [log(max(s2_j, FLT_MIN)) for
     j < nc | s2_j for nc <= j < d | log(max(psi_i, FLT_MIN)) | stat]: the
     terms of main's log-likelihood, which the host sums in float64.
-    LL: the sum in double-float float32 here (TwoSum, the same sequential
-    order), llrec[2 it, 2 it + 1] = (hi, lo), and the test
-    -(n / 2) (S - S_prev) < tol sets llst[0] = 1 and llst[1] = it + 1 (every
-    later launch is a no-op). llst = [flag, it_conv, S_hi_prev, S_lo_prev].
+    llst[0] (always zero since the device test went) and llrec are kept in
+    the signature only.
     SVD (FA_GRAM_DF): a = the d singular values of R D / sqrt(n) (s2 their
     squares) and v = V^T (vector p in row p), `_fa_ev` / `_fa_v`."""
     if llst.unsafe_load(0) != Float32(0.0):
@@ -982,32 +741,9 @@ def fa_finish_kernel[LL: Bool, SVD: Bool = False](
         small.unsafe_store(2 * d + 1, stat.unsafe_load(1))
         small.unsafe_store(2 * d + 2, stat.unsafe_load(2))
         small.unsafe_store(2 * d + 3, stat.unsafe_load(3))
-    comptime if LL:
-        dev_barrier()
-        if tid == 0:
-            var hi = Float32(0.0)
-            var lo = Float32(0.0)
-            var dd2 = 2 * d
-            for k in range(dd2):
-                var ts = _two_sum(hi, small.unsafe_load(k))
-                hi = ts[0]
-                lo = lo + ts[1]
-            var it = Int(it_in)
-            llrec.unsafe_store(2 * it, hi)
-            llrec.unsafe_store(2 * it + 1, lo)
-            # an unconverged eigh stops the loop at once (the host raises)
-            var stop = stat.unsafe_load(0) == Float32(0.0)
-            if it > 0:
-                var dh = hi - llst.unsafe_load(2)
-                var dl = lo - llst.unsafe_load(3)
-                var step = -half_n * (dh + dl)
-                if step < tol:
-                    stop = True
-            if stop:
-                llst.unsafe_store(0, Float32(1.0))
-                llst.unsafe_store(1, Float32(it + 1))
-            llst.unsafe_store(2, hi)
-            llst.unsafe_store(3, lo)
+    # TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: the double-float ll sum and the device tol test here.
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -1131,7 +867,7 @@ def _fa_svd_grid(
     ctx: DeviceContext, mem: _FaMem, s_rt: Int, s_vt: Int, s_s: Int, s_flags: Int,
     mut hflags: HostBuffer[DType.float32], d: Int, s_es: Int,
 ) raises -> SIMD[DType.float32, 4]:
-    """FA_GRAM_DF without EIG_SMALL: main's `DevExec.svd_cells` rounds on the
+    """FA_GRAM_DF: main's `DevExec.svd_cells` rounds on the
     loop's pointers (one `rs_round_kernel` launch a round, a pair a block,
     the pair flags read once per sweep; a sweep with no rotation is
     converged), then `rs_norm_kernel`. Returns (converged, sweeps run, 0, 0)."""
@@ -1269,7 +1005,6 @@ def fa_em_py(
     var tol32 = Float32(tol64)
     var old_ll = Float64.MIN_FINITE
     var it = 0
-    var stopped = False
     var cur = s_pa
     var nxt = s_pb
     var i = 0
@@ -1282,15 +1017,9 @@ def fa_em_py(
                 mem.ptr(s_r0), mem.ptr(cur), mem.ptr(s_b), mem.ptr(s_sp), pllst, Int32(d), inv_sqrt_n,
                 grid_dim=_blocks(d * d), block_dim=TPB,
             )
-            comptime if FA_EIG_SMALL:
-                ctx.enqueue_function[fa_rs_svd_block_kernel](
-                    mem.ptr(s_b), mem.ptr(s_v), mem.ptr(s_s), pstat, pllst, Int32(d), Int32(dm),
-                    Int32(X_DECOMP_SVD_SWEEPS), X_DECOMP_SVD_TOL, grid_dim=1, block_dim=FA_TPB,
-                )
-            else:
-                est = _fa_svd_grid(ctx, mem, s_b, s_v, s_s, s_flags, hflags, d, s_es)
-                _fa_check_eigh(est[0], est[1], est[2], est[3], d)
-            ctx.enqueue_function[fa_finish_kernel[FA_LL_DEVICE, True]](
+            est = _fa_svd_grid(ctx, mem, s_b, s_v, s_s, s_flags, hflags, d, s_es)
+            _fa_check_eigh(est[0], est[1], est[2], est[3], d)
+            ctx.enqueue_function[fa_finish_kernel[True]](
                 mem.ptr(s_s), mem.ptr(s_v), mem.ptr(s_sp), mem.ptr(cur), mem.ptr(s_w), mem.ptr(nxt),
                 mem.ptr(s_small), pstat, pllst, pllrec, Int32(d), Int32(nc), Int32(i), half_n, tol32,
                 grid_dim=1, block_dim=FA_TPB,
@@ -1299,93 +1028,47 @@ def fa_em_py(
             ctx.enqueue_function[fa_scale_kernel](
                 pg, mem.ptr(cur), mem.ptr(s_b), mem.ptr(s_sp), pllst, Int32(d), inv_n, grid_dim=_blocks(d * d), block_dim=TPB
             )
-            comptime if FA_EIG_SMALL:
-                ctx.enqueue_function[fa_rr_eigh_block_kernel](
-                    mem.ptr(s_b), mem.ptr(s_v), mem.ptr(s_cs), pstat, pllst, Int32(d), Int32(dm), Int32(RR_EIGH_SWEEPS),
-                    Float32(JACOBI_TOL), grid_dim=1, block_dim=FA_TPB,
-                )
-            else:
-                est = _fa_eigh_grid(ctx, mem, s_b, s_v, s_cs, s_off, s_part, s_fold, hfold, d, s_es)
-                _fa_check_eigh(est[0], est[1], est[2], est[3], d)
-            ctx.enqueue_function[fa_finish_kernel[FA_LL_DEVICE]](
+            est = _fa_eigh_grid(ctx, mem, s_b, s_v, s_cs, s_off, s_part, s_fold, hfold, d, s_es)
+            _fa_check_eigh(est[0], est[1], est[2], est[3], d)
+            ctx.enqueue_function[fa_finish_kernel[False]](
                 mem.ptr(s_b), mem.ptr(s_v), mem.ptr(s_sp), mem.ptr(cur), mem.ptr(s_w), mem.ptr(nxt),
                 mem.ptr(s_small), pstat, pllst, pllrec, Int32(d), Int32(nc), Int32(i), half_n, tol32,
                 grid_dim=1, block_dim=FA_TPB,
             )
-        comptime if FA_LL_DEVICE:
-            # the flag every FA_LL_STRIDE iterations and at the budget's end
-            if i % FA_LL_STRIDE == FA_LL_STRIDE - 1 or i == max_iter - 1:
-                var ssm = mem.sub(s_llst)
-                ctx.enqueue_copy(dst_ptr=hsmall.unsafe_ptr(), src_buf=ssm)
-                ctx.synchronize()
-                var hp = F32Ptr(unsafe_from_address=Int(hsmall.unsafe_ptr()))
-                if hp.unsafe_load(0) != Float32(0.0):
-                    it = Int(hp.unsafe_load(1))
-                    stopped = True
-                    break
-        else:
-            var ssm = mem.sub(s_small)
-            ctx.enqueue_copy(dst_ptr=hsmall.unsafe_ptr(), src_buf=ssm)
-            ctx.synchronize()
-            var hp = F32Ptr(unsafe_from_address=Int(hsmall.unsafe_ptr()))
-            comptime if FA_EIG_SMALL:
-                _fa_check_eigh(hp.unsafe_load(2 * d), hp.unsafe_load(2 * d + 1), hp.unsafe_load(2 * d + 2),
-                               hp.unsafe_load(2 * d + 3), d)
-            var ll = _fa_ll(hp, d, nc, llconst, neg_half_n)
-            ll_dst.unsafe_store(i, ll)
-            if (ll - old_ll) < tol64:
-                break
-            old_ll = ll
+        var ssm = mem.sub(s_small)
+        ctx.enqueue_copy(dst_ptr=hsmall.unsafe_ptr(), src_buf=ssm)
+        ctx.synchronize()
+        var hp = F32Ptr(unsafe_from_address=Int(hsmall.unsafe_ptr()))
+        var ll = _fa_ll(hp, d, nc, llconst, neg_half_n)
+        ll_dst.unsafe_store(i, ll)
+        if (ll - old_ll) < tol64:
+            break
+        old_ll = ll
         var tmp = cur
         cur = nxt
         nxt = tmp
         i += 1
-    comptime if FA_LL_DEVICE:
-        # stopped at iteration c (1-based): psi is the one that iteration
-        # read (buffer (c - 1) % 2, A first; main breaks before its psi
-        # update); the budget run out: psi is the last update (cur, after
-        # the last swap), as main's loop leaves it. The ll pairs and the
-        # status come back with W and psi
-        var c = it
-        var used = cur
-        if stopped:
-            used = s_pa if (c - 1) % 2 == 0 else s_pb
-        var hrec = ctx.enqueue_create_host_buffer[DType.float32](2 * max_iter)
-        var srec = mem.sub(s_llrec)
-        ctx.enqueue_copy(dst_ptr=hrec.unsafe_ptr(), src_buf=srec)
-        var ssm2 = mem.sub(s_small)
-        ctx.enqueue_copy(dst_ptr=hsmall.unsafe_ptr(), src_buf=ssm2)
-        ctx.enqueue_copy(dst_ptr=w_dst, src_buf=mem.sub(s_w))
-        ctx.enqueue_copy(dst_ptr=psi_dst, src_buf=mem.sub(used))
+    # TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: the stop iteration and ll pairs read back from the device here.
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
+    comptime if FA_LIVEBUF:
+        # W, psi A and psi B are adjacent in the arena: one copy
+        var span = (mem.offs[s_pb] + mem.lens[s_pb]) - mem.offs[s_w]
+        var hout = ctx.enqueue_create_host_buffer[DType.float32](span)
+        var sall = mem.bufs[0].create_sub_buffer[DType.float32](mem.offs[s_w], span)
+        ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=sall)
         ctx.synchronize()
-        var hp2 = F32Ptr(unsafe_from_address=Int(hsmall.unsafe_ptr()))
-        comptime if FA_EIG_SMALL:
-            _fa_check_eigh(hp2.unsafe_load(2 * d), hp2.unsafe_load(2 * d + 1), hp2.unsafe_load(2 * d + 2),
-                           hp2.unsafe_load(2 * d + 3), d)
-        var rp = F32Ptr(unsafe_from_address=Int(hrec.unsafe_ptr()))
-        for k in range(c):
-            var s = Float64(rp.unsafe_load(2 * k)) + Float64(rp.unsafe_load(2 * k + 1))
-            ll_dst.unsafe_store(k, (llconst + s) * neg_half_n)
-        _ = hrec^
+        var op = F32Ptr(unsafe_from_address=Int(hout.unsafe_ptr()))
+        for k in range(nc * d):
+            w_dst.unsafe_store(k, op.unsafe_load(k))
+        var poff = mem.offs[cur] - mem.offs[s_w]
+        for k in range(d):
+            psi_dst.unsafe_store(k, op.unsafe_load(poff + k))
+        _ = hout^
     else:
-        comptime if FA_LIVEBUF:
-            # W, psi A and psi B are adjacent in the arena: one copy
-            var span = (mem.offs[s_pb] + mem.lens[s_pb]) - mem.offs[s_w]
-            var hout = ctx.enqueue_create_host_buffer[DType.float32](span)
-            var sall = mem.bufs[0].create_sub_buffer[DType.float32](mem.offs[s_w], span)
-            ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=sall)
-            ctx.synchronize()
-            var op = F32Ptr(unsafe_from_address=Int(hout.unsafe_ptr()))
-            for k in range(nc * d):
-                w_dst.unsafe_store(k, op.unsafe_load(k))
-            var poff = mem.offs[cur] - mem.offs[s_w]
-            for k in range(d):
-                psi_dst.unsafe_store(k, op.unsafe_load(poff + k))
-            _ = hout^
-        else:
-            ctx.enqueue_copy(dst_ptr=w_dst, src_buf=mem.sub(s_w))
-            ctx.enqueue_copy(dst_ptr=psi_dst, src_buf=mem.sub(cur))
-            ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=w_dst, src_buf=mem.sub(s_w))
+        ctx.enqueue_copy(dst_ptr=psi_dst, src_buf=mem.sub(cur))
+        ctx.synchronize()
     _ = hsmall^
     _ = hfold^
     _ = hflags^
@@ -1460,12 +1143,8 @@ def fa_defines_py() raises -> PythonObject:
         s += "MOJOLEARN_FA_GRAM_ONCE,"
     comptime if FA_ITER_DEVICE:
         s += "MOJOLEARN_FA_ITER_DEVICE,"
-    comptime if FA_EIG_SMALL:
-        s += "MOJOLEARN_FA_EIG_SMALL,"
     comptime if FA_LIVEBUF:
         s += "MOJOLEARN_FA_LIVEBUF,"
-    comptime if FA_LL_DEVICE:
-        s += "MOJOLEARN_FA_LL_DEVICE,"
     comptime if FA_TRANSFORM_FUSED:
         s += "MOJOLEARN_FA_TRANSFORM_FUSED,"
     # not a -D name: the route ITER_DEVICE takes unless MOJOLEARN_FA_GRAM_QOLD

@@ -138,26 +138,9 @@ comptime MBF_RG_MAXK = 16
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/center-accumulation.
 # Compilation/identity reused. No combined-toggle/full-board claim.
 comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"]()
-# DROP-speed, 2026-10-04, lane/apple-fast-w2-clres@4d80737b1:
-# w2-mbk-labrg-* quality PASS; istella146.6->144.0ms, taxi45.3->46.3ms.
-# One sample/arm does not establish a useful speed gain; default OFF.
-# See docs/apple-fast/EXPERIMENTS.md (MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG).
-# -D MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG: the fit's last pass (labels and
-# distances of all n rows, x_cluster/minibatch_ptr.mojo) is
-# `DeviceOps.nearest`, a thread per row that walks its 880-byte Istella row k
-# times (uncoalesced, 1M rows). With the switch it is `_mbf_label_rg_kernel`,
-# the CLS3_ROWGRP batch assignment over every row: a 32-thread group per row,
-# coalesced reads, one pass over X. k <= MBF_RG_MAXK, else the old pass.
-# FAST: the distance's summation order changes (labels may flip only at
-# near-ties; quality checked against main).
-# MEASURED M3 FAST; broader workload evidence remains separate.
-# F15/default M3 2026-10-06: 6 scored caller times; B/A
-# 0.9470..1.1250 (mixed/regressing); FAST candidate remains OFF.
-# Scored FAST quality 3/3 within existing bands; PASS.
-# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/default.
-# Compilation/identity reused. No combined-toggle/full-board claim.
-comptime MBK_W2_LABRG = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"]()
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: MiniBatchKMeans' last all-rows labelling as the CLS3_ROWGRP 32-thread-per-row assignment (_mbf_label_rg_kernel); istella 146.6 -> 144.0 ms, taxi 45.3 -> 46.3 (noise); F15 B/A 0.947..1.125 mixed.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -352,60 +335,9 @@ def _mbf_sum_cmp_kernel(
         cpart[j * NC + c] = Int32(m)
 
 
-def _mbf_label_rg_kernel(x: FPtr, n: Int32, c: FPtr, k: Int32, d: Int32, lab: IPtr, dist: FPtr):
-    """MBK_W2_LABRG: `_mbf_assign_rg_kernel` over rows 0..n-1 (no index
-    list, no inertia partials): a 32-thread group per row, lane l takes
-    features l, l + 32, ...; ties to the lower center."""
-    var tid = Int(thread_idx.x)
-    var g = tid // MBF_RG_W
-    var l = tid - g * MBF_RG_W
-    var t = Int(block_idx.x) * MBF_RG_ROWS + g
-    var K = Int(k)
-    var D = Int(d)
-    var red = stack_allocation[MBF_TPB * MBF_RG_MAXK, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = SIMD[DType.float32, MBF_RG_MAXK](0)
-    var live = t < Int(n)
-    if live:
-        for f in range(l, D, MBF_RG_W):
-            var xv = ftz(x[t * D + f])
-            comptime for j in range(MBF_RG_MAXK):
-                if j < K:
-                    var tt = ftz(ftz(c[j * D + f]) - xv)
-                    acc[j] = ftz(acc[j] + ftz(identical_mul(tt, tt)))
-    comptime for j in range(MBF_RG_MAXK):
-        red[tid * MBF_RG_MAXK + j] = acc[j]
-    barrier()
-    if l < K:
-        var s = Float32(0)
-        for q in range(MBF_RG_W):
-            s = ftz(s + red[(g * MBF_RG_W + q) * MBF_RG_MAXK + l])
-        red[(g * MBF_RG_W) * MBF_RG_MAXK + MBF_RG_MAXK * MBF_RG_W // 2 + l] = s
-    barrier()
-    if l == 0 and live:
-        var base = (g * MBF_RG_W) * MBF_RG_MAXK + MBF_RG_MAXK * MBF_RG_W // 2
-        var best = red[base]
-        var bi = 0
-        for j in range(1, K):
-            var a = red[base + j]
-            if a < best:
-                best = a
-                bi = j
-        lab[t] = Int32(bi)
-        dist[t] = best
-
-
-def mbk_labels_rg(ctx: DeviceContext, x: FPtr, n: Int, c: FPtr, k: Int, d: Int, lab: IPtr, dist: FPtr) raises -> Bool:
-    """MBK_W2_LABRG: enqueue the all-rows labelling (`lab`, `dist`, n each).
-    False (nothing enqueued) outside the switch or for k > MBF_RG_MAXK."""
-    comptime if MBK_W2_LABRG:
-        if k < 1 or k > MBF_RG_MAXK or n < 1 or d < 1:
-            return False
-        ctx.enqueue_function[_mbf_label_rg_kernel](
-            x, Int32(n), c, Int32(k), Int32(d), lab, dist,
-            grid_dim=(n + MBF_RG_ROWS - 1) // MBF_RG_ROWS, block_dim=MBF_TPB,
-        )
-        return True
-    return False
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: _mbf_label_rg_kernel and mbk_labels_rg (the all-rows row-group labelling).
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch; record in docs/TOMBSTONES.md.
 
 
 def _mbf_finish_kernel(

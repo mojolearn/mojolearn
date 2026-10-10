@@ -44,12 +44,16 @@ from x_decomp.lu_blocked import (
 )
 from x_decomp.lu_fast_mma import LU_FAST_MMA, lu_fast_mma_factor
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
-from x_decomp.fast_chol import CHOL_FAST_BLOCKED, CH_NB, launch_chol_blocked
+# TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: blocked right-looking Cholesky (x_decomp/fast_chol.mojo, 3 n / 32 launches); cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6.
+# Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
 from x_decomp.omp_block import DECOMP_FAST_OMP_BLOCK, OMP_TPB, omp_block_fits, omp_block_kernel
-from x_decomp.fast_gemm import DECOMP_FAST_GEMM_TILED, FG_TPB, fg_gemm_tiled_kernel, fg_tiles
 # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower: rab3-qrdev istella 1628.1 -> 7319.9 ms, taxi 47.6 -> 91.7) deleted 2026-10-09
 # on lane/owed-deletions-D1 (x_decomp/fast_qr.mojo grid-fold geqrf / orgqr, with its sub-arm MOJOLEARN_AFCL_L09); code
 # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_DECOMP_FAST_GEMM_TILED (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: threadgroup-tiled decomp gemm (x_decomp/fast_gemm.mojo, with its AFCL_L08 slab-depth knob); randomized-svd istella 483.56 -> 640.22 ms (+32.4%), reconstruction error equal.
+# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch; record in docs/TOMBSTONES.md.
 from x_decomp.cells import (
     IDN_LU_NB128,
     LUB_NB,
@@ -1910,20 +1914,9 @@ def launch_gemm(
 ) raises:
     """C = op(A) op(B) on device pointers, enqueued (no sync): FOLD_BLOCK
     partial sums then the fold past one block (DEVIATIONS 5300/5301)."""
-    comptime if DECOMP_FAST_GEMM_TILED:
-        # -D MOJOLEARN_DECOMP_FAST_GEMM_TILED (x_decomp/fast_gemm.mojo, default
-        # off, FAST + Apple): the threadgroup-tiled kernel with the same
-        # FOLD_BLOCK partials (grid z) and fold, ahead of the MMA route below.
-        if m > 0 and n > 0 and k > 0:
-            var tnb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
-            ctx.enqueue_function[fg_gemm_tiled_kernel](
-                a, b, p if tnb > 1 else c, Int32(m), Int32(k), Int32(n),
-                Int32(1 if ta else 0), Int32(1 if tb else 0), Int32(tnb),
-                grid_dim=(fg_tiles(n), fg_tiles(m), tnb), block_dim=(FG_TPB, 1, 1),
-            )
-            if tnb > 1:
-                ctx.enqueue_function[fold_kernel](p, c, Int32(m * n), Int32(tnb), grid_dim=_blocks(m * n), block_dim=TPB)
-            return
+    # TOMBSTONE: MOJOLEARN_DECOMP_FAST_GEMM_TILED (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+    # Tried: the tiled kernel ahead of the MMA route in launch_gemm.
+    # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch; record in docs/TOMBSTONES.md.
     comptime if DECOMP_FAST_GEMM_MMA:
         if m > 0 and n > 0 and k > 0:
             _launch_gemm_mma(ctx, a, b, c, m, k, n, ta, tb)
@@ -2421,6 +2414,9 @@ def orth_on_device_diag(
         # round trip is deleted)
         _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
         ctx.enqueue_function[orth_guard_kernel](r_buf.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
+        # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+        # Tried: the blocked kernel for the CholeskyQR Gram factor when l > 32 (that CholeskyQR pass is itself deleted with MOJOLEARN_SVD_FAST_CHOLQR).
+        # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
         if with_diag and l > 0:
             ctx.enqueue_function[orth_diag_kernel](
                 r_buf.unsafe_ptr(), ddiag.unsafe_ptr(), Int32(l), grid_dim=_blocks(l), block_dim=TPB
@@ -2846,20 +2842,14 @@ struct DevExec(Exec):
         # thread recomputing the pivot's chain itself, so neither the
         # one-thread kernel (MOJOLEARN_XD_CHOL_SERIAL) nor the one-thread
         # diagonal launch remains; n launches.
-        var blocked = False
-        comptime if CHOL_FAST_BLOCKED:
-            # -D MOJOLEARN_CHOL_FAST_BLOCKED (x_decomp/fast_chol.mojo, default
-            # off, FAST + Apple): `launch_chol_blocked`, 3 n / CH_NB launches;
-            # a matrix within one panel keeps the column driver below.
-            if n > CH_NB:
-                launch_chol_blocked(ctx, _p(da), _p(di), n)
-                blocked = True
-        if not blocked:
-            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
-            for j in range(n):
-                ctx.enqueue_function[chol_step_kernel](
-                    da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
-                )
+        # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+        # Tried: launch_chol_blocked for n > 32 here.
+        # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
+        ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+        for j in range(n):
+            ctx.enqueue_function[chol_step_kernel](
+                da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
+            )
         _down(ctx, da, a, n * n)
         _down(ctx, di, info, 1)
         ctx.synchronize()
