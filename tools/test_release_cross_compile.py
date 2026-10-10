@@ -102,7 +102,7 @@ class CrossCompileStep(unittest.TestCase):
         self.assertEqual(run[:4], ["workflow", "run", "cross-compile-check.yml", "--ref"])
         self.assertIn(f"ref={BASE}", run)
         self.assertIn(f"commit={FROZEN}", run)
-        self.assertIn("archs=sm_90a,sm_89,gfx942", run)
+        self.assertIn("archs=sm_89,gfx942", run)
         watch = [c for c in calls if c[:2] == ["run", "watch"]]
         self.assertEqual(watch[0][2], "42", "it waits on ITS run, found by token, not the newest")
         self.assertIn("--exit-status", watch[0])

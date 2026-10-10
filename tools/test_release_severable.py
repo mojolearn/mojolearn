@@ -223,8 +223,8 @@ class Legs(Base):
 
     def test_rerun_after_one_leg_failure_relaunches_only_that_leg(self):
         r = self.release()
-        r._plan = plan(["cuda-sm_90a", "cuda-sm_89", "hip-gfx942"])
-        for name in ("cuda-sm_90a", "hip-gfx942"):
+        r._plan = plan(["cuda-sm_89", "hip-gfx942"])  # sm_90a left the 0.8.37 legs (gpu_plugins.py)
+        for name in ("hip-gfx942",):
             self.finished(self.cpu_leg(r, name), Y)
         bad = self.cpu_leg(r, "cuda-sm_89")
         bad.out_dir.mkdir(parents=True)
@@ -235,7 +235,7 @@ class Legs(Base):
         self.assertEqual(len(self.spawned), 1, self.spawned)
         self.assertIn("--archs sm_89", self.spawned[0][0][2])
         self.assertEqual(len(list(bad.workdir.glob("cuda-sm_89.log.failed-*"))), 1)
-        self.assertIn("  cuda-sm_90a: already done at this freeze", r.lines)
+        self.assertIn("  hip-gfx942: already done at this freeze", r.lines)
         # the relaunched leg names both commits
         prov = json.loads(bad.provenance_file.read_text())
         self.assertEqual(prov["source_commit"], Y)
@@ -260,59 +260,59 @@ class Legs(Base):
         r.tooling = lambda: dict(commit=HEAD, digest=tooling, dirty=[], files={})
 
     def test_an_unchanged_set_takes_its_completed_leg_and_a_changed_one_rebuilds(self):
-        self.setup_earlier_freeze("cuda-sm_90a", "cuda", "sm_90a", "D90")
+        self.setup_earlier_freeze("cuda-sm_89", "cuda", "sm_89", "D90")
         self.setup_earlier_freeze("hip-gfx942", "hip", "gfx942", "DHIP-OLD")
         r = self.release()
-        r._plan = plan(["cuda-sm_90a", "hip-gfx942"])
-        self.identities(r, {"cuda-sm_90a": "D90", "hip-gfx942": "DHIP-NEW"})
+        r._plan = plan(["cuda-sm_89", "hip-gfx942"])
+        self.identities(r, {"cuda-sm_89": "D90", "hip-gfx942": "DHIP-NEW"})
         result = r.step_linux_builds()
         self.assertEqual(len(self.spawned), 1)
         self.assertIn("--archs gfx942", self.spawned[0][0][2])
-        self.assertIn("taken from an earlier freeze: cuda-sm_90a", result)
-        doc = json.loads(r.admission_path("cuda-sm_90a").read_text())
+        self.assertIn("taken from an earlier freeze: cuda-sm_89", result)
+        doc = json.loads(r.admission_path("cuda-sm_89").read_text())
         self.assertEqual((doc["built_from"], doc["admitted_for"]), (X, Y))
         self.assertIn("set identity", doc["because"])
         self.assertEqual(doc["set_identity_digest"], "D90")
         self.assertTrue(any("TAKEN, not launched: built from aaaaaaaaaaaa" in l for l in r.lines), r.lines)
         self.assertTrue(any("hip-gfx942" in l and "set identity differs" in l for l in r.lines), r.lines)
-        self.assertEqual(set(r.admitted_legs()), {"cuda-sm_90a"})
+        self.assertEqual(set(r.admitted_legs()), {"cuda-sm_89"})
         # linux-wait does not wait for a taken leg, and the pack gives no proof for it
-        self.assertEqual([l.name for l in r.reused_leg_objects()], ["cuda-sm_90a"])
+        self.assertEqual([l.name for l in r.reused_leg_objects()], ["cuda-sm_89"])
         origin = r.leg_origin(doc)
         for k in ("source_commit", "leg", "proof_sha256", "admitted_for", "set_identity_digest", "tooling_digest"):
             self.assertTrue(origin[k], k)
 
     def test_changed_tooling_or_moved_bytes_rebuild(self):
-        rb = self.setup_earlier_freeze("cuda-sm_90a", "cuda", "sm_90a", "D90")
+        rb = self.setup_earlier_freeze("cuda-sm_89", "cuda", "sm_89", "D90")
         r = self.release()
-        r._plan = plan(["cuda-sm_90a"])
-        self.identities(r, {"cuda-sm_90a": "D90"}, tooling="U" * 64)
+        r._plan = plan(["cuda-sm_89"])
+        self.identities(r, {"cuda-sm_89": "D90"}, tooling="U" * 64)
         r.step_linux_builds()
         self.assertEqual(len(self.spawned), 1, "different build tooling: rebuilt")
         self.assertTrue(any("build tooling differs" in l for l in r.lines), r.lines)
 
         self.spawned.clear()
         r = self.release()
-        r._plan = plan(["cuda-sm_90a"])
-        self.identities(r, {"cuda-sm_90a": "D90"})
-        (rb / "build" / "sets" / "cuda" / "sm_90a" / "identical" / "_mojolearn_gbdt.so").write_bytes(b"moved")
+        r._plan = plan(["cuda-sm_89"])
+        self.identities(r, {"cuda-sm_89": "D90"})
+        (rb / "build" / "sets" / "cuda" / "sm_89" / "identical" / "_mojolearn_gbdt.so").write_bytes(b"moved")
         r.step_linux_builds()
         self.assertEqual(len(self.spawned), 1, "a byte that is not the proof's: rebuilt")
         self.assertTrue(any("not the proof's bytes" in l for l in r.lines), r.lines)
 
         self.spawned.clear()
         r = self.release()
-        r._plan = plan(["cuda-sm_90a"])
-        self.identities(r, {"cuda-sm_90a": "D90"})
+        r._plan = plan(["cuda-sm_89"])
+        self.identities(r, {"cuda-sm_89": "D90"})
         r.tooling = lambda: dict(commit=HEAD, digest=None, dirty=["tools/gemm_remote_leg.sh"], files={})
         r.step_linux_builds()
         self.assertEqual(len(self.spawned), 1, "uncommitted tooling: nothing is taken")
 
     def test_a_source_whose_packer_predates_leg_origins_rebuilds(self):
-        self.setup_earlier_freeze("cuda-sm_90a", "cuda", "sm_90a", "D90")
+        self.setup_earlier_freeze("cuda-sm_89", "cuda", "sm_89", "D90")
         r = self.release()
-        r._plan = plan(["cuda-sm_90a"])
-        self.identities(r, {"cuda-sm_90a": "D90"})
+        r._plan = plan(["cuda-sm_89"])
+        self.identities(r, {"cuda-sm_89": "D90"})
         del r.packer_takes_legs
         with mock.patch.object(release, "file_at", return_value="def load_reuse(): pass\n"):
             r.step_linux_builds()
@@ -322,9 +322,9 @@ class Legs(Base):
             self.assertTrue(r.packer_takes_legs())
 
     def test_an_unreadable_set_identity_rebuilds(self):
-        self.setup_earlier_freeze("cuda-sm_90a", "cuda", "sm_90a", "D90")
+        self.setup_earlier_freeze("cuda-sm_89", "cuda", "sm_89", "D90")
         r = self.release()
-        r._plan = plan(["cuda-sm_90a"])
+        r._plan = plan(["cuda-sm_89"])
         self.identities(r, {})
         r.step_linux_builds()
         self.assertEqual(len(self.spawned), 1)
@@ -346,12 +346,12 @@ class Legs(Base):
         self.assertIn("ledger build/cuda-sm_89/D89/", r.admitted_leg("cuda-sm_89")["provenance"])
 
         # a leg built at this freeze goes into the ledger keyed by what it built, with both commits
-        leg = self.cpu_leg(r, "cuda-sm_90a")
+        leg = self.cpu_leg(r, "cuda-sm_89")
         self.finished(leg, Y)
         leg.provenance_file.write_text(json.dumps(dict(set_identity=dict(digest="D90"), tooling_digest="T" * 64,
                                                        tooling_commit=HEAD, source_commit=Y)))
         r.record_leg(leg)
-        (entry,) = r.ledger().find("build/cuda-sm_90a/D90/")
+        (entry,) = r.ledger().find("build/cuda-sm_89/D90/")
         self.assertEqual((entry["source_commit"], entry["tooling_commit"], entry["verdict"]), (Y, HEAD, "PASS"))
 
 
@@ -365,11 +365,10 @@ class Status(Base):
         r.state["failures"] = {"macos-smoke": dict(at="2026-09-25T11:00:00Z", commit=Y, error="smoke exited 1; log L",
                                                    held=False)}
         r.save()
-        release.write_json(r.plan_path, plan(["cuda-sm_90a", "cuda-sm_89", "hip-gfx942"]))
+        release.write_json(r.plan_path, plan(["cuda-sm_89", "hip-gfx942"]))
         legs = r.rel / "legs"
-        rb, _ = release.leg_layout(legs, "cpu-box", "cuda-sm_90a")
-        leg_tree(rb, "cuda", "sm_90a", Y)
-        (legs / "cuda-sm_90a.exit").write_text("0\n")
+        # 0.8.37: two legs (sm_90a left, gpu_plugins.py): one failed, one running
+        legs.mkdir(parents=True, exist_ok=True)
         (legs / "cuda-sm_89.exit").write_text("1\n")
         (legs / "cuda-sm_89.log").write_text("boom")
         (legs / "hip-gfx942.pid").write_text(str(os.getpid()))
@@ -387,7 +386,6 @@ class Status(Base):
             self.assertIn(title, text)
         self.assertRegex(text, r"macos-smoke +failed +2026-09-25T11:00:00Z: smoke exited 1; log L")
         self.assertIn("rerun: run it again", text)
-        self.assertRegex(text, r"cuda-sm_90a +done +exit 0, proof of cccccccccccc")
         self.assertRegex(text, r"cuda-sm_89 +failed +exit 1, log .*legs/cuda-sm_89.log")
         self.assertIn("rerun: relaunch it", text)
         self.assertRegex(text, r"hip-gfx942 +running +pid ")

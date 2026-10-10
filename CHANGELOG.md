@@ -21,6 +21,10 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## 0.8.37 (published 2026-10-10)
 
+- 0.8.37 NVIDIA wheel: sm_89 only; H100 (sm_90) is not supported in this release: the sm_89 cubins carry no PTX, the
+  loader never crosses a compute-capability major, and the wheel bundles no PTX fallback, so the import refuses with no
+  compatible native set. sm_90a returns when PyPI raises the mojolearn-nvidia file-size limit (with it the wheel is
+  134.6 MiB, over the 100 MiB default).
 - IDENTICAL defaults flipped from the switch grid run ge123e6f9 (NVIDIA L40S and AMD MI325X, full board data, one run per arm;
   verdict = the average of the two vendors against the measured noise floor): Ridge and OLS solve the Gram system (Ridge taxi
   50.0 -> 4.8 ms NVIDIA, 16.3 -> 3.0 ms AMD; OLS taxi 34.0 -> 17.5 / 14.5 -> 8.1 ms), TSQR leaves of 2048 rows for OLS and

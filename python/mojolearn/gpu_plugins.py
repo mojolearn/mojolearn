@@ -12,7 +12,10 @@ Native directory depth stays unchanged to preserve binding RUNPATHs.
 PLUGINS = {
     "cuda": dict(distribution="mojolearn-nvidia", wheel_name="mojolearn_nvidia",
         profile="nvidia", label="NVIDIA (CUDA)", vendor="cuda", role="vendor",
-        arches=("sm_89", "sm_90", "sm_90a"), slots=(("sm_89",), ("sm_90", "sm_90a")),
+        # 0.8.37 (Andrew 2026-10-10): the release ships sm_89 only. With sm_90a the wheel is 134.6 MiB, over
+        # PyPI's 100 MiB file limit, so the Hopper slot ("sm_90", "sm_90a") is not required until PyPI raises the
+        # mojolearn-nvidia limit; sm_90/sm_90a stay registered architectures, so a wheel that carries them loads.
+        arches=("sm_89", "sm_90", "sm_90a"), slots=(("sm_89",),),
         directory="cuda_native", code_format="native", release_enabled=True),
     "hip": dict(distribution="mojolearn-amd", wheel_name="mojolearn_amd",
         profile="amd", label="AMD (ROCm/HIP)", vendor="hip", role="vendor",

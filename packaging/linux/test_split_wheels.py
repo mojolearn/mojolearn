@@ -375,7 +375,8 @@ class SplitWheels(unittest.TestCase):
 
     def test_vendor_requires_all_its_native_architecture_slots(self):
         root = Path(tempfile.mkdtemp(dir=self.root))
-        dirs = make_sets(root, sets=(("cuda", "sm_89"),))
+        # 0.8.37: the Hopper slot is not required (gpu_plugins.py), so the slot that must be filled is sm_89
+        dirs = make_sets(root, sets=(("cuda", "sm_90a"),))
         with self.assertRaisesRegex(SystemExit, "requires one set per registered architecture slot"):
             self.pack("--wheels", "nvidia", sets=dirs)
         with self.assertRaisesRegex(SystemExit, "name each"):

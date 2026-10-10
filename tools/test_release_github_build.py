@@ -157,7 +157,7 @@ class Backend(unittest.TestCase):
         self.assertIn('ap.add_argument("--build-backend", default="github"', (HERE / "release.py").read_text())
         ctx = argparse.Namespace(rel=Path(tempfile.mkdtemp()), commit=C)
         legs = rel.github_legs(ctx)
-        self.assertEqual([l.name for l in legs], ["cuda-sm_90a", "cuda-sm_89", "hip-gfx942"])
+        self.assertEqual([l.name for l in legs], ["cuda-sm_89", "hip-gfx942"])
         for l in legs:
             self.assertEqual(l.command[:3], ["python3", "tools/release_github_build.py", "run"])
             out = Path(l.command[l.command.index("--out") + 1])

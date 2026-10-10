@@ -28,7 +28,7 @@ class CpuBox(unittest.TestCase):
 
     def test_three_legs_one_set_each(self):
         legs = rel.cpu_legs(self.ctx)
-        self.assertEqual([l.name for l in legs], ["cuda-sm_90a", "cuda-sm_89", "hip-gfx942"])
+        self.assertEqual([l.name for l in legs], ["cuda-sm_89", "hip-gfx942"])
         for l in legs:
             self.assertEqual(l.command[:4], ["bash", "tools/release_linux_build.sh", C, "--rent"])
             self.assertEqual(l.command[l.command.index("--archs") + 1], l.arch)

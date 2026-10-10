@@ -607,7 +607,7 @@ def cpu_legs(ctx):
     own files from this checkout (its route.txt), so it takes no route overlay."""
     legs_dir = ctx.rel / "legs"
     legs = []
-    for vendor, arch in (("cuda", "sm_90a"), ("cuda", "sm_89"), ("hip", "gfx942")):
+    for vendor, arch in (("cuda", "sm_89"), ("hip", "gfx942")):  # sm_90a out for 0.8.37 (gpu_plugins.py)
         name = f"{vendor}-{arch}"
         rb, out = leg_layout(legs_dir, "cpu-box", name)
         legs.append(Leg(name, vendor, arch,
@@ -630,7 +630,7 @@ def github_legs(ctx):
     overlay, like cpu-box."""
     legs_dir = ctx.rel / "legs"
     legs = []
-    for vendor, arch in (("cuda", "sm_90a"), ("cuda", "sm_89"), ("hip", "gfx942")):
+    for vendor, arch in (("cuda", "sm_89"), ("hip", "gfx942")):  # sm_90a out for 0.8.37 (gpu_plugins.py)
         name = f"{vendor}-{arch}"
         rb, out = leg_layout(legs_dir, "github", name)
         legs.append(Leg(name, vendor, arch,
@@ -848,6 +848,13 @@ class StepHeld(StepFailed):
 
 
 # ---------------------------------------------------------------- the run
+
+def wheel_marker(wheel):
+    """The parsed gpu_plugin.json of a vendor plugin wheel."""
+    with zipfile.ZipFile(wheel) as archive:
+        name = next(n for n in archive.namelist() if n.endswith(".dist-info/gpu_plugin.json"))
+        return json.loads(archive.read(name))
+
 class Release:
     STEPS = [s for s, _, _, _ in STEP_TABLE]
     #: Every other step checks its own OUTPUT each time and returns at once when
@@ -1246,7 +1253,7 @@ class Release:
 
     # ------------------------------------------------------------ cross-compile (GitHub)
     XCC_WORKFLOW = "cross-compile-check.yml"
-    XCC_ARCHS = "sm_90a,sm_89,gfx942"
+    XCC_ARCHS = "sm_89,gfx942"  # sm_90a out for 0.8.37 (gpu_plugins.py)
 
     def gh(self, *args, log=None):
         """(exit code, stdout) of one `gh` call; stdout also to `log` when given."""
@@ -2012,6 +2019,25 @@ class Release:
         return any(f.get("filename") == wheel.name and f.get("digests", {}).get("sha256") == sha256(wheel)
                    for f in files)
 
+    def published_marker(self, wheel):
+        """gpu_plugin.json of the file PyPI already serves under this wheel's name, else None."""
+        project = wheel.name.split("-")[0].replace("_", "-")
+        try:
+            with urllib.request.urlopen(f"https://pypi.org/pypi/{project}/{self.version}/json", timeout=20) as r:
+                url = next((f["url"] for f in json.load(r).get("urls", []) if f.get("filename") == wheel.name), None)
+            if url is None:
+                return None
+            local = self.rel / "published" / wheel.name
+            local.parent.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(url, local)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:  # this version is not on PyPI yet: nothing published to reuse
+                return None
+            raise StepFailed(f"cannot read the published {wheel.name}: {exc}") from exc
+        except Exception as exc:
+            raise StepFailed(f"cannot read the published {wheel.name}: {exc}") from exc
+        return wheel_marker(local)
+
     def publish(self, platform, wheel, smoke):
         """Publish ONE platform's wheel, built from the frozen source. The
         publisher runs from the tooling checkout (its tag names the tooling;
@@ -2029,6 +2055,17 @@ class Release:
             raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
         if not self.dry and wheel and self.on_pypi(wheel):
             return "already on PyPI"
+        if not self.dry and wheel and platform in SPLIT_PACKAGES and platform != "linux":
+            published = self.published_marker(wheel)
+            # 0.8.37 (2026-10-10): a refreeze after a plugin published rebuilds that plugin with new bytes
+            # (LINUX_PAYLOAD.json names the source commit), and PyPI never takes a filename twice. The loader
+            # admits a plugin on version, arch directories and gpu_plugin.json only (_backend.py), so the
+            # published plugin serves the new core exactly when its marker equals the new build's.
+            if published is not None:
+                if published != wheel_marker(wheel):
+                    raise StepFailed(f"PyPI already has {wheel.name} with a different gpu_plugin.json; "
+                                     "a new version is needed")
+                return "already on PyPI (published from an earlier freeze; gpu_plugin.json equal)"
         day = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
         tag = f"alpha-api-{self.version}-{platform}-{day}"
         work = self.rel / f"publish-{platform}"
@@ -2044,7 +2081,7 @@ class Release:
     def smoke_notes(self, platform):
         """{native set: smoke line} for the alpha manifest of a vendor wheel
         whose set had no installed smoke (sm_90a without a held Hopper box)."""
-        if platform == "nvidia" and not self.hopper_required():
+        if platform == "nvidia" and not self.hopper_required() and "sm_90a" in GPU_PACKAGES["PLUGINS"]["cuda"]["arches"]:
             return {"sm_90a": HOPPER_NOT_RUN}
         return {}
 
