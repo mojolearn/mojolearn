@@ -203,6 +203,7 @@ in the tables after the sections.
 | [`MOJOLEARN_HDBSCAN2_ALL`](#mojolearn_hdbscan2_all) | Cluster | DROP (bundle) | 2026-10-09 | [MOJOLEARN_HDBSCAN2_ALL.patch](../experiments/removed/MOJOLEARN_HDBSCAN2_ALL.patch) |
 | [`MOJOLEARN_HDB_CORE_TILE`](#mojolearn_hdb_core_tile) | Cluster | DROP | 2026-10-09 | [MOJOLEARN_HDB_CORE_TILE.patch](../experiments/removed/MOJOLEARN_HDB_CORE_TILE.patch) |
 | [`MOJOLEARN_HDB_DEV_BORUVKA`](#mojolearn_hdb_dev_boruvka) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_HDB_DEV_BORUVKA.patch](../experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch) |
+| [`MOJOLEARN_KMEANS_FAST_LAZY_SHIFT`](#mojolearn_kmeans_fast_lazy_shift) | Cluster | DROPPED-slower | 2026-10-09 | [MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch](../experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch) |
 | [`MOJOLEARN_ARIMA_FAST_LS_NOREAD`](#mojolearn_arima_fast_ls_noread) | Time series | DROPPED-noise | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch) |
 | [`MOJOLEARN_ARIMA_FAST_P_FIX`](#mojolearn_arima_fast_p_fix) | Time series | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_P_FIX.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_P_FIX.patch) |
 | [`MOJOLEARN_C58_FORECAST4`](#mojolearn_c58_forecast4) | Time series | slower | 2026-10-08 | [MOJOLEARN_C58_FORECAST4.patch](../experiments/removed/MOJOLEARN_C58_FORECAST4.patch) |
@@ -1583,6 +1584,15 @@ in the tables after the sections.
 - EXPERIMENTS.md:492: `HDB_DEV_BORUVKA` | hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-boruvka-taxi | hdbscan taxi 434 -> 432.6 | DROPPED-noise | rec-misc 2026-10-04: hdbscan taxi B 432.6 vs board 434 (-0.3%, inside noise); still opt-in on main (no default), so a dead toggle for the cleanup lane
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): HDB_DEV_BORUVKA (d <= 64 Boruvka rounds driven on the device, fast_mr_mst_device.mojo) was NOISE: hdbscan taxi 434 -> 432.6 ms (-0.3%); code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_KMEANS_FAST_LAZY_SHIFT
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: set KMeansParams.lazy_shift on the KMeans estimator's fits (bindings/_mojolearn.mojo kmeans_fit), so the Lloyd loop tested convergence every KMEANS_LAZY_EVERY iterations instead of every one.
+- Files the patch restores: `bindings/_mojolearn.mojo`, `cluster/impl/detail/kmeans.mojo`, `cluster/impl/kmeans_params.mojo`
+- EXPERIMENTS.md:325: `KMEANS_FAST_LAZY_SHIFT` | kmeans / taxi, istella | lane/apple-fast-vsv-promote | M3 afc_ab_def, full board, 1 run/arm, 2026-10-04 | istella 1451.5 -> 1527.7; taxi 977.6 -> 974.8 | DROPPED-slower | slower on istella, flat on taxi; inertia equal. Stays opt-in OFF (cluster/impl/detail/kmeans.mojo)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KMEANS_FAST_LAZY_SHIFT (lazy convergence read on the KMeans estimator's fits) was SLOWER: kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8 ms, inertia equal; the IVF callers' lazy_shift stays; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Time series
 
 ### MOJOLEARN_ARIMA_FAST_LS_NOREAD
@@ -2014,7 +2024,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
-| `MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` | EXPERIMENTS.md:325 DROPPED-slower (lane/apple-fast-vsv-promote) | `cluster/impl/detail/kmeans.mojo:1498` |
 | `MOJOLEARN_KMEANS_ROW_ASSIGN` | EXPERIMENTS.md:1706 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `cluster/impl/detail/classical_assignment.mojo:19` |
 | `MOJOLEARN_KSHAP_FAST_OVERLAP` | EXPERIMENTS.md:1412 DROPPED-noise (lane/apple-fast-s-shap) | `python/mojolearn/_expansion_trees.py:3403` |
 | `MOJOLEARN_LLE_FAST_NULL_CANON` | EXPERIMENTS.md:1414 DROPPED-quality (lane/apple-fast-s-shap) | `x_decomp/w4_fast.mojo:95` |

@@ -144,8 +144,7 @@ struct KMeansParams(Copyable, ImplicitlyCopyable, Movable):
     # (`KMEANS_LAZY_SHIFT`, cluster/impl/detail/kmeans.mojo): honored in
     # FAST on Apple and FAST on NVIDIA/AMD, and in IDENTICAL on every column
     # (`KMEANS_LAZY_SHIFT_IDN`, lane gap-ivf 2026-10-08). IVF's coarse quantizer and IVF-PQ's codebooks set it; the
-    # KMeans estimator leaves it False unless built with
-    # `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` (2026-10-04).
+    # KMeans estimator leaves it False (its opt-in define was deleted 2026-10-09).
     var lazy_shift: Bool
     # Not a cuVS field (lane fg-ivf B2, `IVF_IDN_RECLUSTER_CAP`): when > 0,
     # the k-means|| recluster (`init_scalable_kmeans_plus_plus`) runs at most

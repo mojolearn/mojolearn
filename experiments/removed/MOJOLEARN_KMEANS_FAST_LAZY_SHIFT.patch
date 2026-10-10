@@ -1,0 +1,60 @@
+diff --git b/bindings/_mojolearn.mojo a/bindings/_mojolearn.mojo
+index 48ed09738..e6872c2d0 100644
+--- b/bindings/_mojolearn.mojo
++++ a/bindings/_mojolearn.mojo
+@@ -209,6 +209,7 @@ comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if _DEVCTX_MODE == _DEVCTX_ID
+ 
+ 
+ from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
++from cluster.impl.detail.kmeans import KMEANS_FAST_LAZY_SHIFT
+ from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
+ from neighbors.resident_index import (
+     knn_index_classify,
+@@ -716,10 +717,9 @@ def kmeans_fit_binding(
+         var r = kmeans_fit(
+             ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm,
+             0.0, ovs,
+-            # TOMBSTONE: MOJOLEARN_KMEANS_FAST_LAZY_SHIFT (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-            # Tried: the lazy convergence read (shift tested every KMEANS_LAZY_EVERY iterations) on the KMeans estimator's fits; kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8, inertia equal.
+-            # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch; record in docs/TOMBSTONES.md.
+-            lazy_shift=False,
++            # OPT-IN, unmeasured (2026-10-04): the lazy convergence read for the
++            # KMeans estimator under -D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT
++            lazy_shift=KMEANS_FAST_LAZY_SHIFT,
+         )
+         inertia = r.inertia
+         n_iter = r.n_iter
+diff --git b/cluster/impl/detail/kmeans.mojo a/cluster/impl/detail/kmeans.mojo
+index 72e367042..ba3916a34 100644
+--- b/cluster/impl/detail/kmeans.mojo
++++ a/cluster/impl/detail/kmeans.mojo
+@@ -1490,9 +1490,12 @@ at iteration i stops at the next tested iteration (at most
+ KMEANS_LAZY_SHIFT_EVERY - 1 more Lloyd steps, which never raise the
+ objective); a fit that runs to max_iter is unchanged bit for bit. Untraced
+ fits without the inertia check, with `params.lazy_shift` set, only."""
+-# TOMBSTONE: MOJOLEARN_KMEANS_FAST_LAZY_SHIFT (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+-# Tried: the lazy convergence read (shift tested every KMEANS_LAZY_EVERY iterations) on the KMeans estimator's fits; kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8, inertia equal.
+-# Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch; record in docs/TOMBSTONES.md.
++#: DROPPED-slower, stays OFF (opt-in `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` sets
++#: `lazy_shift` on the KMeans estimator's fits, bindings/_mojolearn.mojo
++#: `kmeans_fit` call, FAST on Apple only). M3 afc_ab_def, full board size, 1 run
++#: per arm, 2026-10-04: kmeans istella 1451.5 -> 1527.7 ms (slower), taxi
++#: 977.6 -> 974.8 ms (flat); inertia equal.
++comptime KMEANS_FAST_LAZY_SHIFT = is_defined["MOJOLEARN_KMEANS_FAST_LAZY_SHIFT"]()
+ comptime KMEANS_LAZY_SHIFT_EVERY = KMEANS_LAZY_EVERY  # shared with the host restatement
+ 
+ 
+diff --git b/cluster/impl/kmeans_params.mojo a/cluster/impl/kmeans_params.mojo
+index fd1e55679..3637fec0f 100644
+--- b/cluster/impl/kmeans_params.mojo
++++ a/cluster/impl/kmeans_params.mojo
+@@ -144,7 +144,8 @@ struct KMeansParams(Copyable, ImplicitlyCopyable, Movable):
+     # (`KMEANS_LAZY_SHIFT`, cluster/impl/detail/kmeans.mojo): honored in
+     # FAST on Apple and FAST on NVIDIA/AMD, and in IDENTICAL on every column
+     # (`KMEANS_LAZY_SHIFT_IDN`, lane gap-ivf 2026-10-08). IVF's coarse quantizer and IVF-PQ's codebooks set it; the
+-    # KMeans estimator leaves it False (its opt-in define was deleted 2026-10-09).
++    # KMeans estimator leaves it False unless built with
++    # `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` (2026-10-04).
+     var lazy_shift: Bool
+     # Not a cuVS field (lane fg-ivf B2, `IVF_IDN_RECLUSTER_CAP`): when > 0,
+     # the k-means|| recluster (`init_scalable_kmeans_plus_plus`) runs at most
