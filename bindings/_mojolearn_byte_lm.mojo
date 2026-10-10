@@ -49,8 +49,7 @@ from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
 from training.checks.optimizer_contract import OptimizerConfig
 from training.checks.train_loop import download_f32, download_f32_into
-from training.neural_arithmetic_profile import neural_arithmetic_suffix
-from training.byte_lm_config import ByteConfig
+from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
 from training.byte_lm import (
     BYTE_PROFILE, ByteTrainer, byte_train_step, byte_train_step_resident,
     byte_eval_loss, byte_eval_loss_resident, byte_rollback,
@@ -1997,7 +1996,11 @@ def byte_lm_launch_probe_binding(count: PythonObject) raises -> PythonObject:
 
 
 def byte_lm_arithmetic_suffix_binding() raises -> PythonObject:
-    return PythonObject(neural_arithmetic_suffix())
+    # The whole byte-LM arithmetic suffix that ByteConfig.profile() appends
+    # (neural + CE token-tree + GEMM leaf + attention tags), not only the
+    # neural part: the loader checks profile == PROFILE + this, so an A/B arm
+    # build (e.g. MOJOLEARN_IDN_ATTN_SOFTMAX=2) loads (bytelm-profile-harness).
+    return PythonObject(byte_lm_arithmetic_suffix())
 
 
 @export
