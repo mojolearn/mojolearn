@@ -179,6 +179,7 @@ in the tables after the sections.
 | [`MOJOLEARN_LLE_FAST_NULL_CANON`](#mojolearn_lle_fast_null_canon) | Decomp | DROPPED-quality | 2026-10-09 | [MOJOLEARN_LLE_FAST_NULL_CANON.patch](../experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch) |
 | [`MOJOLEARN_MCD_DEVICE_CSTEPS`](#mojolearn_mcd_device_csteps) | Decomp | DROPPED-quality | 2026-10-09 | [MOJOLEARN_MCD_DEVICE_CSTEPS.patch](../experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch) |
 | [`MOJOLEARN_SVD_QFIX`](#mojolearn_svd_qfix) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SVD_QFIX.patch](../experiments/removed/MOJOLEARN_SVD_QFIX.patch) |
+| [`MOJOLEARN_SVD_QOLD`](#mojolearn_svd_qold) | Decomp | DROPPED-slower | 2026-10-09 | no code (no patch) |
 | [`MOJOLEARN_AFFINITY_FAST_LOOP`](#mojolearn_affinity_fast_loop) | Cluster | DROPPED-noise | 2026-10-02 | [MOJOLEARN_AFFINITY_FAST_LOOP.patch](../experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch) |
 | [`MOJOLEARN_BGMM_ENT`](#mojolearn_bgmm_ent) | Cluster | DROPPED-noise | 2026-10-03 | [MOJOLEARN_BGMM_ENT.patch](../experiments/removed/MOJOLEARN_BGMM_ENT.patch) |
 | [`MOJOLEARN_BISECT_FAST_RESIDENT`](#mojolearn_bisect_fast_resident) | Cluster | DROPPED-slower | 2026-10-02 | [MOJOLEARN_BISECT_FAST_RESIDENT.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch) |
@@ -1408,6 +1409,15 @@ in the tables after the sections.
 - EXPERIMENTS.md:1271: `SVD_QFIX` (now opt-in `MOJOLEARN_SVD_QFIX`) | svd / istella, taxi | lane/apple-fast-verdicts-4 | rab5-svd | taxi 48.54 -> 54.96 (+13.2%); istella 1790.45 -> 1795.62 (+0.3%) | REVERTED: old route is the default | no quality gain (singular value and reconstruction errors unchanged)
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): SVD_QFIX (TSQR-route svd keeping directions above 2^-40 s_0 with a Householder U_R) was SLOWER with no quality gain: svd taxi 48.54 -> 54.96 ms (+13.2%), istella 1790.45 -> 1795.62 (+0.3%), singular value and reconstruction errors unchanged (rab5-svd); code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_SVD_QOLD
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- No code read the define at `b639a2bd2` (only comments named it); no patch.
+- What it tried: the old opt-out of SVD_QFIX (keep the 2^-20 orth route) while SVD_QFIX was the default; after the revert no code read it (only qfix.mojo's docstring named it).
+- Files the deletion touched (comments only): 
+- EXPERIMENTS.md:1216: `SVD_QFIX` (QOLD `MOJOLEARN_SVD_QOLD`) | svd / istella, taxi | lane/apple-fast-q-linalg @ aaebc0ab8 | - | - | DROPPED-slower | reconciled 2026-10-05: rab5-svd taxi +13.2%, istella +0.3%, no quality gain, Verdicts batch 4; reverted, opt-in MOJOLEARN_SVD_QFIX. Was QUALITY-FIX, READY-AB: U_R null cut 2^-20 -> 2^-40 s_0 + Householder orthonormalization on the TSQR route; audit recon 3.84e-05 / 1.83e-06 vs numpy 4.1e-08 / 4.3e-08; float32 model 2.1e-06 -> 3.2e-07; max_rel_singular_value_error is an artifact (QUALITY_AUDIT_NOTES.md)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): SVD_QOLD was the opt-out name of SVD_QFIX while that was briefly the FAST default; SVD_QFIX was reverted (DROPPED-slower, svd taxi +13.2%) and SVD_QOLD was already a no-op; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Cluster
 
 ### MOJOLEARN_AFFINITY_FAST_LOOP
@@ -2093,7 +2103,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_SEQ_FAST_RAW_DOWN` | EXPERIMENTS.md:1196 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/exec_device.mojo:151` |
 | `MOJOLEARN_SEQ_FAST_VAR_NODRAIN` | EXPERIMENTS.md:1411 DROPPED-slower (lane/apple-fast-s-ts) | `sequence/exec_device.mojo:150` |
 | `MOJOLEARN_SVD_FAST_CHOLQR` | EXPERIMENTS.md:454 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1567` |
-| `MOJOLEARN_SVD_QOLD` | EXPERIMENTS.md:1216 DROPPED-slower (lane/apple-fast-q-linalg @ aaebc0ab8) | `x_decomp/qfix.mojo:10` |
 | `MOJOLEARN_SYM_DERIV_FUSED` | EXPERIMENTS.md:182 DROPPED-noise (lane/apple-fast-sym-iter @ 4956a2234) | `gbdt/methods/sym_iter_fast.mojo:30` |
 | `MOJOLEARN_SYM_GATHER_FUSED` | EXPERIMENTS.md:185 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/sym_fast.mojo:65` |
 | `MOJOLEARN_SYM_HIST_MULT` | EXPERIMENTS.md:187 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/sym_fast.mojo:106` |
