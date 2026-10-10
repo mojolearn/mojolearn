@@ -140,6 +140,7 @@ in the tables after the sections.
 | [`MOJOLEARN_MI_FAST_FOLDS`](#mojolearn_mi_fast_folds) | Prep | DROP (speed + quality) | 2026-10-09 | [MOJOLEARN_MI_FAST_FOLDS.patch](../experiments/removed/MOJOLEARN_MI_FAST_FOLDS.patch) |
 | [`MOJOLEARN_PREP3_LABELS`](#mojolearn_prep3_labels) | Prep | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_PREP3_SPLINE`](#mojolearn_prep3_spline) | Prep | DROPPED-noise |  | lane only |
+| [`MOJOLEARN_PTIMPUTE_ALL`](#mojolearn_ptimpute_all) | Prep | DROP (quality) | 2026-10-09 | [MOJOLEARN_PTIMPUTE_ALL.patch](../experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch) |
 | [`MOJOLEARN_RESAMPLE_FAST_IDX_BULK`](#mojolearn_resample_fast_idx_bulk) | Prep | DROPPED-semantics |  | lane only |
 | [`MOJOLEARN_RESAMPLE_FAST_TAKE`](#mojolearn_resample_fast_take) | Prep | DROPPED-semantics | 2026-10-04 | lane only |
 | [`MOJOLEARN_SHAP_FAST_PIPE`](#mojolearn_shap_fast_pipe) | Prep | DROPPED-speed | 2026-10-04 | lane only |
@@ -1057,6 +1058,16 @@ in the tables after the sections.
 - Recoverable on the lane: `lane/apple-fast-prep3 @ ec65873e3`.
 - EXPERIMENTS.md:374 (Prep (42)): `PREP3_SPLINE` on spline / istella, lane/apple-fast-prep3 @ ec65873e3, A/B prep3-spline-istella, spline istella 11.8 -> 11.6 ms, **DROPPED-noise**: rec-misc 2026-10-04: -1.7% at n=1, under 5%; not merged
 
+### MOJOLEARN_PTIMPUTE_ALL
+
+- What it tried: one define turning on every lane af-ptimpute / apple-fast-batchv PowerTransformer + col_stats candidate (PT_FOLD_NOX, PT_COLBATCH, PT_SPEC, PT_FUSED_TRANSFORM, SI_ONEPASS) on FAST + Apple.
+- Verdict: DROP (quality): M3 batchv-pt-all-istella 2,258 -> 512 ms (-77%), but M2 quality (tools/batchv_quality.sh, 100k x 220 / x 11) lambdas vs define-off max relative shift 9.5e-3, sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_PTIMPUTE_ALL`): the alias only; SI_ONEPASS stays the FAST + Apple default.
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `x_prep/fastpt.mojo`, `tools/batchv_quality.sh`, `tools/batchv_quality.py`
+- Guard refusal (core/six_lane_experiment_guards.mojo:250): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PTIMPUTE_ALL, the PowerTransformer FAST bundle, was DROP (quality): M3 istella 2,258 -> 512 ms but lambda relative shift 9.5e-3 fails the 1e-4 gate; code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:376 (lane/apple-fast-batchv @ 77f1f5afb): `PTIMPUTE_ALL` on power-transformer / istella; taxi, A/B batchv-pt-all-istella, batchv-pt-all-taxi, istella 2,258 -> 512 (-77%), **DROP (quality)**: lambdas vs define-off max rel 9.5e-3
+- EXPERIMENTS.md:1833 (Owed deletions D2): **DELETED**.
+
 ### MOJOLEARN_RESAMPLE_FAST_IDX_BULK
 
 - Verdict: DROPPED-semantics. The code never reached main as a live switch (no code line naming it was ever deleted from main); no patch.
@@ -1925,7 +1936,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_MC_CLASS_BATCH_EST` | EXPERIMENTS.md:166 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:774` |
 | `MOJOLEARN_PL_PAIRS_ONCE` | EXPERIMENTS.md:174 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/pair_logit_group.mojo:130` |
 | `MOJOLEARN_PSHAP_FAST_OVERLAP` | EXPERIMENTS.md:1413 DROPPED-slower (lane/apple-fast-s-shap) | `python/mojolearn/_expansion_trees.py:3530` |
-| `MOJOLEARN_PTIMPUTE_ALL` | EXPERIMENTS.md:376 DROP (quality) (lane/apple-fast-batchv @ 77f1f5afb) | `x_prep/fastpt.mojo:24` |
 | `MOJOLEARN_PT_COLBATCH` | EXPERIMENTS.md:377 DROP (quality) (lane/apple-fast-batchv @ 30aa43339) | `x_prep/fastpt.mojo:11` |
 | `MOJOLEARN_PT_FOLD_NOX` | EXPERIMENTS.md:379 DROP (lane/apple-fast-ptimpute @ 9623cd7dc) | `x_prep/fastpt.mojo:8` |
 | `MOJOLEARN_PT_FUSED_TRANSFORM` | EXPERIMENTS.md:380 DROP (quality, with COLBATCH) (lane/apple-fast-batchv) | `x_prep/fastpt.mojo:18` |

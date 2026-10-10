@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """batchv_quality.py: quality-only check for the lane/apple-fast-batchv
-defines (PTIMPUTE_ALL, SI_ONEPASS, KDE_DIMTILE). It times nothing.
+defines (SI_ONEPASS, KDE_DIMTILE; PTIMPUTE_ALL deleted 2026-10-09). It times nothing.
 
   python tools/batchv_quality.py dump prep|kde <out.npz>   fit on seeded data with the installed .so
   python tools/batchv_quality.py cmp <off.npz> <on.npz> <label>   one BATCHV-Q line per output
