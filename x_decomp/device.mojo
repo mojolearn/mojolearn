@@ -44,7 +44,9 @@ from x_decomp.lu_blocked import (
 )
 from x_decomp.lu_fast_mma import LU_FAST_MMA, lu_fast_mma_factor
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
-from x_decomp.fast_chol import CHOL_FAST_BLOCKED, CH_NB, launch_chol_blocked
+# TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: blocked right-looking Cholesky (x_decomp/fast_chol.mojo, 3 n / 32 launches); cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6.
+# Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
 from x_decomp.omp_block import DECOMP_FAST_OMP_BLOCK, OMP_TPB, omp_block_fits, omp_block_kernel
 from x_decomp.fast_gemm import DECOMP_FAST_GEMM_TILED, FG_TPB, fg_gemm_tiled_kernel, fg_tiles
 from x_decomp.fast_qr import (
@@ -1120,8 +1122,7 @@ comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_a
 #: FAST + Apple only. Source lane/apple-fast-decomp-linalg@74d52352b
 #: (50d12a950). What it does: `orth_on_device_diag`'s `with_diag` caller
 #: (linalg.svd's U on the whole-matrix route) runs each pass as CholeskyQR:
-#: G = A^T A on `launch_gemm`, L = chol(G) (the blocked kernel when
-#: CHOL_FAST_BLOCKED is on and l > CH_NB, else the column driver), R = L^T,
+#: G = A^T A on `launch_gemm`, L = chol(G) (the column driver), R = L^T,
 #: then main's row-parallel A R^-1; two passes = CholeskyQR2. linalg.svd
 #: takes that route instead of the blocked TSQR only when the FAST Metal
 #: binding reports the define (`x_decomp_fast_defines`). A pass falls back
@@ -2496,17 +2497,14 @@ def orth_on_device_diag(
                 var gscr = ctx.enqueue_create_buffer[DType.float32](gscr_n if gscr_n > 0 else 1)
                 var hflag = ctx.enqueue_create_host_buffer[DType.float32](1)
                 launch_gemm(ctx, _p(src), _p(src), _p(dg), _p(gscr), l, m, l, True, False)
-                var gblocked = False
-                comptime if CHOL_FAST_BLOCKED:
-                    if l > CH_NB:
-                        launch_chol_blocked(ctx, _p(dg), _p(dinfo), l)
-                        gblocked = True
-                if not gblocked:
-                    ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
-                    for j in range(l):
-                        ctx.enqueue_function[chol_step_kernel](
-                            dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j), block_dim=TPB
-                        )
+                # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+                # Tried: the blocked kernel for the CholeskyQR Gram factor when l > 32.
+                # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
+                ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
+                for j in range(l):
+                    ctx.enqueue_function[chol_step_kernel](
+                        dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j), block_dim=TPB
+                    )
                 ctx.enqueue_function[cholqr_guard_kernel](  # small-launch(l: Gram columns): the l x l diagonal, l = the matrix's column count
                     dg.unsafe_ptr(), dinfo.unsafe_ptr(), dflag.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=CQ_TPB
                 )
@@ -2956,20 +2954,14 @@ struct DevExec(Exec):
         # thread recomputing the pivot's chain itself, so neither the
         # one-thread kernel (MOJOLEARN_XD_CHOL_SERIAL) nor the one-thread
         # diagonal launch remains; n launches.
-        var blocked = False
-        comptime if CHOL_FAST_BLOCKED:
-            # -D MOJOLEARN_CHOL_FAST_BLOCKED (x_decomp/fast_chol.mojo, default
-            # off, FAST + Apple): `launch_chol_blocked`, 3 n / CH_NB launches;
-            # a matrix within one panel keeps the column driver below.
-            if n > CH_NB:
-                launch_chol_blocked(ctx, _p(da), _p(di), n)
-                blocked = True
-        if not blocked:
-            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
-            for j in range(n):
-                ctx.enqueue_function[chol_step_kernel](
-                    da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
-                )
+        # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+        # Tried: launch_chol_blocked for n > 32 here.
+        # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
+        ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+        for j in range(n):
+            ctx.enqueue_function[chol_step_kernel](
+                da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
+            )
         _down(ctx, da, a, n * n)
         _down(ctx, di, info, 1)
         ctx.synchronize()

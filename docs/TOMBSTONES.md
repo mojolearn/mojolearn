@@ -160,6 +160,7 @@ in the tables after the sections.
 | [`MOJOLEARN_PCA_FAST_NO_ALIAS`](#mojolearn_pca_fast_no_alias) | Decomp | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_PCA_FAST_TOPK`](#mojolearn_pca_fast_topk) | Decomp | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_TSNE_FAST_SPLIT`](#mojolearn_tsne_fast_split) | Decomp | DROPPED-quality | 2026-09-28 | [MOJOLEARN_TSNE_FAST_SPLIT.patch](../experiments/removed/MOJOLEARN_TSNE_FAST_SPLIT.patch) |
+| [`MOJOLEARN_CHOL_FAST_BLOCKED`](#mojolearn_chol_fast_blocked) | Decomp | DROPPED-slower+quality | 2026-10-09 | [MOJOLEARN_CHOL_FAST_BLOCKED.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch) |
 | [`MOJOLEARN_AFFINITY_FAST_LOOP`](#mojolearn_affinity_fast_loop) | Cluster | DROPPED-noise | 2026-10-02 | [MOJOLEARN_AFFINITY_FAST_LOOP.patch](../experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch) |
 | [`MOJOLEARN_BGMM_ENT`](#mojolearn_bgmm_ent) | Cluster | DROPPED-noise | 2026-10-03 | [MOJOLEARN_BGMM_ENT.patch](../experiments/removed/MOJOLEARN_BGMM_ENT.patch) |
 | [`MOJOLEARN_BISECT_FAST_RESIDENT`](#mojolearn_bisect_fast_resident) | Cluster | DROPPED-slower | 2026-10-02 | [MOJOLEARN_BISECT_FAST_RESIDENT.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch) |
@@ -1203,6 +1204,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:341 (Neighbors (42)): `TSNE_FAST_SPLIT` on tsne / istella, lane/apple-fast-ann @ 70833546a, A/B ann-tsne-split-istella, - ms, **DROPPED-quality**: reconciled 2026-10-05: ann-tsne-split-istella-b 2540.9 -> 2318.7 (-8.7%), trustworthiness .9923 -> .9921 (LEDGER 2026-10-03); deleted at merge 8d43ec357. Was OPEN: A/B queued, no judged result yet
 
 
+### MOJOLEARN_CHOL_FAST_BLOCKED
+
+- Verdict: DROPPED-slower+quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch` (reverse of the lane's deletion commit; applies to the lane head).
+- What it tried: a blocked right-looking Cholesky (x_decomp/fast_chol.mojo: diagonal block, panel TRSM, trailing SYRK; 3 n / 32 launches) for potrf_lower's defer_ok callers and x_decomp's chol / CholeskyQR Gram factor, FAST + Apple.
+- Files the patch restores: `cholesky/checks/potrf.mojo`, `x_decomp/device.mojo`, `x_decomp/fast_chol.mojo`
+- EXPERIMENTS.md:422: `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-chol-blocked-synthetic | old-head B 476 vs board FAST 261 (no same-build A) | DROPPED-slower+quality 2026-10-04 (see verdicts batch 3) | ported to main (x_decomp/fast_chol.mojo, potrf_lower + DevExec.chol); default off; potrf route only for defer_ok callers with CHOL_FAST_NOSYNC on (LAPACK partial factor kept via the redo); awaiting M2 build + M3 A/B
+- EXPERIMENTS.md:1241: `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | 259.4 -> 330.7 | DROPPED-slower+quality | relative_residual 1.66e-7 -> 1.98e-6 (M3, full board, 1 run per arm, 2026-10-04); stays off
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): CHOL_FAST_BLOCKED (blocked right-looking Cholesky, x_decomp/fast_chol.mojo) was SLOWER and less accurate: cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6 (M3, 1 run per arm); code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Cluster
 
 ### MOJOLEARN_AFFINITY_FAST_LOOP
@@ -1822,7 +1833,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_ARIMA_FAST_D_CONCURRENT` | EXPERIMENTS.md:1409 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:140` |
 | `MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT` | EXPERIMENTS.md:1408 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:103` |
 | `MOJOLEARN_ARIMA_FAST_STEPWISE` | EXPERIMENTS.md:1417 DROPPED-slower (main a6ff25ff8) | `arima/impl/fast_order_search.mojo:201` |
-| `MOJOLEARN_CHOL_FAST_BLOCKED` | EXPERIMENTS.md:422 DROPPED-slower+quality 2026-10-04 (see verdicts batch 3) (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `x_decomp/fast_chol.mojo:5` |
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_DECOMP_FAST_GEMM_TILED` | EXPERIMENTS.md:425 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `x_decomp/fast_gemm.mojo:6` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
