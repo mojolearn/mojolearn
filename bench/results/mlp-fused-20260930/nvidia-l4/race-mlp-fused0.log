@@ -1,8 +1,0 @@
-BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"amsgrad": false, "betas": [0.9, 0.999], "eps": 1e-08, "learning_rate": 0.001, "seed": "none (deterministic)", "weight_decay": 0.01}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mlp-train-step", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
-NEURAL-ROUND lane=mlp-train-step arm=ours round=0 ms=1202.746 digest=None
-NEURAL-ROUND lane=mlp-train-step arm=ours round=1 ms=2.472 digest=None
-NEURAL-ROUND lane=mlp-train-step arm=ours round=2 ms=2.149 digest=None
-NEURAL-ROUND lane=mlp-train-step arm=ours round=3 ms=2.011 digest=None
-NEURAL-ROUND lane=mlp-train-step arm=ours round=4 ms=2.209 digest=None
-NEURAL-ROUND lane=mlp-train-step arm=ours round=5 ms=2.079 digest=None
-NEURAL lane=mlp-train-step arm=ours status=ok median_ms=2.149175852537155 quality={"loss_first_step": 1.1064348220825195, "loss_last_step": 1.160229206085205, "steps": 6}

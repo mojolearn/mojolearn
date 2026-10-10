@@ -1,5 +1,0 @@
-use  /Users/andrewhendel/mojolearn-wt/verify-applicability/bench/results/identity_break/2026-09-28_admitted-metrics/do-amd/x-metrics-regression.cpudefault.json: class cpu, commit 2c81a1293, 72 of 81 cell parts; absent rlpair x9 (not run)
-use  /Users/andrewhendel/mojolearn-wt/verify-applicability/bench/results/identity_break/2026-09-28_admitted-metrics/do-amd/x-metrics-regression.gpu.json: class amd, commit 2c81a1293, 72 of 81 cell parts; absent rlpair x9 (not run)
-use  /Users/andrewhendel/mojolearn-wt/verify-applicability/bench/results/identity_break/2026-09-28_admitted-metrics/m4-a/x-metrics-regression.cpudefault.json: class cpu, commit 2c81a1293, 72 of 81 cell parts; absent rlpair x9 (not run)
-use  /Users/andrewhendel/mojolearn-wt/verify-applicability/bench/results/identity_break/2026-09-28_admitted-metrics/m4-a/x-metrics-regression.gpu.json: class apple, commit 2c81a1293, 72 of 81 cell parts; absent rlpair x9 (not run)
-absent rlpair: 36 cell parts over 4 admitted columns (not run x36)
