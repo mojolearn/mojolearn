@@ -11,11 +11,8 @@ Three kernels, all one launch, all parallel, no host step:
 
   * (`rank_sort_f32_kernel`, -D MOJOLEARN_RESAMPLE_FAST_RANK_SORT, was
     deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
-  * `bootstrap_mean_fast_kernel` (-D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD): mean
-    / diff_means replicates with ONE block fold per replicate (each thread
-    folds its own draws in registers, then `block.sum`) instead of one
-    `virtual_block_sum` per 256-draw chunk. Same draws (`draw_row_index` at
-    the same positions); FAST's summation order is not pinned.
+  * (`bootstrap_mean_fast_kernel`, -D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD, was
+    deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
   * `perm_select_fast_kernel` (RESAMPLE_FAST_PERM_SELECT, default; _OFF): the
     permutation null by a 4-bit radix select (16 counters per thread in a
     SIMD register, block totals through threadgroup memory, no atomics, keys
@@ -73,110 +70,9 @@ comptime PERM_BINS = 16
 # b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch; record in docs/TOMBSTONES.md.
 
 
-# ===========================================================================
-# 2. mean / diff_means replicates with one block fold each
-# ===========================================================================
-
-
-def bootstrap_mean_fast_kernel[two: Bool, tpb: Int](
-    theta: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    lo_bits: Int32,
-    hi_bits: Int32,
-    r_first_in: Int32,
-    n_replicates_in: Int32,
-    n_in: Int32,
-    n_rows_in: Int32,
-    n_features_in: Int32,
-):
-    """`theta[r] = mean(resample(x, r))` (`two`: minus the mean of column
-    1, the paired diff_means). One block per replicate; thread `t` draws
-    positions `t, t + tpb, ...` with `draw_row_index` (the same draws as
-    `bootstrap_stat_kernel`) and folds them in a register, then ONE
-    `block.sum` per column. Every thread reaches the block primitive."""
-    var rr = Int(block_idx.x)
-    if rr >= Int(n_replicates_in):
-        return
-    var r = Int(r_first_in) + rr
-    var tid = Int(thread_idx.x)
-    var key = key_join(lo_bits, hi_bits)
-    var n = Int(n_in)
-    var d = Int(n_features_in)
-    var acc0 = Float32(0.0)
-    var acc1 = Float32(0.0)
-    var i = tid
-    while i < n:
-        var row = Int(draw_row_index(key, r, i, n_rows_in))
-        acc0 += ftz(x.unsafe_load(row * d))
-        comptime if two:
-            acc1 += ftz(x.unsafe_load(row * d + 1))
-        i += tpb
-    var s0 = block_sum[block_size=tpb](acc0)
-    var s1 = Float32(0.0)
-    comptime if two:
-        s1 = block_sum[block_size=tpb](acc1)
-    if tid == 0:
-        var value = _mean_of_sum(s0, n)
-        comptime if two:
-            value = ftz(value - _mean_of_sum(s1, n))
-        theta.unsafe_store(rr, canonicalize_nan(value))
-
-
-def bootstrap_mean_fast(
-    ctx: DeviceContext,
-    mut theta: DeviceBuffer[DType.float32],
-    mut x: DeviceBuffer[DType.float32],
-    key: UInt64,
-    r_first: Int,
-    n_replicates: Int,
-    n: Int,
-    n_features: Int,
-    statistic: Int,
-) raises -> Bool:
-    """Replicates `[r_first, r_first + n_replicates)` of mean or diff_means
-    into `theta`, FAST_TPB threads per replicate, drained. False (nothing
-    enqueued): another statistic, the caller takes main's launch."""
-    comptime if RESAMPLE_FAST_APPLE:
-        if n_replicates <= 0:
-            return True
-        if statistic == STAT_DIFF_MEANS:
-            comptime kern2 = bootstrap_mean_fast_kernel[True, FAST_TPB]
-            ctx.enqueue_function[kern2](
-                theta.unsafe_ptr(),
-                x.unsafe_ptr(),
-                key_lo(key),
-                key_hi(key),
-                Int32(r_first),
-                Int32(n_replicates),
-                Int32(n),
-                Int32(n),
-                Int32(n_features),
-                grid_dim=(n_replicates, 1, 1),
-                block_dim=(FAST_TPB, 1, 1),
-            )
-        elif statistic == STAT_MEAN:
-            comptime kern1 = bootstrap_mean_fast_kernel[False, FAST_TPB]
-            ctx.enqueue_function[kern1](
-                theta.unsafe_ptr(),
-                x.unsafe_ptr(),
-                key_lo(key),
-                key_hi(key),
-                Int32(r_first),
-                Int32(n_replicates),
-                Int32(n),
-                Int32(n),
-                Int32(n_features),
-                grid_dim=(n_replicates, 1, 1),
-                block_dim=(FAST_TPB, 1, 1),
-            )
-        else:
-            return False
-        _ = theta.unsafe_ptr()
-        _ = x.unsafe_ptr()
-        ctx.synchronize()
-        return True
-    else:
-        return False
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_ONE_FOLD (DROPPED-slower: bootstrap taxi 16.31 -> 13.89 ms but istella 12.84 -> 14.23)
+# deleted 2026-10-09 on lane/owed-deletions-D1 (mean / diff_means replicates folded once per block); code recoverable at
+# b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_ONE_FOLD.patch; record in docs/TOMBSTONES.md.
 
 
 # ===========================================================================

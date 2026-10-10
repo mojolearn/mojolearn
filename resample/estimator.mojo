@@ -38,7 +38,6 @@ from experiments.classical_identical_ideas.shared_controls import C11_DRAW_GATHE
 from resample.gather_fast import GATHER_COLS, GATHER_ROWS, classical_draw_gather_kernel, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
 from resample.fast_apple import (
     RESAMPLE_FAST_APPLE,
-    bootstrap_mean_fast,
     perm_select_fast,
 )
 from std.math import ceildiv
@@ -190,21 +189,9 @@ comptime RESAMPLE_MAP_TPB = 256
 #: deleted 2026-10-09 on lane/owed-deletions-D1 (the bootstrap distribution sorted by one rank launch); code recoverable at
 #: b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch; record in docs/TOMBSTONES.md.
 
-#: `-D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` (bootstrap, _bootstrap_theta):
-#: mean / diff_means replicates folded once per block (each thread's draws in
-#: registers, then one block.sum; bootstrap_mean_fast_kernel) instead of
-#: `_chunked_sum`'s virtual_block_sum per 256-draw chunk (79 block folds per
-#: replicate at n = 20,000). Same draws, FAST's own summation order (bits
-#: move; quality is the interval vs scipy). Source
-#: lane/apple-fast-resample@50b96e795. Known: never compiled, never
-#: measured. Fixed here: current syntax; the launch reports False for any
-#: other statistic so main's launch runs.
-#: DROPPED-slower, stays OFF (M3 afc_ab_def, full board size, 1 run per arm,
-#: 2026-10-04): bootstrap taxi 16.31 -> 13.89 ms, istella 12.84 -> 14.23 ms
-#: (mixed: slower on istella).
-comptime RESAMPLE_FAST_ONE_FOLD = (
-    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_ONE_FOLD"]()
-)
+#: TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_ONE_FOLD (DROPPED-slower: bootstrap taxi 16.31 -> 13.89 ms but istella 12.84 -> 14.23)
+#: deleted 2026-10-09 on lane/owed-deletions-D1 (mean / diff_means replicates folded once per block); code recoverable at
+#: b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_ONE_FOLD.patch; record in docs/TOMBSTONES.md.
 
 #: `-D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT` (permutation_test_host): the null
 #: by fast_apple.mojo's 4-bit radix select (16 counters per thread in a SIMD
@@ -267,15 +254,14 @@ comptime CV_FAST_TRUST_FOLDS = (
 def resample_fast_defines() -> Int:
     """The FAST + Apple candidate defines this build was compiled with, as a
     bit mask (0 on every IDENTICAL and every non-Apple build): 1 RANK_SORT (deleted),
-    2 ONE_FOLD, 4 PERM_SELECT, 32 CV_SLICE, 64 CV_TRUST_FOLDS, 128
+    2 ONE_FOLD (deleted), 4 PERM_SELECT, 32 CV_SLICE, 64 CV_TRUST_FOLDS, 128
     GATHER_NARROW (8 and 16 were
     the old branch's IDX_BULK and GATHER, not ported). Read by the
     `resample_fast_defines` binding; python/mojolearn/model_selection.py
     switches on it instead of an environment variable."""
     var m = 0
     # bit 1 (RESAMPLE_FAST_RANK_SORT) is always 0 since its deletion (2026-10-09)
-    comptime if RESAMPLE_FAST_ONE_FOLD:
-        m |= 2
+    # bit 2 (RESAMPLE_FAST_ONE_FOLD) is always 0 since its deletion (2026-10-09)
     comptime if RESAMPLE_FAST_PERM_SELECT:
         m |= 4
     comptime if CV_FAST_SLICE:
@@ -1173,30 +1159,21 @@ def _bootstrap_theta(
         _ = vals^
         _ = svals^
     else:
-        # -D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD (FAST + Apple, default OFF):
-        # mean / diff_means folded once per replicate block instead of a
-        # virtual_block_sum per 256-draw chunk; same draws, FAST's fold.
-        # Any other statistic: main's launch.
-        var folded = False
-        comptime if RESAMPLE_FAST_ONE_FOLD:
-            folded = bootstrap_mean_fast(
-                ctx, theta, dx, key, r_first, n_resamples, n, n_features,
-                statistic,
-            )
-        if not folded:
-            _launch_bootstrap_stat(
-                ctx,
-                theta,
-                dx,
-                key,
-                r_first,
-                n_resamples,
-                n,
-                n,
-                n_features,
-                statistic,
-                tpb,
-            )
+        # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_ONE_FOLD (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
+        # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_ONE_FOLD.patch.
+        _launch_bootstrap_stat(
+            ctx,
+            theta,
+            dx,
+            key,
+            r_first,
+            n_resamples,
+            n,
+            n,
+            n_features,
+            statistic,
+            tpb,
+        )
         ctx.synchronize()
 
 
