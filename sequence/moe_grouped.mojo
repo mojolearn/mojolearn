@@ -4,7 +4,8 @@
 2026-10-08; plan docs/plans/gaps-2026-10-08.md section 8): THE DEVICE SIDE.
 The switch and the host twin are `sequence/moe_grouped_fold.mojo`.
 
-MOJOLEARN_IDN_MOE_GROUPED_GEMM, in `DeviceExec.launch` after the device
+MOJOLEARN_IDN_MOE_GROUPED_GEMM (the IDENTICAL default since 2026-10-10;
+`_OFF` restores moe_reg's tile), in `DeviceExec.launch` after the device
 grouping of the (token, pick) pairs by expert (MOE_DEVGROUP's `order` and
 `poff`, sequence/moe_reg.mojo):
 

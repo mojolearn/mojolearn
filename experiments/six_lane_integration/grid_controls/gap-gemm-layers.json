@@ -5,15 +5,15 @@
  "head": "02f7aed95",
  "controls": {
   "moe_grouped_gemm": {
-   "define": "MOJOLEARN_IDN_MOE_GROUPED_GEMM",
+   "define": "MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_MOE_GROUPED_GEMM=1"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF=1"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "sequence/moe_grouped_fold.mojo:31",
     "sequence/moe_grouped.mojo:1",
@@ -25,9 +25,9 @@
    "binding": "_mojolearn_x_sequence",
    "host_binding": "_mojolearn_x_sequence_host",
    "bits_change": true,
-   "status": "new",
+   "status": "promoted 2026-10-10 (lane/postmerge-act-6; post-merge neural A/B, one run per arm, nv2 L40S v1052 -> v1055 on main 9f83ea479, amd MI325X a1152 -> a1155 on main 0a7b206f1): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
    "board": "neural:moe (synthetic)",
-   "note": "Plan gaps-2026-10-08 section 8: each expert's gate|up and down products through identical_gemm_into (OP_NT on the slot-ordered pairs, one launch per expert), replacing moe_reg's one-chain tile; the combine reads s through slot_of in the same pick order. Bits: the contract's leaves + balanced tree over d and f instead of one chain (NV, AMD and the host twin sequence/moe.mojo together; build the host twin with the same define). One download of the E+1 pair offsets per forward (launch sizing). IDENTICAL only; FAST and Apple keep moe_reg / moe_mma.",
+   "note": "Plan gaps-2026-10-08 section 8: each expert's gate|up and down products through identical_gemm_into (OP_NT on the slot-ordered pairs, one launch per expert), replacing moe_reg's one-chain tile; the combine reads s through slot_of in the same pick order. Bits: the contract's leaves + balanced tree over d and f instead of one chain (NV, AMD and the host twin sequence/moe.mojo together; build the host twin with the same define). One download of the E+1 pair offsets per forward (launch sizing). IDENTICAL only; FAST and Apple keep moe_reg / moe_mma. PROMOTED: moe NV 23.16 -> 14.22 ms (0.61x) / AMD 18.79 -> 15.15 ms (0.81x); digest 393fefe9 -> c7c1ee2c on BOTH vendors (bits change; host twin _mojolearn_x_sequence_host follows). The off arm restores moe_reg one-chain tile.",
    "reach": "neural:moe: sequence/pyapi.mojo moe_forward_run -> _moe_devgroup_rest (MOE_DEVGROUP, E <= 127) -> DeviceExec.launch[OP_MOE_HIDDEN|OP_MOE_OUT] a.i6 == 1"
   },
   "cnn_bn_fuse": {

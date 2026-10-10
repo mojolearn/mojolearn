@@ -5,7 +5,14 @@
 AND THE SWITCH. HOST-SAFE (no device construct): `sequence/moe.mojo`'s items
 import this file, `sequence/moe_grouped.mojo` holds the device side.
 
-MOJOLEARN_IDN_MOE_GROUPED_GEMM (IDENTICAL, default off). The device runs
+MOJOLEARN_IDN_MOE_GROUPED_GEMM: the IDENTICAL default since 2026-10-10
+(lane/postmerge-act-6; `-D MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF` restores
+`moe_reg`'s one-chain tile; the old on-define is refused in
+core/six_lane_experiment_guards.mojo). Post-merge A/B, one run per arm (nv2
+L40S v1052 -> v1055 on main 9f83ea479, MI325X a1152 -> a1155 on main
+0a7b206f1): moe NV 23.16 -> 14.22 ms (0.61x) / AMD 18.79 -> 15.15 ms (0.81x);
+digest 393fefe9 -> c7c1ee2c on BOTH vendors (bits change, host twin with
+them); conv2d / resnet-block untouched (1.00-1.03x). The device runs
 each expert's two products through `identical_gemm_into` (profile
 mojolearn.identical.gemm.fp32.v1): gate|up = x_e . W_gu[e]^T over d, and
 s_e = h_e . W_down[e]^T over f. So a cell is no longer `moe_reg`'s single
@@ -30,7 +37,7 @@ from sequence.ops import FP
 
 comptime MOE_GROUPED_GEMM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_MOE_GROUPED_GEMM"]()
+    and not is_defined["MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
