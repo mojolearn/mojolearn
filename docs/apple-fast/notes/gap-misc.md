@@ -30,10 +30,10 @@ pyapi flag is `c.i6 = 1` at sequence/pyapi.mojo:~1540):
   - Kernels: `moe_hidden_mma_kernel` :119, `moe_out_mma_kernel` :219.
   - Each cell is still one fma chain in ascending reduction order, without the per-step ftz. Bits may move
     in subnormal cases, so quality is judged on the board's rel_fro / max_rel_diff.
-- `-D MOJOLEARN_MOE_FAST_MMA_KB32`: 32-word slabs, half the barriers.
-- `-D MOJOLEARN_MOE_FAST_MMA_WIDE`: hidden block 64 x 64, 32 accumulator fragments per simdgroup.
+- `-D MOJOLEARN_MOE_FAST_MMA_KB32`: 32-word slabs, half the barriers (deleted 2026-10-09, docs/TOMBSTONES.md).
+- `-D MOJOLEARN_MOE_FAST_MMA_WIDE`: hidden block 64 x 64, 32 accumulator fragments per simdgroup (deleted 2026-10-10, docs/TOMBSTONES.md).
 - `-D MOJOLEARN_MOE_FAST_MMA_PF`: the next slab's global words are loaded into registers before the current
-  slab's fragment products.
+  slab's fragment products (deleted 2026-10-10, docs/TOMBSTONES.md).
 
 ## gbdt-depthwise taxi: 11,123 ms vs xgboost-cpu 10,435 ms (1.07x)
 

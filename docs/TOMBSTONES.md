@@ -284,6 +284,8 @@ in the tables after the sections.
 | [`MOJOLEARN_SEQ_FAST_RAW_DOWN`](#mojolearn_seq_fast_raw_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SEQ_FAST_RAW_DOWN.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_RAW_DOWN.patch) |
 | [`MOJOLEARN_IDN_CNN_BN_FUSE`](#mojolearn_idn_cnn_bn_fuse) | Neural | DROPPED-noise | 2026-10-10 | [MOJOLEARN_IDN_CNN_BN_FUSE.patch](../experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch) |
 | [`MOJOLEARN_IDN_EMB_SCAN_DEFERRED`](#mojolearn_idn_emb_scan_deferred) | Neural | DROPPED-slower | 2026-10-10 | [MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch](../experiments/removed/MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch) |
+| [`MOJOLEARN_MOE_FAST_MMA_WIDE`](#mojolearn_moe_fast_mma_wide) | Neural | DROPPED-slower (bundle) | 2026-10-10 | [MOJOLEARN_MOE_FAST_MMA_WIDE.patch](../experiments/removed/MOJOLEARN_MOE_FAST_MMA_WIDE.patch) |
+| [`MOJOLEARN_MOE_FAST_MMA_PF`](#mojolearn_moe_fast_mma_pf) | Neural | DROPPED-slower (bundle) | 2026-10-10 | [MOJOLEARN_MOE_FAST_MMA_PF.patch](../experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_NT_TILED`](#mojolearn_apple_fast_gemm_nt_tiled) | GEMM | DROPPED-slower | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_PINNED`](#mojolearn_apple_fast_gemm_pinned) | GEMM | DROPPED-noise | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch) |
 | [`MOJOLEARN_BGMM_FAST_MAHAL_GEMM`](#mojolearn_bgmm_fast_mahal_gemm) | GEMM | DROPPED-slower |  | lane only |
@@ -2415,6 +2417,24 @@ in the tables after the sections.
 - Files the patch restores: `bindings/_mojolearn_embedding.mojo`
 - grid_controls: `neural-io-2.json` `idn_emb_scan_deferred_off` moved to `removed`.
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): both defines; code at main 9f83ea479.
+
+### MOJOLEARN_MOE_FAST_MMA_WIDE
+
+- Verdict: DROPPED-slower as the bundle KB32 + WIDE + PF on top of the default MOE_FAST_MMA: M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms (2x slower); never A/B-ed alone (EXPERIMENTS.md row "MOE_FAST_MMA_KB32 + _WIDE + _PF"). Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit eaa014bd6); `MM_FNH` is 2. KB32 went on lane/owed-deletions-D2; MOE_FAST_MMA itself stays the FAST + Apple default.
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_MOE_FAST_MMA_WIDE.patch` (reverse of the deletion commit, code files only). The PF deletion came after it in the same file: apply `MOJOLEARN_MOE_FAST_MMA_PF.patch` first (reverse deletion order), or use `git apply -3`.
+- What it tried: the FAST + Apple MoE hidden product (`moe_hidden_mma_kernel`, sequence/moe_mma.mojo) as 64 pairs x 64 features a block (gate and up 32 accumulator fragments per simdgroup) instead of 64 x 32. FAST only; quality on rel_fro / max_rel_diff.
+- Files the patch restores: `sequence/moe_mma.mojo`
+- grid_controls: none (a FAST + Apple define, never in an IDENTICAL grid).
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): MOE_FAST_MMA_WIDE; code at main 9f83ea479.
+
+### MOJOLEARN_MOE_FAST_MMA_PF
+
+- Verdict: DROPPED-slower as the bundle KB32 + WIDE + PF on top of the default MOE_FAST_MMA: M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms (2x slower); never A/B-ed alone. Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit 3891fb535); the slab loads follow the slab's fragment products. MOE_FAST_MMA itself stays the FAST + Apple default.
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch` (reverse of the deletion commit, code files only; applies to the current tree; apply it before `MOJOLEARN_MOE_FAST_MMA_WIDE.patch`).
+- What it tried: the next slab's global words read into registers before the current slab's fragment products in both MoE MMA kernels (`moe_hidden_mma_kernel`, `moe_out_mma_kernel`), hiding one slab of load latency. FAST only.
+- Files the patch restores: `sequence/moe_mma.mojo`
+- grid_controls: none (a FAST + Apple define).
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): MOE_FAST_MMA_PF; code at main 9f83ea479.
 
 ## GEMM
 
