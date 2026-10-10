@@ -1037,7 +1037,7 @@ in the tables after the sections.
 ### MOJOLEARN_MI_ALL
 
 - What it tried: one define turning on every lane/apple-fast-mi(v) mutual-information candidate (REG_TIES, REG_RANKMAJOR, FAST_FOLDS, CLF_RANKMAJOR) on FAST + Apple.
-- Verdict: DROP (quality): M3 miv-reg-all-* / miv-clf-all-* reg istella 46,430 -> 1,151 ms, taxi 2,316 -> 81; clf istella 715 -> 552, taxi 203 -> 145, but it includes MI_FAST_FOLDS, which fails the selected-set gate (M2 tie-heavy fixture: scores move up to 3.2% of scale, selected-set symmetric difference 2). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_MI_ALL`): the alias only; REG_TIES and CLF_RANKMAJOR stay FAST defaults, REG_RANKMAJOR keeps its own define.
+- Verdict: DROP (quality): M3 miv-reg-all-* / miv-clf-all-* reg istella 46,430 -> 1,151 ms, taxi 2,316 -> 81; clf istella 715 -> 552, taxi 203 -> 145, but it includes MI_FAST_FOLDS, which fails the selected-set gate (M2 tie-heavy fixture: scores move up to 3.2% of scale, selected-set symmetric difference 2). Deleted 2026-10-09 by `f59dc2c0a` on `lane/owed-deletions-D2`: the alias only; REG_TIES and CLF_RANKMAJOR stay FAST defaults, REG_RANKMAJOR keeps its own define.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_MI_ALL.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `x_prep/device.mojo`, `tools/miv_quality.sh`, `tools/miv_quality.py`
 - Guard refusal (core/six_lane_experiment_guards.mojo:244): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_MI_ALL, the mutual-information FAST bundle, was DROP (quality): M3 miv-reg-all istella 46,430 -> 1,151 ms but it includes MI_FAST_FOLDS (selected set changes); name the members instead; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1047,7 +1047,7 @@ in the tables after the sections.
 ### MOJOLEARN_MI_FAST_FOLDS
 
 - What it tried: x_prep ops 66 / 70 (`mi_colscale`, `mi_reduce`, one thread per column over n rows) as threadgroup folds per column on FAST + Apple (lane apple-fast-mi; x_prep/dmi_fast.mojo `mi_colscale_fast_kernel`, `mi_reduce_fast_kernel`).
-- Verdict: DROP (speed + quality): M3 mi-reg-folds-istella-x -0.2% (inconclusive), M2 tools/miv_quality.sh (30k x 48 tie-heavy, cont / 5-value / 2-class y): scores move up to 3.2% of scale, selected set changes (symmetric difference 2). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_MI_FAST_FOLDS`).
+- Verdict: DROP (speed + quality): M3 mi-reg-folds-istella-x -0.2% (inconclusive), M2 tools/miv_quality.sh (30k x 48 tie-heavy, cont / 5-value / 2-class y): scores move up to 3.2% of scale, selected set changes (symmetric difference 2). Deleted 2026-10-09 by `602a364d7` on `lane/owed-deletions-D2`.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_MI_FAST_FOLDS.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `x_prep/device.mojo`, `x_prep/dmi_fast.mojo`, `tools/miv_quality.sh`, `tools/miv_quality.py`
 - Guard refusal (core/six_lane_experiment_guards.mojo:245): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_MI_FAST_FOLDS, the mutual-information column threadgroup folds, was DROP (speed + quality): istella -0.2%, scores move up to 3.2% of scale and the selected set changes; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1070,7 +1070,7 @@ in the tables after the sections.
 ### MOJOLEARN_PTIMPUTE_ALL
 
 - What it tried: one define turning on every lane af-ptimpute / apple-fast-batchv PowerTransformer + col_stats candidate (PT_FOLD_NOX, PT_COLBATCH, PT_SPEC, PT_FUSED_TRANSFORM, SI_ONEPASS) on FAST + Apple.
-- Verdict: DROP (quality): M3 batchv-pt-all-istella 2,258 -> 512 ms (-77%), but M2 quality (tools/batchv_quality.sh, 100k x 220 / x 11) lambdas vs define-off max relative shift 9.5e-3, sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_PTIMPUTE_ALL`): the alias only; SI_ONEPASS stays the FAST + Apple default.
+- Verdict: DROP (quality): M3 batchv-pt-all-istella 2,258 -> 512 ms (-77%), but M2 quality (tools/batchv_quality.sh, 100k x 220 / x 11) lambdas vs define-off max relative shift 9.5e-3, sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate. Deleted 2026-10-09 by `3715af5f9` on `lane/owed-deletions-D2`: the alias only; SI_ONEPASS stays the FAST + Apple default.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `x_prep/fastpt.mojo`, `tools/batchv_quality.sh`, `tools/batchv_quality.py`
 - Guard refusal (core/six_lane_experiment_guards.mojo:250): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PTIMPUTE_ALL, the PowerTransformer FAST bundle, was DROP (quality): M3 istella 2,258 -> 512 ms but lambda relative shift 9.5e-3 fails the 1e-4 gate; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1080,7 +1080,7 @@ in the tables after the sections.
 ### MOJOLEARN_PT_FOLD_NOX
 
 - What it tried: x_prep/fastred.mojo `pt_fold_fast_kernel` reading X only at the first evaluation (K = 0, the unit's rule) and folding T alone afterwards, to skip a d-strided X read per evaluation (lane af-ptimpute, FAST + Apple; flag bit 16).
-- Verdict: DROP: ptimpute-pt-nox-istella / -taxi recorded no gain (`-`), moot under COLBATCH (docs/apple-fast/notes/ptimpute.md, where the tiled kernel never reads T); and COLBATCH is on under the FAST + Apple default PT_SCORE_STABLE, so this kernel is off the default path. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_PT_FOLD_NOX`).
+- Verdict: DROP: ptimpute-pt-nox-istella / -taxi recorded no gain (`-`), moot under COLBATCH (docs/apple-fast/notes/ptimpute.md, where the tiled kernel never reads T); and COLBATCH is on under the FAST + Apple default PT_SCORE_STABLE, so this kernel is off the default path. Deleted 2026-10-09 by `f9e6ee32b` on `lane/owed-deletions-D2`.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_PT_FOLD_NOX.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `x_prep/fastpt.mojo`, `x_prep/fastred.mojo`, `bindings/_mojolearn_x_prep.mojo`, `python/mojolearn/_expansion_prep.py`
 - Guard refusal (core/six_lane_experiment_guards.mojo:253): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PT_FOLD_NOX, the PowerTransformer fold that skips X after K = 0, was DROP: no recorded gain (ptimpute-pt-nox-*), moot under COLBATCH; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1090,7 +1090,7 @@ in the tables after the sections.
 ### MOJOLEARN_PT_FUSED_TRANSFORM
 
 - What it tried: PowerTransformer.fit's standardize tail (pt_apply + col_stats) as `cs_tile_kernel` with the transform in registers (no TX block; x_prep/fastpt.mojo LAM >= 0 arm, x_prep/device.mojo `fused_tail_pair` dispatch, Python flag bit 4), FAST + Apple.
-- Verdict: DROP (quality, with COLBATCH): batchv-pt-nospec-* (COLBATCH + FUSED_TRANSFORM + SI_ONEPASS) istella 2,262 -> 425, taxi 305 -> 54.5 ms, lambdas shift 9.5e-3 (rel) and fail the gate; never A/B-ed alone; already compiled out under the FAST + Apple default PT_SCORE_STABLE. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_PT_FUSED_TRANSFORM`); `cs_tile_kernel` / `cs_tile_stats` lost their LAM / method arguments (SI_ONEPASS passed LAM = -1: same values).
+- Verdict: DROP (quality, with COLBATCH): batchv-pt-nospec-* (COLBATCH + FUSED_TRANSFORM + SI_ONEPASS) istella 2,262 -> 425, taxi 305 -> 54.5 ms, lambdas shift 9.5e-3 (rel) and fail the gate; never A/B-ed alone; already compiled out under the FAST + Apple default PT_SCORE_STABLE. Deleted 2026-10-09 by `349b555d8` on `lane/owed-deletions-D2`; `cs_tile_kernel` / `cs_tile_stats` lost their LAM / method arguments (SI_ONEPASS passed LAM = -1: same values).
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `x_prep/fastpt.mojo`, `x_prep/device.mojo`, `bindings/_mojolearn_x_prep.mojo`, `python/mojolearn/_expansion_prep.py`, `tools/batchv_quality.sh`
 - Guard refusal (core/six_lane_experiment_guards.mojo:252): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PT_FUSED_TRANSFORM, the fused PowerTransformer standardize tail, was DROP (quality, with COLBATCH): batchv-pt-nospec lambda shift 9.5e-3; off under the default PT_SCORE_STABLE; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1101,7 +1101,7 @@ in the tables after the sections.
 ### MOJOLEARN_PT_SPEC
 
 - What it tried: PowerTransformer's FAST search speculated 3 golden steps a round with COLBATCH's tiled kernel over the speculated candidates (pt_smap + pt_sfold fused, up to PT_MAXM a thread; x_prep/fastpt.mojo `pt_spec_fold`, `pt_stile_finish_kernel`; Python `_PT_FAST_SPEC`, flag bit 2), FAST + Apple.
-- Verdict: DROP: M3 ptimpute-pt-spec-istella +10% vs COLBATCH; ptimpute-pt-spec-vs-colbatch-istella 910 -> 1,012 ms (+11%); on main PTIMPUTE_ALL 512 vs the no-SPEC set 425. It was also off whenever PT_SCORE is on (the FAST + Apple default through PT_SCORE_STABLE). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_PT_SPEC`). The IDENTICAL speculation (`MOJOLEARN_XPREP_PT_SPEC`, x_prep/transform.mojo) is a different knob and stays.
+- Verdict: DROP: M3 ptimpute-pt-spec-istella +10% vs COLBATCH; ptimpute-pt-spec-vs-colbatch-istella 910 -> 1,012 ms (+11%); on main PTIMPUTE_ALL 512 vs the no-SPEC set 425. It was also off whenever PT_SCORE is on (the FAST + Apple default through PT_SCORE_STABLE). Deleted 2026-10-09 by `92967cc46` on `lane/owed-deletions-D2`. The IDENTICAL speculation (`MOJOLEARN_XPREP_PT_SPEC`, x_prep/transform.mojo) is a different knob and stays.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_PT_SPEC.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `x_prep/fastpt.mojo`, `x_prep/device.mojo`, `bindings/_mojolearn_x_prep.mojo`, `python/mojolearn/_expansion_prep.py`
 - Guard refusal (core/six_lane_experiment_guards.mojo:251): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PT_SPEC, the FAST speculated PowerTransformer search on the tiled kernel, was DROP: M3 istella +10% vs COLBATCH (910 -> 1,012 ms); code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1497,7 +1497,7 @@ in the tables after the sections.
 ### MOJOLEARN_SEQ_FAST_VAR_NODRAIN
 
 - What it tried: VAR fit / forecast bindings mark their DeviceExec drained after their own final wait so `DeviceExec.__deinit__` skips the second empty synchronize (one Metal wait fewer per call), FAST + Apple (lane apple-fast-s-ts; sequence/exec_device.mojo, bindings/_mojolearn_x_sequence.mojo).
-- Verdict: DROPPED-slower: M3 afc_ab_def verdicts batch 6 (2026-10-05) var taxi-hourly +10.6% (mixed). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_SEQ_FAST_VAR_NODRAIN`): the define, the `drained` field and `mark_drained`; `__deinit__` always synchronizes, as every default build did.
+- Verdict: DROPPED-slower: M3 afc_ab_def verdicts batch 6 (2026-10-05) var taxi-hourly +10.6% (mixed). Deleted 2026-10-09 by `2e3e2ed5b` on `lane/owed-deletions-D2`: the define, the `drained` field and `mark_drained`; `__deinit__` always synchronizes, as every default build did.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/exec_device.mojo`, `bindings/_mojolearn_x_sequence.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:259): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_VAR_NODRAIN, the VAR no-second-drain executor flag, was DROPPED-slower: M3 verdicts batch 6 var taxi-hourly +10.6%; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1535,7 +1535,7 @@ in the tables after the sections.
 ### MOJOLEARN_AFN_OPT_FUSE_SCAN
 
 - What it tried: the optimizer step's four non-finite refusal scans (4 launches, 1 readback, 1 wait) as one scan launch over param/grad/m/v plus a device-gate fold, the update reading the gate (FAST + Apple, lane afn-optim).
-- Verdict: DROPPED-noise (M3 afc_ab_def rab19, 2026-10-05: adam within +-2%, the output digest moves, no quality metric; F20 2026-10-06 trajectory B/A 1.0514). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_AFN_OPT_FUSE_SCAN`). The aliases `MOJOLEARN_AFN26_OPT_FUSE_SCAN` and the bundle `MOJOLEARN_AFN_OPTIM_ALL` lose this arm; the clip partials kernel (CLIP_FUSE) stays as `afn_clip_sums_kernel` / `afn_clip_fold_kernel`.
+- Verdict: DROPPED-noise (M3 afc_ab_def rab19, 2026-10-05: adam within +-2%, the output digest moves, no quality metric; F20 2026-10-06 trajectory B/A 1.0514). Deleted 2026-10-09 by `ee44be74b` on `lane/owed-deletions-D2`. The aliases `MOJOLEARN_AFN26_OPT_FUSE_SCAN` and the bundle `MOJOLEARN_AFN_OPTIM_ALL` lose this arm; the clip partials kernel (CLIP_FUSE) stays as `afn_clip_sums_kernel` / `afn_clip_fold_kernel`.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `training/afn_optim.mojo`, `training/checks/optimizer.mojo`, `experiments/performance_ideas/F20/manifest.json`, `experiments/performance_ideas/F20/compile_audit.json` (the F20 `status` variant)
 - Guard refusal (core/six_lane_experiment_guards.mojo:241): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_AFN_OPT_FUSE_SCAN (and alias MOJOLEARN_AFN26_OPT_FUSE_SCAN), the fused optimizer refusal scan, was DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1545,7 +1545,7 @@ in the tables after the sections.
 ### MOJOLEARN_AFN_OPT_RESIDENT_STATE
 
 - What it tried: the FAST Apple optimizer step's and fused loss's per-step scratch (scan/clip partials, gate cells and pinned mirror, SGD table, the resident host entry's eight buffers, the loss row/flag scratch) in a process-wide pool created once per shape (lane afn-optim).
-- Verdict: DROPPED-noise (M3 afc_ab_def rab19, 2026-10-05: adam within +-2%, digest moves, no quality metric). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_AFN_OPT_RESIDENT_STATE`), with the alias `MOJOLEARN_AFN26_OPT_RESIDENT_STATE`. The pool's Float32 view slots stay: IDENTICAL's resident step uses them (`IDN_OPT_SCRATCH_POOL`, training/estimator.mojo); the Int32 / pinned-host slots and `afn_scratch_i32` / `afn_scratch_f32` / `afn_scratch_host_i32` went with the FAST users.
+- Verdict: DROPPED-noise (M3 afc_ab_def rab19, 2026-10-05: adam within +-2%, digest moves, no quality metric). Deleted 2026-10-09 by `f5d53362d` on `lane/owed-deletions-D2`, with the alias `MOJOLEARN_AFN26_OPT_RESIDENT_STATE`. The pool's Float32 view slots stay: IDENTICAL's resident step uses them (`IDN_OPT_SCRATCH_POOL`, training/estimator.mojo); the Int32 / pinned-host slots and `afn_scratch_i32` / `afn_scratch_f32` / `afn_scratch_host_i32` went with the FAST users.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `training/afn_optim.mojo`, `training/estimator.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:243): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_AFN_OPT_RESIDENT_STATE (and alias MOJOLEARN_AFN26_OPT_RESIDENT_STATE), the FAST pooled optimizer/loss scratch, was DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric; IDENTICAL keeps its scratch pool; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1555,7 +1555,7 @@ in the tables after the sections.
 ### MOJOLEARN_AFN_OPT_VEC4
 
 - What it tried: the FAST Apple Adam/AdamW update four consecutive elements per thread with 4-wide loads and stores (lane afn-optim).
-- Verdict: DROPPED-noise (M3 afc_ab_def rab19, 2026-10-05: adam within +-2%, digest moves, no quality metric). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_AFN_OPT_VEC4`), with the alias `MOJOLEARN_AFN26_OPT_VEC4`; `afn_adam_kernel` lost its width parameter (one element per thread).
+- Verdict: DROPPED-noise (M3 afc_ab_def rab19, 2026-10-05: adam within +-2%, digest moves, no quality metric). Deleted 2026-10-09 by `69772d6a8` on `lane/owed-deletions-D2`, with the alias `MOJOLEARN_AFN26_OPT_VEC4`; `afn_adam_kernel` lost its width parameter (one element per thread).
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `training/afn_optim.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:242): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_AFN_OPT_VEC4 (and alias MOJOLEARN_AFN26_OPT_VEC4), the 4-wide FAST Adam update, was DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1620,7 +1620,7 @@ in the tables after the sections.
 ### MOJOLEARN_MOE_FAST_MMA_KB32
 
 - What it tried: the MoE fragment-product kernels (sequence/moe_mma.mojo) with 32-word reduction slabs instead of 16 (half the barriers per reduction), FAST + Apple.
-- Verdict: DROPPED-slower as the bundle KB32 + WIDE + PF on top of the default MOE_FAST_MMA: M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms (2x slower); never A/B-ed alone. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_MOE_FAST_MMA_KB32`); `MM_KB` is 16. `_WIDE` and `_PF` (same bundle) are not on the owed list and stay opt-in.
+- Verdict: DROPPED-slower as the bundle KB32 + WIDE + PF on top of the default MOE_FAST_MMA: M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms (2x slower); never A/B-ed alone. Deleted 2026-10-09 by `5f1e76ad6` on `lane/owed-deletions-D2`; `MM_KB` is 16. `_WIDE` and `_PF` (same bundle) are not on the owed list and stay opt-in.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_MOE_FAST_MMA_KB32.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/moe_mma.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:246): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_MOE_FAST_MMA_KB32, the MoE 32-word slab, was DROPPED-slower as the KB32 + WIDE + PF bundle: M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms; MM_KB is 16; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1657,7 +1657,7 @@ in the tables after the sections.
 ### MOJOLEARN_OPT_FAST_MAP_DOWN
 
 - What it tried: the sequence optimizer's resident-step parameter read-back through `DeviceBuffer.map_to_host` and one memcpy per tensor instead of the pinned-halves pipeline (FAST + Apple, lane apple-fast-gap-optim; sequence/opt_resident.mojo `_map_download`).
-- Verdict: DROPPED-slower: M3 rab7-optfastmapdo (Verdicts batch 4, reconciled 2026-10-05) rmsprop, adagrad, adamax, nadam synthetic +81% .. +86%. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_OPT_FAST_MAP_DOWN`).
+- Verdict: DROPPED-slower: M3 rab7-optfastmapdo (Verdicts batch 4, reconciled 2026-10-05) rmsprop, adagrad, adamax, nadam synthetic +81% .. +86%. Deleted 2026-10-09 by `624ff6204` on `lane/owed-deletions-D2`.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_OPT_FAST_MAP_DOWN.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/opt_resident.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:247): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_OPT_FAST_MAP_DOWN, the map_to_host optimizer read-back, was DROPPED-slower: M3 rab7-optfastmapdo rmsprop/adagrad/adamax/nadam +81% .. +86%; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1668,7 +1668,7 @@ in the tables after the sections.
 ### MOJOLEARN_OPT_FAST_PIPE_CH
 
 - What it tried: a `-D MOJOLEARN_OPT_FAST_PIPE_CH=<floats>` override of the sequence optimizer's pipelined transfer chunk (the A/B arm was 524288 floats = 2 MB against the 1 << 21 = 8 MB default), lane apple-fast-gap-optim.
-- Verdict: EXPERIMENTS.md:1193 records the gap-optim read-back batch (MAP_DOWN, RAW_DOWN, PIPE_CH=524288) DROPPED-slower; the PIPE_CH arm itself was never run (`untried`). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_OPT_FAST_PIPE_CH`): only the override; `OPT_PIPE_CH` stays 1 << 21 on every mode and vendor (no bit or transport change on any default path).
+- Verdict: EXPERIMENTS.md:1193 records the gap-optim read-back batch (MAP_DOWN, RAW_DOWN, PIPE_CH=524288) DROPPED-slower; the PIPE_CH arm itself was never run (`untried`). Deleted 2026-10-09 by `321352866` on `lane/owed-deletions-D2`: only the override; `OPT_PIPE_CH` stays 1 << 21 on every mode and vendor (no bit or transport change on any default path).
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_OPT_FAST_PIPE_CH.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/opt_resident.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:249): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_OPT_FAST_PIPE_CH, the optimizer transfer-chunk override (=524288 arm), was dropped with the gap-optim read-back batch (DROPPED-slower, rab7 MAP_DOWN +81-86%, RAW_DOWN +76-80%; this arm untried); OPT_PIPE_CH stays 1 << 21; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1678,7 +1678,7 @@ in the tables after the sections.
 ### MOJOLEARN_OPT_FAST_RAW_DOWN
 
 - What it tried: the sequence optimizer's resident-step parameter read-back DMAd straight into the caller's array in OPT_PIPE_CH chunks, all queued, one wait (FAST + Apple, lane apple-fast-gap-optim; sequence/opt_resident.mojo `_raw_download`).
-- Verdict: DROPPED-slower: M3 rab7-optfastrawdo (Verdicts batch 4, reconciled 2026-10-05) rmsprop, adagrad, adamax, nadam synthetic +76% .. +80%. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_OPT_FAST_RAW_DOWN`).
+- Verdict: DROPPED-slower: M3 rab7-optfastrawdo (Verdicts batch 4, reconciled 2026-10-05) rmsprop, adagrad, adamax, nadam synthetic +76% .. +80%. Deleted 2026-10-09 by `8d5396ef3` on `lane/owed-deletions-D2`.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_OPT_FAST_RAW_DOWN.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/opt_resident.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:248): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_OPT_FAST_RAW_DOWN, the raw chunked optimizer read-back, was DROPPED-slower: M3 rab7-optfastrawdo rmsprop/adagrad/adamax/nadam +76% .. +80%; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1689,7 +1689,7 @@ in the tables after the sections.
 ### MOJOLEARN_SEQ_FAST_LSTM_SCAN
 
 - What it tried: the LSTM recurrence as one launch per direction, one threadgroup per batch row walking all T steps with a device-memory barrier between steps (sequence/recurrent_scan.mojo), FAST + Apple; `MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE` (one lane per gate column, a FAST fold) rode on it.
-- Verdict: DROPPED-quality (BROKEN): the model does not train. M3 afc_ab_def 2026-10-04 bundle lstm-clf 1877.4 -> 1315.5 ms but accuracy 0.9608 -> 0.5002, logloss 0.0954 -> 0.6931; lstm-reg r2 0.9804 -> -0.1043; after the Args fix (8bb42b7de) M3 rab10 2026-10-05 SCAN alone, SCAN + SMEM, the bundle and WIDE still do not train (same numbers), times -4% .. -30%. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_SEQ_FAST_LSTM_SCAN`), with `_SCAN_WIDE` (unreachable once the FAST define is gone). The scan kernels stay: `MOJOLEARN_IDN_SEQ_LSTM_SCAN` (grid control `seq_lstm_scan`, neural-seq-train-dedupe.json, kept, blocked_quality) still selects them.
+- Verdict: DROPPED-quality (BROKEN): the model does not train. M3 afc_ab_def 2026-10-04 bundle lstm-clf 1877.4 -> 1315.5 ms but accuracy 0.9608 -> 0.5002, logloss 0.0954 -> 0.6931; lstm-reg r2 0.9804 -> -0.1043; after the Args fix (8bb42b7de) M3 rab10 2026-10-05 SCAN alone, SCAN + SMEM, the bundle and WIDE still do not train (same numbers), times -4% .. -30%. Deleted 2026-10-09 by `671c59d06` on `lane/owed-deletions-D2`, with `_SCAN_WIDE` (unreachable once the FAST define is gone). The scan kernels stay: `MOJOLEARN_IDN_SEQ_LSTM_SCAN` (grid control `seq_lstm_scan`, neural-seq-train-dedupe.json, kept, blocked_quality) still selects them.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/recurrent_scan.mojo`, `experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json` (note only)
 - Guard refusal (core/six_lane_experiment_guards.mojo:254): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_LSTM_SCAN (and its _SCAN_WIDE arm), the FAST one-launch LSTM scan, was DROPPED-quality (BROKEN): M3 rab10 lstm-clf accuracy 0.9608 -> 0.5002, lstm-reg r2 0.9804 -> -0.1043; the IDENTICAL MOJOLEARN_IDN_SEQ_LSTM_SCAN keeps the kernels; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1701,7 +1701,7 @@ in the tables after the sections.
 ### MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM
 
 - What it tried: on top of the LSTM scan, h_prev (forward) and dGH_{s+1} (backward) staged in threadgroup memory per step, the same fold order (sequence/recurrent_scan.mojo, both scan kernels).
-- Verdict: not measured alone; the SCAN + SMEM pair and the SCAN + SMEM + WGRAD bundle are DROPPED-quality (BROKEN, the model does not train): M3 2026-10-04 bundle accuracy 0.9608 -> 0.5002, r2 0.9804 -> -0.1043; M3 rab10 2026-10-05 SCAN + SMEM after the Args fix still the same. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM`); it was still reachable under IDENTICAL with `MOJOLEARN_IDN_SEQ_LSTM_SCAN`. `SCAN_SMEM` = 4096 stays as `scan_applies`' shape bound (it decides the IDENTICAL scan path; unchanged).
+- Verdict: not measured alone; the SCAN + SMEM pair and the SCAN + SMEM + WGRAD bundle are DROPPED-quality (BROKEN, the model does not train): M3 2026-10-04 bundle accuracy 0.9608 -> 0.5002, r2 0.9804 -> -0.1043; M3 rab10 2026-10-05 SCAN + SMEM after the Args fix still the same. Deleted 2026-10-09 by `8008822a7` on `lane/owed-deletions-D2`; it was still reachable under IDENTICAL with `MOJOLEARN_IDN_SEQ_LSTM_SCAN`. `SCAN_SMEM` = 4096 stays as `scan_applies`' shape bound (it decides the IDENTICAL scan path; unchanged).
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/recurrent_scan.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:255): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM, the threadgroup-staged LSTM scan, was DROPPED-quality with its bundle: M3 rab10 SCAN + SMEM lstm-clf accuracy 0.9608 -> 0.5002, r2 0.9804 -> -0.1043; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1712,7 +1712,7 @@ in the tables after the sections.
 ### MOJOLEARN_SEQ_FAST_LSTM_WGRAD
 
 - What it tried: the LSTM's (time x batch)-long weight and bias gradient folds split over K (`wgrad_gemm`, `OP_GEMM_SPLITK` with a 65,536-float scratch; bias sums as ones^T dG), a different fold order, FAST + Apple (sequence/recurrent.mojo).
-- Verdict: DROPPED-quality with the SCAN + SCAN_SMEM + WGRAD bundle (M3 2026-10-04: lstm-clf 1877.4 -> 1315.5 ms but accuracy 0.9608 -> 0.5002, lstm-reg r2 0.9804 -> -0.1043; BROKEN); never A/B-ed alone (EXPERIMENTS.md:661). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_SEQ_FAST_LSTM_WGRAD`). IDENTICAL's blocked weight gradient (`SEQ_WGRAD_BLOCKED`, `MOJOLEARN_IDN_SEQ_WGRAD`) is separate and unchanged.
+- Verdict: DROPPED-quality with the SCAN + SCAN_SMEM + WGRAD bundle (M3 2026-10-04: lstm-clf 1877.4 -> 1315.5 ms but accuracy 0.9608 -> 0.5002, lstm-reg r2 0.9804 -> -0.1043; BROKEN); never A/B-ed alone (EXPERIMENTS.md:661). Deleted 2026-10-09 by `7936a119e` on `lane/owed-deletions-D2`. IDENTICAL's blocked weight gradient (`SEQ_WGRAD_BLOCKED`, `MOJOLEARN_IDN_SEQ_WGRAD`) is separate and unchanged.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/recurrent.mojo`, `sequence/recurrent_scan.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:256): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_LSTM_WGRAD, the FAST split-K LSTM weight-gradient folds, was DROPPED-quality with the scan bundle: M3 lstm-clf accuracy 0.9608 -> 0.5002, lstm-reg r2 0.9804 -> -0.1043; never A/B-ed alone; code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1724,7 +1724,7 @@ in the tables after the sections.
 ### MOJOLEARN_SEQ_FAST_MAP_DOWN
 
 - What it tried: the sequence executor's deferred (pipelined) downloads read through `DeviceBuffer.map_to_host` and one memcpy instead of the two pinned write-combined halves (FAST + Apple, lane apple-fast-gap-optim; sequence/exec_device.mojo `_pipe_down`).
-- Verdict: DROPPED-slower: M3 afc_ab_def 2026-10-04 (lane/apple-fast-rec-ab2 @ 40027eb8e) layernorm synthetic 50.2 -> 79.8 ms; rab2-seqmapdown +58.7%. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_SEQ_FAST_MAP_DOWN`).
+- Verdict: DROPPED-slower: M3 afc_ab_def 2026-10-04 (lane/apple-fast-rec-ab2 @ 40027eb8e) layernorm synthetic 50.2 -> 79.8 ms; rab2-seqmapdown +58.7%. Deleted 2026-10-09 by `18e7355d2` on `lane/owed-deletions-D2`.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_MAP_DOWN.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/exec_device.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:257): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_MAP_DOWN, the map_to_host sequence read-back, was DROPPED-slower: M3 layernorm 50.2 -> 79.8 ms (+59%); code at main b639a2bd2; see docs/TOMBSTONES.md
@@ -1735,7 +1735,7 @@ in the tables after the sections.
 ### MOJOLEARN_SEQ_FAST_RAW_DOWN
 
 - What it tried: the sequence executor's deferred downloads DMAd straight into the caller's array in SEQ_PIPE_CH chunks, all queued, one wait (no stage, no host read), FAST + Apple (lane apple-fast-gap-optim; sequence/exec_device.mojo `_pipe_down`).
-- Verdict: DROPPED-slower: M3 rab7-seqrawdown (Verdicts batch 4, reconciled 2026-10-05) layernorm synthetic 48.99 -> 73.68 ms (+50.4%). Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_SEQ_FAST_RAW_DOWN`).
+- Verdict: DROPPED-slower: M3 rab7-seqrawdown (Verdicts batch 4, reconciled 2026-10-05) layernorm synthetic 48.99 -> 73.68 ms (+50.4%). Deleted 2026-10-09 by `c3ed3b876` on `lane/owed-deletions-D2`.
 - Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_RAW_DOWN.patch` (applies to the deletion commit's tree).
 - Files the patch restores: `sequence/exec_device.mojo`
 - Guard refusal (core/six_lane_experiment_guards.mojo:258): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_RAW_DOWN, the raw chunked sequence read-back, was DROPPED-slower: M3 rab7-seqrawdown layernorm 48.99 -> 73.68 ms (+50.4%); code at main b639a2bd2; see docs/TOMBSTONES.md
