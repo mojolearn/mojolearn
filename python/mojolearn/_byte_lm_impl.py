@@ -338,6 +338,13 @@ def _load(shape=None):
     # the GPU vendors; the install decides, so this module never imports the
     # CPU trainer adapter (cpu-gpu-cleanup n-pyneural).
     vendors = ('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal')
+    # The binding declares its own arithmetic suffix (every -D switch tag that
+    # ByteConfig.profile() appends: neural, CE token-tree, GEMM leaf,
+    # attention; training/byte_lm_config.byte_lm_arithmetic_suffix), so an
+    # A/B arm build loads with its arm tags; base PROFILE (shape + version),
+    # numeric mode and vendor still refuse a real mismatch. Before
+    # 2026-10-10 the suffix carried only the neural part and grid arms
+    # attn_softmax / ce_token_fold were refused here (bytelm-profile-harness).
     arithmetic_suffix = str(binding.byte_lm_arithmetic_suffix())
     if (int(binding.byte_lm_numeric_mode()) != _NATIVE_MODE_CODE[mode]
             or str(binding.byte_lm_profile()) != PROFILE + arithmetic_suffix

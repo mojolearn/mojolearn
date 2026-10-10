@@ -204,7 +204,7 @@ class FakeByteLM:
 
     def byte_lm_arithmetic_suffix(self):
         # The real binding exports this (bindings/_mojolearn_byte_lm.mojo,
-        # neural_arithmetic_suffix): the IDENTICAL toggle suffix that the
+        # training/byte_lm_config.byte_lm_arithmetic_suffix): the IDENTICAL toggle suffix that the
         # Python layer appends to every expected profile. A default build
         # (no toggle defines) has the empty suffix.
         return ''
