@@ -17,9 +17,8 @@ Switches (FAST + Apple GPU only; IDENTICAL and other vendors compile main):
   (-D MOJOLEARN_SEQ_FAST_LSTM_SCAN and its _SCAN_WIDE arm were deleted
    2026-10-09, DROPPED-quality; the kernels stay for the IDENTICAL
    -D MOJOLEARN_IDN_SEQ_LSTM_SCAN, see the TOMBSTONE below.)
-  -D MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM  (with SCAN) h_prev / dGH_{s+1} staged
-                                        in threadgroup memory per step, the
-                                        same fold order (same bits)
+  (-D MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM, h_prev / dGH_{s+1} staged in
+   threadgroup memory, was deleted 2026-10-09 with the same verdict.)
   -D MOJOLEARN_SEQ_FAST_LSTM_WGRAD      the (time x batch)-long weight and bias
                                         gradient folds split over K
                                         (sequence/recurrent.mojo gemm/colsum;
@@ -28,15 +27,13 @@ Switches (FAST + Apple GPU only; IDENTICAL and other vendors compile main):
 The host executor runs the scan ops as the per-step launches they replace
 (row by row, step by step): the same cells in the same order.
 """
-from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import stack_allocation
+from std.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from max.gpu.memory import AddressSpace
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_linear.team import team_barrier
-from sequence.ops import FP, Args, add, fma3, gates_of, ld, op_cell_bwd, op_cell_bwd_h, op_cell_fwd, op_cell_fwd_h, st
+from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, st
 
 comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
@@ -78,14 +75,17 @@ comptime SEQ_LSTM_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_def
 # MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE (FAST-only arm on top of it, same DROPPED-quality rab10 row) and its kernel arms;
 # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch
 comptime SEQ_LSTM_SCAN = SEQ_LSTM_SCAN_IDN
-comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM (bundle DROPPED-quality, rab10 SCAN + SMEM does not train) deleted 2026-10-09
+# on lane/owed-deletions-D2: the define and both kernels' staged arms; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM.patch
 comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
 comptime OP_CELL_FWD_SCAN = 120
 comptime OP_CELL_BWD_SCAN = 121
 
 #: lanes per row block: H rounded up to a simdgroup multiple, at most this
 comptime SCAN_MAX_H = 1024
-#: threadgroup floats staged per step (SMEM): h_prev (H) or dGH_{s+1} (G H)
+#: the scan's shape bound on the staged row, G H <= this (kept from the
+#: deleted SMEM arm's threadgroup buffer: `scan_applies` decides the path)
 comptime SCAN_SMEM = 4096
 
 
@@ -223,35 +223,15 @@ def cell_fwd_scan_kernel(
         st(a.p4, t, Float32(0.0))
     # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE (DROPPED-quality, rab10) deleted 2026-10-09 on lane/owed-deletions-D2;
     # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch
-    comptime if SEQ_LSTM_SCAN_SMEM:
-        var hs = stack_allocation[SCAN_SMEM, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-        var G = gates_of(a.i0)
-        var GH = G * Hn
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM (bundle DROPPED-quality, rab10 SCAN + SMEM does not train) deleted 2026-10-09
+    # on lane/owed-deletions-D2: the threadgroup-staged arm; code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM.patch
+    team_barrier()
+    for s in range(a.i3):
+        var sa = fwd_step(a, s)
+        if u < Hn:
+            op_cell_fwd_h(t, sa)
         team_barrier()
-        for s in range(a.i3):
-            var sa = fwd_step(a, s)
-            if u < Hn:
-                hs[u] = ld(sa.p3, t)
-            team_barrier()
-            if u < Hn:
-                # op_cell_fwd_h with h_prev read from the staged row: the
-                # same fold (k ascending from 0, one fma per term), the
-                # same bias add, then op_cell_fwd verbatim
-                for g in range(G):
-                    var n = g * Hn + u
-                    var acc = Float32(0.0)
-                    for k in range(Hn):
-                        acc = fma3(hs[k], ld(sa.p7, n * Hn + k), acc)
-                    st(sa.p1, row * GH + n, add(ftz(acc), ld(sa.p8, n)))
-                op_cell_fwd(t, sa)
-            team_barrier()
-    else:
-        team_barrier()
-        for s in range(a.i3):
-            var sa = fwd_step(a, s)
-            if u < Hn:
-                op_cell_fwd_h(t, sa)
-            team_barrier()
 
 
 def cell_bwd_scan_kernel(
@@ -273,33 +253,12 @@ def cell_bwd_scan_kernel(
         st(a.p7, t, Float32(0.0))
     # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE (DROPPED-quality, rab10) deleted 2026-10-09 on lane/owed-deletions-D2;
     # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch
-    comptime if SEQ_LSTM_SCAN_SMEM:
-        var ds = stack_allocation[SCAN_SMEM, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-        var GH = gates_of(a.i0) * Hn
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM (bundle DROPPED-quality, rab10 SCAN + SMEM does not train) deleted 2026-10-09
+    # on lane/owed-deletions-D2: the threadgroup-staged arm; code recoverable at b639a2bd2.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM.patch
+    team_barrier()
+    for j in range(a.i3):
+        var sa = bwd_step(a, j)
+        if u < Hn:
+            op_cell_bwd_h(t, sa)
         team_barrier()
-        for j in range(a.i3):
-            var sa = bwd_step(a, j)
-            if sa.i3 != 0:
-                # stage dGH_{s+1}[row, :] (GH words) across the block's lanes
-                var k = u
-                while k < GH:
-                    ds[k] = ld(sa.p9 + sa.i4, row * GH + k)
-                    k += Int(block_dim.x)
-            team_barrier()
-            if u < Hn:
-                if sa.i3 != 0:
-                    # op_cell_bwd_h's fold from the staged row: k ascending
-                    # from the direct part, one fma per term
-                    var acc = ld(sa.p5, t)
-                    for kk in range(GH):
-                        acc = fma3(ds[kk], ld(sa.p11, kk * Hn + u), acc)
-                    st(sa.p5, t, acc)
-                op_cell_bwd(t, sa)
-            team_barrier()
-    else:
-        team_barrier()
-        for j in range(a.i3):
-            var sa = bwd_step(a, j)
-            if u < Hn:
-                op_cell_bwd_h(t, sa)
-            team_barrier()
