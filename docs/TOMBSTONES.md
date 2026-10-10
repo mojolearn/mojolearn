@@ -213,6 +213,7 @@ in the tables after the sections.
 | [`MOJOLEARN_OPT_FAST_MAP_DOWN`](#mojolearn_opt_fast_map_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_OPT_FAST_MAP_DOWN.patch](../experiments/removed/MOJOLEARN_OPT_FAST_MAP_DOWN.patch) |
 | [`MOJOLEARN_OPT_FAST_PIPE_CH`](#mojolearn_opt_fast_pipe_ch) | Neural | DROPPED-slower (batch; arm untried) | 2026-10-09 | [MOJOLEARN_OPT_FAST_PIPE_CH.patch](../experiments/removed/MOJOLEARN_OPT_FAST_PIPE_CH.patch) |
 | [`MOJOLEARN_OPT_FAST_RAW_DOWN`](#mojolearn_opt_fast_raw_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_OPT_FAST_RAW_DOWN.patch](../experiments/removed/MOJOLEARN_OPT_FAST_RAW_DOWN.patch) |
+| [`MOJOLEARN_SEQ_FAST_LSTM_SCAN`](#mojolearn_seq_fast_lstm_scan) | Neural | DROPPED-quality (broken) | 2026-10-09 | [MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_NT_TILED`](#mojolearn_apple_fast_gemm_nt_tiled) | GEMM | DROPPED-slower | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_PINNED`](#mojolearn_apple_fast_gemm_pinned) | GEMM | DROPPED-noise | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch) |
 | [`MOJOLEARN_BGMM_FAST_MAHAL_GEMM`](#mojolearn_bgmm_fast_mahal_gemm) | GEMM | DROPPED-slower |  | lane only |
@@ -1669,6 +1670,18 @@ in the tables after the sections.
 - EXPERIMENTS.md:1280 (lane/apple-fast-verdicts-4): `OPT_FAST_RAW_DOWN`, rab7-optfastrawdo, +76% .. +80%, **RECORD: stays off**: slower
 - EXPERIMENTS.md:1831 (Owed deletions D2): **DELETED**.
 
+### MOJOLEARN_SEQ_FAST_LSTM_SCAN
+
+- What it tried: the LSTM recurrence as one launch per direction, one threadgroup per batch row walking all T steps with a device-memory barrier between steps (sequence/recurrent_scan.mojo), FAST + Apple; `MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE` (one lane per gate column, a FAST fold) rode on it.
+- Verdict: DROPPED-quality (BROKEN): the model does not train. M3 afc_ab_def 2026-10-04 bundle lstm-clf 1877.4 -> 1315.5 ms but accuracy 0.9608 -> 0.5002, logloss 0.0954 -> 0.6931; lstm-reg r2 0.9804 -> -0.1043; after the Args fix (8bb42b7de) M3 rab10 2026-10-05 SCAN alone, SCAN + SMEM, the bundle and WIDE still do not train (same numbers), times -4% .. -30%. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_SEQ_FAST_LSTM_SCAN`), with `_SCAN_WIDE` (unreachable once the FAST define is gone). The scan kernels stay: `MOJOLEARN_IDN_SEQ_LSTM_SCAN` (grid control `seq_lstm_scan`, neural-seq-train-dedupe.json, kept, blocked_quality) still selects them.
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `sequence/recurrent_scan.mojo`, `experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json` (note only)
+- Guard refusal (core/six_lane_experiment_guards.mojo:254): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_LSTM_SCAN (and its _SCAN_WIDE arm), the FAST one-launch LSTM scan, was DROPPED-quality (BROKEN): M3 rab10 lstm-clf accuracy 0.9608 -> 0.5002, lstm-reg r2 0.9804 -> -0.1043; the IDENTICAL MOJOLEARN_IDN_SEQ_LSTM_SCAN keeps the kernels; code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:658 (lane/apple-fast-gap-lstm @ 0d6cbc821): `SEQ_FAST_LSTM_SCAN`, **not measured alone; bundle DROPPED-quality 2026-10-04**
+- EXPERIMENTS.md:1198 (lane/apple-fast-rec-ab2 @ 40027eb8e): bundle SCAN + SCAN_SMEM + WGRAD, lstm-clf 1877.4 -> 1315.5; lstm-reg 1876.9 -> 1312.2, **DROPPED-quality (BROKEN)**: accuracy 0.9608 -> 0.5002, r2 0.9804 -> -0.1043
+- EXPERIMENTS.md:1292/1295 (lane/apple-fast-s-seq @ 8bb42b7de / 826305835): `SEQ_FAST_LSTM_SCAN` (fixed) and `+ _SCAN_WIDE`, **DROPPED-quality**: reconciled 2026-10-05 rab10, still do not train (the READY-AB rows 1296-1299 are superseded by these)
+- EXPERIMENTS.md:1838 (Owed deletions D2): **DELETED**.
+
 ## GEMM
 
 ### MOJOLEARN_APPLE_FAST_GEMM_NT_TILED
@@ -1976,7 +1989,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_QR_FAST_DEV` | EXPERIMENTS.md:453 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1251` |
 | `MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` | EXPERIMENTS.md:384 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:221` |
 | `MOJOLEARN_RESAMPLE_FAST_RANK_SORT` | EXPERIMENTS.md:386 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:205` |
-| `MOJOLEARN_SEQ_FAST_LSTM_SCAN` | EXPERIMENTS.md:658 not measured alone; bundle DROPPED-quality 2026-10-04 (see rec-optim table) (lane/apple-fast-gap-lstm @ 0d6cbc821) | `sequence/recurrent_scan.mojo:17` |
 | `MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM` | EXPERIMENTS.md:659 not measured alone; bundle DROPPED-quality 2026-10-04 (see rec-optim table) (lane/apple-fast-gap-lstm @ 0d6cbc821) | `sequence/recurrent_scan.mojo:18` |
 | `MOJOLEARN_SEQ_FAST_LSTM_WGRAD` | EXPERIMENTS.md:660 DROPPED-quality 2026-10-04 (BROKEN; see rec-optim table) (lane/apple-fast-gap-lstm @ 0d6cbc821) | `sequence/recurrent_scan.mojo:23` |
 | `MOJOLEARN_SEQ_FAST_MAP_DOWN` | EXPERIMENTS.md:662 DROPPED-slower 2026-10-04 on layernorm (see rec-optim table) (lane/apple-fast-gap-optim @ cf4513f8a) | `sequence/exec_device.mojo:139` |

@@ -251,6 +251,7 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_PT_SPEC"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PT_SPEC, the FAST speculated PowerTransformer search on the tiled kernel, was DROP: M3 istella +10% vs COLBATCH (910 -> 1,012 ms); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not (is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PT_FUSED_TRANSFORM, the fused PowerTransformer standardize tail, was DROP (quality, with COLBATCH): batchv-pt-nospec lambda shift 9.5e-3; off under the default PT_SCORE_STABLE; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not (is_defined["MOJOLEARN_PT_FOLD_NOX"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PT_FOLD_NOX, the PowerTransformer fold that skips X after K = 0, was DROP: no recorded gain (ptimpute-pt-nox-*), moot under COLBATCH; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not (is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]() or is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_SEQ_FAST_LSTM_SCAN (and its _SCAN_WIDE arm), the FAST one-launch LSTM scan, was DROPPED-quality (BROKEN): M3 rab10 lstm-clf accuracy 0.9608 -> 0.5002, lstm-reg r2 0.9804 -> -0.1043; the IDENTICAL MOJOLEARN_IDN_SEQ_LSTM_SCAN keeps the kernels; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

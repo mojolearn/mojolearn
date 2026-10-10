@@ -231,7 +231,7 @@
     "off_board",
     "blocked_quality"
    ],
-   "note": "Same kernel as SEQ_FAST_LSTM_SCAN, DROPPED-quality on M3 (rab10: lstm-clf acc 0.96->0.50). Owes a repair before any grid run. NI49 row-serial arm deleted."
+   "note": "Same kernel as SEQ_FAST_LSTM_SCAN, DROPPED-quality on M3 (rab10: lstm-clf acc 0.96->0.50). Owes a repair before any grid run. NI49 row-serial arm deleted. The FAST define MOJOLEARN_SEQ_FAST_LSTM_SCAN (and _SCAN_WIDE) was deleted 2026-10-09 (lane/owed-deletions-D2); this IDENTICAL control keeps the kernels."
   },
   "seq_wgrad": {
    "define": "MOJOLEARN_IDN_SEQ_WGRAD",
