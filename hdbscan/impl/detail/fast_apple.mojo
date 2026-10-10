@@ -40,10 +40,9 @@ main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
 # Tried: core distances from one tiled kernel with a register top-k (core_tile.mojo, with its AFCL_G04 tile knob); hdbscan istella 44,717 -> 45,590 ms (+2%), taxi +0.8%, clusters identical; F15 mixed (B/A 0.95..1.04).
 # Restore: git apply experiments/removed/MOJOLEARN_HDB_CORE_TILE.patch; record in docs/TOMBSTONES.md.
 
-comptime HDB_DEV_BORUVKA = HDB_FAST_APPLE and (
-    is_defined["MOJOLEARN_HDB_DEV_BORUVKA"]()
-)
-"""The d <= 64 arm's Boruvka rounds on the device (fast_mr_mst_device.mojo)."""
+# TOMBSTONE: MOJOLEARN_HDB_DEV_BORUVKA (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the d <= 64 arm's Boruvka rounds driven on the device (fast_mr_mst_device.mojo); hdbscan taxi 434 -> 432.6 ms (-0.3%, noise).
+# Restore: git apply experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch; record in docs/TOMBSTONES.md.
 
 # INCONCLUSIVE-speed, M3 batchv-hdb-onesync-taxi / -istella vs main:
 # 424.7 -> 425.5 / 3809 -> 3829 ms, clusters identical (SMR on both).

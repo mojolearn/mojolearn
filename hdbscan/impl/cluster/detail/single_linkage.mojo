@@ -85,11 +85,12 @@ from hierarchy.impl.cluster.detail.single_linkage import (
 )
 from checks.numerics import identical_div
 from hdbscan.impl.detail.fast_apple import (
-    HDB_DEV_BORUVKA,
     HDB_LINKAGE_DEVICE,
 )
 from hdbscan.impl.cluster.detail.dendrogram_union import build_dendrogram_union
-from hdbscan.impl.cluster.detail.fast_mr_mst_device import fast_mr_mst_device
+# TOMBSTONE: MOJOLEARN_HDB_DEV_BORUVKA (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the d <= 64 arm's Boruvka rounds driven on the device (fast_mr_mst_device.mojo); hdbscan taxi 434 -> 432.6 ms (-0.3%, noise).
+# Restore: git apply experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch; record in docs/TOMBSTONES.md.
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 from std.os import getenv
 from std.time import perf_counter_ns
@@ -350,20 +351,12 @@ def build_mr_linkage(
                 mst_weights, sabotage,
             )
     elif use_fast:
-        # lane af-hdbscan2 (-D MOJOLEARN_HDB_DEV_BORUVKA): the same search
-        # kernels, the rounds driven on the device (fast_mr_mst_device.mojo).
-        comptime if HDB_DEV_BORUVKA:
-            rounds = fast_mr_mst_device(
-                ctx, x, core_dists, m, n, inv_alpha, mst_rows, mst_cols,
-                mst_weights,
-            )
-        else:
-            rounds = fast_euclidean_mst(
-                ctx, x, m, n, True, mst_rows, mst_cols, mst_weights,
-                mutual_reach=True,
-                core_ptr=core_dists.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                inv_alpha=inv_alpha,
-            )
+        rounds = fast_euclidean_mst(
+            ctx, x, m, n, True, mst_rows, mst_cols, mst_weights,
+            mutual_reach=True,
+            core_ptr=core_dists.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            inv_alpha=inv_alpha,
+        )
     else:
         rounds = build_sorted_mst[DENSE=True](
             ctx, indptr, indices, mr, m, n,

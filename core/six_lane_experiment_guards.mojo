@@ -250,6 +250,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_HDBSCAN2_ALL"](), "removed 2026-10-09 (lane/owed-deletions-D3): HDBSCAN2_ALL (every af-hdbscan2 FAST Apple switch at once) was DROPPED as a bundle: its gain is HDB_SMR_TILED (now the FAST Apple default), CORE_TILE and ONE_SYNC lose vs main; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_AFCL_G04"](), "removed 2026-10-09 (lane/owed-deletions-D3): AFCL_G04 (core tile 64 -> 32 rows) tuned only hdbscan/impl/detail/core_tile.mojo, deleted with its parent MOJOLEARN_HDB_CORE_TILE (DROP, hdbscan istella +2%); never measured; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_HDB_CORE_TILE"](), "removed 2026-10-09 (lane/owed-deletions-D3): HDB_CORE_TILE (tiled core-distance kernel with a register top-k, core_tile.mojo) was NOISE/slower vs main: hdbscan istella 44,717 -> 45,590 ms (+2%), taxi +0.8%, clusters identical; F15 M3 2026-10-06 mixed (B/A 0.95-1.04); its child knob MOJOLEARN_AFCL_G04 went with it; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_HDB_DEV_BORUVKA"](), "removed 2026-10-09 (lane/owed-deletions-D3): HDB_DEV_BORUVKA (d <= 64 Boruvka rounds driven on the device, fast_mr_mst_device.mojo) was NOISE: hdbscan taxi 434 -> 432.6 ms (-0.3%); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
