@@ -18,8 +18,7 @@ weights. Each cell is still one fma chain over the reduction index
 ascending (the matrix unit's per-cell order), with no per-step flush; FAST
 only, quality on the board's rel_fro / max_rel_diff column.
   (_KB32, 32-word slabs, was deleted 2026-10-09: see the TOMBSTONE below.)
-  _WIDE: the hidden product 64 pairs x 64 features (gate and up 32 fragments
-         a simdgroup) instead of 64 x 32.
+  (_WIDE, the 64 x 64 hidden block, was deleted 2026-10-10: see the TOMBSTONE below.)
   _PF:   the next slab's global words read into registers before the current
          slab's fragment products (one slab of load latency hidden).
 Every variant implies MOJOLEARN_MOE_FAST_MMA."""
@@ -45,12 +44,14 @@ from sequence.moe_reg import MOE_DEVGROUP
 # TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_KB32 (DROPPED-slower as the bundle KB32 + WIDE + PF: M3 rab10-moemmaall moe synthetic
 # 71.3 -> 146.8 ms; never A/B-ed alone) deleted 2026-10-09 on lane/owed-deletions-D2: the 32-word slab; MM_KB is 16;
 # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_KB32.patch
-comptime MM_WIDE = is_defined["MOJOLEARN_MOE_FAST_MMA_WIDE"]()
+# TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_WIDE (DROPPED-slower, bundle) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: the hidden product as 64 pairs x 64 features (gate and up 32 fragments a simdgroup, MM_FNH 4) instead of 64 x 32; DROPPED with the bundle KB32 + WIDE + PF (M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms, 2x slower; never A/B-ed alone). MM_FNH is 2.
+# Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_WIDE.patch; record in docs/TOMBSTONES.md.
 comptime MM_PF = is_defined["MOJOLEARN_MOE_FAST_MMA_PF"]()
 # Apple simdgroup intrinsics only: an NVIDIA/AMD target cannot link them
 # (gfx942 lld: undefined air.simdgroup_matrix_*; box-run-2 compile fix).
 comptime MOE_MMA = has_apple_gpu_accelerator() and MOE_DEVGROUP and (
-    (not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()) or MM_WIDE or MM_PF
+    (not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()) or MM_PF
 )
 
 comptime MM_KB = 16
@@ -60,7 +61,7 @@ comptime MM_FM = 4
 comptime MM_NT = 32 * MM_SGM * MM_SGN
 comptime MM_BM = 8 * MM_FM * MM_SGM
 #: fragments per simdgroup along the outputs: hidden (gate and up each), out
-comptime MM_FNH = 4 if MM_WIDE else 2
+comptime MM_FNH = 2
 comptime MM_FNO = 4
 comptime MM_BNH = 8 * MM_FNH * MM_SGN
 comptime MM_BNO = 8 * MM_FNO * MM_SGN
