@@ -125,8 +125,8 @@ def ts_tree_fold(mut s: List[Float32]):
             s[t] = ftz(s[t] + s[t + w])
         w = w // 2
 
-# lane/classical-structural (2026-10-07), IDENTICAL only, default off:
-# `-D MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO`. randomized_svd orthonormalizes its
+# lane/classical-structural (2026-10-07), IDENTICAL only (default on since
+# 2026-10-10, below; `-D MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF` turns it off). randomized_svd orthonormalizes its
 # tall sketch (m x l, l small) nine times per fit through `orth`: two passes
 # of the sliced Householder `qr_factor` (64 slices x 32 threads, 18 serial
 # reflector steps each), a one-thread rank guard and a per-row trsm, about
@@ -146,8 +146,18 @@ def ts_tree_fold(mut s: List[Float32]):
 # randomized_svd's `nlive` compaction contract. Shapes the TSQR does not
 # take (l > TS_MAX_N, m < l, an Int32 overflow) keep the two-pass route on
 # both columns.
+# PROMOTED to the IDENTICAL default 2026-10-10 (lane/grid-act-6, grid freeze
+# 20261010 @50ebe26a5, runs g50ebe26a5/h: NVIDIA L40S sm_89 nv2 v1177 + AMD
+# MI325X gfx942 amd2 b0038, full board data, one run per arm, incumbent once
+# + stored floors). randomized-svd NV / AMD ms, two-pass orth -> TSQR orth:
+#   istella 194.5 -> 160.2 (0.824) / 231.6 -> 141.6 (0.611), 0.710x combined;
+#   taxi     68.9 ->  52.2 (0.757) / 114.3 ->  61.5 (0.538), 0.638x combined.
+# Bits change vs the old default (one TSQR Householder pass) on the host
+# column and both GPU vendors together. Absent = TSQR orth in IDENTICAL;
+# -D MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF restores the two-pass route
+# (the old on-define is refused by core/six_lane_experiment_guards.mojo).
 comptime RSVD_IDN_TSQR_ORTHO = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF"]()
 )
 
 
