@@ -247,6 +247,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_FA_ALL"](), "removed 2026-10-09 (lane/owed-deletions-D3): FA_ALL (every FactorAnalysis FAST define at once) was SLOWER: factor-analysis istella 10300.89 -> 20530.81 ms (+99.3%, rab6-faqfix), taxi 345.06 -> 34.19, quality noise; the slowdown is EIG_SMALL's one-threadgroup eigh; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_FA_EIG_SMALL"](), "removed 2026-10-09 (lane/owed-deletions-D3): FA_EIG_SMALL (one-threadgroup eigh / SVD inside the FactorAnalysis EM loop) was SLOWER: in FA_ALL factor-analysis istella 10300.89 -> 20530.81 ms (+99.3%), the slowdown from this one-threadgroup eigh on a 220 x 220; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_FA_LL_DEVICE"](), "removed 2026-10-09 (lane/owed-deletions-D3): FA_LL_DEVICE (FactorAnalysis EM convergence test on the device) was DROPPED-slower with its EIG_SMALL arm (FA_ALL istella +99.3%, rab6-faqfix); never timed alone on the default loop; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_HDBSCAN2_ALL"](), "removed 2026-10-09 (lane/owed-deletions-D3): HDBSCAN2_ALL (every af-hdbscan2 FAST Apple switch at once) was DROPPED as a bundle: its gain is HDB_SMR_TILED (now the FAST Apple default), CORE_TILE and ONE_SYNC lose vs main; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

@@ -190,6 +190,7 @@ in the tables after the sections.
 | [`MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN`](#mojolearn_x_cluster_fast_cls2_mbk_fin) | Cluster | DROPPED | 2026-10-03 | [MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch) |
 | [`MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128`](#mojolearn_x_cluster_fast_cls2_mbk_g128) | Cluster | DROPPED | 2026-10-03 | [MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch) |
 | [`MOJOLEARN_BGMM_ESTEP1`](#mojolearn_bgmm_estep1) | Cluster | DROPPED-noise | 2026-10-09 | [MOJOLEARN_BGMM_ESTEP1.patch](../experiments/removed/MOJOLEARN_BGMM_ESTEP1.patch) |
+| [`MOJOLEARN_HDBSCAN2_ALL`](#mojolearn_hdbscan2_all) | Cluster | DROP (bundle) | 2026-10-09 | [MOJOLEARN_HDBSCAN2_ALL.patch](../experiments/removed/MOJOLEARN_HDBSCAN2_ALL.patch) |
 | [`MOJOLEARN_ARIMA_FAST_LS_NOREAD`](#mojolearn_arima_fast_ls_noread) | Time series | DROPPED-noise | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LS_NOREAD.patch) |
 | [`MOJOLEARN_ARIMA_FAST_P_FIX`](#mojolearn_arima_fast_p_fix) | Time series | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ARIMA_FAST_P_FIX.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_P_FIX.patch) |
 | [`MOJOLEARN_C58_FORECAST4`](#mojolearn_c58_forecast4) | Time series | slower | 2026-10-08 | [MOJOLEARN_C58_FORECAST4.patch](../experiments/removed/MOJOLEARN_C58_FORECAST4.patch) |
@@ -1450,6 +1451,15 @@ in the tables after the sections.
 - EXPERIMENTS.md:482: `BGMM_ESTEP1` | bayesian-gmm / taxi | lane/apple-fast-cluster2 @ ded4ea07b | cluster2-bgmm-estep1-taxi | - | DROPPED-noise | reconciled 2026-10-05: cluster2-bgmm-estep1-taxi-b 309.7 -> 311.1 (+0.5%), mean_log_likelihood same (LEDGER 2026-10-03); define stays opt-in on main (x_cluster/bgmm.mojo). Was OPEN: A/B queued, no judged result yet
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): BGMM_ESTEP1 (one-launch row-per-thread E-step, ops.estep) was NOISE: bayesian-gmm taxi 309.7 -> 311.1 ms (+0.5%), mean_log_likelihood same; code at main b639a2bd2; see docs/TOMBSTONES.md
 
+### MOJOLEARN_HDBSCAN2_ALL
+
+- Verdict: DROP (bundle). Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_HDBSCAN2_ALL.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: one -D that turned on every af-hdbscan2 FAST Apple switch (SMR_TILED, CORE_TILE, DEV_BORUVKA, ONE_SYNC, SELECT_DEVICE).
+- Files the patch restores: `hdbscan/impl/detail/fast_apple.mojo`
+- EXPERIMENTS.md:490: `HDBSCAN2_ALL` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-all-taxi, hdbscan2-all6-taxi, hdbscan2-all-istella, hdbscan2-all6-istella | - | DROP (as a bundle) | its gain is HDB_SMR_TILED (KEEP); CORE_TILE and ONE_SYNC lose vs main; opt-in only
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): HDBSCAN2_ALL (every af-hdbscan2 FAST Apple switch at once) was DROPPED as a bundle: its gain is HDB_SMR_TILED (now the FAST Apple default), CORE_TILE and ONE_SYNC lose vs main; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Time series
 
 ### MOJOLEARN_ARIMA_FAST_LS_NOREAD
@@ -1881,7 +1891,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |
 | `MOJOLEARN_EST_REUSE_PART` | EXPERIMENTS.md:156 DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:20` |
 | `MOJOLEARN_EST_SHRINK_FUSED` | EXPERIMENTS.md:157 DROPPED-inconclusive (-2.8% 1k old base) (lane/apple-fast-sym-est @ c8518eb52) | `gbdt/methods/leaves_estimation/apple_fast_est.mojo:32` |
-| `MOJOLEARN_HDBSCAN2_ALL` | EXPERIMENTS.md:490 DROP (as a bundle) (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/detail/fast_apple.mojo:8` |
 | `MOJOLEARN_HDB_CORE_TILE` | EXPERIMENTS.md:491 DROP (lane/apple-fast-batchv @ c7ede6e47) | `hdbscan/impl/detail/core_tile.mojo:5` |
 | `MOJOLEARN_HDB_DEV_BORUVKA` | EXPERIMENTS.md:492 DROPPED-noise (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/cluster/detail/fast_mr_mst_device.mojo:4` |
 | `MOJOLEARN_HDB_ONE_SYNC` | EXPERIMENTS.md:494 DROP (lane/apple-fast-batchv @ c8251211d) | `hdbscan/impl/detail/fast_apple.mojo:71` |
