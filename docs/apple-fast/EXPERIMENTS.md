@@ -1821,3 +1821,4 @@ Defines with a DROPPED row whose code was still on main (docs/TOMBSTONES.md 'Owe
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_BGMM_ESTEP1` | bayesian-gmm / taxi | lane/owed-deletions-D3 from main @ b639a2bd2 | (no new A/B; DROP rows EXPERIMENTS.md:482) | 309.7 -> 311.1 | DELETED | noise: bayesian-gmm taxi +0.5%, mean_log_likelihood same; deleted the bgmm.mojo branch, ClusterOps.estep (trait, device, host) and _estep_row_kernel. |
+| `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | cagra / taxi | lane/owed-deletions-D3 from main @ b639a2bd2 | (no new A/B; DROP rows EXPERIMENTS.md:314,879) | recall .997925 -> .997125 | DELETED | quality: taxi recall@10 .997925 -> .997125; only the standalone opt-in read is deleted, the low-d graph code stays as part of the LOWD_SEEDS4 FAST default (no default bit change). |

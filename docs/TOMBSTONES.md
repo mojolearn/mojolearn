@@ -131,6 +131,7 @@ in the tables after the sections.
 | [`MOJOLEARN_XN_FAST_MMA_ROUTE`](#mojolearn_xn_fast_mma_route) | Neighbors | DROPPED-slower |  | lane only |
 | [`MOJOLEARN_XN_FAST_TILED_RBF`](#mojolearn_xn_fast_tiled_rbf) | Neighbors | DROPPED-noise | 2026-10-03 | [MOJOLEARN_XN_FAST_TILED_RBF.patch](../experiments/removed/MOJOLEARN_XN_FAST_TILED_RBF.patch) |
 | [`MOJOLEARN_XN_PCS_SPARSE`](#mojolearn_xn_pcs_sparse) | Neighbors | DROPPED-noise | 2026-10-03 | [MOJOLEARN_XN_PCS_SPARSE.patch](../experiments/removed/MOJOLEARN_XN_PCS_SPARSE.patch) |
+| [`MOJOLEARN_CAGRA_FAST_IVFG_LOWD`](#mojolearn_cagra_fast_ivfg_lowd) | Neighbors | DROPPED-quality | 2026-10-09 | [MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch) |
 | [`MOJOLEARN_ACHI2_FAST_DEVCHECK`](#mojolearn_achi2_fast_devcheck) | Prep | DROPPED | Oct 3 | lane only |
 | [`MOJOLEARN_CLASSICAL_C55_CLASS_GROUP`](#mojolearn_classical_c55_class_group) | Prep | quality loss | 2026-10-07 | [MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
@@ -976,6 +977,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:560 (Kernel / GP (11)): `XN_PCS_SPARSE` on poly-count-sketch / taxi, lane/apple-fast-neighbors2 @ 5fb6edd3f, A/B n2-pcs-sparse-taxi, poly-count-sketch taxi 0.3 -> 0.3 ms, **DROPPED-noise**: no change; code removed from main 3d1c6bd73; recover at lane/apple-fast-neighbors2@5fb6edd3f
 
 
+### MOJOLEARN_CAGRA_FAST_IVFG_LOWD
+
+- Verdict: DROPPED-quality. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch` (reverse of the lane's deletion commit; applies to the lane head).
+- What it tried: the IVFG candidate graph for d <= 64 without the 4x search seeds, as an opt-in beside the LOWD_SEEDS4 default (only reachable with -D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF).
+- Files the patch restores: `x_ann/fast_env.mojo`
+- EXPERIMENTS.md:314: `CAGRA_FAST_IVFG_LOWD` | cagra / taxi (istella must be identical) | lane/apple-fast-w2-cagra (base b2b1c22bc) | w2-cagra-lowd-q, w2-cagra-lowd-taxi | cagra taxi 2,900 -> ? | DROPPED-quality | reconciled 2026-10-05: w2-cagra-lowd-q taxi recall@10 .997925 -> .997125 (gate B >= A), Manager verdicts session 2; LOWD_SEEDS4 (row below) is the default. Was OPEN: IVFG graph for d <= 64 (taxi d = 11 still built the exact 1.6e11-pair graph); gate recall@10 B >= A (tools/cagra_lowd_pair.py)
+- EXPERIMENTS.md:879: `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | cagra taxi | lane/apple-fast-w2-cagra 5d7d79cb5 | w2-cagra-lowd-q | taxi recall@10 A 0.997925 -> B 0.997125 (gate: B >= A); istella identical | DROP-quality; LOWD_SEEDS4 queued
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): CAGRA_FAST_IVFG_LOWD alone (low-d IVFG graph without SEEDS4, opt-in with _LOWD_SEEDS4_OFF) lost recall: cagra taxi recall@10 .997925 -> .997125 (gate B >= A); the low-d graph stays inside the LOWD_SEEDS4 FAST default; code at main b639a2bd2; see docs/TOMBSTONES.md
+
 ## Prep
 
 ### MOJOLEARN_ACHI2_FAST_DEVCHECK
@@ -1801,7 +1812,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_ARIMA_FAST_D_CONCURRENT` | EXPERIMENTS.md:1409 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:140` |
 | `MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT` | EXPERIMENTS.md:1408 DROPPED-slower (lane/apple-fast-s-ts) | `arima/impl/fast_order_search.mojo:103` |
 | `MOJOLEARN_ARIMA_FAST_STEPWISE` | EXPERIMENTS.md:1417 DROPPED-slower (main a6ff25ff8) | `arima/impl/fast_order_search.mojo:201` |
-| `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | EXPERIMENTS.md:314 DROPPED-quality (lane/apple-fast-w2-cagra (base b2b1c22bc)) | `x_ann/fast_env.mojo:92` |
 | `MOJOLEARN_CAGRA_FAST_SEEDS4` | EXPERIMENTS.md:308 DROPPED-semantics (lane/apple-fast-gap-cagra @ 2b16b4322) | `x_ann/fast_env.mojo:108` |
 | `MOJOLEARN_CHOL_FAST_BLOCKED` | EXPERIMENTS.md:422 DROPPED-slower+quality 2026-10-04 (see verdicts batch 3) (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `x_decomp/fast_chol.mojo:5` |
 | `MOJOLEARN_DBSCAN_FAST_DENSEBALL` | EXPERIMENTS.md:488 DROPPED-slower (lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc) | `dbscan/impl/denseball.mojo:4` |

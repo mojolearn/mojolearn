@@ -239,6 +239,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_AF_VEC_FUSED"](), "removed 2026-10-09 (neural A/B nv2 v1010/v1012, amd a1141/a1143, lane/postmerge-act-5): neural-io-2 Adafactor fused vector step (sequence/af_fused.mojo, OP_AF_VFUSE/OP_AF_VFIN) was NOISE: adafactor synthetic NV 13.671 -> 13.738 ms (1.00x), AMD 8.620 -> 8.186 ms (0.95x), avg 0.98x, digest aa99a3dc unchanged; code at main 0a7b206f1; see EXPERIMENTS.md"
     # Lane owed-deletions-D3 (2026-10-09): owed DROP deletions (docs/TOMBSTONES.md 'Owed deletions'; docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main b639a2bd2.
     comptime assert not is_defined["MOJOLEARN_BGMM_ESTEP1"](), "removed 2026-10-09 (lane/owed-deletions-D3): BGMM_ESTEP1 (one-launch row-per-thread E-step, ops.estep) was NOISE: bayesian-gmm taxi 309.7 -> 311.1 ms (+0.5%), mean_log_likelihood same; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD"](), "removed 2026-10-09 (lane/owed-deletions-D3): CAGRA_FAST_IVFG_LOWD alone (low-d IVFG graph without SEEDS4, opt-in with _LOWD_SEEDS4_OFF) lost recall: cagra taxi recall@10 .997925 -> .997125 (gate B >= A); the low-d graph stays inside the LOWD_SEEDS4 FAST default; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
