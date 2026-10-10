@@ -108,16 +108,18 @@ comptime QN_FAST_XTDZ = (
 across blocks, X read once) instead of one block per output cell walking
 every row at a stride of D floats."""
 
-comptime QN_FAST_COALESCED = (
-    QN_FAST_XTDZ and not is_defined["MOJOLEARN_QN_FAST_COALESCED_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_FAST_COALESCED_OFF (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+# Tried: the rollback to fast_xtdz for the qn gradient's X^T dZ; logreg istella 3,889 -> 4,996 ms (+28.5%) with coalescing off.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_COALESCED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_FAST_COALESCED = QN_FAST_XTDZ
 """FAST on Apple (lane/linear-apple2): where `xtdz_coalesced` fits (D * C <=
 1024 cells) the gradient's `X^T dZ` takes it instead of `fast_xtdz`: the
 chains and fold of `xty_kernel` / `xtdz_multi_kernel` (what FAST computes on
 every other column) under FAST arithmetic, read row-coalesced. fast_xtdz
 put D * C threads of 256 to work on 16-row tiles with two barriers each.
-FAST's words change (to xty_kernel's order); -D MOJOLEARN_QN_FAST_COALESCED_OFF=1
-restores fast_xtdz."""
+FAST's words change (to xty_kernel's order). The _OFF rollback was deleted
+2026-10-09 (+28.5% slower on logreg istella); -D MOJOLEARN_QN_FAST_XTDZ_OFF
+still turns both off."""
 
 
 def qn_coalesced_applies(d: Int, c: Int) -> Bool:

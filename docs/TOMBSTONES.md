@@ -108,6 +108,7 @@ in the tables after the sections.
 | [`MOJOLEARN_QN_IDN_DCONV_POLL_8`](#mojolearn_qn_idn_dconv_poll_8) | Linear | slower | 2026-10-08 | [MOJOLEARN_QN_IDN_DCONV.patch](../experiments/removed/MOJOLEARN_QN_IDN_DCONV.patch) |
 | [`MOJOLEARN_RIDGE_FAST_CLS1_PREDICT`](#mojolearn_ridge_fast_cls1_predict) | Linear | DROPPED-noise | 2026-10-03 | [MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch](../experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_PREDICT.patch) |
 | [`MOJOLEARN_SGD_PERC_QOLD`](#mojolearn_sgd_perc_qold) | Linear | DROPPED-quality | 2026-10-04 | [MOJOLEARN_SGD_PERC_QOLD.patch](../experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch) |
+| [`MOJOLEARN_QN_FAST_COALESCED_OFF`](#mojolearn_qn_fast_coalesced_off) | Linear | DROPPED-slower | 2026-10-09 | [MOJOLEARN_QN_FAST_COALESCED_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_COALESCED_OFF.patch) |
 | [`MOJOLEARN_C29_STREAM_TOPK`](#mojolearn_c29_stream_topk) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_STREAM_TOPK.patch](../experiments/removed/MOJOLEARN_C29_STREAM_TOPK.patch) |
 | [`MOJOLEARN_C29_TILE`](#mojolearn_c29_tile) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_TILE.patch](../experiments/removed/MOJOLEARN_C29_TILE.patch) |
 | [`MOJOLEARN_CAGRA_FAST_DOT`](#mojolearn_cagra_fast_dot) | Neighbors | DROPPED-semantics | 2026-10-03 | [MOJOLEARN_CAGRA_FAST_DOT.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch) |
@@ -827,6 +828,15 @@ in the tables after the sections.
 - Files the patch restores: `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo`, `neighbors/estimator.mojo`, `x_linear/sgd.mojo`, `x_linear/sgd_avg.mojo`
 - EXPERIMENTS.md:1228 (Quality fixes, classifiers (lane/apple-fast-q-clf, 2026-10-0): `MOJOLEARN_SGD_PERC_QOLD` on perceptron / taxi, istella (x_linear/sgd.mojo `SGD_PERC_AVG`, x_linear/sgd_avg.mojo), lane/apple-fast-q-clf @ a3bd71a65, A/B (owed), (owed) ms, **DROPPED-quality**: reconciled 2026-10-05: rab5-perc taxi 1401.12 -> 1400.29, accuracy .76219 -> .74097, Verdicts batch 4; reverted, opt-in MOJOLEARN_SGD_PERC_AVG. Was QUALITY-FIX, READY-AB: minibatch Perceptron returns the mean of its epoch-end iterates from epoch max_iter//2 on; audit accuracy 0.465 vs sklearn 0.751; float32 numpy model of the step (taxi 1M rows): last iterate 0.543/0.774/0.668/0.757 over seeds, mean 0.771/0.769/0.774; device grid + FAST host column
 
+
+### MOJOLEARN_QN_FAST_COALESCED_OFF
+
+- Verdict: DROPPED-slower. Deleted 2026-10-09 by lane/owed-deletions-D3 (owed deletion, D3).
+- Recoverable at `b639a2bd2` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_QN_FAST_COALESCED_OFF.patch` (reverse of this define's deletion commit on the lane; when a later deletion touched the same lines, use `git apply -3`).
+- What it tried: the rollback define that sent the FAST Apple qn gradient's X^T dZ back to fast_xtdz instead of the row-coalesced xtdz_coalesced.
+- Files the patch restores: `glm/impl/qn/glm_base.mojo`
+- EXPERIMENTS.md:247: `QN_FAST_COALESCED_OFF` | logreg / istella | lane/apple-fast-linear @ 1c7c213f8 | linear-logreg-nocoal-istella | logreg istella 3,889 -> 4,996 | DROPPED-slower | +28.5% (turning coalescing off)
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): QN_FAST_COALESCED_OFF (rollback from the row-coalesced qn gradient X^T dZ to fast_xtdz) is SLOWER: logreg istella 3,889 -> 4,996 ms (+28.5%); the coalesced route is the only FAST Apple route (QN_FAST_XTDZ_OFF still turns both off); code at main b639a2bd2; see docs/TOMBSTONES.md
 
 ## Neighbors
 
@@ -2062,7 +2072,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_PT_FOLD_NOX` | EXPERIMENTS.md:379 DROP (lane/apple-fast-ptimpute @ 9623cd7dc) | `x_prep/fastpt.mojo:8` |
 | `MOJOLEARN_PT_FUSED_TRANSFORM` | EXPERIMENTS.md:380 DROP (quality, with COLBATCH) (lane/apple-fast-batchv) | `x_prep/fastpt.mojo:18` |
 | `MOJOLEARN_PT_SPEC` | EXPERIMENTS.md:378 DROP (lane/apple-fast-batch @ 3150d75c1) | `x_prep/fastpt.mojo:14` |
-| `MOJOLEARN_QN_FAST_COALESCED_OFF` | EXPERIMENTS.md:247 DROPPED-slower (lane/apple-fast-linear @ 1c7c213f8) | `glm/impl/qn/glm_base.mojo:112` |
 | `MOJOLEARN_QR_FAST_DEV` | EXPERIMENTS.md:453 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1251` |
 | `MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` | EXPERIMENTS.md:384 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:221` |
 | `MOJOLEARN_RESAMPLE_FAST_RANK_SORT` | EXPERIMENTS.md:386 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:205` |
