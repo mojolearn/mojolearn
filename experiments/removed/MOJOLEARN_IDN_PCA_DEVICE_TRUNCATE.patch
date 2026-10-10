@@ -1,0 +1,280 @@
+diff --git a/decomposition/host/pca_oracle.mojo b/decomposition/host/pca_oracle.mojo
+index 3da561df9..25133c5e8 100644
+--- a/decomposition/host/pca_oracle.mojo
++++ b/decomposition/host/pca_oracle.mojo
+@@ -169,7 +169,8 @@ from core.host_predict_threads import (
+     host_predict_task_count,
+ )
+ from gemm.host.identical_gemm import OP_TN, gemm_oracle
+-from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_SWEEPS
++from decomposition.pca_rr_switch import PCA_DEVICE_TRUNCATE, PCA_RR_EIGH, PCA_RR_SWEEPS
++from decomposition.spectrum_order_device import spectrum_rank_desc
+ from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
+ from x_decomp.rr import host_eigh_rr
+ from x_decomp.eigh_scale import host_es_scale, host_es_unscale_diag
+@@ -637,9 +638,49 @@ def host_order_truncate_spectrum(
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+-# Tried: host_order_truncate_spectrum_ranked, the host twin of P5's device order (ties to the lower index).
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
++def host_order_truncate_spectrum_ranked(
++    diag32: List[Float32],
++    vecs: List[Float64],
++    n_cols: Int,
++    n_components: Int,
++    singular_scale: Int,
++) raises -> PCAHostResult:
++    """P5 (PCA_DEVICE_TRUNCATE, lane fg-pca): `host_order_truncate_spectrum`
++    with the device's order, `spectrum_rank_desc` over the Float32 diagonal
++    (descending, ties to the lower index; decomposition/
++    spectrum_order_device.mojo, the `_argsort_desc` rule), then the same
++    Float64 tail."""
++    var count = n_cols
++    var order = List[Int](length=count, fill=0)
++    var kp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(diag32.unsafe_ptr()))
++    for i in range(count):
++        order[spectrum_rank_desc(kp, count, i)] = i
++    var diag = List[Float64]()
++    for i in range(count):
++        diag.append(Float64(diag32[i]))
++    var total = 0.0
++    for i in range(count):
++        total += diag[i]
++    var components = List[Float64]()
++    var explained_var = List[Float64]()
++    var explained_var_ratio = List[Float64]()
++    var singular_vals = List[Float64]()
++    for c in range(n_components):
++        var src = order[c]
++        var lam = diag[src]
++        for f in range(n_cols):
++            components.append(vecs[f * n_cols + src])
++        explained_var.append(lam)
++        explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
++        singular_vals.append(sqrt(lam * Float64(singular_scale)))
++    var noise = 0.0
++    if n_components < count and n_components <= singular_scale:
++        for c in range(n_components, count):
++            noise += diag[order[c]]
++        noise /= Float64(count - n_components)
++    return PCAHostResult(
++        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
++    )
+ 
+ 
+ def host_pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
+@@ -692,9 +733,14 @@ def host_eig_and_truncate(
+         var rvecs = List[Float64]()
+         for i in range(n_cols * n_cols):
+             rvecs.append(Float64(rv[i]))
+-        # TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+-        # Tried: the host twin's P5 branch.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
++        comptime if PCA_DEVICE_TRUNCATE:
++            # P5: the device column's order (ties to the lower index)
++            var d32 = List[Float32]()
++            for i in range(n_cols):
++                d32.append(cov[i * n_cols + i])
++            return host_order_truncate_spectrum_ranked(
++                d32, rvecs, n_cols, n_components, singular_scale
++            )
+         return host_order_truncate_spectrum(
+             rdiag, rvecs, n_cols, n_components, singular_scale
+         )
+diff --git a/decomposition/impl/linalg/detail/pca.mojo b/decomposition/impl/linalg/detail/pca.mojo
+index 121ba99f1..2f3e1b060 100644
+--- a/decomposition/impl/linalg/detail/pca.mojo
++++ b/decomposition/impl/linalg/detail/pca.mojo
+@@ -55,13 +55,17 @@ from core.device_zero import enqueue_fill
+ # TOMBSTONE: MOJOLEARN_IDN_PCA_RR_ONE_BLOCK_STEPS (broken) deleted 2026-10-09 by 16a2c0dd3; code recoverable at 16a2c0dd3^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_RR_ONE_BLOCK.patch; record in docs/TOMBSTONES.md.
+ from decomposition.pca_rr_switch import (
++    PCA_DEVICE_TRUNCATE,
+     PCA_RR_EIGH,
+     PCA_RR_FLAG_TEST,
+     PCA_RR_SWEEPS,
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+-# Tried: the spectrum_order_device kernel imports of the device truncate.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
++from decomposition.spectrum_order_device import (
++    _TPB as _SO_TPB,
++    _blocks as _so_blocks,
++    _gather_diag_kernel,
++    _rank_kernel,
++)
+ from x_decomp.jacobi_par import (
+     PJ_TPB,
+     eigh_par_off_fold_kernel,
+@@ -817,9 +821,124 @@ def _eig_info_check(info0: Float32, info1: Float32, n_cols: Int) raises:
+ 
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+-# Tried: pca_inv_order_kernel, pca_gather_components_kernel, _device_truncate and truncate_in_order (P5's device order + gather and its n-value host tail).
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
++def pca_inv_order_kernel(pos: MutPointer[Int32, MutAnyOrigin], n_in: Int32, inv: MutPointer[Int32, MutAnyOrigin]):
++    """inv[pos[i]] = i: the index at each place of the descending order
++    (`_rank_kernel`'s ranks are a permutation). One thread a value."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(n_in):
++        inv.unsafe_store(Int(pos.unsafe_load(i)), Int32(i))
++
++
++def pca_gather_components_kernel(
++    vec: F32Ptr, inv: MutPointer[Int32, MutAnyOrigin], n_in: Int32, k_in: Int32, comp: F32Ptr
++):
++    """comp[c, f] = vec[f, inv[c]] for the first k places: component c is the
++    eigenvector column at place c (`order_truncate_spectrum`'s gather). One
++    thread a cell, no arithmetic."""
++    var n = Int(n_in)
++    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if t < Int(k_in) * n:
++        var c = t // n
++        var f = t - c * n
++        comp.unsafe_store(t, vec.unsafe_load(f * n + Int(inv.unsafe_load(c))))
++
++
++def _device_truncate(
++    ctx: DeviceContext,
++    mut cov: DeviceBuffer[DType.float32],
++    mut vec_buf: DeviceBuffer[DType.float32],
++    mut info_buf: DeviceBuffer[DType.float32],
++    n_cols: Int,
++    n_components: Int,
++    singular_scale: Int,
++) raises -> PCAResult:
++    """P5: `eig_and_truncate`'s tail with the order (`spectrum_rank_desc`,
++    ties to the lower index) and the component gather on the device; the
++    Float64 tail on the downloaded diagonal is `order_truncate_spectrum`'s
++    statements given that order."""
++    var n = n_cols
++    var k = n_components
++    var ddiag = ctx.enqueue_create_buffer[DType.float32](n)
++    var dpos = ctx.enqueue_create_buffer[DType.int32](n)
++    var dinv = ctx.enqueue_create_buffer[DType.int32](n)
++    var dcomp = ctx.enqueue_create_buffer[DType.float32](max(k * n, 1))
++    var cp = cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var vp = vec_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var gp = ddiag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var pp = dpos.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var ip = dinv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var op = dcomp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    ctx.enqueue_function[_gather_diag_kernel](cp, Int32(n), gp, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
++    ctx.enqueue_function[_rank_kernel](gp, Int32(n), pp, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
++    ctx.enqueue_function[pca_inv_order_kernel](pp, Int32(n), ip, grid_dim=_so_blocks(n), block_dim=_SO_TPB)
++    ctx.enqueue_function[pca_gather_components_kernel](
++        vp, ip, Int32(n), Int32(k), op, grid_dim=_so_blocks(k * n), block_dim=_SO_TPB
++    )
++    var h_diag = ctx.enqueue_create_host_buffer[DType.float32](n)
++    var h_inv = ctx.enqueue_create_host_buffer[DType.int32](n)
++    var h_comp = ctx.enqueue_create_host_buffer[DType.float32](max(k * n, 1))
++    var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
++    ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=ddiag)
++    ctx.enqueue_copy(dst_ptr=h_inv.unsafe_ptr(), src_buf=dinv)
++    ctx.enqueue_copy(dst_ptr=h_comp.unsafe_ptr(), src_buf=dcomp)
++    ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
++    ctx.synchronize()
++    _eig_info_check(h_info.unsafe_ptr().unsafe_load(0), h_info.unsafe_ptr().unsafe_load(1), n)
++    _ = ddiag^
++    _ = dpos^
++    _ = dinv^
++    _ = dcomp^
++    var result = truncate_in_order(
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_diag.unsafe_ptr())),
++        MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(h_inv.unsafe_ptr())),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(h_comp.unsafe_ptr())),
++        n, k, singular_scale,
++    )
++    _ = h_diag^
++    _ = h_inv^
++    _ = h_comp^
++    _ = h_info^
++    return result^
++
++
++def truncate_in_order(
++    diag32: MutPointer[Float32, MutAnyOrigin],
++    order32: MutPointer[Int32, MutAnyOrigin],
++    comp32: MutPointer[Float32, MutAnyOrigin],
++    n_cols: Int,
++    n_components: Int,
++    singular_scale: Int,
++) raises -> PCAResult:
++    """`order_truncate_spectrum`'s tail (its Float64 statements, unchanged)
++    on P5's downloads: the diagonal, the order (`order32[c]` the index at
++    place c) and the gathered k x n components. The same host tail main runs
++    after `eig_and_truncate`, over n values instead of n^2."""
++    var count = n_cols
++    var diag = List[Float64]()
++    for i in range(count):
++        diag.append(Float64(diag32.unsafe_load(i)))
++    var total = 0.0
++    for i in range(count):
++        total += diag[i]
++    var components = List[Float64]()
++    var explained_var = List[Float64]()
++    var explained_var_ratio = List[Float64]()
++    var singular_vals = List[Float64]()
++    for c in range(n_components):
++        var lam = diag[Int(order32.unsafe_load(c))]
++        for f in range(n_cols):
++            components.append(Float64(comp32.unsafe_load(c * n_cols + f)))
++        explained_var.append(lam)
++        explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
++        singular_vals.append(sqrt(lam * Float64(singular_scale)))
++    var noise = 0.0
++    if n_components < count and n_components <= singular_scale:
++        for c in range(n_components, count):
++            noise += diag[Int(order32.unsafe_load(c))]
++        noise /= Float64(count - n_components)
++    return PCAResult(
++        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
++    )
+ 
+ 
+ def eig_and_truncate(
+@@ -866,9 +985,10 @@ def eig_and_truncate(
+     ctx.synchronize()
+     _ = dfac^
+ 
+-    # TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+-    # Tried: the P5 branch to _device_truncate.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
++    comptime if PCA_DEVICE_TRUNCATE:
++        # P5 (MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE): order and gather on the
++        # device, only k x n components + 2 n words + the info cross
++        return _device_truncate(ctx, cov, vec_buf, info_buf, n_cols, n_components, singular_scale)
+ 
+     var h_cov = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
+     var h_vec = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
+diff --git a/decomposition/pca_rr_switch.mojo b/decomposition/pca_rr_switch.mojo
+index 48a42af6f..232fa4ecb 100644
+--- a/decomposition/pca_rr_switch.mojo
++++ b/decomposition/pca_rr_switch.mojo
+@@ -50,7 +50,20 @@ comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not (
+ #: on taxi and istella REFUSED at decomposition/impl/linalg/detail/pca.mojo:734). Deleted,
+ #: refused in core/six_lane_experiment_guards.mojo; recoverable at main 0a7b206f1.
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+-# Tried: P5 (lane fg-pca): eig_and_truncate's spectrum order (spectrum_rank_desc) and component gather on the device, only k x n + 2 n words crossing; pca / tsvd NV 0.91-1.01x, AMD 1.00x (fg2 nv2 v1021-v1050, amd a1161-a1190): noise, hashes unchanged.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch; record in docs/TOMBSTONES.md.
++#: P5, lane fg-pca (2026-10-09), DEFAULT OFF: `-D MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE`.
++#: `eig_and_truncate` downloaded the whole n x n covariance and eigenvector
++#: matrices and ordered the spectrum on the host (an O(n^2) exchange sort on
++#: `>` over Float64 lists, the components gathered on the host). Here the
++#: order is formed on the device (decomposition/spectrum_order_device.mojo
++#: `spectrum_rank_desc`: descending, ties to the LOWER index, one thread a
++#: value), the top n_components columns are gathered on the device, and only
++#: the diagonal (n), the order (n) and the k x n components cross; the
++#: Float64 tail (total, ratios, singular values, noise) is the same statements
++#: on the same words. Cost: 2 n^2 floats of download become k n + 2 n; the
++#: host loops over n^2 Float64 values go. BITS: the same, except where two
++#: eigenvalues tie (or a NaN): the exchange sort's tie order was not the
++#: lower index (`decomposition/host/linalg_public.mojo` `_argsort_desc` made
++#: the same move for eigh), so tied components may swap. The host column
++#: (`host_eig_and_truncate`, decomposition/host/pca_oracle.mojo) reads this
++#: switch and takes the same order: build the host binding with it too.
+ comptime PCA_DEVICE_TRUNCATE = PCA_RR_EIGH and is_defined["MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE"]()

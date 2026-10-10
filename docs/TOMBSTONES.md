@@ -209,6 +209,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SVD_QFIX`](#mojolearn_svd_qfix) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_SVD_QFIX.patch](../experiments/removed/MOJOLEARN_SVD_QFIX.patch) |
 | [`MOJOLEARN_SVD_QOLD`](#mojolearn_svd_qold) | Decomp | DROPPED-slower | 2026-10-09 | no code (no patch) |
 | [`MOJOLEARN_TSVD_FAST_CHOLQR3`](#mojolearn_tsvd_fast_cholqr3) | Decomp | DROPPED-slower | 2026-10-09 | [MOJOLEARN_TSVD_FAST_CHOLQR3.patch](../experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch) |
+| [`MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE`](#mojolearn_idn_pca_device_truncate) | Decomp | DROPPED-noise | 2026-10-10 | [MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch](../experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch) |
 | [`MOJOLEARN_AFFINITY_FAST_LOOP`](#mojolearn_affinity_fast_loop) | Cluster | DROPPED-noise | 2026-10-02 | [MOJOLEARN_AFFINITY_FAST_LOOP.patch](../experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch) |
 | [`MOJOLEARN_BGMM_ENT`](#mojolearn_bgmm_ent) | Cluster | DROPPED-noise | 2026-10-03 | [MOJOLEARN_BGMM_ENT.patch](../experiments/removed/MOJOLEARN_BGMM_ENT.patch) |
 | [`MOJOLEARN_BISECT_FAST_RESIDENT`](#mojolearn_bisect_fast_resident) | Cluster | DROPPED-slower | 2026-10-02 | [MOJOLEARN_BISECT_FAST_RESIDENT.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_RESIDENT.patch) |
@@ -1728,6 +1729,16 @@ in the tables after the sections.
 - EXPERIMENTS.md:1370: `MOJOLEARN_TSVD_FAST_CHOLQR3` | tsvd / istella, taxi (x_decomp/tsvd_fast.mojo, binding x_decomp) | lane/apple-fast-s-linalg | (owed) | istella 864 / taxi 42.2 (rab8-tsvd, TSVD_QFIX on) -> ? | READY-AB | TSVD_QFIX's R from shifted CholeskyQR3 (2 diagonal-shifted + 2 plain passes; Gram and Y R^-1 on the matrix unit via launch_gemm) instead of the scalar Householder TSQR; device guard (Cholesky info, last-pass Gram diagonal within 2^-6 of 1) falls back to the TSQR. Quality gate: istella relative_reconstruction_error stays ~1.22e-4 (not the Gram's 2.55e-3). Not SVD_FAST_CHOLQR (that was linalg.svd's U with an unshifted CholQR2 per orth pass)
 - EXPERIMENTS.md:1410: `TSVD_FAST_CHOLQR3` | tsvd / istella | lane/apple-fast-s-linalg | verdicts batch 6 | istella +19.9% | DROPPED-slower | stays off
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): TSVD_FAST_CHOLQR3 (TruncatedSVD's R from shifted CholeskyQR3, x_decomp/tsvd_fast.mojo) was SLOWER: tsvd istella +19.9% (verdicts batch 6); code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE
+
+- Verdict: DROPPED-noise. Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit 65b172f2f).
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch` (reverse of the deletion commit, code files only).
+- What it tried: lane fg-pca P5 (2026-10-09): `eig_and_truncate` stopped downloading the whole n x n covariance and eigenvector matrices for the host's O(n^2) exchange sort; the spectrum order (`spectrum_rank_desc`, ties to the lower index) and the top-k component gather ran on the device and only k x n + 2 n words crossed (`_device_truncate`, `truncate_in_order`, `pca_inv_order_kernel`, `pca_gather_components_kernel`); the host twin `host_order_truncate_spectrum_ranked` took the same order. Bits the same except on tied eigenvalues.
+- Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): pca istella NV 1.00x / AMD 1.00x, pca taxi NV 1.01x / AMD 1.00x, tsvd istella NV 1.00x / AMD 1.00x, tsvd taxi NV 0.91x / AMD 1.00x (avg 0.96x on one cell, the rest 1.00x): noise. Hashes unchanged (pca 3cc2b456 / 187a68d3, tsvd 3747911d / 8e8dc2a1); explained_variance_ratio_sum unchanged.
+- Files the patch restores: `decomposition/pca_rr_switch.mojo`, `decomposition/impl/linalg/detail/pca.mojo`, `decomposition/host/pca_oracle.mojo`
+- grid_controls: `fg-pca.json` `pca_device_truncate` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): IDN_PCA_DEVICE_TRUNCATE was NOISE; code at main 9f83ea479.
 
 ## Cluster
 
