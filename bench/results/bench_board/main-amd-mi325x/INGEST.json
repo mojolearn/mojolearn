@@ -1,18 +1,20 @@
 {
- "generated": "2026-10-10T01:34:32Z",
+ "generated": "2026-10-10T07:45:02Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-10T01:34:32Z",
+  "generated": "2026-10-10T07:45:02Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
-   "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt"
+   "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-grid-logs.txt"
   ],
   "json_dir": null,
   "results": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
-   "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt"
+   "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-results.txt"
   ]
  },
  "skip_notes": [
@@ -218,12 +220,12 @@
   "GRIDBB: branch freeze-20261007: nv/n0095 ge123e6f9.P004.bb"
  ],
  "skipped": {
-  "ALGOS: A/B or grid arm (ENV)": 4,
-  "ALGOS: A/B or grid arm (MOJOLEARN_BUILD_DEFINES)": 198,
-  "ALGOS: branch other than main": 2061,
-  "GRIDBB: A/B or switched build": 108,
-  "GRIDBB: branch freeze-20261007": 4344,
+  "ALGOS: A/B or grid arm (ENV)": 6,
+  "ALGOS: A/B or grid arm (MOJOLEARN_BUILD_DEFINES)": 216,
+  "ALGOS: branch other than main": 2092,
+  "GRIDBB: A/B or switched build": 190,
+  "GRIDBB: branch freeze-20261007": 4387,
   "GRIDBB: branch gbdt-categorical-oom": 6
  },
- "summary": "MAINBOARD column=amd-mi325x label=main@0a7b206f1 races=111 add=22 change=17 drop=0 failed=23 ledger=142 withheld_opponents=2 identity=MATCH:54,n/a:57"
+ "summary": "MAINBOARD column=amd-mi325x label=main@888f286db races=117 add=6 change=21 drop=0 failed=23 ledger=167 withheld_opponents=2 identity=MATCH:48,n/a:69"
 }

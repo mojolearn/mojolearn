@@ -227,5 +227,5 @@
   "GRIDBB: branch freeze-20261007": 4387,
   "GRIDBB: branch gbdt-categorical-oom": 6
  },
- "summary": "MAINBOARD column=nvidia-l40s label=main@ca8ea1f8d races=155 add=1 change=31 drop=0 failed=46 ledger=219 withheld_opponents=2 identity=MATCH:48,n/a:107"
+ "summary": "MAINBOARD column=amd-mi300x label=main@8d5855b83 races=1 add=1 change=0 drop=0 failed=0 ledger=0 withheld_opponents=0 identity=n/a:1"
 }

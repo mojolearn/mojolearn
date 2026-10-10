@@ -1,0 +1,223 @@
+{
+  "board_notes": [
+    "MAIN BOARD amd-mi300x, version label main@8d5855b83. Unreleased: not reproducible by pip install; the release boards are the reference.",
+    "Cells: 1 races; oldest cell main@8d5855b83 (2026-10-10T06:56:04Z), newest cell main@8d5855b83 (2026-10-10T06:56:04Z). Boxes: AMD Instinct MI300X (amd2, Hot Aisle).",
+    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 0 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
+    "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 1).",
+    "Opponents: copied from the stored opponent boards (none found), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 0 races.",
+    "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax. A cell of ours whose output hash equals a copied opponent's shows quality identical_to=<arm> (the same bits) where the own-host reference gave none."
+  ],
+  "board_sections": [
+    {
+      "lines": [
+        "Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: n/a 1.",
+        "",
+        "DIFFER: none."
+      ],
+      "title": "Identity"
+    },
+    {
+      "lines": [
+        "Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 0 failed runs.",
+        ""
+      ],
+      "title": "FAILED"
+    }
+  ],
+  "box": {
+    "gpu": {
+      "api": "hip",
+      "name": "AMD Instinct MI300X",
+      "vendor": "amd"
+    },
+    "host": {
+      "hostname": "AMD Instinct MI300X (amd2, Hot Aisle)"
+    },
+    "mojolearn": {
+      "version": "main@8d5855b83",
+      "wheel": {
+        "file": "none (unreleased; built from source at each cell's commit)",
+        "sha256": "-"
+      }
+    },
+    "repo": {
+      "commit": "8d5855b835d65aa208a64b573c5cfc6666d2b513"
+    }
+  },
+  "config": {
+    "families": [
+      "algos"
+    ],
+    "modes": [
+      "identical"
+    ],
+    "rounds": 1,
+    "smoke": false,
+    "vendor": "amd"
+  },
+  "created": "2026-10-10T07:45:02Z",
+  "main_board": {
+    "backfill": {
+      "filled": {
+        "hardware<-box table": 1,
+        "version<-git _version.py": 1
+      },
+      "not_comparable_rows": 0,
+      "unknown_rows": []
+    },
+    "boxes": [
+      "amd2"
+    ],
+    "column": "amd-mi300x",
+    "differ": [],
+    "failed_observations": [],
+    "failed_runs": 0,
+    "identity": {
+      "n/a": 1
+    },
+    "inputs": {
+      "branch": "main",
+      "generated": "2026-10-10T07:45:02Z",
+      "grid_logs": [
+        "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+        "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+        "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+        "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-grid-logs.txt"
+      ],
+      "json_dir": null,
+      "results": [
+        "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+        "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+        "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+        "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-results.txt"
+      ]
+    },
+    "label": "main@8d5855b83",
+    "newest_sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "oldest_sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+    "opponent_boards": [],
+    "replaced": 0,
+    "withheld_opponents": 0
+  },
+  "main_board_schema": "mojolearn-main-board/1",
+  "plan": [
+    "algos/incremental-pca/taxi/rows=full"
+  ],
+  "races": {
+    "algos/incremental-pca/taxi/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI300X (amd2, Hot Aisle)",
+          "hardware_key": "AMD Instinct MI300X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "070044c1026e4042",
+          "hash_stable": null,
+          "lane": "incremental-pca",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd2",
+            "commit_date": "2026-10-10T06:56:04Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "b0002",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd2",
+              "column": "amd-mi300x",
+              "comparability": {},
+              "ct": 1791615364,
+              "dataset": "taxi",
+              "digest": "070044c1026e4042",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI300X (amd2, Hot Aisle)",
+              "infra": false,
+              "job": "b0002",
+              "kind": "algos",
+              "lane": "incremental-pca",
+              "measured": null,
+              "median_ms": 74.13890999941941,
+              "quality": {
+                "explained_variance_fraction": 0.9999947784900433
+              },
+              "race_id": "algos/incremental-pca/taxi/rows=full",
+              "reason": null,
+              "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.37 (source build, main@8d5855b83)"
+            },
+            "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513"
+          },
+          "max_ms": 74.13890999941941,
+          "median_ms": 74.13890999941941,
+          "memory": {},
+          "min_ms": 74.13890999941941,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "explained_variance_fraction": 0.9999947784900433
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@8d5855b83 amd2/b0002 2026-10-10; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            74.13890999941941
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.37 (source build, main@8d5855b83)",
+          "version_source": "box table (job amd2/b0002)",
+          "warmup_ms": null
+        }
+      ],
+      "dataset": "taxi",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI300X (amd2, Hot Aisle) job b0002"
+      },
+      "id": "algos/incremental-pca/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "incremental-pca",
+      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-results.txt (amd2/b0002)",
+      "main_board": {
+        "box": "amd2",
+        "identity": "n/a",
+        "job": "b0002",
+        "sha": "8d5855b835d65aa208a64b573c5cfc6666d2b513"
+      },
+      "opponent_source": {
+        "boards": []
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    }
+  },
+  "schema": "mojolearn-bench-board/1",
+  "updated": "2026-10-10T07:45:02Z"
+}
