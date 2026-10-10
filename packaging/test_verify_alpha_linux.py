@@ -194,13 +194,25 @@ class SplitLinuxTests(unittest.TestCase):
             members['mojolearn/.libs/libfixture.so'] = b'FAKE BYTES, NEVER EXECUTE'
         else:
             meta.extend('Requires-Dist: ' + r for r in P.package_requirements(kind, v))
-            arches = []
-            if package['role'] in ('vendor', 'payload'):
-                arches = [slot[-1] for slot in package['slots']]
-                for arch in arches:
-                    members[f"mojolearn/{package['directory']}/{arch}/identical/_mojolearn_knn.so"] = b'FAKE BYTES, NEVER EXECUTE'
-            marker = P.PAYLOAD_MARKER if package['role'] == 'payload' else P.PLUGIN_MARKER
-            members[prefix + marker] = json.dumps(P.package_marker(kind, v, arches)).encode()
+            arches = [slot[-1] for slot in package['slots']]
+            for arch in arches:
+                members[f"mojolearn/{package['directory']}/{arch}/identical/_mojolearn_knn.so"] = b'FAKE BYTES, NEVER EXECUTE'
+            bundle = None
+            if package.get('ptx'):
+                # THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag)
+                ptx_root = P.BUNDLED_PTX_ROOT + '/'
+                ptx_bytes = b'FAKE PTX BYTES, NEVER EXECUTE'
+                members[ptx_root + 'identical/_mojolearn_knn.so'] = ptx_bytes
+                manifest = json.dumps(dict(
+                    schema=P.PTX_MANIFEST_SCHEMA, code_format=P.PTX_CODE_FORMAT, vendor='cuda', target='sm_80',
+                    min_compute_capability=[8, 0], source_commit='a' * 40, source_dirty=False,
+                    mojo_version='fixture', errors=[],
+                    files=[dict(file='identical/_mojolearn_knn.so', numeric_mode='identical',
+                                sha256=hashlib.sha256(ptx_bytes).hexdigest(),
+                                ptx_modules=[dict(target='sm_80', sha256='b' * 64)])])).encode()
+                members[ptx_root + P.BASELINE_MANIFEST] = manifest
+                bundle = dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
+            members[prefix + P.PLUGIN_MARKER] = json.dumps(P.package_marker(kind, v, arches, bundled_ptx=bundle)).encode()
         payload['extensions'] = {name: hashlib.sha256(raw).hexdigest()
                                  for name, raw in members.items() if name.endswith('.so')}
         members[prefix + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()
@@ -331,9 +343,11 @@ class SplitLinuxTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'source witness differs'):
             gate.verify(self.dist, self.stage('core', wrong_source), None, self.root)
 
-    def test_experimental_baseline_cannot_publish(self):
-        with self.assertRaisesRegex(ValueError, 'experimental PTX payload'):
-            gate.verify(self.dist, self.stage('nvidia-ptx80'), None, self.root)
+    def test_there_is_no_separate_ptx_package_to_publish(self):
+        # the PTX set is a slot of mojolearn-nvidia, not a project of its own
+        self.assertNotIn('nvidia-ptx80', self.plugins.PAYLOADS)
+        with self.assertRaises((KeyError, StopIteration)):
+            self.plugins.package('nvidia-ptx80')
 
     def test_a_split_wheel_of_another_version_is_refused(self):
         digest = self.stage('amd')

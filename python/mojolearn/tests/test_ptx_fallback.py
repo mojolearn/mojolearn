@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
-"""The NVIDIA PTX fallback as the loader decides it, on a machine with no GPU.
+"""The NVIDIA PTX slot as the loader decides it, on a machine with no GPU.
 
     python python/mojolearn/tests/test_ptx_fallback.py
 
@@ -9,20 +9,20 @@ file needs no built binding. In a checkout without bindings, pytest must be
 pointed at the file from outside the package (a symlink in another directory),
 because collecting it as `mojolearn.tests.*` imports the real package.
 
-Every case fabricates an installed split core, a `mojolearn-nvidia` plugin with
-native sets and a bundled PTX payload, and a device with no compatible native
-set, then asks the real `_backend`. Nothing loads an extension and nothing
-touches a device. The rules under test (docs/NVIDIA_PTX_IDENTITY.md):
+Every case fabricates an installed split core and a `mojolearn-nvidia` plugin
+carrying the native sm_89 set and the PTX slot (cuda_ptx/sm_80), then asks the
+real `_backend` about a synthetic device. Nothing loads an extension and
+nothing touches a device. The rules under test (docs/NVIDIA_PTX_IDENTITY.md;
+Andrew 2026-10-10: PTX is a normal target; no flag):
 
-  * native first; only `_NoCompatibleNative` on a detected device reaches PTX;
-  * FAST and DETERMINISTIC take the PTX payload with no admission;
-  * IDENTICAL takes it only under a bundled or local admission for exactly this
-    configuration, and otherwise refuses naming the qualification command;
-  * a per-call identical request on an unqualified PTX process refuses;
-  * no refusal ever selects the CPU set.
+  * native first: a device with a native set loads it;
+  * every other NVIDIA device of compute capability 8.0 or newer loads the PTX
+    set, in FAST, DETERMINISTIC and IDENTICAL alike, with no admission;
+  * MOJOLEARN_GPU_ARCH=sm_80 selects the PTX set by name;
+  * an older device, or a PTX set that fails its provenance, refuses and never
+    selects the CPU set;
+  * MOJOLEARN_EXPERIMENTAL_PTX and MOJOLEARN_CUDA_PATH no longer mean anything.
 """
-import contextlib
-import copy
 import hashlib
 import importlib
 import json
@@ -36,12 +36,8 @@ from unittest.mock import patch
 
 PKG_SRC = Path(__file__).resolve().parents[1]
 ALIAS = "mojolearn_ptx_fallback_under_test"
-CONFIG = dict(device_name="Synthetic A100", compute_capability=[8, 0],
-              driver_version="580.1.2", cuda_driver_version=13000)
-OTHER = dict(device_name="Synthetic A10", compute_capability=[8, 6],
-             driver_version="570.9.9", cuda_driver_version=12080)
 SOURCE = "a" * 40
-FIXTURES = ["base", "odd"]
+MODES = ("fast", "deterministic", "identical")
 
 
 def fresh(module="_backend"):
@@ -61,7 +57,7 @@ def probe(B, cuda=True):
 
 
 class Install(unittest.TestCase):
-    """A fabricated install: split core, NVIDIA plugin, bundled PTX, sm_80 device."""
+    """A fabricated install: split core, NVIDIA plugin with sm_89 and the PTX slot."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -69,20 +65,15 @@ class Install(unittest.TestCase):
         self.site = Path(self.tmp.name) / "site-packages"
         self.pkg = self.site / "mojolearn"
         self.pkg.mkdir(parents=True)
-        self.admissions = Path(self.tmp.name) / "state"
         self.B = fresh()
-        self.A = importlib.import_module(ALIAS + ".ptx_admission")
         self.version = self.B._CORE_VERSION
-        cleared = ("MOJOLEARN_VENDOR", "MOJOLEARN_GPU_ARCH", "MOJOLEARN_VENDOR_FORCE", "MOJOLEARN_CUDA_PATH",
-                   "MOJOLEARN_EXPERIMENTAL_PTX", "MOJOLEARN_PTX_QUALIFYING", "MOJOLEARN_NUMERIC_MODE")
-        env = patch.dict(os.environ, {"MOJOLEARN_PTX_ADMISSION_DIR": str(self.admissions)})
+        env = patch.dict(os.environ)
         env.start()
         self.addCleanup(env.stop)
-        for key in cleared:
+        for key in ("MOJOLEARN_VENDOR", "MOJOLEARN_GPU_ARCH", "MOJOLEARN_VENDOR_FORCE", "MOJOLEARN_CUDA_PATH",
+                    "MOJOLEARN_EXPERIMENTAL_PTX", "MOJOLEARN_NUMERIC_MODE"):
             os.environ.pop(key, None)
-        argv = patch.object(sys, "argv", ["pytest"])
-        argv.start()
-        self.addCleanup(argv.stop)
+        self.device = "sm_80"
         self.build()
 
     def dist_info(self, name, marker=None):
@@ -92,31 +83,22 @@ class Install(unittest.TestCase):
         if marker is not None:
             (d / marker[0]).write_text(marker[1])
 
-    def release_admission(self, manifest_hash, configurations):
-        A = self.A
-        return dict(schema=A.SCHEMA, qualified=True, numeric_mode="identical", source_commit=SOURCE,
-                    manifest_sha256=manifest_hash, coverage_contract=A.COVERAGE_CONTRACT,
-                    coverage=dict(inventory_sha256="c" * 64, harness_sha256="d" * 64,
-                        shared=dict(lanes=["synthetic-lane"], fixtures=list(A.SHARED_FIXTURES),
-                                    parts=list(A.SHARED_PARTS), vendors=["cuda", "hip", "metal"],
-                                    comparison_sha256="e" * 64),
-                        nvidia=dict(lanes=["synthetic-lane"], fixtures=list(A.NVIDIA_FIXTURES),
-                                    parts=list(A.NVIDIA_PARTS), comparison_sha256="f" * 64)),
-                    configurations=copy.deepcopy(configurations))
+    def marker_path(self):
+        gp = self.B.gpu_plugins
+        return self.site / f"mojolearn_nvidia-{self.version}.dist-info" / gp.PLUGIN_MARKER
 
-    def build(self, admitted=(OTHER,)):
-        """`admitted`: the configurations the bundled release admission names."""
+    def build(self, dirty=False):
         B, gp = self.B, self.B.gpu_plugins
         self.dist_info("mojolearn", (gp.CORE_MARKER, json.dumps(gp.core_marker(self.version))))
-        arches = ["sm_89", "sm_90a"]
-        for arch in arches:
-            for tier in ("", "identical"):
+        self.arches = ["sm_89"]
+        for arch in self.arches:
+            for tier in ("", "deterministic", "identical"):
                 d = self.pkg / gp.native_directory("cuda") / arch / tier
                 d.mkdir(parents=True, exist_ok=True)
                 (d / "_mojolearn_gbdt.so").write_bytes(b"inert native")
-        self.root = self.pkg / "cuda_ptx" / "sm_80"
+        self.root = self.pkg / gp.PTX_DIRECTORY / gp.PTX_ARCH
         files = []
-        for tier in ("fast", "deterministic", "identical"):
+        for tier in MODES:
             d = self.root if tier == "fast" else self.root / tier
             d.mkdir(parents=True, exist_ok=True)
             binary = d / "_mojolearn_gbdt.so"
@@ -124,30 +106,23 @@ class Install(unittest.TestCase):
             files.append(dict(file=binary.relative_to(self.root).as_posix(), numeric_mode=tier,
                               sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
                               ptx_modules=[dict(target="sm_80", sha256="b" * 64)]))
-        self.identical_sha = files[2]["sha256"]
-        manifest = dict(schema="mojolearn.ptx-baseline.v1", code_format="ptx-baseline", vendor="cuda",
-                        target="sm_80", min_compute_capability=[8, 0], source_commit=SOURCE,
-                        source_dirty=False, experimental=True, identical_qualified=False,
-                        qualification_required=True, errors=[], files=files)
+        manifest = dict(schema=gp.PTX_MANIFEST_SCHEMA, code_format=gp.PTX_CODE_FORMAT, vendor="cuda",
+                        target=gp.PTX_ARCH, min_compute_capability=[8, 0], source_commit=SOURCE,
+                        source_dirty=dirty, mojo_version="test", errors=[], files=files)
         (self.root / gp.BASELINE_MANIFEST).write_text(json.dumps(manifest))
         self.manifest_hash = hashlib.sha256((self.root / gp.BASELINE_MANIFEST).read_bytes()).hexdigest()
-        raw = json.dumps(self.release_admission(self.manifest_hash, list(admitted))).encode()
-        (self.root / self.A.ADMISSION_FILE).write_bytes(raw)
-        bundle = dict(manifest_sha256=self.manifest_hash, admission_sha256=hashlib.sha256(raw).hexdigest())
-        self.dist_info(gp.plugin("cuda")["distribution"],
-                       (gp.PLUGIN_MARKER, json.dumps(gp.plugin_marker("cuda", self.version, arches, bundled_ptx=bundle))))
+        self.write_marker(dict(manifest_sha256=self.manifest_hash))
         (self.pkg / "identity_columns").mkdir(exist_ok=True)
         (self.pkg / "identity_columns" / "COMMIT").write_text(SOURCE)
-        (self.pkg / "verify_reference").mkdir(exist_ok=True)
-        (self.pkg / "verify_reference" / "table.json").write_text(
-            json.dumps(dict(fixtures={f: {} for f in FIXTURES}, cells={})))
-        (self.pkg / "_identity_break.py").write_text("# synthetic harness\n")
-        self.reference = self.A.reference_hashes(str(self.pkg))
         B._pkg_dir = lambda: str(self.pkg)
         B._probe_box = lambda: probe(B)
-        B._device_arch = lambda vendor: ("sm_80", "synthetic driver")
-        B._ptx_runtime_configuration = lambda: copy.deepcopy(CONFIG)
+        B._device_arch = lambda vendor: (self.device, "synthetic driver")
         self.reset()
+
+    def write_marker(self, bundle):
+        gp = self.B.gpu_plugins
+        doc = gp.plugin_marker("cuda", self.version, self.arches, bundled_ptx=bundle)
+        self.dist_info(gp.plugin("cuda")["distribution"], (gp.PLUGIN_MARKER, json.dumps(doc)))
 
     def reset(self):
         B = self.B
@@ -157,162 +132,93 @@ class Install(unittest.TestCase):
         B._SELECTED = B._CPU_ONLY = B._DEFAULT_MODE = None
         B._SETS.clear()
 
-    def layout(self, mode):
+    def layout(self, mode, **env):
         self.reset()
-        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": mode}):
+        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": mode, **env}):
             return self.B._layout()
 
-    def refusal(self, mode):
+    def refusal(self, mode, **env):
         """The layout's refusal, which must be a GPU refusal `select()` never turns into the CPU set."""
         self.reset()
-        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": mode}):
+        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": mode, **env}):
             with patch.object(self.B, "host_binding_built", return_value=True):
                 with patch.object(self.B, "_select_cpu_only") as cpu:
                     with self.assertRaises(self.B.GpuPluginError) as ctx:
                         self.B.select()
                     cpu.assert_not_called()
         self.assertIsNone(self.B._CPU_ONLY)
+        self.assertIsNone(self.B.baseline_selection_receipt())
         return str(ctx.exception)
 
-    QUALIFY_COMMAND = ("/usr/bin/python3", "-m", "mojolearn", "verify", "--qualify-gpu")
 
-    def token_file(self, key=None, pid=424242, name="qualification.token"):
-        key = key or self.A.local_admission_key(SOURCE, self.manifest_hash, CONFIG, self.reference)
-        path = Path(self.tmp.name) / name
-        path.write_text(json.dumps(self.A.qualification_token(key, pid, "7" * 64)))
-        path.chmod(0o600)
-        return path
+class Selection(Install):
+    def test_a_device_with_a_native_set_loads_it(self):
+        self.device = "sm_89"
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                self.assertTrue(self.layout(mode)[1].endswith("cuda_native/sm_89"))
+                self.assertIsNone(self.B.baseline_selection_receipt())
+                self.assertEqual(self.B.gpu_arch(), "sm_89")
 
-    def process_tree(self, pid=424242, command=None, descends=True):
-        """Stand-ins for /proc: this process descends (two hops) from `pid`, whose command line is `command`."""
-        parents = {424240: 424241, 424241: pid if descends else 1, pid: 1}
-        command = list(self.QUALIFY_COMMAND if command is None else command)
-        stack = contextlib.ExitStack()
-        stack.enter_context(patch.object(os, "getppid", return_value=424240))
-        stack.enter_context(patch.object(self.A, "_process_parent", side_effect=lambda p: parents.get(p)))
-        stack.enter_context(patch.object(self.A, "_process_command",
-                                         side_effect=lambda p: command if p == pid else ["/bin/bash"]))
-        return stack
+    def test_every_other_nvidia_device_takes_ptx_in_every_mode(self):
+        # sm_86 included: the PTX slot is not a native family member of 8.x.
+        for device in ("sm_80", "sm_86", "sm_90", "sm_100", "sm_120"):
+            self.device = device
+            for mode in MODES:
+                with self.subTest(device=device, mode=mode):
+                    self.assertEqual(self.layout(mode), ("vendor", str(self.root)))
+                    receipt = self.B.baseline_selection_receipt()
+                    self.assertEqual((receipt["schema"], receipt["selected"], receipt["fallback"],
+                                      receipt["code_format"], receipt["arch"], receipt["numeric_mode"]),
+                                     ("mojolearn.ptx-selection.v2", "ptx", "ptx", "ptx", "sm_80", mode))
+                    self.assertEqual((receipt["manifest_sha256"], receipt["source_commit"]),
+                                     (self.manifest_hash, SOURCE))
+                    self.assertEqual(receipt["loaded_files"], [])
+                    for gone in ("identical_qualified", "admission", "qualifying", "requested"):
+                        self.assertNotIn(gone, receipt)
+                    self.assertEqual(self.B.gpu_arch(), "sm_80")
+                    self.assertIn(device, self.B.gpu_arch_how())
+                    self.assertEqual(self.B.tier_dir(mode),
+                                     str(self.root if mode == "fast" else self.root / mode))
+                    self.assertEqual(self.B.gpu_plugin()["code_format"], "ptx")
 
-    def qualification_process(self, **kwargs):
-        """This process as a verifier the qualification command spawned: live token, real ancestry."""
-        stack = self.process_tree()
-        stack.enter_context(patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": str(self.token_file(**kwargs))}))
-        return stack
+    def test_a_device_older_than_8_0_refuses_and_never_selects_cpu(self):
+        self.device = "sm_75"
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                self.assertIn("older than compute capability 8.0", self.refusal(mode))
 
-    def summaries(self):
-        return [dict(profile=profile, verdict="VERIFIED",
-                     counts=dict(IDENTICAL=12, DIVERGENT=0, REFUSED=0, OWED=0, **{"N/A": 3}),
-                     lanes_in_scope=3, lanes_verified=2, lanes_not_applicable=["par-synthetic"],
-                     lanes_with_exclusions=[], lanes_excluded=[], lanes_compared=["ols", "pca"],
-                     parts_compared=12, exclusions=[],
-                     fixtures=list(FIXTURES), parts_identical=["infer", "train"], cells=15,
-                     cross_check=dict(ran=True, passed=True, compared=4, agree=4), report_sha256="9" * 64)
-                for profile in self.A.QUALIFY_PROFILES]
+    def test_gpu_arch_sm_80_selects_ptx_on_a_native_device(self):
+        self.device = "sm_89"
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                self.assertEqual(self.layout(mode, MOJOLEARN_GPU_ARCH="sm_80"), ("vendor", str(self.root)))
+                receipt = self.B.baseline_selection_receipt()
+                self.assertEqual(receipt["selected"], "ptx")
+                self.assertIn("MOJOLEARN_GPU_ARCH", receipt["how"])
 
-    def write_local(self, configuration=CONFIG, mutate=None):
-        A = self.A
-        doc = A.build_local_admission(source_commit=SOURCE, manifest_sha256=self.manifest_hash,
-            configuration=configuration, reference=self.reference, summaries=self.summaries(),
-            core_version=self.version, created_utc="2026-10-04T00:00:00Z")
-        if mutate:
-            mutate(doc)
-        path = Path(A.local_admission_path(str(self.admissions), doc["key"]))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(doc))
-        return path
+    def test_the_removed_switches_have_no_effect(self):
+        for env in ({"MOJOLEARN_EXPERIMENTAL_PTX": "1"}, {"MOJOLEARN_CUDA_PATH": "ptx-baseline"},
+                    {"MOJOLEARN_EXPERIMENTAL_PTX": "1", "MOJOLEARN_CUDA_PATH": "ptx-baseline"}):
+            with self.subTest(env=env):
+                self.device = "sm_89"
+                self.assertTrue(self.layout("identical", **env)[1].endswith("cuda_native/sm_89"))
+                self.assertIsNone(self.B.baseline_selection_receipt())
+                self.device = "sm_90"
+                self.assertEqual(self.layout("identical", **env), ("vendor", str(self.root)))
+        for gone in ("_baseline_layout", "_admitted_baseline_base", "_ptx_identical_refusal",
+                     "_ptx_qualifying", "PTX_QUALIFY_COMMAND", "_ptx_runtime_configuration"):
+            self.assertFalse(hasattr(self.B, gone), gone)
 
+    def test_per_call_identical_is_served_on_a_ptx_process(self):
+        self.device = "sm_90"
+        self.layout("fast")
+        marker = object()
+        self.B._SETS["identical"] = marker
+        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
+            self.assertIs(self.B.load_set("identical"), marker)
 
-class FastFallback(Install):
-    def test_fast_takes_ptx_without_an_admission(self):
-        self.assertEqual(self.layout("fast"), ("vendor", str(self.root)))
-        receipt = self.B.baseline_selection_receipt()
-        self.assertEqual((receipt["requested"], receipt["selected"], receipt["fallback"], receipt["numeric_mode"]),
-                         ("native-first", "ptx-baseline", "ptx", "fast"))
-        self.assertIs(receipt["identical_qualified"], False)
-        self.assertIsNone(receipt["admission"])
-        self.assertIs(receipt["qualifying"], False)
-        self.assertEqual(receipt["configuration"], CONFIG)
-        self.assertEqual(self.B.gpu_arch(), "sm_80")
-        self.assertIn("not IDENTICAL-qualified", self.B.gpu_arch_how())
-        self.assertEqual(self.B.tier_dir("fast"), str(self.root))
-        self.assertEqual(self.B.gpu_plugin()["code_format"], "ptx-baseline")
-        self.assertIs(self.B.gpu_plugin()["identical_qualified"], False)
-
-    def test_twin_a_device_with_native_code_never_reaches_ptx(self):
-        self.B._device_arch = lambda vendor: ("sm_89", "synthetic driver")
-        self.assertTrue(self.layout("fast")[1].endswith("cuda_native/sm_89"))
-        self.assertIsNone(self.B.baseline_selection_receipt())
-
-    def test_deterministic_takes_ptx_without_an_admission(self):
-        self.assertEqual(self.layout("deterministic"), ("vendor", str(self.root)))
-        receipt = self.B.baseline_selection_receipt()
-        self.assertEqual(receipt["numeric_mode"], "deterministic")
-        self.assertIs(receipt["identical_qualified"], False)
-        self.assertEqual(self.B.tier_dir("deterministic"), str(self.root / "deterministic"))
-
-    def test_fast_does_not_need_a_readable_device_record(self):
-        def unreadable():
-            raise ValueError("PTX admission currently requires one visible CUDA device")
-        self.B._ptx_runtime_configuration = unreadable
-        self.assertEqual(self.layout("fast"), ("vendor", str(self.root)))
-        receipt = self.B.baseline_selection_receipt()
-        self.assertIsNone(receipt["configuration"])
-        self.assertIs(receipt["identical_qualified"], False)
-        self.assertIn("one visible CUDA device", self.refusal("identical"))
-
-    def test_manifest_only_descriptor_serves_fast_and_refuses_identical(self):
-        # A vendor marker that binds the payload and names no release admission.
-        self.reset()
-        found = {"cuda": {"distribution": "mojolearn-nvidia", "bundled_ptx": {"manifest_sha256": self.manifest_hash}}}
-        (self.root / self.A.ADMISSION_FILE).unlink()
-        with patch.dict(self.B._PLUGINS_FOUND, found, clear=True):
-            with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
-                self.assertEqual(self.B._admitted_baseline_base(str(self.pkg), "native refusal"), str(self.root))
-            self.assertIs(self.B.baseline_selection_receipt()["identical_qualified"], False)
-            self.reset()
-            with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "identical"}):
-                with self.assertRaisesRegex(self.B.GpuPluginError, "bundles no PTX identity admission"):
-                    self.B._admitted_baseline_base(str(self.pkg), "native refusal")
-
-    def test_payload_and_provenance_failures_refuse_in_every_tier(self):
-        gp = self.B.gpu_plugins
-        manifest = self.root / gp.BASELINE_MANIFEST
-        admission = self.root / self.A.ADMISSION_FILE
-        binary = self.root / "_mojolearn_gbdt.so"
-        commit = self.pkg / "identity_columns" / "COMMIT"
-        for target, change in ((manifest, lambda p: p.write_bytes(p.read_bytes() + b" ")),
-                               (manifest, lambda p: p.unlink()),
-                               (admission, lambda p: p.write_bytes(p.read_bytes() + b" ")),
-                               (admission, lambda p: p.unlink()),
-                               (binary, lambda p: p.write_bytes(b"changed")),
-                               (binary, lambda p: p.unlink()),
-                               (commit, lambda p: p.write_text("c" * 40))):
-            old = target.read_bytes()
-            change(target)
-            for mode in ("fast", "deterministic", "identical"):
-                with self.subTest(target=target.name, mode=mode):
-                    self.assertIn("PTX fallback refused", self.refusal(mode))
-                    self.assertIsNone(self.B.baseline_selection_receipt())
-            target.write_bytes(old)
-        self.assertEqual(self.layout("fast"), ("vendor", str(self.root)))
-
-    def test_no_bundle_refuses_and_other_native_errors_never_reach_ptx(self):
-        gp = self.B.gpu_plugins
-        marker = self.site / f"mojolearn_nvidia-{self.version}.dist-info" / gp.PLUGIN_MARKER
-        marker.write_text(json.dumps(gp.plugin_marker("cuda", self.version, ["sm_89", "sm_90a"])))
-        self.assertIn("no PTX fallback", self.refusal("fast"))
-        self.build()
-        with patch.object(self.B, "_pick_arch", side_effect=ImportError("native probe broken")):
-            with patch.object(self.B, "_admitted_baseline_base") as fallback:
-                self.reset()
-                with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
-                    with self.assertRaisesRegex(ImportError, "native probe broken"):
-                        self.B._layout()
-                fallback.assert_not_called()
-
-    def test_a_fast_ptx_process_with_no_binary_never_selects_cpu(self):
-        # Every FAST binding path is absent from this fixture except gbdt, which is inert bytes.
+    def test_a_ptx_process_with_no_binary_never_selects_cpu(self):
         with patch.object(self.B, "_exec_binding", side_effect=ImportError("inert fixture binary")):
             self.reset()
             with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
@@ -324,752 +230,72 @@ class FastFallback(Install):
         self.assertIsNone(self.B._CPU_ONLY)
 
 
-class IdenticalAdmission(Install):
-    def test_identical_refuses_and_names_the_command(self):
-        text = self.refusal("identical")
-        self.assertIn("IDENTICAL PTX fallback refused", text)
-        self.assertIn(self.B.PTX_QUALIFY_COMMAND, text)
-        self.assertEqual(self.B.PTX_QUALIFY_COMMAND, "python -m mojolearn verify --qualify-gpu")
-        self.assertIn("this device/driver configuration is not admitted", text)
-        self.assertIn("no local qualification exists", text)
-        self.assertIn("No CPU substitution", text)
-        self.assertIsNone(self.B.baseline_selection_receipt())
-
-    def test_default_mode_is_identical_and_refuses(self):
-        self.reset()
-        with self.assertRaisesRegex(self.B.GpuPluginError, "verify --qualify-gpu"):
-            self.B._layout()
-
-    def test_bundled_release_admission_is_accepted_for_its_configuration(self):
-        self.build(admitted=(CONFIG,))
-        self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
-        receipt = self.B.baseline_selection_receipt()
-        self.assertIs(receipt["identical_qualified"], True)
-        self.assertEqual(receipt["admission"], "bundled")
-        self.assertIn("bundled admission", self.B.gpu_arch_how())
-
-    def test_local_admission_is_accepted_and_reported(self):
-        path = self.write_local()
-        self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
-        receipt = self.B.baseline_selection_receipt()
-        self.assertIs(receipt["identical_qualified"], True)
-        self.assertEqual(receipt["admission"], "local")
-        self.assertEqual(receipt["admission_detail"]["admission_path"], str(path))
-        self.assertEqual(receipt["admission_sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
-        self.assertEqual(self.B.gpu_plugin()["admission"], "local")
-        # twin: without the file the same install refuses
-        path.unlink()
-        self.assertIn("verify --qualify-gpu", self.refusal("identical"))
-
-    def test_stale_local_admission_refuses_again(self):
-        self.write_local()
-        self.assertEqual(self.layout("identical")[1], str(self.root))
-        with self.subTest("driver update"):
-            self.B._ptx_runtime_configuration = lambda: {**CONFIG, "driver_version": "581.0.0"}
-            self.assertIn("verify --qualify-gpu", self.refusal("identical"))
-        with self.subTest("CUDA API change"):
-            self.B._ptx_runtime_configuration = lambda: {**CONFIG, "cuda_driver_version": 13010}
-            self.assertIn("verify --qualify-gpu", self.refusal("identical"))
-        with self.subTest("another device"):
-            self.B._ptx_runtime_configuration = lambda: {**CONFIG, "device_name": "Synthetic A40"}
-            self.assertIn("verify --qualify-gpu", self.refusal("identical"))
-        self.B._ptx_runtime_configuration = lambda: copy.deepcopy(CONFIG)
-        with self.subTest("different wheel: reference table"):
-            table = self.pkg / "verify_reference" / "table.json"
-            old = table.read_bytes()
-            table.write_bytes(old + b" ")
-            self.assertIn("verify --qualify-gpu", self.refusal("identical"))
-            table.write_bytes(old)
-        with self.subTest("different wheel: PTX payload"):
-            self.build()                      # same bytes, so the admission still fits
-            self.assertEqual(self.layout("identical")[1], str(self.root))
-            (self.root / "_mojolearn_gbdt.so").write_bytes(b"a rebuilt payload")
-            self.assertIn("PTX fallback refused", self.refusal("identical"))
-        self.build()
-        self.assertEqual(self.layout("identical")[1], str(self.root))
-
-    def test_an_edited_local_admission_refuses(self):
-        for label, mutate, expect in (
-                ("another driver inside", lambda d: d["configuration"].update(driver_version="1.2"), "another device or driver"),
-                ("unqualified", lambda d: d.update(qualified=False), "not a qualified local admission"),
-                ("release schema", lambda d: d.update(schema=self.A.SCHEMA), "not a qualified local admission"),
-                ("divergent summary", lambda d: d["comparison"]["profiles"][0]["counts"].update(DIVERGENT=1), "not identical outside its pinned exclusions"),
-                ("owed summary", lambda d: d["comparison"]["profiles"][1]["counts"].update(OWED=2), "not identical outside its pinned exclusions"),
-                ("one profile", lambda d: d["comparison"]["profiles"].pop(), "every verification profile"),
-                ("lanes unaccounted", lambda d: d["comparison"]["profiles"][0].update(lanes_in_scope=9), "every lane in scope"),
-                ("another source", lambda d: d.update(source_commit="c" * 40), "another source commit"),
-                ("another payload", lambda d: d.update(manifest_sha256="c" * 64), "another PTX payload")):
-            with self.subTest(label):
-                path = self.write_local(mutate=mutate)
-                text = self.refusal("identical")
-                self.assertIn(expect, text)
-                self.assertIn("verify --qualify-gpu", text)
-                path.unlink()
-        path = self.write_local()
-        path.write_text("{not json")
-        self.assertIn("verify --qualify-gpu", self.refusal("identical"))
-
-    def test_a_release_record_is_not_a_local_admission(self):
-        doc = self.release_admission(self.manifest_hash, [CONFIG])
-        with self.assertRaisesRegex(ValueError, "not a qualified local admission"):
-            self.A.validate_local_admission(doc, source_commit=SOURCE, manifest_sha256=self.manifest_hash,
-                                            configuration=CONFIG, reference=self.reference)
-        local = json.loads(self.write_local().read_text())
-        with self.assertRaises(ValueError):
-            self.A.validate_admission(local, source_commit=SOURCE, manifest_sha256=self.manifest_hash,
-                                      configuration=CONFIG)
-
-
-class PerCallIdentical(Install):
-    def test_per_call_identical_on_a_fast_ptx_process_refuses(self):
-        self.layout("fast")
-        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
-            for call in (lambda: self.B.load_set("identical"),
-                         lambda: self.B.binding("_mojolearn_gbdt", "identical"),
-                         lambda: self.B.set_default_mode("identical")):
-                with self.assertRaises(self.B.GpuPluginError) as ctx:
-                    call()
-                self.assertIn("numeric_mode='identical' refused", str(ctx.exception))
-                self.assertIn(self.B.PTX_QUALIFY_COMMAND, str(ctx.exception))
-                self.assertIn("No CPU substitution", str(ctx.exception))
-            self.assertIsNone(self.B._CPU_ONLY)
-            self.assertEqual(self.B.default_mode(), "fast")
-
-    def test_a_cached_identical_set_does_not_answer_a_refused_request(self):
-        self.layout("fast")
-        marker = object()
-        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
-            with self.B.host_helper_scope():
-                self.B._SETS["identical"] = marker         # what `_buffer._native` leaves behind
-                self.assertIs(self.B.load_set("identical"), marker)
-            with self.assertRaises(self.B.GpuPluginError):
-                self.B.load_set("identical")
-            self.B._SETS["fast"] = marker
-            self.assertIs(self.B.load_set("fast"), marker)   # the process's own tier is untouched
-
-    def test_first_identical_request_refuses_before_any_binary_loads(self):
-        # The layout is decided inside the first load_set call; the refusal must still fire.
-        self.reset()
-        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
-            with patch.object(self.B, "_load_member") as load:
-                with self.assertRaises(self.B.GpuPluginError):
-                    self.B.load_set("identical")
-                load.assert_not_called()
-
-    def test_per_call_identical_is_served_once_this_configuration_is_admitted(self):
-        self.write_local()
-        self.layout("fast")
-        receipt = self.B.baseline_selection_receipt()
-        self.assertEqual((receipt["numeric_mode"], receipt["admission"]), ("fast", "local"))
-        marker = object()
-        self.B._SETS["identical"] = marker
-        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
-            self.assertIs(self.B.load_set("identical"), marker)
-
-    def test_native_and_forced_experimental_processes_are_not_judged_here(self):
-        self.B._device_arch = lambda vendor: ("sm_89", "synthetic driver")
-        self.layout("fast")
-        self.assertIsNone(self.B._ptx_identical_refusal())
-        self.B._BASELINE_SELECTION = dict(requested="ptx-baseline", identical_qualified=False)
-        self.assertIsNone(self.B._ptx_identical_refusal())
-
-
-class Qualifying(Install):
-    def test_the_qualification_run_loads_identical_ptx_without_claiming_it(self):
-        with self.qualification_process():
-            self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
-        receipt = self.B.baseline_selection_receipt()
-        self.assertIs(receipt["identical_qualified"], False)
-        self.assertIs(receipt["qualifying"], True)
-        self.assertIsNone(receipt["admission"])
-        self.assertIn("qualification run in progress", self.B.gpu_arch_how())
-        self.assertIsNone(self.B._ptx_identical_refusal())
-
-    def test_an_exported_variable_in_an_ordinary_process_is_still_refused(self):
-        """The bypass: MOJOLEARN_PTX_QUALIFYING set by hand must unlock nothing."""
-        token = self.token_file()
-        for value in ("1", "true", "0", str(token), "relative.token", str(Path(self.tmp.name) / "absent.token")):
-            with self.subTest(value=value):
-                # No stand-in process tree: this is an ordinary process whose real
-                # ancestors are not a qualification run, even with a well-formed token.
-                with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": value}):
-                    text = self.refusal("identical")
-                self.assertIn("python -m mojolearn verify --qualify-gpu", text)
-                self.assertIn("MOJOLEARN_PTX_QUALIFYING is set but is not the live token", text)
-                self.assertIsNone(self.B.baseline_selection_receipt())
-
-    def test_a_token_is_bound_to_the_run_the_configuration_and_the_command(self):
-        A = self.A
-        key = A.local_admission_key(SOURCE, self.manifest_hash, CONFIG, self.reference)
-        other = A.local_admission_key(SOURCE, self.manifest_hash, OTHER, self.reference)
-        token = self.token_file()
-        with self.process_tree():
-            self.assertEqual(A.validate_qualification_token(str(token), key)["pid"], 424242)
-            with self.assertRaisesRegex(ValueError, "another wheel, device, driver or reference"):
-                A.validate_qualification_token(str(token), other)
-            with self.assertRaisesRegex(ValueError, "absolute"):
-                A.validate_qualification_token("qualification.token", key)
-            link = Path(self.tmp.name) / "link.token"
-            link.symlink_to(token)
-            with self.assertRaisesRegex(ValueError, "regular file"):
-                A.validate_qualification_token(str(link), key)
-            token.chmod(0o666)
-            with self.assertRaisesRegex(ValueError, "private file"):
-                A.validate_qualification_token(str(token), key)
-            token.chmod(0o600)
-            for mutate in (lambda d: d.update(schema="other"), lambda d: d.update(pid=1), lambda d: d.update(pid="424242"),
-                           lambda d: d.update(nonce="short"), lambda d: d.update(extra=1), lambda d: d.pop("nonce")):
-                doc = json.loads(token.read_text())
-                mutate(doc)
-                bad = Path(self.tmp.name) / "bad.token"
-                bad.write_text(json.dumps(doc))
-                bad.chmod(0o600)
-                with self.subTest(doc=doc), self.assertRaisesRegex(ValueError, "malformed"):
-                    A.validate_qualification_token(str(bad), key)
-        with self.process_tree(descends=False):
-            with self.assertRaisesRegex(ValueError, "not an ancestor"):
-                A.validate_qualification_token(str(token), key)
-        for command in (["/usr/bin/python3", "-m", "mojolearn", "verify", "--all"],
-                        ["/usr/bin/python3", "train.py", "-m", "mojolearn", "verify", "--qualify-gpu"],
-                        ["/usr/bin/python3", "-m", "other", "verify", "--qualify-gpu"], ["/bin/bash"], None):
-            with self.subTest(command=command), self.process_tree(command=command or []):
-                with self.assertRaisesRegex(ValueError, "not the qualification command"):
-                    A.validate_qualification_token(str(token), key)
-        # with no /proc stand-in at all (this machine), nothing is an ancestor
-        with self.assertRaisesRegex(ValueError, "not an ancestor|not the qualification command"):
-            A.validate_qualification_token(str(token), key)
-        # and the loader agrees for each: a token for another device, or a dead run, refuses IDENTICAL
-        with self.process_tree(), patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING":
-                                                          str(self.token_file(key=other, name="other.token"))}):
-            self.assertIn("is not the live token", self.refusal("identical"))
-        with self.process_tree(descends=False), patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": str(token)}):
-            self.assertIn("not an ancestor", self.refusal("identical"))
-
-    def test_command_lines_recognized(self):
-        A = self.A
-        for command, expected in ((["python", "-m", "mojolearn", "verify", "--qualify-gpu"], True),
-                                  (["python", "-u", "-m", "mojolearn", "verify", "--json", "--qualify-gpu"], True),
-                                  (["python", "/site/mojolearn/__main__.py", "verify", "--qualify-gpu"], True),
-                                  (["python", "-m", "mojolearn", "verify", "--all"], False),
-                                  (["python", "-m", "mojolearn._verify_worker", "verify", "--qualify-gpu"], False),
-                                  (["python", "train.py", "-m", "mojolearn", "verify", "--qualify-gpu"], False),
-                                  (["python", "-c", "import mojolearn", "verify", "--qualify-gpu"], False),
-                                  (["python"], False), ([], False), (None, False)):
-            with self.subTest(command=command):
-                self.assertIs(A.is_qualify_command_line(command), expected)
-
-    def test_the_command_line_is_recognized_and_nothing_else_is(self):
-        for argv, expected in ((["-m", "verify", "--qualify-gpu"], True),
-                               (["/site/mojolearn/__main__.py", "verify", "--json", "--qualify-gpu"], True),
-                               (["-m", "verify", "--all"], False),
-                               (["train.py", "verify", "--qualify-gpu"], False),
-                               (["train.py", "-m", "mojolearn", "verify", "--qualify-gpu"], False),
-                               (["-m", "doctor", "--qualify-gpu"], False)):
-            with self.subTest(argv=argv):
-                with patch.object(sys, "argv", argv):
-                    self.assertIs(self.B._ptx_qualifying(), expected)
-        for value in ("0", "1"):
-            with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": value}):
-                self.assertIs(self.B._ptx_qualifying(), False)
-
-    def test_qualifying_never_relaxes_fast_or_an_existing_admission(self):
-        with self.qualification_process():
-            self.layout("fast")
-            self.assertIs(self.B.baseline_selection_receipt()["qualifying"], False)
-            self.write_local()
-            self.layout("identical")
-            receipt = self.B.baseline_selection_receipt()
-            self.assertEqual((receipt["admission"], receipt["qualifying"]), ("local", False))
-
-
-def clean_report(case, profile, **changes):
-    """A finished verifier report that qualifies; each test moves one thing."""
-    lanes = {"ols": dict(state="VERIFIED", reason=None), "pca": dict(state="VERIFIED", reason=None),
-             "par-synthetic": dict(state="NOT APPLICABLE", reason="two-device claim")}
-    cells = [dict(lane=lane, fixture=fixture, part=part, state="IDENTICAL", detail="")
-             for lane in ("ols", "pca") for fixture in FIXTURES for part in ("train", "infer")]
-    cells.append(dict(lane="ols", fixture="base", part="stepfull", state="N/A", detail="n/a:no-sequence"))
-    report = dict(
-        format="mojolearn.verify-all-report.v1", verdict="VERIFIED", exit=0, depth="full",
-        fixtures=list(FIXTURES), selection=dict(profile=dict(name=profile)),
-        device=dict(vendor="cuda", numeric_mode="identical"),
-        table=dict(sha256=case.reference["table_sha256"]),
-        harness=dict(sha256=case.reference["harness_sha256"], matches_table=True),
-        execution=dict(interrupted=None, completed_cells=4, total_cells=4),
-        self_test=dict(passed=True), cells=cells,
-        counts={"IDENTICAL": 8, "DIVERGENT": 0, "OWED": 0, "REFUSED": 0, "N/A": 1},
-        lane_accounting=dict(total=3, verdict_scope=sorted(lanes), lanes=lanes),
-        bindings=[dict(module="_mojolearn_gbdt", sha256=case.identical_sha, size=1),
-                  dict(module="mojolearn._host._mojolearn_forest_host", sha256="0" * 64, size=1, kind="host")],
-        cross_check=(dict(ran=True, passed=True, compared=4, agree=4, differ=0) if profile == "routine"
-                     else dict(ran=False, passed=None)))
-    report.update(changes)
-    return report
-
-
-class JudgeReport(Install):
-    def judge(self, report, profile="routine"):
-        return self.A.judge_report(report, profile=profile, reference=self.reference, table_fixtures=FIXTURES,
-                                   ptx_identical_sha256={self.identical_sha}, report_sha256="9" * 64)
-
-    def test_a_complete_identical_report_qualifies(self):
-        for profile in self.A.QUALIFY_PROFILES:
-            result = self.judge(clean_report(self, profile), profile)
-            self.assertEqual((result["differing"], result["missing"], result["incomplete"]), ([], [], []))
-            self.assertEqual(result["summary"]["lanes_verified"], 2)
-            self.assertEqual(result["summary"]["lanes_not_applicable"], ["par-synthetic"])
-            self.assertEqual(result["summary"]["parts_identical"], ["infer", "train"])
-
-    def moved(self, expect, bucket, profile="routine", **changes):
-        result = self.judge(clean_report(self, profile, **changes), profile)
-        self.assertTrue(any(expect in row for row in result[bucket]), (expect, result))
-        return result
-
-    def test_each_defect_alone_denies_qualification(self):
-        base = clean_report(self, "routine")
-        def cells(state, detail):
-            return [dict(base["cells"][0], state=state, detail=detail)] + base["cells"][1:]
-        def lanes(state):
-            rows = dict(base["lane_accounting"]["lanes"], pca=dict(state=state, reason="synthetic reason"))
-            return dict(base["lane_accounting"], lanes=rows)
-        self.moved("ols/base/train: this box 11, reference 22", "differing", cells=cells("DIVERGENT", "this box 11, reference 22"))
-        self.moved("ols/base/train: no committed record", "missing", cells=cells("OWED", "no committed record carries this cell part yet"))
-        self.moved("ols/base/train: worker exited", "incomplete", cells=cells("REFUSED", "worker exited 1"))
-        for state in ("OWED", "HELD", "NOT RUN", "UNDECLARED", "SMOKE"):
-            self.moved(f"pca: lane {state}", "missing", lane_accounting=lanes(state))
-        self.moved("pca: lane DIVERGENT", "differing", lane_accounting=lanes("DIVERGENT"))
-        self.moved("pca: lane REFUSED", "incomplete", lane_accounting=lanes("REFUSED"))
-        self.moved("full-depth", "incomplete", fixtures=["base"])
-        self.moved("full-depth", "incomplete", depth="base")
-        self.moved("not cuda in identical mode", "incomplete", device=dict(vendor="cuda", numeric_mode="fast"))
-        self.moved("reference table and harness this install ships", "incomplete", table=dict(sha256="1" * 64))
-        self.moved("not generated by the shipped harness", "missing",
-                   harness=dict(sha256=self.reference["harness_sha256"], matches_table=False))
-        self.moved("stopped after", "incomplete", execution=dict(interrupted="timeout", completed_cells=1, total_cells=4))
-        self.moved("self-test", "incomplete", self_test=dict(passed=False))
-        self.moved("not loaded from the IDENTICAL PTX payload", "incomplete",
-                   bindings=[dict(module="_mojolearn_gbdt", sha256="7" * 64, size=1)])
-        self.moved("not loaded from the IDENTICAL PTX payload", "incomplete", bindings=[])
-        self.moved("GPU and CPU inference differ", "differing", cross_check=dict(ran=True, passed=False, differ=2))
-        self.moved("did not run to a pass", "incomplete", cross_check=dict(ran=False, passed=None))
-        self.moved("report is for profile", "incomplete", selection=dict(profile=dict(name="neural-training")))
-        self.moved("verifier verdict", "incomplete", verdict="MISMATCH", exit=1)
-        self.moved("no lane was verified", "incomplete",
-                   lane_accounting=dict(total=1, verdict_scope=["par-synthetic"], lanes=base["lane_accounting"]["lanes"]))
-
-    def test_no_report_is_incomplete(self):
-        for report in (None, dict(format="mojolearn.verify-all-report.v1", verdict="CANNOT RUN", exit=4, detail="import raised")):
-            result = self.judge(report)
-            self.assertIsNone(result["summary"])
-            self.assertTrue(result["incomplete"])
-
-
-class QualifyCommand(Install):
-    def command(self, reports, argv=("-m", "verify", "--qualify-gpu"), mode="identical"):
-        Q = importlib.import_module(ALIAS + "._ptx_qualify")
-        self.reset()
-        seen = []
-
-        def run(profile, report_path, log_path, args, token=None):
-            seen.append(profile)
-            # the token handed to each verifier is this run's: private, bound to this
-            # process and configuration, and present only while the run lasts
-            doc = json.loads(Path(token).read_text())
-            self.assertEqual((doc["schema"], doc["pid"], doc["key"]), (self.A.QUALIFY_TOKEN_SCHEMA, os.getpid(),
-                             self.A.local_admission_key(SOURCE, self.manifest_hash, CONFIG, self.reference)))
-            self.assertEqual(os.stat(token).st_mode & 0o777, 0o600)
-            self.tokens.append((token, doc["nonce"]))
-            report = reports(profile)
-            if report is not None:
-                Path(report_path).write_text(json.dumps(report))
-            Path(log_path).write_text("synthetic verifier log\n")
-            return 0 if report is None else report.get("exit", 0)
-
-        self.tokens = []
-        args = types.SimpleNamespace(json=True, cell_timeout=120.0, cpu_threads=1)
-        with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": mode}), patch.object(sys, "argv", list(argv)):
-            self.B._layout()
-            out = tempfile.TemporaryFile("w+")
-            with patch.object(sys, "stdout", out), patch.object(sys, "stderr", tempfile.TemporaryFile("w+")):
-                code = Q.cmd_qualify_gpu(args, backend=self.B, run=run)
-            out.seek(0)
-            self.assertFalse([t for t, _ in self.tokens if os.path.exists(t)], "a qualification token outlived its run")
-            return code, json.loads(out.read()), seen
-
-    def admissions_written(self):
-        return sorted(p.name for p in self.admissions.glob("*.json")) if self.admissions.exists() else []
-
-    def test_a_clean_run_writes_an_admission_the_loader_then_accepts(self):
-        self.assertIn("verify --qualify-gpu", self.refusal("identical"))
-        code, result, seen = self.command(lambda profile: clean_report(self, profile))
-        self.assertEqual((code, result["verdict"]), (0, "QUALIFIED"))
-        self.assertEqual(seen, list(self.A.QUALIFY_PROFILES))
-        self.assertEqual(len(self.admissions_written()), 1)
-        doc = json.loads(Path(result["admission_path"]).read_text())
-        self.assertEqual(doc["schema"], self.A.LOCAL_SCHEMA)
-        self.assertNotEqual(doc["schema"], self.A.SCHEMA)
-        self.assertEqual((doc["source_commit"], doc["manifest_sha256"], doc["configuration"], doc["reference"]),
-                         (SOURCE, self.manifest_hash, CONFIG, self.reference))
-        self.assertEqual([row["profile"] for row in doc["comparison"]["profiles"]], list(self.A.QUALIFY_PROFILES))
-        for row in doc["comparison"]["profiles"]:
-            raw = (Path(result["evidence"]) / f"{row['profile']}.json").read_bytes()
-            self.assertEqual(row["report_sha256"], hashlib.sha256(raw).hexdigest())
-        # an ordinary process, with no qualification signal, now loads IDENTICAL
-        self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
-        self.assertEqual(self.B.baseline_selection_receipt()["admission"], "local")
-        code, result, seen = self.command(lambda profile: clean_report(self, profile))
-        self.assertEqual((code, result["verdict"], seen), (0, "ALREADY QUALIFIED", []))
-
-    def test_a_differing_lane_writes_nothing_and_is_reported(self):
-        def reports(profile):
-            report = clean_report(self, profile)
-            if profile == "neural-training":
-                report["cells"][0].update(state="DIVERGENT", detail="this box 11, reference 22")
-                report.update(verdict="MISMATCH", exit=1)
-            return report
-        code, result, seen = self.command(reports)
-        self.assertEqual((code, result["verdict"]), (1, "NOT QUALIFIED"))
-        self.assertEqual(seen, list(self.A.QUALIFY_PROFILES))
-        self.assertEqual(result["differing"], ["ols/base/train: this box 11, reference 22"])
-        self.assertEqual(self.admissions_written(), [])
-        self.assertIn("verify --qualify-gpu", self.refusal("identical"))
-
-    def test_missing_reference_data_writes_nothing_and_names_what_is_missing(self):
-        def reports(profile):
-            report = clean_report(self, profile)
-            report["lane_accounting"]["lanes"]["pca"] = dict(state="OWED", reason="no committed record carries a hash")
-            report["cells"][1].update(state="OWED", detail="no committed record carries this cell part yet")
-            return report                                  # `verify` itself still says VERIFIED, exit 0
-        code, result, _ = self.command(reports)
-        self.assertEqual((code, result["verdict"]), (5, "NOT QUALIFIED"))
-        self.assertEqual(result["differing"], [])
-        self.assertIn("pca: lane OWED: no committed record carries a hash", result["missing_reference"])
-        self.assertIn("ols/base/infer: no committed record carries this cell part yet", result["missing_reference"])
-        self.assertEqual(self.admissions_written(), [])
-
-    def test_a_run_that_did_not_finish_writes_nothing(self):
-        code, result, _ = self.command(lambda profile: clean_report(self, profile) if profile == "routine" else None)
-        self.assertEqual((code, result["verdict"]), (4, "INCOMPLETE"))
-        self.assertEqual(self.admissions_written(), [])
-
-    def test_native_devices_and_unreadable_devices_write_nothing(self):
-        self.B._device_arch = lambda vendor: ("sm_89", "synthetic driver")
-        with patch.object(self.B, "vendor", return_value="cuda"):
-            code, result, seen = self.command(lambda profile: clean_report(self, profile))
-        self.assertEqual((code, result["verdict"], seen), (0, "NOT NEEDED", []))
-        self.B._device_arch = lambda vendor: ("sm_80", "synthetic driver")
-        def unreadable():
-            raise ValueError("PTX admission currently requires one visible CUDA device")
-        self.B._ptx_runtime_configuration = unreadable
-        code, result, seen = self.command(lambda profile: clean_report(self, profile))
-        self.assertEqual((code, result["verdict"], seen), (4, "CANNOT RUN", []))
-        self.assertIn("one visible CUDA device", result["detail"])
-        self.assertEqual(self.admissions_written(), [])
-
-    def test_the_verifier_children_run_identical_under_the_qualifying_signal(self):
-        Q = importlib.import_module(ALIAS + "._ptx_qualify")
-        args = types.SimpleNamespace(cell_timeout=90.0, cpu_threads=2)
-        log = Path(self.tmp.name) / "child.log"
-        for profile, neural in (("routine", False), ("neural-training", True)):
-            with patch.object(Q.subprocess, "run", return_value=types.SimpleNamespace(returncode=0)) as run:
-                with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": "1"}):
-                    self.assertEqual(Q._run_verifier(profile, "report.json", str(log), args, token="/state/run.token"), 0)
-            command, env = run.call_args.args[0], run.call_args.kwargs["env"]
-            self.assertEqual(command[1:5], ["-m", "mojolearn", "verify", "--all"])
-            self.assertEqual("--neural-training" in command, neural)
-            self.assertNotIn("--quick", command)
-            self.assertNotIn("--lanes", command)
-            self.assertEqual((env["MOJOLEARN_NUMERIC_MODE"], env["MOJOLEARN_PTX_QUALIFYING"]),
-                             ("identical", "/state/run.token"))
-        # with no token the child inherits nothing a caller exported
-        with patch.object(Q.subprocess, "run", return_value=types.SimpleNamespace(returncode=0)) as run:
-            with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": "1"}):
-                Q._run_verifier("routine", "report.json", str(log), args)
-        self.assertNotIn("MOJOLEARN_PTX_QUALIFYING", run.call_args.kwargs["env"])
-
-    def test_each_run_writes_a_fresh_token_and_removes_it(self):
-        code, _, seen = self.command(lambda profile: clean_report(self, profile) if profile == "routine" else None)
-        first = list(self.tokens)
-        self.assertEqual((code, len(first)), (4, 2))
-        self.assertEqual(len({nonce for _, nonce in first}), 1)
-        self.command(lambda profile: None)
-        self.assertNotEqual(self.tokens[0][1], first[0][1])
-
-    def test_the_cli_dispatches_the_flag(self):
-        main = importlib.import_module(ALIAS + ".__main__")
-        Q = importlib.import_module(ALIAS + "._ptx_qualify")
-        args = main.build_parser().parse_args(["verify", "--qualify-gpu"])
-        self.assertIs(args.qualify_gpu, True)
-        with patch.object(Q, "cmd_qualify_gpu", return_value=17) as command:
-            with patch.object(main._verify_all, "cmd_verify_all") as suite, patch.object(main._verify, "cmd_verify") as card:
-                self.assertEqual(args.func(args), 17)
-                suite.assert_not_called()
-                card.assert_not_called()
-        command.assert_called_once_with(args)
-        # twin: without the flag the ordinary verifier is dispatched
-        plain = main.build_parser().parse_args(["verify", "--quick"])
-        self.assertIs(plain.qualify_gpu, False)
-        with patch.object(Q, "cmd_qualify_gpu") as command:
-            with patch.object(main._verify_all, "cmd_verify_all", return_value=0):
-                plain.func(plain)
-            command.assert_not_called()
-
-
-def pinned_report(case, profile):
-    """A finished report on which every pinned exclusion reads exactly as pinned,
-    over the nine release fixtures, beside two fully identical lanes."""
-    A = case.A
-    fixtures = list(A.NVIDIA_FIXTURES)
-    report = clean_report(case, profile, fixtures=fixtures)
-    cells, lanes = report["cells"], report["lane_accounting"]["lanes"]
-    owed = 0
-    for lane, fixture, part, kind in A.LOCAL_EXCLUSIONS:
-        if kind == A.EXCLUDED_LANE:
-            lanes[lane] = dict(state="OWED", reason=A.LANE_OWED_REASON + ", so every part of it would read OWED")
-            continue
-        if lane not in lanes:
-            # one matching part the list does not pin (a conflict lane may pin every scored part of a fixture)
-            cells.append(dict(lane=lane, fixture="base", part="stepfull", state="IDENTICAL", detail="", value="c" * 16))
-        if kind == A.EXCLUDED_UNDECLARED:
-            lanes.setdefault(lane, dict(state="VERIFIED", reason=None))
-            cells.append(dict(lane=lane, fixture=fixture, part=part, state="N/A", detail=A.UNDECLARED_VALUE,
-                              value=A.UNDECLARED_VALUE, columns={}))
-        else:
-            lanes.setdefault(lane, dict(state="OWED", reason="no committed record carries a reference for a part of it"))
-            cells.append(dict(lane=lane, fixture=fixture, part=part, state="OWED", detail=A.CONFLICT_DETAIL,
-                              value="a" * 16, reference=None,
-                              columns=dict(amd=dict(agrees=True), apple=dict(agrees=False, value="b" * 16),
-                                           nvidia=dict(agrees=False, value="a" * 16))))
-            owed += 1
-    report["counts"] = {"IDENTICAL": sum(1 for c in cells if c["state"] == "IDENTICAL"), "DIVERGENT": 0,
-                        "OWED": owed, "REFUSED": 0, "N/A": sum(1 for c in cells if c["state"] == "N/A")}
-    report["lane_accounting"].update(total=len(lanes), verdict_scope=sorted(lanes))
-    return report
-
-
-#: A lane-level exclusion stands in for the judge's `EXCLUDED_LANE` arm: the
-#: shipped list has none since gemm-int15 gained table cells (2026-10-08), and
-#: the arm must still deny every misreading. The static pin test below holds
-#: the real list to the table; the synthetic lane never reaches it.
-SYNTH_LANE = "zz-synthetic-lane-without-record"
-
-
-class PinnedExclusions(Install):
-    """Step 5: the reference gaps the shipped table has on every device."""
-
-    def _with_lane_exclusion(self):
-        A = self.A
-        saved = A.LOCAL_EXCLUSIONS
-        A.LOCAL_EXCLUSIONS = tuple(sorted(saved + ((SYNTH_LANE, "*", "*", A.EXCLUDED_LANE),)))
-        self.addCleanup(setattr, A, "LOCAL_EXCLUSIONS", saved)
-
-    def judge(self, report, profile="routine"):
-        return self.A.judge_report(report, profile=profile, reference=self.reference,
-                                   table_fixtures=list(self.A.NVIDIA_FIXTURES),
-                                   ptx_identical_sha256={self.identical_sha}, report_sha256="9" * 64)
-
-    def cell(self, report, lane, fixture, part):
-        return next(c for c in report["cells"] if (c["lane"], c["fixture"], c["part"]) == (lane, fixture, part))
-
-    def test_every_pinned_exclusion_reading_as_pinned_qualifies_and_is_never_a_match(self):
-        self._with_lane_exclusion()
-        A = self.A
-        results = [self.judge(pinned_report(self, profile), profile) for profile in A.QUALIFY_PROFILES]
-        for result in results:
-            self.assertEqual((result["differing"], result["missing"], result["incomplete"]), ([], [], []))
-            summary = result["summary"]
-            self.assertEqual(len(summary["exclusions"]), len(A.LOCAL_EXCLUSIONS))
-            self.assertEqual(summary["lanes_excluded"], [SYNTH_LANE])
-            self.assertEqual(summary["lanes_with_exclusions"],
-                             sorted({k[0] for k in A.LOCAL_EXCLUSIONS if k[3] == A.EXCLUDED_CONFLICT}))
-            # compared = the IDENTICAL cells only: no excluded part is in the count
-            self.assertEqual(summary["parts_compared"], summary["counts"]["IDENTICAL"])
-            self.assertNotIn(SYNTH_LANE, summary["lanes_compared"])
-            self.assertEqual(summary["lanes_verified"] + len(summary["lanes_with_exclusions"])
-                             + len(summary["lanes_excluded"]) + len(summary["lanes_not_applicable"]),
-                             summary["lanes_in_scope"])
-            for row in summary["exclusions"]:
-                self.assertEqual(row.get("agrees"), ["nvidia"] if row["kind"] == A.EXCLUDED_CONFLICT else None)
-        doc = A.build_local_admission(source_commit=SOURCE, manifest_sha256=self.manifest_hash, configuration=CONFIG,
-            reference=self.reference, summaries=[r["summary"] for r in results], core_version=self.version,
-            created_utc="2026-10-04T00:00:00Z")
-        coverage = doc["coverage"]
-        self.assertEqual(len(coverage["exclusions"]), len(A.LOCAL_EXCLUSIONS))
-        self.assertEqual((coverage["exclusions_counted_as_matched"], coverage["pinned_exclusions_not_reached"]), (0, []))
-        self.assertEqual(coverage["parts_compared"], sum(r["summary"]["counts"]["IDENTICAL"] for r in results))
-        self.assertEqual(coverage["lanes_compared"], len(set(results[0]["summary"]["lanes_compared"])))
-        self.assertEqual(coverage["pinned_exclusions_sha256"], A.pinned_exclusions_sha256())
-        # the loader takes it and reports the same coverage
-        path = Path(A.local_admission_path(str(self.admissions), doc["key"]))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(doc))
+class Provenance(Install):
+    def test_loaded_ptx_bindings_are_recorded_and_checked(self):
         self.layout("identical")
-        receipt = self.B.baseline_selection_receipt()
-        self.assertEqual(receipt["admission"], "local")
-        self.assertEqual(receipt["admission_detail"]["coverage"],
-                         dict(lanes_compared=coverage["lanes_compared"], parts_compared=coverage["parts_compared"],
-                              exclusions=len(A.LOCAL_EXCLUSIONS)))
+        binary = self.root / "identical" / "_mojolearn_gbdt.so"
+        self.B._record_baseline_load(str(binary))
+        self.B._record_baseline_load(str(binary))
+        digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+        self.assertEqual(self.B.baseline_selection_receipt()["loaded_files"],
+                         [dict(file="identical/_mojolearn_gbdt.so", sha256=digest)])
+        self.assertEqual(self.B.ptx_payload_files()["identical/_mojolearn_gbdt.so"], digest)
+        binary.write_bytes(b"altered after the manifest check")
+        with self.assertRaisesRegex(self.B.GpuPluginError, "changed after manifest verification"):
+            self.B._record_baseline_load(str(binary))
+        native = self.pkg / "cuda_native" / "sm_89" / "_mojolearn_gbdt.so"
+        with self.assertRaisesRegex(self.B.GpuPluginError, "native GPU binding loaded"):
+            self.B._record_baseline_load(str(native))
 
-    def test_a_pinned_exclusion_that_reads_any_other_way_denies(self):
-        self._with_lane_exclusion()
-        A = self.A
-        def conflict(report):
-            return self.cell(report, "gbdt-feature-freq", "base", "train")
-        def undeclared(report):
-            return self.cell(report, "gbdt-class-weights", "odd", "batch")
-        cases = [
-            ("differing", "reproduces none of the committed columns", lambda r: conflict(r).update(value="d" * 16)),
-            ("incomplete", "did not read as pinned", lambda r: conflict(r).update(state="IDENTICAL", detail="")),
-            ("incomplete", "did not read as pinned",
-             lambda r: conflict(r).update(detail="no committed record carries this cell part yet")),
-            ("incomplete", "did not read as pinned", lambda r: conflict(r).update(state="N/A", value="n/a:skipped")),
-            ("differing", "MOVED", lambda r: conflict(r).update(state="DIVERGENT", detail="two hashes (MOVED)")),
-            ("incomplete", "raised", lambda r: conflict(r).update(state="REFUSED", detail="raised")),
-            ("incomplete", "did not read as pinned",
-             lambda r: undeclared(r).update(state="OWED", value="e" * 16, detail="no committed record carries this cell part yet")),
-            ("incomplete", "did not read as pinned", lambda r: undeclared(r).update(value="n/a:no-batch")),
-            ("incomplete", "pinned as having no record",
-             lambda r: r["lane_accounting"]["lanes"][SYNTH_LANE].update(state="VERIFIED", reason=None)),
-            ("incomplete", "pinned as having no record",
-             lambda r: r["lane_accounting"]["lanes"][SYNTH_LANE].update(reason="its fixture moved")),
-            ("incomplete", "yet this run compared it",
-             lambda r: r["cells"].append(dict(lane=SYNTH_LANE, fixture="base", part="train", state="IDENTICAL",
-                                              detail="", value="f" * 16))),
-        ]
-        for bucket, expect, mutate in cases:
-            report = pinned_report(self, "routine")
-            mutate(report)
-            result = self.judge(report)
-            with self.subTest(expect=expect, bucket=bucket):
-                self.assertTrue(any(expect in row for row in result[bucket]), result[bucket][:3])
-        # a conflict value is matched against real column values only: a device n/a or a column with none is no match
-        report = pinned_report(self, "routine")
-        conflict(report).update(columns=dict(amd=dict(agrees=True), cpu=dict(agrees=True)))
-        self.assertTrue(any("reproduces none" in row for row in self.judge(report)["differing"]))
+    def test_manifest_differing_from_the_vendor_marker_refuses(self):
+        self.write_marker(dict(manifest_sha256="f" * 64))
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                self.assertIn("differs from the mojolearn-nvidia vendor marker", self.refusal(mode))
 
-    def test_anything_else_the_table_cannot_judge_still_denies(self):
-        cases = [
-            # an unpinned part of a lane that also has pinned conflicts: the lane is not excused
-            ("gbdt-feature-freq/base/stepfull", lambda r: self.cell(r, "gbdt-feature-freq", "base", "stepfull").update(
-                state="OWED", detail="no committed record carries this cell part yet")),
-            ("gbdt-feature-freq: lane OWED", lambda r: self.cell(r, "gbdt-feature-freq", "base", "stepfull").update(
-                state="OWED", detail="no committed record carries this cell part yet")),
-            # the same conflict sentence on a part that is not pinned
-            ("ols/base/train", lambda r: self.cell(r, "ols", "base", "train").update(
-                state="OWED", detail=self.A.CONFLICT_DETAIL, value="a" * 16)),
-            # an undeclared part outside the list
-            ("ols/base/stepfull: an undeclared part outside the pinned exclusions",
-             lambda r: self.cell(r, "ols", "base", "stepfull").update(value=self.A.UNDECLARED_VALUE)),
-            # lanes that are owed, held, not run or undeclared and not pinned
-            ("pca: lane OWED", lambda r: r["lane_accounting"]["lanes"]["pca"].update(
-                state="OWED", reason=self.A.LANE_OWED_REASON)),
-            ("pca: lane HELD", lambda r: r["lane_accounting"]["lanes"]["pca"].update(state="HELD", reason="held")),
-            ("pca: lane NOT RUN", lambda r: r["lane_accounting"]["lanes"]["pca"].update(state="NOT RUN", reason="x")),
-            ("pca: lane UNDECLARED", lambda r: r["lane_accounting"]["lanes"]["pca"].update(state="UNDECLARED", reason="x")),
-        ]
-        for expect, mutate in cases:
-            report = pinned_report(self, "routine")
-            mutate(report)
-            result = self.judge(report)
-            with self.subTest(expect=expect):
-                self.assertTrue(any(expect in row for row in result["missing"]), result["missing"][:3])
-        # a conflict lane with no part that matched is not excused either
-        report = pinned_report(self, "routine")
-        report["cells"] = [c for c in report["cells"]
-                           if not (c["lane"] == "gbdt-tensor-ctr-tables" and c["state"] == "IDENTICAL")]
-        self.assertTrue(any("gbdt-tensor-ctr-tables: lane OWED" in row for row in self.judge(report)["missing"]))
+    def test_payload_and_source_failures_refuse_in_every_tier(self):
+        gp = self.B.gpu_plugins
+        manifest = self.root / gp.BASELINE_MANIFEST
+        binary = self.root / "identical" / "_mojolearn_gbdt.so"
+        commit = self.pkg / "identity_columns" / "COMMIT"
+        for target, change in ((manifest, lambda p: p.unlink()),
+                               (binary, lambda p: p.write_bytes(b"changed")),
+                               (binary, lambda p: p.unlink()),
+                               (commit, lambda p: p.write_text("c" * 40))):
+            old = target.read_bytes()
+            change(target)
+            for mode in MODES:
+                with self.subTest(target=target.name, mode=mode):
+                    self.assertIn("PTX set refused", self.refusal(mode))
+            target.write_bytes(old)
+        self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
 
-    def test_an_admission_cannot_misstate_its_coverage(self):
-        self._with_lane_exclusion()
-        A = self.A
-        summaries = [self.judge(pinned_report(self, profile), profile)["summary"] for profile in A.QUALIFY_PROFILES]
-        def build(mutate=None):
-            doc = A.build_local_admission(source_commit=SOURCE, manifest_sha256=self.manifest_hash,
-                configuration=CONFIG, reference=self.reference, summaries=copy.deepcopy(summaries),
-                core_version=self.version, created_utc="2026-10-04T00:00:00Z")
-            if mutate:
-                mutate(doc)
-            return A.validate_local_admission(doc, source_commit=SOURCE, manifest_sha256=self.manifest_hash,
-                                              configuration=CONFIG, reference=self.reference)
-        build()
-        first = lambda d: d["comparison"]["profiles"][0]
-        mutations = [
-            lambda d: d["coverage"]["exclusions"].pop(),
-            lambda d: d["coverage"].update(exclusions_counted_as_matched=1),
-            lambda d: d["coverage"].update(parts_compared=d["coverage"]["parts_compared"] + 27),
-            lambda d: d["coverage"].update(lanes_compared=d["coverage"]["lanes_compared"] + 1),
-            lambda d: d["coverage"].update(pinned_exclusions_sha256="0" * 64),
-            lambda d: d.pop("coverage"),
-            lambda d: first(d)["exclusions"].append(dict(lane="ols", fixture="base", part="train",
-                                                        kind=A.EXCLUDED_CONFLICT, agrees=["nvidia"])),
-            lambda d: first(d)["exclusions"].append(dict(first(d)["exclusions"][0])),
-            lambda d: first(d)["exclusions"].pop(),
-            lambda d: first(d)["counts"].update(OWED=0),
-            lambda d: first(d).update(parts_compared=first(d)["parts_compared"] + 1),
-            lambda d: first(d)["lanes_with_exclusions"].append("ols"),
-            lambda d: first(d).update(lanes_excluded=[]),
-            lambda d: first(d)["lanes_compared"].append(SYNTH_LANE),
-            lambda d: next(e for e in first(d)["exclusions"] if e["kind"] == A.EXCLUDED_CONFLICT).update(agrees=[]),
-            lambda d: next(e for e in first(d)["exclusions"] if e["kind"] == A.EXCLUDED_UNDECLARED).update(agrees=["nvidia"]),
-            lambda d: d.update(schema="mojolearn.ptx-local-identity-admission.v1"),
-        ]
-        for index, mutate in enumerate(mutations):
-            with self.subTest(mutation=index), self.assertRaises(ValueError):
-                build(mutate)
+    def test_a_dirty_source_manifest_refuses(self):
+        self.build(dirty=True)
+        self.assertIn("source differs from the clean installed core", self.refusal("identical"))
 
-    def test_a_run_that_reaches_no_pinned_part_says_so(self):
-        doc = self.A.build_local_admission(source_commit=SOURCE, manifest_sha256=self.manifest_hash,
-            configuration=CONFIG, reference=self.reference, summaries=self.summaries(), core_version=self.version,
-            created_utc="2026-10-04T00:00:00Z")
-        self.assertEqual(doc["coverage"]["exclusions"], [])
-        self.assertEqual(len(doc["coverage"]["pinned_exclusions_not_reached"]), len(self.A.LOCAL_EXCLUSIONS))
-        self.assertEqual((doc["coverage"]["lanes_compared"], doc["coverage"]["parts_compared"]), (2, 24))
+    def test_a_marker_without_the_ptx_slot_refuses(self):
+        gp = self.B.gpu_plugins
+        doc = gp.plugin_marker("cuda", self.version, self.arches, bundled_ptx=dict(manifest_sha256=self.manifest_hash))
+        del doc["bundled_ptx"]
+        self.marker_path().write_text(json.dumps(doc))
+        self.device = "sm_89"   # even a native device: the install itself is incomplete
+        self.assertIn("PTX slot metadata", self.refusal("fast"))
 
-    def test_the_pinned_list_is_exactly_what_the_shipped_table_cannot_judge(self):
-        """Static, no device: the list against python/mojolearn/verify_reference/table.json and host_surface."""
-        A = self.A
-        repo = PKG_SRC.parents[1]
-        table = json.loads((PKG_SRC / "verify_reference" / "table.json").read_text())
-        def load(name, path):
-            spec = importlib.util.spec_from_file_location(name, path)
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[name] = module
-            self.addCleanup(sys.modules.pop, name, None)
-            spec.loader.exec_module(module)
-            return module
-        surface = load("ptx_pin_host_surface", PKG_SRC / "host_surface.py")
-        harness = load("ptx_pin_harness", repo / "tools" / "identity_break.py")
-        self.assertEqual(tuple(harness.FIXTURES), tuple(A.NVIDIA_FIXTURES))
-        exposure = surface.lane_exposure(list(harness.LANES), "nvidia")
-        exposed = [lane for lane in harness.LANES if exposure[lane]["status"] == "EXPOSED"]
-        found = [(lane, "*", "*", A.EXCLUDED_LANE) for lane in harness.LANES if exposure[lane]["status"] == "OWED"]
-        for lane in harness.LANES:
-            if exposure[lane]["status"] == "OWED":
-                self.assertTrue(exposure[lane]["reason"].startswith(A.LANE_OWED_REASON))
-        self.assertFalse([lane for lane in harness.LANES
-                          if exposure[lane]["status"] not in ("EXPOSED", "NOT APPLICABLE", "OWED")])
-        for lane in exposed:
-            for fixture in harness.FIXTURES:
-                cell = table["cells"].get(f"{lane}/{fixture}") or {}
-                self.assertTrue(cell, f"{lane}/{fixture} has no table cell")
-                for part in A.NVIDIA_PARTS:
-                    entry = cell.get(part)
-                    if entry is None:
-                        if part == "batch":
-                            found.append((lane, fixture, part, A.EXCLUDED_UNDECLARED))
-                        else:
-                            self.assertEqual(part, "rlpair", f"{lane}/{fixture}/{part} has no table entry")
-                    elif entry.get("conflict"):
-                        found.append((lane, fixture, part, A.EXCLUDED_CONFLICT))
-                        values = [v[1] for v in entry["cols"].values() if not isinstance(v, int)]
-                        self.assertTrue(values and all(isinstance(v, str) and len(v) == 16 for v in values))
-                    else:
-                        self.assertIsInstance(entry.get("ref"), str)
-        self.assertEqual(tuple(sorted(found)), A.LOCAL_EXCLUSIONS)
-        # the sentences the judge matches are the verifier's own
-        reference = load("ptx_pin_verify_reference", PKG_SRC / "_verify_reference.py")
-        self.assertEqual(reference.judge("a" * 16, dict(conflict=True, ref=None)), ("OWED", A.CONFLICT_DETAIL))
-        self.assertEqual(reference.judge(A.UNDECLARED_VALUE, None), ("N/A", A.UNDECLARED_VALUE))
+    def test_an_empty_ptx_directory_refuses(self):
+        for so in self.root.rglob("*.so"):
+            so.unlink()
+        self.device = "sm_89"
+        self.assertIn("missing its PTX set", self.refusal("fast"))
+
+    def test_other_native_errors_never_reach_ptx(self):
+        with patch.object(self.B, "_pick_arch", side_effect=ImportError("native probe broken")):
+            with patch.object(self.B, "_ptx_base") as ptx:
+                self.reset()
+                with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": "fast"}):
+                    with self.assertRaisesRegex(ImportError, "native probe broken"):
+                        self.B._layout()
+                ptx.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -22,11 +22,12 @@ def blob(ptx=PTX):
 def test_requires_explicit_baseline_arch():
     for arch in ('', 'sm_89', 'sm_90a', 'gfx942'):
         with pytest.raises(ValueError, match='sm_80'):
-            baseline.validate_config('ptx-baseline', arch)
-    baseline.validate_config('ptx-baseline', 'sm_80')
+            baseline.validate_config('ptx', arch)
+    baseline.validate_config('ptx', 'sm_80')
     baseline.validate_config('native', 'gfx942')
+    # the old experimental format name is gone (Andrew 2026-10-10: PTX is a normal target; no flag)
     with pytest.raises(ValueError, match='unsupported'):
-        baseline.validate_config('ptx', 'sm_80')
+        baseline.validate_config('ptx-baseline', 'sm_80')
 
 
 def test_preserves_rounding_safeguard_and_reports_approx_without_certifying(tmp_path):
@@ -38,9 +39,10 @@ def test_preserves_rounding_safeguard_and_reports_approx_without_certifying(tmp_
     path.write_bytes(patched)
     report = baseline.audit_tree(tmp_path, 'a' * 40, 'Mojo 1.0.0')
     assert report['errors'] == []
-    assert report['schema'] == 'mojolearn.ptx-baseline.v1'
-    assert report['identical_qualified'] is False
-    assert report['experimental'] and report['qualification_required']
+    assert report['schema'] == 'mojolearn.ptx-set.v2'
+    assert report['code_format'] == 'ptx'
+    for field in ('identical_qualified', 'experimental', 'qualification_required'):
+        assert field not in report
     row = report['files'][0]
     assert row['sha256'] == hashlib.sha256(patched).hexdigest()
     assert row['ptx_modules'][0]['approx'] == {'rsqrt.approx.f32': 1}
@@ -75,7 +77,7 @@ def test_empty_or_native_only_set_refused_and_host_ignored(tmp_path):
     (host / 'host.so').write_bytes(blob())
     report = baseline.audit_tree(tmp_path, 'b' * 40, 'Mojo 1.0.0')
     assert report['files'] == []
-    assert report['errors'] == ['baseline set contains no PTX modules']
+    assert report['errors'] == ['PTX set contains no PTX modules']
 
 
 def test_fast_is_reported_without_identical_rounding_claim(tmp_path):
@@ -83,13 +85,13 @@ def test_fast_is_reported_without_identical_rounding_claim(tmp_path):
     report = baseline.audit_tree(tmp_path, 'b' * 40, 'Mojo 1.0.0')
     assert report['errors'] == []
     assert report['files'][0]['numeric_mode'] == 'fast'
-    assert report['identical_qualified'] is False
+    assert 'identical_qualified' not in report
 
 
 def test_cli_invalid_format_fails_before_any_compilation(tmp_path):
     script = Path(__file__).with_name('build_sets.sh')
     import os
-    env = dict(os.environ, MOJOLEARN_CUDA_CODE_FORMAT='ptx-baseline', MOJOLEARN_GPU_ARCHS='gfx942')
+    env = dict(os.environ, MOJOLEARN_CUDA_CODE_FORMAT='ptx', MOJOLEARN_GPU_ARCHS='gfx942')
     result = subprocess.run(['bash', str(script), str(tmp_path / 'out')], env=env,
                             capture_output=True, text=True)
     assert result.returncode == 2

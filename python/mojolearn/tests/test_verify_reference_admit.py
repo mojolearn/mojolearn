@@ -426,3 +426,71 @@ def test_partial_fit_name_exception_cannot_hide_partial_or_bad_evidence(broken):
     elif broken == 'wrong_suffix': path = f'clean/{lane}.partial.gpu.json'
     elif broken == 'no_witness': del j['resume_signature']
     assert vref.admit(j, path, known_lanes=known) is not None
+
+
+# THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag). A record
+# labelled nvidia-ptx-<gpu>-sm80 is the `ptx` device class; it is judged against
+# the NVIDIA == AMD reference and never decides or corroborates one.
+
+def test_a_ptx_label_is_the_ptx_device_class():
+    assert vref.PTX_CLASS in vref.CLASSES
+    assert vref.device_class('nvidia-ptx-l40s-sm80', 'x.json') == 'ptx'
+    assert vref.device_class('x86_64', 'nvidia-ptx-l40s-sm80.identical.json') == 'ptx'
+    assert vref.device_class('nvidia-l40s-sm_89', 'x.json') == 'nvidia'
+
+
+def test_a_cuda_backend_record_labelled_ptx_is_the_ptx_column():
+    j = backend_witness_column('cuda', 'nvidia-ptx-l40s-sm80')
+    assert vref.record_device_class(j, 'nvidia-ptx-l40s-sm80.identical.json') == ('ptx', None)
+    assert vref.admit(j, 'nvidia-ptx-l40s-sm80.identical.json') is None
+    other = backend_witness_column('hip', 'nvidia-ptx-l40s-sm80')
+    cls, why = vref.record_device_class(other, 'nvidia-ptx-l40s-sm80.identical.json')
+    assert cls is None and why
+
+
+def _ptx_table(tmp_path, monkeypatch, columns):
+    """build_table over one train cell; `columns` is [(file stem, vendor label, value)]."""
+    import json, types
+    h=types.SimpleNamespace(LANES={'x':None}, FIXTURES=['base'], LANE_REVISIONS={}, __file__=__file__,
+        _h=lambda x:'f'*16, fixture=lambda f:(0,0,0), heldout=lambda f:0,
+        BATCH_ALONE=16,BATCH_SPLIT=(3,7),_part_protocol=lambda part,alone:dict(length=32))
+    paths=[]
+    for stem, vendor, value in columns:
+        path=tmp_path/f'{stem}.json'
+        path.write_text(json.dumps(dict(mode='identical',commit='a'*40,vendor=vendor,
+            cells={'x/base':dict(verdict='STABLE',hashes=[value])},
+            fixtures={'base':dict(X='f'*16,y_clf='f'*16,y_reg='f'*16)},heldout={'base':dict(X='f'*16)})))
+        paths.append(path)
+    monkeypatch.setattr(vref,'_commit_time',lambda *a:1)
+    return vref.build_table([str(p) for p in paths],h,str(tmp_path),parts=('train',))
+
+
+def test_an_agreeing_ptx_column_is_listed_and_never_decides(tmp_path, monkeypatch):
+    # The PTX file sorts last, so it would be "newest" if it could decide.
+    table=_ptx_table(tmp_path, monkeypatch, [('amd','amd-test','a'*16), ('nvidia','nvidia-test','a'*16),
+                                             ('nvidia-ptx-zz','nvidia-ptx-test','a'*16)])
+    ent=table['cells']['x/base']['train']
+    assert ent['ref']=='a'*16 and not ent.get('conflict')
+    assert set(ent['cols'])=={'amd','nvidia','ptx'} and isinstance(ent['cols']['ptx'], int)
+    assert table['ptx_divergent']==[]
+
+
+def test_a_differing_ptx_value_is_listed_and_the_reference_stays(tmp_path, monkeypatch):
+    table=_ptx_table(tmp_path, monkeypatch, [('amd','amd-test','a'*16), ('nvidia','nvidia-test','a'*16),
+                                             ('nvidia-ptx-zz','nvidia-ptx-test','b'*16)])
+    ent=table['cells']['x/base']['train']
+    assert ent['ref']=='a'*16 and not ent.get('conflict')
+    assert ent['cols']['ptx'][1]=='b'*16
+    assert isinstance(ent['cols']['amd'], int) and isinstance(ent['cols']['nvidia'], int)
+    assert [(r['cell'], r['part'], r['ptx'], r['reference']) for r in table['ptx_divergent']] == \
+        [('x/base', 'train', 'b'*16, 'a'*16)]
+
+
+@pytest.mark.parametrize('columns', [
+    [('nvidia-ptx-zz','nvidia-ptx-test','a'*16)],
+    [('nvidia','nvidia-test','a'*16), ('nvidia-ptx-zz','nvidia-ptx-test','a'*16)],
+    [('amd','amd-test','a'*16), ('nvidia-ptx-zz','nvidia-ptx-test','a'*16)]])
+def test_a_ptx_column_never_corroborates_a_reference(tmp_path, monkeypatch, columns):
+    table=_ptx_table(tmp_path, monkeypatch, columns)
+    assert 'x/base' not in table['cells']
+    assert table['ptx_divergent']==[]

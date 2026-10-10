@@ -5,16 +5,18 @@
 
     .pixi/envs/test/bin/python -m pytest -q packaging/linux/test_split_wheels.py
 
-Three fake architecture sets (cuda sm_89, cuda sm_90a, hip gfx942) shaped the
-way build_sets.sh leaves them -- every tier's bindings, read-back witnesses,
-host bindings and a runtime closure, all inert bytes -- are packed twice by
-the real `pack_wheel.main`: once as the combined wheel (`--profile generic`)
-and once as the split (the default). Then the wheels are opened as zip files.
+Fake architecture sets (cuda sm_89, the cuda sm_80 PTX slot, hip gfx942)
+shaped the way build_sets.sh leaves them -- every tier's bindings, read-back
+witnesses, host bindings, a runtime closure and, for the PTX slot, its
+PTX_BASELINE.json manifest, all inert bytes -- are packed by the real
+`pack_wheel.main`: the native sets as the combined wheel (`--profile
+generic`, which never carries the PTX slot) and all of them as the split
+(the default). Then the wheels are opened as zip files.
 
 THE IDENTITY PROOF is `test_the_three_wheels_are_the_combined_wheel`: every
 member of the combined wheel outside its .dist-info is in exactly one split
 wheel, at the same archive path, with the same bytes, and the split wheels
-carry nothing else. `_gates=False` skips portable_math/wheel.py and the API
+carry nothing else but the PTX slot (cuda_ptx/sm_80, in mojolearn-nvidia). `_gates=False` skips portable_math/wheel.py and the API
 audit, which read real ELF and the checkout's API surface; the first
 rewrites only runtime directories (.libs), which the core carries whole and
 no plugin carries, so it cannot touch a set's bytes.
@@ -41,12 +43,40 @@ pw = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pw)
 import wheel_api_audit  # noqa: E402
 
-SETS = (("cuda", "sm_89"), ("cuda", "sm_90a"), ("hip", "gfx942"))
+#: Andrew 2026-10-10: PTX is a normal target; no flag. cuda/sm_80 is the PTX slot.
+SETS = (("cuda", "sm_89"), ("cuda", "sm_80"), ("hip", "gfx942"))
+NATIVE_SETS = tuple(k for k in SETS if k != ("cuda", "sm_80"))
 TAG = "py3-none-manylinux_2_35_x86_64"
 
 
+def source_head():
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+
+
+def write_ptx_manifest(adir, source=None, dirty=False, **override):
+    """A v2 PTX_BASELINE.json (gpu_plugins.validate_baseline_manifest) over the
+    set's GPU bindings, as packaging/linux/ptx_baseline.py writes it."""
+    files = []
+    for binary in sorted(Path(adir).rglob("_mojolearn*.so")):
+        rel = binary.relative_to(adir).as_posix()
+        if rel.startswith(("host/", ".libs/")):
+            continue
+        mode = rel.split("/", 1)[0] if "/" in rel else "fast"
+        files.append(dict(file=rel, numeric_mode=mode, sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                          ptx_modules=[dict(target="sm_80", sha256="b" * 64)]))
+    doc = dict(schema=pw.gpu_plugins.PTX_MANIFEST_SCHEMA, code_format=pw.gpu_plugins.PTX_CODE_FORMAT,
+               vendor="cuda", target="sm_80", min_compute_capability=[8, 0],
+               source_commit=source or source_head(), source_dirty=dirty, mojo_version="test",
+               errors=[], files=files)
+    doc.update(override)
+    path = Path(adir) / pw.gpu_plugins.BASELINE_MANIFEST
+    path.write_text(json.dumps(doc))
+    return path
+
+
 def make_sets(root, sets=SETS, libs_differ=False, include_byte_lm=False):
-    """sets/<vendor>/<arch>/ trees in build_sets.sh's shape, inert bytes."""
+    """sets/<vendor>/<arch>/ trees in build_sets.sh's shape, inert bytes; the
+    cuda/sm_80 PTX slot also gets its manifest."""
     for vendor, arch in sets:
         adir = root / "sets" / vendor / arch
         rb, ab = [], []
@@ -70,6 +100,8 @@ def make_sets(root, sets=SETS, libs_differ=False, include_byte_lm=False):
         (adir / ".libs" / "libMojolearnMath.so").write_bytes(b"math")
         (adir / "manifest.json").write_text(json.dumps(
             dict(bytes_extensions=1, bytes_staged_libs=1, driver_libs_not_staged=[])))
+        if (vendor, arch) == ("cuda", pw.gpu_plugins.PTX_ARCH):
+            write_ptx_manifest(adir)
     return sorted({str(root / "sets" / v) for v, _ in sets})
 
 
@@ -97,9 +129,11 @@ class SplitWheels(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.tmp.name)
         cls.set_dirs = make_sets(cls.root)
+        cls.native_dirs = make_sets(cls.root / "native", sets=NATIVE_SETS)
         cls.version = pw.read_version()
         args = [a for s in cls.set_dirs for a in ("--set", s)]
-        assert pw.main(args + ["--profile", "generic", "--out", str(cls.root / "single")], _gates=False) == 0
+        native = [a for s in cls.native_dirs for a in ("--set", s)]
+        assert pw.main(native + ["--profile", "generic", "--out", str(cls.root / "single")], _gates=False) == 0
         assert pw.main(args + ["--out", str(cls.root / "split")], _gates=False) == 0
         cls.single = next((cls.root / "single").glob("*.whl"))
         cls.split = {p.name.split("-")[0]: p for p in (cls.root / "split").glob("*.whl")}
@@ -111,7 +145,8 @@ class SplitWheels(unittest.TestCase):
     def pack(self, *extra, sets=None):
         out = Path(tempfile.mkdtemp(dir=self.root))
         args = [a for s in (sets or self.set_dirs) for a in ("--set", s)]
-        pw.main(args + list(extra) + ["--out", str(out)], _gates=False)
+        self.last_rc = pw.main(args + list(extra) + ["--out", str(out)], _gates=False)
+        self.last_out = out
         return sorted(out.glob("*.whl"))
 
     # ---- the partition ------------------------------------------------------
@@ -139,22 +174,32 @@ class SplitWheels(unittest.TestCase):
     def test_the_three_wheels_are_the_combined_wheel(self):
         """Identity: same members, same paths, same bytes; only .dist-info differs."""
         single = {pw.gpu_plugins.installed_member(n): b for n, b in members(self.single).items() if ".dist-info/" not in n}
-        union = {}
+        union, ptx = {}, {}
         for whl in self.split.values():
             for n, b in members(whl).items():
                 if ".dist-info/" in n:
                     continue
                 self.assertNotIn(n, union, f"{n} is in two split wheels")
-                union[n] = b
+                self.assertNotIn(n, ptx, f"{n} is in two split wheels")
+                if n.startswith(pw.gpu_plugins.BUNDLED_PTX_ROOT + "/"):
+                    self.assertIn(whl, [self.split["mojolearn_nvidia"]])
+                    ptx[n] = b
+                else:
+                    union[n] = b
         self.assertEqual(sorted(union), sorted(single))
         differ = [n for n in single if hashlib.sha256(single[n]).digest() != hashlib.sha256(union[n]).digest()]
         self.assertEqual(differ, [])
-        # and the sets really are in there, every tier of every architecture
+        union.update(ptx)
+        # and the sets really are in there, every tier of every architecture,
+        # the PTX slot at cuda_ptx/sm_80 with its manifest
         for vendor, arch in SETS:
             for tier in pw.TIERS:
                 for name in pw.tier_names(tier):
-                    rel = f"mojolearn/{pw.gpu_plugins.native_directory(vendor)}/{arch}/" + ("" if tier == "fast" else tier + "/") + name + ".so"
+                    rel = pw.gpu_plugins.installed_member(
+                        f"mojolearn/{vendor}/{arch}/" + ("" if tier == "fast" else tier + "/") + name + ".so")
                     self.assertEqual(union[rel], f"{vendor}/{arch}/{tier}/{name}".encode())
+        self.assertIn(pw.gpu_plugins.BUNDLED_PTX_ROOT + "/" + pw.gpu_plugins.BASELINE_MANIFEST, ptx)
+        self.assertTrue(pw.gpu_plugins.BUNDLED_PTX_ROOT.startswith("mojolearn/cuda_ptx/sm_80"))
 
     def test_qualification_requires_payloads_as_well_as_aggregates(self):
         import check_linux_release_qualification as qualification
@@ -176,9 +221,8 @@ class SplitWheels(unittest.TestCase):
         output.mkdir()
         combined, vendors = qualification.split_combined(wheels, output)
         self.assertEqual(vendors, ('cuda', 'hip'))
-        self.assertEqual({n: b for n, b in members(combined).items() if '.dist-info/' not in n},
-                         {pw.gpu_plugins.installed_member(n): b for n, b in members(self.single).items()
-                          if '.dist-info/' not in n})
+        expected = {n: b for w in self.split.values() for n, b in members(w).items() if '.dist-info/' not in n}
+        self.assertEqual({n: b for n, b in members(combined).items() if '.dist-info/' not in n}, expected)
         incomplete = [w for w in wheels if not w.name.startswith('mojolearn_nvidia-')]
         with self.assertRaisesRegex(ValueError, 'every plugin'):
             qualification.split_combined(incomplete, output)
@@ -204,21 +248,25 @@ class SplitWheels(unittest.TestCase):
         self.assertTrue(any(n.startswith("mojolearn/host/") for n in core))
         self.assertTrue(any(n.startswith("mojolearn/.libs/") for n in core))
         for row in pw.gpu_plugins.PAYLOADS.values():
-            if not row["release_enabled"]:
-                continue
             payload = [n for n in members(self.split[row["wheel_name"]]) if ".dist-info/" not in n]
             self.assertTrue(payload)
-            self.assertTrue(all(n.startswith(f"mojolearn/{row['directory']}/") for n in payload))
+            dirs = {row["directory"]} | ({row["ptx"]["directory"]} if row.get("ptx") else set())
+            self.assertTrue(all(n.split("/")[1] in dirs for n in payload))
             self.assertFalse([n for n in payload if n.endswith(".py") or "/.libs/" in n])
-            self.assertTrue(pw.gpu_plugins.valid_arches(row["profile"], sorted({n.split("/")[2] for n in payload})))
+            native = sorted({n.split("/")[2] for n in payload if n.split("/")[1] == row["directory"]})
+            self.assertTrue(pw.gpu_plugins.valid_arches(row["profile"], native))
+            if row.get("ptx"):
+                self.assertTrue(any(n.startswith(pw.gpu_plugins.BUNDLED_PTX_ROOT + "/") for n in payload))
         self.assertEqual(wheel_api_audit.split_audit(list(self.split.values()))["problems"], [])
 
-    def test_upload_budget_is_vendor_specific_and_bounded(self):
+    def test_upload_budget_is_pypis_100_mib_for_every_project(self):
         import os
         original = Path.stat
-        for key, mib, accepted in (("mojolearn_nvidia", 105, True),
-                                   ("mojolearn_nvidia", 250, True),
-                                   ("mojolearn_nvidia", 251, False),
+        for key in ("mojolearn_nvidia", "mojolearn_amd", "mojolearn"):
+            self.assertEqual(pw.gpu_plugins.wheel_size_limit(key.replace("_", "-")), 100 * 1024**2)
+        for key, mib, accepted in (("mojolearn_nvidia", 99, True),
+                                   ("mojolearn_nvidia", 101, False),
+                                   ("mojolearn_nvidia", 250, False),
                                    ("mojolearn_amd", 101, False),
                                    ("mojolearn", 101, False)):
             target = self.split[key]
@@ -298,7 +346,7 @@ class SplitWheels(unittest.TestCase):
                 self.assertEqual(len(naps), 2 * len(missing))   # retried, the index may be propagating
         # Vendor aggregates publish only after every payload is on the index.
         payload_index = {r["distribution"]: [self.split[r["wheel_name"]].name]
-                         for r in pw.gpu_plugins.PAYLOADS.values() if r["release_enabled"]}
+                         for r in pw.gpu_plugins.PAYLOADS.values()}
         self.assertEqual(wheel_api_audit.plugins_on_index([nvidia, amd], "pypi",
                           files=index(payload_index), sleep=lambda s: None), [])
         self.assertEqual(len(wheel_api_audit.plugins_on_index([nvidia, amd], "pypi",
@@ -312,8 +360,18 @@ class SplitWheels(unittest.TestCase):
         self.assertEqual(json.loads(members(core)[f"{dist_info(core)}/{gp.CORE_MARKER}"]),
                          gp.core_marker(self.version))
         nvidia = self.split["mojolearn_nvidia"]
-        self.assertEqual(json.loads(members(nvidia)[f"{dist_info(nvidia)}/{gp.PLUGIN_MARKER}"]),
-                         gp.plugin_marker("cuda", self.version, ["sm_89", "sm_90a"]))
+        manifest = members(nvidia)[gp.BUNDLED_PTX_ROOT + "/" + gp.BASELINE_MANIFEST]
+        bundle = dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
+        marker = json.loads(members(nvidia)[f"{dist_info(nvidia)}/{gp.PLUGIN_MARKER}"])
+        self.assertEqual(marker, gp.plugin_marker("cuda", self.version, ["sm_89"], bundled_ptx=bundle))
+        # THE MARKER BINDS THE PTX MANIFEST, and names the PTX slot; the native arches stay native
+        self.assertEqual(marker["bundled_ptx"], bundle)
+        self.assertEqual(marker["ptx"], dict(arch="sm_80", directory="cuda_ptx"))
+        self.assertEqual(marker["arches"], ["sm_89"])
+        with self.assertRaisesRegex(ValueError, "PTX manifest digest is required"):
+            gp.plugin_marker("cuda", self.version, ["sm_89"])
+        with self.assertRaisesRegex(ValueError, "only the NVIDIA"):
+            gp.plugin_marker("hip", self.version, ["gfx942"], bundled_ptx=bundle)
         for whl in self.split.values():
             files = members(whl)
             record = files[f"{dist_info(whl)}/RECORD"].decode().splitlines()
@@ -345,23 +403,33 @@ class SplitWheels(unittest.TestCase):
             self.pack("--profile", "generic", "--wheels", "nvidia")
 
     def test_release_split_slots(self):
-        self.assertEqual(pw.split_release_slots({"cuda"}), {("cuda", "sm_89"), ("cuda", "sm_90")})
+        # Andrew 2026-10-10: the PTX slot is a release set like sm_89
+        self.assertEqual(pw.split_release_slots({"cuda"}), {("cuda", "sm_89"), ("cuda", "sm_80")})
         self.assertEqual(pw.split_release_slots({"hip"}), {("hip", "gfx942")})
-        self.assertEqual(pw.split_release_slots({"cuda", "hip"}), pw.RELEASE_061_SETS)
+        self.assertEqual(pw.split_release_slots({"cuda", "hip"}), pw.RELEASE_SPLIT_SETS)
+        self.assertEqual(pw.RELEASE_SPLIT_SETS, set(SETS))
         # one definition: the admission side's per-plugin share agrees
         import verify_linux_surface_qualification as surface
         for vendor in ("cuda", "hip"):
             slots = {"/".join(k) for k in pw.split_release_slots({vendor})}
             self.assertEqual(slots, set(surface.PLUGIN_ARCHES[vendor]))
             self.assertTrue(surface.plugin_arch_set_ok(vendor, slots))
-        self.assertTrue(surface.plugin_arch_set_ok("cuda", {"cuda/sm_89", "cuda/sm_90a"}))
-        self.assertFalse(surface.plugin_arch_set_ok("cuda", {"cuda/sm_89", "cuda/sm_90a", "cuda/sm_90"}))
+        self.assertFalse(surface.plugin_arch_set_ok("cuda", {"cuda/sm_89"}))
+        self.assertFalse(surface.plugin_arch_set_ok("cuda", {"cuda/sm_89", "cuda/sm_90a"}))
         self.assertFalse(surface.plugin_arch_set_ok("hip", {"hip/gfx942", "cuda/sm_89"}))
         hip = pw.SetDir("hip", "gfx942", {}, {}, {}, {}, None)
         with self.assertRaises(SystemExit) as ctx:
             pw.release_inventory([hip], [], self.version, required=pw.split_release_slots({"cuda"}),
                                  profile=pw.RELEASE_SPLIT_PROFILE)
-        self.assertIn("release-split requires exactly the sets cuda/sm_89, cuda/sm_90", str(ctx.exception))
+        self.assertIn("release-split requires exactly the sets cuda/sm_80, cuda/sm_89", str(ctx.exception))
+        # the PTX set is proved like any set: a release-split nvidia pack with the
+        # sm_89 proof alone is short one proof
+        sm89 = pw.SetDir("cuda", "sm_89", {"cuda/sm_89/a.so": Path(__file__)}, {}, {}, {}, None)
+        sm80 = pw.SetDir("cuda", "sm_80", {"cuda/sm_80/a.so": Path(__file__)}, {}, {}, {}, None)
+        with self.assertRaises(SystemExit) as ctx:
+            pw.release_inventory([sm89, sm80], [Path("cuda-sm_89.json")], self.version,
+                                 required=pw.split_release_slots({"cuda"}), profile=pw.RELEASE_SPLIT_PROFILE)
+        self.assertIn("2 proof(s) needed, 1 given", str(ctx.exception))
 
     def test_payload_paths_cannot_be_removed_by_an_old_vendor_record(self):
         old_owned = {n for n in members(self.single) if n.startswith(("mojolearn/cuda/", "mojolearn/hip/"))}
@@ -376,17 +444,81 @@ class SplitWheels(unittest.TestCase):
     def test_vendor_requires_all_its_native_architecture_slots(self):
         root = Path(tempfile.mkdtemp(dir=self.root))
         # 0.8.37: the Hopper slot is not required (gpu_plugins.py), so the slot that must be filled is sm_89
-        dirs = make_sets(root, sets=(("cuda", "sm_90a"),))
+        dirs = make_sets(root, sets=(("cuda", "sm_90a"), ("cuda", "sm_80")))
         with self.assertRaisesRegex(SystemExit, "requires one set per registered architecture slot"):
             self.pack("--wheels", "nvidia", sets=dirs)
         with self.assertRaisesRegex(SystemExit, "name each"):
             self.pack("--wheels", "nvidia-sm89", sets=dirs)
+        with self.assertRaisesRegex(SystemExit, "name each"):
+            self.pack("--wheels", "nvidia-ptx80", sets=dirs)
 
-    def test_experimental_ptx_payload_is_explicit_and_cannot_enter_release(self):
-        self._check_experimental_baseline(include_byte_lm=False)
+    def test_the_nvidia_wheel_requires_the_ptx_slot(self):
+        root = Path(tempfile.mkdtemp(dir=self.root))
+        dirs = make_sets(root, sets=(("cuda", "sm_89"),))
+        with self.assertRaisesRegex(SystemExit, "the PTX slot cuda/sm_80 included"):
+            self.pack("--wheels", "nvidia", sets=dirs)
+        with self.assertRaisesRegex(SystemExit, "the PTX slot cuda/sm_80 included"):
+            self.pack(sets=dirs)
 
-    def test_experimental_ptx_preserves_full_byte_lm_payload_and_readbacks(self):
-        self._check_experimental_baseline(include_byte_lm=True)
+    def test_the_ptx_slot_never_enters_the_combined_wheel(self):
+        with self.assertRaisesRegex(SystemExit, "packs only into the split"):
+            self.pack("--profile", "generic")
+
+    def test_ptx_slot_packs_into_nvidia(self):
+        self._check_ptx_slot(include_byte_lm=False)
+
+    def test_ptx_slot_preserves_full_byte_lm_payload_and_readbacks(self):
+        self._check_ptx_slot(include_byte_lm=True)
+
+    def test_ptx_manifest_must_be_v2_clean_and_match_the_bytes(self):
+        for label, override, why in (
+                ("v1 schema", dict(schema="mojolearn.ptx-baseline.v1"), "invalid PTX set manifest"),
+                ("old code format", dict(code_format="ptx-baseline"), "invalid PTX set manifest"),
+                ("dirty source", dict(source_dirty=True), "clean source manifest"),
+                ("wrong bytes", dict(files=[]), "does not match")):
+            with self.subTest(label):
+                root = Path(tempfile.mkdtemp(dir=self.root))
+                dirs = make_sets(root, sets=(("cuda", "sm_89"), ("cuda", "sm_80")))
+                write_ptx_manifest(root / "sets/cuda/sm_80", **override)
+                with self.assertRaisesRegex(SystemExit, why):
+                    self.pack("--wheels", "nvidia", sets=dirs)
+        root = Path(tempfile.mkdtemp(dir=self.root))
+        dirs = make_sets(root, sets=(("cuda", "sm_89"), ("cuda", "sm_80")))
+        (root / "sets/cuda/sm_80" / pw.gpu_plugins.BASELINE_MANIFEST).unlink()
+        with self.assertRaisesRegex(SystemExit, "requires its PTX_BASELINE.json"):
+            self.pack("--wheels", "nvidia", sets=dirs)
+
+    def test_an_oversize_wheel_fails_the_pack_with_its_payload_sizes(self):
+        import contextlib
+        import io
+        import os
+        original = Path.stat
+
+        def stat(path, *args, **kwargs):
+            result = original(path, *args, **kwargs)
+            if Path(path).name.startswith("mojolearn_nvidia-") and str(path).endswith(".whl"):
+                values = list(result)
+                values[6] = 120 * 1024**2
+                return os.stat_result(values)
+            return result
+        err = io.StringIO()
+        # split_audit refuses an oversize wheel too (SystemExit); the size report
+        # under test is the pack's own, so the audit is held clean here.
+        with mock.patch.object(Path, "stat", stat), contextlib.redirect_stderr(err), \
+                mock.patch.object(wheel_api_audit, "split_audit", return_value={"problems": []}), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.pack("--wheels", "nvidia")
+        self.assertEqual(self.last_rc, 1)
+        text = err.getvalue()
+        self.assertIn("OVER PyPI's 100 MiB FILE LIMIT", text)
+        self.assertIn("cuda_native/sm_89:", text)
+        self.assertIn("cuda_ptx/sm_80:", text)
+        report = json.loads(next(self.last_out.glob("SIZES-*.json")).read_text())
+        row = next(iter(report["wheels"].values()))
+        self.assertTrue(row["over_limit"])
+        self.assertEqual(row["pypi_limit_bytes"], 100 * 1024**2)
+        self.assertIn("cuda_ptx/sm_80", row["payloads"])
+        self.assertIn("cuda_native/sm_89", row["payloads"])
 
     def test_native_generic_does_not_start_accepting_optional_byte_lm(self):
         root = Path(tempfile.mkdtemp(dir=self.root))
@@ -394,51 +526,45 @@ class SplitWheels(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "undeclared or missing native payload"):
             self.pack("--wheels", "nvidia", sets=dirs)
 
-    def _check_experimental_baseline(self, include_byte_lm):
-        import subprocess
+    def _check_ptx_slot(self, include_byte_lm):
         root = Path(tempfile.mkdtemp(dir=self.root))
+        make_sets(root, sets=(("cuda", "sm_89"),))
         dirs = make_sets(root, sets=(("cuda", "sm_80"),), include_byte_lm=include_byte_lm)
         adir = root / "sets" / "cuda" / "sm_80"
-        source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-        files = []
-        for binary in sorted(adir.rglob("_mojolearn*.so")):
-            rel = binary.relative_to(adir).as_posix()
-            if rel.startswith("host/"):
-                continue
-            mode = rel.split("/", 1)[0] if "/" in rel else "fast"
-            files.append(dict(file=rel, numeric_mode=mode, sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
-                              ptx_modules=[dict(target="sm_80", sha256="b" * 64)]))
-        doc = dict(schema="mojolearn.ptx-baseline.v1", code_format="ptx-baseline", vendor="cuda",
-                   target="sm_80", min_compute_capability=[8, 0], source_commit=source,
-                   experimental=True, identical_qualified=False, qualification_required=True,
-                   errors=[], files=files)
-        (adir / pw.gpu_plugins.BASELINE_MANIFEST).write_text(json.dumps(doc))
-        wheels = self.pack("--wheels", "nvidia-ptx80", sets=dirs)
+        wheels = self.pack("--wheels", "nvidia", sets=dirs)
         self.assertEqual(len(wheels), 1)
+        self.assertTrue(wheels[0].name.startswith("mojolearn_nvidia-"))
         payload = members(wheels[0])
-        self.assertIn("mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json", payload)
-        self.assertTrue(all(n.startswith("mojolearn/cuda_ptx/sm_80/") for n in payload if ".dist-info/" not in n))
-        byte_member = "mojolearn/cuda_ptx/sm_80/identical/_mojolearn_byte_lm.so"
+        root_ptx = pw.gpu_plugins.BUNDLED_PTX_ROOT + "/"
+        self.assertIn(root_ptx + "PTX_BASELINE.json", payload)
+        self.assertTrue(all(n.startswith((root_ptx, "mojolearn/cuda_native/sm_89/"))
+                            for n in payload if ".dist-info/" not in n))
+        for binary in adir.rglob("_mojolearn*.so"):
+            rel = binary.relative_to(adir).as_posix()
+            if not rel.startswith("host/"):
+                self.assertEqual(payload[root_ptx + rel], binary.read_bytes())
+        marker = json.loads(payload[f"{dist_info(wheels[0])}/{pw.gpu_plugins.PLUGIN_MARKER}"])
+        self.assertEqual(marker["bundled_ptx"]["manifest_sha256"],
+                         hashlib.sha256((adir / pw.gpu_plugins.BASELINE_MANIFEST).read_bytes()).hexdigest())
+        self.assertEqual(wheel_api_audit.split_audit(wheels)["problems"], [])
+        byte_member = root_ptx + "identical/_mojolearn_byte_lm.so"
         self.assertEqual(byte_member in payload, include_byte_lm)
         if include_byte_lm:
             self.assertEqual(payload[byte_member], (adir / "identical/_mojolearn_byte_lm.so").read_bytes())
-            packed_doc = json.loads(payload["mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json"])
+            packed_doc = json.loads(payload[root_ptx + "PTX_BASELINE.json"])
             self.assertTrue(any(row["file"] == "identical/_mojolearn_byte_lm.so" for row in packed_doc["files"]))
             witness = adir / "readback.txt"
             original = witness.read_text()
             witness.write_text("\n".join(line for line in original.splitlines()
                                          if not line.startswith("identical _mojolearn_byte_lm ")) + "\n")
             with self.assertRaisesRegex(SystemExit, "incomplete release native readback"):
-                self.pack("--wheels", "nvidia-ptx80", sets=dirs)
+                self.pack("--wheels", "nvidia", sets=dirs)
             witness.write_text(original)
-        with self.assertRaisesRegex(SystemExit, "experimental payloads cannot"):
-            self.pack("--profile", "release-split", "--wheels", "nvidia-ptx80", sets=dirs)
         for req in pw.gpu_plugins.core_requirements(self.version) + pw.gpu_plugins.payload_requirements("cuda", self.version):
             self.assertNotIn("ptx", req)
-        doc["source_commit"] = "c" * 40
-        (adir / pw.gpu_plugins.BASELINE_MANIFEST).write_text(json.dumps(doc))
+        write_ptx_manifest(adir, source="c" * 40)
         with self.assertRaisesRegex(SystemExit, "source commits differ"):
-            self.pack("--wheels", "nvidia-ptx80", sets=dirs)
+            self.pack("--wheels", "nvidia", sets=dirs)
 
     # ---- the audit sees a broken split ----------------------------------------
     def rewrite(self, whl, add=None, drop=(), replace=None):

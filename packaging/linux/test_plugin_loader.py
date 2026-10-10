@@ -61,9 +61,10 @@ class PluginLoader(unittest.TestCase):
         self.B._pkg_dir = lambda: str(self.pkg)
         self.version = self.B._CORE_VERSION
         self.env = {k: os.environ.pop(k) for k in ("MOJOLEARN_VENDOR", "MOJOLEARN_GPU_ARCH",
-                                                    "MOJOLEARN_VENDOR_FORCE") if k in os.environ}
+                                                    "MOJOLEARN_VENDOR_FORCE", "MOJOLEARN_CUDA_PATH",
+                                                    "MOJOLEARN_EXPERIMENTAL_PTX") if k in os.environ}
         self.addCleanup(os.environ.update, self.env)
-        for k in ("MOJOLEARN_VENDOR",):
+        for k in ("MOJOLEARN_VENDOR", "MOJOLEARN_GPU_ARCH", "MOJOLEARN_CUDA_PATH", "MOJOLEARN_EXPERIMENTAL_PTX"):
             self.addCleanup(os.environ.pop, k, None)
 
     # ---- fixture builders -------------------------------------------------
@@ -93,13 +94,39 @@ class PluginLoader(unittest.TestCase):
                 d.mkdir(parents=True, exist_ok=True)
                 (d / "_mojolearn_gbdt.so").write_bytes(b"inert")
 
+    def ptx_set(self, source="a" * 40):
+        """The PTX slot (Andrew 2026-10-10: PTX is a normal target; no flag):
+        cuda_ptx/sm_80 with a fast and an identical binding, its v2 manifest
+        and the core's source witness. Returns (root, identical binary)."""
+        import hashlib
+        gp = self.B.gpu_plugins
+        root = self.pkg / gp.PTX_DIRECTORY / gp.PTX_ARCH
+        (root / "identical").mkdir(parents=True, exist_ok=True)
+        rows = []
+        for rel, mode in (("_mojolearn_gbdt.so", "fast"), ("identical/_mojolearn_gbdt.so", "identical")):
+            (root / rel).write_bytes(b"fake embedded PTX, not executable " + mode.encode())
+            rows.append(dict(file=rel, numeric_mode=mode, sha256=hashlib.sha256((root / rel).read_bytes()).hexdigest(),
+                             ptx_modules=[dict(target="sm_80", sha256="b" * 64)]))
+        doc = dict(schema=gp.PTX_MANIFEST_SCHEMA, code_format=gp.PTX_CODE_FORMAT, vendor="cuda",
+                   target="sm_80", min_compute_capability=[8, 0], source_commit=source,
+                   source_dirty=False, mojo_version="fixture", errors=[], files=rows)
+        (root / gp.BASELINE_MANIFEST).write_text(json.dumps(doc))
+        (self.pkg / "identity_columns").mkdir(exist_ok=True)
+        (self.pkg / "identity_columns" / "COMMIT").write_text(source)
+        return root, root / "identical" / "_mojolearn_gbdt.so"
+
     def plugin(self, vendor, arches, version=None):
+        import hashlib
         gp = self.B.gpu_plugins
         version = version or self.version
         if vendor == "cuda" and "sm_89" not in arches:
             arches = ["sm_89"] + list(arches)
+        bundle = None
+        if vendor == "cuda":
+            root, _ = self.ptx_set()
+            bundle = dict(manifest_sha256=hashlib.sha256((root / gp.BASELINE_MANIFEST).read_bytes()).hexdigest())
         self.dist_info(gp.plugin(vendor)["distribution"], version,
-                       (gp.PLUGIN_MARKER, json.dumps(gp.plugin_marker(vendor, version, arches))))
+                       (gp.PLUGIN_MARKER, json.dumps(gp.plugin_marker(vendor, version, arches, bundled_ptx=bundle))))
         self.sets(vendor, arches)
 
     def host_binding(self):
@@ -321,47 +348,71 @@ class ArchitecturePayloadLoader(PluginLoader):
         (legacy / "_mojolearn_gbdt.so").write_bytes(b"old wheel")
         self.assertIn("legacy cuda", str(self.refusal(cuda=True)))
 
-    def baseline(self):
-        import hashlib
+    # ---- THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag) ----
+    def ptx_root(self):
+        return self.pkg / "cuda_ptx" / "sm_80"
+
+    def test_native_set_first_then_ptx_for_every_other_nvidia_gpu(self):
         self.split_core()
-        gp = self.B.gpu_plugins
-        row = gp.PAYLOADS["nvidia-ptx80"]
-        self.dist_info(row["distribution"], self.version,
-                      (gp.PAYLOAD_MARKER, json.dumps(gp.payload_marker(row["profile"], self.version, ["sm_80"]))))
-        root = self.pkg / "cuda_ptx" / "sm_80"
-        (root / "identical").mkdir(parents=True)
-        binary = root / "identical" / "_mojolearn_gbdt.so"
-        binary.write_bytes(b"fake embedded PTX, not executable")
-        doc = dict(schema="mojolearn.ptx-baseline.v1", code_format="ptx-baseline", vendor="cuda",
-                   target="sm_80", min_compute_capability=[8, 0], source_commit="a" * 40,
-                   source_dirty=False, experimental=True, identical_qualified=False,
-                   qualification_required=True, errors=[], files=[dict(
-                       file="identical/_mojolearn_gbdt.so", numeric_mode="identical",
-                       sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
-                       ptx_modules=[dict(target="sm_80", sha256="b" * 64)])])
-        (root / gp.BASELINE_MANIFEST).write_text(json.dumps(doc))
-        (self.pkg / "identity_columns").mkdir()
-        (self.pkg / "identity_columns" / "COMMIT").write_text("a" * 40)
-        for key, value in (("MOJOLEARN_CUDA_PATH", "ptx-baseline"), ("MOJOLEARN_EXPERIMENTAL_PTX", "1")):
-            old = os.environ.get(key)
-            os.environ[key] = value
-            self.addCleanup(lambda k=key, v=old: os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v))
-        return root, binary
+        self.plugin("cuda", ["sm_89"])
+        native = ("vendor", str(self.pkg / "cuda_native" / "sm_89"))
+        self.assertEqual(self.layout(cuda=True, device=("sm_89", "fixture")), native)
+        self.assertIsNone(self.B.baseline_selection_receipt())
+        for device in ("sm_80", "sm_86", "sm_90", "sm_100", "sm_120", "sm_121"):
+            with self.subTest(device=device):
+                self.B._BASELINE_SELECTION = None
+                self.assertEqual(self.layout(cuda=True, device=(device, "fixture")), ("vendor", str(self.ptx_root())))
+                self.assertEqual(self.B.gpu_arch(), "sm_80")
+                receipt = self.B.baseline_selection_receipt()
+                self.assertEqual((receipt["selected"], receipt["code_format"]), ("ptx", "ptx"))
+                self.assertEqual(self.B.gpu_plugin()["code_format"], "ptx")
 
-    def test_baseline_requires_both_explicit_switches(self):
-        self.baseline()
-        os.environ.pop("MOJOLEARN_EXPERIMENTAL_PTX")
-        self.assertIsInstance(self.refusal(cuda=True), self.B.GpuPluginError)
-
-    def test_baseline_selection_and_actual_load_receipt(self):
-        root, binary = self.baseline()
-        self.plugin("cuda", ["sm_89", "sm_90a"])
-        self.assertEqual(self.layout(cuda=True, device=("sm_100", "fixture")), ("vendor", str(root)))
-        self.assertEqual(self.B.gpu_plugin()["code_format"], "ptx-baseline")
+    def test_ptx_serves_identical_with_no_flag_and_no_admission(self):
+        self.split_core()
+        self.plugin("cuda", ["sm_89"])
+        self.B.requested_mode = lambda: "identical"
+        self.assertEqual(self.layout(cuda=True, device=("sm_90", "fixture")), ("vendor", str(self.ptx_root())))
         receipt = self.B.baseline_selection_receipt()
-        self.assertEqual(receipt["loaded_files"], [])
-        self.assertFalse(receipt["identical_qualified"])
-        self.assertFalse(receipt["native_fallback"])
+        self.assertEqual(receipt["numeric_mode"], "identical")
+        for removed in ("identical_qualified", "admission", "qualifying"):
+            self.assertNotIn(removed, receipt)
+        for name in ("PTX_QUALIFY_COMMAND", "_ptx_qualifying", "_ptx_identical_refusal", "_baseline_layout",
+                     "_admitted_baseline_base"):
+            self.assertFalse(hasattr(self.B, name), name)
+
+    def test_gpu_arch_names_the_ptx_set_like_any_directory(self):
+        self.split_core()
+        self.plugin("cuda", ["sm_89"])
+        os.environ["MOJOLEARN_GPU_ARCH"] = "sm_80"
+        self.assertEqual(self.layout(cuda=True, device=("sm_89", "fixture")), ("vendor", str(self.ptx_root())))
+        self.assertIn("MOJOLEARN_GPU_ARCH", self.B.gpu_arch_how())
+        os.environ["MOJOLEARN_GPU_ARCH"] = "sm_89"
+        self.B._BASELINE_SELECTION = None
+        self.assertEqual(self.layout(cuda=True, device=("sm_89", "fixture")),
+                         ("vendor", str(self.pkg / "cuda_native" / "sm_89")))
+
+    def test_the_old_experimental_switches_do_nothing(self):
+        self.split_core()
+        self.plugin("cuda", ["sm_89"])
+        os.environ["MOJOLEARN_CUDA_PATH"] = "ptx-baseline"
+        os.environ["MOJOLEARN_EXPERIMENTAL_PTX"] = "1"
+        self.assertEqual(self.layout(cuda=True, device=("sm_89", "fixture")),
+                         ("vendor", str(self.pkg / "cuda_native" / "sm_89")))
+        self.assertIsNone(self.B.baseline_selection_receipt())
+
+    def test_ptx_load_receipt_records_actual_loads(self):
+        self.split_core()
+        self.plugin("cuda", ["sm_89"])
+        self.layout(cuda=True, device=("sm_100", "fixture"))
+        binary = self.ptx_root() / "identical" / "_mojolearn_gbdt.so"
+        self.assertEqual(self.B.baseline_selection_receipt()["loaded_files"], [])
+        class Failing:
+            path = str(binary)
+            def exec_module(self, module):
+                raise RuntimeError("failed load")
+        with self.assertRaises(RuntimeError):
+            self.B._exec_binding(Failing(), object())
+        self.assertEqual(self.B.baseline_selection_receipt()["loaded_files"], [])
         class Loader:
             path = str(binary)
             def exec_module(self, module):
@@ -370,32 +421,45 @@ class ArchitecturePayloadLoader(PluginLoader):
         self.assertEqual(self.B.baseline_selection_receipt()["loaded_files"][0]["file"],
                          "identical/_mojolearn_gbdt.so")
 
-    def test_baseline_failed_load_does_not_claim_loaded_file(self):
-        root, binary = self.baseline()
-        self.layout(cuda=True)
-        class Loader:
-            path = str(binary)
-            def exec_module(self, module):
-                raise RuntimeError("failed load")
-        with self.assertRaises(RuntimeError):
-            self.B._exec_binding(Loader(), object())
-        self.assertEqual(self.B.baseline_selection_receipt()["loaded_files"], [])
-
-    def test_baseline_tamper_source_and_capability_refuse(self):
-        root, binary = self.baseline()
+    def test_ptx_tamper_source_marker_and_capability_refuse(self):
+        self.split_core()
+        self.plugin("cuda", ["sm_89"])
+        binary = self.ptx_root() / "identical" / "_mojolearn_gbdt.so"
         original = binary.read_bytes()
         binary.write_bytes(b"tampered")
         self.assertIn("complete GPU binding bytes", str(self.refusal(cuda=True)))
         binary.write_bytes(original)
         (self.pkg / "identity_columns" / "COMMIT").write_text("c" * 40)
-        self.assertIn("source commits differ", str(self.refusal(cuda=True)))
+        self.assertIn("source differs", str(self.refusal(cuda=True)))
         (self.pkg / "identity_columns" / "COMMIT").write_text("a" * 40)
-        self.assertIn("Ampere-or-newer", str(self.refusal(cuda=True, device=("sm_75", "fixture"))))
+        exc = self.refusal(cuda=True, device=("sm_75", "fixture"))
+        self.assertIsInstance(exc, self.B.GpuPluginError)
+        self.assertIn("older than compute capability 8.0", str(exc))
+        manifest = self.ptx_root() / self.B.gpu_plugins.BASELINE_MANIFEST
+        manifest.write_text(manifest.read_text() + " ")
+        self.assertIn("vendor marker", str(self.refusal(cuda=True)))
 
-    def test_malformed_baseline_records_never_select_cpu(self):
-        root, _ = self.baseline()
+    def test_the_nvidia_wheel_must_carry_and_bind_its_ptx_set(self):
+        import shutil
+        self.split_core()
+        self.plugin("cuda", ["sm_89"])
+        shutil.rmtree(self.ptx_root())
+        exc = self.refusal(cuda=True, device=("sm_89", "fixture"))
+        self.assertIsInstance(exc, self.B.GpuPluginError)
+        self.assertIn("missing its PTX set", str(exc))
+        # twin: the marker no longer binds a PTX manifest
+        self.ptx_set()
+        path = self.site / f"mojolearn_nvidia-{self.version}.dist-info" / self.B.gpu_plugins.PLUGIN_MARKER
+        doc = json.loads(path.read_text())
+        del doc["bundled_ptx"]
+        path.write_text(json.dumps(doc))
+        self.assertIn("PTX slot metadata", str(self.refusal(cuda=True, device=("sm_89", "fixture"))))
+
+    def test_malformed_ptx_records_never_select_cpu(self):
+        self.split_core()
+        self.plugin("cuda", ["sm_89"])
         self.host_binding()
-        path = root / self.B.gpu_plugins.BASELINE_MANIFEST
+        path = self.ptx_root() / self.B.gpu_plugins.BASELINE_MANIFEST
         original = json.loads(path.read_text())
         for files in ([None], ["wrong"], [dict(original["files"][0], file={})],
                       [dict(original["files"][0], ptx_modules="wrong")]):
@@ -406,26 +470,37 @@ class ArchitecturePayloadLoader(PluginLoader):
                     self.B.select()
                 self.assertIsNone(self.B._CPU_ONLY)
 
-    def test_missing_baseline_tier_never_selects_cpu(self):
-        root, binary = self.baseline()
+    def test_missing_ptx_tier_never_selects_cpu(self):
+        import hashlib
+        self.split_core()
+        self.plugin("cuda", ["sm_89"])
         self.host_binding()
-        binary.rename(root / binary.name)
-        path = root / self.B.gpu_plugins.BASELINE_MANIFEST
+        root = self.ptx_root()
+        (root / "identical" / "_mojolearn_gbdt.so").unlink()
+        gp = self.B.gpu_plugins
+        path = root / gp.BASELINE_MANIFEST
         doc = json.loads(path.read_text())
-        doc["files"][0].update(file=binary.name, numeric_mode="fast")
+        doc["files"] = [row for row in doc["files"] if row["numeric_mode"] == "fast"]
         path.write_text(json.dumps(doc))
+        marker = self.site / f"mojolearn_nvidia-{self.version}.dist-info" / gp.PLUGIN_MARKER
+        mdoc = json.loads(marker.read_text())
+        mdoc["bundled_ptx"] = dict(manifest_sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+        marker.write_text(json.dumps(mdoc))
         self.box(cuda=True)
         self.B.requested_mode = lambda: "identical"
         self.B._MODULES = ("_mojolearn_gbdt",)
-        with self.assertRaisesRegex(self.B.GpuPluginError, "cannot fall back to CPU"):
+        with self.assertRaisesRegex(self.B.GpuPluginError, "never falls back to the CPU"):
             self.B.select()
         self.assertIsNone(self.B._CPU_ONLY)
 
-    def test_baseline_never_selected_automatically(self):
-        self.baseline()
-        os.environ.pop("MOJOLEARN_CUDA_PATH")
-        os.environ.pop("MOJOLEARN_EXPERIMENTAL_PTX")
-        self.assertIsInstance(self.refusal(cuda=True, device=("sm_100", "fixture")), self.B.GpuPluginError)
+    def test_blackwell_native_sets_are_registered(self):
+        gp = self.B.gpu_plugins
+        for arch in ("sm_100", "sm_100a", "sm_103", "sm_103a", "sm_120", "sm_120a", "sm_121", "sm_121a"):
+            self.assertIn(arch, gp.PLUGINS["cuda"]["arches"])
+        self.split_core()
+        self.plugin("cuda", ["sm_89", "sm_100a"])
+        self.assertEqual(self.layout(cuda=True, device=("sm_100", "fixture")),
+                         ("vendor", str(self.pkg / "cuda_native" / "sm_100a")))
         self.assertIsNone(self.B.baseline_selection_receipt())
 
 

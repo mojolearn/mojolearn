@@ -1260,6 +1260,14 @@ def main(argv=None, _gates=True):
         built = write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets,
                             readme, bundled_ptx=bundle)
 
+    # THE WHEEL SIZE CHECK, FIRST (Andrew 2026-10-10): before the audits (split_audit
+    # refuses an oversize wheel too, with no per-set sizes), so the failure names them.
+    oversize = oversize_report(built)
+    if oversize:
+        print("\n".join(["", "pack_wheel: WHEEL OVER PyPI's 100 MiB FILE LIMIT. STOP: this release cannot publish."]
+                        + oversize), file=sys.stderr)
+        return 1
+
     try:
         if _gates:
             # Finalize cached runtime closures too; never trust an older set to
@@ -1354,6 +1362,22 @@ def main(argv=None, _gates=True):
         print("\n".join(lines), file=sys.stderr)
         return 1
     return 0
+
+
+def oversize_report(built):
+    """Report lines for every built wheel when any is over its PyPI limit, else []."""
+    rows = []
+    for whl, vendor in built:
+        distribution = (gpu_plugins.package(vendor)["distribution"] if vendor else gpu_plugins.CORE_DISTRIBUTION)
+        rows.append((whl, whl.stat().st_size, gpu_plugins.wheel_size_limit(distribution)))
+    if not any(size > limit for _, size, limit in rows):
+        return []
+    lines = []
+    for whl, size, limit in rows:
+        lines.append(f"  {'OVER' if size > limit else 'ok  '} {whl.name}: {size / 2**20:.1f} MiB (limit {limit / 2**20:.0f} MiB)")
+        for payload, nbytes in sorted(wheel_payload_sizes(whl).items(), key=lambda kv: -kv[1]):
+            lines.append(f"         {payload}: {nbytes / 2**20:.1f} MiB compressed")
+    return lines
 
 
 def wheel_payload_sizes(whl):
