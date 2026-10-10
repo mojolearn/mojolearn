@@ -249,6 +249,7 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_OPT_FAST_PIPE_CH"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_OPT_FAST_PIPE_CH, the optimizer transfer-chunk override (=524288 arm), was dropped with the gap-optim read-back batch (DROPPED-slower, rab7 MAP_DOWN +81-86%, RAW_DOWN +76-80%; this arm untried); OPT_PIPE_CH stays 1 << 21; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not (is_defined["MOJOLEARN_PTIMPUTE_ALL"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PTIMPUTE_ALL, the PowerTransformer FAST bundle, was DROP (quality): M3 istella 2,258 -> 512 ms but lambda relative shift 9.5e-3 fails the 1e-4 gate; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not (is_defined["MOJOLEARN_PT_SPEC"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PT_SPEC, the FAST speculated PowerTransformer search on the tiled kernel, was DROP: M3 istella +10% vs COLBATCH (910 -> 1,012 ms); code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not (is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]()), "removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PT_FUSED_TRANSFORM, the fused PowerTransformer standardize tail, was DROP (quality, with COLBATCH): batchv-pt-nospec lambda shift 9.5e-3; off under the default PT_SCORE_STABLE; code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

@@ -141,6 +141,7 @@ in the tables after the sections.
 | [`MOJOLEARN_PREP3_LABELS`](#mojolearn_prep3_labels) | Prep | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_PREP3_SPLINE`](#mojolearn_prep3_spline) | Prep | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_PTIMPUTE_ALL`](#mojolearn_ptimpute_all) | Prep | DROP (quality) | 2026-10-09 | [MOJOLEARN_PTIMPUTE_ALL.patch](../experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch) |
+| [`MOJOLEARN_PT_FUSED_TRANSFORM`](#mojolearn_pt_fused_transform) | Prep | DROP (quality, with COLBATCH) | 2026-10-09 | [MOJOLEARN_PT_FUSED_TRANSFORM.patch](../experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch) |
 | [`MOJOLEARN_PT_SPEC`](#mojolearn_pt_spec) | Prep | DROP | 2026-10-09 | [MOJOLEARN_PT_SPEC.patch](../experiments/removed/MOJOLEARN_PT_SPEC.patch) |
 | [`MOJOLEARN_RESAMPLE_FAST_IDX_BULK`](#mojolearn_resample_fast_idx_bulk) | Prep | DROPPED-semantics |  | lane only |
 | [`MOJOLEARN_RESAMPLE_FAST_TAKE`](#mojolearn_resample_fast_take) | Prep | DROPPED-semantics | 2026-10-04 | lane only |
@@ -1069,6 +1070,17 @@ in the tables after the sections.
 - EXPERIMENTS.md:376 (lane/apple-fast-batchv @ 77f1f5afb): `PTIMPUTE_ALL` on power-transformer / istella; taxi, A/B batchv-pt-all-istella, batchv-pt-all-taxi, istella 2,258 -> 512 (-77%), **DROP (quality)**: lambdas vs define-off max rel 9.5e-3
 - EXPERIMENTS.md:1833 (Owed deletions D2): **DELETED**.
 
+### MOJOLEARN_PT_FUSED_TRANSFORM
+
+- What it tried: PowerTransformer.fit's standardize tail (pt_apply + col_stats) as `cs_tile_kernel` with the transform in registers (no TX block; x_prep/fastpt.mojo LAM >= 0 arm, x_prep/device.mojo `fused_tail_pair` dispatch, Python flag bit 4), FAST + Apple.
+- Verdict: DROP (quality, with COLBATCH): batchv-pt-nospec-* (COLBATCH + FUSED_TRANSFORM + SI_ONEPASS) istella 2,262 -> 425, taxi 305 -> 54.5 ms, lambdas shift 9.5e-3 (rel) and fail the gate; never A/B-ed alone; already compiled out under the FAST + Apple default PT_SCORE_STABLE. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_PT_FUSED_TRANSFORM`); `cs_tile_kernel` / `cs_tile_stats` lost their LAM / method arguments (SI_ONEPASS passed LAM = -1: same values).
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `x_prep/fastpt.mojo`, `x_prep/device.mojo`, `bindings/_mojolearn_x_prep.mojo`, `python/mojolearn/_expansion_prep.py`, `tools/batchv_quality.sh`
+- Guard refusal (core/six_lane_experiment_guards.mojo:252): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_PT_FUSED_TRANSFORM, the fused PowerTransformer standardize tail, was DROP (quality, with COLBATCH): batchv-pt-nospec lambda shift 9.5e-3; off under the default PT_SCORE_STABLE; code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:380 (lane/apple-fast-batchv): `PT_FUSED_TRANSFORM` on power-transformer / istella; taxi, (in batchv-pt-nospec-*), see PT_COLBATCH, **DROP (quality, with COLBATCH)**: not A/B-ed alone vs main; stays opt-in
+- EXPERIMENTS.md:377 (lane/apple-fast-batchv @ 30aa43339): `PT_COLBATCH` (COLBATCH + FUSED_TRANSFORM + SI_ONEPASS), istella 2,262 -> 425 (-81%); taxi 305 -> 54.5 (-82%), **DROP (quality)**: lambdas vs define-off max rel 9.5e-3
+- EXPERIMENTS.md:1835 (Owed deletions D2): **DELETED**.
+
 ### MOJOLEARN_PT_SPEC
 
 - What it tried: PowerTransformer's FAST search speculated 3 golden steps a round with COLBATCH's tiled kernel over the speculated candidates (pt_smap + pt_sfold fused, up to PT_MAXM a thread; x_prep/fastpt.mojo `pt_spec_fold`, `pt_stile_finish_kernel`; Python `_PT_FAST_SPEC`, flag bit 2), FAST + Apple.
@@ -1950,7 +1962,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_PSHAP_FAST_OVERLAP` | EXPERIMENTS.md:1413 DROPPED-slower (lane/apple-fast-s-shap) | `python/mojolearn/_expansion_trees.py:3530` |
 | `MOJOLEARN_PT_COLBATCH` | EXPERIMENTS.md:377 DROP (quality) (lane/apple-fast-batchv @ 30aa43339) | `x_prep/fastpt.mojo:11` |
 | `MOJOLEARN_PT_FOLD_NOX` | EXPERIMENTS.md:379 DROP (lane/apple-fast-ptimpute @ 9623cd7dc) | `x_prep/fastpt.mojo:8` |
-| `MOJOLEARN_PT_FUSED_TRANSFORM` | EXPERIMENTS.md:380 DROP (quality, with COLBATCH) (lane/apple-fast-batchv) | `x_prep/fastpt.mojo:18` |
 | `MOJOLEARN_QN_FAST_COALESCED_OFF` | EXPERIMENTS.md:247 DROPPED-slower (lane/apple-fast-linear @ 1c7c213f8) | `glm/impl/qn/glm_base.mojo:112` |
 | `MOJOLEARN_QR_FAST_DEV` | EXPERIMENTS.md:453 DROPPED-slower (lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp) | `python/mojolearn/_linalg_impl.py:1251` |
 | `MOJOLEARN_RESAMPLE_FAST_ONE_FOLD` | EXPERIMENTS.md:384 DROPPED-slower (lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf) | `resample/estimator.mojo:221` |

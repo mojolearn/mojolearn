@@ -35,7 +35,7 @@ dump() {  # $1 binding, $2 arm, $3 prep|kde
 }
 build x_prep off "" && dump x_prep off prep
 build x_prep si "-D MOJOLEARN_SI_ONEPASS" && dump x_prep si prep
-build x_prep ptns "-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_PT_FUSED_TRANSFORM -D MOJOLEARN_SI_ONEPASS" && dump x_prep ptns prep
+build x_prep ptns "-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_SI_ONEPASS" && dump x_prep ptns prep
 build estimators off "" && dump estimators off kde
 build estimators kdt "-D MOJOLEARN_KDE_DIMTILE" && dump estimators kdt kde
 for a in si ptns; do
