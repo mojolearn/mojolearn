@@ -1,0 +1,135 @@
+diff --git a/decomposition/host/pca_oracle.mojo b/decomposition/host/pca_oracle.mojo
+index 4a82afb90..3e77d855f 100644
+--- a/decomposition/host/pca_oracle.mojo
++++ b/decomposition/host/pca_oracle.mojo
+@@ -139,7 +139,7 @@ pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
+ brief records what it has shown.
+ """
+ from experiments.classical_identical_ideas.shared_controls import C01_MEAN
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
++from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04
+ from core.blocked_moments_host import host_bm_column_mean
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+ from core.classical_centered import centered_gram_v1_cell
+@@ -745,16 +745,26 @@ def host_pca_fit(
+     var cov: List[Float32]
+     # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+     # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
+-    # Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch; record in docs/TOMBSTONES.md.
+-    mu = host_column_mean_launch(x, n_rows, n_cols)
+-    if host_gram_applies(n_cols):
+-        cov = host_gram_splitk(x, mu, True, n_cols, n_rows)
++    # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++    comptime if PCA_COV_C04:
++        # MOJOLEARN_CLASSICAL_PCA_COV=4: the reference cell the device's
++        # row-parallel leaves and binary-counter fold reproduce
++        mu = host_column_mean_launch(x, n_rows, n_cols)
++        cov = List[Float32](length=n_cols*n_cols, fill=Float32(0))
++        var xp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
++        var mp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(mu.unsafe_ptr()))
++        for i in range(n_cols):
++            for j in range(n_cols):
++                cov[i*n_cols+j] = centered_gram_v1_cell(xp, mp, n_rows, n_cols, i, j)
++        host_scale_in_place(cov, Float32(1.0) / Float32(n_rows - 1))
+     else:
+-        var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
+-        cov = host_gemm_tn(centered, n_cols, n_rows)
+-    host_scale_in_place(cov, Float32(1.0) / Float32(n_rows - 1))
++        mu = host_column_mean_launch(x, n_rows, n_cols)
++        if host_gram_applies(n_cols):
++            cov = host_gram_splitk(x, mu, True, n_cols, n_rows)
++        else:
++            var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
++            cov = host_gemm_tn(centered, n_cols, n_rows)
++        host_scale_in_place(cov, Float32(1.0) / Float32(n_rows - 1))
+     var result = host_eig_and_truncate(cov, n_cols, n_components, n_rows - 1)
+     return PCAHostFit(result^, mu^)
+ 
+diff --git a/decomposition/impl/linalg/detail/pca.mojo b/decomposition/impl/linalg/detail/pca.mojo
+index 69738c6c0..121ba99f1 100644
+--- a/decomposition/impl/linalg/detail/pca.mojo
++++ b/decomposition/impl/linalg/detail/pca.mojo
+@@ -1,5 +1,5 @@
+ """PCA by covariance eigendecomposition. The `input`-unchanged CONTRACT is the one to not drop: `input` is an in-out parameter that must end the call unchanged, and a fit that leaves the caller's matrix centered is wrong in a way nothing in the fit itself will reveal."""
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
++from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_LEGAL
+ from core.blocked_moments import bm_centered_gram_panels
+ from gemm.contract import contract_leaf_size
+ # SPDX-License-Identifier: Apache-2.0
+@@ -223,16 +223,35 @@ def compute_covariance(
+     restore_input: Bool = True,
+ ) raises:
+     """Steps 1, 2, 3 and 6. The branch below must take the fused arm exactly when `gemm_tn` would take split-K for this shape, so it asks the SAME `gram_splitk_applies(m, n, k)` that `gemm_tn` asks -- one predicate, both readers, no target test of our own."""
+-    # MOJOLEARN_CLASSICAL_PCA_COV (lane classical-decomp, 2026-10-07): both arms deleted.
++    comptime assert PCA_COV_LEGAL, "MOJOLEARN_CLASSICAL_PCA_COV must be 4 (C04 arm); the C23 arm (=23) was deleted 2026-10-08"
++    # MOJOLEARN_CLASSICAL_PCA_COV (lane classical-decomp, 2026-10-07; default
++    # absent = the incumbent below). One switch, one named arm (c04),
++    # replacing the incumbent's routing at every width; X is never modified.
++    # NOT MEASURED.
+     # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+-    # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted.
+-    # Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++    # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
++    # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+     # column_mean_kernel's value, read row-coalesced where it applies
+     # (core/xtdz_coalesced.mojo::column_mean_launch).
+     column_mean_launch(ctx, mu, x, n_rows, n_cols)
+     var cells = n_rows * n_cols
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch; record in docs/TOMBSTONES.md.
++    comptime if PCA_COV_C04:
++        # =4: the centered Gram around the mean read straight from X (no
++        # shift/unshift passes), leaves of contract_leaf_size(n) rows, the
++        # binary-counter fold: the old C04 cell's value
++        # (core/classical_centered.mojo, the host column), row-parallel.
++        bm_centered_gram_panels(
++            ctx, cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            n_rows, n_cols, contract_leaf_size(n_rows),
++        )
++        ctx.enqueue_function[scale_in_place_kernel](
++            cov.unsafe_ptr(), Int32(n_cols * n_cols), Float32(1.0) / Float32(n_rows - 1),
++            grid_dim=((n_cols * n_cols + 255) // 256, 1, 1), block_dim=(256, 1, 1),
++        )
++        ctx.synchronize()
++        return
+     comptime if PCA_COMPENSATED_COV:
+         PCA_COV_STATE.get_or_create_ptr()[].calls += 1
+         comptime if AFCL_L07:
+diff --git a/experiments/classical_identical_ideas/linear_controls.mojo b/experiments/classical_identical_ideas/linear_controls.mojo
+index 130b03cdf..952efdb80 100644
+--- a/experiments/classical_identical_ideas/linear_controls.mojo
++++ b/experiments/classical_identical_ideas/linear_controls.mojo
+@@ -181,16 +181,20 @@ comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TR
+ # counter: the old C23 cell's value (x_decomp/classical_cells.mojo, the host
+ # column), now computed in parallel. NOT MEASURED.
+ comptime C23_MCD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_MCD"]()
+-# PCA covariance: MOJOLEARN_CLASSICAL_PCA_COV is gone; the incumbent
+-# (column_mean_launch, then split-K or shift + gemm_tn) is the only route.
++# PCA covariance, ONE switch with a named arm (the old C04-over-C23 silent
++# priority is gone): -D MOJOLEARN_CLASSICAL_PCA_COV=4 is the C04 arm
++# (two passes: the column mean, then the centered Gram around it read
++# straight from X, leaves of contract_leaf_size(n) rows, binary-counter
++# fold: the old C04 cell's value, computed in parallel, no shift/unshift
++# passes). Absent = the incumbent (column_mean_launch, then split-K or
++# shift + gemm_tn). The arm replaces the incumbent's routing at every
++# width. NOT MEASURED.
+ # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
+-# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted.
+-# Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch; record in docs/TOMBSTONES.md.
+-# Grid g50ebe26a5 (2026-10-10): c04 (two-pass centered Gram read straight from X) pca NV/AMD istella 1.31x/1.25x
+-# SLOWER (1.281x combined), taxi 0.94x/0.82x (0.878x); geo-mean ~1.06x: noise/slower. Both arms are deleted; any
+-# -D MOJOLEARN_CLASSICAL_PCA_COV is refused in core/six_lane_experiment_guards.mojo.
++# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
++# (c04 stays; C23_MCD is separate). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
++comptime _PCA_COV_RAW = get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV", 0]()
++comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4
++comptime PCA_COV_C04 = CLASSICAL_IDN and _PCA_COV_RAW == 4
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
+ # Grid g50ebe26a5: tsvd NV/AMD istella 2.34x/3.46x, taxi 1.83x/1.38x SLOWER (combined 2.84x / 1.59x).

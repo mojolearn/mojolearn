@@ -46,8 +46,30 @@ comptime C13_FOLD_STATS = CLASSICAL_IDN
 # chunk's sums are compensated (TwoSum / Dot2), chunks merge ascending, and
 # the training sets combine fold statistics ascending by the parallel-axis
 # rule. Changes bits (host column and both GPU vendors together).
-comptime ENETCV_FOLD_BLOCKS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS"]()
-comptime ENETCV_FB_CHUNKS = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS", 32]() if ENETCV_FOLD_BLOCKS else 32
+# PROMOTED to the IDENTICAL default 2026-10-10 (lane/grid-act-6, grid freeze
+# 20261010 @50ebe26a5, runs g50ebe26a5/h/m: NVIDIA L40S sm_89 nv2 + AMD
+# MI325X gfx942, full board data, one run per arm, incumbent once + stored
+# floors). NV / AMD ms, incumbent (staged means + Gram) -> 64 chunks:
+#   enet-cv  istella 531.3 -> 459.1 / 907.2 -> 868.4 (0.909x combined),
+#            taxi 92.1 -> 20.0 / 346.0 -> 226.7 (0.377x);
+#   lasso-cv istella 526.1 -> 428.6 / 934.4 -> 823.0 (0.847x),
+#            taxi 89.8 -> 17.8 / 372.4 -> 229.7 (0.350x).
+# Other arms, combined enet-cv / lasso-cv istella, taxi: 16 = 0.888/0.839,
+# 0.398/0.388; 32 = 0.922/0.860, 0.403/0.417. 64 wins three of the four
+# cells and the geo-mean (0.565 vs 0.582 / 0.604). Cost reasoning: the work
+# is one read of every row per pass for any chunk count; more chunks per fold
+# put more blocks on the device for the same fold span (span / 64 rows per
+# chunk), and the extra merge is 64 TwoSum steps per (fold, cell), small
+# against the row reads for any fold span above a few thousand rows. The
+# chunk count is a fixed constant, not a data shape. Bits change vs the old
+# default (the fold order of the prep statistics) on the host column and both
+# GPU vendors together; NV and AMD output hashes must match per arm.
+# Absent = 64 in IDENTICAL; -D MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16|32
+# are the other arms; -D MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF restores
+# the old staged means + Gram path. FAST keeps the old path.
+comptime ENETCV_FOLD_BLOCKS_OFF = is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF"]()
+comptime ENETCV_FOLD_BLOCKS = CLASSICAL_IDN and not ENETCV_FOLD_BLOCKS_OFF
+comptime ENETCV_FB_CHUNKS = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS", 64]() if ENETCV_FOLD_BLOCKS else 64
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS (quality loss) deleted 2026-10-07 by f4de82db4; code recoverable at f4de82db4^.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
 comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"]()
@@ -159,27 +181,19 @@ comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TR
 # counter: the old C23 cell's value (x_decomp/classical_cells.mojo, the host
 # column), now computed in parallel. NOT MEASURED.
 comptime C23_MCD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_MCD"]()
-# PCA covariance, ONE switch with a named arm (the old C04-over-C23 silent
-# priority is gone): -D MOJOLEARN_CLASSICAL_PCA_COV=4 is the C04 arm
-# (two passes: the column mean, then the centered Gram around it read
-# straight from X, leaves of contract_leaf_size(n) rows, binary-counter
-# fold: the old C04 cell's value, computed in parallel, no shift/unshift
-# passes). Absent = the incumbent (column_mean_launch, then split-K or
-# shift + gemm_tn). The arm replaces the incumbent's routing at every
-# width. NOT MEASURED.
+# PCA covariance: MOJOLEARN_CLASSICAL_PCA_COV is gone; the incumbent
+# (column_mean_launch, then split-K or shift + gemm_tn) is the only route.
 # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
-# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
-# (c04 stays; C23_MCD is separate). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
-comptime _PCA_COV_RAW = get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV", 0]()
-comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4
-comptime PCA_COV_C04 = CLASSICAL_IDN and _PCA_COV_RAW == 4
-# TSVD_FUSED_STATS (new, lane classical-decomp): TruncatedSVD's
-# explained_variance_ / _ratio_ in one blocked kernel: per leaf the mean and
-# centered sum of squares of X's columns and of X V^T's columns (the
-# projection formed in the kernel, never stored), merged by Chan's update.
-# Replaces gemm_nt + two (mean, shift, square, mean) chains: about 8 passes
-# over n x d down to 2 reads of each leaf. NOT MEASURED.
-comptime TSVD_FUSED_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS"]()
+# istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted.
+# Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+# TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch; record in docs/TOMBSTONES.md.
+# Grid g50ebe26a5 (2026-10-10): c04 (two-pass centered Gram read straight from X) pca NV/AMD istella 1.31x/1.25x
+# SLOWER (1.281x combined), taxi 0.94x/0.82x (0.878x); geo-mean ~1.06x: noise/slower. Both arms are deleted; any
+# -D MOJOLEARN_CLASSICAL_PCA_COV is refused in core/six_lane_experiment_guards.mojo.
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
+# Grid g50ebe26a5: tsvd NV/AMD istella 2.34x/3.46x, taxi 1.83x/1.38x SLOWER (combined 2.84x / 1.59x).
 comptime C24_PANEL8 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_PANEL8"]()
 # C24 ROWS2048: TSQR leaf blocks of 2048 rows instead of 4096
 # (x_decomp/tsqr_core.mojo TS_ROWS; twice the leaf blocks in flight per
