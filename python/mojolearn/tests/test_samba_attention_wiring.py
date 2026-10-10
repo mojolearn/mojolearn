@@ -85,7 +85,7 @@ class TransformerBackwardWiring(unittest.TestCase):
                 shape = (2, 3, 32)
                 ids = np.zeros((2, 3), np.int32)
                 xs = [np.full(shape, i + 1, np.float32) for i in range(3)]
-                acts = dict(ids=ids, key=None, xs=xs, h=xs[-1], hn=xs[-1],
+                acts = dict(ids=ids, key=None, xs=xs, tapes=[None] * len(xs), h=xs[-1], hn=xs[-1],
                             logits=np.zeros((6, 11), np.float32))
                 order = []
                 original_block = st._block
