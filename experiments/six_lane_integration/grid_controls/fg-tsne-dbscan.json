@@ -131,8 +131,8 @@
     "_mojolearn_hdbscan_host"
    ],
    "bits_change": false,
-   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
-   "note": "H3, default ON (waste removal). The round's ADDED readback rides on the next round's phase-A count read (cumulative ADDED): 3 -> 2 drains per Boruvka round. The off arm restores three reads."
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): the two-drain round loop stays the IDENTICAL default",
+   "note": "H3, default ON (waste removal). The round's ADDED readback rides on the next round's phase-A count read (cumulative ADDED): 3 -> 2 drains per Boruvka round. The off arm restores three reads. CONFIRMED 2026-10-10 (neutral, v1046 / a1186): the _OFF arm is hdbscan istella NV 0.98x / AMD 0.97x, taxi NV 0.98x / AMD 0.98x; hashes unchanged (533cb305, 19b22783). Within noise either way; kept as the default (fewer drains, integer plumbing only)."
   },
   "hdb_out_memcpy_off": {
    "define": "MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF",
@@ -151,8 +151,8 @@
     "_mojolearn_hdbscan"
    ],
    "bits_change": false,
-   "status": "new (fg-tsne-dbscan, plan flagship-gaps-2026-10-09)",
-   "note": "H5, default ON (waste removal). Fit outputs copied into the caller's arrays by memcpy instead of element loops. Same bytes."
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): the output memcpy stays the default",
+   "note": "H5, default ON (waste removal). Fit outputs copied into the caller's arrays by memcpy instead of element loops. Same bytes. CONFIRMED 2026-10-10 (neutral, v1047 / a1187): the _OFF arm is hdbscan istella NV 0.97x / AMD 0.98x, taxi NV 0.96x / AMD 1.00x; hashes unchanged (533cb305, 19b22783). Within noise either way; kept as the default."
   }
  },
  "algorithms": {

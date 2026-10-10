@@ -82,8 +82,8 @@
    ],
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "bits_change": false,
-   "status": "new",
-   "note": "P3: past the split-K Gram width, the covariance Gram centers at its tile load on the v1 SPLIT plan's arithmetic (same leaf partition, per-cell chain, partial and fold launch), X read-only; falls back to shift + gemm_tn when the shipped dispatch would not run a split plan. Same staged words as shift_columns_kernel, so no bit should move; the ID check settles it."
+   "status": "hold:postmerge-20261010 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1021 -> v1031, amd MI325X a1161 -> a1171; ratio = arm / fg2.default-linear)): mixed, stays default off, no change",
+   "note": "P3: past the split-K Gram width, the covariance Gram centers at its tile load on the v1 SPLIT plan's arithmetic (same leaf partition, per-cell chain, partial and fold launch), X read-only; falls back to shift + gemm_tn when the shipped dispatch would not run a split plan. Same staged words as shift_columns_kernel, so no bit should move; the ID check settles it. HOLD 2026-10-10 (mixed): tsvd taxi NV 0.73x / AMD 0.99x, tsvd istella 0.99x / 0.99x, pca taxi NV 1.03x / AMD 1.00x, pca istella NV 0.97x / AMD 1.13x; hashes unchanged (tsvd 8e8dc2a1 / 3747911d, pca 187a68d3 / 3cc2b456). Neither promoted nor deleted."
   },
   "colvar_fused": {
    "define": "MOJOLEARN_IDN_COLVAR_FUSED_OFF",

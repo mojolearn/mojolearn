@@ -75,12 +75,12 @@
     "_mojolearn_x_sequence"
    ],
    "bits_change": false,
-   "status": "new",
+   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-7; neural RACE layernorm synthetic, one run per arm: nv2 L40S default v1056 (main 9f83ea479) -> ENV arm v1063, amd MI325X default a1156 -> ENV arm a1151 (main 0a7b206f1)): the kept stats stay the default",
    "grid": "exclude",
    "tags": [
     "env_switch"
    ],
-   "note": "Python-shell ENVIRONMENT switch (A/B by ENV=MOJOLEARN_LN_KEEP_STATS_OFF=1 on the race line). Default ON (absent): a resident LayerNorm.forward stores its row mean / rstd in two kept M-float resident tensors and backward passes them (6-handle layer_norm_dev, ip[5] = 1), so the device entry skips the forward recompute: one OP_LN_FWD launch over M x D and an M x D scratch y fewer per backward. The stats are the forward's own stores: no bits. Only reached with the class on resident x (the functional layer_norm_backward recomputes as before)."
+   "note": "Python-shell ENVIRONMENT switch (A/B by ENV=MOJOLEARN_LN_KEEP_STATS_OFF=1 on the race line). Default ON (absent): a resident LayerNorm.forward stores its row mean / rstd in two kept M-float resident tensors and backward passes them (6-handle layer_norm_dev, ip[5] = 1), so the device entry skips the forward recompute: one OP_LN_FWD launch over M x D and an M x D scratch y fewer per backward. The stats are the forward's own stores: no bits. Only reached with the class on resident x (the functional layer_norm_backward recomputes as before). CONFIRMED 2026-10-10 (neutral, vendor split): the _OFF arm is layernorm NV 0.95x / AMD 1.07x (average 1.01x, noise); kept as the default (one OP_LN_FWD launch and an M x D scratch fewer per backward, no bits)."
   }
  },
  "algorithms": {
