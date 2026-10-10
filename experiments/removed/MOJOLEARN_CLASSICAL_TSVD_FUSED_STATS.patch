@@ -1,0 +1,321 @@
+diff --git a/core/blocked_moments.mojo b/core/blocked_moments.mojo
+index b78cef7c9..f7c0beb0b 100644
+--- a/core/blocked_moments.mojo
++++ b/core/blocked_moments.mojo
+@@ -187,8 +187,87 @@ def bm_leaf_gram_kernel(
+             part.unsafe_store(base + j * d + i, acc)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
++@always_inline
++def _tsvd_value(x: BmPtr, v: BmPtr, r: Int, d: Int, j: Int) -> Float32:
++    """Column `j` of [X | X V^T] at row `r`; a projection is one ascending
++    flushed multiply-add chain over the features."""
++    if j < d:
++        return ftz(x.unsafe_load(r * d + j))
++    var c = j - d
++    var acc = Float32(0.0)
++    for f in range(d):
++        acc = bm_fma(ftz(x.unsafe_load(r * d + f)), ftz(v.unsafe_load(c * d + f)), acc)
++    return acc
++
++
++def bm_tsvd_leaf_kernel(
++    leaf_mean: BmPtr, leaf_m2: BmPtr, x: BmPtr, v: BmPtr,
++    n_in: Int32, d_in: Int32, nc_in: Int32, leaf_in: Int32,
++):
++    """Block `k` = leaf `k` of [X | X V^T] (m = d + nc columns, the
++    projection formed on the fly, never stored): per column the leaf mean,
++    then the leaf's centered sum of squares, in the colsum kernel's
++    (s, j) chains. One read of the leaf for the sums, one for the squares."""
++    var n = Int(n_in)
++    var d = Int(d_in)
++    var m = d + Int(nc_in)
++    var leaf = Int(leaf_in)
++    var k = Int(block_idx.x)
++    var t = Int(thread_idx.x)
++    var r0 = k * leaf
++    var r1 = min(n, r0 + leaf)
++    var cnt = Float32(r1 - r0)
++    var sh = stack_allocation[BM_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var mu = stack_allocation[BM_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    if m <= BM_TPB:
++        var chains = bm_sub_chains(m)
++        var s = t // m
++        var j = t - s * m
++        var acc = Float32(0.0)
++        if s < chains:
++            var r = r0 + s
++            while r < r1:
++                acc = bm_add(acc, _tsvd_value(x, v, r, d, j))
++                r += chains
++        sh[t] = acc
++        barrier()
++        if t < m:
++            var tot = sh[t]
++            for q in range(1, chains):
++                tot = bm_add(tot, sh[q * m + t])
++            mu[t] = bm_div(tot, cnt)
++        barrier()
++        var acc2 = Float32(0.0)
++        if s < chains:
++            var mj = mu[j]
++            var r = r0 + s
++            while r < r1:
++                var c = bm_sub(_tsvd_value(x, v, r, d, j), mj)
++                acc2 = bm_fma(c, c, acc2)
++                r += chains
++        barrier()
++        sh[t] = acc2
++        barrier()
++        if t < m:
++            var tot = sh[t]
++            for q in range(1, chains):
++                tot = bm_add(tot, sh[q * m + t])
++            leaf_mean.unsafe_store(k * m + t, mu[t])
++            leaf_m2.unsafe_store(k * m + t, tot)
++    else:
++        var j = t
++        while j < m:
++            var acc = Float32(0.0)
++            for r in range(r0, r1):
++                acc = bm_add(acc, _tsvd_value(x, v, r, d, j))
++            var mj = bm_div(acc, cnt)
++            var acc2 = Float32(0.0)
++            for r in range(r0, r1):
++                var c = bm_sub(_tsvd_value(x, v, r, d, j), mj)
++                acc2 = bm_fma(c, c, acc2)
++            leaf_mean.unsafe_store(k * m + j, mj)
++            leaf_m2.unsafe_store(k * m + j, acc2)
++            j += BM_TPB
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -528,5 +607,25 @@ def bm_centered_cross_panels(
+ # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
++def bm_tsvd_variances(
++    ctx: DeviceContext, var_out: BmPtr, x: BmPtr, v: BmPtr, n: Int, d: Int, nc: Int,
++) raises:
++    """TSVD_FUSED_STATS: `var_out[0:d]` = np.var(X, axis=0) and
++    `var_out[d:d+nc]` = np.var(X V^T, axis=0) (ddof 0), the projection formed
++    inside the leaf kernel, the moments merged by Chan's update."""
++    var m = d + nc
++    if m < 1 or n < 1:
++        return
++    var leaf = bm_onepass_leaf_rows(n, m)
++    var leaves = bm_leaf_count(n, leaf)
++    var lmean = ctx.enqueue_create_buffer[DType.float32](leaves * m)
++    var lm2 = ctx.enqueue_create_buffer[DType.float32](leaves * m)
++    var outm = ctx.enqueue_create_buffer[DType.float32](m)
++    ctx.enqueue_function[bm_tsvd_leaf_kernel](
++        _bp(lmean), _bp(lm2), x, v, Int32(n), Int32(d), Int32(nc), Int32(leaf),
++        grid_dim=leaves, block_dim=BM_TPB,
++    )
++    bm_chan_fold[True](ctx, lm2, lmean, leaves, m, n, leaf, var_out, _bp(outm), n)
++    _ = lmean^
++    _ = lm2^
++    _ = outm^
+diff --git a/core/blocked_moments_host.mojo b/core/blocked_moments_host.mojo
+index 14dff8bb0..c5e28903b 100644
+--- a/core/blocked_moments_host.mojo
++++ b/core/blocked_moments_host.mojo
+@@ -170,5 +170,58 @@ def host_bm_column_mean(x: List[Float32], n: Int, d: Int) -> List[Float32]:
+ # (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
++def _host_tsvd_value(x: List[Float32], v: List[Float32], r: Int, d: Int, j: Int) -> Float32:
++    if j < d:
++        return ftz(x[r * d + j])
++    var cc = j - d
++    var acc = Float32(0.0)
++    for f in range(d):
++        acc = bm_fma(ftz(x[r * d + f]), ftz(v[cc * d + f]), acc)
++    return acc
++
++
++def host_bm_tsvd_variances(x: List[Float32], v: List[Float32], n: Int, d: Int, nc: Int) -> List[Float32]:
++    """`bm_tsvd_variances`: [var(X) | var(X V^T)], ddof 0."""
++    var m = d + nc
++    var leaf = bm_onepass_leaf_rows(n, m)
++    var leaves = bm_leaf_count(n, leaf)
++    var lmean = List[Float32](length=max(1, leaves * m), fill=Float32(0.0))
++    var lm2 = List[Float32](length=max(1, leaves * m), fill=Float32(0.0))
++    var chains = bm_sub_chains(m)
++    for k in range(leaves):
++        var r0 = k * leaf
++        var r1 = min(n, r0 + leaf)
++        var cnt = Float32(r1 - r0)
++        for j in range(m):
++            var mj: Float32
++            var tot2 = Float32(0.0)
++            if m <= BM_TPB:
++                var tot = Float32(0.0)
++                for s in range(chains):
++                    var acc = Float32(0.0)
++                    var r = r0 + s
++                    while r < r1:
++                        acc = bm_add(acc, _host_tsvd_value(x, v, r, d, j))
++                        r += chains
++                    tot = acc if s == 0 else bm_add(tot, acc)
++                mj = bm_div(tot, cnt)
++                for s in range(chains):
++                    var acc2 = Float32(0.0)
++                    var r = r0 + s
++                    while r < r1:
++                        var cv = bm_sub(_host_tsvd_value(x, v, r, d, j), mj)
++                        acc2 = bm_fma(cv, cv, acc2)
++                        r += chains
++                    tot2 = acc2 if s == 0 else bm_add(tot2, acc2)
++            else:
++                var acc = Float32(0.0)
++                for r in range(r0, r1):
++                    acc = bm_add(acc, _host_tsvd_value(x, v, r, d, j))
++                mj = bm_div(acc, cnt)
++                for r in range(r0, r1):
++                    var cv = bm_sub(_host_tsvd_value(x, v, r, d, j), mj)
++                    tot2 = bm_fma(cv, cv, tot2)
++            lmean[k * m + j] = mj
++            lm2[k * m + j] = tot2
++    var unused = List[Float32]()
++    return host_bm_chan_fold(lm2^, lmean^, leaves, m, True, n, leaf, n, unused)
+diff --git a/decomposition/estimator.mojo b/decomposition/estimator.mojo
+index 0103064fe..f27c11ec7 100644
+--- a/decomposition/estimator.mojo
++++ b/decomposition/estimator.mojo
+@@ -387,8 +387,8 @@ def square_in_place_kernel(
+ # tiled arm changes the fold and must also be selected by the host column. -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (or
+ # -D MOJOLEARN_IDN_ALL_OFF) restores the direct one-block-per-column launch.
+ from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
++from experiments.classical_identical_ideas.linear_controls import TSVD_FUSED_STATS
++from core.blocked_moments import bm_tsvd_variances
+ 
+ 
+ from core.host_tile_fold import IDN_XTY_TILED, XTY_TILE_ROWS, xty_tiles
+@@ -573,8 +573,38 @@ def tsvd_explained_host(
+     binding (lane/algos-decomp, 2026-09-27; it had run through the x_decomp
+     expansion binding). X V^T is `tsvd_transform_host`'s `gemm_nt`."""
+     pca_validate(n_rows, n_features, n_components)
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
++    comptime if TSVD_FUSED_STATS:
++        # MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (lane classical-decomp,
++        # 2026-10-07; default OFF): both column variances from one blocked
++        # kernel over [X | X V^T] (core/blocked_moments.mojo
++        # `bm_tsvd_variances`; the projection is never stored), then the
++        # same device tail. Host column: pca_oracle `host_tsvd_explained`.
++        # NOT MEASURED.
++        var fx = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
++        var fv = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
++        var both = ctx.enqueue_create_buffer[DType.float32](n_features + n_components)
++        ctx.enqueue_copy(dst_buf=fx, src_ptr=x_ptr)
++        ctx.enqueue_copy(dst_buf=fv, src_ptr=components_ptr)
++        bm_tsvd_variances(ctx, _mp(both), _mp(fx), _mp(fv), n_rows, n_features, n_components)
++        var f_exp = ctx.enqueue_create_buffer[DType.float32](max(n_components, 1))
++        var f_rat = ctx.enqueue_create_buffer[DType.float32](max(n_components, 1))
++        var var_t_p = MutPointer[Float32, MutAnyOrigin](
++            unsafe_from_address=Int(both.unsafe_ptr()) + 4 * n_features
++        )
++        ctx.enqueue_function[tsvd_finish_kernel](
++            var_t_p, Int32(n_components), _mp(both), Int32(n_features), _mp(f_exp), _mp(f_rat),
++            grid_dim=1, block_dim=TSVD_FIN_TPB,
++        )
++        if n_components > 0:
++            ctx.enqueue_copy(dst_ptr=explained_ptr, src_buf=f_exp)
++            ctx.enqueue_copy(dst_ptr=ratio_ptr, src_buf=f_rat)
++        ctx.synchronize()
++        _ = fx^
++        _ = fv^
++        _ = both^
++        _ = f_exp^
++        _ = f_rat^
++        return
+     var x: DeviceBuffer[DType.float32]
+     comptime if TSVD_FAST_POOL:
+         x = pool_take[_PCA_POOL](ctx, n_rows * n_features)
+@@ -646,11 +676,12 @@ def _tsvd_explained_tail(
+ #: SAME device buffer. Cost: -1 H2D copy of X and -1 n*d allocation per fit at
+ #: any shape. Bits: none (the same kernels on the same words in the same
+ #: order; the components reach the tail through the same Float32 output
+-#: array). The OFF arm (and FAST, which keeps its pooled pair) runs the two
+-#: calls in order.
++#: array). The OFF arm (and FAST, which keeps its pooled pair, and
++#: TSVD_FUSED_STATS, which has its own upload) runs the two calls in order.
+ comptime TSVD_ONE_UPLOAD = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not is_defined["MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF"]()
++    and not TSVD_FUSED_STATS
+ )
+ 
+ 
+diff --git a/decomposition/host/pca_oracle.mojo b/decomposition/host/pca_oracle.mojo
+index 3e77d855f..3da561df9 100644
+--- a/decomposition/host/pca_oracle.mojo
++++ b/decomposition/host/pca_oracle.mojo
+@@ -139,9 +139,8 @@ pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
+ brief records what it has shown.
+ """
+ from experiments.classical_identical_ideas.shared_controls import C01_MEAN
+-from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04
+-from core.blocked_moments_host import host_bm_column_mean
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
++from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, TSVD_FUSED_STATS
++from core.blocked_moments_host import host_bm_column_mean, host_bm_tsvd_variances
+ from core.classical_centered import centered_gram_v1_cell
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+@@ -823,8 +822,23 @@ def host_tsvd_explained(
+     DeviceContext: X V^T by `host_gemm_nt_into` (`tsvd_transform`'s host
+     arm), then both column variances."""
+     host_pca_validate(n_rows, n_features, n_components)
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
++    comptime if TSVD_FUSED_STATS:
++        # MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS: `bm_tsvd_variances`' host column
++        var xs = List[Float32](length=n_rows * n_features, fill=Float32(0.0))
++        for i in range(n_rows * n_features):
++            xs[i] = x[i]
++        var vs = List[Float32](length=n_components * n_features, fill=Float32(0.0))
++        for i in range(n_components * n_features):
++            vs[i] = components[i]
++        var both = host_bm_tsvd_variances(xs, vs, n_rows, n_features, n_components)
++        var vx = List[Float32](length=n_features, fill=Float32(0.0))
++        var vt = List[Float32](length=n_components, fill=Float32(0.0))
++        for i in range(n_features):
++            vx[i] = both[i]
++        for i in range(n_components):
++            vt[i] = both[n_features + i]
++        tsvd_explained_finish(vt, vx, explained_ptr, ratio_ptr)
++        return
+     var xt = List[Float32](length=n_rows * n_components, fill=Float32(0.0))
+     host_gemm_nt_into(
+         x, components, host_list_ptr(xt), n_rows, n_components, n_features,
+diff --git a/experiments/classical_identical_ideas/linear_controls.mojo b/experiments/classical_identical_ideas/linear_controls.mojo
+index 952efdb80..be8cbf1e7 100644
+--- a/experiments/classical_identical_ideas/linear_controls.mojo
++++ b/experiments/classical_identical_ideas/linear_controls.mojo
+@@ -195,9 +195,13 @@ comptime C23_MCD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_MCD"]()
+ comptime _PCA_COV_RAW = get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV", 0]()
+ comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4
+ comptime PCA_COV_C04 = CLASSICAL_IDN and _PCA_COV_RAW == 4
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
+-# Grid g50ebe26a5: tsvd NV/AMD istella 2.34x/3.46x, taxi 1.83x/1.38x SLOWER (combined 2.84x / 1.59x).
++# TSVD_FUSED_STATS (new, lane classical-decomp): TruncatedSVD's
++# explained_variance_ / _ratio_ in one blocked kernel: per leaf the mean and
++# centered sum of squares of X's columns and of X V^T's columns (the
++# projection formed in the kernel, never stored), merged by Chan's update.
++# Replaces gemm_nt + two (mean, shift, square, mean) chains: about 8 passes
++# over n x d down to 2 reads of each leaf. NOT MEASURED.
++comptime TSVD_FUSED_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS"]()
+ comptime C24_PANEL8 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_PANEL8"]()
+ # C24 ROWS2048: TSQR leaf blocks of 2048 rows instead of 4096
+ # (x_decomp/tsqr_core.mojo TS_ROWS; twice the leaf blocks in flight per

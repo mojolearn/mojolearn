@@ -63,10 +63,9 @@ comptime IDN_CE_DENOM_ROWFOLD = _ENABLED and is_defined["MOJOLEARN_IDN_CE_DENOM_
 # 2 = NN62 byte-LM lifetime arena (training/neural_ab_lifetime.mojo), 3 = both.
 comptime IDN_TRAIN_SCRATCH_ARM = get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH", 0]()
 comptime IDN_TRAIN_BACKWARD_SCRATCH = _ENABLED and (IDN_TRAIN_SCRATCH_ARM == 1 or IDN_TRAIN_SCRATCH_ARM == 3)
-# NI35: explicit V arithmetic profile for the CE token-total fold only.
-# Vocabulary folds, objective divisor, dlogits and optimizer are unchanged.
-# Arm 2 of MOJOLEARN_IDN_CE_TOKEN_FOLD (training/neural_ab_profile_contract.mojo).
-comptime IDN_LOSS_TOKEN_TREE_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD", 0]() == 2
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
+# (NI35 256-token tree v2; bytes lm-forward NV/AMD 0.99x/1.01x, lm-train-step 1.01x/1.00x, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557)
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
 # NI34: the existing explicit config stays supported; this opt-in chooses it
 # for default-constructed byte configs and enables compatible Samba callers.
 comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
@@ -74,11 +73,12 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED
 # Arm 3 of MOJOLEARN_IDN_ACT_RETAIN (transformer/experiments/checkpoint_contract.mojo).
 comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and not is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]() and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]() == 3
 
-# NI20: fixed tile32 online attention numerical graph on every column. Arm 2
-# of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1, the NN20
-# summary tree, was deleted 2026-10-08 as a grid ge123e6f9 loser and is refused;
-# recoverable at main bc10b8b56).
-comptime IDN_ATTENTION_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 2
+# NI20 / MOJOLEARN_IDN_ATTN_SOFTMAX: both arms are gone and the define is refused
+# (arm 1, the NN20 summary tree, deleted 2026-10-08, grid ge123e6f9, recoverable at
+# main bc10b8b56).
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
+# (online_tile32 attention v2; bytes lm-train-step NV/AMD 1.43x/1.56x slower, lm-forward 0.98x/1.04x, mean_nll same; nv2 v1229/v1231/v1232, amd a1555/a1556/a1557)
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 # S1 (lane/samba-resident, 2026-10-07): the Samba stack's forward and train
 # step as ONE device-resident binding call each (training/samba_resident.mojo):
 # the registry, the gradient, every block's activations and the backward

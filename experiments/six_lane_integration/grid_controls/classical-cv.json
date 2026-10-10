@@ -5,33 +5,34 @@
  "head": "0410922f36b2",
  "controls": {
   "enetcv_fold_blocks": {
-   "define": "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS",
-   "kind": "arms",
+   "define": "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS,MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF",
+   "kind": "int_sweep",
    "arms": {
-    "off": [],
+    "64": [],
     "16": [
      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
     ],
     "32": [
      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
     ],
-    "64": [
-     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64"
+    "off": [
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF"
     ]
    },
-   "default": "off",
+   "default": "64",
    "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:46",
+    "experiments/classical_identical_ideas/linear_controls.mojo:71",
     "x_linear/enetcv_blocks.mojo",
-    "x_linear/cd_grid.mojo:727",
+    "x_linear/cd_grid.mojo:807",
     "x_linear/cd.mojo:244",
     "x_linear/cd.mojo:283",
-    "bindings/_mojolearn_x_linear_host.mojo:113"
+    "bindings/_mojolearn_x_linear_host.mojo:113",
+    "core/six_lane_experiment_guards.mojo:40"
    ],
    "binding": "_mojolearn_x_linear (device grid) + _mojolearn_x_linear_host (host column)",
    "bits_change": true,
-   "status": "new",
-   "note": "Arm value = chunks per fold (fixed constant, not a data shape). Every row read once per pass (vs F+1 full scans), TwoSum/Dot2 compensated chunk partials, chunks merged ascending, training sets by parallel-axis rule over folds ascending. Each arm is its own bits version; NV and AMD must match per arm. NOT COMPILED-VERIFIED on host (lanes no longer compile); sm_90 device binding compiled rc=0 with =32 before the rule change."
+   "status": "promoted:g50ebe26a5",
+   "note": "PROMOTED 2026-10-10 (lane/grid-act-6, grid freeze 20261010 @50ebe26a5, runs g50ebe26a5/h/m, one run per arm): absent = 64 chunks per fold in IDENTICAL; =16|32 the other arms; _OFF the old staged means + Gram path. Combined (vendor-averaged) arm/incumbent: 64 enet-cv istella 0.909x, taxi 0.377x; lasso-cv 0.847x, 0.350x; 16: 0.888/0.398, 0.839/0.388; 32: 0.922/0.403, 0.860/0.417. Bits change vs the old default (prep-statistic fold order) on the host column and both GPU vendors together. Arm value = chunks per fold (fixed constant, not a data shape). Every row read once per pass (vs F+1 full scans), TwoSum/Dot2 compensated chunk partials, chunks merged ascending, training sets by parallel-axis rule over folds ascending. Each arm is its own bits version; NV and AMD must match per arm. NOT COMPILED-VERIFIED on host (lanes no longer compile); sm_90 device binding compiled rc=0 with =32 before the rule change."
   },
   "c18_residual_next": {
    "define": "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT",

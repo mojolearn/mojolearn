@@ -3,45 +3,14 @@
  "lane": "attention-tiled-v2",
  "branch": "lane/attention-tiled-v2",
  "head": "cd4a0e870",
- "controls": {
-  "attn_v2_tq": {
-   "define": "MOJOLEARN_IDN_ATTN_V2_TQ",
-   "kind": "int_sweep",
-   "arms": {
-    "32": [
-     "MOJOLEARN_IDN_ATTN_V2_TQ=32"
-    ],
-    "64": [
-     "MOJOLEARN_IDN_ATTN_V2_TQ=64"
-    ]
-   },
-   "default": "32",
-   "source": [
-    "transformer/impl/llama/attention_v2_model_device.mojo:96",
-    "transformer/impl/llama/attention_v2_model_device.mojo:317",
-    "core/six_lane_experiment_guards.mojo:71"
-   ],
-   "binding": [
-    "_mojolearn_byte_lm",
-    "_mojolearn_transformer",
-    "_mojolearn_training"
-   ],
-   "bits_change": false,
-   "status": "new",
-   "note": "Query rows per block of the tiled online_tile32 forward (_forward_tiled[HD, TQ]); only read with attn_softmax on at arm online_tile32 (MOJOLEARN_IDN_ATTN_SOFTMAX=2; the guard refuses it otherwise). 256 threads either way: 32 rows = 8 lanes per row (4 keys scored, HD/8 output lanes per lane; 38.5 KB shared at HD=64; twice the blocks), 64 rows = 4 lanes per row (8 keys, HD/4 lanes; 42.7 KB shared; K/V staged once per 64 rows). Same bits: the fold is per row. The backward row-side kernels stay at 32 rows (their DY tile and two word arrays would exceed the NVIDIA static budget at 64)."
-  }
- },
+ "controls": {},
  "algorithms": {
   "neural:lm-forward": {
    "binding": "_mojolearn_byte_lm",
    "route": "byte_lm forward -> modeling_llama eager_attention_forward -> (IDN_ATTENTION_V2) _model_attention_v2_forward -> attention_v2_model_forward -> _forward_tiled[HD, ATTN_V2_TQ]",
-   "controls": [
-    "attn_v2_tq"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "attn_softmax",
-     "attn_v2_tq",
      "attn_tile_order",
      "attn_fwd_tq_rule"
     ]
@@ -50,13 +19,9 @@
   "neural:lm-train-step": {
    "binding": "_mojolearn_byte_lm",
    "route": "byte_lm train step -> modeling_llama eager_attention_forward -> attention_v2_model_forward (_forward_tiled); backward transformer_backward.mojo:3628 -> attention_v2_model_backward -> _prepare_tiled, _dq_tiled, _dkdv_tiled",
-   "controls": [
-    "attn_v2_tq"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "attn_softmax",
-     "attn_v2_tq",
      "attn_tile_order",
      "attn_fwd_tq_rule",
      "attn_stash"
@@ -66,13 +31,9 @@
   "neural:transformer-forward": {
    "binding": "_mojolearn_transformer",
    "route": "transformer binding forward -> modeling_llama eager_attention_forward -> attention_v2_model_forward -> _forward_tiled",
-   "controls": [
-    "attn_v2_tq"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "attn_softmax",
-     "attn_v2_tq",
      "attn_tile_order",
      "attn_fwd_tq_rule"
     ]
@@ -81,13 +42,9 @@
   "neural:samba-forward": {
    "binding": "_mojolearn_mamba + _mojolearn_transformer",
    "route": "samba attention layers -> _mojolearn_transformer -> modeling_llama eager_attention_forward -> attention_v2_model_forward -> _forward_tiled",
-   "controls": [
-    "attn_v2_tq"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "attn_softmax",
-     "attn_v2_tq",
      "attn_tile_order",
      "attn_fwd_tq_rule"
     ]
@@ -96,13 +53,9 @@
   "neural:samba-train-step": {
    "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
    "route": "samba attention layers forward (_forward_tiled) + transformer_backward attention_v2_model_backward (_prepare_tiled, _dq_tiled, _dkdv_tiled)",
-   "controls": [
-    "attn_v2_tq"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "attn_softmax",
-     "attn_v2_tq",
      "attn_tile_order",
      "attn_fwd_tq_rule",
      "attn_stash"
@@ -110,6 +63,12 @@
    ]
   }
  },
- "removed": [],
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_ATTN_V2_TQ",
+   "control": "attn_v2_tq",
+   "reason": "DELETED 2026-10-10 (lane grid-act-15, deletion c1bf9d832) with the online_tile32 arm it tuned (MOJOLEARN_IDN_ATTN_SOFTMAX=2: slower, lm-train-step NV 1.43x / AMD 1.56x, avg 1.49x; main ca25d9321, byte-LM bytes profile, one run per arm, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557 (default v1232/a1557); identity: every arm's NV hash == AMD hash). Its kernels lived in transformer/impl/llama/attention_v2_model_device.mojo. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch."
+  }
+ ],
  "notes": "The v2 arm itself (attn_softmax=online_tile32, MOJOLEARN_IDN_ATTN_SOFTMAX=2, neural-gemm-attn-dedupe.json) gained the tiled kernels in this lane; no second define. RUN OWED: ID + RACE lm-forward, lm-train-step, transformer-forward, samba-forward, samba-train-step on nv and amd with MOJOLEARN_IDN_ATTN_SOFTMAX=2 (and the attn_v2_tq=64 arm)."
 }

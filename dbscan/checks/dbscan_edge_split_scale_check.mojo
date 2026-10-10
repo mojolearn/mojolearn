@@ -77,35 +77,44 @@ def main() raises:
         + String(2 * SC_HALF * SC_HALF) + " edges; the int32 tail reads "
         + String(wrapped) + " (MAX_LABEL " + String(Int(MAX_LABEL)) + ")"
     )
-    var n_batches = List[Int](length=1, fill=0)
-    _ = dbscan_fit(
-        ctx, x, adj, vd, core, ex, labels, labels_temp, work_buffer,
-        block_sums, nw, ws, n, SC_D, 1.0, 2, 0, n + 1, EPS_NN_RBC,
-        phase_timing=True,
-        n_batches_out_addr=Int(n_batches.unsafe_ptr()),
-    )
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
-    ctx.synchronize()
-    var bad = 0
-    for i in range(n):
-        var want = Int32(0) if i < SC_HALF else Int32(1)
-        if h.unsafe_ptr().unsafe_load(i) != want:
-            bad += 1
-    if bad != 0:
-        raise Error(
-            String(bad) + " of " + String(n) + " rows are not in their"
-            " clique's cluster after " + String(n_batches[0]) + " batches"
+    # lane dbscan-taxi-speed: arm 0 pins the split route (edge_free=False);
+    # arm 1 lets the fit take the edge-free route (IDN_DBSCAN_EDGE_FREE,
+    # where compiled in) and must give the same two cliques.
+    for arm in range(2):
+        var allow_ef = arm == 1
+        var n_batches = List[Int](length=1, fill=0)
+        _ = dbscan_fit(
+            ctx, x, adj, vd, core, ex, labels, labels_temp, work_buffer,
+            block_sums, nw, ws, n, SC_D, 1.0, 2, 0, n + 1, EPS_NN_RBC,
+            phase_timing=True,
+            n_batches_out_addr=Int(n_batches.unsafe_ptr()),
+            edge_free=allow_ef,
         )
-    if n_batches[0] < 4:
-        raise Error(
-            "expected the 5e9-edge batch to split into at least 4 batches,"
-            " got " + String(n_batches[0])
+        var h = ctx.enqueue_create_host_buffer[DType.int32](n)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
+        ctx.synchronize()
+        var bad = 0
+        for i in range(n):
+            var want = Int32(0) if i < SC_HALF else Int32(1)
+            if h.unsafe_ptr().unsafe_load(i) != want:
+                bad += 1
+        if bad != 0:
+            raise Error(
+                String(bad) + " of " + String(n) + " rows are not in their"
+                " clique's cluster after " + String(n_batches[0])
+                + " batches (edge_free " + String(allow_ef) + ")"
+            )
+        if not allow_ef and n_batches[0] < 4:
+            raise Error(
+                "expected the 5e9-edge batch to split into at least 4 batches,"
+                " got " + String(n_batches[0])
+            )
+        print(
+            "dbscan_edge_split_scale_check: arm edge_free " + String(allow_ef)
+            + ": 5000000000 edges, " + String(n_batches[0])
+            + " batches/ranges, both cliques whole, labels 0 and 1"
         )
-    print(
-        "dbscan_edge_split_scale_check: PASS: 5000000000 edges split into "
-        + String(n_batches[0]) + " batches, both cliques whole, labels 0 and 1"
-    )
+    print("dbscan_edge_split_scale_check: PASS")
 
 
 def truncate_to_32(v: Int) -> Int:

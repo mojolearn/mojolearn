@@ -1300,6 +1300,61 @@ def rbc_eps_pass_fill_bitmap(
         rbc_canonicalize_row_order(ctx, adj_ia, adj_ja, n_queries, nnz)
 
 
+def rbc_eps_pass_degrees_tile(
+    ctx: DeviceContext,
+    mut x_reordered: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut r: DeviceBuffer[DType.float32],
+    mut r_indptr: DeviceBuffer[DType.int32],
+    mut r_1nn_cols: DeviceBuffer[DType.int32],
+    mut r_1nn_dists: DeviceBuffer[DType.float32],
+    mut r_radius: DeviceBuffer[DType.float32],
+    mut deg_out: DeviceBuffer[DType.int32],
+    n_queries: Int,
+    n_cols: Int,
+    n_landmarks: Int,
+    eps: Float32,
+) raises:
+    """IDN_DBSCAN_EDGE_FREE (dbscan/impl/edge_free.mojo): D1's tiled count,
+    Euclidean, writing each query's degree to `deg_out[q]` and nothing else
+    (no scan, no total: the degrees of a dense range can sum past int32).
+    The same kernel and predicate as `rbc_eps_pass_count_bitmap`, so the
+    same degrees."""
+    _rbc_eps_tile_launch[ET_COUNT](
+        ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
+        deg_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg_out.unsafe_ptr().bitcast[UInt64]().unsafe_origin_cast[MutAnyOrigin](), n_queries, n_cols,
+        n_landmarks, eps,
+        RBC_METRIC_DEFAULT, Float32(2.0),
+    )
+
+
+def rbc_eps_pass_bits_tile(
+    ctx: DeviceContext,
+    mut x_reordered: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut r: DeviceBuffer[DType.float32],
+    mut r_indptr: DeviceBuffer[DType.int32],
+    mut r_1nn_cols: DeviceBuffer[DType.int32],
+    mut r_1nn_dists: DeviceBuffer[DType.float32],
+    mut r_radius: DeviceBuffer[DType.float32],
+    mut deg_scratch: DeviceBuffer[DType.int32],
+    mut bm: DeviceBuffer[DType.uint64],
+    n_queries: Int,
+    n_cols: Int,
+    n_landmarks: Int,
+    eps: Float32,
+) raises:
+    """IDN_DBSCAN_EDGE_FREE: D2's bit matrix for one query range (the degrees
+    land in `deg_scratch` and are not read). No scan and no total, for the
+    reason `rbc_eps_pass_degrees_tile` gives."""
+    _rbc_eps_tile_launch[ET_COUNT_BITMAP](
+        ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
+        deg_scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg_scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), bm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_queries, n_cols,
+        n_landmarks, eps,
+        RBC_METRIC_DEFAULT, Float32(2.0),
+    )
+
+
 def rbc_eps_pass_dense(
     ctx: DeviceContext,
     mut x_reordered: DeviceBuffer[DType.float32],

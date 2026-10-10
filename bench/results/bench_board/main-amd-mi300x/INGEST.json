@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-10T07:45:02Z",
+ "generated": "2026-10-10T23:00:40Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-10T07:45:02Z",
+  "generated": "2026-10-10T23:00:40Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -222,10 +222,12 @@
  "skipped": {
   "ALGOS: A/B or grid arm (ENV)": 6,
   "ALGOS: A/B or grid arm (MOJOLEARN_BUILD_DEFINES)": 216,
-  "ALGOS: branch other than main": 2092,
-  "GRIDBB: A/B or switched build": 190,
-  "GRIDBB: branch freeze-20261007": 4387,
-  "GRIDBB: branch gbdt-categorical-oom": 6
+  "ALGOS: branch other than main": 2427,
+  "GRIDBB: A/B or switched build": 202,
+  "GRIDBB: branch freeze-20261007": 4389,
+  "GRIDBB: branch freeze-20261010": 1146,
+  "GRIDBB: branch gbdt-categorical-oom": 6,
+  "GRIDBB: no job line in results": 1
  },
- "summary": "MAINBOARD column=amd-mi300x label=main@8d5855b83 races=1 add=1 change=0 drop=0 failed=0 ledger=0 withheld_opponents=0 identity=n/a:1"
+ "summary": "MAINBOARD column=amd-mi300x label=main@8d5855b83 races=1 add=0 change=0 drop=0 failed=0 ledger=0 withheld_opponents=0 identity=n/a:1"
 }

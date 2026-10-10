@@ -55,7 +55,7 @@
     "smoke": false,
     "vendor": "amd"
   },
-  "created": "2026-10-10T07:45:02Z",
+  "created": "2026-10-10T23:00:40Z",
   "main_board": {
     "backfill": {
       "filled": {
@@ -77,7 +77,7 @@
     },
     "inputs": {
       "branch": "main",
-      "generated": "2026-10-10T07:45:02Z",
+      "generated": "2026-10-10T23:00:40Z",
       "grid_logs": [
         "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
         "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -219,5 +219,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-10T07:45:02Z"
+  "updated": "2026-10-10T23:00:40Z"
 }

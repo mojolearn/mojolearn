@@ -51,27 +51,28 @@
    "note": "LinearRegression (alpha 0) and Ridge (alpha > 0) as ONE resident centered-Gram fit: X and y up once; exact column sums + binary64 means (col_sums_pair_buf/col_means_buf); the centered Gram and cross X^T y read straight from resident X by the blocked leaf kernels (bm_centered_gram_panels, new bm_centered_cross_panels; binary-counter fold; leaves contract_leaf_size(n)); power-of-two equilibration (ols_equilibration_scale); the IDENTICAL Cholesky cells (chol_diag/chol_col_elem statements, one launch per column); a trust gate (non-positive pivot or pivot^2 < 2^-12 of its equilibrated diagonal, x_linear RIDGE_FF_GATE); parallel per-column triangular solves; no U formed. Status 1 (not trusted) -> the Python glue runs the incumbent route (OLS: centered TSQR + SVD cutoff; Ridge: 4-crossing glue + Jacobi eig), both columns alike. Bits change (normal equations); the host column glm/host/gram_solve_host.mojo runs the same cells (centered_gram_v1_cell, new centered_cross_v1_cell, chol_serial, same solve statements). Quality check owed on istella (ill-conditioned; the gate is expected to fall back there for OLS). Reach: classical:ols (LinearRegression.fit, before the TSQR branch, unweighted) and more:ridge (Ridge.fit, before the centering glue). Under 'on' the OLS controls ols_one_entry/C24_TSQR and the Ridge control c02_linear_pair act only on the fallback path. Default ON in IDENTICAL; `_OFF` is the incumbent (TSQR OLS / SVD Ridge) arm. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
   },
   "rsvd_tsqr_ortho": {
-   "define": "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO",
+   "define": "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO"
+    "on": [],
+    "off": [
+     "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
-    "x_decomp/tsqr_core.mojo:86",
+    "x_decomp/tsqr_core.mojo:159",
     "x_decomp/device.mojo:2381",
     "x_decomp/device.mojo:2419",
     "x_decomp/host.mojo:561",
     "x_decomp/host.mojo:570",
-    "x_decomp/tsqr_device.mojo (ts_apply_device_buf)"
+    "x_decomp/tsqr_device.mojo (ts_apply_device_buf)",
+    "core/six_lane_experiment_guards.mojo:185"
    ],
    "binding": "_mojolearn_x_decomp (host column _mojolearn_x_decomp_host)",
    "bits_change": true,
-   "status": "new",
-   "note": "randomized_svd's nine orthonormalizations (Kit.orth -> x_decomp_dev_orth -> orth_on_device: two sliced Householder qr_factor passes + 1-thread guard + per-row trsm, ~154 launches/6 syncs each) become ONE blocked TSQR pass (ts_factor_device, the OLS kernels) plus the explicit Q from the kept reflectors applied to the rank-guarded selection C = diag(R[j,j] != 0) (ts_apply_device_buf, C built on the device), ~25 launches/1 sync per orth. Cost: the m x l sketch is read three times at full width instead of being walked by 2,048 strided threads; latency-bound, so it holds for any tall sketch with l small. Bits change (one TSQR Householder pass instead of two sliced passes); the host column HostExec.orth takes the same route via ts_factor_host/ts_apply_host. A dependent column maps to an exactly zero Q column (randomized_svd's nlive compaction contract kept). Shapes outside the TSQR's (l > 512, m < l, Int32 overflow) keep the two-pass route on both columns; TS_SMEM_OK gates the device as for OLS. orth_diag (linalg.svd's U) and the FAST-only SVD_FAST_CHOLQR/DECOMP_FAST_ORTH_WS paths are untouched. more:tsvd does not share this route (covariance_eigh)."
+   "status": "promoted:g50ebe26a5",
+   "note": "PROMOTED 2026-10-10 (lane/grid-act-6, grid g50ebe26a5, one run per arm): the TSQR orth is the IDENTICAL default; _OFF restores the two-pass route; the old on-define is refused. randomized-svd combined 0.710x istella (NV 0.824 / AMD 0.611), 0.638x taxi (NV 0.757 / AMD 0.538). Bits change vs the old default on the host column and both GPU vendors together. randomized_svd's nine orthonormalizations (Kit.orth -> x_decomp_dev_orth -> orth_on_device: two sliced Householder qr_factor passes + 1-thread guard + per-row trsm, ~154 launches/6 syncs each) become ONE blocked TSQR pass (ts_factor_device, the OLS kernels) plus the explicit Q from the kept reflectors applied to the rank-guarded selection C = diag(R[j,j] != 0) (ts_apply_device_buf, C built on the device), ~25 launches/1 sync per orth. Cost: the m x l sketch is read three times at full width instead of being walked by 2,048 strided threads; latency-bound, so it holds for any tall sketch with l small. Bits change (one TSQR Householder pass instead of two sliced passes); the host column HostExec.orth takes the same route via ts_factor_host/ts_apply_host. A dependent column maps to an exactly zero Q column (randomized_svd's nlive compaction contract kept). Shapes outside the TSQR's (l > 512, m < l, Int32 overflow) keep the two-pass route on both columns; TS_SMEM_OK gates the device as for OLS. orth_diag (linalg.svd's U) and the FAST-only SVD_FAST_CHOLQR/DECOMP_FAST_ORTH_WS paths are untouched. more:tsvd does not share this route (covariance_eigh)."
   },
   "idn_kmeans_centroid_fold": {
    "define": "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF",

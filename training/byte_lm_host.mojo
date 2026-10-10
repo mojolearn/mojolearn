@@ -57,8 +57,8 @@ from gemm.host.neural_gemm import gemm_oracle
 from training.byte_lm_config import ByteConfig
 from training.chunked_lm_head_gemm_host import byte_chunked_head_forward
 from training.chunked_lm_head_host import chunked_lm_head_gemm_host_forward
-from training.neural_identical_experiments import IDN_ATTENTION_V2
-from transformer.impl.llama.attention_v2_model_host import attention_v2_host_forward
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 from training.byte_lm_host_kernels import (
     all_finite_span,
     ce_causal_mean_loss_fast,
@@ -452,42 +452,27 @@ def block_par(
             var rows = hi - lo
             var mchunk = mp[0].copy()  # empty: the fill is formed in the kernel
             var ctx = List[Float32](length=rows * qw, fill=Float32(0.0))
-            if IDN_ATTENTION_V2:
-                # Keep the existing host worker allocation. Each query chunk
-                # owns its rows; own0 preserves their absolute causal origin.
-                var qchunk = copy_rows(qtp[0], lo, hi, qw)
-                var nkv = nh // n_rep
-                var kp2 = List[Float32](length=nkv * s * hd, fill=Float32(0.0))
-                var vp2 = List[Float32](length=nkv * s * hd, fill=Float32(0.0))
-                for kh in range(nkv):
-                    var first_head = kh * n_rep
-                    for j in range(s):
-                        for d in range(hd):
-                            kp2[(kh * s + j) * hd + d] = kpk.unsafe_load(first_head * hd * s + d * s + j)
-                            vp2[(kh * s + j) * hd + d] = vpk.unsafe_load(first_head * s * hd + j * hd + d)
-                var av2 = attention_v2_host_forward(qchunk, kp2, vp2,
-                    1, rows, nh, nkv, s, hd, lo, 0, scale, diagnostic=False)
-                ctx = av2.output.copy()
-            else:
-                var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
-                var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
-                var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
-                var cell = List[Float32](length=rows * s, fill=Float32(0.0))
-                var aweights = List[Float32](length=rows * s, fill=Float32(0.0))
-                var qsp = qtp[0].unsafe_ptr()
-                var qmp = qmat.unsafe_ptr()
-                var kpp = kpack.unsafe_ptr()
-                var vpp = vpack.unsafe_ptr()
-                for h in range(nh):
-                    for qi in range(rows):
-                        for d in range(hd):
-                            qmp.unsafe_store(qi * hd + d, qsp.unsafe_load((lo + qi) * qw + h * hd + d))
-                    # this head's shared packs, a block copy each
-                    unsafe_memcpy(dest=kpp, src=kpk.unsafe_offset(h * hd * s), count=hd * s)
-                    unsafe_memcpy(dest=vpp, src=vpk.unsafe_offset(h * s * hd), count=s * hd)
-                    gemm_nt_rows(qmat, kpack, s, hd, 0, rows, cell)
-                    _softmax_head(cell, mchunk, rows, s, scale, aweights, lo)
-                    _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx, lo)
+            # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
+            # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
+            var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
+            var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
+            var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
+            var cell = List[Float32](length=rows * s, fill=Float32(0.0))
+            var aweights = List[Float32](length=rows * s, fill=Float32(0.0))
+            var qsp = qtp[0].unsafe_ptr()
+            var qmp = qmat.unsafe_ptr()
+            var kpp = kpack.unsafe_ptr()
+            var vpp = vpack.unsafe_ptr()
+            for h in range(nh):
+                for qi in range(rows):
+                    for d in range(hd):
+                        qmp.unsafe_store(qi * hd + d, qsp.unsafe_load((lo + qi) * qw + h * hd + d))
+                # this head's shared packs, a block copy each
+                unsafe_memcpy(dest=kpp, src=kpk.unsafe_offset(h * hd * s), count=hd * s)
+                unsafe_memcpy(dest=vpp, src=vpk.unsafe_offset(h * s * hd), count=s * hd)
+                gemm_nt_rows(qmat, kpack, s, hd, 0, rows, cell)
+                _softmax_head(cell, mchunk, rows, s, scale, aweights, lo)
+                _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx, lo)
             var xc = copy_rows(xp[0], lo, hi, dm)
             var o = List[Float32](length=rows * dm, fill=Float32(0.0))
             gemm_w(ctx, tp[][tb + 4], dm, qw, 0, rows, o)

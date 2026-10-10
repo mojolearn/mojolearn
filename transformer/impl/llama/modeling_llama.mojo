@@ -1636,8 +1636,8 @@ struct LlamaKVCache(Movable):
         self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
 
 
-from training.neural_identical_experiments import IDN_ATTENTION_V2
-from transformer.impl.llama.attention_v2_model_device import attention_v2_model_forward
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
 struct LlamaDeviceStages(Movable):
@@ -1726,7 +1726,6 @@ struct LlamaDeviceStages(Movable):
     """DEVIATION 3110: this layer's fused FORWARD refused once, so it is not
     launched again for the life of this struct. Latched, never cleared by a
     step; `reset` clears it because that is a fresh fixture."""
-    var attn_v2: Bool  # saved numerical profile; backward must consume the same graph
     var attn_materialized: Bool
     """Whether the LAST call's eager softmax weights are valid for backward.
     The eager path sets it; fused clears it. The byte trainer may release
@@ -1845,7 +1844,6 @@ struct LlamaDeviceStages(Movable):
         self.attn_forward_status = -1
         self.attn_fused_off = False
         self.attn_materialized = False
-        self.attn_v2 = False
         self.attn_estash_cells = 0
         self.attn_fwd_scan = AttnFwdScan()
 
@@ -1927,7 +1925,6 @@ struct LlamaDeviceStages(Movable):
         self.attn_forward_status = -1
         self.attn_fused_off = False
         self.attn_materialized = False
-        self.attn_v2 = False
         self.attn_estash_cells = 0
         self.attn_fwd_scan = AttnFwdScan()
         step_count_sync()
@@ -4122,27 +4119,9 @@ def attention_path_choice(plant_at: Int) -> Int:
     return ATTN_PATH_AUTO
 
 
-def _model_attention_v2_forward[diagnostic: Bool](
-    ctx: DeviceContext, mut stages: LlamaDeviceStages, b: Int, l: Int,
-    s: Int, pos0: Int, key_lo: Int, window: Int,
-) raises:
-    comptime if diagnostic:
-        ensure_attention_stage_capacity(ctx, stages, l, s)
-    var nh = stages.dims.n_heads
-    var nkv = stages.dims.n_kv
-    var hd = stages.dims.head_dim
-    step_count_launch()
-    attention_v2_model_forward[diagnostic](
-        ctx, stages.q_rope, stages.k_cache, stages.v_cache, stages.ctxv,
-        stages.amax, stages.denom, stages.scores, stages.masked,
-        stages.aexp, stages.weights, b, l, nh, nkv, s, hd,
-        pos0 - key_lo, window, llama_attention_scale(hd),
-    )
-    stages.attn_v2 = True
-    stages.attn_materialized = diagnostic
-    stages.attn_estash_cells = 0
-    stages.attn_fwd_scan.clear()
-    stages.attn_forward_status = FUSED_RAN
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
+# (online_tile32 attention v2; bytes lm-train-step NV/AMD 1.43x/1.56x slower, lm-forward 0.98x/1.04x, mean_nll same; nv2 v1229/v1231/v1232, amd a1555/a1556/a1557): _model_attention_v2_forward.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
 def eager_attention_forward(
@@ -4189,25 +4168,7 @@ def eager_attention_forward(
     # 4.86x/16.79x, lm-train-step 42.89x/40.18x, samba-forward 1.79x/4.79x, samba-train-step 1.64x/1.81x, transformer-forward
     # 5.48x/21.89x SLOWER (mean_nll not judged). Deleted (transformer/experiments/attention_summary_*.mojo,
     # summary_model*.mojo, the NN20 split-KV) and =1 refused; recoverable at main bc10b8b56.
-    stages.attn_v2 = False
-    comptime if IDN_ATTENTION_V2 and not BLOCK_ANY_SABOTAGE:
-        # Numeric-profile choice, independent of hardware and dimensions.
-        # Existing fixed15/softcap and planted diagnostics keep their existing
-        # specified graph on every column. Ordinary trace has complete V2 stages.
-        if not stages.int15_on and softcap == Float32(0.0) and len(plant_idx) == 0:
-            if materialize or trace.enabled:
-                _model_attention_v2_forward[True](ctx, stages, b, l, s, pos0, key_lo, window)
-            else:
-                _model_attention_v2_forward[False](ctx, stages, b, l, s, pos0, key_lo, window)
-            var cells_v2 = b * dims.n_heads * l * s
-            trace.record_device[DType.float32](ctx, prefix + ".attn.scores", stages.scores, cells_v2)
-            trace.record_device[DType.float32](ctx, prefix + ".attn.masked", stages.masked, cells_v2)
-            trace.record_device[DType.float32](ctx, prefix + ".attn.max", stages.amax, b * dims.n_heads * l)
-            trace.record_device[DType.float32](ctx, prefix + ".attn.exp", stages.aexp, cells_v2)
-            trace.record_device[DType.float32](ctx, prefix + ".attn.denom", stages.denom, b * dims.n_heads * l)
-            trace.record_device[DType.float32](ctx, prefix + ".attn.weights", stages.weights, cells_v2)
-            trace.record_device[DType.float32](ctx, prefix + ".attn.ctx", stages.ctxv, b * l * dims.q_width())
-            return FUSED_RAN
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
     var choice = attention_path_choice(plant_at)
     if choice == ATTN_PATH_AUTO and stages.attn_prefer_eager:
         choice = ATTN_PATH_EAGER
@@ -4325,9 +4286,7 @@ def ensure_attention_materialized(
     in `stages`; the output `ctxv` is rewritten with the same bits."""
     if stages.attn_materialized:
         return
-    if stages.attn_v2:
-        _model_attention_v2_forward[True](ctx, stages, b, l, s, pos0, key_lo, window)
-        return
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
     var off = IdentityTrace.disabled()
     var dims = stages.dims.copy()
     attention_eager_core(

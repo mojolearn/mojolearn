@@ -351,9 +351,6 @@
     "0": [],
     "1": [
      "MOJOLEARN_IDN_CE_TOKEN_FOLD=1"
-    ],
-    "2": [
-     "MOJOLEARN_IDN_CE_TOKEN_FOLD=2"
     ]
    },
    "default": "0",
@@ -366,8 +363,7 @@
    "bits_change": true,
    "status": "rewritten",
    "entries": [
-    "NN54",
-    "NI35"
+    "NN54"
    ],
    "board": "lm-train-step",
    "tags": [
@@ -375,10 +371,9 @@
    ],
    "arm_names": {
     "0": "gemm_ones_fold",
-    "1": "nn54_leaf128_tree",
-    "2": "ni35_token_tree256_v2"
+    "1": "nn54_leaf128_tree"
    },
-   "note": "Review said host-only; wrong: identical_ce_forward_into (GPU) already implements both arms, host column matches (byte_lm_host_kernels.mojo:1080-1084)."
+   "note": "Review said host-only; wrong: identical_ce_forward_into (GPU) already implements both arms, host column matches (byte_lm_host_kernels.mojo:1080-1084). Arm 2 (ni35_token_tree256_v2, MOJOLEARN_IDN_CE_TOKEN_FOLD=2) deleted 2026-10-10 by lane grid-act-15 (noise); =2 refused; see removed."
   },
   "ce_grad_fused": {
    "define": "MOJOLEARN_IDN_CE_GRAD_FUSED",
@@ -1698,7 +1693,7 @@
   },
   {
    "define": "MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2",
-   "reason": "now MOJOLEARN_IDN_CE_TOKEN_FOLD=2"
+   "reason": "was MOJOLEARN_IDN_CE_TOKEN_FOLD=2, itself removed 2026-10-10 (lane grid-act-15, noise)"
   },
   {
    "define": "MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION",
@@ -1771,6 +1766,12 @@
    "define": "MOJOLEARN_NI14_TILED_COL2IM",
    "control": "ni14_tiled_col2im",
    "reason": "MERGED into ni14_col2im (-D MOJOLEARN_NI14_COL2IM=1|2) by lane/grid-prune 2026-10-07; old define refused in core/six_lane_experiment_guards.mojo"
+  },
+  {
+   "define": "MOJOLEARN_IDN_CE_TOKEN_FOLD=2",
+   "control": "ce_token_fold",
+   "arm": "2",
+   "reason": "DELETED 2026-10-10 (lane grid-act-15, deletion 3034789a2): noise. ni35_token_tree256_v2/default ms ratio NV/AMD: lm-forward 0.99/1.01 (48.55 -> 48.11 NV, 34.67 -> 34.93 AMD; avg 1.00), lm-train-step 1.01/1.00 (35.43 -> 35.86 NV, 42.84 -> 42.88 AMD; avg 1.01); mean_nll 9.018733 and train loss_last 8.418446 unchanged. main ca25d9321, byte-LM bytes profile, one run per arm, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557 (default v1232/a1557); identity: every arm's NV hash == AMD hash. training/loss_reduction_v2.mojo and the ce_token_tree_v2 kernels deleted; arms 0|1 stay. Code recoverable at main ca25d9321; =2 refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch."
   }
  ],
  "notes": {

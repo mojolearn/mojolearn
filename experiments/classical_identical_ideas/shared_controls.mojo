@@ -23,8 +23,8 @@ comptime C01_LEAF = _C01_LEAF_RAW if CLASSICAL_IDENTICAL else 32
 comptime C01_MEAN = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C01_MEAN"]()
 comptime C02_STATS_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C02_STATS_PAIR"]()
 comptime C03_FINITE_EXTREMA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA"]()
-# C04 is split (lane classical-decomp, 2026-10-07): its PCA use is the =4 arm of
-# MOJOLEARN_CLASSICAL_PCA_COV (linear_controls.mojo); C04_LDA is the x_prep
+# C04 is split (lane classical-decomp, 2026-10-07): its PCA use was the =4 arm of
+# MOJOLEARN_CLASSICAL_PCA_COV (deleted 2026-10-10, lane/grid-act-6); C04_LDA is the x_prep
 # `centered_matmul` op (LDA transform, solver != eigen), behavior unchanged.
 # C04_LDA (lane classical-nbda, 2026-10-07): C04's LDA half, split from
 # C04_LOAD_CENTER (whose PCA half lane L2 owns). LDA `transform` (solver

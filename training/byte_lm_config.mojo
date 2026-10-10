@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only shape and registry for the configured decoder language model."""
-from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2, IDN_CHUNKED_LM_HEAD_V2, IDN_ATTENTION_V2
+from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 from training.neural_arithmetic_profile import neural_arithmetic_suffix
@@ -143,17 +143,10 @@ struct ByteConfig(Copyable, Movable):
 
     def profile(self) raises -> String:
         self.validate()
-        # NI35 owns a different numerical loss profile. The chunked head
-        # already has its independent V2 loss graph and does not call CE L12.
-        var loss_version = String("-ce-token-tree256-v2") if IDN_LOSS_TOKEN_TREE_V2 and not self.chunked_lm_head_v2 else String("")
-        # NI08/I04 are new GEMM graphs on every column. Keep checkpoint
-        # identity distinct from leaf128 even when architecture is unchanged.
-        var attention_version = String("-attention-online-tile32-v2") if IDN_ATTENTION_V2 else String("")
-        var gemm_version = String("") if CONTRACT_K_LEAF_MIN == 128 else String("-gemm-leaf") + String(CONTRACT_K_LEAF_MIN)
         if (not self.chunked_lm_head_v2 and self.batch == 2 and self.length == 32 and self.d_model == 32
             and self.n_heads == 4 and self.n_kv == 2 and self.head_dim == 8
             and self.intermediate == 64 and self.n_layers == 2 and self.vocab_size == 256):
-            return String(BYTE_DEFAULT_PROFILE) + neural_arithmetic_suffix() + loss_version + gemm_version + attention_version
+            return String(BYTE_DEFAULT_PROFILE) + byte_lm_arithmetic_suffix()
         var suffix = String("-v256-blocks2.fp32.v2")
         if self.n_layers != 2 or self.vocab_size != 256:
             suffix = String("-v") + String(self.vocab_size) + "-blocks" + String(self.n_layers) + ".fp32.v3"
@@ -162,4 +155,41 @@ struct ByteConfig(Copyable, Movable):
             + "-l" + String(self.length) + "-d" + String(self.d_model)
             + "-h" + String(self.n_heads) + "-kv" + String(self.n_kv)
             + "-hd" + String(self.head_dim) + "-ff" + String(self.intermediate)
-            + suffix + head + neural_arithmetic_suffix() + loss_version + gemm_version + attention_version)
+            + suffix + head + byte_lm_arithmetic_suffix())
+
+
+def byte_lm_arithmetic_suffix() -> String:
+    """Every arithmetic tag a byte-LM binary appends to its profile, built
+    from the compile-time switches of THIS binary (lane
+    bytelm-profile-harness, 2026-10-10).
+
+    The bindings return this from `byte_lm_arithmetic_suffix` /
+    `byte_lm_host_arithmetic_suffix`, and the Python loader
+    (_byte_lm_impl._load, _byte_lm_host) accepts exactly
+    base PROFILE + this suffix. Before, the bindings returned only
+    `neural_arithmetic_suffix()` while `ByteConfig.profile()` also appended
+    the CE token-tree, GEMM-leaf and online-tile32 attention tags, so a
+    grid A/B arm built with MOJOLEARN_IDN_CE_TOKEN_FOLD=2 or
+    MOJOLEARN_IDN_ATTN_SOFTMAX=2 (freeze 20261010, AMD CMD lines) was
+    refused with "Byte-LM requires the exact native profile". (Both of those
+    arms were deleted 2026-10-10 as A/B losers, so their tags are now always
+    empty; see docs/TOMBSTONES.md.) The tags stay in the profile: an arm that
+    changes bits must be carried by a checkpoint, and a binary without it
+    must refuse it. What identifies the binary
+    (base profile version, numeric mode, vendor) is still checked
+    separately and still refuses a real mismatch.
+
+    A bit-changing tag (the CE token-tree tag, while it existed) is appended
+    for every shape, the chunked LM head included (it has its own V2 loss graph and never calls CE L12): the
+    same rule as `neural_arithmetic_suffix`, where a graph the binary was
+    built with belongs to the serialized arithmetic version even when one
+    model does not use it. A no-argument suffix keeps the loader check
+    shape-free."""
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
+    var loss_version = String("")
+    # NI08/I04 are new GEMM graphs on every column. Keep checkpoint
+    # identity distinct from leaf128 even when architecture is unchanged.
+    var gemm_version = String("") if CONTRACT_K_LEAF_MIN == 128 else String("-gemm-leaf") + String(CONTRACT_K_LEAF_MIN)
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
+    var attention_version = String("")
+    return neural_arithmetic_suffix() + loss_version + gemm_version + attention_version

@@ -167,61 +167,8 @@ def host_bm_column_mean(x: List[Float32], n: Int, d: Int) -> List[Float32]:
 
 # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
 # istella 2.28x/1.27x SLOWER, taxi 0.90x/0.78x faster (dimension-dependent; combined 1.195x SLOWER) -> deleted
-# (c04 stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+# (c04 deleted 2026-10-10, lane/grid-act-6). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 
 
-def _host_tsvd_value(x: List[Float32], v: List[Float32], r: Int, d: Int, j: Int) -> Float32:
-    if j < d:
-        return ftz(x[r * d + j])
-    var cc = j - d
-    var acc = Float32(0.0)
-    for f in range(d):
-        acc = bm_fma(ftz(x[r * d + f]), ftz(v[cc * d + f]), acc)
-    return acc
-
-
-def host_bm_tsvd_variances(x: List[Float32], v: List[Float32], n: Int, d: Int, nc: Int) -> List[Float32]:
-    """`bm_tsvd_variances`: [var(X) | var(X V^T)], ddof 0."""
-    var m = d + nc
-    var leaf = bm_onepass_leaf_rows(n, m)
-    var leaves = bm_leaf_count(n, leaf)
-    var lmean = List[Float32](length=max(1, leaves * m), fill=Float32(0.0))
-    var lm2 = List[Float32](length=max(1, leaves * m), fill=Float32(0.0))
-    var chains = bm_sub_chains(m)
-    for k in range(leaves):
-        var r0 = k * leaf
-        var r1 = min(n, r0 + leaf)
-        var cnt = Float32(r1 - r0)
-        for j in range(m):
-            var mj: Float32
-            var tot2 = Float32(0.0)
-            if m <= BM_TPB:
-                var tot = Float32(0.0)
-                for s in range(chains):
-                    var acc = Float32(0.0)
-                    var r = r0 + s
-                    while r < r1:
-                        acc = bm_add(acc, _host_tsvd_value(x, v, r, d, j))
-                        r += chains
-                    tot = acc if s == 0 else bm_add(tot, acc)
-                mj = bm_div(tot, cnt)
-                for s in range(chains):
-                    var acc2 = Float32(0.0)
-                    var r = r0 + s
-                    while r < r1:
-                        var cv = bm_sub(_host_tsvd_value(x, v, r, d, j), mj)
-                        acc2 = bm_fma(cv, cv, acc2)
-                        r += chains
-                    tot2 = acc2 if s == 0 else bm_add(tot2, acc2)
-            else:
-                var acc = Float32(0.0)
-                for r in range(r0, r1):
-                    acc = bm_add(acc, _host_tsvd_value(x, v, r, d, j))
-                mj = bm_div(acc, cnt)
-                for r in range(r0, r1):
-                    var cv = bm_sub(_host_tsvd_value(x, v, r, d, j), mj)
-                    tot2 = bm_fma(cv, cv, tot2)
-            lmean[k * m + j] = mj
-            lm2[k * m + j] = tot2
-    var unused = List[Float32]()
-    return host_bm_chan_fold(lm2^, lmean^, leaves, m, True, n, leaf, n, unused)
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.

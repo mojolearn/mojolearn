@@ -77,17 +77,13 @@
   "neural:transformer-forward": {
    "binding": "_mojolearn_transformer",
    "route": "TransformerBlock.forward -> llama_decoder_layer -> eager attention (modeling_llama.mojo eager_attention_forward; the NN20 summary route was deleted 2026-10-08, lane grid-act-3)",
-   "controls": [
-    "attn_softmax"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "neural:samba-forward": {
    "binding": "_mojolearn_transformer",
    "route": "SambaStack attention layers through the transformer binding -> eager attention (the NN20 summary route was deleted 2026-10-08, lane grid-act-3)",
-   "controls": [
-    "attn_softmax"
-   ],
+   "controls": [],
    "interaction_groups": []
   }
  },

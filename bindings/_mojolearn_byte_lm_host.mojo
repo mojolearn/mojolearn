@@ -36,8 +36,7 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
 # gemm_oracle, so a build carrying it computes wrong answers and must read
 # back as a sabotage build too.
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
-from training.neural_arithmetic_profile import neural_arithmetic_suffix
-from training.byte_lm_config import ByteConfig
+from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
 from training.byte_lm_host import (
     byte_host_logits,
     byte_host_logits_threaded,
@@ -367,7 +366,11 @@ def cast_f64_to_f32_binding(src_addr: PythonObject, dst_addr: PythonObject,
 
 
 def byte_lm_host_arithmetic_suffix_binding() raises -> PythonObject:
-    return PythonObject(neural_arithmetic_suffix())
+    # The whole byte-LM arithmetic suffix that ByteConfig.profile() appends
+    # (neural + CE token-tree + GEMM leaf + attention tags), not only the
+    # neural part: the loader checks profile == PROFILE + this, so an A/B arm
+    # build (e.g. MOJOLEARN_IDN_GEMM_LEAF) loads (bytelm-profile-harness).
+    return PythonObject(byte_lm_arithmetic_suffix())
 
 
 @export
