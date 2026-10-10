@@ -3,6 +3,40 @@
  "entries": [
   {
    "column": "nvidia-l40s",
+   "failed": true,
+   "race": "trees/gbdt-categorical/taxi/rows=full",
+   "reason": "failed run (REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)) never replaces an ok cell",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-08T13:42:40Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0320",
+    "kind": "gridbb",
+    "median_ms": null,
+    "reason": "REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)",
+    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
+    "status": "REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)",
+    "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T23:04:22Z",
+    "digest": "0fe88c6449ff240a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1304",
+    "kind": "gridbb",
+    "median_ms": 7325.823,
+    "reason": null,
+    "sha": "cd10f284dfb2df1f75f038132eee420256ed7015",
+    "status": "ok",
+    "version": "mojolearn 0.8.38 (source build, main@cd10f284d)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
    "failed": false,
    "race": "algos/adafactor/synthetic/rows=full",
    "reason": "same commit date, earlier job",
@@ -7449,27 +7483,6 @@
   },
   {
    "column": "nvidia-l40s",
-   "failed": true,
-   "race": "trees/gbdt-categorical/taxi/rows=full",
-   "reason": "failed run (REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)) never replaces an ok cell; no ok run of this race: FAILED table",
-   "replaced": {
-    "box": "nv",
-    "commit_date": "2026-10-08T13:42:40Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0320",
-    "kind": "gridbb",
-    "median_ms": null,
-    "reason": "REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)",
-    "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
-    "status": "REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)",
-    "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
-   },
-   "replaced_by": null
-  },
-  {
-   "column": "nvidia-l40s",
    "failed": false,
    "race": "trees/gbdt-depthwise/istella/rows=full",
    "reason": "older commit",
@@ -7826,5 +7839,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-10T23:05:32Z"
+ "updated": "2026-10-10T23:44:51Z"
 }

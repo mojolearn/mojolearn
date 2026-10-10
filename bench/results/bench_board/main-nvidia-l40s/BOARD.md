@@ -1,14 +1,14 @@
 # mojolearn benchmark board
 
-Generated 2026-10-10T23:05:32Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-10T23:44:52Z from `board.json` (schema `mojolearn-bench-board/1`).
 
-> MAIN BOARD nvidia-l40s, version label main@ca25d9321. Unreleased: not reproducible by pip install; the release boards are the reference.
+> MAIN BOARD nvidia-l40s, version label main@cd10f284d. Unreleased: not reproducible by pip install; the release boards are the reference.
 
-> Cells: 191 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@ca25d9321 (2026-10-10T19:37:56Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).
+> Cells: 192 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@cd10f284d (2026-10-10T23:04:22Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 228 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 1 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
-> Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 80, n/a 111).
+> Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 81, n/a 111).
 
 > Opponents: copied from the stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 2 races.
 
@@ -16,17 +16,14 @@ Generated 2026-10-10T23:05:32Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Identity
 
-Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 80, n/a 111.
+Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 81, n/a 111.
 
 DIFFER: none.
 
 ## FAILED
 
-Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 1 failed runs.
+Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 0 failed runs.
 
-| lane | dataset | commit | hardware | version | box/job | reason | ok cell on the board |
-|---|---|---|---|---|---|---|---|
-| gbdt-categorical | taxi | main@de2b2b739 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.37 (source build, main@de2b2b739) | nv/n0320 | REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO) | none |
 
 ## Box
 
@@ -39,8 +36,8 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | memory bytes | - |
 | OS | - |
 | Python | - |
-| mojolearn | main@ca25d9321 (wheel none (unreleased; built from source at each cell's commit), sha256 -) |
-| script commit | ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb |
+| mojolearn | main@cd10f284d (wheel none (unreleased; built from source at each cell's commit), sha256 -) |
+| script commit | cd10f284dfb2df1f75f038132eee420256ed7015 |
 | patch sync | - |
 | modes | identical |
 | rounds | 1 timed after 1 warm-up, arms interleaved round by round |
@@ -63,7 +60,7 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 
 ## Coverage
 
-Races: 191 planned, 191 done, 0 failed, 0 unsupported, 0 pending. Cells: 732 (REFUSED 25, ok 707).
+Races: 192 planned, 192 done, 0 failed, 0 unsupported, 0 pending. Cells: 739 (REFUSED 28, ok 711).
 
 ## Quality at a glance
 
@@ -332,6 +329,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | trees | et | istella | logloss (lower is better) | - | 0.189989 | sklearn-et-cpu 0.190177 |
 | trees | et | taxi | auc (higher is better) | - | 0.618907 | sklearn-et-cpu 0.619262 |
 | trees | et | taxi | logloss (lower is better) | - | 0.526142 | sklearn-et-cpu 0.525951 |
+| trees | gbdt-categorical | taxi | auc (higher is better) | - | 0.631297 | catboost-gpu 0.630387; xgboost-gpu 0.631978; catboost-cpu -; xgboost-cpu -; lightgbm-cpu -; lightgbm-cuda 0.500000 |
+| trees | gbdt-categorical | taxi | logloss (lower is better) | - | 0.528285 | catboost-gpu 0.528535; xgboost-gpu 0.528548; catboost-cpu -; xgboost-cpu -; lightgbm-cpu -; lightgbm-cuda 0.554692 |
 | trees | gbdt-depthwise | istella | auc (higher is better) | - | 0.983304 | catboost-gpu 0.983152; xgboost-gpu 0.983622; catboost-cpu -; xgboost-cpu - |
 | trees | gbdt-depthwise | istella | logloss (lower is better) | - | 0.156072 | catboost-gpu 0.156748; xgboost-gpu 0.149263; catboost-cpu -; xgboost-cpu - |
 | trees | gbdt-depthwise | taxi | auc (higher is better) | - | 0.632205 | catboost-gpu 0.632335; xgboost-gpu 0.630969; catboost-cpu -; xgboost-cpu - |
@@ -450,6 +449,28 @@ memory, ours: host not sampled; GPU not sampled
 memory, sklearn-et-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
 
 config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### gbdt-categorical / taxi (rows full, shape taxicat-4110786x16)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1304)`, ran on NVIDIA L40S (nv2, RunPod) job v1304
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | mojolearn 0.8.38 (source build, main@cd10f284d) | identical | 7325.8 | 7325.8..7325.8 | 1 | - | - | 7325.8 | - | - (stored whole) | - | - | - | - | auc=0.631297, logloss=0.528285 | - | main board, one scored run | - | ok (main@cd10f284d nv2/v1304 2026-10-10; identity vs amd-mi325x: MATCH) |
+| catboost-gpu | catboost | gpu | NVIDIA L40S (host 24a11adce16e) | catboost 1.2.10 | opponent | 26444.4 | 26444.4..26444.4 | 1 | 0.277 | - | 26444.4 | - | - (stored whole) | 0.277 (whole/whole) | - | 4571.4 | 498.0 | auc=0.630387, logloss=0.528535 | yes | COMPARABLE | - | ok (copied from opponents-specific-20261006; measured this run) |
+| xgboost-gpu | xgboost | gpu | NVIDIA L40S (host 24a11adce16e) | xgboost 3.2.0 | opponent | 13662.3 | 13662.3..13662.3 | 1 | 0.536 | - | 13662.3 | - | - (stored whole) | 0.536 (whole/whole) | - | 1886.0 | 498.0 | auc=0.631978, logloss=0.528548 | yes | COMPARABLE | - | ok (copied from opponents-specific-20261006; measured this run) |
+| catboost-cpu | catboost | cpu | CPU AMD EPYC 9554 64-Core Processor (host 24a11adce16e, NVIDIA L40S box) | catboost 1.2.10 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | COMPARABLE | - | REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against) (copied from opponents-specific-20261006; measured this run) |
+| xgboost-cpu | xgboost | cpu | CPU AMD EPYC 9554 64-Core Processor (host 24a11adce16e, NVIDIA L40S box) | xgboost 3.2.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | COMPARABLE | - | REFUSED(GPU-PATH-ONLY: xgboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against ) (copied from opponents-specific-20261006; measured this run) |
+| lightgbm-cpu | lightgbm | cpu | CPU AMD EPYC 9554 64-Core Processor (host 24a11adce16e, NVIDIA L40S box) | lightgbm 4.7.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | COMPARABLE | - | REFUSED(GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against) (copied from opponents-specific-20261006; measured this run) |
+| lightgbm-cuda | lightgbm | gpu | NVIDIA L40S (host 24a11adce16e) | lightgbm 4.7.0 | opponent | 1636.8 | 1636.8..1636.8 | 1 | 4.476 | - | 1636.8 | - | - (stored whole) | 4.476 (whole/whole) | - | 1321.9 | 546.0 | auc=0.500000, logloss=0.554692 | yes | UNKNOWN | - | ok (copied from opponents-specific-20261006; measured this run) |
+
+memory, ours, catboost-cpu, xgboost-cpu, lightgbm-cpu: host not sampled; GPU not sampled
+
+memory, catboost-gpu, xgboost-gpu, lightgbm-cuda: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+
+config: NVIDIA gbm-bench, xgb/lgbm/cat shared_params, ntrees 500 (binary task) (https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 

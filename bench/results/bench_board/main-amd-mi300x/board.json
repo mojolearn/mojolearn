@@ -55,7 +55,7 @@
     "smoke": false,
     "vendor": "amd"
   },
-  "created": "2026-10-10T23:05:32Z",
+  "created": "2026-10-10T23:44:51Z",
   "main_board": {
     "backfill": {
       "filled": {
@@ -76,8 +76,8 @@
       "n/a": 1
     },
     "inputs": {
-      "branch": "main",
-      "generated": "2026-10-10T23:05:32Z",
+      "branch": "board-failed-cells",
+      "generated": "2026-10-10T23:44:51Z",
       "grid_logs": [
         "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
         "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -180,7 +180,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@8d5855b83 amd2/b0002 2026-10-10; identity vs the nvidia columns: n/a",
           "status": "ok",
@@ -219,5 +219,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-10T23:05:32Z"
+  "updated": "2026-10-10T23:44:52Z"
 }

@@ -1,16 +1,16 @@
 {
   "board_notes": [
-    "MAIN BOARD nvidia-l40s, version label main@ca25d9321. Unreleased: not reproducible by pip install; the release boards are the reference.",
-    "Cells: 191 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@ca25d9321 (2026-10-10T19:37:56Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).",
-    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 228 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
-    "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 80, n/a 111).",
+    "MAIN BOARD nvidia-l40s, version label main@cd10f284d. Unreleased: not reproducible by pip install; the release boards are the reference.",
+    "Cells: 192 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@cd10f284d (2026-10-10T23:04:22Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).",
+    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 1 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
+    "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 81, n/a 111).",
     "Opponents: copied from the stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 2 races.",
     "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax. A cell of ours whose output hash equals a copied opponent's shows quality identical_to=<arm> (the same bits) where the own-host reference gave none."
   ],
   "board_sections": [
     {
       "lines": [
-        "Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 80, n/a 111.",
+        "Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 81, n/a 111.",
         "",
         "DIFFER: none."
       ],
@@ -18,11 +18,8 @@
     },
     {
       "lines": [
-        "Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 1 failed runs.",
-        "",
-        "| lane | dataset | commit | hardware | version | box/job | reason | ok cell on the board |",
-        "|---|---|---|---|---|---|---|---|",
-        "| gbdt-categorical | taxi | main@de2b2b739 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.37 (source build, main@de2b2b739) | nv/n0320 | REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO) | none |"
+        "Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 0 failed runs.",
+        ""
       ],
       "title": "FAILED"
     }
@@ -37,14 +34,14 @@
       "hostname": "NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod)"
     },
     "mojolearn": {
-      "version": "main@ca25d9321",
+      "version": "main@cd10f284d",
       "wheel": {
         "file": "none (unreleased; built from source at each cell's commit)",
         "sha256": "-"
       }
     },
     "repo": {
-      "commit": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb"
+      "commit": "cd10f284dfb2df1f75f038132eee420256ed7015"
     }
   },
   "config": {
@@ -62,16 +59,16 @@
     "smoke": false,
     "vendor": "nvidia"
   },
-  "created": "2026-10-10T23:05:32Z",
+  "created": "2026-10-10T23:44:51Z",
   "main_board": {
     "backfill": {
       "filled": {
-        "hardware<-box table": 191,
-        "hardware<-cell record": 485,
-        "hardware<-source board box": 56,
-        "version<-cell record": 519,
-        "version<-git _version.py": 191,
-        "version<-source board box packages": 22
+        "hardware<-box table": 192,
+        "hardware<-cell record": 488,
+        "hardware<-source board box": 59,
+        "version<-cell record": 522,
+        "version<-git _version.py": 192,
+        "version<-source board box packages": 25
       },
       "not_comparable_rows": 0,
       "unknown_rows": []
@@ -82,43 +79,15 @@
     ],
     "column": "nvidia-l40s",
     "differ": [],
-    "failed_observations": [
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791466960,
-        "dataset": "taxi",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
-        "family": "trees",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": false,
-        "job": "n0320",
-        "kind": "gridbb",
-        "lane": "gbdt-categorical",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "trees/gbdt-categorical/taxi/rows=full",
-        "reason": "REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)",
-        "sha": "de2b2b739afbcc9f94f5efc4de8692cc0c601151",
-        "status": "REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)",
-        "status_raw": "REFUSED(Exception_during_warm-up:_At_max/mojo/max/gpu/host/device_context.mojo:4073:35:_CUDA_call_failed:_CUDA_ERROR_OUT_OF_MEMO)",
-        "tag": "flips1.trees.nv.bb",
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
-      }
-    ],
-    "failed_runs": 1,
+    "failed_observations": [],
+    "failed_runs": 0,
     "identity": {
-      "MATCH": 80,
+      "MATCH": 81,
       "n/a": 111
     },
     "inputs": {
-      "branch": "main",
-      "generated": "2026-10-10T23:05:32Z",
+      "branch": "board-failed-cells",
+      "generated": "2026-10-10T23:44:51Z",
       "grid_logs": [
         "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
         "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -133,8 +102,8 @@
         "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-results.txt"
       ]
     },
-    "label": "main@ca25d9321",
-    "newest_sha": "ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb",
+    "label": "main@cd10f284d",
+    "newest_sha": "cd10f284dfb2df1f75f038132eee420256ed7015",
     "oldest_sha": "89485bc9624fad07097aa6671c5b162b5221ae99",
     "opponent_boards": [
       {
@@ -150,7 +119,7 @@
         "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/nvidia-l40s/board/board.json"
       }
     ],
-    "replaced": 228,
+    "replaced": 1,
     "withheld_opponents": 2
   },
   "main_board_schema": "mojolearn-main-board/1",
@@ -333,6 +302,7 @@
     "neural/transformer-forward/gaussian/shape=full",
     "trees/et/istella/rows=full",
     "trees/et/taxi/rows=full",
+    "trees/gbdt-categorical/taxi/rows=full",
     "trees/gbdt-depthwise/istella/rows=full",
     "trees/gbdt-depthwise/taxi/rows=full",
     "trees/gbdt-lossguide/istella/rows=full",
@@ -424,7 +394,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1065 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -811,7 +781,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1056 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -1180,7 +1150,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1056 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -1568,7 +1538,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -2377,7 +2347,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -3189,7 +3159,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -4005,7 +3975,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1080 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -4823,7 +4793,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -5196,7 +5166,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -5567,7 +5537,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -5925,7 +5895,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -6285,7 +6255,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -6661,7 +6631,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -7035,7 +7005,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0519 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -7485,7 +7455,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -8455,7 +8425,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -8837,7 +8807,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -9220,7 +9190,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@42d1e42c6 nv/n0532 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -9601,7 +9571,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0523 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -9950,7 +9920,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0523 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -10299,7 +10269,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -11131,7 +11101,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1080 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -11963,7 +11933,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0610 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -12324,7 +12294,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0610 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -12681,7 +12651,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1056 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -13240,7 +13210,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0519 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -13696,7 +13666,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1080 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -14074,7 +14044,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1228 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -14358,7 +14328,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1228 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -14639,7 +14609,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@6b882cf81 nv/n0668 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -15001,7 +14971,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@6b882cf81 nv/n0668 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -15361,7 +15331,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -15738,7 +15708,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -16115,7 +16085,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -16932,7 +16902,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -17750,7 +17720,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -18531,7 +18501,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -19307,7 +19277,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -20131,7 +20101,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -20958,7 +20928,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -21919,7 +21889,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -22882,7 +22852,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -23857,7 +23827,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -24827,7 +24797,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -25197,7 +25167,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -25568,7 +25538,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1020 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -25931,7 +25901,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1020 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -26303,7 +26273,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -26668,7 +26638,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -27043,7 +27013,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@de2b2b739 nv/n0318 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -27412,7 +27382,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -27793,7 +27763,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -28175,7 +28145,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@03b648834 nv/n0583 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -28549,7 +28519,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@03b648834 nv/n0583 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -28923,7 +28893,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1020 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -29187,7 +29157,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1020 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -29450,7 +29420,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -29811,7 +29781,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -30172,7 +30142,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -30530,7 +30500,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -30889,7 +30859,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -31038,7 +31008,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -31409,7 +31379,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -31781,7 +31751,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1228 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -32062,7 +32032,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1228 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -32338,7 +32308,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1080 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -33143,7 +33113,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0607 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -33391,7 +33361,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0607 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -33638,7 +33608,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@42d1e42c6 nv/n0526 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -33785,7 +33755,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0523 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -34144,7 +34114,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0523 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -34503,7 +34473,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -35464,7 +35434,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -36427,7 +36397,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -37402,7 +37372,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -38373,7 +38343,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0521 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -38819,7 +38789,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0521 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -39264,7 +39234,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0519 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -39705,7 +39675,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0519 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -40150,7 +40120,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -40502,7 +40472,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -40859,7 +40829,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -41668,7 +41638,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -42472,7 +42442,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1080 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -43291,7 +43261,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -43670,7 +43640,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -44050,7 +44020,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@42d1e42c6 nv/n0532 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -44427,7 +44397,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1056 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -44816,7 +44786,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -45174,7 +45144,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -45532,7 +45502,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0609 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -45896,7 +45866,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0609 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -46260,7 +46230,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0610 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -46506,7 +46476,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0610 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -46752,7 +46722,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0609 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -47001,7 +46971,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0609 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -47251,7 +47221,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0523 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -47618,7 +47588,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0523 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -47985,7 +47955,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@03b648834 nv/n0583 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -48353,7 +48323,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@03b648834 nv/n0583 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -48720,7 +48690,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -49094,7 +49064,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -49468,7 +49438,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@de2b2b739 nv/n0318 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -49830,7 +49800,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0521 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -50284,7 +50254,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0521 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -50742,7 +50712,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@de2b2b739 nv/n0328 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -51008,7 +50978,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@de2b2b739 nv/n0328 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -51270,7 +51240,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1228 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -51632,7 +51602,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1228 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -51993,7 +51963,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1080 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -52780,7 +52750,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0609 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -53050,7 +53020,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0609 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -53316,7 +53286,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1056 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -53695,7 +53665,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -54663,7 +54633,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -55633,7 +55603,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -56615,7 +56585,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1091 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -57592,7 +57562,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -57968,7 +57938,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -58344,7 +58314,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0606 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -58779,7 +58749,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0606 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -59218,7 +59188,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -59657,7 +59627,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -60092,7 +60062,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -60462,7 +60432,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -60832,7 +60802,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -61215,7 +61185,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0314 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -61598,7 +61568,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -61949,7 +61919,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -62303,7 +62273,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0521 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -62762,7 +62732,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@4df610f3b nv/n0521 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -63223,7 +63193,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@89485bc96 nv/n0313 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -63610,7 +63580,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0609 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -63994,7 +63964,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0609 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -64378,7 +64348,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0610 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -64732,7 +64702,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@d3c0fd72b nv/n0610 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -65087,7 +65057,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@42d1e42c6 nv/n0530 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -65702,7 +65672,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@42d1e42c6 nv/n0530 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -66316,7 +66286,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1051 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -66719,7 +66689,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (algos)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1051 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -67127,7 +67097,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1234 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -67358,7 +67328,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1234 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -67589,7 +67559,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -67825,7 +67795,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -68061,7 +68031,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -68393,7 +68363,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -68722,7 +68692,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1079 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -69048,7 +69018,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1079 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -69376,7 +69346,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1064 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -69797,7 +69767,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1064 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -70215,7 +70185,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@a8e0548a5 nv2/v1226 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -70536,7 +70506,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@a8e0548a5 nv2/v1226 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -70861,7 +70831,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -71100,7 +71070,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -71339,7 +71309,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@de2b2b739 nv/n0329 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -71470,7 +71440,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@de2b2b739 nv/n0329 2026-10-08; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -71599,7 +71569,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -71827,7 +71797,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1023 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -72056,7 +72026,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1079 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -72293,7 +72263,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca8ea1f8d nv2/v1079 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -72531,7 +72501,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -72773,7 +72743,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@0a7b206f1 nv2/v1021 2026-10-09; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -73014,7 +72984,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1064 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -73250,7 +73220,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1064 2026-10-10; identity vs the amd columns: n/a",
           "status": "ok",
@@ -73485,7 +73455,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@a8e0548a5 nv2/v1226 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -73716,7 +73686,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@a8e0548a5 nv2/v1226 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -73945,7 +73915,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1049 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -74693,7 +74663,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1232 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -75445,7 +75415,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@ca25d9321 nv2/v1232 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -76308,7 +76278,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v0999 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -76951,7 +76921,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v0999 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -77909,7 +77879,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v0999 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -78867,7 +78837,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@432d6e8ff nv/n0664 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -79735,7 +79705,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1049 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -80529,7 +80499,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1049 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -81399,7 +81369,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9f83ea479 nv2/v1049 2026-10-10; identity vs amd-mi325x: MATCH",
           "status": "ok",
@@ -82160,7 +82130,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v1008 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -82381,7 +82351,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v1008 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -82524,6 +82494,905 @@
       "shape": null,
       "status": "done"
     },
+    "trees/gbdt-categorical/taxi/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware_key": "NVIDIA L40S",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "0fe88c6449ff240a",
+          "hash_stable": null,
+          "lane": "gbdt-categorical",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "nv2",
+            "commit_date": "2026-10-10T23:04:22Z",
+            "identity": {
+              "other_column": "amd-mi325x",
+              "other_digest": "0fe88c6449ff240a",
+              "other_hardware": "AMD Instinct MI325X (amd, DO)",
+              "other_job": "amd/a1588",
+              "status": "MATCH"
+            },
+            "job": "v1304",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "nv2",
+              "column": "nvidia-l40s",
+              "comparability": {},
+              "ct": 1791673462,
+              "dataset": "taxi",
+              "digest": "0fe88c6449ff240a",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+              "family": "trees",
+              "gpu_recorded": null,
+              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "infra": false,
+              "job": "v1304",
+              "kind": "gridbb",
+              "lane": "gbdt-categorical",
+              "measured": null,
+              "median_ms": 7325.823,
+              "quality": {
+                "auc": 0.631297,
+                "logloss": 0.528285
+              },
+              "race_id": "trees/gbdt-categorical/taxi/rows=full",
+              "reason": null,
+              "sha": "cd10f284dfb2df1f75f038132eee420256ed7015",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": "f3.gbdtcat.nv2",
+              "vendor": "nvidia",
+              "version": "mojolearn 0.8.38 (source build, main@cd10f284d)"
+            },
+            "sha": "cd10f284dfb2df1f75f038132eee420256ed7015"
+          },
+          "max_ms": 7325.823,
+          "median_ms": 7325.823,
+          "memory": {},
+          "min_ms": 7325.823,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "auc": 0.631297,
+            "logloss": 0.528285
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (gridbb)"
+          },
+          "source": "main@cd10f284d nv2/v1304 2026-10-10; identity vs amd-mi325x: MATCH",
+          "status": "ok",
+          "times_ms": [
+            7325.823
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.38 (source build, main@cd10f284d)",
+          "version_source": "box table (job nv2/v1304)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "catboost-gpu",
+          "comparability": {
+            "fit_verdict": "COMPARABLE",
+            "fit_verdict_line": "lane=gbdt-categorical arms=catboost-gpu,xgboost-gpu leaves=catboost-gpu:96634,xgboost-gpu:102162 spread=0.0541 verdict=COMPARABLE"
+          },
+          "copied_from": {
+            "board": "opponents-specific-20261006",
+            "box": "24a11adce16e",
+            "gpu": "NVIDIA L40S",
+            "measured": "2026-10-06T06:41:35Z",
+            "path": "/Users/andrewhendel/mojolearn-wt/board-failed-cells/bench/results/bench_board/overnight-20261006-nvidia-specific/board.json",
+            "race": "trees/gbdt-categorical/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "trees",
+          "fit": "trees=500 leaves=96634 depth=- src=get_tree_leaf_counts",
+          "hardware": "NVIDIA L40S (host 24a11adce16e)",
+          "hardware_comparable": true,
+          "hardware_key": "NVIDIA L40S",
+          "hardware_source": "cell record",
+          "hash": "f0d7e720d4112561",
+          "hash_stable": true,
+          "lane": "gbdt-categorical",
+          "library": "catboost",
+          "library_version": "1.2.10",
+          "max_ms": 26444.441,
+          "median_ms": 26444.441,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 498.0,
+            "peak_host_mb": 4571.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 428.0,
+            "warmup_host_mb": 4113.9
+          },
+          "min_ms": 26444.441,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "catboost",
+            "params": {
+              "boosting_type": "Plain",
+              "bootstrap_type": "No",
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_bin": 255,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_samples_leaf": 1,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 0.0,
+              "reg_lambda": 1.0,
+              "scale_pos_weight": 1.3101271632087197,
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "subsample": null
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 498.0,
+          "peak_host_mb": 4571.4,
+          "quality": {
+            "auc": 0.630387,
+            "logloss": 0.528535
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.2770269562514103,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "mismatches": [
+                "categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+                "categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+                "input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+                "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "Logloss",
+                "lightgbm": "binary",
+                "mojolearn": "Logloss",
+                "xgboost": "binary:logistic"
+              },
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "task": "binary"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxicat-4110786x16",
+          "source": "copied from opponents-specific-20261006; measured this run",
+          "status": "ok",
+          "times_ms": [
+            26444.441
+          ],
+          "verdict": "COMPARABLE",
+          "version": "catboost 1.2.10",
+          "version_source": "cell record",
+          "warmup_ms": 26428.615
+        },
+        {
+          "arm": "xgboost-gpu",
+          "comparability": {
+            "fit_verdict": "COMPARABLE",
+            "fit_verdict_line": "lane=gbdt-categorical arms=catboost-gpu,xgboost-gpu leaves=catboost-gpu:96634,xgboost-gpu:102162 spread=0.0541 verdict=COMPARABLE"
+          },
+          "copied_from": {
+            "board": "opponents-specific-20261006",
+            "box": "24a11adce16e",
+            "gpu": "NVIDIA L40S",
+            "measured": "2026-10-06T06:41:35Z",
+            "path": "/Users/andrewhendel/mojolearn-wt/board-failed-cells/bench/results/bench_board/overnight-20261006-nvidia-specific/board.json",
+            "race": "trees/gbdt-categorical/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "trees",
+          "fit": "trees=500 leaves=102162 depth=8 src=booster.get_dump",
+          "hardware": "NVIDIA L40S (host 24a11adce16e)",
+          "hardware_comparable": true,
+          "hardware_key": "NVIDIA L40S",
+          "hardware_source": "cell record",
+          "hash": "251694b70883eb3c",
+          "hash_stable": true,
+          "lane": "gbdt-categorical",
+          "library": "xgboost",
+          "library_version": "3.2.0",
+          "max_ms": 13662.287,
+          "median_ms": 13662.287,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 498.0,
+            "peak_host_mb": 1886.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 498.0,
+            "warmup_host_mb": 2338.8
+          },
+          "min_ms": 13662.287,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "xgboost",
+            "params": {
+              "boosting_type": "gbtree",
+              "feature_fraction": 1.0,
+              "feature_fraction_bynode": 1.0,
+              "grow_policy": "lossguide",
+              "learning_rate": 0.1,
+              "max_bin": 255,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_weight": 0.0,
+              "min_split_gain": 0.0,
+              "n_estimators": 500,
+              "reg_alpha": 0.0,
+              "reg_lambda": 1.0,
+              "scale_pos_weight": 1.3101271632087197,
+              "seed": 7,
+              "subsample": 1.0
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 498.0,
+          "peak_host_mb": 1886.0,
+          "quality": {
+            "auc": 0.631978,
+            "logloss": 0.528548
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.5362076642073176,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "mismatches": [
+                "categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+                "categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+                "input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+                "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "Logloss",
+                "lightgbm": "binary",
+                "mojolearn": "Logloss",
+                "xgboost": "binary:logistic"
+              },
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "task": "binary"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxicat-4110786x16",
+          "source": "copied from opponents-specific-20261006; measured this run",
+          "status": "ok",
+          "times_ms": [
+            13662.287
+          ],
+          "verdict": "COMPARABLE",
+          "version": "xgboost 3.2.0",
+          "version_source": "cell record",
+          "warmup_ms": 13753.708
+        },
+        {
+          "arm": "catboost-cpu",
+          "comparability": {
+            "fit_verdict": "COMPARABLE",
+            "fit_verdict_line": "lane=gbdt-categorical arms=catboost-gpu,xgboost-gpu leaves=catboost-gpu:96634,xgboost-gpu:102162 spread=0.0541 verdict=COMPARABLE"
+          },
+          "copied_from": {
+            "board": "opponents-specific-20261006",
+            "box": "24a11adce16e",
+            "gpu": "NVIDIA L40S",
+            "measured": "2026-10-06T06:41:35Z",
+            "path": "/Users/andrewhendel/mojolearn-wt/board-failed-cells/bench/results/bench_board/overnight-20261006-nvidia-specific/board.json",
+            "race": "trees/gbdt-categorical/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hardware": "CPU AMD EPYC 9554 64-Core Processor (host 24a11adce16e, NVIDIA L40S box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9554 64-Core Processor",
+          "hardware_key": "NVIDIA L40S",
+          "hardware_source": "source board box",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-categorical",
+          "library": "catboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "mismatches": [
+                "categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+                "categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+                "input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+                "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "Logloss",
+                "lightgbm": "binary",
+                "mojolearn": "Logloss",
+                "xgboost": "binary:logistic"
+              },
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "task": "binary"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxicat-4110786x16",
+          "source": "copied from opponents-specific-20261006; measured this run",
+          "status": "REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)",
+          "store": "not stored (key fields missing: library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "COMPARABLE",
+          "version": "catboost 1.2.10",
+          "version_source": "source board box packages",
+          "warmup_ms": null
+        },
+        {
+          "arm": "xgboost-cpu",
+          "comparability": {
+            "fit_verdict": "COMPARABLE",
+            "fit_verdict_line": "lane=gbdt-categorical arms=catboost-gpu,xgboost-gpu leaves=catboost-gpu:96634,xgboost-gpu:102162 spread=0.0541 verdict=COMPARABLE"
+          },
+          "copied_from": {
+            "board": "opponents-specific-20261006",
+            "box": "24a11adce16e",
+            "gpu": "NVIDIA L40S",
+            "measured": "2026-10-06T06:41:35Z",
+            "path": "/Users/andrewhendel/mojolearn-wt/board-failed-cells/bench/results/bench_board/overnight-20261006-nvidia-specific/board.json",
+            "race": "trees/gbdt-categorical/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hardware": "CPU AMD EPYC 9554 64-Core Processor (host 24a11adce16e, NVIDIA L40S box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9554 64-Core Processor",
+          "hardware_key": "NVIDIA L40S",
+          "hardware_source": "source board box",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-categorical",
+          "library": "xgboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "mismatches": [
+                "categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+                "categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+                "input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+                "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "Logloss",
+                "lightgbm": "binary",
+                "mojolearn": "Logloss",
+                "xgboost": "binary:logistic"
+              },
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "task": "binary"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxicat-4110786x16",
+          "source": "copied from opponents-specific-20261006; measured this run",
+          "status": "REFUSED(GPU-PATH-ONLY: xgboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against )",
+          "store": "not stored (key fields missing: library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "COMPARABLE",
+          "version": "xgboost 3.2.0",
+          "version_source": "source board box packages",
+          "warmup_ms": null
+        },
+        {
+          "arm": "lightgbm-cpu",
+          "comparability": {
+            "fit_verdict": "COMPARABLE",
+            "fit_verdict_line": "lane=gbdt-categorical arms=catboost-gpu,xgboost-gpu leaves=catboost-gpu:96634,xgboost-gpu:102162 spread=0.0541 verdict=COMPARABLE"
+          },
+          "copied_from": {
+            "board": "opponents-specific-20261006",
+            "box": "24a11adce16e",
+            "gpu": "NVIDIA L40S",
+            "measured": "2026-10-06T06:41:35Z",
+            "path": "/Users/andrewhendel/mojolearn-wt/board-failed-cells/bench/results/bench_board/overnight-20261006-nvidia-specific/board.json",
+            "race": "trees/gbdt-categorical/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hardware": "CPU AMD EPYC 9554 64-Core Processor (host 24a11adce16e, NVIDIA L40S box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9554 64-Core Processor",
+          "hardware_key": "NVIDIA L40S",
+          "hardware_source": "source board box",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-categorical",
+          "library": "lightgbm",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "mismatches": [
+                "categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+                "categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+                "input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+                "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "Logloss",
+                "lightgbm": "binary",
+                "mojolearn": "Logloss",
+                "xgboost": "binary:logistic"
+              },
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "task": "binary"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxicat-4110786x16",
+          "source": "copied from opponents-specific-20261006; measured this run",
+          "status": "REFUSED(GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)",
+          "store": "not stored (key fields missing: library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "COMPARABLE",
+          "version": "lightgbm 4.7.0",
+          "version_source": "source board box packages",
+          "warmup_ms": null
+        },
+        {
+          "arm": "lightgbm-cuda",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": "lane=gbdt-categorical arms=lightgbm-cuda leaves=lightgbm-cuda:1 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one"
+          },
+          "copied_from": {
+            "board": "opponents-specific-20261006",
+            "box": "24a11adce16e",
+            "gpu": "NVIDIA L40S",
+            "measured": "2026-10-06T06:41:35Z",
+            "path": "/Users/andrewhendel/mojolearn-wt/board-failed-cells/bench/results/bench_board/overnight-20261006-nvidia-specific/board.json",
+            "race": "trees/gbdt-categorical/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "trees",
+          "fit": "trees=1 leaves=1 depth=0 src=booster_.dump_model",
+          "hardware": "NVIDIA L40S (host 24a11adce16e)",
+          "hardware_comparable": true,
+          "hardware_key": "NVIDIA L40S",
+          "hardware_source": "cell record",
+          "hash": "02172b88d2f9e454",
+          "hash_stable": true,
+          "lane": "gbdt-categorical",
+          "library": "lightgbm",
+          "library_version": "4.7.0",
+          "max_ms": 1636.75,
+          "median_ms": 1636.75,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 546.0,
+            "peak_host_mb": 1321.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 546.0,
+            "warmup_host_mb": 1095.9
+          },
+          "min_ms": 1636.75,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "lightgbm",
+            "params": {
+              "boosting_type": "gbdt",
+              "class_weight": null,
+              "feature_fraction": 1.0,
+              "learning_rate": 0.1,
+              "max_bin": 255,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_weight": 0.001,
+              "min_samples_leaf": 20,
+              "min_split_gain": 0.0,
+              "n_estimators": 500,
+              "reg_alpha": 0.0,
+              "reg_lambda": 1.0,
+              "scale_pos_weight": 1.3101271632087197,
+              "seed": 7,
+              "subsample": 1.0
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 546.0,
+          "peak_host_mb": 1321.9,
+          "quality": {
+            "auc": 0.5,
+            "logloss": 0.554692
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 4.475835038949137,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "mismatches": [
+                "categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+                "categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+                "input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+                "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "Logloss",
+                "lightgbm": "binary",
+                "mojolearn": "Logloss",
+                "xgboost": "binary:logistic"
+              },
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "task": "binary"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxicat-4110786x16",
+          "source": "copied from opponents-specific-20261006; measured this run",
+          "status": "ok",
+          "times_ms": [
+            1636.75
+          ],
+          "verdict": "UNKNOWN",
+          "version": "lightgbm 4.7.0",
+          "version_source": "cell record",
+          "warmup_ms": 2294.13
+        }
+      ],
+      "dataset": "taxi",
+      "family": "trees",
+      "host": {
+        "hostname": "NVIDIA L40S (nv2, RunPod) job v1304"
+      },
+      "id": "trees/gbdt-categorical/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "gbdt-categorical",
+      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt (nv2/v1304)",
+      "main_board": {
+        "box": "nv2",
+        "identity": "MATCH",
+        "job": "v1304",
+        "sha": "cd10f284dfb2df1f75f038132eee420256ed7015"
+      },
+      "opponent_source": {
+        "boards": [
+          "opponents-specific-20261006"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
     "trees/gbdt-depthwise/istella/rows=full": {
       "cells": [
         {
@@ -82602,7 +83471,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v1007 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -83181,7 +84050,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v1007 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -83760,7 +84629,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@de2b2b739 nv/n0320 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -84569,7 +85438,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@de2b2b739 nv/n0320 2026-10-08; identity vs the amd columns: n/a",
           "status": "ok",
@@ -85377,7 +86246,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9499046fa nv/n0653 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -86292,7 +87161,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9499046fa nv/n0653 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -87206,7 +88075,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9499046fa nv/n0653 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -87593,7 +88462,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9499046fa nv/n0653 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -87982,7 +88851,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@9499046fa nv/n0653 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -88582,7 +89451,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v1007 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -88932,7 +89801,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v1007 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -89282,7 +90151,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v1008 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -89513,7 +90382,7 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (gridbb)"
+            "source": "main board: one scored run of ours (previous)"
           },
           "source": "main@444f0b96e nv2/v1008 2026-10-09; identity vs the amd columns: n/a",
           "status": "ok",
@@ -89668,5 +90537,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-10T23:05:32Z"
+  "updated": "2026-10-10T23:44:52Z"
 }

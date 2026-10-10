@@ -1,14 +1,14 @@
 # mojolearn benchmark board
 
-Generated 2026-10-10T23:05:32Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-10T23:44:52Z from `board.json` (schema `mojolearn-bench-board/1`).
 
-> MAIN BOARD amd-mi325x, version label main@ca25d9321. Unreleased: not reproducible by pip install; the release boards are the reference.
+> MAIN BOARD amd-mi325x, version label main@cd10f284d. Unreleased: not reproducible by pip install; the release boards are the reference.
 
-> Cells: 153 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@ca25d9321 (2026-10-10T19:37:56Z). Boxes: AMD Instinct MI325X (amd, DO).
+> Cells: 153 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@cd10f284d (2026-10-10T23:04:22Z). Boxes: AMD Instinct MI325X (amd, DO).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 176 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 1 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
-> Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 80, n/a 73).
+> Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 81, n/a 72).
 
 > Opponents: copied from the stored opponent boards (opponents-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 2 races.
 
@@ -16,7 +16,7 @@ Generated 2026-10-10T23:05:32Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Identity
 
-Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 80, n/a 73.
+Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 81, n/a 72.
 
 DIFFER: none.
 
@@ -36,8 +36,8 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | memory bytes | - |
 | OS | - |
 | Python | - |
-| mojolearn | main@ca25d9321 (wheel none (unreleased; built from source at each cell's commit), sha256 -) |
-| script commit | ca25d932101a8f5bf9f55d5ec5bf26fc1a3909eb |
+| mojolearn | main@cd10f284d (wheel none (unreleased; built from source at each cell's commit), sha256 -) |
+| script commit | cd10f284dfb2df1f75f038132eee420256ed7015 |
 | patch sync | - |
 | modes | identical |
 | rounds | 1 timed after 1 warm-up, arms interleaved round by round |
@@ -386,15 +386,15 @@ What customers run is torch in bf16. The headline divides our IDENTICAL median b
 
 ### gbdt-categorical / taxi (rows full, shape taxicat-4110786x16)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt (amd/a0499)`, ran on AMD Instinct MI325X (amd, DO) job a0499
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt (amd/a1588)`, ran on AMD Instinct MI325X (amd, DO) job a1588
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@89485bc96) | identical | 10258.4 | 10258.4..10258.4 | 1 | - | - | 10258.4 | - | - (stored whole) | - | - | - | - | auc=0.631297, logloss=0.528285 | - | main board, one scored run | - | ok (main@89485bc96 amd/a0499 2026-10-08; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@cd10f284d) | identical | 10903.0 | 10903.0..10903.0 | 1 | - | - | 10903.0 | - | - (stored whole) | - | - | - | - | auc=0.631297, logloss=0.528285 | - | main board, one scored run | - | ok (main@cd10f284d amd/a1588 2026-10-10; identity vs nvidia-l40s: MATCH) |
 | xgboost-gpu | xgboost | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | xgboost 3.2.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (copied from opponents-20261006; measured this run) |
-| catboost-cpu | catboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | catboost 1.2.10 | opponent | 97857.4 | 97857.4..97857.4 | 1 | 0.105 | - | 97857.4 | 97857.4 | 0.00 (cpu-arm) | 0.105 (whole/whole) | - | 11918.4 | - | auc=0.628772, logloss=0.528923 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
-| xgboost-cpu | xgboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | xgboost 3.2.0 | opponent | 18924.8 | 18924.8..18924.8 | 1 | 0.542 | - | 18924.8 | 18924.8 | 0.00 (cpu-arm) | 0.542 (whole/whole) | - | 8838.5 | - | auc=0.631473, logloss=0.528686 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
-| lightgbm-cpu | lightgbm | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | lightgbm 4.7.0 | opponent | 10928.0 | 10928.0..10928.0 | 1 | 0.939 | - | 10928.0 | 10928.0 | 0.00 (cpu-arm) | 0.939 (whole/whole) | - | 8741.9 | - | auc=0.632665, logloss=0.528094 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
+| catboost-cpu | catboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | catboost 1.2.10 | opponent | 97857.4 | 97857.4..97857.4 | 1 | 0.111 | - | 97857.4 | 97857.4 | 0.00 (cpu-arm) | 0.111 (whole/whole) | - | 11918.4 | - | auc=0.628772, logloss=0.528923 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
+| xgboost-cpu | xgboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | xgboost 3.2.0 | opponent | 18924.8 | 18924.8..18924.8 | 1 | 0.576 | - | 18924.8 | 18924.8 | 0.00 (cpu-arm) | 0.576 (whole/whole) | - | 8838.5 | - | auc=0.631473, logloss=0.528686 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
+| lightgbm-cpu | lightgbm | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | lightgbm 4.7.0 | opponent | 10928.0 | 10928.0..10928.0 | 1 | 0.998 | - | 10928.0 | 10928.0 | 0.00 (cpu-arm) | 0.998 (whole/whole) | - | 8741.9 | - | auc=0.632665, logloss=0.528094 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
 
 memory, ours, xgboost-gpu: host not sampled; GPU not sampled
 
