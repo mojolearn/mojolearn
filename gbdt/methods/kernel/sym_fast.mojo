@@ -53,17 +53,9 @@ comptime SYM_RESOLVE_BLOCK = SYM_FAST_APPLE and (
     SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_RESOLVE_BLOCK"]()
 )
 
-#: after the sort, ONE launch gathers weights and targets by the new
-#: `indices` and writes the partition sizes, replacing the sizes kernel and
-#: the two gathers (`pointwise_optimization_subsets.mojo::update_subsets_stats`).
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
-#: arms never reached the queue).
-#: apple-fast LEDGER 2026-10-03 batchv: DROP symhist gather (noise), old base;
-#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
-comptime SYM_GATHER_FUSED = SYM_FAST_APPLE and (
-    is_defined["MOJOLEARN_SYM_GATHER_FUSED"]()
-)
+#: TOMBSTONE: MOJOLEARN_SYM_GATHER_FUSED (DROPPED-noise: symhist-gather istella/taxi noise, old base) deleted 2026-10-09 on
+#: lane/owed-deletions-D1 (sizes + both gathers in one launch); code recoverable at b639a2bd2.
+#: Restore: git apply experiments/removed/MOJOLEARN_SYM_GATHER_FUSED.patch; record in docs/TOMBSTONES.md.
 
 #: the per-partition weight / target sums run on a (partitions x chunks)
 #: grid with a shared-memory reduce per block and a global float atomic

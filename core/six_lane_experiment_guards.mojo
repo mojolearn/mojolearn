@@ -256,6 +256,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SYM_DERIV_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple symmetric next-tree gradient pass behind the tail drain was DROPPED-noise: sym-iter-fused istella/taxi -0.1% (old base); F12 re-runs 2026-10-06 kept it OFF; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_SYM_LEAF_FROM_STATS"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple symmetric leaves as one Newton step from the searcher partition stats was DROPPED-noise: sym-iter-leaf istella/taxi -0.2% (old base); F12 re-runs 2026-10-06 kept it OFF; code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_SYM_REUSE_PARTITION"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple symmetric reuse of the searcher final partition for leaf estimation was DROPPED-noise: sym-iter-reuse taxi +0.3% (old base); F12 re-runs 2026-10-06 B/A 0.94-1.03 mixed, kept OFF; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_SYM_GATHER_FUSED"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple symmetric partition sizes and both gathers in one launch was DROPPED-noise: symhist-gather istella/taxi noise (old base); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
