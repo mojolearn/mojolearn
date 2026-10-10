@@ -651,7 +651,7 @@
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/cnn-clf/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -666,7 +666,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "0e77b074697fa054",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1212",
+    "kind": "algos",
+    "median_ms": 314.1894830041565,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -1454,7 +1467,7 @@
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/gcn/istella/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:55:19Z",
@@ -1469,13 +1482,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:49:38Z",
+    "digest": "052c093d8f32367e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1210",
+    "kind": "algos",
+    "median_ms": 3.038416994968429,
+    "reason": null,
+    "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@6416999f7)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/gcn/taxi/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:55:19Z",
@@ -1490,13 +1516,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:49:38Z",
+    "digest": "8f1a232749915615",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1210",
+    "kind": "algos",
+    "median_ms": 1.3706810132134706,
+    "reason": null,
+    "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@6416999f7)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/graphsage/istella/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:55:19Z",
@@ -1511,13 +1550,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:49:38Z",
+    "digest": "09a833349e94f972",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1210",
+    "kind": "algos",
+    "median_ms": 5.906467995373532,
+    "reason": null,
+    "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@6416999f7)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/graphsage/taxi/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:55:19Z",
@@ -1532,13 +1584,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:49:38Z",
+    "digest": "d053647ed5c362bb",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1210",
+    "kind": "algos",
+    "median_ms": 1.6370469820685685,
+    "reason": null,
+    "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@6416999f7)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/gru-clf/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -1553,13 +1618,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "3721a6af05cae0b3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 514.9187150236685,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/gru-clf/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -1574,13 +1652,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "cf251bce6f945b8c",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 515.516151994234,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/gru-reg/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -1595,13 +1686,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "cc1e1acec8ffe22b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 513.307387009263,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/gru-reg/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -1616,7 +1720,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "99bcbccd064bc3d7",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 513.4496160026174,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -2302,7 +2419,7 @@
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/lstm-clf/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -2317,13 +2434,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "1f8f0efb97de8a51",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 631.5607099968474,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/lstm-clf/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -2338,13 +2468,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "9d081737a1ba8e27",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 630.6998380168807,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/lstm-reg/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -2359,13 +2502,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "aa2849b4c8129cdb",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 628.5590420011431,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/lstm-reg/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -2380,7 +2536,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "0d8af2a3834c91b8",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 627.9220250144135,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -2658,7 +2827,7 @@
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/maxpool2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T19:47:27Z",
@@ -2673,7 +2842,20 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@530498ea8)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "97cfede5e4c32f4f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1212",
+    "kind": "algos",
+    "median_ms": 0.6418359989766032,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -3835,7 +4017,7 @@
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/rnn-clf/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -3850,13 +4032,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "3517ee5de29781cd",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 305.91130699031055,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/rnn-clf/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -3871,13 +4066,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "9e2d83b1c8955d8c",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 306.61477299872786,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/rnn-reg/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -3892,13 +4100,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "5915670344f2889a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 300.13143399264663,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
    "failed": true,
    "race": "algos/rnn-reg/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "amd",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -3913,7 +4134,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "4fa55ff95f77c179",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "a1211",
+    "kind": "algos",
+    "median_ms": 300.66302299383096,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "amd-mi325x",
@@ -5382,5 +5616,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-10T07:45:02Z"
+ "updated": "2026-10-10T18:52:44Z"
 }

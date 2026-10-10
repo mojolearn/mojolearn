@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-10T07:45:02Z",
+ "generated": "2026-10-10T18:52:44Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-10T07:45:02Z",
+  "generated": "2026-10-10T18:52:44Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -222,10 +222,11 @@
  "skipped": {
   "ALGOS: A/B or grid arm (ENV)": 6,
   "ALGOS: A/B or grid arm (MOJOLEARN_BUILD_DEFINES)": 216,
-  "ALGOS: branch other than main": 2092,
+  "ALGOS: branch other than main": 2406,
   "GRIDBB: A/B or switched build": 190,
-  "GRIDBB: branch freeze-20261007": 4387,
+  "GRIDBB: branch freeze-20261007": 4389,
+  "GRIDBB: branch freeze-20261010": 1021,
   "GRIDBB: branch gbdt-categorical-oom": 6
  },
- "summary": "MAINBOARD column=nvidia-l40s label=main@ca8ea1f8d races=155 add=1 change=31 drop=0 failed=46 ledger=219 withheld_opponents=2 identity=MATCH:48,n/a:107"
+ "summary": "MAINBOARD column=nvidia-l40s label=main@1665b5626 races=190 add=35 change=0 drop=0 failed=6 ledger=219 withheld_opponents=2 identity=MATCH:69,n/a:121"
 }

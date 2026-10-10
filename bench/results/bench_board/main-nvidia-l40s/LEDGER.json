@@ -379,7 +379,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/avgpool1d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -394,13 +394,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "8f415c65c3fe8114",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 0.9873248636722565,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/avgpool2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -415,13 +428,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "50b3b720f2049060",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 1.6508623957633972,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/batchnorm1d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -436,7 +462,20 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "350fa2dfacbe848b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 1.5704967081546783,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -680,7 +719,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/bernoulli-nb/istella/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -695,13 +734,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "05b5615b618a9b7c",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 52.29731649160385,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/bernoulli-nb/taxi/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -716,13 +768,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "5206aa4313afe18c",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 13.509653508663177,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/categorical-nb/istella/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -737,13 +802,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "ed766de28b4cdad5",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 20.9830142557621,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/categorical-nb/taxi/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -758,7 +836,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "1f4cfd614bbc6c98",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 17.08643138408661,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -832,7 +923,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/cnn-clf/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -847,13 +938,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "0e77b074697fa054",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 195.78954577445984,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/complement-nb/istella/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -868,13 +972,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "b61a77e38efdd6c7",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 125.44941157102585,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/complement-nb/taxi/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -889,7 +1006,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "43f7a2e19e8a165b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 44.1967137157917,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -1031,7 +1161,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/conv1d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -1046,7 +1176,20 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "720ffaacdfcf76a5",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 10.126054286956787,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -1936,7 +2079,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/gcn/istella/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T19:55:19Z",
@@ -1951,13 +2094,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "052c093d8f32367e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 3.014136105775833,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/gcn/istella/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -1972,13 +2128,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "052c093d8f32367e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 3.014136105775833,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/gcn/taxi/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T19:55:19Z",
@@ -1993,13 +2162,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "8f1a232749915615",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 2.9592476785182953,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/gcn/taxi/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -2014,13 +2196,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "8f1a232749915615",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 2.9592476785182953,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/global-avgpool/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -2035,13 +2230,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "b50e06fc713744d1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 2.061266452074051,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/global-maxpool/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -2056,13 +2264,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "3578657416f43a55",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 2.933468669652939,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/graphsage/istella/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T19:55:19Z",
@@ -2077,13 +2298,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "09a833349e94f972",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 7.463090121746063,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/graphsage/istella/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -2098,13 +2332,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "09a833349e94f972",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 7.463090121746063,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/graphsage/taxi/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T19:55:19Z",
@@ -2119,13 +2366,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "d053647ed5c362bb",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 1.7457716166973114,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/graphsage/taxi/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -2140,13 +2400,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "d053647ed5c362bb",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 1.7457716166973114,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/gru-clf/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -2161,13 +2434,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "3721a6af05cae0b3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 447.06952944397926,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/gru-clf/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -2182,13 +2468,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "cf251bce6f945b8c",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 447.7297514677048,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/gru-reg/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -2203,13 +2502,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "cc1e1acec8ffe22b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 446.3483914732933,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/gru-reg/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -2224,7 +2536,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "99bcbccd064bc3d7",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 447.00613617897034,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -3012,7 +3337,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/lstm-clf/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -3027,13 +3352,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "1f8f0efb97de8a51",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 546.5598627924919,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/lstm-clf/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -3048,13 +3386,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "9d081737a1ba8e27",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 546.5342402458191,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/lstm-reg/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -3069,13 +3420,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "aa2849b4c8129cdb",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 545.5510653555393,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/lstm-reg/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -3090,7 +3454,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "0d8af2a3834c91b8",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 545.7999892532825,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -3368,7 +3745,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/maxpool1d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -3383,13 +3760,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "e458d4bba33b2c8e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 2.2240355610847473,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/maxpool2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T19:55:19Z",
@@ -3404,13 +3794,26 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "97cfede5e4c32f4f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 1.470174640417099,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/maxpool2d/synthetic/rows=full",
-   "reason": "infrastructure status not_ready never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "infrastructure status not_ready never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -3425,7 +3828,20 @@
     "status": "REFUSED(not_ready)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "97cfede5e4c32f4f",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1092",
+    "kind": "algos",
+    "median_ms": 1.470174640417099,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -3703,7 +4119,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/multinomial-nb/istella/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -3718,13 +4134,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "df472c9b1baaf987",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 127.2728219628334,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/multinomial-nb/taxi/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -3739,7 +4168,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "27fdaae650d4326e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 41.97850450873375,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -4799,7 +5241,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/rnn-clf/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -4814,13 +5256,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "3517ee5de29781cd",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 243.97534132003784,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/rnn-clf/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -4835,13 +5290,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "9e2d83b1c8955d8c",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 243.8967190682888,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/rnn-reg/synthetic/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -4856,13 +5324,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "5915670344f2889a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 242.35302209854126,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/rnn-reg/taxi-hourly/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:42:40Z",
@@ -4877,7 +5358,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "4fa55ff95f77c179",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1091",
+    "kind": "algos",
+    "median_ms": 242.38863587379456,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -4951,7 +5445,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/standard-scaler/istella/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -4966,13 +5460,26 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "cf00d661795e2db5",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 42.862419039011,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
    "failed": true,
    "race": "algos/standard-scaler/taxi/rows=full",
-   "reason": "failed run (error) never replaces an ok cell; no ok run of this race: FAILED table",
+   "reason": "failed run (error) never replaces an ok cell",
    "replaced": {
     "box": "nv",
     "commit_date": "2026-10-08T13:27:06Z",
@@ -4987,7 +5494,20 @@
     "status": "REFUSED(error)",
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
-   "replaced_by": null
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-10T07:57:07Z",
+    "digest": "106faca24dd60690",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "v1090",
+    "kind": "algos",
+    "median_ms": 3.0453987419605255,
+    "reason": null,
+    "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+    "status": "ok",
+    "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+   }
   },
   {
    "column": "nvidia-l40s",
@@ -6851,5 +7371,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-10T07:45:02Z"
+ "updated": "2026-10-10T18:52:44Z"
 }
