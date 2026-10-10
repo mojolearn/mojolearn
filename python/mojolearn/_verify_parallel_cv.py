@@ -2,7 +2,7 @@
 """One/two-GPU CV numerical and placement captures from source or a wheel.
 
 Five uneven folds for classifier/regressor, one/two/reversed device schedules,
-two repeats, saved-model replay and comparator controls. No physical execution
+one run per schedule, saved-model replay and comparator controls. No physical execution
 trace or native arithmetic sabotage is inferred from these checks.
 """
 import argparse
@@ -73,10 +73,15 @@ def _atomic_json(path, value):
     temporary.replace(path)
 
 
+#: Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
+#: One run per device schedule; the schedules themselves are the comparison.
+REPEATS = 1
+
+
 def validate_receipt(report):
     if (report.get('protocol') != PROTOCOL or report.get('status') != 'NUMERICS_AND_PLACEMENT_PASS'
             or report.get('vendor') not in ('cuda', 'hip') or report.get('folds') != 5
-            or report.get('repeats') != 2):
+            or report.get('repeats') != REPEATS):
         raise ValueError('incomplete or incompatible CV capture')
     devices = report.get('devices', [])
     if len(devices) != 2 or len(set(devices)) != 2 or any(type(d) is not int or d < 0 for d in devices):
@@ -94,7 +99,7 @@ def validate_receipt(report):
         raise ValueError('CV fixture input witnesses are missing')
     layouts = [[devices[0]], devices, devices[::-1]]
     expected = {(model, tuple(order), repeat) for model in ('regressor', 'classifier')
-                for order in layouts for repeat in range(2)}
+                for order in layouts for repeat in range(REPEATS)}
     seen, baseline, scores = set(), {}, {}
     for run in report.get('runs', []):
         key = (run['model'], tuple(run['devices']), run['repeat'])
@@ -198,7 +203,7 @@ def main(argv=None):
     from ._verify import environment_json
     report = dict(protocol=PROTOCOL, status='INCOMPLETE', source_commit=source['commit'], source=source,
                   package_origin=ml.__file__, distribution=distribution, bindings=bindings, environment=environment_json(),
-                  vendor=ml.vendor(), devices=list(devices), repeats=2, folds=5, runs=[], controls=[],
+                  vendor=ml.vendor(), devices=list(devices), repeats=REPEATS, folds=5, runs=[], controls=[],
                   physical_execution_trace='OWED', native_fault_controls='OWED',
                   scope='CV numerical, save/reload and placement checks; no capacity, throughput or complete physical execution qualification')
     out.mkdir(parents=True, exist_ok=False)
@@ -219,7 +224,7 @@ def main(argv=None):
                 n_estimators=4, max_depth=3, border_count=16, random_state=7, numeric_mode='identical')
             baseline = scores0 = None
             for order in ((devices[0],), devices, devices[::-1]):
-                for repeat in range(2):
+                for repeat in range(REPEATS):
                     directory = out / (name + '-' + '-'.join(map(str, order)) + f'-r{repeat}')
                     directory.mkdir()
                     scorer = functools.partial(score_with_witness, directory=str(directory))

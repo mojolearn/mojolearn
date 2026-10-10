@@ -6,13 +6,13 @@ from mojolearn import _verify_distributed as v
 
 def receipt():
     value = dict(protocol=v.PROTOCOL, status='NUMERICAL_MATCH_EXECUTION_TRACE_OWED',
-                 vendor='cuda', repeats=2, devices=[0,1], cells=[], controls=[],
+                 vendor='cuda', repeats=v.REPEATS, devices=[0,1], cells=[], controls=[],
                  worker_calls=[], worker_groups=[], source_files=dict.fromkeys(v.PROFILE_FILES,'a'*64),
                  bindings={name:dict(vendor='cuda',sha256='b'*64) for name in
                     ('_mojolearn_arima','_mojolearn_tsa','_mojolearn_gp','_mojolearn_ivf')})
     parts=[dict(shape=[2,3],dtype='<f4',sha256='c'*64)]
     for layout,devices in enumerate(([0],[0,1],[1,0])):
-        for repeat in range(2):
+        for repeat in range(v.REPEATS):
             for case in v.CASES:
                 group=len(value['worker_groups'])
                 inventory=[]

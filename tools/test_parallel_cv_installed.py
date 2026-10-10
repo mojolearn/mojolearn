@@ -8,14 +8,14 @@ from test_parallel_cv_witness import records
 
 def receipt():
     return dict(protocol=cv.PROTOCOL, status='NUMERICS_AND_PLACEMENT_PASS', vendor='cuda',
-                folds=5, repeats=2, devices=[0, 1],
+                folds=5, repeats=cv.REPEATS, devices=[0, 1],
                 source={'source_sha256': {name: 'a' * 64 for name in cv.PROFILE_FILES}},
                 bindings={'_mojolearn_gbdt': {'vendor': 'cuda', 'sha256': 'e' * 64}},
                 inputs={name: 'f' * 64 for name in ('X', 'classifier', 'regressor')},
                 runs=[dict(model=model, devices=order, repeat=repeat,
                            scores_hex='000000000000f03f' * 5, fold_records=records(len(order)))
                       for model in ('classifier', 'regressor')
-                      for order in ([0], [0, 1], [1, 0]) for repeat in range(2)],
+                      for order in ([0], [0, 1], [1, 0]) for repeat in range(cv.REPEATS)],
                 controls=[model + ':' + fault for model in ('classifier', 'regressor') for fault in cv.FAULTS])
 
 

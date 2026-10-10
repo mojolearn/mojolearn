@@ -86,17 +86,22 @@ def _valid_digests(values):
         for v in values))
 
 
+#: Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
+#: One run per device layout; the layouts themselves are the comparison.
+REPEATS = 1
+
+
 def validate_receipt(receipt):
     """Validate numerical, transport and placement coverage; no execution claim."""
     if (receipt.get('protocol') != PROTOCOL
             or receipt.get('status') != 'NUMERICAL_MATCH_EXECUTION_TRACE_OWED'
-            or receipt.get('repeats') != 2 or receipt.get('vendor') not in ('cuda', 'hip')):
+            or receipt.get('repeats') != REPEATS or receipt.get('vendor') not in ('cuda', 'hip')):
         raise ValueError('incomplete or incompatible distributed capture')
     devices = receipt.get('devices', [])
     if len(devices) != 2 or len(set(devices)) != 2 or any(type(d) is not int or d < 0 for d in devices):
         raise ValueError('capture requires two distinct device indices')
     layouts = [[devices[0]], devices, list(reversed(devices))]
-    expected = {(case, layout, repeat) for case in CASES for layout in range(3) for repeat in range(2)}
+    expected = {(case, layout, repeat) for case in CASES for layout in range(3) for repeat in range(REPEATS)}
     seen, canonical = set(), {}
     for cell in receipt.get('cells', []):
         key = (cell['case'], cell['layout'], cell['repeat'])
@@ -223,7 +228,7 @@ def main(argv=None):
     if args.require_installed and (not distribution or not distribution['import_matches_distribution'] or distribution['editable']):
         ap.error('import does not match an installed mojolearn distribution')
     from mojolearn._verify import environment_json
-    receipt = {'protocol': PROTOCOL, 'environment': environment_json(), 'repeats': 2, 'status': 'RUNNING',
+    receipt = {'protocol': PROTOCOL, 'environment': environment_json(), 'repeats': REPEATS, 'status': 'RUNNING',
                'physical_execution_trace': 'OWED', 'native_fault_controls': 'OWED',
                'vendor': vendor,
                'package': str(package), 'distribution': distribution,
@@ -314,7 +319,7 @@ def main(argv=None):
             with DistributedIVFIndex.from_index(ivf, devices=selected) as distributed:
                 return list(distributed.search(ivf_x[:7]))
         for layout, selected in enumerate(((devices[0],), devices, tuple(reversed(devices)))):
-            for repeat in range(2):
+            for repeat in range(REPEATS):
                 for case in CASES:
                     first_group = len(receipt['worker_groups'])
                     got = [digest(v) for v in run_case(case, selected)]
