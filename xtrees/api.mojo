@@ -1183,7 +1183,6 @@ comptime XTREES_FAST_SWITCHES = (
     + (32 if agn_dev.PSHAP_DELTA else 0)
     + (64 if _XT_AGN_DEVICE_MODEL else 0)
     + (128 if _XT_IDN_ADA_SESSION else 0)
-    + (512 if agn_dev.PSHAP_FAST_OVERLAP else 0)
     + (1024 if _XT_KSHAP_FAST_DEVICE_MODEL else 0)
     + (2048 if _XT_PSHAP_FAST_DEVICE_MODEL else 0)
 )
@@ -1199,7 +1198,7 @@ def fast_switches_binding() raises -> PythonObject:
     128 `_XT_IDN_ADA_SESSION` (an IDENTICAL build's switch; was bit 32 on
     the IDENTICAL integration branch, renumbered at the 2026-10-05 merge
     because main took 32 for PSHAP_DELTA), bit 256 the deleted
-    MOJOLEARN_KSHAP_FAST_OVERLAP (always 0), bit 512 MOJOLEARN_PSHAP_FAST_OVERLAP
+    MOJOLEARN_KSHAP_FAST_OVERLAP (always 0), bit 512 the deleted MOJOLEARN_PSHAP_FAST_OVERLAP (always 0)
     (xtrees/agnostic_device.mojo; were 64 and 128 before the 2026-10-05 merge),
     bit 1024 MOJOLEARN_KSHAP_FAST_DEVICE_MODEL, bit 2048
     MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (FAST + Apple experiments)."""
@@ -1665,27 +1664,9 @@ def pshap_dsynth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, t
     return PythonObject(p[0])
 
 
-def pshap_dsynth_async_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, tot: PythonObject,
-                               params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_PSHAP_FAST_OVERLAP: `x_trees_pshap_dsynth` whose rows reach
-    syn by `x_trees_pshap_dsynth_wait` (tot is final on return); the same
-    params. Refused in a build without the define (switches bit 128)."""
-    var p = _agn_ints(params, 6, "x_trees_pshap_dsynth_async")
-    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
-        raise Error("x_trees_pshap_dsynth_async: bad counts")
-    comptime if agn_dev.PSHAP_FAST_OVERLAP:
-        agn_dev.pshap_dsynth_async(Int(py=x), Int(py=bg), Int(py=syn), Int(py=tot), p[0], p[1], p[2], p[3], p[5],
-                                   p[4])
-    else:
-        raise Error("x_trees_pshap_dsynth_async: built without MOJOLEARN_PSHAP_FAST_OVERLAP")
-    return PythonObject(p[0])
-
-
-def pshap_dsynth_wait_binding() raises -> PythonObject:
-    """MOJOLEARN_PSHAP_FAST_OVERLAP: wait for the chunk in flight."""
-    comptime if agn_dev.PSHAP_FAST_OVERLAP:
-        agn_dev.pshap_dsynth_wait()
-    return PythonObject(0)
+# TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
+# on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
 
 
 def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject, phi: PythonObject,
@@ -1937,5 +1918,3 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[pshap_values_model_binding]("x_trees_pshap_values_model")
     m.def_function[pshap_dsynth_binding]("x_trees_pshap_dsynth")
     m.def_function[pshap_dvalues_binding]("x_trees_pshap_dvalues")
-    m.def_function[pshap_dsynth_async_binding]("x_trees_pshap_dsynth_async")
-    m.def_function[pshap_dsynth_wait_binding]("x_trees_pshap_dsynth_wait")
