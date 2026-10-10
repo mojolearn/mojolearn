@@ -1,0 +1,28 @@
+diff --git a/checks/kernel_matrix.mojo b/checks/kernel_matrix.mojo
+index 635dc642a..dd4d3a0e7 100644
+--- a/checks/kernel_matrix.mojo
++++ b/checks/kernel_matrix.mojo
+@@ -1770,10 +1770,19 @@ def knn_block_topk_select_for[column: Int, identical: Bool]() -> Bool:
+ #: The widest k the block top-k (DEVIATION 3001) serves by default; larger
+ #: k keeps the matrix and the small-k selector (measured above).
+ #: `-D MOJOLEARN_KNN_BLOCK_TOPK_ALL_K=1` lifts it to the selector's 64.
+-# TOMBSTONE: MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K (DROPPED-slower) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+-# Tried: K3 (lane fg-knn-nb): the block top-k lifted to k <= 64 on the AMD column only; AMD knn istella 13.96x / taxi 1.02x slower, NV neutral (fg2 amd a1161-a1190, nv2 v1021-v1050), recall and hashes unchanged.
+-# Restore: git apply experiments/removed/MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K.patch; record in docs/TOMBSTONES.md.
+-comptime KNN_BLOCK_TOPK_MAX_K = 64 if is_defined["MOJOLEARN_KNN_BLOCK_TOPK_ALL_K"]() else 16
++#: K3 (lane fg-knn-nb, 2026-10-09; `-D MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K=1`,
++#: DEFAULT OFF, an A/B arm): the same lift on the AMD column ONLY, so one
++#: grid arm moves AMD while the NVIDIA build keeps its measured 16. Cost
++#: reasoning: the k = 64 loss above is the 4090's register file (137 -> 164
++#: registers, one 256-thread block per SM); CDNA has 512 VGPRs per lane and
++#: 6 TB/s, and the lift removes the `query_tile x index_tile` distance-matrix
++#: write and read (4 B x 2 per cell) and the selector launch per tile. Bits:
++#: none (the same composite keys, measured equal on the 4090 at every k).
++#: The shared tile's AMD width gate still applies (block top-k needs it).
++comptime KNN_BLOCK_TOPK_MAX_K = 64 if (
++    is_defined["MOJOLEARN_KNN_BLOCK_TOPK_ALL_K"]()
++    or (is_defined["MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K"]() and TARGET_COLUMN == COLUMN_AMD)
++) else 16
+ 
+ 
+ @always_inline

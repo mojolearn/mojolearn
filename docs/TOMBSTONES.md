@@ -160,6 +160,10 @@ in the tables after the sections.
 | [`MOJOLEARN_KDE_LSE_FUSED`](#mojolearn_kde_lse_fused) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE_LSE_FUSED.patch](../experiments/removed/MOJOLEARN_KDE_LSE_FUSED.patch) |
 | [`MOJOLEARN_KDE_NORM_FUSED`](#mojolearn_kde_norm_fused) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE_NORM_FUSED.patch](../experiments/removed/MOJOLEARN_KDE_NORM_FUSED.patch) |
 | [`MOJOLEARN_KDE_SAMPLE_FUSED`](#mojolearn_kde_sample_fused) | Neighbors | DROP | 2026-10-09 | [MOJOLEARN_KDE_SAMPLE_FUSED.patch](../experiments/removed/MOJOLEARN_KDE_SAMPLE_FUSED.patch) |
+| [`MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE`](#mojolearn_knn_amd_legacy_schedule) | Neighbors | DROPPED-slower | 2026-10-10 | [MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE.patch](../experiments/removed/MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE.patch) |
+| [`MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K`](#mojolearn_knn_amd_block_topk_all_k) | Neighbors | DROPPED-slower | 2026-10-10 | [MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K.patch](../experiments/removed/MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K.patch) |
+| [`MOJOLEARN_KNN_AMD_EXACT_CHAIN`](#mojolearn_knn_amd_exact_chain) | Neighbors | DROPPED-noise | 2026-10-10 | [MOJOLEARN_KNN_AMD_EXACT_CHAIN.patch](../experiments/removed/MOJOLEARN_KNN_AMD_EXACT_CHAIN.patch) |
+| [`MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX`](#mojolearn_knn_identical_widek_radix) | Neighbors | DROPPED-slower | 2026-10-10 | [MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX.patch](../experiments/removed/MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX.patch) |
 | [`MOJOLEARN_ACHI2_FAST_DEVCHECK`](#mojolearn_achi2_fast_devcheck) | Prep | DROPPED | Oct 3 | lane only |
 | [`MOJOLEARN_CLASSICAL_C55_CLASS_GROUP`](#mojolearn_classical_c55_class_group) | Prep | quality loss | 2026-10-07 | [MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch) |
 | [`MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS`](#mojolearn_classical_c61_da_class_stats) | Prep | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS.patch) |
@@ -1307,6 +1311,46 @@ in the tables after the sections.
 - EXPERIMENTS.md:333: `KDE_DIMTILE + KDE_SAMPLE_FUSED` | kde / istella | lane/apple-fast-kde2 @ 659400b94 | kde2-sample-ontile-istella | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only
 - EXPERIMENTS.md:334: `KDE_SAMPLE_FUSED` | kde / istella; kde / taxi | lane/apple-fast-batch @ 3150d75c1 | kde2-sample-taxi-x | taxi +354% | DROP | opt-in only
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-09 (lane/owed-deletions-D3): KDE_SAMPLE_FUSED (resident kde score with its download behind it, one drain per call) was DROPPED: kde taxi +354% (old base), with DIMTILE no istella gain; code at main b639a2bd2; see docs/TOMBSTONES.md
+
+### MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE
+
+- Verdict: DROPPED-slower (on AMD; neutral on NVIDIA). Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit 749584012).
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE.patch` (reverse of the deletion commit, code files only).
+- What it tried: lane fg-knn-nb K1 made the AMD column take NVIDIA's measured kNN schedule rows by default (`knn_nvidia_schedule_column`: transposed layout, index norms cache, specialized common-k selector, warp-bound guard, bound-and-compact selector, eight register rows, 512-query tile, vector index loads); `-D MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE=1` was the A/B arm that put AMD back on its old rows. Bits: none (scheduling rows only).
+- Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 39.32x / NV 1.01x, knn taxi AMD 97.96x / NV 1.00x. Recall and hashes unchanged (istella 842a646a recall@k 0.97625, taxi cd7ff955 recall@k 0.99975). The AMD column keeps the NVIDIA schedule; only the arm is gone.
+- Files the patch restores: `checks/kernel_matrix.mojo`, `neighbors/estimator.mojo`, `neighbors/impl/detail/knn_brute_force.mojo`
+- grid_controls: `fg-knn-nb.json` `knn_amd_legacy_schedule` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): KNN_AMD_LEGACY_SCHEDULE was SLOWER on AMD; code at main 9f83ea479.
+
+### MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K
+
+- Verdict: DROPPED-slower (on AMD; the arm is AMD-only). Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit 758ced62f).
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K.patch` (reverse of the deletion commit, code files only).
+- What it tried: lane fg-knn-nb K3: the block top-k (DEVIATION 3001) lifted from k <= 16 to k <= 64 on the AMD column only (`KNN_BLOCK_TOPK_MAX_K`), to drop the distance-matrix write/read and the selector launch per tile on CDNA's larger register file. `MOJOLEARN_KNN_BLOCK_TOPK_ALL_K` (every column) is unchanged. Bits: none.
+- Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 13.96x, knn taxi AMD 1.02x; NVIDIA builds are untouched by the arm. Recall and hashes unchanged.
+- Files the patch restores: `checks/kernel_matrix.mojo`
+- grid_controls: `fg-knn-nb.json` `knn_amd_block_topk_all_k` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): KNN_AMD_BLOCK_TOPK_ALL_K was SLOWER on AMD; code at main 9f83ea479.
+
+### MOJOLEARN_KNN_AMD_EXACT_CHAIN
+
+- Verdict: DROPPED-noise. Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit 3373a6665).
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KNN_AMD_EXACT_CHAIN.patch` (reverse of the deletion commit, code files only).
+- What it tried: lane fg-knn-nb K5: the AMD column alone admitted its register distance tile (rows narrower than the shared tile's d >= 32 gate) to the unflushed chain (`knn_distance_exact_chain_for`), since AMD's flush is a software select on every FMA step. Bits: none (admission proves the flush is the identity).
+- Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 1.00x, knn taxi AMD 1.01x; NVIDIA untouched. Recall and hashes unchanged.
+- Files the patch restores: `checks/kernel_matrix.mojo`
+- grid_controls: `fg-knn-nb.json` `knn_amd_exact_chain` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): KNN_AMD_EXACT_CHAIN was NOISE; code at main 9f83ea479.
+
+### MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX
+
+- Verdict: DROPPED-slower (on AMD; neutral on NVIDIA). Deleted 2026-10-10 by lane/postmerge-act-6 (deletion commit bc07b36f6).
+- Recoverable at `9f83ea479` (main the lane branched from). Patch: `experiments/removed/MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX.patch` (reverse of the deletion commit, code files only).
+- What it tried: lane fg-knn-nb K2: on a 64-lane column (CDNA), a column tile's top-k for k >= 17 by the block-cooperative radix selector (`radix_topk_identical_kernel`) instead of the small-k selector's k-deep per-thread lists or the bound-and-compact selector (`KNN_WIDEK_RADIX`, `knn_widek_radix_applies`), keeping the radix scratch for those k. Bits: none (same ascending composite keys).
+- Verdict numbers: fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 1.12x / NV 1.00x, knn taxi AMD 1.31x / NV 0.99x. Recall and hashes unchanged.
+- Files the patch restores: `neighbors/impl/detail/knn_brute_force.mojo`
+- grid_controls: `fg-knn-nb.json` `knn_widek_radix` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): KNN_IDENTICAL_WIDEK_RADIX was SLOWER on AMD; code at main 9f83ea479.
 
 ## Prep
 
