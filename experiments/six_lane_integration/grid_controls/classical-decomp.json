@@ -103,25 +103,6 @@
    "bits_change": true,
    "status": "split_from:C23_CENTERED_PANELS (rewritten row-parallel, same panel-256 cell values)"
   },
-  "TSVD_FUSED_STATS": {
-   "define": "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "decomposition/estimator.mojo:453",
-    "core/blocked_moments.mojo:578",
-    "decomposition/host/pca_oracle.mojo:819"
-   ],
-   "binding": "_mojolearn_estimators",
-   "bits_change": true,
-   "status": "new"
-  },
   "C24_TSQR": {
    "define": "MOJOLEARN_CLASSICAL_C24_PANEL8,MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF,MOJOLEARN_CLASSICAL_C24_TREE4",
    "kind": "switch",
@@ -192,17 +173,11 @@
   },
   "more:tsvd": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
-   "route": "fit: TruncatedSVD.fit -> tsvd_fit (gemm_tn Gram + eig, no control) -> tsvd_explained_host (TSVD_FUSED_STATS | gemm_nt + 2x _column_variance -> column_mean_launch [C01_MEAN]); transform: tsvd_transform (gemm_nt, no control)",
+   "route": "fit: TruncatedSVD.fit -> tsvd_fit (gemm_tn Gram + eig, no control) -> tsvd_explained_host (gemm_nt + 2x _column_variance -> column_mean_launch [C01_MEAN]); transform: tsvd_transform (gemm_nt, no control)",
    "controls": [
-    "C01_MEAN",
-    "TSVD_FUSED_STATS"
+    "C01_MEAN"
    ],
-   "interaction_groups": [
-    [
-     "C01_MEAN",
-     "TSVD_FUSED_STATS"
-    ]
-   ],
+   "interaction_groups": [],
    "note": "TSVD_FUSED_STATS bypasses _column_variance, so C01_MEAN is inert under it"
   },
   "classical:pca@svd_solver=full": {
@@ -319,6 +294,11 @@
    "control": "PCA_COV",
    "arm": "c23",
    "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. c23/off ms ratio NV/AMD on pca: istella 2.281/1.265 (154.0 -> 351.3 NV, 53.1 -> 67.2 AMD), taxi 0.903/0.782; combined 1.195x SLOWER (dimension-dependent: the one-pass d x d leaf Gram loses at wide d; lane grid-flips-1 refused to flip it). Deleted the C23 branch in decomposition/impl/linalg/detail/pca.mojo and pca_oracle.mojo, bm_onepass_covariance (core/blocked_moments.mojo) and its host twin; c04 stays (unmeasured), C23_MCD is separate. Code recoverable at main 42d1e42c6; =23 refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS",
+   "control": "TSVD_FUSED_STATS",
+   "reason": "DELETED 2026-10-10 (lane grid-act-6, deletion commit ffb82c770): IDENTICAL grid g50ebe26a5 loser, one run per arm. on/off ms ratio NV/AMD on more:tsvd: istella 2.337/3.461 (54.1 -> 126.5 NV, 29.5 -> 102.1 AMD), 2.844x combined; taxi 1.834/1.384 (2.9 -> 5.3 NV, 2.7 -> 3.7 AMD), 1.593x. Deleted bm_tsvd_variances / bm_tsvd_leaf_kernel (core/blocked_moments.mojo), host_bm_tsvd_variances (core/blocked_moments_host.mojo) and the branches in decomposition/estimator.mojo and decomposition/host/pca_oracle.mojo; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 328b0ae58; patch experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch."
   }
  ],
  "notes": [
