@@ -76,6 +76,31 @@ def neural_models():
     return dict(mod.MODEL_OF)
 
 
+def bench_board_module():
+    """tools/bench_board.py as a module (its family rosters and tree task tables; standard library imports)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('gridbb_bench_board', TREE / 'tools' / 'bench_board.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def unplanned_reason(BB, fam, lane, ds):
+    """None when bench_board plans the (family, lane, dataset) race, else why it never will.
+
+    bench_board races only its own rosters: --families neural --lanes conv2d plans nothing (conv2d, moe and
+    resnet-block are algos lanes), and a tree task lane races only the board datasets it has a task for
+    (bench_board.tree_task_datasets: gbdt-categorical is taxi only). Such a request used to come back as a GRIDBB
+    NO-RECORD line, which the main board listed as a FAILED cell with no ok cell (nv n0570 / amd a0885 asked
+    neural:conv2d|moe|resnet-block:synthetic; nv n0320 / amd a0499 asked trees:gbdt-categorical:istella)."""
+    if lane not in BB.family_lanes(fam):
+        owner = [f for f in BB.FAMILIES if lane in BB.family_lanes(f)]
+        return 'lane_%s_is_not_in_bench_board_family_%s%s' % (lane, fam, ('_(it_is_%s)' % ','.join(owner)) if owner else '')
+    if fam == 'trees' and not BB.tree_task_datasets(lane, [ds]):
+        return 'bench_board_plans_no_%s_race_for_%s_(TREE_TASK_DATASETS)' % (ds, lane)
+    return None
+
+
 def pip_extra(races, models=None):
     """[(module, spec)] the requested races need beyond DEFAULT_PIP (torch for a Mamba lane)."""
     neural = [lane for fam, lane, _ in races if fam == 'neural']
@@ -198,6 +223,22 @@ def main(argv=None):
                    'Mamba lane whatever this says)')
     p.add_argument('--dry-run', action='store_true', help='print the bench_board commands only')
     args = p.parse_args(argv)
+    # A requested race bench_board never plans is refused here, by name, and never printed as a GRIDBB line
+    # (a GRIDBB NO-RECORD reads as a failed board cell; tools/main_board_ingest.py skips GRIDBB-UNPLANNED).
+    BB = bench_board_module()
+    planned = []
+    for fam, lane, ds in args.race:
+        why = unplanned_reason(BB, fam, lane, ds)
+        if why:
+            print('GRIDBB-UNPLANNED tag=%s vendor=%s family=%s lane=%s dataset=%s reason=%s'
+                  % (args.tag, args.vendor, fam, lane, ds, why), flush=True)
+        else:
+            planned.append((fam, lane, ds))
+    if not planned:
+        print('GRIDBB-DONE tag=%s races=0 ok=0 bench_board_rc=none out=none unplanned=%d'
+              % (args.tag, len(args.race)), flush=True)
+        return 2
+    args.race = planned
     out = Path(args.out or TREE.parent / 'bb')
     extra = [tuple(x.split('=', 1)) for x in args.pip.split(',') if x]
     extra += [kv for kv in pip_extra(args.race) if kv[0] not in {m for m, _ in extra}]

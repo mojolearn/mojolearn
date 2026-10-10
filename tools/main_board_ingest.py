@@ -439,6 +439,25 @@ def admit_algos(BB, rec, branch, resolve, skips, devices=None):
                    gpu_recorded=(devices or {}).get((rec["box"], rec["job"])))
 
 
+def unplanned_reason(BB, family, lane, dataset):
+    """None when bench_board plans the (family, lane, dataset) race, else why it never will.
+
+    A GRIDBB line for a race bench_board never plans says NO-RECORD, and that is a request error, not a failed
+    cell (lane F3, 2026-10-10): nv n0570 / amd a0885 asked neural:conv2d|moe|resnet-block:synthetic (algos lanes,
+    whose ok cells are algos/<lane>/synthetic/rows=full), nv n0320 / amd a0499 asked
+    trees:gbdt-categorical:istella (the lane is taxi only, bench_board.TREE_TASK_DATASETS). Those rows sat in
+    FAILED with "ok cell on the board: none" under a race id no ok run ever has. tools/six_lane_grid_bb.py now
+    refuses such a request up front (GRIDBB-UNPLANNED)."""
+    if family not in BB.FAMILIES:
+        return "unknown family %s" % family
+    if lane not in BB.family_lanes(family):
+        owner = [f for f in BB.FAMILIES if lane in BB.family_lanes(f)]
+        return "lane %s is not in bench_board family %s%s" % (lane, family, (" (it is %s)" % ",".join(owner)) if owner else "")
+    if family == "trees" and not BB.tree_task_datasets(lane, [dataset]):
+        return "bench_board plans no %s race for %s (TREE_TASK_DATASETS)" % (dataset, lane)
+    return None
+
+
 def admit_gridbb(BB, rec, jobs, branch, skip_tag_re, resolve, skips, devices=None):
     job = jobs.get((rec["box"], rec["job"])) if rec["job"] else None
     why = job_is_default(job, branch, skip_tag_re)
@@ -450,6 +469,11 @@ def admit_gridbb(BB, rec, jobs, branch, skip_tag_re, resolve, skips, devices=Non
         return None
     if rec["family"] not in BB.FAMILIES:
         skips.add("GRIDBB: unknown family", rec["family"])
+        return None
+    why = unplanned_reason(BB, rec["family"], rec["lane"], rec["dataset"])
+    if why:
+        skips.add("GRIDBB: not a bench_board race", "%s/%s %s %s/%s/%s: %s" % (
+            rec["box"], rec["job"], rec["tag"], rec["family"], rec["lane"], rec["dataset"], why))
         return None
     return make_ob(BB, resolve, skips, kind="gridbb", vendor=rec["vendor"], box=rec["box"], job=rec["job"],
                    head=job["head"], family=rec["family"], lane=rec["lane"], dataset=rec["dataset"],
@@ -1050,7 +1074,14 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
             raise SystemExit("main_board_ingest: unknown column %r (known: %s)" % (column, ", ".join(COLUMN_VENDOR)))
         root = os.path.join(args.out_root, "main-%s" % column)
         prevs[column] = (root, BB.load_result(os.path.join(root, "board.json")))
-        all_obs.extend(previous_observations(prevs[column][1]))
+        for ob in previous_observations(prevs[column][1]):
+            # a failed row an older board stored for a race bench_board never plans leaves with this ingest
+            why = None if is_ok(ob) else unplanned_reason(BB, ob.get("family"), ob.get("lane"), ob.get("dataset"))
+            if why:
+                skips.add("previous FAILED row: not a bench_board race", "%s/%s %s/%s/%s: %s" % (
+                    ob.get("box"), ob.get("job"), ob.get("family"), ob.get("lane"), ob.get("dataset"), why))
+                continue
+            all_obs.append(ob)
     for ob in all_obs:
         # an observation an older board stored without a version: the version file at its commit
         if not ob.get("version") and hasattr(resolve, "version"):
