@@ -504,10 +504,24 @@ cmd_stage() {
     echo "staged $_staged key(s); the box verified each against the pins"
 }
 
+# put-file <local file> <key>: upload one file that is not a pinned dataset (box log archives, run records) to R2 under <key>.
+# Andrew 2026-10-10: box logs go to R2 by default (archive_box.sh calls this every time), so no run's logs live only on a rented box.
+cmd_put_file() {
+    need_aws || return 1
+    load_creds || return 1
+    _lp="${1:?usage: put-file <local file> <key>}"; key="${2:?usage: put-file <local file> <key>}"
+    [ -f "$_lp" ] || { echo "missing locally: $_lp" >&2; return 1; }
+    case "$key" in measurements/*|boards/*|logs/*) ;; *) echo "put-file keys live under measurements/, boards/ or logs/: $key" >&2; return 1;; esac
+    echo "putting $key ($(size_of "$_lp") bytes) ..."
+    aws s3 cp "$_lp" "s3://$R2_BUCKET/$key" --endpoint-url "$ENDPOINT" --only-show-errors || { echo "put FAILED: $key" >&2; return 1; }
+    echo "  ok"
+}
+
 case "${1:-}" in
     stage)    shift; cmd_stage "$@" ;;
     manifest) shift; cmd_manifest "$@" ;;
     push)     shift; cmd_push "$@" ;;
+    put-file) shift; cmd_put_file "$@" ;;
     list)     shift; cmd_list "$@" ;;
     presign)  shift; cmd_presign "$@" ;;
     presign-put) shift; cmd_presign_put "$@" ;;
