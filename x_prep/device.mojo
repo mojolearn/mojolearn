@@ -44,8 +44,8 @@ from x_prep.idn_blocked import IDN_TE_BLOCKED, te_blocked_scratch_words, te_bloc
 #: lane af-ptimpute (2026-10-03), FAST + Apple + define only (x_prep/fastpt.mojo): the import
 #: instantiates nothing; every launch below sits inside `comptime if PT_* / SI_*`
 from x_prep.fastpt import (
-    PT_COLBATCH, PT_SPEC, PT_FUSED_TRANSFORM, SI_ONEPASS, OP_PT_MAP, OP_PT_SMAP, OP_PT_SFOLD, OP_PT_APPLY,
-    pt_colbatch_fold, pt_spec_fold, cs_tile_stats, ptimpute_part_words, fused_tail_pair,
+    PT_COLBATCH, PT_FUSED_TRANSFORM, SI_ONEPASS, OP_PT_MAP, OP_PT_APPLY,
+    pt_colbatch_fold, cs_tile_stats, ptimpute_part_words, fused_tail_pair,
 )
 from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
@@ -703,15 +703,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                                  FP(unsafe_from_address=Int(dpt.unsafe_ptr())), host_q + (s * STAGE_INTS + 2),
                                  IP(unsafe_from_address=Int(dq.unsafe_ptr())) + (s * STAGE_INTS + 2))
                 continue
-        comptime if PT_SPEC:
-            # the speculated round's (pt_smap, pt_sfold) likewise; pt_spts and pt_sres stay units
-            if op == OP_PT_SMAP:
-                continue
-            if op == OP_PT_SFOLD:
-                pt_spec_fold(ctx, FP(unsafe_from_address=Int(df.unsafe_ptr())),
-                             FP(unsafe_from_address=Int(dpt.unsafe_ptr())), host_q + (s * STAGE_INTS + 2),
-                             IP(unsafe_from_address=Int(dq.unsafe_ptr())) + (s * STAGE_INTS + 2))
-                continue
+        # TOMBSTONE: MOJOLEARN_PT_SPEC (DROP: +10% vs COLBATCH) deleted 2026-10-09 on lane/owed-deletions-D2;
+        # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_SPEC.patch
         comptime if PT_FUSED_TRANSFORM:
             # the standardize tail: pt_apply whose output only feeds the next col_stats runs as the
             # tiled stats of the transform (no TX block), and that col_stats stage is skipped
