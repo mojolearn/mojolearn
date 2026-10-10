@@ -100,7 +100,7 @@ from arima.estimator import (
 from arima.impl.fast_order_search import (
     order_search_caps, order_search_device, order_search_loglike,
     order_search_fit, order_search_multi, ARIMA_FAST_SEARCH_REUSE, ARIMA_FAST_D_CONCURRENT,
-    fast_search_mode, order_search_css, order_search_stepwise,
+    fast_search_mode,
 )
 from arima.impl.fast_arima_quality import ndiffs_kpss
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH
@@ -274,8 +274,8 @@ def arima_order_search_multi_binding(y_addrs: PythonObject, out_addrs: PythonObj
 
 
 def arima_fast_search_mode_binding() raises -> PythonObject:
-    """lane/apple-fast-arima-sf: `fast_search_mode` (bit 0
-    MOJOLEARN_ARIMA_FAST_CSS_SEARCH, bit 1 MOJOLEARN_ARIMA_FAST_STEPWISE,
+    """lane/apple-fast-arima-sf: `fast_search_mode` (bits 0 and 1, the
+    deleted MOJOLEARN_ARIMA_FAST_CSS_SEARCH / _STEPWISE, are always 0;
     bit 2 the grouped final fit through `arima_order_search_multi`, bit 3
     MOJOLEARN_ARIMA_FAST_CONST_BOTH, bit 4 MOJOLEARN_ARIMA_FAST_ROOT_CHECK,
     bit 5 MOJOLEARN_ARIMA_FAST_KPSS_D); 0 with an identity trace on."""
@@ -304,60 +304,10 @@ def arima_ndiffs_kpss_binding(y_addr: PythonObject, out_addr: PythonObject,
     return PythonObject(written)
 
 
-def arima_order_search_css_binding(y_addr: PythonObject, out_addr: PythonObject,
-                                   grid: PythonObject, config: PythonObject) raises -> PythonObject:
-    """`order_search_css`: the `arima_order_search` arguments ((p, q, k)
-    triples, [batch, nobs, d, maxiter]); writes every order's CSS objective
-    at its optimum, on the criterion's scale."""
-    if len(config) != 4 or len(grid) % 3 != 0:
-        raise Error("arima_order_search_css: expected [batch,nobs,d,maxiter] and (p,q,k) triples")
-    var bs = Int(py=config[0])
-    var nobs = Int(py=config[1])
-    var d = Int(py=config[2])
-    var maxiter = Int(py=config[3])
-    var orders = List[ARIMAOrder]()
-    for i in range(len(grid) // 3):  # small-loop(grid: candidate p, q, k orders of the search plan): plan entries, not series data
-        orders.append(ARIMAOrder(Int(py=grid[3*i]), d, Int(py=grid[3*i+1]),
-                                 0, 0, 0, 0, Int(py=grid[3*i+2]), 0))
-    var yp = f32_ptr(Int(py=y_addr))
-    var op = f32_ptr(Int(py=out_addr))
-    var written = 0
-    with GILReleased(Python()):
-        written = order_search_css(yp, op, orders, bs, nobs, maxiter)
-    return PythonObject(written)
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_CSS_SEARCH (DROPPED-quality) and MOJOLEARN_ARIMA_FAST_STEPWISE (DROPPED-slower) deleted
+# 2026-10-09 on lane/owed-deletions-D1 (arima_order_search_css / arima_order_search_stepwise); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_CSS_SEARCH.patch; record in docs/TOMBSTONES.md.
 
-
-def arima_order_search_stepwise_binding(
-    y_addr: PythonObject, best_addr: PythonObject, ic_addr: PythonObject,
-    grid: PythonObject, pens: PythonObject, config: PythonObject,
-) raises -> PythonObject:
-    """`order_search_stepwise`: `grid` (p, q, k) triples (the reachable
-    grid), `pens` one criterion penalty per order, `config` [batch, nobs, d,
-    maxiter, start_p, start_q, max_p, max_q]. Writes `batch` chosen grid rows
-    (int32) and their float32 criteria; returns `batch`."""
-    if len(config) != 8 or len(grid) % 3 != 0 or len(pens) != len(grid) // 3:
-        raise Error("arima_order_search_stepwise: expected [batch,nobs,d,maxiter,start_p,start_q,max_p,max_q], (p,q,k) triples and one penalty per order")
-    var bs = Int(py=config[0])
-    var nobs = Int(py=config[1])
-    var d = Int(py=config[2])
-    var maxiter = Int(py=config[3])
-    var orders = List[ARIMAOrder]()
-    var pen = List[Float32]()
-    for i in range(len(grid) // 3):  # small-loop(grid: candidate p, q, k orders of the search plan): plan entries, not series data
-        orders.append(ARIMAOrder(Int(py=grid[3*i]), d, Int(py=grid[3*i+1]),
-                                 0, 0, 0, 0, Int(py=grid[3*i+2]), 0))
-        pen.append(Float32(Float64(py=pens[i])))
-    var yp = f32_ptr(Int(py=y_addr))
-    var bp = i32_ptr(Int(py=best_addr))
-    var icp = f32_ptr(Int(py=ic_addr))
-    var sp = Int(py=config[4])
-    var sq = Int(py=config[5])
-    var mp = Int(py=config[6])
-    var mq = Int(py=config[7])
-    var written = 0
-    with GILReleased(Python()):
-        written = order_search_stepwise(yp, bp, icp, orders, pen, bs, nobs, maxiter, sp, sq, mp, mq)
-    return PythonObject(written)
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -722,8 +672,6 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         m.def_function[arima_d_concurrent_enabled_binding]("arima_d_concurrent_enabled")
         m.def_function[arima_order_search_multi_binding]("arima_order_search_multi")
         m.def_function[arima_fast_search_mode_binding]("arima_fast_search_mode")
-        m.def_function[arima_order_search_css_binding]("arima_order_search_css")
-        m.def_function[arima_order_search_stepwise_binding]("arima_order_search_stepwise")
         m.def_function[arima_ndiffs_kpss_binding]("arima_ndiffs_kpss")
         m.def_function[arima_predict_binding]("arima_predict")
         m.def_function[arima_forecast_binding]("arima_forecast")

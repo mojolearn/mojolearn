@@ -235,23 +235,16 @@ class AutoARIMA:
         dw = np.ascontiguousarray(dser, dtype=np.int32)
         dcount = _counts(dw, 3)
         grouped_ok = not s and D_ == 0 and 4 not in p_opts and 4 not in q_opts and self.n_obs > 2
-        # lane apple-fast-arima-sf: MOJOLEARN_ARIMA_FAST_CSS_SEARCH (bit 0) /
-        # MOJOLEARN_ARIMA_FAST_STEPWISE (bit 1), FAST + Apple builds only.
-        # The CSS approximation follows statsforecast's `auto_arima_f` rule:
-        # approximation = len(x) > 150 or season_length > 12.
-        css_on = bool(fast_mode & 1) and (self.n_obs > 150 or s > 12)
-        stepwise_on = bool(fast_mode & 2)
+        # TOMBSTONE: MOJOLEARN_ARIMA_FAST_CSS_SEARCH (DROPPED-quality) and MOJOLEARN_ARIMA_FAST_STEPWISE (DROPPED-slower)
+        # deleted 2026-10-09 on lane/owed-deletions-D1 (bits 0/1 of arima_fast_search_mode, the CSS / stepwise search
+        # calls and the grouped final fit); code recoverable at b639a2bd2.
+        # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_CSS_SEARCH.patch; record in docs/TOMBSTONES.md.
         # lane apple-fast-arima-quality: MOJOLEARN_ARIMA_FAST_CONST_BOTH (bit
         # 3) every order with and without the constant in the same search
         # call; MOJOLEARN_ARIMA_FAST_ROOT_CHECK (bit 4) is native (the
-        # searches reject roots of modulus < 1.01), read by _fit_grouped
+        # searches reject roots of modulus < 1.01)
         const_both = bool(fast_mode & 8)
         self._root_check = bool(fast_mode & 16)
-        # the chosen orders then get ONE grouped exact fit (fit()); the
-        # search wrote no reusable fit block
-        self._final_grouped = False
-        if (css_on or stepwise_on) and grouped_ok:
-            grouped_ok = False  # the FAST search below takes every d group
         # MOJOLEARN_ARIMA_FAST_D_CONCURRENT: every d group's grouped search in
         # one native call (fast_order_search.order_search_multi), stashed here
         # and read by the loop below in place of its own call
@@ -310,34 +303,6 @@ class AutoARIMA:
                         best_ic = out
                     elif written:
                         grouped_ll = out.reshape(len(grid), nb)
-                elif plain and (css_on or stepwise_on) and fast_mode & 4:
-                    packed_grid = [v for p_, q_, _, _, k_ in grid for v in (p_, q_, k_)]  # glue: native order metadata arguments
-                    if stepwise_on:
-                        # MOJOLEARN_ARIMA_FAST_STEPWISE: statsforecast's
-                        # stepwise search on the device, start p = q = 2
-                        # (clipped to the grid by the native search)
-                        pens = [self._penalty_of(p_ + q_ + k_ + 1, ic, d_, D_, 0) for p_, q_, _, _, k_ in grid]  # glue: one penalty scalar per order
-                        best32 = np.empty(nb, dtype=np.int32)
-                        ic32 = np.empty(nb, dtype=np.float32)
-                        max_p, max_q = max(p_opts), max(q_opts)  # glue: the user's order option bounds, two ints
-                        written = int(binding.arima_order_search_stepwise(
-                            sub.ctypes.data, best32.ctypes.data, ic32.ctypes.data, packed_grid, pens,
-                            [nb, self.n_obs, d_, int(maxiter), 2, 2, max_p, max_q]))
-                        if written != nb:
-                            raise RuntimeError("AutoARIMA: incomplete stepwise search output")
-                        chosen_on_device = True
-                        best = np.asarray(best32, dtype=np.int64)  # glue: widen the device's choice
-                        best_ic = ic32
-                    else:
-                        # MOJOLEARN_ARIMA_FAST_CSS_SEARCH: every order scored
-                        # by CSS in one round loop
-                        grouped_ll = np.empty((len(grid), nb), dtype=np.float32)
-                        written = int(binding.arima_order_search_css(
-                            sub.ctypes.data, grouped_ll.ctypes.data, packed_grid,
-                            [nb, self.n_obs, d_, int(maxiter)]))
-                        if written != grouped_ll.size:
-                            raise RuntimeError("AutoARIMA: incomplete CSS search output")
-                    self._final_grouped = True
                 elif plain:
                     grouped_ll = np.empty((len(grid), nb), dtype=np.float32)
                     packed_grid = [v for p_, q_, _, _, k_ in grid for v in (p_, q_, k_)]  # glue: native order metadata arguments
@@ -403,58 +368,10 @@ class AutoARIMA:
     @staticmethod
     def _fast_mode():
         """The ARIMA binding's FAST search switches (`arima_fast_search_mode`:
-        bit 0 CSS search, bit 1 stepwise, bit 2 the grouped final fit); 0
-        for a binding without them (the host column, other builds)."""
+        bits 3..5 the quality switches); 0 for a binding without them (the
+        host column, other builds)."""
         fn = getattr(ARIMA()._extension(), "arima_fast_search_mode", None)
         return int(fn()) if fn is not None else 0
-
-    def _fit_grouped(self, maxiter):
-        """MOJOLEARN_ARIMA_FAST_CSS_SEARCH / _STEPWISE: the exact ML fit of
-        every chosen order on its own series in ONE native call
-        (`arima_order_search_multi` with fit output: one concurrent round
-        loop, each order its own start and device L-BFGS, the fit's maxiter),
-        adopted as `ARIMA.fit` state; the criterion `ic_` is then the exact
-        fit's (statsforecast refits the chosen order exactly and reports that
-        fit's criterion)."""
-        binding = ARIMA()._extension()
-        caps_fn = getattr(binding, "arima_order_caps", None)
-        caps = int(caps_fn()) if caps_fn is not None else 0
-        ic_dtype = np.float32 if caps & 4 else np.float64
-        ic_fold = _native("ic_running_min_f32" if caps & 4 else "ic_running_min_f64")
-        keep, y_addrs, out_addrs, fit_addrs, grids = [], [], [], [], []
-        config = [self.n_obs, int(maxiter)]
-        for i, ((p_, d_, q_), _, k_) in enumerate(self.models):  # glue: one native task per chosen order
-            sub = _take(self.endog, self._ids[i])
-            nb = len(self._ids[i])
-            ll = np.empty((1, nb), dtype=np.float32)
-            fit_f32 = np.empty(nb * (3 * (p_ + q_ + k_ + 1) + 1), dtype=np.float32)
-            fit_i32 = np.empty(2 * nb, dtype=np.int32)
-            keep.append((sub, ll, fit_f32, fit_i32, nb))
-            y_addrs.append(sub.ctypes.data)
-            out_addrs.append(ll.ctypes.data)
-            fit_addrs += [fit_f32.ctypes.data, fit_i32.ctypes.data]
-            grids.append([p_, q_, k_])
-            config += [d_, nb]
-        if getattr(self, "_root_check", False):
-            # MOJOLEARN_ARIMA_FAST_ROOT_CHECK: the final exact refit of the
-            # chosen orders is not rejected (the search already applied
-            # statsforecast's root rule to every candidate)
-            config.append(0)
-        written = int(binding.arima_order_search_multi(y_addrs, out_addrs, fit_addrs, grids, config))
-        if written != len(self.endog):
-            raise RuntimeError("AutoARIMA: incomplete grouped final fit output")
-        for i, (order, sorder, k) in enumerate(self.models):  # glue: chosen order groups, at most the grid
-            sub, ll, fit_f32, fit_i32, nb = keep[i]
-            m = ARIMA(order=order, seasonal_order=sorder, trend="c" if k else "n", maxiter=maxiter)
-            local = np.arange(nb, dtype=np.int64)  # glue: identity row ids for the byte gather
-            self._fitted[i] = _adopt_search_fit(m, sub, (fit_f32, fit_i32, [0], nb, ll), 0, local)
-            ic_k = np.empty(nb, dtype=ic_dtype)
-            best_ic = np.empty(nb, dtype=ic_dtype)
-            best = np.empty(nb, dtype=np.int64)
-            ic_fold(ll.ctypes.data, nb, self._penalty(m, self._ic, order[1], sorder[1], sorder[3]),
-                    0, ic_k.ctypes.data, best_ic.ctypes.data, best.ctypes.data)
-            _put(self.ic_, self._ids[i], best_ic)
-        return self
 
     def _search_d_concurrent(self, y, dw, dcount, D_, p_opts, q_opts, P_opts, Q_opts,
                              fit_intercept, maxiter, const_both=False):
@@ -530,8 +447,6 @@ class AutoARIMA:
             raise RuntimeError("AutoARIMA: call search() before fit()")
         if h != 1e-8 or truncate or method != "ml":
             raise NotImplementedError("AutoARIMA.fit: method 'ml' with the default h only")
-        if getattr(self, "_final_grouped", False):
-            return self._fit_grouped(maxiter)
         reuse = getattr(self, "_reuse", None) or [None] * len(self.models)
         for i, (order, sorder, k) in enumerate(self.models):  # glue: chosen order groups, at most the grid
             m = ARIMA(order=order, seasonal_order=sorder, trend="c" if k else "n", maxiter=maxiter)

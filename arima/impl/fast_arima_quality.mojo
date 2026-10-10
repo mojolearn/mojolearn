@@ -63,8 +63,8 @@ comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
 #: the AutoARIMA grid fitted with and without the constant (mean for d + D ==
 #: 0, drift for d + D == 1; none for d + D == 2) in the same batched search
 #: call, statsforecast `search_arima`'s K loop; picked by the board's ic.
-#: Works with ARIMA_FAST_STEPWISE (the walk toggles the constant, R's ninth
-#: move, over the doubled grid), ARIMA_FAST_CSS_SEARCH and SEARCH_REUSE.
+#: Works with SEARCH_REUSE. (ARIMA_FAST_STEPWISE and ARIMA_FAST_CSS_SEARCH,
+#: which it also fed, were deleted 2026-10-09: docs/TOMBSTONES.md.)
 #: UNMEASURED as of 2026-10-05, merged on compile by Andrew's decision. A/B:
 #: lane autoarima, taxi-hourly + synthetic, forecast_rmse must not go up.
 comptime ARIMA_FAST_CONST_BOTH = (
@@ -72,7 +72,7 @@ comptime ARIMA_FAST_CONST_BOTH = (
 )
 #: MOJOLEARN_ARIMA_FAST_ROOT_CHECK (default off, READY-AB). After each
 #: candidate's fit in the device searches (grouped exact, GROUPS/D
-#: concurrent, CSS, stepwise steps), a candidate whose AR or MA polynomial
+#: concurrent), a candidate whose AR or MA polynomial
 #: has a root of modulus < 1.01 gets log-likelihood -inf (ic +inf), as
 #: statsforecast's `myarima` / R's auto.arima. The final exact refit of the
 #: chosen order is not re-checked (`order_search_multi(root_check=False)`).

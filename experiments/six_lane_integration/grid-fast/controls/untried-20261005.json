@@ -39,12 +39,6 @@
   "ARIMA_FAST_KPSS_D": {"define": "MOJOLEARN_ARIMA_FAST_KPSS_D", "kind": "switch", "arms": {"off": [], "on": ["MOJOLEARN_ARIMA_FAST_KPSS_D"]}, "default": "off",
    "source": ["arima/impl/fast_arima_quality.mojo:90"], "paths": ["arima/impl/fast_arima_quality.mojo"], "binding": "arima", "status": "untried",
    "branch": "lane/apple-fast-arima-quality @ 9ca86df3e", "quality": "forecast_rmse"},
-  "ARIMA_FAST_STEPWISE": {"define": "MOJOLEARN_ARIMA_FAST_STEPWISE", "kind": "switch", "arms": {"off": [], "on": ["MOJOLEARN_ARIMA_FAST_STEPWISE"]}, "default": "off",
-   "source": ["arima/impl/fast_order_search.mojo:201"], "paths": ["arima/impl/fast_order_search.mojo"], "binding": "arima", "status": "opt-in, verdict pending (lane/apple-fast-arima-sf)",
-   "branch": "lane/apple-fast-arima-sf", "quality": "forecast_rmse"},
-  "ARIMA_FAST_CSS_SEARCH": {"define": "MOJOLEARN_ARIMA_FAST_CSS_SEARCH", "kind": "switch", "arms": {"off": [], "on": ["MOJOLEARN_ARIMA_FAST_CSS_SEARCH"]}, "default": "off",
-   "source": ["arima/impl/fast_order_search.mojo:198"], "paths": ["arima/impl/fast_order_search.mojo"], "binding": "arima", "status": "opt-in, verdict pending (lane/apple-fast-arima-sf)",
-   "branch": "lane/apple-fast-arima-sf", "quality": "forecast_rmse"},
   "AUTOARIMA_SEARCH_QOLD": {"define": "MOJOLEARN_AUTOARIMA_SEARCH_QOLD", "kind": "env", "arms": {"off": [], "on": ["MOJOLEARN_AUTOARIMA_SEARCH_QOLD=1"]}, "default": "off",
    "source": ["tools/bench_board_algos.py:3086"], "paths": [], "binding": "arima", "status": "untried (board default maxiter 1000 never timed)",
    "branch": "lane/apple-fast-q-misc @ 4daac2998", "quality": "forecast_rmse (statsforecast 68.21)",
@@ -63,8 +57,8 @@
   "algos:iterative-imputer": {"controls": ["X_PREP_FAST_II_CONV", "X_PREP_FAST_II_GRAM_TILE"], "interaction_groups": [["X_PREP_FAST_II_CONV", "X_PREP_FAST_II_GRAM_TILE"]]},
   "algos:simple-imputer": {"controls": ["X_PREP_FAST_QSELECT"], "interaction_groups": []},
   "algos:robust-scaler": {"controls": ["X_PREP_FAST_QSELECT"], "interaction_groups": []},
-  "algos:autoarima": {"controls": ["ARIMA_FAST_CONST_BOTH", "ARIMA_FAST_ROOT_CHECK", "ARIMA_FAST_KPSS_D", "ARIMA_FAST_STEPWISE", "ARIMA_FAST_CSS_SEARCH", "AUTOARIMA_SEARCH_QOLD"],
-   "interaction_groups": [["ARIMA_FAST_CONST_BOTH", "ARIMA_FAST_ROOT_CHECK", "ARIMA_FAST_KPSS_D"], ["ARIMA_FAST_STEPWISE", "ARIMA_FAST_CSS_SEARCH"]]},
+  "algos:autoarima": {"controls": ["ARIMA_FAST_CONST_BOTH", "ARIMA_FAST_ROOT_CHECK", "ARIMA_FAST_KPSS_D", "AUTOARIMA_SEARCH_QOLD"],
+   "interaction_groups": [["ARIMA_FAST_CONST_BOTH", "ARIMA_FAST_ROOT_CHECK", "ARIMA_FAST_KPSS_D"]]},
   "classical:dbscan": {"controls": ["DBSCAN_FAST_CC_BATCH"], "interaction_groups": []},
   "algos:sparse-coder": {"controls": ["DECOMP_FAST_OMP_BLOCK"], "interaction_groups": []}
  },
@@ -79,5 +73,9 @@
   {"define": "MOJOLEARN_AFN_OPT_FUSE_SCAN, AFN_OPT_VEC4, AFN_OPT_RESIDENT_STATE", "kind": "out-of-scope", "reason": "neural optimizers, not trees/classical"},
   {"define": "MOJOLEARN_OPT_FAST_PIPE_CH=524288", "kind": "out-of-scope", "reason": "neural optimizer pipeline, not trees/classical"},
   {"define": "MOJOLEARN_SCHED_FAST_INLINE", "kind": "out-of-scope", "reason": "neural schedule, not trees/classical"}
+ ],
+ "removed": [
+  {"define": "MOJOLEARN_ARIMA_FAST_STEPWISE", "reason": "DROPPED-slower (rab26: synthetic +51.6%, taxi +102.5%, taxi rmse 75.71 -> 90.54); code deleted 2026-10-09 on lane/owed-deletions-D1, recoverable at b639a2bd2"},
+  {"define": "MOJOLEARN_ARIMA_FAST_CSS_SEARCH", "reason": "DROPPED-quality (rab26: forecast_rmse 2.465 -> 3.485 synthetic, 75.71 -> 76.06 taxi); code deleted 2026-10-09 on lane/owed-deletions-D1, recoverable at b639a2bd2"}
  ]
 }
