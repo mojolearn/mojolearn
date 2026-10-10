@@ -248,6 +248,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_PSHAP_FAST_OVERLAP"](), "removed 2026-10-09 (lane/owed-deletions-D1): PermutationExplainer next-chunk delta rows and download overlapped with the model was DROPPED-slower: permutation-shap taxi +26.6% (M3 verdicts batch 6, 1 run per arm); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_MC_CLASS_BATCH_DERIV"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple MultiClass softmax in registers was DROPPED-noise: symmulti-mc-deriv istella/taxi within +-2.4%, identical quality (old base); code at main b639a2bd2; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_MC_CLASS_BATCH_EST"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple MultiClass leaf-oracle value, der and der2 in one launch was DROPPED-noise: symmulti-mc-est istella/taxi within +-2.4%, with MC_CLASS_BATCH_DERIV -1.2% (old base), quality identical; code at main b639a2bd2; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_PL_PAIRS_ONCE"](), "removed 2026-10-09 (lane/owed-deletions-D1): FAST Apple PairLogit each-pair-once group kernel was DROPPED-noise: symmulti-pl-once / pl-both istella within +-2.4%, identical quality (old base); code at main b639a2bd2; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
