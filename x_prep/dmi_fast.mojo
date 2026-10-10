@@ -38,10 +38,8 @@ never compile a launch of these kernels.
      i * d + c as the unit does (adjacent threads: different columns).
    A column with a non-finite value or noise word, or a non-finite y, runs
    `mi_cc_unit` for its points (the host's rule).
-2. `mi_colscale_fast_kernel`, `mi_reduce_fast_kernel` (MOJOLEARN_MI_FAST_FOLDS):
-   the two one-thread-per-column folds over n rows as threadgroup folds
-   (x_prep/fastred.mojo's form): the sum order changes (FAST), pairwise is
-   never less accurate than row order.
+2. (MOJOLEARN_MI_FAST_FOLDS, the column folds as threadgroup folds, was deleted
+   2026-10-09: DROP speed + quality; see the TOMBSTONE below.)
 3. `mi_cd_device_rank` (MOJOLEARN_MI_CLF_RANKMAJOR): dmi.mojo's `mi_cd`
    stage with the point kernel in the rank-major mapping of (1).
 """
@@ -58,8 +56,6 @@ from x_prep.dmi import (
     _count_run, _count_within_ties, _load_kernel, _tile_kernel, _global_kernel, _prep_kernel, _M_FLAG, _M_NA,
 )
 
-#: threads of a column fold (mi_colscale, mi_reduce)
-comptime TGF = 256
 #: threads per block of the one-thread-per-unit launches
 comptime CBS = 256
 
@@ -600,71 +596,9 @@ def mi_cc_device[TIES: Bool, RANK: Bool](ctx: DeviceContext, mut df: DeviceBuffe
 
 
 # ------------------------------------------------------------------ MI_FAST_FOLDS
-def mi_colscale_fast_kernel(f: FP, q: IP):
-    """`mi_colscale_unit` for column block_idx.x by a threadgroup fold:
-    q = [X, n, d, ST, SCALE, MABS]; each thread sums abs(x / SCALE) over rows
-    tid, tid + TGF, ..., then the tree."""
-    var c = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var n = p(q, 1)
-    var d = p(q, 2)
-    var s = zero_to_one(sqrtf(ld(f, p(q, 3) + 2 * d + c)))
-    var sh = stack_allocation[TGF, Float32, address_space = AddressSpace.SHARED]()
-    var acc = Float32(0)
-    for i in range(tid, n, TGF):
-        acc = add(acc, abs(div(ld(f, p(q, 0) + i * d + c), s)))
-    sh[tid] = acc
-    barrier()
-    var w = TGF // 2
-    while w >= 1:
-        if tid < w:
-            sh[tid] = add(sh[tid], sh[tid + w])
-        barrier()
-        w //= 2
-    if tid == 0:
-        st(f, p(q, 4) + c, s)
-        var m = div(sh[0], Float32(n))
-        st(f, p(q, 5) + c, m if m > Float32(1) else Float32(1))
-
-
-def mi_reduce_fast_kernel(f: FP, q: IP):
-    """`mi_reduce_unit` for column block_idx.x: TERM summed by the fold, the
-    rest (digamma, NUSED, the clip at 0) by thread 0 as the unit writes it.
-    q = [TERM, n, d, KIND, k, NUSED, OUT, CNT, KS]."""
-    var c = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var n = p(q, 1)
-    var d = p(q, 2)
-    var sh = stack_allocation[TGF, Float32, address_space = AddressSpace.SHARED]()
-    var acc = Float32(0)
-    for i in range(tid, n, TGF):
-        acc = add(acc, ld(f, p(q, 0) + i * d + c))
-    sh[tid] = acc
-    barrier()
-    var w = TGF // 2
-    while w >= 1:
-        if tid < w:
-            sh[tid] = add(sh[tid], sh[tid + w])
-        barrier()
-        w //= 2
-    if tid != 0:
-        return
-    var s = sh[0]
-    var mi: Float32
-    if p(q, 3) == 0:
-        mi = sub(add(digammaf(Float32(n)), digammaf(Float32(p(q, 4)))), div(s, Float32(n)))
-    else:
-        var used = p(q, 5)
-        if p(q, 3) >= 2:
-            # KIND 3 (lane cpu2-l3-prep): one count table shared by every column
-            var cb = p(q, 7) + (0 if p(q, 3) == 3 else c * p(q, 8))
-            used = 0
-            for kk in range(p(q, 8)):
-                var cnt = Int(ld(f, cb + kk))
-                if cnt > 1:
-                    used += cnt
-        mi = add(digammaf(Float32(used)), div(s, Float32(used))) if used > 0 else Float32(0)
-    st(f, p(q, 6) + c, mi if mi > Float32(0) else Float32(0))
+# TOMBSTONE: MOJOLEARN_MI_FAST_FOLDS (DROP speed + quality: -0.2% istella; scores move up to 3.2% of scale and the
+# selected set changes) deleted 2026-10-09 on lane/owed-deletions-D2: mi_colscale_fast_kernel, mi_reduce_fast_kernel
+# and TGF; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_MI_FAST_FOLDS.patch
 
 
 # ------------------------------------------------------------------ MI_CLF_RANKMAJOR

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """miv_quality.py: quality-only check for the lane/apple-fast-miv defines
 (x_prep/dmi_fast.mojo MI_REG_TIES / MI_REG_RANKMAJOR / MI_CLF_RANKMAJOR /
-MI_FAST_FOLDS; MI_ALL deleted 2026-10-09). It times nothing.
+MI_FAST_FOLDS and MI_ALL deleted 2026-10-09). It times nothing.
 
   python tools/miv_quality.py dump <out.npz>          scores with the installed .so
   python tools/miv_quality.py cmp <off.npz> <on.npz> <label>
