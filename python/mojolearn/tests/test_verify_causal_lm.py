@@ -21,6 +21,21 @@ def test_comparator_compares_logits_and_input_bytes():
     assert not compare(a,b)
 
 
+
+def test_host_vs_device_state_is_recorded_not_required():
+    """Andrew 2026-10-07: host digests are recorded, never required; device vs device stays exact."""
+    a=record(); b=copy.deepcopy(a)
+    a['device']='cpu'; b['device']='gpu'
+    b['cases'][0]['parts']['state']='e'*64
+    notes=[]
+    assert compare(a,b,notes)
+    assert notes[0]['host_device_state']=='DIFFERS' and len(notes[0]['state_differs'])==1
+    b['cases'][0]['parts']['logits']='f'*64
+    assert not compare(a,b)
+    c=copy.deepcopy(a); d=copy.deepcopy(a); c['device']=d['device']='gpu'
+    d['cases'][0]['parts']['state']='e'*64
+    assert not compare(c,d)
+
 @pytest.mark.parametrize('fault', ['missing_part','missing_check','failed','duplicate','empty','source'])
 def test_incomplete_records_refused(fault):
     a=record(); b=copy.deepcopy(a)

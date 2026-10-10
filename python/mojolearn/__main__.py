@@ -139,9 +139,10 @@ def _causal_lm_dispatch(args):
     from . import _verify_causal_lm as proof
     if args.compare:
         left, right = (json.loads(Path(p).read_text()) for p in args.compare)
-        equal = proof.compare(left, right)
+        notes = []
+        equal = proof.compare(left, right, notes)
         print(json.dumps({'status': 'NUMERICAL_MATCH_UNQUALIFIED' if equal else 'DIVERGENT',
-                          'release_qualified': False}))
+                          'release_qualified': False, **({'recorded': notes} if notes else {})}))
         return 0 if equal else 1
     path = Path(args.output)
     if path.exists():

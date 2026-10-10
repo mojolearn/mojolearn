@@ -146,7 +146,7 @@ def capture(device='cpu', formats=('float32',), *, layer_devices=None):
     return result
 
 
-def compare(left, right):
+def compare(left, right, notes=None):
     if (left.get('profile') != PROFILE or right.get('profile') != PROFILE
             or not left.get('source_sha256')
             or left.get('source_sha256') != right.get('source_sha256')):
@@ -173,7 +173,18 @@ def compare(left, right):
         if set(out) != expected:
             raise ValueError('capture missing requested architecture/format cases')
         return out
-    return cells(left) == cells(right)
+    a, b = cells(left), cells(right)
+    if {left.get('device'), right.get('device')} == {'cpu', 'gpu'}:
+        # Andrew 2026-10-07: identity is required NVIDIA vs AMD only; host and Apple digests are recorded, never
+        # required. Host vs device: logits, checkpoints and every other part must match; the 'state' part is
+        # recorded (in `notes`) and not required. Device vs device (split, reversed) still compares every part.
+        differ = sorted(k for k in a if a[k][1]['state'] != b[k][1]['state'])  # glue: names the recorded cases
+        if notes is not None:
+            notes.append({'host_device_state': 'DIFFERS' if differ else 'EQUAL', 'cases': len(a),
+                          'state_differs': ['/'.join(map(str, k)) for k in differ]})  # glue: case labels
+        a, b = ({k: (ck, {n: h for n, h in parts.items() if n != 'state'})  # glue: drops the recorded part
+                 for k, (ck, parts) in cs.items()} for cs in (a, b))
+    return a == b
 
 
 def main():

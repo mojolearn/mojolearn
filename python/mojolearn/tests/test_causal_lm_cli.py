@@ -26,7 +26,7 @@ def test_compare_never_runs_model(tmp_path, monkeypatch, equal, exit_code):
     def unexpected(*args):
         raise AssertionError('comparison executed a model')
     monkeypatch.setattr(proof, 'capture', unexpected)
-    monkeypatch.setattr(proof, 'compare', lambda a, b: equal)
+    monkeypatch.setattr(proof, 'compare', lambda a, b, notes=None: equal)
     path = tmp_path / 'capture.json'
     path.write_text(json.dumps({'status': 'example'}))
     args = cli.build_parser().parse_args(['verify-causal-lm', '--compare', str(path), str(path)])
