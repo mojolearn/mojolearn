@@ -19,9 +19,7 @@ ascending (the matrix unit's per-cell order), with no per-step flush; FAST
 only, quality on the board's rel_fro / max_rel_diff column.
   (_KB32, 32-word slabs, was deleted 2026-10-09: see the TOMBSTONE below.)
   (_WIDE, the 64 x 64 hidden block, was deleted 2026-10-10: see the TOMBSTONE below.)
-  _PF:   the next slab's global words read into registers before the current
-         slab's fragment products (one slab of load latency hidden).
-Every variant implies MOJOLEARN_MOE_FAST_MMA."""
+  (_PF, the next slab's register prefetch, was deleted 2026-10-10: see the TOMBSTONE below.)"""
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.ffi import external_call
@@ -37,9 +35,8 @@ from sequence.moe_reg import MOE_DEVGROUP
 
 #: MOE_FAST_MMA is the FAST + Apple default since M3 A/B rab10-moemma (2026-10-05, afc_ab_def, full board
 #: size, 1 run per arm): moe synthetic 71.39 -> 53.48 ms (-25.1%), output digest identical.
-#: `-D MOJOLEARN_MOE_FAST_MMA_OFF` turns it off. WIDE/PF geometry variants stay opt-in:
-#: the bundle KB32 + WIDE + PF (rab10-moemmaall, same A/B setup) was slower, moe 71.3 -> 146.8 ms;
-#: recorded as a bundle loss (no single-variant A/B yet).
+#: `-D MOJOLEARN_MOE_FAST_MMA_OFF` turns it off. The bundle KB32 + WIDE + PF (rab10-moemmaall,
+#: same A/B setup) was slower, moe 71.3 -> 146.8 ms; its three variants are deleted (TOMBSTONEs below).
 # See docs/apple-fast/EXPERIMENTS.md (MOE_FAST_MMA); neural lane owns validation.
 # TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_KB32 (DROPPED-slower as the bundle KB32 + WIDE + PF: M3 rab10-moemmaall moe synthetic
 # 71.3 -> 146.8 ms; never A/B-ed alone) deleted 2026-10-09 on lane/owed-deletions-D2: the 32-word slab; MM_KB is 16;
@@ -47,11 +44,13 @@ from sequence.moe_reg import MOE_DEVGROUP
 # TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_WIDE (DROPPED-slower, bundle) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
 # Tried: the hidden product as 64 pairs x 64 features (gate and up 32 fragments a simdgroup, MM_FNH 4) instead of 64 x 32; DROPPED with the bundle KB32 + WIDE + PF (M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms, 2x slower; never A/B-ed alone). MM_FNH is 2.
 # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_WIDE.patch; record in docs/TOMBSTONES.md.
-comptime MM_PF = is_defined["MOJOLEARN_MOE_FAST_MMA_PF"]()
+# TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_PF (DROPPED-slower, bundle) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+# Tried: the next slab's global words read into registers before the current slab's fragment products; DROPPED with the bundle KB32 + WIDE + PF (M3 rab10-moemmaall moe synthetic 71.3 -> 146.8 ms, 2x slower; never A/B-ed alone). The loads follow the slab's products.
+# Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch; record in docs/TOMBSTONES.md.
 # Apple simdgroup intrinsics only: an NVIDIA/AMD target cannot link them
 # (gfx942 lld: undefined air.simdgroup_matrix_*; box-run-2 compile fix).
 comptime MOE_MMA = has_apple_gpu_accelerator() and MOE_DEVGROUP and (
-    (not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()) or MM_PF
+    not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()
 )
 
 comptime MM_KB = 16
@@ -193,11 +192,9 @@ def moe_hidden_mma_kernel(
             ut[r * MM_BST + q - r * MM_KB] = uv[j]
         barrier()
         var d1 = d0 + MM_KB
-        comptime if MM_PF:
-            if d1 < D:
-                xv = _mm_gload[NX](x, xrow, d1, D, tid)
-                gv = _mm_gload[NW](gu, grow, d1, D, tid)
-                uv = _mm_gload[NW](gu, urow, d1, D, tid)
+        # TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_PF (DROPPED-slower, bundle) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+        # Tried: MOE_FAST_MMA_PF's early slab load (hidden kernel).
+        # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch; record in docs/TOMBSTONES.md.
         comptime for p8 in range(MM_KB // 8):
             var af = InlineArray[_M64, MM_FM](fill=_M64(0))
             comptime for fm in range(MM_FM):
@@ -209,11 +206,10 @@ def moe_hidden_mma_kernel(
                     accg[fm * FN + fq] = _mm_mma(af[fm], gf, accg[fm * FN + fq])
                     accu[fm * FN + fq] = _mm_mma(af[fm], uf, accu[fm * FN + fq])
         barrier()
-        comptime if not MM_PF:
-            if d1 < D:
-                xv = _mm_gload[NX](x, xrow, d1, D, tid)
-                gv = _mm_gload[NW](gu, grow, d1, D, tid)
-                uv = _mm_gload[NW](gu, urow, d1, D, tid)
+        if d1 < D:
+            xv = _mm_gload[NX](x, xrow, d1, D, tid)
+            gv = _mm_gload[NW](gu, grow, d1, D, tid)
+            uv = _mm_gload[NW](gu, urow, d1, D, tid)
         d0 = d1
     comptime for fm in range(MM_FM):
         var rp = p0 + (sgm * MM_FM + fm) * 8 + frow
@@ -286,10 +282,9 @@ def moe_out_mma_kernel(
             wt[r * MM_BST + q - r * MM_KB] = wv[j]
         barrier()
         var f1 = f0 + MM_KB
-        comptime if MM_PF:
-            if f1 < F:
-                hv = _mm_gload[NX](h, hrow, f1, F, tid)
-                wv = _mm_gload[NW](dn, wrow, f1, F, tid)
+        # TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_PF (DROPPED-slower, bundle) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+        # Tried: MOE_FAST_MMA_PF's early slab load (out kernel).
+        # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch; record in docs/TOMBSTONES.md.
         comptime for p8 in range(MM_KB // 8):
             var af = InlineArray[_M64, MM_FM](fill=_M64(0))
             comptime for fm in range(MM_FM):
@@ -299,10 +294,9 @@ def moe_out_mma_kernel(
                 comptime for fm in range(MM_FM):
                     acc[fm * FN + fq] = _mm_mma(af[fm], bf, acc[fm * FN + fq])
         barrier()
-        comptime if not MM_PF:
-            if f1 < F:
-                hv = _mm_gload[NX](h, hrow, f1, F, tid)
-                wv = _mm_gload[NW](dn, wrow, f1, F, tid)
+        if f1 < F:
+            hv = _mm_gload[NX](h, hrow, f1, F, tid)
+            wv = _mm_gload[NW](dn, wrow, f1, F, tid)
         f0 = f1
     comptime for fm in range(MM_FM):
         var rp = p0 + (sgm * MM_FM + fm) * 8 + frow
