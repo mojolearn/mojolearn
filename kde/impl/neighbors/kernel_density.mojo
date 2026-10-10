@@ -1085,7 +1085,7 @@ comptime KDE_FUSED_QREG = 64
 
 
 @always_inline
-def _kde_fused_cell_distance[DPAD: Int, qo: MutOrigin, to: MutOrigin](
+def _kde_fused_cell_distance[DPAD: Int, qo: MutOrigin, to: MutOrigin](  # device-helper: one cell distance inside the fused kde kernels
     qreg: MutPointer[Float32, qo],
     query: MutPointer[Float32, MutAnyOrigin],
     tile: MutPointer[Float32, to, address_space = AddressSpace.SHARED],
