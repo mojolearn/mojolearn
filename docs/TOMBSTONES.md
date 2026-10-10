@@ -207,6 +207,7 @@ in the tables after the sections.
 | [`MOJOLEARN_NN22_EAGER_DKDV_PAIR`](#mojolearn_nn22_eager_dkdv_pair) | Neural | unmeasured | 2026-10-07 | [MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch](../experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch) |
 | [`MOJOLEARN_NN23_ROWDOT_DS`](#mojolearn_nn23_rowdot_ds) | Neural | unmeasured | 2026-10-07 | [MOJOLEARN_NN23_ROWDOT_DS.patch](../experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch) |
 | [`MOJOLEARN_OPT_FAST_MAP_DOWN`](#mojolearn_opt_fast_map_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_OPT_FAST_MAP_DOWN.patch](../experiments/removed/MOJOLEARN_OPT_FAST_MAP_DOWN.patch) |
+| [`MOJOLEARN_OPT_FAST_RAW_DOWN`](#mojolearn_opt_fast_raw_down) | Neural | DROPPED-slower | 2026-10-09 | [MOJOLEARN_OPT_FAST_RAW_DOWN.patch](../experiments/removed/MOJOLEARN_OPT_FAST_RAW_DOWN.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_NT_TILED`](#mojolearn_apple_fast_gemm_nt_tiled) | GEMM | DROPPED-slower | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_NT_TILED.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_PINNED`](#mojolearn_apple_fast_gemm_pinned) | GEMM | DROPPED-noise | 2026-10-03 | [MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_PINNED.patch) |
 | [`MOJOLEARN_BGMM_FAST_MAHAL_GEMM`](#mojolearn_bgmm_fast_mahal_gemm) | GEMM | DROPPED-slower |  | lane only |
@@ -1600,6 +1601,17 @@ in the tables after the sections.
 - EXPERIMENTS.md:1279 (lane/apple-fast-verdicts-4): `OPT_FAST_MAP_DOWN`, rab7-optfastmapdo, +81% .. +86%, **RECORD: stays off**: slower
 - EXPERIMENTS.md:1830 (Owed deletions D2): **DELETED**.
 
+### MOJOLEARN_OPT_FAST_RAW_DOWN
+
+- What it tried: the sequence optimizer's resident-step parameter read-back DMAd straight into the caller's array in OPT_PIPE_CH chunks, all queued, one wait (FAST + Apple, lane apple-fast-gap-optim; sequence/opt_resident.mojo `_raw_download`).
+- Verdict: DROPPED-slower: M3 rab7-optfastrawdo (Verdicts batch 4, reconciled 2026-10-05) rmsprop, adagrad, adamax, nadam synthetic +76% .. +80%. Deleted 2026-10-09 on `lane/owed-deletions-D2` (commit `owed-deletions-D2: delete MOJOLEARN_OPT_FAST_RAW_DOWN`).
+- Recoverable at `b639a2bd2`. Patch: `experiments/removed/MOJOLEARN_OPT_FAST_RAW_DOWN.patch` (applies to the deletion commit's tree).
+- Files the patch restores: `sequence/opt_resident.mojo`
+- Guard refusal (core/six_lane_experiment_guards.mojo:248): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_OPT_FAST_RAW_DOWN, the raw chunked optimizer read-back, was DROPPED-slower: M3 rab7-optfastrawdo rmsprop/adagrad/adamax/nadam +76% .. +80%; code at main b639a2bd2; see docs/TOMBSTONES.md
+- EXPERIMENTS.md:1193 (lane/apple-fast-gap-optim @ cf4513f8a, on main): `OPT_FAST_MAP_DOWN` / `OPT_FAST_RAW_DOWN` / `OPT_FAST_PIPE_CH=524288`, **DROPPED-slower**: RAW_DOWN rab7-optfastrawdo +76% .. +80%
+- EXPERIMENTS.md:1280 (lane/apple-fast-verdicts-4): `OPT_FAST_RAW_DOWN`, rab7-optfastrawdo, +76% .. +80%, **RECORD: stays off**: slower
+- EXPERIMENTS.md:1831 (Owed deletions D2): **DELETED**.
+
 ## GEMM
 
 ### MOJOLEARN_APPLE_FAST_GEMM_NT_TILED
@@ -1901,7 +1913,6 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_MC_CLASS_BATCH_DERIV` | EXPERIMENTS.md:165 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:763` |
 | `MOJOLEARN_MC_CLASS_BATCH_EST` | EXPERIMENTS.md:166 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/multilogit.mojo:774` |
 | `MOJOLEARN_OPT_FAST_PIPE_CH` | EXPERIMENTS.md:1193 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/opt_resident.mojo:82` |
-| `MOJOLEARN_OPT_FAST_RAW_DOWN` | EXPERIMENTS.md:1193 DROPPED-slower (lane/apple-fast-gap-optim @ cf4513f8a (on main)) | `sequence/opt_resident.mojo:91` |
 | `MOJOLEARN_PL_PAIRS_ONCE` | EXPERIMENTS.md:174 DROPPED-noise (lane/apple-fast-sym-multi @ d2c832da0) | `gbdt/targets/kernel/pair_logit_group.mojo:130` |
 | `MOJOLEARN_PSHAP_FAST_OVERLAP` | EXPERIMENTS.md:1413 DROPPED-slower (lane/apple-fast-s-shap) | `python/mojolearn/_expansion_trees.py:3530` |
 | `MOJOLEARN_PTIMPUTE_ALL` | EXPERIMENTS.md:376 DROP (quality) (lane/apple-fast-batchv @ 77f1f5afb) | `x_prep/fastpt.mojo:24` |
