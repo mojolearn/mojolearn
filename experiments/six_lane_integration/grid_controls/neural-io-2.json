@@ -28,27 +28,6 @@
    "status": "new",
    "note": "Lane neural-io-2. Default ON (waste removal): MoEBlock's forward on resident sequence tensors (x, y, logits, picks, weights stay on the device; 2 x 4 T D bytes over PCIe and four host zero-filled outputs per call removed; host-array entry outputs np.empty). The OFF arm leaves moe_forward_dev out of the binding, so MoEBlock.to_device returns host arrays and the host-array entry runs (the before arm). Same moe_forward_core launches on the same words: no bit moves. A/B owed on moe plus a neighboring shape (e.g. T=6144, D=1024, F=2816; T=8192, D=768)."
   },
-  "idn_emb_scan_deferred_off": {
-   "define": "MOJOLEARN_IDN_EMB_SCAN_DEFERRED_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_EMB_SCAN_DEFERRED_OFF=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "bindings/_mojolearn_embedding.mojo:59",
-    "bindings/_mojolearn_embedding.mojo:1029"
-   ],
-   "binding": [
-    "_mojolearn_embedding"
-   ],
-   "bits_change": false,
-   "status": "new",
-   "note": "Lane neural-io-2. Default ON (IDENTICAL; waste removal): the resident backward of a fresh gradient queues the dY non-finite scan and its partials' copy before the fold and reads them after the call's one final wait (one host round trip per call removed); a hit raises the same message from the same word (the fold never writes dY). A carried dW keeps the eager scans. No bit moves. A/B owed on embedding plus a neighboring shape (V=50,257, T=65,536)."
-  },
   "xcnn_res_new_nozero_off": {
    "define": "MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF",
    "kind": "switch",
@@ -109,15 +88,10 @@
   },
   "expanded:embedding": {
    "binding": "_mojolearn_embedding",
-   "route": "Embedding.backward(ids, dy on device) -> embedding_backward_dev -> _backward_dev_run [idn_emb_scan_deferred_off]",
-   "controls": [
-    "idn_emb_scan_deferred_off"
-   ],
-   "interaction_groups": [
-    [
-     "idn_emb_scan_deferred_off"
-    ]
-   ]
+   "route": "Embedding.backward(ids, dy on device) -> embedding_backward_dev -> _backward_dev_run (eager refusal scans; idn_emb_scan_deferred_off removed 2026-10-10)",
+   "controls": [],
+   "interaction_groups": [],
+   "note": "no control of this lane reaches it since the deferred scan was deleted (lane postmerge-act-6)"
   },
   "neural:batchnorm2d": {
    "binding": "_mojolearn_x_cnn",
@@ -163,6 +137,11 @@
    "define": "MOJOLEARN_IDN_AF_VEC_FUSED",
    "control": "idn_af_vec_fused",
    "reason": "DELETED 2026-10-09 (lane postmerge-act-5): post-merge A/B, one run per arm, found it NOISE: adafactor synthetic NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), vendor average 0.98x; digest aa99a3dc unchanged. sequence/af_fused.mojo, OP_AF_VFUSE/OP_AF_VFIN and the pyapi route deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 0a7b206f1."
+  },
+  {
+   "define": "MOJOLEARN_IDN_EMB_SCAN_DEFERRED_OFF",
+   "control": "idn_emb_scan_deferred_off",
+   "reason": "DELETED 2026-10-10 (lane postmerge-act-6): the _OFF arm (eager scans) WON the post-merge neural A/B, one run per arm (nv2 L40S v1056 -> v1059 on main 9f83ea479, amd MI325X a1156 -> a1159 on main 0a7b206f1): embedding NV 2.70 -> 2.28 ms (0.84x) / AMD 2.09 -> 1.94 ms (0.92x), digest 2753e61a unchanged. The deferred scan (MOJOLEARN_IDN_EMB_SCAN_DEFERRED, default on) is deleted, the eager scans are the only path; both defines refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch)."
   }
  ]
 }
