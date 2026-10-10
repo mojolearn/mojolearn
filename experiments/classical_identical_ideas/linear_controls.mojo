@@ -46,8 +46,30 @@ comptime C13_FOLD_STATS = CLASSICAL_IDN
 # chunk's sums are compensated (TwoSum / Dot2), chunks merge ascending, and
 # the training sets combine fold statistics ascending by the parallel-axis
 # rule. Changes bits (host column and both GPU vendors together).
-comptime ENETCV_FOLD_BLOCKS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS"]()
-comptime ENETCV_FB_CHUNKS = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS", 32]() if ENETCV_FOLD_BLOCKS else 32
+# PROMOTED to the IDENTICAL default 2026-10-10 (lane/grid-act-6, grid freeze
+# 20261010 @50ebe26a5, runs g50ebe26a5/h/m: NVIDIA L40S sm_89 nv2 + AMD
+# MI325X gfx942, full board data, one run per arm, incumbent once + stored
+# floors). NV / AMD ms, incumbent (staged means + Gram) -> 64 chunks:
+#   enet-cv  istella 531.3 -> 459.1 / 907.2 -> 868.4 (0.909x combined),
+#            taxi 92.1 -> 20.0 / 346.0 -> 226.7 (0.377x);
+#   lasso-cv istella 526.1 -> 428.6 / 934.4 -> 823.0 (0.847x),
+#            taxi 89.8 -> 17.8 / 372.4 -> 229.7 (0.350x).
+# Other arms, combined enet-cv / lasso-cv istella, taxi: 16 = 0.888/0.839,
+# 0.398/0.388; 32 = 0.922/0.860, 0.403/0.417. 64 wins three of the four
+# cells and the geo-mean (0.565 vs 0.582 / 0.604). Cost reasoning: the work
+# is one read of every row per pass for any chunk count; more chunks per fold
+# put more blocks on the device for the same fold span (span / 64 rows per
+# chunk), and the extra merge is 64 TwoSum steps per (fold, cell), small
+# against the row reads for any fold span above a few thousand rows. The
+# chunk count is a fixed constant, not a data shape. Bits change vs the old
+# default (the fold order of the prep statistics) on the host column and both
+# GPU vendors together; NV and AMD output hashes must match per arm.
+# Absent = 64 in IDENTICAL; -D MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16|32
+# are the other arms; -D MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF restores
+# the old staged means + Gram path. FAST keeps the old path.
+comptime ENETCV_FOLD_BLOCKS_OFF = is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF"]()
+comptime ENETCV_FOLD_BLOCKS = CLASSICAL_IDN and not ENETCV_FOLD_BLOCKS_OFF
+comptime ENETCV_FB_CHUNKS = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS", 64]() if ENETCV_FOLD_BLOCKS else 64
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS (quality loss) deleted 2026-10-07 by f4de82db4; code recoverable at f4de82db4^.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
 comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"]()
