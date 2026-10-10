@@ -67,37 +67,6 @@
    "status": "new K2 (A/B owed)",
    "note": "On a 64-lane column (AMD CDNA) k>=17 column-tile selection by the radix selector (scratch shrink skipped there). NVIDIA build unaffected (32-lane). Same composite-key total order."
   },
-  "knn_amd_block_topk_all_k": {
-   "define": "MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "checks/kernel_matrix.mojo:KNN_BLOCK_TOPK_MAX_K"
-   ],
-   "binding": [
-    "_mojolearn",
-    "_mojolearn_estimators",
-    "_mojolearn_hdbscan",
-    "_mojolearn_metrics",
-    "_mojolearn_x_ann",
-    "_mojolearn_ivf",
-    "_mojolearn_x_cluster",
-    "_mojolearn_estimators_host",
-    "_mojolearn_hdbscan_host",
-    "_mojolearn_metrics_host",
-    "_mojolearn_x_ann_host",
-    "_mojolearn_x_cluster_host"
-   ],
-   "bits_change": false,
-   "status": "new K3 (A/B owed)",
-   "note": "AMD column only: block top-k serves k up to 64 (no distance matrix, no selector launch) where the smem tile runs (d>=32 on AMD). NVIDIA keeps 16."
-  },
   "knn_amd_exact_chain": {
    "define": "MOJOLEARN_KNN_AMD_EXACT_CHAIN",
    "kind": "switch",
@@ -161,13 +130,11 @@
    "controls": [
     "knn_scratch_pool_off",
     "knn_widek_radix",
-    "knn_amd_block_topk_all_k",
     "knn_amd_exact_chain"
    ],
    "interaction_groups": [
     [
-     "knn_widek_radix",
-     "knn_amd_block_topk_all_k"
+     "knn_widek_radix"
     ],
     [
      "knn_amd_exact_chain"
@@ -205,6 +172,11 @@
    "define": "MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE",
    "control": "knn_amd_legacy_schedule",
    "reason": "DELETED 2026-10-10 (lane postmerge-act-6): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 39.32x / NV 1.01x, knn taxi AMD 97.96x / NV 1.00x (slower on AMD), recall and hashes unchanged (842a646a, cd7ff955). The AMD column takes the NVIDIA kNN schedule only (checks/kernel_matrix.mojo knn_nvidia_schedule_column); define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE.patch)."
+  },
+  {
+   "define": "MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K",
+   "control": "knn_amd_block_topk_all_k",
+   "reason": "DELETED 2026-10-10 (lane postmerge-act-6): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 13.96x, knn taxi AMD 1.02x (slower on AMD; the NVIDIA build is untouched by this AMD-only arm), recall and hashes unchanged. K3 deleted from checks/kernel_matrix.mojo KNN_BLOCK_TOPK_MAX_K; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K.patch)."
   }
  ]
 }
