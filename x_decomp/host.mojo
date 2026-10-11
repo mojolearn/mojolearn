@@ -957,12 +957,12 @@ struct HostExec(Exec):
         _ = cb^
 
     @staticmethod
-    def ols_r_trisolve(r: F32Ptr, out: F32Ptr, d: Int) raises -> Int:
+    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
         """The host column of DevExec.ols_r_trisolve: the same fold."""
         var tmp = List[Float32](length=d + 1, fill=Float32(0))
         ols_r_trisolve_host(r, F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr())), d)
-        for j in range(d):  # small-loop(d: coefficients): copy-out of d words
-            out.unsafe_store(j, tmp[j])
+        for j in range(d):  # small-loop(d: coefficients): copy-res of d words
+            res.unsafe_store(j, tmp[j])
         var ok = 1 if tmp[d] != Float32(0) else 0
         _ = tmp^
         return ok

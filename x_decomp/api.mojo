@@ -702,8 +702,8 @@ def ols_tsqr_r_py[E: Exec](
     return PythonObject(n)
 
 
-def ols_r_trisolve_py[E: Exec](r: PythonObject, out: PythonObject, p: PythonObject) raises -> PythonObject:
-    """out (float32 [d]) = R's back-substitution R x = c of R_aug (r,
+def ols_r_trisolve_py[E: Exec](r: PythonObject, res: PythonObject, p: PythonObject) raises -> PythonObject:
+    """res (float32 [d]) = R's back-substitution R x = c of R_aug (r,
     (d + 1) x (d + 1), as `ols_tsqr_r_py` wrote it) when the rank gate on
     R's equilibrated diagonal passes; returns the gate (1 pass, 0 fail:
     the caller keeps the SVD route). p = [d]."""
@@ -711,7 +711,7 @@ def ols_r_trisolve_py[E: Exec](r: PythonObject, out: PythonObject, p: PythonObje
     if d < 1 or d + 1 > TS_MAX_N:
         raise Error("x_decomp: ols_r_trisolve needs 1 <= d, d + 1 <= " + String(TS_MAX_N))
     var pr = _f(r)
-    var po = _f(out)
+    var po = _f(res)
     var ok = 0
     with GILReleased(Python()):
         ok = E.ols_r_trisolve(pr, po, d)

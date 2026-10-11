@@ -89,9 +89,9 @@ def ots_lane_partial(r: F32Ptr, x: F32Ptr, i: Int, t: Int, n: Int, d: Int) -> Fl
     return acc
 
 
-def ols_r_trisolve_kernel(r: F32Ptr, out: F32Ptr, d_in: Int32):
+def ols_r_trisolve_kernel(r: F32Ptr, res: F32Ptr, d_in: Int32):
     """One block of OTS_TPB threads over R_aug (n = d + 1, row-major, device):
-    out[0, d) = x when the gate passes, out[d] = 1 (pass) or 0 (fail)."""
+    res[0, d) = x when the gate passes, res[d] = 1 (pass) or 0 (fail)."""
     var d = Int(d_in)
     var n = d + 1
     var tid = Int(thread_idx.x)
@@ -146,13 +146,13 @@ def ols_r_trisolve_kernel(r: F32Ptr, out: F32Ptr, d_in: Int32):
             i -= 1
     j = tid
     while j < d:
-        out.unsafe_store(j, sx[j])
+        res.unsafe_store(j, sx[j])
         j += OTS_TPB
     if tid == 0:  # small-launch(d: the gate word): one word written after the d x d solve
-        out.unsafe_store(d, sok[0])
+        res.unsafe_store(d, sok[0])
 
 
-def ols_r_trisolve_host(r: F32Ptr, out: F32Ptr, d: Int):
+def ols_r_trisolve_host(r: F32Ptr, res: F32Ptr, d: Int):
     """The host column of `ols_r_trisolve_kernel`: the same cells in the
     same fold (lane partials then the halving tree)."""
     var n = d + 1
@@ -176,8 +176,8 @@ def ols_r_trisolve_host(r: F32Ptr, out: F32Ptr, d: Int):
             x[i] = div0(sub(r.unsafe_load(i * n + d), p[0]), r.unsafe_load(i * n + i))
             i -= 1
     for j in range(d):  # small-loop(d: coefficients): one word per feature
-        out.unsafe_store(j, x[j])
-    out.unsafe_store(d, Float32(1) if ok else Float32(0))
+        res.unsafe_store(j, x[j])
+    res.unsafe_store(d, Float32(1) if ok else Float32(0))
     _ = dg^
     _ = x^
     _ = p^

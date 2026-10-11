@@ -4045,7 +4045,7 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def ols_r_trisolve(r: F32Ptr, out: F32Ptr, d: Int) raises -> Int:
+    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
         """MOJOLEARN_IDN_OLS_R_TRISOLVE: R_aug up (n x n words, n <= TS_MAX_N),
         ONE launch (gate + back-substitution, x_decomp/ols_trisolve.mojo),
         d + 1 words down (x, then the gate word)."""
@@ -4059,8 +4059,8 @@ struct DevExec(Exec):
         var host = List[Float32](length=n, fill=Float32(0))
         _down(ctx, dout, F32Ptr(unsafe_from_address=Int(host.unsafe_ptr())), n)
         ctx.synchronize()
-        for j in range(d):  # small-loop(d: coefficients): copy-out of d words
-            out.unsafe_store(j, host[j])
+        for j in range(d):  # small-loop(d: coefficients): copy-res of d words
+            res.unsafe_store(j, host[j])
         var ok = 1 if host[d] != Float32(0) else 0
         _ = host^
         _ = dr^
