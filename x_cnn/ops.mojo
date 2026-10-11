@@ -1197,6 +1197,157 @@ def bn_blk_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
     aux.unsafe_store(_bn(aux, BN_SUMGX, c, C), _bn_blk_total(C + c, part, NB))
 
 
+# lane bn-grid-stats (2026-10-11, G5): `-D MOJOLEARN_IDN_BN_GRID_STATS`,
+# IDENTICAL only, DEFAULT OFF. BatchNorm's per-channel statistics as
+# coalesced two-level folds. Structural reason: the BN_FOLD_BLOCK folds run
+# one thread per (channel, block) over a block of up to sqrt(count) words, a
+# serial dependent chain of ~512 adds on ~25k threads; the time is that
+# chain's latency, not bandwidth (51 MB x 9 passes is 0.1-0.2 ms). Here a
+# channel's count = N * HW values, in the same (n, hw) order, are cut into
+# fixed BN_GS_CHUNK = 1024-value chunks (a constant, not a size rule: it
+# replaces bn_fold_block's size-derived B); lane l of chunk q sums its
+# BN_GS_PER = 4 consecutive values ascending from +0.0 (adjacent lanes read
+# adjacent words), the BN_GS_LANES = 256 lane sums fold in the fixed
+# halving tree v[i] += v[i + s], s = 128, 64, ..., 1, and the channel's chunk
+# partials are then added ascending from +0.0 (one thread per channel). The
+# device runs one 256-thread block per (channel, chunk) with the tree in
+# shared memory; the host twin runs the same lane sums and the same tree in
+# registers, so NVIDIA, AMD and the host give the same words. Two passes
+# kept (mean, then sum (x - mean)^2), the formula is unchanged; only the fold
+# shape changes, so bits CHANGE versus BN_FOLD_BLOCK on every column
+# together. Expected: BN2d AMD 2.2 -> ~1.0 ms, BN1d 2.1 -> ~1.0, NV 1.2 ->
+# ~0.9 / 1.6 -> ~1.1; resnet-block gets it twice.
+comptime IDN_BN_GRID_STATS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_BN_GRID_STATS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime BN_GS_LANES = 256
+comptime BN_GS_PER = 4
+comptime BN_GS_CHUNK = BN_GS_LANES * BN_GS_PER
+
+
+@always_inline
+def bn_gs_chunks(count: Int) -> Int:
+    """Chunks per channel (at least 1)."""
+    var nb = (count + BN_GS_CHUNK - 1) // BN_GS_CHUNK
+    return nb if nb > 0 else 1
+
+
+@always_inline
+def bn_gs_lane[MODE: Int](t: Int, lane: Int, x: FP, g: FP, aux: FP, p: IP) -> Tuple[Float32, Float32]:
+    """Lane `lane` of chunk t = c * NB + q: its BN_GS_PER values ascending
+    from +0.0. MODE 0: (sum x, 0), images through bn_mean_row. MODE 1:
+    (sum (x - mean)^2, 0). MODE 2: (sum g, sum g * xhat)."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var count = N * HW
+    var NB = bn_gs_chunks(count)
+    var c = t // NB
+    var j0 = (t - c * NB) * BN_GS_CHUNK + lane * BN_GS_PER
+    var mean = Float32(0)
+    var invstd = Float32(0)
+    comptime if MODE != 0:
+        mean = aux.unsafe_load(_bn(aux, BN_MEAN, c, C))
+    comptime if MODE == 2:
+        invstd = aux.unsafe_load(_bn(aux, BN_INVSTD, c, C))
+    var s0 = Float32(0)
+    var s1 = Float32(0)
+    comptime for e in range(BN_GS_PER):
+        var j = j0 + e
+        if j < count:
+            var a = j // HW
+            var k = j - a * HW
+            var n = a
+            comptime if MODE == 0:
+                n = bn_mean_row(a, N)
+            var i = (n * C + c) * HW + k
+            comptime if MODE == 0:
+                s0 = ftz(s0 + ftz(x.unsafe_load(i)))
+            elif MODE == 1:
+                var d = ftz(ftz(x.unsafe_load(i)) - mean)
+                s0 = ftz(s0 + ftz(identical_mul(d, d)))
+            else:
+                var gv = ftz(g.unsafe_load(i))
+                var xhat = ftz(identical_mul(ftz(ftz(x.unsafe_load(i)) - mean), invstd))
+                s0 = ftz(s0 + gv)
+                s1 = ftz(s1 + ftz(identical_mul(gv, xhat)))
+    return (s0, s1)
+
+
+@always_inline
+def _bn_gs_chunk_host[MODE: Int](t: Int, x: FP, g: FP, aux: FP, p: IP) -> Tuple[Float32, Float32]:
+    """The host twin of the device chunk block: the same lane sums and the
+    same halving tree, in registers."""
+    var v0 = InlineArray[Float32, BN_GS_LANES](fill=Float32(0))
+    var v1 = InlineArray[Float32, BN_GS_LANES](fill=Float32(0))
+    for l in range(BN_GS_LANES):
+        var r = bn_gs_lane[MODE](t, l, x, g, aux, p)
+        v0[l] = r[0]
+        v1[l] = r[1]
+    var s = BN_GS_LANES // 2
+    while s > 0:
+        for l in range(s):
+            v0[l] = ftz(v0[l] + v0[l + s])
+            comptime if MODE == 2:
+                v1[l] = ftz(v1[l] + v1[l + s])
+        s //= 2
+    return (v0[0], v1[0])
+
+
+@always_inline
+def bn_gs_sum_host_at(t: Int, x: FP, part: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Host: part[t] = chunk t's sum of x (part holds C * NB words)."""
+    part.unsafe_store(t, _bn_gs_chunk_host[0](t, x, x, x, p)[0])
+
+
+@always_inline
+def bn_gs_sq_host_at(t: Int, x: FP, part: FP, aux: FP, f3: FP, q: IP, p: IP):
+    """Host: part[t] = chunk t's sum of (x - mean)^2."""
+    part.unsafe_store(t, _bn_gs_chunk_host[1](t, x, x, aux, p)[0])
+
+
+@always_inline
+def bn_gs_red_host_at(t: Int, x: FP, g: FP, aux: FP, part: FP, q: IP, p: IP):
+    """Host: part[t] = chunk t's sum of g, part[C * NB + t] = its sum of
+    g * xhat (part holds 2 * C * NB words)."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var r = _bn_gs_chunk_host[2](t, x, g, aux, p)
+    part.unsafe_store(t, r[0])
+    part.unsafe_store(C * bn_gs_chunks(N * HW) + t, r[1])
+
+
+@always_inline
+def _bn_gs_total(c: Int, part: FP, NB: Int) -> Float32:
+    """The NB chunk partials at row c added ascending from +0.0."""
+    var acc = Float32(0)
+    for b in range(NB):
+        acc = ftz(acc + part.unsafe_load(c * NB + b))
+    return acc
+
+
+@always_inline
+def bn_gs_mean_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Channel c's mean from its chunk sums."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var acc = _bn_gs_total(c, part, bn_gs_chunks(N * HW))
+    aux.unsafe_store(_bn(aux, BN_MEAN, c, C), ftz(identical_div(acc, Float32(N * HW))))
+
+
+@always_inline
+def bn_gs_var_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Channel c's biased variance and invstd from its chunk sums."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var sq = _bn_gs_total(c, part, bn_gs_chunks(N * HW))
+    var var_b = ftz(identical_div(sq, Float32(N * HW)))
+    aux.unsafe_store(_bn(aux, BN_VAR, c, C), var_b)
+    aux.unsafe_store(_bn(aux, BN_INVSTD, c, C), ftz(identical_rsqrt(ftz(var_b + aux.unsafe_load(0)))))
+
+
+@always_inline
+def bn_gs_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Channel c's sum_g and sum_gx from its chunk sums."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var NB = bn_gs_chunks(N * HW)
+    aux.unsafe_store(_bn(aux, BN_SUMG, c, C), _bn_gs_total(c, part, NB))
+    aux.unsafe_store(_bn(aux, BN_SUMGX, c, C), _bn_gs_total(C + c, part, NB))
+
+
 @always_inline
 def bn_bwd_dx_at(i: Int, x: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
     """Training-mode dx = (g - mean(g) - xhat * mean(g xhat)) * invstd * gamma

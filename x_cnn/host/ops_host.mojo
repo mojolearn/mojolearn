@@ -37,6 +37,8 @@ from x_cnn.ops import (
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
     bn_blk_red_at, bn_blk_red_fin_at,
+    IDN_BN_GRID_STATS, bn_gs_chunks, bn_gs_sum_host_at, bn_gs_sq_host_at, bn_gs_red_host_at,
+    bn_gs_mean_at, bn_gs_var_at, bn_gs_red_fin_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
 )
@@ -892,9 +894,18 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, dst: FP, prm: List[Int32
     # lane idn-loss-norm-folds: the device's blocked folds (x_cnn/ops.mojo
     # BN_FOLD_BLOCK), the same element functions
     var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    # lane bn-grid-stats (G5): the device chunk blocks' twin (x_cnn/ops.mojo
+    # IDN_BN_GRID_STATS), the same lane sums and tree
+    comptime if IDN_BN_GRID_STATS:
+        nblk = C * bn_gs_chunks(Int(prm[0]) * Int(prm[2]))
     var part = zeros(nblk)
     if training:
-        comptime if BN_FOLD_BLOCK:
+        comptime if IDN_BN_GRID_STATS:
+            run[bn_gs_sum_host_at](x, hp(part), hp(part), hp(part), hi(ps), hi(ps), nblk)
+            run[bn_gs_mean_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+            run[bn_gs_sq_host_at](x, hp(part), aux, aux, hi(ps), hi(ps), nblk)
+            run[bn_gs_var_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+        elif BN_FOLD_BLOCK:
             run[bn_blk_sum_at](x, hp(part), hp(part), hp(part), hi(ps), hi(ps), nblk)
             run[bn_blk_mean_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
             run[bn_blk_sq_at](x, hp(part), aux, aux, hi(ps), hi(ps), nblk)
@@ -919,8 +930,13 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, dst: FP, prm: List[Int32], tr
     var total = Int(prm[0]) * C * Int(prm[2])
     var ps = prm.copy()
     var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    comptime if IDN_BN_GRID_STATS:
+        nblk = C * bn_gs_chunks(Int(prm[0]) * Int(prm[2]))
     var part = zeros(2 * nblk)
-    comptime if BN_FOLD_BLOCK:
+    comptime if IDN_BN_GRID_STATS:
+        run[bn_gs_red_host_at](x, g, aux, hp(part), hi(ps), hi(ps), nblk)
+        run[bn_gs_red_fin_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+    elif BN_FOLD_BLOCK:
         run[bn_blk_red_at](x, g, aux, hp(part), hi(ps), hi(ps), nblk)
         run[bn_blk_red_fin_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
     else:
