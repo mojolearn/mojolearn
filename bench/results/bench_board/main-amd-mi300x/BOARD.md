@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-10T23:44:52Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-11T15:38:22Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 > MAIN BOARD amd-mi300x, version label main@8d5855b83. Unreleased: not reproducible by pip install; the release boards are the reference.
 
