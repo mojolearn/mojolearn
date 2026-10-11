@@ -165,8 +165,12 @@ def _linalg():
         raise ImportError(
             "mojolearn.lowbit: packing and materializing need the linalg binding "
             f"(GPU extension or _mojolearn_linalg_host); none is loaded: {e}") from None
-    from . import linalg
-    return linalg
+    # `_linalg_impl` itself, not the public `linalg` door (lane/lazy-imports-2,
+    # 2026-10-11): the four functions used here (to_bf16, from_bf16,
+    # quantize_int8, dequantize_int8) are the same objects `linalg` re-exports,
+    # and the door also imports `Cholesky` (`_cholesky_impl`, the GP binding),
+    # which put the GP binding in every lowbit user's closure (mamba1 among them).
+    return _linalg_impl
 
 
 def widen_bf16(bits):
