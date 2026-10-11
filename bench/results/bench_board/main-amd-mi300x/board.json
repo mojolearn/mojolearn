@@ -55,7 +55,7 @@
     "smoke": false,
     "vendor": "amd"
   },
-  "created": "2026-10-10T23:44:51Z",
+  "created": "2026-10-11T15:38:22Z",
   "main_board": {
     "backfill": {
       "filled": {
@@ -76,20 +76,16 @@
       "n/a": 1
     },
     "inputs": {
-      "branch": "board-failed-cells",
-      "generated": "2026-10-10T23:44:51Z",
+      "branch": "main",
+      "generated": "2026-10-11T15:38:22Z",
       "grid_logs": [
-        "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
-        "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
-        "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
-        "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-grid-logs.txt"
+        "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-new-grid-logs.txt",
+        "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-new-grid-logs.txt"
       ],
       "json_dir": null,
       "results": [
-        "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
-        "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
-        "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
-        "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-results.txt"
+        "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-new-results.txt",
+        "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-new-results.txt"
       ]
     },
     "label": "main@8d5855b83",
@@ -219,5 +215,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-10T23:44:52Z"
+  "updated": "2026-10-11T15:38:22Z"
 }
