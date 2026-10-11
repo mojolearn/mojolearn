@@ -97,6 +97,42 @@ comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and not is_defined["MOJOLEARN_IDN_JAC
 # host column (glm/host/gram_solve_host.mojo) runs the same cells.
 comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"]()
 
+# C1 (lane ridge-ff-tiled, 2026-10-11; DEFAULT OFF, -D MOJOLEARN_IDN_GFF_GRAM_TILED).
+# The float-float leaf Gram of IDN_GRAM_FF_FALLBACK (the route ridge istella
+# takes: the fp32 gate rejects it) as register tiles: a block owns one 64 x 64
+# tile of the extended (d + 1) x (d + 1) upper triangle ([X | y], the cross
+# cells are column d) for one of the GFF_LEAVES leaves, 256 threads x 4 x 4
+# cells, the centered float-float words of 16 rows staged through shared
+# memory once per chunk (glm/impl/gram_solve.mojo `gff_leaf_tiled_kernel`).
+# Today `gff_leaf_kernel` gives each (leaf, cell) a thread that loads both
+# words of every row from global memory: 2 loads + 2 centerings per ff
+# multiply-add; tiled, one staged centered word serves 4 cells (8x fewer
+# global loads, 4x fewer centerings per ff-MAC). Cost reasoning: at
+# n x d = 1M x 220 the leaf pass is ~24 G ff-MACs, today global-load bound
+# (~250-350 ms NV); expected ~40-60 ms. Any width works (the tile grid is
+# ceil((d + 1) / 64)^2 / 2 blocks per leaf; no width rule). NO BIT MOVES:
+# each cell's sequence is unchanged (ff_centered of the same words, ff_mul
+# (c_i, c_j), ff_add into the cell, rows ascending within the leaf, the same
+# leaf cut), so the host column (glm/host/gram_solve_host.mojo) is untouched.
+comptime IDN_GFF_GRAM_TILED = IDN_GRAM_FF_FALLBACK and is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED"]()
+
+# C2 (lane ridge-ff-tiled, 2026-10-11; DEFAULT OFF, -D MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH).
+# The resident Gram solve's Cholesky, forward and backward solves (fp32 and
+# the float-float second chance) as ONE launch each: one block of 256 threads
+# walks the d column steps with a barrier between steps, the rows of a step
+# strided over the threads, the SAME per-cell statements (the step kernels'
+# bodies, `chol_serial`'s order) -> no bit moves, host untouched. Today 3 d
+# launches per chain set (660 at d = 220, each a few us of work behind a
+# ~5-10 us launch gap). Cost reasoning: for d <= 256 every row of a step has
+# its own thread, the parallelism the per-column grids had; above, rows per
+# thread grow, so the switch keeps the one-launch walk only while a thread's
+# worst step stays near one launch gap: d <= 1024 for fp32 (<= 4 rows a
+# thread), d <= 512 for float-float (~20 fp32 ops per term, <= 2 rows a
+# thread); wider keeps the per-column launches. Not on Apple (Metal's
+# barrier does not order device memory; x_decomp/omp_block.mojo).
+# Expected: ~7-15 ms per chain set NV, ~2x AMD (ridge, ols-Gram).
+comptime IDN_GS_SOLVE_ONE_LAUNCH = LINEAR_GRAM_SOLVE and is_defined["MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH"]()
+
 # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
 # Tried: L4 (lane fg-linear), the linear fits' X/y uploads through a process-lifetime pinned stage
