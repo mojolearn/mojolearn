@@ -453,14 +453,36 @@ def _python_files():
         return _PYTHON_FILES
     out = []
     base = os.path.join(ROOT, PKG)
+    ignored = _ignored_package_files()
     for dirpath, dirnames, filenames in os.walk(base):
         rel_dir = os.path.relpath(dirpath, base)
         dirnames[:] = sorted(d for d in dirnames if d not in ("tests", "__pycache__"))
         for name in sorted(filenames):
             if name.endswith(".py"):
-                out.append(os.path.join(PKG, name) if rel_dir == "." else os.path.join(PKG, rel_dir, name))
+                rel = os.path.join(PKG, name) if rel_dir == "." else os.path.join(PKG, rel_dir, name)
+                if rel not in ignored:
+                    out.append(rel)
     _PYTHON_FILES = sorted(out)
     return _PYTHON_FILES
+
+
+def _ignored_package_files():
+    """The git-IGNORED files under the package: generated copies a release or
+    wheel build stages there (`_identity_break.py` and `_identity_lane_*.py`,
+    copies of the harness, python/.gitignore:51-52). No diff can name them and
+    no checkout has them, yet the walk above read them as package modules: in
+    a checkout that had built a wheel, the harness copy imports `_buffer` and
+    names every helper and estimator, so a helper added to `_buffer.py` or a
+    changed `qr` selected all 507 lanes (2026-10-10, the main suite run, red
+    there and green in a clean worktree). A new, not yet committed module is
+    untracked but NOT ignored and stays in."""
+    try:
+        res = subprocess.run(["git", "-C", ROOT, "ls-files", "--others", "--ignored",
+                              "--exclude-standard", "--", PKG],
+                             capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return set()
+    return {os.path.normpath(p) for p in res.stdout.split("\n") if p}
 
 
 def _module_paths(dotted, listing):
