@@ -1,0 +1,93 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "lm-attn-nohost",
+ "branch": "lane/lm-attn-nohost",
+ "head": "150df49d9",
+ "controls": {
+  "attn_defer_regime": {
+   "define": "MOJOLEARN_IDN_ATTN_DEFER_REGIME",
+   "kind": "bool",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_ATTN_DEFER_REGIME"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "transformer/impl/llama/fused_attention.mojo (IDN_ATTN_DEFER_REGIME block after _zero_flag; fused_forward_launch_ran deferred branch)",
+    "transformer/impl/llama/modeling_llama.mojo (estash gate, attn_forward_only)",
+    "bindings/_mojolearn_transformer.mojo (_transformer_run_session arm/read/rerun)"
+   ],
+   "binding": [
+    "_mojolearn_transformer",
+    "_mojolearn_byte_lm"
+   ],
+   "bits_change": false,
+   "status": "new",
+   "note": "Idea H1 (renamed from IDN_ATTN_NO_HOST_REGIME: the host-route fence reads *HOST* define names as host knobs). Regime verdict on the device + deferred corner window, read once with the session downloads; rerun disarmed on a flag. Forward-only calls also skip the fused exp stash (reaches lm-forward via byte_lm's forward_only). byte_lm training does not arm the window yet (training/byte_lm.mojo is another lane's file). ID check needed on the estash gate (plain vs estash launcher ctxv)."
+  },
+  "tf_session_lean": {
+   "define": "MOJOLEARN_IDN_TF_SESSION_LEAN",
+   "kind": "bool",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_TF_SESSION_LEAN"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "bindings/_mojolearn_transformer.mojo (_transformer_run_session discard_cache fill)"
+   ],
+   "binding": [
+    "_mojolearn_transformer"
+   ],
+   "bits_change": false,
+   "status": "new",
+   "note": "Idea H9, partial: skips the stateless prefill's cache zero-fill when l == smax (every slot written). Weight version stamp left out (needs the Python API file)."
+  }
+ },
+ "algorithms": {
+  "neural:transformer-forward": {
+   "binding": "_mojolearn_transformer",
+   "route": "transformer session forward -> _transformer_run_session -> llama_decoder_layer_forward -> fused attention forward",
+   "controls": [
+    "attn_defer_regime",
+    "tf_session_lean"
+   ],
+   "interaction_groups": [
+    [
+     "attn_defer_regime",
+     "tf_session_lean"
+    ]
+   ]
+  },
+  "neural:lm-forward": {
+   "binding": "_mojolearn_byte_lm",
+   "route": "byte_lm forward (forward_only) -> modeling_llama attention estash gate",
+   "controls": [
+    "attn_defer_regime"
+   ],
+   "interaction_groups": [
+    [
+     "attn_defer_regime"
+    ]
+   ]
+  },
+  "neural:lm-train-step": {
+   "binding": "_mojolearn_byte_lm",
+   "route": "byte_lm train step: no arming, no forward_only; expected neutral (control)",
+   "controls": [
+    "attn_defer_regime"
+   ],
+   "interaction_groups": [
+    [
+     "attn_defer_regime"
+    ]
+   ]
+  }
+ },
+ "removed": [],
+ "notes": {}
+}

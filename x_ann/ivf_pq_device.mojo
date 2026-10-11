@@ -13,6 +13,7 @@ from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import (
     ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_SEED, ANN3_ROW_THREADS, IDN_PQ_DEVICE_CODEBOOKS,
+    IDN_PQ_TRAINSET_STRIDED, IDN_PQ_TRAIN_ROWS_PER_CODE,
     IVF_PQ_ONE_UPLOAD,
 )
 from x_ann.kpp_seed import kpp_seed
@@ -464,6 +465,11 @@ def _ivf_pq_build_impl[resident: Bool](
         comptime if PQ_FAST_TRAINSET:
             if n > PQ_FAST_ROWS_PER_CODE * n_codes:
                 n_train = PQ_FAST_ROWS_PER_CODE * n_codes
+        # lane hdb-ivf D8(a), IDN_PQ_TRAINSET_STRIDED (x_ann/switches.mojo);
+        # the host twin reads the same n_train
+        comptime if IDN_PQ_TRAINSET_STRIDED:
+            if n > IDN_PQ_TRAIN_ROWS_PER_CODE * n_codes:
+                n_train = IDN_PQ_TRAIN_ROWS_PER_CODE * n_codes
         dcb = pq_codebooks_device(ctx, dr, n, n_train, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
         codebooks = download_f32(ctx, dcb, pq_dim * n_codes * pq_len)
         st.host("codebooks")

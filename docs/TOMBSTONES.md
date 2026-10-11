@@ -130,6 +130,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_CD_GRAM_EPOCHS_64`](#mojolearn_idn_cd_gram_epochs_64) | Linear | DROPPED-slower | 2026-10-10 | [MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch](../experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch) |
 | [`MOJOLEARN_IDN_CHOL_NB128`](#mojolearn_idn_chol_nb128) | Linear | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_CHOL_NB128.patch](../experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch) |
 | [`MOJOLEARN_IDN_BM_GRAM_RB4`](#mojolearn_idn_bm_gram_rb4) | Linear | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_BM_GRAM_RB4.patch](../experiments/removed/MOJOLEARN_IDN_BM_GRAM_RB4.patch) |
+| [`MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF`](#mojolearn_idn_linear_pinned_upload_off) | Linear | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch](../experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch) |
 | [`MOJOLEARN_C29_STREAM_TOPK`](#mojolearn_c29_stream_topk) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_STREAM_TOPK.patch](../experiments/removed/MOJOLEARN_C29_STREAM_TOPK.patch) |
 | [`MOJOLEARN_C29_TILE`](#mojolearn_c29_tile) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_TILE.patch](../experiments/removed/MOJOLEARN_C29_TILE.patch) |
 | [`MOJOLEARN_CAGRA_FAST_DOT`](#mojolearn_cagra_fast_dot) | Neighbors | DROPPED-semantics | 2026-10-03 | [MOJOLEARN_CAGRA_FAST_DOT.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch) |
@@ -1087,6 +1088,15 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Files the patch restores: `core/blocked_moments.mojo`.
 - grid_controls: `gram-rb4.json` `bm_gram_rb4` moved to `removed`.
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, bde9c2243): IDN_BM_GRAM_RB4 was SLOWER net ~1.0-1.1x.
+### MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF
+
+- Verdict: DROPPED-slower (the default-on stage lost to its OFF arm). Deleted 2026-10-11 by `47a3af928` (lane/ridge-ff-tiled).
+- Recoverable at `47a3af928^`. Patch: `experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch` (whole deletion reversed, code files only, taken after the tombstones were filled in so it applies to the tree as left).
+- What it tried: lane fg-linear L4 (2026-10-09): the linear fits' host uploads of X and y (>= 1M floats: the resident Gram fit `linear_gram_fit`, `ridge_fit_host`, `qn_fit_host`) through a process-lifetime pinned stage of two 32 MB halves, the memcpy of chunk i overlapping the DMA of chunk i - 1, instead of one pageable `enqueue_copy`. Transport only, no bit moved.
+- Verdict numbers: grid ge123e6f9 (results-g50ebe26a5), one run per arm, ratio = off / default: ols istella NV 0.98x / AMD 0.66x, ols taxi NV 0.86x / AMD 0.26x (combined 0.62x, FASTER), ridge taxi NV 0.64x / AMD 0.68x, ridge istella NV 0.99x / AMD 0.95x, logreg istella 1.00x / 0.95x, logreg taxi NV 1.20x / AMD 0.76x (ridge/logreg timing INCOMPLETE); identity MATCH, quality SAME. The per-chunk synchronize and the extra host memcpy cost more than the pinned DMA saves.
+- Files the patch restores: `glm/impl/pinned_upload.mojo` (deleted), `glm/impl/gram_solve.mojo`, `glm/estimator.mojo`, `experiments/classical_identical_ideas/fg_linear_controls.mojo`.
+- grid_controls: `fg-linear.json` `linear_pinned_upload` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/ridge-ff-tiled, 47a3af928).
 
 ## Neighbors
 

@@ -1,0 +1,54 @@
+{
+  "schema": "mojolearn.grid-controls/1",
+  "lane": "cnn-dx-wgrad",
+  "branch": "lane/cnn-dx-wgrad",
+  "head": "0bb8327f6",
+  "controls": {
+    "cnn_dx_implicit": {
+      "define": "MOJOLEARN_IDN_CNN_DX_IMPLICIT",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_IDN_CNN_DX_IMPLICIT=1"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "x_cnn/cnn_dx_wgrad.mojo:1",
+        "x_cnn/device.mojo:710",
+        "x_cnn/device.mojo:836",
+        "x_cnn/host/ops_host.mojo:_conv_dx_implicit_host"
+      ],
+      "binding": "_mojolearn_x_cnn",
+      "host_binding": "_mojolearn_x_cnn_host",
+      "bits_change": true,
+      "status": "OPEN (code only, uncompiled)",
+      "board": "neural:conv2d, neural:conv1d, neural:resnet-block (synthetic)",
+      "note": "ideas-all-gaps-20261011 G1: dx as an implicit transposed conv (one contract over OC*KH*KW per dx cell, contract_partition leaves + balanced fold) replacing dcols GEMM + col2im. Bits change on NV, AMD and host together. B arm: off (dcols + col2im)."
+    },
+    "cnn_wgrad_leaf1024": {
+      "define": "MOJOLEARN_IDN_CNN_WGRAD_LEAF1024",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_IDN_CNN_WGRAD_LEAF1024=1"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "x_cnn/cnn_dx_wgrad.mojo:1",
+        "x_cnn/device.mojo:_implicit_wgrad",
+        "x_cnn/host/gemm_host.mojo:gemm_host_into",
+        "x_cnn/host/ops_host.mojo:conv2d_backward_cols"
+      ],
+      "binding": "_mojolearn_x_cnn",
+      "host_binding": "_mojolearn_x_cnn_host",
+      "bits_change": true,
+      "status": "OPEN (code only, uncompiled)",
+      "board": "neural:conv2d, neural:conv1d, neural:resnet-block (synthetic)",
+      "note": "ideas-all-gaps-20261011 G2: dW leaves of 1024 rows (cnn_wgrad_partition, P <= 1024) instead of contract_partition(rows); the GEMM fold kernels' balanced tree unchanged. Bits change on NV, AMD and host together."
+    }
+  }
+}

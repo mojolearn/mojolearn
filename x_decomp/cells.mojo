@@ -365,6 +365,18 @@ def bidx(mode: Int, i: Int, d: Int) -> Int:
 comptime FOLD_BLOCK = 4096
 
 
+#: lane/xd-kit-gemm (2026-10-11, idea C6/A3): -D MOJOLEARN_IDN_XD_KIT_GEMM, default
+#: OFF. The kit's `launch_gemm` (x_decomp/device.mojo) and `HostExec.gemm`
+#: (x_decomp/host.mojo) run the identical GEMM (`identical_gemm_into`) and its
+#: normative host oracle (`gemm_oracle_cell`) instead of the per-cell FOLD_BLOCK
+#: chains. Structural reason: the per-cell kernel is one thread per output walking
+#: all of k from global memory (rsvd's 900k x 18 products read ~8 B per row per
+#: warp); the identical GEMM tiles through shared memory. Expected: svd istella
+#: -40 ms, randomized-svd istella 162 -> ~90 ms NV. BITS CHANGE (FOLD_BLOCK partials
+#: -> contract leaves + balanced tree) equally on NVIDIA, AMD and the host column.
+comptime IDN_XD_KIT_GEMM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_XD_KIT_GEMM"]()
+
+
 # DEVIATION 5300 (PIN; IDENTITY_PATHS row 130): p ascending inside a block, one
 # fused multiply-add per term, the blocks' partials added ascending (FOLD_BLOCK);
 # check x_decomp/checks/fold_ew_check.mojo, arm 5300_gemm_order.

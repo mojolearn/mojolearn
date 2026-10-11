@@ -29,8 +29,9 @@ from sequence.moe_reg import (
 )
 from sequence.moe_mma import MM_BNH, MM_BNO, MM_NT, MOE_MMA, moe_hidden_mma_kernel, moe_mma_blocks, moe_out_mma_kernel
 # lane gap-gemm-layers (2026-10-08): the expert products as grouped identical GEMMs
-from sequence.moe_grouped_fold import MOE_GROUPED_GEMM
+from sequence.moe_grouped_fold import MOE_GROUPED_GEMM, MOE_RESIDENT
 from sequence.moe_grouped import moe_grouped_offsets, moe_grouped_workspace, moe_grouped_hidden, moe_grouped_out
+from sequence.moe_grouped import moe_resident_fits, moe_resident_hidden, moe_resident_out
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -46,10 +47,11 @@ from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_C
 from sequence.adafactor import AF_COL_CHUNK_FOLD
 from sequence.adafactor_candidates import AF_COL_LANES, af_col_chunk_kernel
 from sequence.theta_spec import THETA_SPEC
+from sequence.ets_spec import ETS_SPEC, op_ets_spec
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
 from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
-from sequence.ets_team import ETS_TEAM, ets_team
+from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM, ets_team
 from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
 from sequence.ops import OP_ETS, OP_GARCH
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_block
@@ -252,8 +254,9 @@ def team_kernel[OP: Int](
         var team = SeqTeam(Int(thread_idx.x), Int(block_dim.x))
         comptime if OP == OP_GARCH:
             garch_team(blk, team, a)
-        elif ETS_TEAM and OP == OP_ETS:
-            # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo)
+        elif (ETS_TEAM or IDN_ETS_TEAM) and OP == OP_ETS:
+            # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo);
+            # IDENTICAL behind -D MOJOLEARN_IDN_ETS_TEAM (default off, the tree prefix)
             ets_team(blk, team, a)
         elif PROPHET_COOP:
             # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
@@ -290,7 +293,12 @@ def coop_kernel[OP: Int](
                      _lo(i67), _hi(i67), _lo(i89), _hi(i89), _lo(i1011), _hi(i1011),
                      _flo(f01), _fhi(f01), _flo(f23), _fhi(f23),
                      _flo(f45), _fhi(f45), _flo(f67), _fhi(f67))
-        apply_coop[OP](cell, g - cell * COOP_W, a)
+        comptime if ETS_SPEC and OP == OP_ETS:
+            # MOJOLEARN_IDN_NM_SPEC: no-season ETS with the Nelder-Mead
+            # candidates on the cell's lanes (sequence/ets_spec.mojo)
+            op_ets_spec(cell, g - cell * COOP_W, a)
+        else:
+            apply_coop[OP](cell, g - cell * COOP_W, a)
 
 
 
@@ -434,6 +442,10 @@ struct DeviceExec(Exec):
     #: lane gap-gemm-layers: the pair offsets of the MoE grouping, on the host
     #: (MOE_GROUPED_GEMM: the hidden op downloads them, the out op reuses them)
     var moe_poff: List[Int]
+    #: MOJOLEARN_IDN_MOE_RESIDENT: `alloc` skips the zero fill (set only by
+    #: sequence/moe_dev.mojo around a forward whose every scratch word is
+    #: stored before it is read)
+    var nofill: Bool
 
     def __init__(out self) raises:
         self.ctx = sequence_ctx()
@@ -452,8 +464,12 @@ struct DeviceExec(Exec):
         self.pipe_src = List[Int]()
         self.pipe_n = List[Int]()
         self.moe_poff = List[Int]()
+        self.nofill = False
 
     def alloc(mut self, n: Int) raises -> FP:
+        comptime if MOE_RESIDENT:
+            if self.nofill:
+                return self._alloc(n, False)
         return self._alloc(n, True)
 
     def _alloc(mut self, n: Int, zero: Bool) raises -> FP:
@@ -732,6 +748,17 @@ struct DeviceExec(Exec):
                     # lane gap-gemm-layers: each expert's gate|up product on
                     # identical_gemm_into (sequence/moe_grouped.mojo); h in
                     # slot order, read by the out op's grouped path below
+                    comptime if MOE_RESIDENT:
+                        # lane moe-resident: one grouped launch reading the
+                        # device offsets; no download, sync or workspace
+                        if a.i6 == 1 and moe_resident_fits(npairs // a.i2):
+                            var xg = self._alloc(npairs * a.i0, False)
+                            var gu = self._alloc(npairs * 2 * a.i1, False)
+                            moe_resident_hidden(
+                                self.ctx, a.p0, a.p1, a.p4, a.p5, xg, gu, a.p3,
+                                a.i0, a.i1, a.i2, a.i3, npairs, npairs // a.i2,
+                            )
+                            return
                     if a.i6 == 1:
                         self.moe_poff = moe_grouped_offsets(self.ctx, a.p5, a.i3)
                         var xg = self._alloc(npairs * a.i0, False)
@@ -768,6 +795,14 @@ struct DeviceExec(Exec):
                 comptime if MOE_GROUPED_GEMM:
                     # lane gap-gemm-layers: each expert's down product on
                     # identical_gemm_into, the combine through slot_of
+                    comptime if MOE_RESIDENT:
+                        if a.i6 == 1 and moe_resident_fits(n // a.i0):
+                            var slot_of = self._alloc(npairs, False)
+                            moe_resident_out(
+                                self.ctx, a.p0, a.p1, a.p3, a.p6, a.p7, slot_of, a.p5, a.p4,
+                                a.i0, a.i1, a.i2, a.i3, npairs, n // a.i0, n // a.i0,
+                            )
+                            return
                     if a.i6 == 1:
                         if len(self.moe_poff) != a.i3 + 1:
                             raise Error("moe grouped out: the hidden op's pair offsets are missing")
@@ -852,9 +887,13 @@ struct DeviceExec(Exec):
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
+        # THETA_SPEC: FAST + Apple, and the IDENTICAL twin under -D MOJOLEARN_IDN_NM_SPEC
+        # (sequence/theta_spec.mojo); ETS_SPEC: that define's no-season ETS (sequence/ets_spec.mojo).
+        # Both admitted on NVIDIA/AMD by SEQ_COOP_NVAMD; same bits as op_theta / op_ets.
         comptime if (SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
                                    or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
                                    or (THETA_SPEC and OP == OP_THETA)
+                                   or (ETS_SPEC and OP == OP_ETS)
                                    or (SEQ_FAST_VAR_COOP and (OP == OP_COLSCALE or OP == OP_VAR_SIGMA)))) or (
                 SEQ_LN_COOP and (OP == OP_LN_FWD or OP == OP_LN_BWD_X)) or (
                 SEQ_AF_COOP and (OP == OP_AF_ROW or OP == OP_AF_RMEAN)):
@@ -867,6 +906,11 @@ struct DeviceExec(Exec):
                     coop = coop or a.i11 == 1
             elif OP == OP_AF_ALPHA or OP == OP_AF_DENOM:
                 coop = a.i0 >= 4096
+            elif OP == OP_ETS:
+                # MOJOLEARN_IDN_NM_SPEC: the model form decides, never a size: only
+                # a model without a season (a.i6 == 0, SEAS_N) has a side-effect-free
+                # objective the four candidate lanes can share; seasonal models keep op_ets
+                coop = a.i6 == 0
             if coop:
                 self.ctx.enqueue_function[coop_kernel[OP]](
                     a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,

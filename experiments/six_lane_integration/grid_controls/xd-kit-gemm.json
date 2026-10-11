@@ -1,0 +1,36 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "xd-kit-gemm",
+ "branch": "lane/xd-kit-gemm",
+ "head": "cd203faf9",
+ "controls": {
+  "xd_kit_gemm": {
+   "define": "MOJOLEARN_IDN_XD_KIT_GEMM",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_XD_KIT_GEMM"]},
+   "default": "off",
+   "source": [
+    "x_decomp/cells.mojo:IDN_XD_KIT_GEMM",
+    "x_decomp/device.mojo:gemm_scratch",
+    "x_decomp/device.mojo:launch_gemm",
+    "x_decomp/device.mojo:_launch_gemm_identical",
+    "x_decomp/host.mojo:HostExec._gemm_identical"
+   ],
+   "binding": "_mojolearn_x_decomp,_mojolearn_linalg,_mojolearn_scoped_gemm_probe",
+   "bits_change": true,
+   "status": "new",
+   "notes": "Kit launch_gemm (every k.mm: svd A V, randomized-svd, lstsq, OLS post-R, NMF, ALS, PLS, FA, lanczos) through identical_gemm_into; host twin gemm_oracle_cell. Bits change equally on NVIDIA, AMD and host (FOLD_BLOCK partials -> contract leaves + balanced tree). Workloads: algos:randomized-svd:istella, algos:randomized-svd:taxi, algos:svd:istella, algos:lstsq:istella; nv+amd; ID check owed."
+  },
+  "rsvd_orth_lean": {
+   "define": "MOJOLEARN_IDN_RSVD_ORTH_LEAN",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_RSVD_ORTH_LEAN"]},
+   "default": "off",
+   "source": ["x_decomp/device.mojo:_orth_tsqr_device_lean"],
+   "binding": "_mojolearn_x_decomp,_mojolearn_linalg,_mojolearn_scoped_gemm_probe",
+   "bits_change": false,
+   "status": "new",
+   "notes": "RSVD TSQR orth: pooled work/R/selection buffers across orths, R by device copy from the kept TSQR state, no end sync (the apply's Q parked until the next orth's factor sync). Same words. Workloads: algos:randomized-svd:istella, algos:randomized-svd:taxi; nv+amd."
+  }
+ }
+}

@@ -1,0 +1,32 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "moe-resident",
+ "branch": "lane/moe-resident",
+ "head": "26ef6a308",
+ "controls": {
+  "moe_resident": {
+   "define": "MOJOLEARN_IDN_MOE_RESIDENT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_MOE_RESIDENT=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "sequence/moe_grouped_fold.mojo:57",
+    "sequence/moe_grouped.mojo:220",
+    "sequence/exec_device.mojo:747",
+    "sequence/exec_device.mojo:792",
+    "sequence/moe_dev.mojo:66"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "host_binding": "_mojolearn_x_sequence_host",
+   "bits_change": false,
+   "status": "open 2026-10-11 (lane/moe-resident, idea H5); A/B owed nv + amd",
+   "board": "neural:moe (synthetic)",
+   "note": "Idea H5: the grouped MoE path without the E+1 offsets download + mid-forward sync, the per-call GEMM workspace and the scratch zero fills. One launch per product over all experts (grid.z = expert, row extent = capacity bound T), blocks read poff on the device and exit past their expert's count; cells are moe_contract_cell term for term (same bits as the grouped GEMM). Needs MOE_GROUPED_GEMM on (the default)."
+  }
+ }
+}

@@ -23,6 +23,7 @@ from checks.numerics import ftz
 from bindings.hostptr import i32_ptr, f32_ptr
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from x_cnn.cnn_dx_wgrad import IDN_CNN_DX_IMPLICIT, IDN_CNN_WGRAD_LEAF1024, cnn_wgrad_partition
 from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
 from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
 from x_cnn.ops import (
@@ -37,6 +38,8 @@ from x_cnn.ops import (
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
     bn_blk_red_at, bn_blk_red_fin_at,
+    IDN_BN_GRID_STATS, bn_gs_chunks, bn_gs_sum_host_at, bn_gs_sq_host_at, bn_gs_red_host_at,
+    bn_gs_mean_at, bn_gs_var_at, bn_gs_red_fin_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
 )
@@ -44,6 +47,9 @@ from x_cnn.ops import (
 from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
 # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
 from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
+# lane cnn-resident-glue (2026-10-11, G6): the global average pool's lane/tree fold
+from x_cnn.ops import IDN_GPOOL_WARP, GPOOL_LANES, gpool_is_global, gpool_avg_lane, gpool_avg_divisor
+from checks.numerics import identical_div
 
 #: The host family's negative control (host_surface sabotage_define): the
 #: host col2im gathers in reversed (kh) order.
@@ -389,6 +395,65 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: Li
     _ = ps^
 
 
+def _conv_dx_implicit_host(g: FP, w: FP, gx: FP, prm: List[Int32]) raises:
+    """G1 host twin (`implicit_dx_kernel`'s words): A [N*H*W x OC*KH*KW] with
+    A[(n, h, w), oc*KK + kh*KW + kw] = g[(n, oh, ow), oc] at
+    oh = (h + PH - kh DH) / SH, ow = (w + PW - kw DW) / SW when integral and in
+    range, else +0.0; B [OC*KK x C] with B[oc*KK + t, c] = W[oc, c, t];
+    gemm_host_into OP_NN (leaves contract_leaf_size(OC*KK), the chain and the
+    balanced tree the kernel runs), then the [N*H*W x C] result to NCHW."""
+    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var H = Int(prm[CP_H]); var W = Int(prm[CP_W])
+    var KH = Int(prm[CP_KH]); var KW = Int(prm[CP_KW])
+    var OH = Int(prm[CP_OH]); var OW = Int(prm[CP_OW]); var OC = Int(prm[CP_OC])
+    var SH = Int(prm[CP_SH]); var SW = Int(prm[CP_SW])
+    var PH = Int(prm[CP_PH]); var PW = Int(prm[CP_PW])
+    var DH = Int(prm[CP_DH]); var DW = Int(prm[CP_DW])
+    var KK = KH * KW
+    var kdim = OC * KK
+    var HW = H * W
+    var rows = N * HW
+    if rows <= 0 or C <= 0:
+        return
+    var a = scratch(rows * kdim)
+    var b = scratch(kdim * C)
+    var y = scratch(rows * C)
+    for kk in range(kdim):
+        var oc = kk // KK
+        var t2 = kk - oc * KK
+        for c in range(C):
+            b.unsafe_store(kk * C + c, w.unsafe_load(oc * C * KK + c * KK + t2))
+    var tasks = _tasks_for(N, HW * kdim)
+    var chunk = (N + tasks - 1) // tasks
+
+    def _fill(t: Int) {imm a, imm g, imm chunk, imm N, imm H, imm W, imm KH, imm KW, imm OH, imm OW, imm OC, imm SH, imm SW, imm PH, imm PW, imm DH, imm DW, imm KK, imm kdim}:
+        for n in range(t * chunk, min(t * chunk + chunk, N)):
+            for h in range(H):
+                for wq in range(W):
+                    var arow = a + ((n * H + h) * W + wq) * kdim
+                    for oc in range(OC):
+                        for kh in range(KH):
+                            var th = h + PH - kh * DH
+                            for kw in range(KW):
+                                var tw = wq + PW - kw * DW
+                                var v = Float32(0)
+                                if th >= 0 and tw >= 0 and th % SH == 0 and tw % SW == 0 and th // SH < OH and tw // SW < OW:
+                                    v = g.unsafe_load(((n * OH + th // SH) * OW + tw // SW) * OC + oc)
+                                arow.unsafe_store(oc * KK + kh * KW + kw, v)
+
+    if tasks <= 1:
+        _fill(0)
+    else:
+        host_parallelize(_fill, tasks)
+    gemm_host_into(a, b, y, OP_NN, rows, C, kdim)
+    for n in range(N):
+        for c in range(C):
+            for q in range(HW):
+                gx.unsafe_store((n * C + c) * HW + q, y.unsafe_load((n * HW + q) * C + c))
+    a.free()
+    b.free()
+    y.free()
+
+
 def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: List[Int32], need_dx: Bool) raises:
     """conv2d_backward_into from the input's im2col matrix `cols`."""
     var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
@@ -400,8 +465,19 @@ def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm:
     var g = scratch(rows * OC)
     dout_rows_host(dout, g, ps)
     var ones = List[Float32](length=rows, fill=Float32(1))
-    gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
+    comptime if IDN_CNN_WGRAD_LEAF1024:
+        # G2 (x_cnn/cnn_dx_wgrad.mojo): the device leaf kernel's 1024-row leaves
+        gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows, leaf_override=cnn_wgrad_partition(rows)[0])
+    else:
+        gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
     gemm_host_into(g, hp(ones), gb, OP_TN, OC, 1, rows)
+    comptime if IDN_CNN_DX_IMPLICIT:
+        if need_dx:
+            _conv_dx_implicit_host(g, w, gx, prm)
+        g.free()
+        _ = ones^
+        _ = ps^
+        return
     if need_dx:
         var dcols = scratch(rows * ckk)
         gemm_host_into(g, w, dcols, OP_NN, rows, ckk, OC)
@@ -675,10 +751,34 @@ def maxpool2d_backward_into(dout: FP, idx: IP, gx: FP, prm: List[Int32]):
     _ = ps^
 
 
+def _gpool_avg_host(x: FP, dst: FP, p: IP, planes: Int):
+    """The device's `gpool_fwd_kernel[True]` (MOJOLEARN_IDN_GPOOL_WARP): per
+    plane, GPOOL_LANES lane sums then the same pairwise tree (s = 16 .. 1),
+    one divide; the same words as NVIDIA and AMD."""
+    var hw = Int(p.unsafe_load(PP_H)) * Int(p.unsafe_load(PP_W))
+    var div = Float32(gpool_avg_divisor(p))
+    var v = List[Float32](length=GPOOL_LANES, fill=Float32(0))
+    for nc in range(planes):
+        for t in range(GPOOL_LANES):
+            v[t] = gpool_avg_lane(nc, t, x, hw)
+        var s = GPOOL_LANES // 2
+        while s > 0:
+            for t in range(s):
+                v[t] = ftz(v[t] + v[t + s])
+            s //= 2
+        dst.unsafe_store(nc, ftz(identical_div(v[0], div)))
+
+
 def avgpool2d_forward_into(x: FP, dst: FP, prm: List[Int32]):
     var no = _pool_sizes(prm)[1]
     var ps = prm.copy()
-    run[avgpool_fwd_at](x, dst, dst, dst, hi(ps), hi(ps), no)
+    var gavg = False
+    comptime if IDN_GPOOL_WARP:
+        gavg = gpool_is_global(prm)
+    if gavg:
+        _gpool_avg_host(x, dst, hi(ps), no)
+    else:
+        run[avgpool_fwd_at](x, dst, dst, dst, hi(ps), hi(ps), no)
     _ = ps^
 
 
@@ -892,9 +992,18 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, dst: FP, prm: List[Int32
     # lane idn-loss-norm-folds: the device's blocked folds (x_cnn/ops.mojo
     # BN_FOLD_BLOCK), the same element functions
     var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    # lane bn-grid-stats (G5): the device chunk blocks' twin (x_cnn/ops.mojo
+    # IDN_BN_GRID_STATS), the same lane sums and tree
+    comptime if IDN_BN_GRID_STATS:
+        nblk = C * bn_gs_chunks(Int(prm[0]) * Int(prm[2]))
     var part = zeros(nblk)
     if training:
-        comptime if BN_FOLD_BLOCK:
+        comptime if IDN_BN_GRID_STATS:
+            run[bn_gs_sum_host_at](x, hp(part), hp(part), hp(part), hi(ps), hi(ps), nblk)
+            run[bn_gs_mean_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+            run[bn_gs_sq_host_at](x, hp(part), aux, aux, hi(ps), hi(ps), nblk)
+            run[bn_gs_var_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+        elif BN_FOLD_BLOCK:
             run[bn_blk_sum_at](x, hp(part), hp(part), hp(part), hi(ps), hi(ps), nblk)
             run[bn_blk_mean_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
             run[bn_blk_sq_at](x, hp(part), aux, aux, hi(ps), hi(ps), nblk)
@@ -919,8 +1028,13 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, dst: FP, prm: List[Int32], tr
     var total = Int(prm[0]) * C * Int(prm[2])
     var ps = prm.copy()
     var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    comptime if IDN_BN_GRID_STATS:
+        nblk = C * bn_gs_chunks(Int(prm[0]) * Int(prm[2]))
     var part = zeros(2 * nblk)
-    comptime if BN_FOLD_BLOCK:
+    comptime if IDN_BN_GRID_STATS:
+        run[bn_gs_red_host_at](x, g, aux, hp(part), hi(ps), hi(ps), nblk)
+        run[bn_gs_red_fin_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+    elif BN_FOLD_BLOCK:
         run[bn_blk_red_at](x, g, aux, hp(part), hi(ps), hi(ps), nblk)
         run[bn_blk_red_fin_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
     else:

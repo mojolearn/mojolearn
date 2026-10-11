@@ -42,7 +42,6 @@ from std.sys.compile import is_defined
 
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
-from glm.impl.pinned_upload import linear_upload_f32
 from glm.impl.ols import (
     OLS_ALGO_EIG,
     ols_fit_traced,
@@ -435,9 +434,10 @@ def ridge_fit_host(
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var w = ctx.enqueue_create_buffer[DType.float32](n_features)
-    # lane fg-linear L4 (IDN_LINEAR_PINNED_UPLOAD): pinned staged when large
-    linear_upload_f32(ctx, x, x_ptr, n_rows * n_features)
-    linear_upload_f32(ctx, y, y_ptr, n_rows)
+    # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.synchronize()
     var trace = IdentityTrace()
     if trace.enabled:
@@ -681,9 +681,10 @@ def qn_fit_host(
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-    # lane fg-linear L4 (IDN_LINEAR_PINNED_UPLOAD): pinned staged when large
-    linear_upload_f32(ctx, x, x_ptr, n_rows * n_features)
-    linear_upload_f32(ctx, y, y_ptr, n_rows)
+    # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.enqueue_memset(w, Float32(0.0))
     ctx.synchronize()
     var pams = QNParams.default()

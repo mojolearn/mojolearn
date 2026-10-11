@@ -14,7 +14,7 @@ from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks, ftz_v, mul_add_v
 from x_ann.ivf_rabitq_core import rq_encode_row, rq_pow2, rq_rotate, rq_scale
 from x_ann.ivf_sq_core import sq_encode_cell, sq_range_cell
-from x_ann.switches import IDN_PQ_DEVICE_CODEBOOKS
+from x_ann.switches import IDN_PQ_DEVICE_CODEBOOKS, IDN_PQ_TRAINSET_STRIDED, IDN_PQ_TRAIN_ROWS_PER_CODE
 from x_ann.ivf_pq_core import PQK_CODES_MAX, PQK_LEN_MAX, PQK_ROWS
 from x_ann.ivf_pq_core import (
     F32P, I32P, IvfPqIndex, pq_assign_cell, pq_coarse_dist, pq_inf, pq_insert, pq_labels_from_lists,
@@ -269,7 +269,12 @@ def ivf_pq_build_host(
         dev_cb = pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
     var cb: List[Float32]
     if dev_cb:
-        cb = _codebooks_host_batched(r, n, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+        # lane hdb-ivf D8(a), IDN_PQ_TRAINSET_STRIDED: the device's n_train
+        var n_train = n
+        comptime if IDN_PQ_TRAINSET_STRIDED:
+            if n > IDN_PQ_TRAIN_ROWS_PER_CODE * n_codes:
+                n_train = IDN_PQ_TRAIN_ROWS_PER_CODE * n_codes
+        cb = _codebooks_host_batched(r, n, n_train, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
     else:
         cb = _codebooks_host(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
     var codes = List[Int32](length=n * pq_dim, fill=Int32(0))

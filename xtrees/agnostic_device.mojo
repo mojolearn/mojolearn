@@ -15,6 +15,8 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.neural_context import process_ctx
+from x_linear.ops import fa as lin_fa, fexp as lin_fexp, ld as lin_ld, row_dot as lin_row_dot
+from checks.numerics import identical_sigmoid as lin_identical_sigmoid, ftz as lin_ftz
 from xtrees.agnostic import (
     F32P, I32P, U64P, I64P, kshap_mask_unit, kshap_synth_unit, bg_mean_unit, logit_unit, kshap_gram_unit,
     kshap_rhs_unit, kshap_pivot_unit, kshap_elim_unit, kshap_back_unit, fx_unit, pshap_perm_unit,
@@ -97,6 +99,27 @@ comptime PSHAP_FAST_DEVICE_MODEL = _AGN_FAST_APPLE and is_defined["MOJOLEARN_PSH
 #: Any build that compiles the device-model route (IDENTICAL default, or a
 #: FAST experiment above).
 comptime AGN_ANY_DEVICE_MODEL = AGN_IDN_DEVICE_MODEL or KSHAP_FAST_DEVICE_MODEL or PSHAP_FAST_DEVICE_MODEL
+#: lane/neighbors-small-ports (2026-10-11, idea D5), IDENTICAL, DEFAULT OFF
+#: (OPEN): `-D MOJOLEARN_IDN_PSHAP_RESIDENT`. PermutationExplainer over one of
+#: this library's linear regressors (predict = link(X W^T + b), x_linear
+#: `decision_kernel`): the chunk's synthetic rows stay on the device and
+#: the linear decision runs on them there (`pshap_values_linear`), then
+#: the background means and the marginals, phi alone crossing back.
+#: Structural reason: today each chunk builds R (2d+1) np nb x d synthetic
+#: floats, downloads them, the model's predict re-uploads them, and the
+#: outputs are uploaded again (77.6 GB of PCIe traffic at the board's
+#: istella permutation-shap); and the chunk budget (2^25 words) is sized
+#: for that host matrix. Here no synthetic word crosses, so the chunk
+#: budget is the device's (`_AGN_BUDGET_RESIDENT` in the Python layer, a
+#: memory bound, not a shape rule). Same words: the same synthetic rows
+#: (`psynth_kernel`), the per-output `decision_one` statements of x_linear
+#: (`_lin_decision_one` below repeats them: the fold first, the intercept
+#: last, then the link), the same mean/marginal kernels. The host column
+#: keeps the model callback (the same decision statements on the host).
+#: Expected: permutation-shap istella NV 7394 -> ~2000 ms.
+comptime PSHAP_IDN_RESIDENT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_PSHAP_RESIDENT"]()
+)
 #: Default FAST + Apple; MOJOLEARN_PSHAP_DELTA_OFF restores full synthesis.
 #: M3 w2-pdelta-pshap-istella: 28,222.8 -> 14,788.6 ms (-47.6%).
 #: w2-pdelta-quality: linear/tanh/two-output phi byte-identical, identical
@@ -1175,6 +1198,85 @@ def pshap_dvalues(x: Int, bg: Int, yout: Int, phi: Int, tot: Int, R: Int, nb: In
     ctx.synchronize()
     _ = dl^
     _ = mp^
+    _ = dout^
+    _ = ey^
+    _ = dphi^
+
+
+# ---- MOJOLEARN_IDN_PSHAP_RESIDENT (lane/neighbors-small-ports, idea D5) ----
+
+
+def _lin_decision_one(x: F32P, i: Int, d: Int, wb: F32P, c: Int, link: Int) -> Float32:
+    """x_linear/dispatch.mojo `decision_one`, statement for statement (the
+    row fold `row_dot`, then `fa` with the intercept, then the link), so a
+    linear model's output here is its predict's word."""
+    var woff = c * (d + 1)
+    var z = lin_fa(lin_row_dot(x, i, d, wb, woff), lin_ld(wb, woff + d))
+    if link == 1:  # x_linear LINK_EXP
+        return lin_fexp(z)
+    if link == 2:  # x_linear LINK_SIGMOID
+        return lin_ftz(lin_identical_sigmoid(z))
+    return z
+
+
+def lin_decision_kernel(x: F32P, wb: F32P, n: Int64, d: Int32, k: Int32, link: Int32, res: F32P):
+    """x_linear/device.mojo `decision_kernel` over the resident synthetic
+    rows: one thread per (row, output), grid-strided (n may exceed a launch)."""
+    var t = _t0()
+    var total = Int(n) * Int(k)
+    while t < total:
+        var i = t // Int(k)
+        var c = t % Int(k)
+        res.unsafe_store(t, _lin_decision_one(x, i, Int(d), wb, c, Int(link)))
+        t += _stride()
+
+
+def pshap_values_linear(x: Int, bg: Int, wb: Int, phi: Int, R: Int, nb: Int, d: Int, k: Int, np: Int,
+                        seed: Int, row0: Int, link: Int) raises:
+    """PSHAP_IDN_RESIDENT: `pshap_synth` + the linear model's predict +
+    `pshap_values` for a chunk without leaving the device: x Float32 R x d,
+    bg Float32 nb x d, wb Float32 k x (d + 1) ([w | b] per output, x_linear
+    `_coef_block`), phi binary64 R x d x k to the host address phi."""
+    var mm = np * (2 * d + 1)
+    if R * d * k <= 0 or mm <= 0:
+        return
+    var rows = R * mm * nb
+    var total = rows * d
+    var ctx = _ctx()
+    var perm = ctx.enqueue_create_buffer[DType.int32](R * np * d)
+    var inv = ctx.enqueue_create_buffer[DType.int32](R * np * d)
+    _perms(ctx, R, d, np, seed, row0, perm, inv)
+    var dx = _up_f32(ctx, x, R * d)
+    var dbg = _up_f32(ctx, bg, nb * d)
+    var dwb = _up_f32(ctx, wb, k * (d + 1))
+    var dsyn = ctx.enqueue_create_buffer[DType.float32](total)
+    ctx.enqueue_function[psynth_kernel](
+        Int64(total), Int32(nb), Int32(d), Int32(np), dx.unsafe_ptr(), dbg.unsafe_ptr(), inv.unsafe_ptr(),
+        dsyn.unsafe_ptr(), grid_dim=_blocks(total), block_dim=AGN_TPB,
+    )
+    var dout = ctx.enqueue_create_buffer[DType.float32](rows * k)
+    ctx.enqueue_function[lin_decision_kernel](
+        dsyn.unsafe_ptr(), dwb.unsafe_ptr(), Int64(rows), Int32(d), Int32(k), Int32(link), dout.unsafe_ptr(),
+        grid_dim=_blocks(rows * k), block_dim=AGN_TPB,
+    )
+    var ey = ctx.enqueue_create_buffer[DType.uint64](R * mm * k)
+    ctx.enqueue_function[mean_kernel](
+        Int64(R * mm * k), Int32(nb), Int32(k), dout.unsafe_ptr(), ey.unsafe_ptr(),
+        grid_dim=_blocks(R * mm * k), block_dim=AGN_TPB,
+    )
+    var dphi = ctx.enqueue_create_buffer[DType.uint64](R * d * k)
+    ctx.enqueue_function[marginal_kernel](
+        Int64(R * d * k), Int32(d), Int32(k), Int32(np), inv.unsafe_ptr(), ey.unsafe_ptr(), dphi.unsafe_ptr(),
+        grid_dim=_blocks(R * d * k), block_dim=AGN_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=phi), src_buf=dphi)
+    ctx.synchronize()
+    _ = perm^
+    _ = inv^
+    _ = dx^
+    _ = dbg^
+    _ = dwb^
+    _ = dsyn^
     _ = dout^
     _ = ey^
     _ = dphi^

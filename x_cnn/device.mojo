@@ -39,6 +39,7 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.experiments.neural_tiled_v2 import NI09_TILED_BIAS, neural_bias_gemm
 from x_cnn.neural_col2im import NI14_TILED_COL2IM, NI14_COL2IM, NI14_COL2IM_BOUNDED, neural_col2im_tiled
+from x_cnn.cnn_dx_wgrad import IDN_CNN_DX_IMPLICIT, IDN_CNN_WGRAD_LEAF1024, cnn_wgrad_partition
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
@@ -73,6 +74,12 @@ from x_cnn.ops import (
 )
 # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
 from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
+# lane cnn-resident-glue (2026-10-11, G6): the global pool's block folds
+from x_cnn.ops import IDN_GPOOL_WARP, GPOOL_LANES, gpool_is_global, gpool_avg_lane, gpool_max_lane, gpool_max_pick, gpool_avg_divisor
+# lane bn-grid-stats (2026-10-11, G5): coalesced two-level BN statistics folds
+from x_cnn.ops import (
+    IDN_BN_GRID_STATS, BN_GS_LANES, bn_gs_chunks, bn_gs_lane, bn_gs_mean_at, bn_gs_var_at, bn_gs_red_fin_at,
+)
 # lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
 from x_cnn.ops import (
     IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_row_val, epoch_rows_prm,
@@ -682,6 +689,10 @@ def _implicit_wgrad(
     if rows <= 0 or OC <= 0 or ckk <= 0:
         return
     var lp = contract_partition(rows)
+    comptime if IDN_CNN_WGRAD_LEAF1024:
+        # G2 (x_cnn/cnn_dx_wgrad.mojo): 1024-row leaves, P ~5x smaller; the
+        # host twin passes the same partition to gemm_host_into
+        lp = cnn_wgrad_partition(rows)
     var mn = OC * ckk
     var wsp = ws(ctx, slot, lp[1] * mn)
     ctx.enqueue_function[implicit_wgrad_leaf_kernel](
@@ -700,6 +711,152 @@ def _implicit_wgrad(
             grid_dim=((mn + FLAT_TPB - 1) // FLAT_TPB, 1, 1), block_dim=(FLAT_TPB, 1, 1),
         )
     _ = wsp^
+
+
+def implicit_dx_kernel(g: FP, w: FP, gx: FP, p: IP, rows_in: Int32, leaf_in: Int32, count_in: Int32):
+    """G1 `MOJOLEARN_IDN_CNN_DX_IMPLICIT` (x_cnn/cnn_dx_wgrad.mojo): dx as an
+    implicit transposed convolution. Row r = (n, h, w) of the N*H*W input
+    pixels, column c of the C input channels, contract index
+    kk = oc * KH*KW + kh * KW + kw over k = OC * KH*KW:
+    A[r, kk] = g[(n, oh, ow), oc] with oh = (h + PH - kh DH) / SH and
+    ow = (w + PW - kw DW) / SW when both are integral and in range, else
+    +0.0; B[kk, c] = W[oc, c, kh, kw]. `implicit_conv_kernel`'s tile, chain
+    and leaf fold (64 rows x 64 channels a block, 4 x 4 cells a thread, the
+    leaf partials on `_fold_push_local`); `leaf_in`, `count_in` are
+    `contract_partition(OC*KH*KW)`. The cell is stored ftz'd into gx (NCHW).
+    The host twin (ops_host `_conv_dx_implicit_host`) runs gemm_host_into on
+    the same A and B: the same leaves, chain and tree."""
+    var atile = stack_allocation[NI12_KS * NI12_TMP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var btile = stack_allocation[NI12_KS * NI12_TNP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var tr = tid // NI12_RS
+    var tc = tid - tr * NI12_RS
+    var row0 = Int(block_idx.x) * NI12_TM
+    var col0 = Int(block_idx.y) * NI12_TN
+    var rows = Int(rows_in)
+    var C = _gp(p, CP_C); var H = _gp(p, CP_H); var W = _gp(p, CP_W)
+    var KH = _gp(p, CP_KH); var KW = _gp(p, CP_KW)
+    var OH = _gp(p, CP_OH); var OW = _gp(p, CP_OW); var OC = _gp(p, CP_OC)
+    var SH = _gp(p, CP_SH); var SW = _gp(p, CP_SW)
+    var PH = _gp(p, CP_PH); var PW = _gp(p, CP_PW)
+    var DH = _gp(p, CP_DH); var DW = _gp(p, CP_DW)
+    var KK = KH * KW
+    var ckk = C * KK
+    var kdim = OC * KK
+    var HW = H * W
+    # A staging: this thread owns tile row `srow` for 4 taps per slab
+    var srow = tid - (tid // NI12_TM) * NI12_TM
+    var skk = tid // NI12_TM
+    var grow = row0 + srow
+    var slive = grow < rows
+    var sgb = 0
+    var sth = 0
+    var stw = 0
+    if slive:
+        var n = _ni12_udiv(grow, HW)
+        var rem = grow - n * HW
+        var h = _ni12_udiv(rem, W)
+        var wq = rem - h * W
+        sgb = n * OH * OW
+        sth = h + PH
+        stw = wq + PW
+    # B staging: tap `page + sbk` of 4 channels `col0 + sboc + 16 l`
+    var sboc = tid // NI12_KS
+    var sbk = tid - sboc * NI12_KS
+    var fl = stack_allocation[TUNED_FOLD_SLOTS * NI12_NCELL, Scalar[DType.float32]]()
+    var occ = 0
+    var leaf = Int(leaf_in)
+    for t in range(Int(count_in)):
+        var lo = t * leaf
+        var hi = min(lo + leaf, kdim)
+        var acc = SIMD[DType.float32, NI12_NCELL](0.0)
+        var page = lo
+        while page < hi:
+            var cnt = min(NI12_KS, hi - page)
+            comptime for l in range(NI12_RC):
+                var k_a = skk + NI12_RC * l
+                var av = Float32(0.0)
+                if slive and k_a < cnt:
+                    var kk = page + k_a
+                    var oc = _ni12_udiv(kk, KK)
+                    var t2 = kk - oc * KK
+                    var kh = _ni12_udiv(t2, KW)
+                    var kw = t2 - kh * KW
+                    var th = sth - kh * DH
+                    var tw = stw - kw * DW
+                    if th >= 0 and tw >= 0:
+                        var oh = _ni12_udiv(th, SH)
+                        var ow = _ni12_udiv(tw, SW)
+                        if oh * SH == th and ow * SW == tw and oh < OH and ow < OW:
+                            av = ftz(g.unsafe_load((sgb + oh * OW + ow) * OC + oc))
+                atile[k_a * NI12_TMP + srow] = av
+            comptime for l in range(NI12_RC):
+                var bc = sboc + NI12_RS * l
+                var sc = col0 + bc
+                var bv = Float32(0.0)
+                if sc < C and sbk < cnt:
+                    var kk = page + sbk
+                    var oc = _ni12_udiv(kk, KK)
+                    var t2 = kk - oc * KK
+                    bv = ftz(w.unsafe_load(oc * ckk + sc * KK + t2))
+                btile[sbk * NI12_TNP + bc] = bv
+            barrier()
+            if cnt == NI12_KS:
+                comptime for i in range(NI12_KS):
+                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    comptime for c in range(NI12_RC):
+                        av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
+                        bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
+                    comptime for a in range(NI12_RC):
+                        comptime for b in range(NI12_RC):
+                            acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
+            else:
+                for i in range(cnt):
+                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    comptime for c in range(NI12_RC):
+                        av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
+                        bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
+                    comptime for a in range(NI12_RC):
+                        comptime for b in range(NI12_RC):
+                            acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
+            barrier()
+            page += NI12_KS
+        var part = SIMD[DType.float32, NI12_NCELL](0.0)
+        comptime for e in range(NI12_NCELL):
+            part[e] = ftz(acc[e])
+        _ = _fold_push_local[NI12_NCELL, TUNED_FOLD_SLOTS](fl, occ, part)
+    var res = _fold_drain_local[NI12_NCELL, TUNED_FOLD_SLOTS](fl, occ)
+    comptime for a in range(NI12_RC):
+        var row = row0 + tr + NI12_RS * a
+        if row < rows:
+            var n = _ni12_udiv(row, HW)
+            var rem = row - n * HW
+            comptime for b in range(NI12_RC):
+                var c = col0 + tc + NI12_RS * b
+                if c < C:
+                    gx.unsafe_store((n * C + c) * HW + rem, ftz(res[a * NI12_RC + b]))
+
+
+def _implicit_dx(
+    ctx: DeviceContext, mut gx: DeviceBuffer[DType.float32], mut g: DeviceBuffer[DType.float32],
+    mut w: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], N: Int, C: Int, HW: Int, OC: Int, KK: Int,
+) raises:
+    """G1: gx (N, C, H, W) = the implicit transposed convolution of the
+    rows-layout g [N*OH*OW x OC] with W [OC x C*KK], one launch, no dcols
+    and no col2im. Leaves `contract_partition(OC * KK)` (the contract's k
+    alone sets them)."""
+    var rows = N * HW
+    var kdim = OC * KK
+    if rows <= 0 or C <= 0:
+        return
+    var lp = contract_partition(kdim)
+    ctx.enqueue_function[implicit_dx_kernel](
+        fp(g), fp(w), fp(gx), ip(dp), Int32(rows), Int32(lp[0]), Int32(lp[1]),
+        grid_dim=((rows + NI12_TM - 1) // NI12_TM, (C + NI12_TN - 1) // NI12_TN, 1),
+        block_dim=(NI12_THREADS, 1, 1),
+    )
 
 
 @always_inline
@@ -1508,7 +1665,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
     var gb = m_out(ctx, 8, a[5], OC, isdev(dev, 5))
-    var dcols = ws(ctx, 9, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
+    var dcols = ws(ctx, 9, 1 if (NN14_BOUNDED_IM2COL or IDN_CNN_DX_IMPLICIT) else rows * ckk)
     var gx = m_out(ctx, 10, a[3], nx, isdev(dev, 3))
     comptime if not NN14_BOUNDED_IM2COL and not NI12_IMPLICIT_CONV:
         _im2col(ctx, dxin, cols, dp, rows, ckk, C)
@@ -1535,6 +1692,9 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     bias_grad_gemm(ctx, gb, g, ones, OC, rows)
     comptime if NN14_BOUNDED_IM2COL:
         launch[nn14_input_grad_at](ctx, fp(g), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+    elif IDN_CNN_DX_IMPLICIT:
+        # G1: one implicit transposed-conv launch, no dcols, no col2im
+        _implicit_dx(ctx, gx, g, dw, dp, N, C, Int(prm[CP_H]) * Int(prm[CP_W]), OC, Int(prm[CP_KH]) * Int(prm[CP_KW]))
     else:
         device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
         _col2im(ctx, dcols, gx, dp, nx)
@@ -1585,6 +1745,48 @@ def _pool_sizes(prm: List[Int32]) -> Tuple[Int, Int]:
     return (nc * Int(prm[PP_H]) * Int(prm[PP_W]), nc * Int(prm[PP_OH]) * Int(prm[PP_OW]))
 
 
+# lane cnn-resident-glue (2026-10-11, G6) MOJOLEARN_IDN_GPOOL_WARP: one block
+# of GPOOL_LANES threads per (n, c) plane when the window is the plane (see
+# x_cnn/ops.mojo IDN_GPOOL_WARP for the fold, the bits and the cost reason).
+def gpool_fwd_kernel[AVG: Bool](x: FP, dst: FP, idx: IP, p: IP):
+    var sv = stack_allocation[GPOOL_LANES, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var si = stack_allocation[GPOOL_LANES, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var nc = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var hw = _gp(p, PP_H) * _gp(p, PP_W)
+    comptime if AVG:
+        sv[t] = gpool_avg_lane(nc, t, x, hw)
+    else:
+        var r = gpool_max_lane(nc, t, x, hw)
+        sv[t] = r[0]
+        si[t] = Int32(r[1])
+    barrier()
+    var s = GPOOL_LANES // 2
+    while s > 0:
+        if t < s:
+            comptime if AVG:
+                sv[t] = ftz(sv[t] + sv[t + s])
+            else:
+                if gpool_max_pick(sv[t], Int(si[t]), sv[t + s], Int(si[t + s])):
+                    sv[t] = sv[t + s]
+                    si[t] = si[t + s]
+        barrier()
+        s //= 2
+    if t == 0:
+        comptime if AVG:
+            dst.unsafe_store(nc, ftz(identical_div(sv[0], Float32(gpool_avg_divisor(p)))))
+        else:
+            dst.unsafe_store(nc, sv[0])
+            idx.unsafe_store(nc, si[0])
+
+
+def _gpool_launch[AVG: Bool](ctx: DeviceContext, x: FP, dst: FP, idx: IP, p: IP, planes: Int) raises:
+    if planes <= 0:
+        return
+    comptime k = gpool_fwd_kernel[AVG]
+    ctx.enqueue_function[k](x, dst, idx, p, grid_dim=(planes, 1, 1), block_dim=(GPOOL_LANES, 1, 1))
+
+
 def maxpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     """a = [x, out, idx (int32)]."""
     var sizes = _pool_sizes(prm)
@@ -1594,7 +1796,13 @@ def maxpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dp = put_prm(ctx, 1, prm)
     var dout = m_out(ctx, 2, a[1], no, isdev(dev, 1))
     var di = m_out_i(ctx, 3, a[2], no, isdev(dev, 2))
-    launch[maxpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(di), ip(dp), no)
+    var gmax = False
+    comptime if IDN_GPOOL_WARP:
+        gmax = gpool_is_global(prm)
+    if gmax:
+        _gpool_launch[False](ctx, fp(dx), fp(dout), ip(di), ip(dp), no)
+    else:
+        launch[maxpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(di), ip(dp), no)
     m_fetch(ctx, dout, a[1], no, isdev(dev, 1))
     m_fetch_i(ctx, di, a[2], no, isdev(dev, 2))
     ctx.synchronize()
@@ -1650,7 +1858,13 @@ def avgpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dx = m_in(ctx, 0, a[0], sizes[0], isdev(dev, 0))
     var dp = put_prm(ctx, 1, prm)
     var dout = m_out(ctx, 2, a[1], no, isdev(dev, 1))
-    launch[avgpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(dp), ip(dp), no)
+    var gavg = False
+    comptime if IDN_GPOOL_WARP:
+        gavg = gpool_is_global(prm)
+    if gavg:
+        _gpool_launch[True](ctx, fp(dx), fp(dout), ip(dp), ip(dp), no)
+    else:
+        launch[avgpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(dp), ip(dp), no)
     m_fetch(ctx, dout, a[1], no, isdev(dev, 1))
     ctx.synchronize()
     _ = dx^
@@ -2116,6 +2330,37 @@ def _bn_use_block[fwd: Bool](
     return pick == 1
 
 
+# lane bn-grid-stats (2026-10-11, G5, `-D MOJOLEARN_IDN_BN_GRID_STATS`, x_cnn/ops.mojo
+# IDN_BN_GRID_STATS): one BN_GS_LANES-thread block per (channel, chunk).
+# Each thread takes its lane sum (bn_gs_lane, the host twin's function),
+# then the fixed halving tree v[i] += v[i + s], s = 128 .. 1, folds the
+# lane sums in shared memory (shared memory only between barriers; every
+# thread reaches every barrier). MODE as bn_gs_lane; part as the host twin.
+def bn_gs_chunk_kernel[MODE: Int](x: FP, g: FP, aux: FP, part: FP, p: IP):
+    var sh0 = stack_allocation[BN_GS_LANES, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sh1 = stack_allocation[BN_GS_LANES, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var t = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var r = bn_gs_lane[MODE](t, tid, x, g, aux, p)
+    sh0[tid] = r[0]
+    comptime if MODE == 2:
+        sh1[tid] = r[1]
+    barrier()
+    var s = BN_GS_LANES // 2
+    while s > 0:
+        if tid < s:
+            sh0[tid] = ftz(sh0[tid] + sh0[tid + s])
+            comptime if MODE == 2:
+                sh1[tid] = ftz(sh1[tid] + sh1[tid + s])
+        barrier()
+        s //= 2
+    if tid == 0:
+        part.unsafe_store(t, sh0[0])
+        comptime if MODE == 2:
+            var N = _gp(p, 0); var C = _gp(p, 1); var HW = _gp(p, 2)
+            part.unsafe_store(C * bn_gs_chunks(N * HW) + t, sh1[0])
+
+
 def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool) raises:
     """a = [x, running (2C, in place), aux (2 + 7C, in place: the statistics
     the backward reads), y]."""
@@ -2134,9 +2379,16 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
     # lane idn-loss-norm-folds: the blocked folds' partials (x_cnn/ops.mojo
     # BN_FOLD_BLOCK), C * NB words; one word when the single chain runs
     var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    comptime if IDN_BN_GRID_STATS:
+        nblk = C * bn_gs_chunks(Int(prm[0]) * Int(prm[2]))
     var dpart = ws(ctx, 5, nblk)
     if training:
-        comptime if BN_FOLD_BLOCK:
+        comptime if IDN_BN_GRID_STATS:
+            ctx.enqueue_function[bn_gs_chunk_kernel[0]](fp(dx), fp(dx), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
+            launch[bn_gs_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            ctx.enqueue_function[bn_gs_chunk_kernel[1]](fp(dx), fp(dx), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
+            launch[bn_gs_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+        elif BN_FOLD_BLOCK:
             launch[bn_blk_sum_at](ctx, fp(dx), fp(dpart), fp(dpart), fp(dpart), ip(dp), ip(dp), nblk)
             launch[bn_blk_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
             launch[bn_blk_sq_at](ctx, fp(dx), fp(dpart), fp(da), fp(da), ip(dp), ip(dp), nblk)
@@ -2204,8 +2456,13 @@ def batchnorm_backward_m(a: List[Int], dev: Int, prm: List[Int32], training: Boo
     # lane idn-loss-norm-folds: blocked folds (x_cnn/ops.mojo BN_FOLD_BLOCK),
     # partials [sum_g C * NB | sum_gx C * NB]
     var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    comptime if IDN_BN_GRID_STATS:
+        nblk = C * bn_gs_chunks(Int(prm[0]) * Int(prm[2]))
     var dpart = ws(ctx, 5, 2 * nblk)
-    comptime if BN_FOLD_BLOCK:
+    comptime if IDN_BN_GRID_STATS:
+        ctx.enqueue_function[bn_gs_chunk_kernel[2]](fp(dx), fp(dg), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
+        launch[bn_gs_red_fin_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+    elif BN_FOLD_BLOCK:
         launch[bn_blk_red_at](ctx, fp(dx), fp(dg), fp(da), fp(dpart), ip(dp), ip(dp), nblk)
         launch[bn_blk_red_fin_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
@@ -2574,6 +2831,21 @@ comptime IDN_LAYER_DEV_IO = _FAM_IDN and not is_defined["MOJOLEARN_IDN_LAYER_DEV
 #: resident and the `_m` entries read them there (glue only; the entries are
 #: the existing ones). `-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`.
 comptime IDN_PIN_WEIGHTS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PIN_WEIGHTS_OFF"]()
+#: bit 7 (lane cnn-resident-glue, 2026-10-11, G3) MOJOLEARN_IDN_CNN_RESIDENT_GRADS,
+#: default OFF: the CNN glue keeps everything of a resident call on the
+#: device: Conv2d/BasicBlock weights auto-pinned on first use (re-pinned when
+#: `weight_`/`bias_` is reassigned), dW/db and BatchNorm's running statistics
+#: and aux block left in resident arrays (`grad_weight_`, `grad_bias_`,
+#: `running_mean_`, `running_var_` download on first host read), the global
+#: pools take resident tensors (`_AdaptivePool._device_io`) with a cached pool
+#: layer, and outputs whose every word is stored come from the unfilled
+#: allocation. Structural reason: a resnet-block fit made ~24 host waits
+#: (each BN forward downloads running + aux, each backward aux and each conv
+#: backward dW/db) and three H2D weight copies per conv call; expected
+#: resnet-block NV 16.2 -> ~11 ms, AMD 15.5 -> ~10, conv2d -0.4 ms,
+#: global-maxpool 2.9 -> ~1.2 NV. Glue and buffer residency only: the same
+#: entries, kernels and operands, so no bit moves.
+comptime IDN_CNN_RESIDENT_GRADS = _FAM_IDN and is_defined["MOJOLEARN_IDN_CNN_RESIDENT_GRADS"]()
 
 
 def idn_flags() -> Int:
@@ -2591,6 +2863,8 @@ def idn_flags() -> Int:
         f |= 16
     comptime if IDN_PIN_WEIGHTS:
         f |= 32
+    comptime if IDN_CNN_RESIDENT_GRADS:
+        f |= 128
     # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
     # Tried: bit 6 (64) of x_cnn_idn_flags, the fused BatchNorm entries.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
@@ -3322,10 +3596,13 @@ def conv_block_backward_into[resident: Bool = False](
         device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, grow, ones, OC, rows)
     if need_dx:
-        var dcols = ws(ctx, 16, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
+        var dcols = ws(ctx, 16, 1 if (NN14_BOUNDED_IM2COL or IDN_CNN_DX_IMPLICIT) else rows * ckk)
         var gx = outb[resident](ctx, 17, gx_out, nx)
         comptime if NN14_BOUNDED_IM2COL:
             launch[nn14_input_grad_at](ctx, fp(grow), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+        elif IDN_CNN_DX_IMPLICIT:
+            # G1: one implicit transposed-conv launch, no dcols, no col2im
+            _implicit_dx(ctx, gx, grow, dw, dp, N, C, Int(cprm[CP_H]) * Int(cprm[CP_W]), OC, Int(cprm[CP_KH]) * Int(cprm[CP_KW]))
         else:
             device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
             _col2im(ctx, dcols, gx, dp, nx)

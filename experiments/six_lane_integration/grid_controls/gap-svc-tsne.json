@@ -1,0 +1,73 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "svc-tsne",
+ "branch": "lane/svc-tsne",
+ "head": "524c1ffff",
+ "head_note": "head = last code commit before this file; the file is committed on top of it.",
+ "controls": {
+  "idn_tsne_rep_rb4": {
+   "define": "MOJOLEARN_IDN_TSNE_REP_RB4",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_TSNE_REP_RB4"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_ann/tsne_device.mojo:720",
+    "x_ann/tsne_device.mojo:729"
+   ],
+   "binding": "_mojolearn_x_ann",
+   "bits_change": false,
+   "status": "new",
+   "note": "t-SNE repulsion tile with 4 rows per thread (64 rows per block per staged 256-candidate tile): same lane folds, same skip branch, same Z pinned tree; ideas-all-gaps D2. A/B owed: tsne taxi + istella nv (+ amd); ID check expected MATCH with main."
+  },
+  "idn_svc_one_block": {
+   "define": "MOJOLEARN_IDN_SVC_ONE_BLOCK",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_SVC_ONE_BLOCK"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "svm/impl/smosolver.mojo:327",
+    "svm/impl/smosolver.mojo:343"
+   ],
+   "binding": "_mojolearn_svm",
+   "bits_change": false,
+   "status": "new",
+   "note": "SMO block solve: block width cap 256 -> 1024 (hardware block limit), so n_ws <= 1024 runs as one block with no grid exchange; selections are total-order so same words; ideas-all-gaps D4 (which predicted a bit change: wrong, the winner is width-invariant). A/B owed: svc taxi + istella nv (+ amd)."
+  }
+ },
+ "algorithms": {
+  "algos:tsne": {
+   "binding": "_mojolearn_x_ann",
+   "route": "TSNE.fit -> tsne_device _enq_repulse_split (repulse_rep_rb4_kernel) [idn_tsne_rep_rb4]",
+   "controls": [
+    "idn_tsne_rep_rb4"
+   ],
+   "interaction_groups": [
+    [
+     "idn_tsne_rep_rb4"
+    ]
+   ]
+  },
+  "algos:svc": {
+   "binding": "_mojolearn_svm",
+   "route": "SVC.fit -> smosolver launch_block_solve (smo_grid_solve_kernel[1024], one block) [idn_svc_one_block]",
+   "controls": [
+    "idn_svc_one_block"
+   ],
+   "interaction_groups": [
+    [
+     "idn_svc_one_block"
+    ]
+   ]
+  }
+ }
+}

@@ -1,0 +1,28 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "trees-ctr-perm-grid",
+ "branch": "lane/trees-ctr-perm-grid",
+ "head": "c590e50aa",
+ "controls": {
+  "ctr_perm_grid": {
+   "define": "MOJOLEARN_IDN_CTR_PERM_GRID",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_CTR_PERM_GRID"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/methods/doc_parallel_boosting.mojo:ctr_perm_grid_bins_kernel",
+    "gbdt/methods/doc_parallel_boosting.mojo:ctr_perm_grid_bins_enqueue",
+    "gbdt/methods/doc_parallel_boosting.mojo:IDN_CTR_PERM_GRID call site in the CTR_PERM_BATCH permutation loop"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "new",
+   "notes": "Non-symmetric CTR fits: every active permutation's model bins from one staged node plane, one upload and one grid launch (block_idx.y = permutation), no per-permutation drain; replaces 4 drains + 28 uploads + 4 launches per tree at 4 permutations. Same walk per (permutation, row), integer bins unchanged. Taken only on the batched path (CTR_PERM_BATCH, device partitioner). Workloads: trees:gbdt-categorical:taxi nv+amd (ID + RACE)."
+  }
+ }
+}

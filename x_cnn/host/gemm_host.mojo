@@ -360,9 +360,11 @@ def _finish(stack: FP, cnt: Int, dst: FP, n: Int):
 # ------------------------------------------------------------------ kernels
 
 
-def _rows_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
+def _rows_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int, leaf_in: Int = 0):
     """Rows split across tasks; every row's whole tree in one task."""
-    var leaf = contract_leaf_size(k)
+    # leaf_in > 0: a caller's explicit contract leaf (x_cnn G2,
+    # cnn_wgrad_partition); the same chain and tree at that leaf
+    var leaf = leaf_in if leaf_in > 0 else contract_leaf_size(k)
     var pcount = leaf_count(k, leaf)
     var chunk = (m + tasks - 1) // tasks
 
@@ -398,12 +400,14 @@ def _rows_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
         host_parallelize(_task, tasks)
 
 
-def _leaves_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
+def _leaves_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int, leaf_in: Int = 0):
     """Few rows, many leaves: aligned power-of-two leaf chunks across tasks.
     Chunk q's root is the tree's node (s, q) for chunk size 2^s, so the
     chunk roots, folded in ascending order by the same counter, are the
     tree's root."""
-    var leaf = contract_leaf_size(k)
+    # leaf_in > 0: a caller's explicit contract leaf (x_cnn G2,
+    # cnn_wgrad_partition); the same chain and tree at that leaf
+    var leaf = leaf_in if leaf_in > 0 else contract_leaf_size(k)
     var pcount = leaf_count(k, leaf)
     var span = 1
     while span * tasks < pcount:
@@ -452,22 +456,23 @@ def _leaves_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
     _ = roots^
 
 
-def gemm_host_split(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int, leaves: Bool):
+def gemm_host_split(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int, leaves: Bool, leaf_in: Int = 0):
     """The kernels on prepared operands (`a` [m x k] and `b` [k x n], both
     flushed), at an explicit task count and split mode: the check's door."""
     if k <= 0:
         for x in range(m * n):
             c.unsafe_store(x, Float32(0))
         return
-    var pcount = leaf_count(k, contract_leaf_size(k))
+    var pcount = leaf_count(k, leaf_in if leaf_in > 0 else contract_leaf_size(k))
     if leaves and pcount > 1 and tasks > 1:
-        _leaves_mode(a, b, c, m, n, k, tasks)
+        _leaves_mode(a, b, c, m, n, k, tasks, leaf_in)
     else:
-        _rows_mode(a, b, c, m, n, k, tasks)
+        _rows_mode(a, b, c, m, n, k, tasks, leaf_in)
 
 
 def gemm_host_into(
-    a: FP, b: FP, c: FP, op: Int, m: Int, n: Int, k: Int, tasks_override: Int = 0, leaves_override: Int = -1
+    a: FP, b: FP, c: FP, op: Int, m: Int, n: Int, k: Int, tasks_override: Int = 0, leaves_override: Int = -1,
+    leaf_override: Int = 0,
 ):
     """C [m x n] = op(A, B) under mojolearn.identical.gemm.fp32.v1, written
     to `c`: OP_NT A [m x k] . B [n x k]^T, OP_TN A [k x m]^T . B [k x n],
@@ -488,17 +493,19 @@ def gemm_host_into(
             c.unsafe_store(x, r[x])
         return
     comptime if NEURAL_PROFILE_CHANGED:
-        var part = neural_partition[NEURAL_LEAF](k)
-        var strides = neural_strides(op, m, n, k)
-        var tasks = tasks_override if tasks_override > 0 else gemm_tasks(m, m * n * k)
-        def selected_rows(task: Int) {imm a, imm b, imm c, imm m, imm n, imm k, imm part, imm strides, imm tasks}:
-            for row in range(task * m // tasks, (task + 1) * m // tasks):
-                for col in range(n):
-                    c.unsafe_store(row * n + col, neural_cell[NEURAL_CHAINS](a, b, row, col, k, part[0], part[1], strides[0], strides[1], strides[2], strides[3]))
-        host_parallelize(selected_rows, tasks)
-        return
+        if leaf_override <= 0:
+            var part = neural_partition[NEURAL_LEAF](k)
+            var strides = neural_strides(op, m, n, k)
+            var tasks = tasks_override if tasks_override > 0 else gemm_tasks(m, m * n * k)
+            def selected_rows(task: Int) {imm a, imm b, imm c, imm m, imm n, imm k, imm part, imm strides, imm tasks}:
+                for row in range(task * m // tasks, (task + 1) * m // tasks):
+                    for col in range(n):
+                        c.unsafe_store(row * n + col, neural_cell[NEURAL_CHAINS](a, b, row, col, k, part[0], part[1], strides[0], strides[1], strides[2], strides[3]))
+            host_parallelize(selected_rows, tasks)
+            return
     var work = m * n * k
-    var pcount = leaf_count(k, contract_leaf_size(k))
+    var leaf = leaf_override if leaf_override > 0 else contract_leaf_size(k)
+    var pcount = leaf_count(k, leaf)
     var tasks = tasks_override
     var leaves = False
     if tasks <= 0:
@@ -535,6 +542,6 @@ def gemm_host_into(
         leaves = leaves_override == 1
     if tasks > 1 and not leaves and tasks > m:
         tasks = m
-    gemm_host_split(ap, bp, c, m, n, k, tasks, leaves)
+    gemm_host_split(ap, bp, c, m, n, k, tasks, leaves, leaf_override)
     _ = aw^
     _ = bw^

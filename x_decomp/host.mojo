@@ -38,6 +38,7 @@ from decomposition.host.linalg_public import host_eigh, host_qr_r
 from checks.numerics import ftz
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from x_decomp.xd_lean import IDN_SVD_TALL_LEAN, orth_lean_skip
 from x_decomp.cells import (
     lu_perm_src,
     lu_result_word,
@@ -51,6 +52,7 @@ from x_decomp.cells import (
     F32Ptr,
     absmax_sign_cell,
     FOLD_BLOCK,
+    IDN_XD_KIT_GEMM,
     colsum_part_cell,
     rowsum_part_cell,
     fold_cell,
@@ -80,6 +82,9 @@ from x_decomp.exec_trait import Exec
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
 # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
+from gemm.contract import CONTRACT_K_LEAF_MIN, contract_leaf_size, leaf_begin, leaf_count, leaf_end
+from gemm.contract import OP_NN as KIT_OP_NN, OP_NT as KIT_OP_NT, OP_TN as KIT_OP_TN
+from gemm.host.gemm_oracle import gemm_oracle_cell
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.host.center_host import center_on_cpu, col_sums_on_cpu
@@ -200,7 +205,15 @@ struct HostExec(Exec):
     @staticmethod
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
         # the cell's arithmetic and order, SIMD across outputs (x_decomp/host_simd.mojo)
-        if gemm_rowdot(m, n, ta):
+        var kit_done = False
+        comptime if IDN_XD_KIT_GEMM:
+            # the device's identical GEMM words (x_decomp/cells.mojo IDN_XD_KIT_GEMM)
+            if m > 0 and n > 0 and k > 0:
+                HostExec._gemm_identical(a, b, c, m, k, n, ta, tb)
+                kit_done = True
+        if kit_done:
+            pass
+        elif gemm_rowdot(m, n, ta):
             def rd(t: Int) {imm a, imm b, imm c, imm m, imm k}:
                 rowdot_task(t, a, b, c, m, k)
 
@@ -226,6 +239,39 @@ struct HostExec(Exec):
             # last place; the GPU binding never defines it
             for t in range(m * n):
                 c.unsafe_store(t, bitcast[DType.float32](bitcast[DType.uint32](c.unsafe_load(t)) ^ UInt32(1)))
+
+    @staticmethod
+    def _gemm_identical(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool):
+        """IDN_XD_KIT_GEMM host twin: `gemm_oracle_cell` (the identical GEMM's
+        normative answer: contract leaves + balanced tree) per output, rows as
+        tasks. TT materializes A^T (m x k) and runs OP_NT, as the device does
+        (x_decomp/device.mojo `_launch_gemm_identical`)."""
+        var la = List[Float32](capacity=m * k)
+        if ta and tb:
+            for i in range(m):
+                for q in range(k):
+                    la.append(a.unsafe_load(q * m + i))
+        else:
+            for t in range(m * k):
+                la.append(a.unsafe_load(t))
+        var lb = List[Float32](capacity=k * n)
+        for t in range(k * n):
+            lb.append(b.unsafe_load(t))
+        var op = KIT_OP_NN
+        if tb:
+            op = KIT_OP_NT
+        elif ta:
+            op = KIT_OP_TN
+        var leaf = contract_leaf_size(k)
+        var pa = UnsafePointer(to=la)
+        var pb = UnsafePointer(to=lb)
+        def row(i: Int) {imm pa, imm pb, imm c, imm op, imm m, imm k, imm n, imm leaf}:
+            for j in range(n):
+                c.unsafe_store(i * n + j, gemm_oracle_cell(pa[], pb[], op, i, j, m, n, k, leaf))
+
+        xd_parallel(row, m)
+        _ = la^
+        _ = lb^
 
     @staticmethod
     def _gemm_simd(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool):
@@ -608,7 +654,7 @@ struct HostExec(Exec):
 
     @staticmethod
     def _orth_passes(a: F32Ptr, m: Int, l: Int, diag: F32Ptr, with_diag: Bool) raises:
-        for _ in range(2):
+        for ps in range(2):
             var w = List[Float32](capacity=m * l)
             for t in range(m * l):
                 w.append(a.unsafe_load(t))
@@ -624,8 +670,16 @@ struct HostExec(Exec):
                 trsm_row(pw, pr, a, i, l)
 
             xd_parallel(row, m)
+            var skip = False
+            comptime if IDN_SVD_TALL_LEAN:
+                # C4 b (lane xd-rr-one-block): the device's skip of the second
+                # pass (`orth_on_device_diag`), the same test on the same R1
+                if ps == 0 and with_diag and l > 0:
+                    skip = orth_lean_skip(pr, l)
             _ = r^
             _ = w^
+            if skip:
+                break
 
     @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:

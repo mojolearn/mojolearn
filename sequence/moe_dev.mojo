@@ -22,6 +22,8 @@ resident tensor."""
 from std.python import PythonObject
 
 from sequence.exec_device import DeviceExec
+from sequence.moe_grouped_fold import MOE_RESIDENT
+from sequence.moe_reg import MOE_DEVGROUP
 from sequence.moe_weights import moe_weights_ptrs
 from sequence.pyapi import ival, moe_forward_core
 from sequence.seq_tensor import seq_tensor_ptr
@@ -52,5 +54,15 @@ def moe_forward_dev_py(handles: PythonObject, ip: PythonObject) raises -> Python
     var W = seq_tensor_ptr(handles[4], T * k, "weights")
     var w = moe_weights_ptrs(wh)
     var ex = DeviceExec()
+    comptime if MOE_RESIDENT and MOE_DEVGROUP:
+        # lane moe-resident (MOJOLEARN_IDN_MOE_RESIDENT, default off): on the
+        # device grouping (E <= 127, `_moe_devgroup_rest`) every scratch word
+        # is stored before it is read (the route writes all T x E
+        # probabilities, the grouping zeroes its counters itself and writes
+        # order and the E + 1 offsets, the epilogue every h word, the grouped
+        # down product every s slot), so the pooled buffers skip the zero
+        # fill. No bit moves.
+        if En <= 127:
+            ex.nofill = True
     moe_forward_core(ex, X, Y, L, Sel, W, T, D, F, En, k, renorm, w[0], w[1], w[2])
     return PythonObject(T * D)

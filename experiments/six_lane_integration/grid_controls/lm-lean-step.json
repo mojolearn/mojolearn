@@ -1,0 +1,50 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "lm-lean-step",
+ "branch": "lane/lm-lean-step",
+ "head": "ac6fef7c9",
+ "controls": {
+  "lm_lean_step": {
+   "define": "MOJOLEARN_IDN_LM_LEAN_STEP",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_LM_LEAN_STEP"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/byte_lm.mojo"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": true,
+   "status": "open",
+   "entries": [],
+   "board": "lm-train-step",
+   "tags": [],
+   "note": "H3: every column takes the out-of-place glue update (optskip|noshadow) with device status words; no shadow copies, no post-update scans. NVIDIA bits unchanged (already OOP); AMD/host move to the OOP kernel (same per-word Adam), check NV==AMD."
+  },
+  "lm_logits_lean": {
+   "define": "MOJOLEARN_IDN_LM_LOGITS_LEAN",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_LM_LOGITS_LEAN"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/byte_lm_logits.mojo"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": false,
+   "status": "open",
+   "entries": [],
+   "board": "lm-forward",
+   "tags": [],
+   "note": "H4: logits non-finite scan queued before the download and folded after its final wait; one wait fewer. Same words."
+  }
+ }
+}
