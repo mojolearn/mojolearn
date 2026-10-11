@@ -1,0 +1,28 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "kde-qtile",
+ "branch": "lane/kde-qtile",
+ "head": "7b3be4ac7",
+ "head_note": "head = last code commit before this file; the file is committed on top of it.",
+ "controls": {
+  "kde_qtile": {
+   "define": "MOJOLEARN_IDN_KDE_QTILE",
+   "kind": "experiment",
+   "arms": {
+    "on": [
+     "MOJOLEARN_IDN_KDE_QTILE"
+    ],
+    "off": []
+   },
+   "default": "off",
+   "source": [
+    "kde/impl/neighbors/kernel_density.mojo:3634",
+    "kde/impl/neighbors/kernel_density.mojo:3698"
+   ],
+   "binding": "_mojolearn_kde",
+   "bits_change": false,
+   "status": "new",
+   "note": "KDE chunked log-sum-exp (IDENTICAL): 4 queries per thread, 16-row train tile staged coalesced along features, only cells x feats words staged; per-pair feature order and per-chunk ascending-j (m, s) fold unchanged, so same partial planes. Workloads algos kde istella + taxi nv (+ amd ID)."
+  }
+ }
+}
