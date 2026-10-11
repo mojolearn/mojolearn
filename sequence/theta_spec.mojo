@@ -42,8 +42,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 #: -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF turns it off; the old
 #: -D MOJOLEARN_SEQ_FAST_THETA_SPEC is harmless.
 comptime THETA_SPEC_FAST = THETA_REG_FAST and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"]()
-#: IDENTICAL twin, -D MOJOLEARN_IDN_NM_SPEC (lane seq-nm-spec 2026-10-11,
-#: default off; idea E1). Structural reason: op_theta runs one thread per
+#: IDENTICAL twin (lane seq-nm-spec 2026-10-11, idea E1), PROMOTED to the IDENTICAL default 2026-10-11
+#: (lane/w2-decide-neural; A/B on main c8ef6c66d, one run per arm,
+#: same bits NV==AMD: theta 0.178/0.118, optimized-theta 0.152/0.100,
+#: dynamic-optimized-theta 0.251/0.339, damped-ets 0.141/0.126; nv2 v0098 / A v0097, amd a1680 / A a1679).
+#: -D MOJOLEARN_IDN_NM_SPEC_OFF restores the serial Nelder-Mead. Structural reason: op_theta runs one thread per
 #: series and its Nelder-Mead evaluates the reflection, then the expansion
 #: or a contraction, back to back (2 + k whole-series passes on a shrink),
 #: a latency-bound serial chain with 64 threads on the taxi-hourly cell.
@@ -60,7 +63,7 @@ comptime THETA_SPEC_FAST = THETA_REG_FAST and not is_defined["MOJOLEARN_SEQ_FAST
 #: ~1.5-2 evaluations per iteration to 1, shrinks from 2 + k to 1).
 comptime THETA_SPEC_IDN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_NM_SPEC"]()
+    and not is_defined["MOJOLEARN_IDN_NM_SPEC_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime THETA_SPEC = THETA_SPEC_FAST or THETA_SPEC_IDN

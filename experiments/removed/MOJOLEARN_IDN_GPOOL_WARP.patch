@@ -1,0 +1,246 @@
+diff --git a/x_cnn/device.mojo b/x_cnn/device.mojo
+index 4b7f5187f..3d36ee453 100644
+--- a/x_cnn/device.mojo
++++ b/x_cnn/device.mojo
+@@ -73,6 +73,8 @@ from x_cnn.ops import (
+ )
+ # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
+ from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
++# lane cnn-resident-glue (2026-10-11, G6): the global pool's block folds
++from x_cnn.ops import IDN_GPOOL_WARP, GPOOL_LANES, gpool_is_global, gpool_avg_lane, gpool_max_lane, gpool_max_pick, gpool_avg_divisor
+ # lane bn-grid-stats (2026-10-11, G5): coalesced two-level BN statistics folds
+ from x_cnn.ops import (
+     IDN_BN_GRID_STATS, BN_GS_LANES, bn_gs_chunks, bn_gs_lane, bn_gs_mean_at, bn_gs_var_at, bn_gs_red_fin_at,
+@@ -1597,6 +1599,48 @@ def _pool_sizes(prm: List[Int32]) -> Tuple[Int, Int]:
+     return (nc * Int(prm[PP_H]) * Int(prm[PP_W]), nc * Int(prm[PP_OH]) * Int(prm[PP_OW]))
+ 
+ 
++# lane cnn-resident-glue (2026-10-11, G6) MOJOLEARN_IDN_GPOOL_WARP: one block
++# of GPOOL_LANES threads per (n, c) plane when the window is the plane (see
++# x_cnn/ops.mojo IDN_GPOOL_WARP for the fold, the bits and the cost reason).
++def gpool_fwd_kernel[AVG: Bool](x: FP, dst: FP, idx: IP, p: IP):
++    var sv = stack_allocation[GPOOL_LANES, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var si = stack_allocation[GPOOL_LANES, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
++    var nc = Int(block_idx.x)
++    var t = Int(thread_idx.x)
++    var hw = _gp(p, PP_H) * _gp(p, PP_W)
++    comptime if AVG:
++        sv[t] = gpool_avg_lane(nc, t, x, hw)
++    else:
++        var r = gpool_max_lane(nc, t, x, hw)
++        sv[t] = r[0]
++        si[t] = Int32(r[1])
++    barrier()
++    var s = GPOOL_LANES // 2
++    while s > 0:
++        if t < s:
++            comptime if AVG:
++                sv[t] = ftz(sv[t] + sv[t + s])
++            else:
++                if gpool_max_pick(sv[t], Int(si[t]), sv[t + s], Int(si[t + s])):
++                    sv[t] = sv[t + s]
++                    si[t] = si[t + s]
++        barrier()
++        s //= 2
++    if t == 0:
++        comptime if AVG:
++            dst.unsafe_store(nc, ftz(identical_div(sv[0], Float32(gpool_avg_divisor(p)))))
++        else:
++            dst.unsafe_store(nc, sv[0])
++            idx.unsafe_store(nc, si[0])
++
++
++def _gpool_launch[AVG: Bool](ctx: DeviceContext, x: FP, dst: FP, idx: IP, p: IP, planes: Int) raises:
++    if planes <= 0:
++        return
++    comptime k = gpool_fwd_kernel[AVG]
++    ctx.enqueue_function[k](x, dst, idx, p, grid_dim=(planes, 1, 1), block_dim=(GPOOL_LANES, 1, 1))
++
++
+ def maxpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
+     """a = [x, out, idx (int32)]."""
+     var sizes = _pool_sizes(prm)
+@@ -1606,7 +1650,13 @@ def maxpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
+     var dp = put_prm(ctx, 1, prm)
+     var dout = m_out(ctx, 2, a[1], no, isdev(dev, 1))
+     var di = m_out_i(ctx, 3, a[2], no, isdev(dev, 2))
+-    launch[maxpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(di), ip(dp), no)
++    var gmax = False
++    comptime if IDN_GPOOL_WARP:
++        gmax = gpool_is_global(prm)
++    if gmax:
++        _gpool_launch[False](ctx, fp(dx), fp(dout), ip(di), ip(dp), no)
++    else:
++        launch[maxpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(di), ip(dp), no)
+     m_fetch(ctx, dout, a[1], no, isdev(dev, 1))
+     m_fetch_i(ctx, di, a[2], no, isdev(dev, 2))
+     ctx.synchronize()
+@@ -1662,7 +1712,13 @@ def avgpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
+     var dx = m_in(ctx, 0, a[0], sizes[0], isdev(dev, 0))
+     var dp = put_prm(ctx, 1, prm)
+     var dout = m_out(ctx, 2, a[1], no, isdev(dev, 1))
+-    launch[avgpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(dp), ip(dp), no)
++    var gavg = False
++    comptime if IDN_GPOOL_WARP:
++        gavg = gpool_is_global(prm)
++    if gavg:
++        _gpool_launch[True](ctx, fp(dx), fp(dout), ip(dp), ip(dp), no)
++    else:
++        launch[avgpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(dp), ip(dp), no)
+     m_fetch(ctx, dout, a[1], no, isdev(dev, 1))
+     ctx.synchronize()
+     _ = dx^
+diff --git a/x_cnn/host/ops_host.mojo b/x_cnn/host/ops_host.mojo
+index 29f2527d8..dd2fb7794 100644
+--- a/x_cnn/host/ops_host.mojo
++++ b/x_cnn/host/ops_host.mojo
+@@ -46,6 +46,9 @@ from x_cnn.ops import (
+ from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
+ # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
+ from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
++# lane cnn-resident-glue (2026-10-11, G6): the global average pool's lane/tree fold
++from x_cnn.ops import IDN_GPOOL_WARP, GPOOL_LANES, gpool_is_global, gpool_avg_lane, gpool_avg_divisor
++from checks.numerics import identical_div
+ 
+ #: The host family's negative control (host_surface sabotage_define): the
+ #: host col2im gathers in reversed (kh) order.
+@@ -681,10 +684,34 @@ def maxpool2d_backward_into(dout: FP, idx: IP, gx: FP, prm: List[Int32]):
+     _ = ps^
+ 
+ 
++def _gpool_avg_host(x: FP, dst: FP, p: IP, planes: Int):
++    """The device's `gpool_fwd_kernel[True]` (MOJOLEARN_IDN_GPOOL_WARP): per
++    plane, GPOOL_LANES lane sums then the same pairwise tree (s = 16 .. 1),
++    one divide; the same words as NVIDIA and AMD."""
++    var hw = Int(p.unsafe_load(PP_H)) * Int(p.unsafe_load(PP_W))
++    var div = Float32(gpool_avg_divisor(p))
++    var v = List[Float32](length=GPOOL_LANES, fill=Float32(0))
++    for nc in range(planes):
++        for t in range(GPOOL_LANES):
++            v[t] = gpool_avg_lane(nc, t, x, hw)
++        var s = GPOOL_LANES // 2
++        while s > 0:
++            for t in range(s):
++                v[t] = ftz(v[t] + v[t + s])
++            s //= 2
++        dst.unsafe_store(nc, ftz(identical_div(v[0], div)))
++
++
+ def avgpool2d_forward_into(x: FP, dst: FP, prm: List[Int32]):
+     var no = _pool_sizes(prm)[1]
+     var ps = prm.copy()
+-    run[avgpool_fwd_at](x, dst, dst, dst, hi(ps), hi(ps), no)
++    var gavg = False
++    comptime if IDN_GPOOL_WARP:
++        gavg = gpool_is_global(prm)
++    if gavg:
++        _gpool_avg_host(x, dst, hi(ps), no)
++    else:
++        run[avgpool_fwd_at](x, dst, dst, dst, hi(ps), hi(ps), no)
+     _ = ps^
+ 
+ 
+diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
+index 1a08d6cc4..36dcb7a3d 100644
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -671,6 +671,99 @@ def avgpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
+     dx.unsafe_store(i, acc)
+ 
+ 
++# lane cnn-resident-glue (2026-10-11, G6) MOJOLEARN_IDN_GPOOL_WARP, default
++# OFF. A pool whose window is the whole plane (output 1 x 1, kernel = H x W,
++# no padding, no dilation: global max/avg pooling, AdaptiveMax/AvgPool2d(1))
++# ran one thread per (n, c) walking all H*W words in a serial dependent chain
++# (N*C threads, e.g. 32k chains of 49 loads). Here one block of GPOOL_LANES
++# threads per (n, c): lane t folds words t, t + 32, ... ascending (the
++# element functions' steps), then a fixed shared-memory pairwise tree
++# (s = 16, 8, 4, 2, 1; v[t] <- v[t] op v[t + s]) folds the 32 lane values.
++# Shared memory and barriers only (no warp shuffles), so the tree is the same
++# on a 32-wide NVIDIA warp and a 64-wide AMD wavefront, and the host twin
++# (x_cnn/host/ops_host.mojo `_gpool_avg_host`) runs the same lanes and tree.
++# The rule is structural (the window equals the plane), never a size: it
++# covers every plane size, and 32 lanes is the smallest SIMD width common to
++# both vendors. Bits: max UNCHANGED (`gpool_max_pick` is associative and
++# reproduces the serial winner: the first maximum, a NaN wins, the last NaN
++# when several); avg CHANGES (the tree replaces the serial sum; one divide
++# per (n, c) by the same divisor), equal on NVIDIA, AMD and the host twin.
++# Expected: global-maxpool NV 2.9 -> ~0.5 ms with G3, AMD 1.2 -> ~0.4;
++# global-avgpool 2.1 -> ~0.5. The backward is unchanged: the tile paths of
++# `maxpool_bwd_val` / `avgpool_bwd_at` already read one window per pixel.
++comptime IDN_GPOOL_WARP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GPOOL_WARP"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++comptime GPOOL_LANES = 32
++
++
++def gpool_is_global(prm: List[Int32]) -> Bool:
++    """Whether pool block `prm` (pool_params) is a window equal to the plane."""
++    return (
++        Int(prm[PP_OH]) == 1 and Int(prm[PP_OW]) == 1
++        and Int(prm[PP_KH]) == Int(prm[PP_H]) and Int(prm[PP_KW]) == Int(prm[PP_W])
++        and Int(prm[PP_PH]) == 0 and Int(prm[PP_PW]) == 0
++        and Int(prm[PP_DH]) == 1 and Int(prm[PP_DW]) == 1
++    )
++
++
++@always_inline
++def gpool_avg_lane(nc: Int, lane: Int, x: FP, hw: Int) -> Float32:
++    """Lane `lane`'s sum of plane `nc`: words lane, lane + GPOOL_LANES, ...
++    ascending from +0.0, `avgpool_fwd_at`'s step."""
++    var acc = Float32(0)
++    var j = lane
++    var base = nc * hw
++    while j < hw:
++        acc = ftz(acc + ftz(x.unsafe_load(base + j)))
++        j += GPOOL_LANES
++    return acc
++
++
++@always_inline
++def gpool_max_lane(nc: Int, lane: Int, x: FP, hw: Int) -> Tuple[Float32, Int]:
++    """Lane `lane`'s (max, flat index) of plane `nc` by `_maxpool_fwd`'s rule
++    over its words ascending; index -1 when the lane holds no word."""
++    var best = Float32(0)
++    var bi = -1
++    var j = lane
++    var base = nc * hw
++    while j < hw:
++        var v = ftz(x.unsafe_load(base + j))
++        if bi < 0 or v > best or v != v:
++            best = v
++            bi = j
++        j += GPOOL_LANES
++    return (best, bi)
++
++
++@always_inline
++def gpool_max_pick(va: Float32, ia: Int, vb: Float32, ib: Int) -> Bool:
++    """Whether (vb, ib) wins over (va, ia) under the serial scan's result: a
++    NaN wins (the largest index among NaNs, the scan's last), else the larger
++    value, a tie (== , so -0.0 and +0.0 tie) to the smaller index (the scan's
++    first). Associative and commutative, so any tree gives the scan's word."""
++    if ib < 0:
++        return False
++    if ia < 0:
++        return True
++    var an = va != va
++    var bn = vb != vb
++    if an or bn:
++        if an and bn:
++            return ib > ia
++        return bn
++    if vb > va:
++        return True
++    if va > vb:
++        return False
++    return ib < ia
++
++
++@always_inline
++def gpool_avg_divisor(p: IP) -> Int:
++    """The one window's divisor (`_avg_divisor` of output cell (0, 0))."""
++    return _avg_divisor(0, 0, p)
++
++
+ # ---------------------------------------------------------------- trainer ops
+ # Parameter blocks: bias rows / linear [rows, in, out]; softmax [n, k];
+ # sgd [count] with the floats [lr, momentum, weight_decay] in f3.

@@ -327,6 +327,10 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_M1_SCAN=1`](#owed-decide-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_M1_SCAN_1.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch) |
 | [`MOJOLEARN_IDN_TSNE_REP_RB4`](#wave-2-w2-decide-algos-2026-10-11) | Manifold | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_TSNE_REP_RB4.patch](../experiments/removed/MOJOLEARN_IDN_TSNE_REP_RB4.patch) |
 | [`MOJOLEARN_IDN_HDB_ROUND_LEAN`](#wave-2-w2-decide-algos-2026-10-11) | Cluster | LOSER-noise | 2026-10-11 | [MOJOLEARN_IDN_HDB_ROUND_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch) |
+| [`MOJOLEARN_IDN_CNN_DX_IMPLICIT`](#wave-2-w2-decide-neural-2026-10-11) | Neural | DROPPED-noise | 2026-10-11 | [MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch](../experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch) |
+| [`MOJOLEARN_IDN_CNN_WGRAD_LEAF1024`](#wave-2-w2-decide-neural-2026-10-11) | Neural | DROPPED-noise | 2026-10-11 | [MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch](../experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch) |
+| [`MOJOLEARN_IDN_GPOOL_WARP`](#wave-2-w2-decide-neural-2026-10-11) | Neural | DROPPED-noise (bits change, NV spike) | 2026-10-11 | [MOJOLEARN_IDN_GPOOL_WARP.patch](../experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch) |
+| [`MOJOLEARN_IDN_MOE_RESIDENT`](#wave-2-w2-decide-neural-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_MOE_RESIDENT.patch](../experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch) |
 
 ## Restored
 
@@ -3053,3 +3057,32 @@ A DROP row was listed as owed, but the define stays: the reason is in each row.
 | `MOJOLEARN_HDB_ONE_SYNC` | EXPERIMENTS.md:494 | its route (one wait per output download set, extract.mojo / runner.mojo) is the IDENTICAL default through IDN_HDB_ONE_SYNC (hdbscan/impl/detail/idn_switches.mojo), and a later FAST Apple measurement (F15/hdbscan-downloads, M3 2026-10-06) was faster: cold B/A 0.95 / 0.92 / 0.89, repeated 0.90 / 0.94 / 0.87, quality equal; combined timing with the promoted linkage is owed |
 | `MOJOLEARN_HDB_SELECT_DEVICE` | EXPERIMENTS.md:495 | the code it selects (extract.mojo _extract_one_read) is the IDENTICAL default through IDN_HDB_SELECT_ONE_READ (hdbscan/impl/detail/idn_switches.mojo, the same comptime if); the define is only the FAST Apple switch of that default route, so no loser code can be removed; F15/hdbscan-selection (M3 2026-10-06) B/A 0.917-1.030, mixed |
 | `MOJOLEARN_KMEANS_ROW_ASSIGN` | EXPERIMENTS.md:1706 | the DROP row (EXPERIMENTS.md:1706) is MOJOLEARN_KMEANS_DIRECT_DISTANCE's (direct4 = ROW_ASSIGN=4 + it), already deleted and refused (guard line 196: 'MOJOLEARN_KMEANS_ROW_ASSIGN=2|4 stays'); ROW_ASSIGN itself is a live grid control (grid_controls/classical-kmeans.json kmeans_assign, arm rows4) with no verdict of its own |
+
+## wave-2 w2-decide-neural (2026-10-11)
+
+Wave-2 A/B arms measured same box, same main c8ef6c66d, one run per arm (NV L40S nv2, AMD MI325X; evidence
+~/mojolearn-evidence/round-20261011/w2_decisions.txt and w2_decide.out). Verdict = average of the two vendors' B/A time ratios;
+digests NV == AMD on every cell. Deleted on lane/w2-decide-neural; each code is recoverable at the parent of its deletion commit.
+
+- `MOJOLEARN_IDN_CNN_DX_IMPLICIT` (G1, lane/cnn-dx-wgrad: conv backward dx as an implicit transposed convolution,
+  `implicit_dx_kernel` + `_implicit_dx` in x_cnn/device.mojo, the gate module x_cnn/cnn_dx_wgrad.mojo deleted whole, host twin
+  `_conv_dx_implicit_host` in x_cnn/host/ops_host.mojo): target cells conv2d 0.931 (NV 0.980, AMD 0.882), resnet-block 0.955
+  (NV 1.033, AMD 0.876), conv1d 1.055 (NV 1.062, AMD 1.048), target mean 0.980. Same bits on both arms (B vs A); no quality
+  change. NOISE. Runs nv2 v0083 / A v0082, amd a1665 / A a1664. Deleted by 499997a56, recoverable at 499997a56^.
+  Patch experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch (also restores G2: they shared x_cnn/cnn_dx_wgrad.mojo).
+- `MOJOLEARN_IDN_CNN_WGRAD_LEAF1024` (G2, lane/cnn-dx-wgrad: 1024-row dW leaves in `_implicit_wgrad`, `cnn_wgrad_partition`,
+  host twin's leaf in x_cnn/host/ops_host.mojo, `gemm_host_into(leaves_override)` in x_cnn/host/gemm_host.mojo): conv1d 0.954
+  (NV 0.931, AMD 0.976), conv2d 0.976 (NV 0.972, AMD 0.981), resnet-block 0.985 (NV 0.977, AMD 0.994), target mean 0.972 (both
+  vendors < 1 but under 3%). Same bits; no quality change. NOISE. Runs nv2 v0084 / A v0082, amd a1666 / A a1664. Deleted by
+  499997a56, recoverable at 499997a56^. Patch experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch.
+- `MOJOLEARN_IDN_GPOOL_WARP` (G6, lane/cnn-resident-glue: one block per (n, c) plane for window = plane pools, the lane folds
+  and max pick in x_cnn/ops.mojo, `gpool_fwd_kernel` + `_gpool_launch` in x_cnn/device.mojo, host avg tree `_gpool_avg_host` in
+  x_cnn/host/ops_host.mojo): global-avgpool 0.868 (NV 0.942, AMD 0.794) with BITS CHANGED, global-maxpool AMD 1.065 and an NV
+  cell 67x (a 216 ms spike); CNN_RESIDENT_GRADS (promoted the same day) already takes both pools to ~0.1 ms. NOISE / unusable.
+  Runs nv2 v0086 / A v0082, amd a1668 / A a1664. Deleted by f5aafae7f, recoverable at f5aafae7f^.
+  Patch experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch.
+- `MOJOLEARN_IDN_MOE_RESIDENT` (idea H5, lane/moe-resident: grouped device-offset GEMM kernel + launchers in
+  sequence/moe_grouped.mojo, the define in sequence/moe_grouped_fold.mojo, DeviceExec `nofill` and the grouped hidden/out routing
+  in sequence/exec_device.mojo, the resident forward's fill skip in sequence/moe_dev.mojo): moe synthetic NV 5.938x, AMD 3.339x,
+  avg 4.64x; same bits. SLOWER. Runs nv2 v0101 / A v0100, amd a1683 / A a1682. Deleted by 978e7f43b, recoverable at 978e7f43b^.
+  Patch experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch.

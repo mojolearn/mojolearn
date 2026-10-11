@@ -670,99 +670,8 @@ def avgpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
             acc = ftz(acc + g)
     dx.unsafe_store(i, acc)
 
-
-# lane cnn-resident-glue (2026-10-11, G6) MOJOLEARN_IDN_GPOOL_WARP, default
-# OFF. A pool whose window is the whole plane (output 1 x 1, kernel = H x W,
-# no padding, no dilation: global max/avg pooling, AdaptiveMax/AvgPool2d(1))
-# ran one thread per (n, c) walking all H*W words in a serial dependent chain
-# (N*C threads, e.g. 32k chains of 49 loads). Here one block of GPOOL_LANES
-# threads per (n, c): lane t folds words t, t + 32, ... ascending (the
-# element functions' steps), then a fixed shared-memory pairwise tree
-# (s = 16, 8, 4, 2, 1; v[t] <- v[t] op v[t + s]) folds the 32 lane values.
-# Shared memory and barriers only (no warp shuffles), so the tree is the same
-# on a 32-wide NVIDIA warp and a 64-wide AMD wavefront, and the host twin
-# (x_cnn/host/ops_host.mojo `_gpool_avg_host`) runs the same lanes and tree.
-# The rule is structural (the window equals the plane), never a size: it
-# covers every plane size, and 32 lanes is the smallest SIMD width common to
-# both vendors. Bits: max UNCHANGED (`gpool_max_pick` is associative and
-# reproduces the serial winner: the first maximum, a NaN wins, the last NaN
-# when several); avg CHANGES (the tree replaces the serial sum; one divide
-# per (n, c) by the same divisor), equal on NVIDIA, AMD and the host twin.
-# Expected: global-maxpool NV 2.9 -> ~0.5 ms with G3, AMD 1.2 -> ~0.4;
-# global-avgpool 2.1 -> ~0.5. The backward is unchanged: the tile paths of
-# `maxpool_bwd_val` / `avgpool_bwd_at` already read one window per pixel.
-comptime IDN_GPOOL_WARP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GPOOL_WARP"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime GPOOL_LANES = 32
-
-
-def gpool_is_global(prm: List[Int32]) -> Bool:
-    """Whether pool block `prm` (pool_params) is a window equal to the plane."""
-    return (
-        Int(prm[PP_OH]) == 1 and Int(prm[PP_OW]) == 1
-        and Int(prm[PP_KH]) == Int(prm[PP_H]) and Int(prm[PP_KW]) == Int(prm[PP_W])
-        and Int(prm[PP_PH]) == 0 and Int(prm[PP_PW]) == 0
-        and Int(prm[PP_DH]) == 1 and Int(prm[PP_DW]) == 1
-    )
-
-
-@always_inline
-def gpool_avg_lane(nc: Int, lane: Int, x: FP, hw: Int) -> Float32:
-    """Lane `lane`'s sum of plane `nc`: words lane, lane + GPOOL_LANES, ...
-    ascending from +0.0, `avgpool_fwd_at`'s step."""
-    var acc = Float32(0)
-    var j = lane
-    var base = nc * hw
-    while j < hw:
-        acc = ftz(acc + ftz(x.unsafe_load(base + j)))
-        j += GPOOL_LANES
-    return acc
-
-
-@always_inline
-def gpool_max_lane(nc: Int, lane: Int, x: FP, hw: Int) -> Tuple[Float32, Int]:
-    """Lane `lane`'s (max, flat index) of plane `nc` by `_maxpool_fwd`'s rule
-    over its words ascending; index -1 when the lane holds no word."""
-    var best = Float32(0)
-    var bi = -1
-    var j = lane
-    var base = nc * hw
-    while j < hw:
-        var v = ftz(x.unsafe_load(base + j))
-        if bi < 0 or v > best or v != v:
-            best = v
-            bi = j
-        j += GPOOL_LANES
-    return (best, bi)
-
-
-@always_inline
-def gpool_max_pick(va: Float32, ia: Int, vb: Float32, ib: Int) -> Bool:
-    """Whether (vb, ib) wins over (va, ia) under the serial scan's result: a
-    NaN wins (the largest index among NaNs, the scan's last), else the larger
-    value, a tie (== , so -0.0 and +0.0 tie) to the smaller index (the scan's
-    first). Associative and commutative, so any tree gives the scan's word."""
-    if ib < 0:
-        return False
-    if ia < 0:
-        return True
-    var an = va != va
-    var bn = vb != vb
-    if an or bn:
-        if an and bn:
-            return ib > ia
-        return bn
-    if vb > va:
-        return True
-    if va > vb:
-        return False
-    return ib < ia
-
-
-@always_inline
-def gpool_avg_divisor(p: IP) -> Int:
-    """The one window's divisor (`_avg_divisor` of output cell (0, 0))."""
-    return _avg_divisor(0, 0, p)
-
+# TOMBSTONE: MOJOLEARN_IDN_GPOOL_WARP (noise/NV spike, bits changed on global-avgpool) deleted 2026-10-11 by f5aafae7f; code recoverable at f5aafae7f^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch
 
 # ---------------------------------------------------------------- trainer ops
 # Parameter blocks: bias rows / linear [rows, in, out]; softmax [n, k];
@@ -1290,8 +1199,15 @@ def bn_blk_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
     aux.unsafe_store(_bn(aux, BN_SUMGX, c, C), _bn_blk_total(C + c, part, NB))
 
 
-# lane bn-grid-stats (2026-10-11, G5): `-D MOJOLEARN_IDN_BN_GRID_STATS`,
-# IDENTICAL only, DEFAULT OFF. BatchNorm's per-channel statistics as
+# lane bn-grid-stats (2026-10-11, G5): IDENTICAL only, PROMOTED to the
+# IDENTICAL default 2026-10-11 (lane/w2-decide-neural; A/B on main c8ef6c66d,
+# one run per arm: batchnorm1d 0.471 (NV 0.589, AMD 0.354), batchnorm2d 0.486
+# (NV 0.647, AMD 0.326), resnet-block 0.916; ids nv2 v0087, amd a1669). Bits
+# CHANGE versus BN_FOLD_BLOCK, NV == AMD on every cell. The quality cell was
+# broken for both arms (fixture env bug, fixed c8ff77698); the quality re-race
+# is nv2 v0137 (A) / v0138 (B), amd a1719 (A) / a1720 (B): the promotion stands
+# unless it shows a quality drop. `-D MOJOLEARN_IDN_BN_GRID_STATS_OFF` restores
+# the BN_FOLD_BLOCK folds. BatchNorm's per-channel statistics as
 # coalesced two-level folds. Structural reason: the BN_FOLD_BLOCK folds run
 # one thread per (channel, block) over a block of up to sqrt(count) words, a
 # serial dependent chain of ~512 adds on ~25k threads; the time is that
@@ -1310,7 +1226,7 @@ def bn_blk_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
 # shape changes, so bits CHANGE versus BN_FOLD_BLOCK on every column
 # together. Expected: BN2d AMD 2.2 -> ~1.0 ms, BN1d 2.1 -> ~1.0, NV 1.2 ->
 # ~0.9 / 1.6 -> ~1.1; resnet-block gets it twice.
-comptime IDN_BN_GRID_STATS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_BN_GRID_STATS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime IDN_BN_GRID_STATS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_BN_GRID_STATS_OFF"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime BN_GS_LANES = 256
 comptime BN_GS_PER = 4
 comptime BN_GS_CHUNK = BN_GS_LANES * BN_GS_PER

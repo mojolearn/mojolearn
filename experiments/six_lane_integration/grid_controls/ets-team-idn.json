@@ -6,15 +6,28 @@
  "head_note": "head = last code commit before this file; the file is committed on top of it.",
  "controls": {
   "idn_ets_team": {
-   "define": "MOJOLEARN_IDN_ETS_TEAM",
+   "define": "MOJOLEARN_IDN_ETS_TEAM,MOJOLEARN_IDN_ETS_TEAM_OFF",
    "kind": "switch",
-   "arms": {"off": [], "on": ["MOJOLEARN_IDN_ETS_TEAM"]},
-   "default": "off",
-   "source": ["sequence/ets_team.mojo:77", "sequence/exec_device.mojo:255", "sequence/exec.mojo:165", "bindings/_mojolearn_x_sequence.mojo:201"],
-   "binding": ["_mojolearn_x_sequence", "_mojolearn_x_sequence_host"],
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_ETS_TEAM_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "sequence/ets_team.mojo:77",
+    "sequence/exec_device.mojo:255",
+    "sequence/exec.mojo:165",
+    "bindings/_mojolearn_x_sequence.mojo:201"
+   ],
+   "binding": [
+    "_mojolearn_x_sequence",
+    "_mojolearn_x_sequence_host"
+   ],
    "bits_change": true,
-   "status": "new",
-   "note": "IDENTICAL ETS(A, A|Ad, N) one block of 64 threads per series (the Apple FAST team): 64 fixed chunks (L = ceil(n/64)), chunk affine maps, a fixed 6-level Hillis-Steele tree prefix, ascending fold of the chunk SSEs, beta e trend form, running phi-power forecast. Host binding replays it (ets_team_replay). Bits change vs op_ets on NV, AMD and host together. Workloads: algos damped-ets taxi-hourly + synthetic, nv+amd (ID + RACE); gate forecast_rmse. Expected damped-ets AMD 1771 -> ~150 ms, NV 744 -> ~80 ms."
+   "status": "promoted:w2-decide-neural-20261011",
+   "note": "PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-neural): A/B on main c8ef6c66d, one run per arm: damped-ets synthetic 0.017, taxi-hourly 0.014 (NV 0.017/0.014, AMD 0.017/0.014). BITS CHANGE, NV==AMD; forecast_rmse 13.93->13.94 synthetic (+0.07%), 96.69->96.69 taxi-hourly: equal. nv2 v0099, amd a1681. Arm off = MOJOLEARN_IDN_ETS_TEAM_OFF. IDENTICAL ETS(A, A|Ad, N) one block of 64 threads per series (the Apple FAST team): 64 fixed chunks (L = ceil(n/64)), chunk affine maps, a fixed 6-level Hillis-Steele tree prefix, ascending fold of the chunk SSEs, beta e trend form, running phi-power forecast. Host binding replays it (ets_team_replay). Bits change vs op_ets on NV, AMD and host together. Workloads: algos damped-ets taxi-hourly + synthetic, nv+amd (ID + RACE); gate forecast_rmse. Expected damped-ets AMD 1771 -> ~150 ms, NV 744 -> ~80 ms."
   }
  }
 }
