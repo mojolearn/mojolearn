@@ -76,7 +76,7 @@ from x_decomp.cells import (
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
-# TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
 from x_decomp.ols_trisolve import ols_r_trisolve_host
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
@@ -190,7 +190,7 @@ def xd_parallel[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
     host_parallelize(group, groups)
 
 
-# TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch (lu_delayed_host, the host column).
 
 
@@ -369,7 +369,7 @@ struct HostExec(Exec):
         # TOMBSTONE: MOJOLEARN_IDN_LU_NB128 (DELETE-slower: grid g50ebe26a5 lu-solve synthetic NV L40S 352.1 -> 541.4 ms, AMD MI325X
         # 331.3 -> 697.0 ms, avg 1.80x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 885c23dc7.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_NB128.patch; record in docs/TOMBSTONES.md.
-        # TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+        # TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
         # lu_serial's statements; each step's row eliminations are tasks of
         # LU_ROWS rows, SIMD across the row (x_decomp/host_simd.mojo lu_rows)
