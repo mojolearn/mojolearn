@@ -39,6 +39,7 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.experiments.neural_tiled_v2 import NI09_TILED_BIAS, neural_bias_gemm
 from x_cnn.neural_col2im import NI14_TILED_COL2IM, NI14_COL2IM, NI14_COL2IM_BOUNDED, neural_col2im_tiled
+from x_cnn.cnn_dx_wgrad import IDN_CNN_DX_IMPLICIT, IDN_CNN_WGRAD_LEAF1024, cnn_wgrad_partition
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
@@ -682,6 +683,10 @@ def _implicit_wgrad(
     if rows <= 0 or OC <= 0 or ckk <= 0:
         return
     var lp = contract_partition(rows)
+    comptime if IDN_CNN_WGRAD_LEAF1024:
+        # G2 (x_cnn/cnn_dx_wgrad.mojo): 1024-row leaves, P ~5x smaller; the
+        # host twin passes the same partition to gemm_host_into
+        lp = cnn_wgrad_partition(rows)
     var mn = OC * ckk
     var wsp = ws(ctx, slot, lp[1] * mn)
     ctx.enqueue_function[implicit_wgrad_leaf_kernel](
@@ -700,6 +705,152 @@ def _implicit_wgrad(
             grid_dim=((mn + FLAT_TPB - 1) // FLAT_TPB, 1, 1), block_dim=(FLAT_TPB, 1, 1),
         )
     _ = wsp^
+
+
+def implicit_dx_kernel(g: FP, w: FP, gx: FP, p: IP, rows_in: Int32, leaf_in: Int32, count_in: Int32):
+    """G1 `MOJOLEARN_IDN_CNN_DX_IMPLICIT` (x_cnn/cnn_dx_wgrad.mojo): dx as an
+    implicit transposed convolution. Row r = (n, h, w) of the N*H*W input
+    pixels, column c of the C input channels, contract index
+    kk = oc * KH*KW + kh * KW + kw over k = OC * KH*KW:
+    A[r, kk] = g[(n, oh, ow), oc] with oh = (h + PH - kh DH) / SH and
+    ow = (w + PW - kw DW) / SW when both are integral and in range, else
+    +0.0; B[kk, c] = W[oc, c, kh, kw]. `implicit_conv_kernel`'s tile, chain
+    and leaf fold (64 rows x 64 channels a block, 4 x 4 cells a thread, the
+    leaf partials on `_fold_push_local`); `leaf_in`, `count_in` are
+    `contract_partition(OC*KH*KW)`. The cell is stored ftz'd into gx (NCHW).
+    The host twin (ops_host `_conv_dx_implicit_host`) runs gemm_host_into on
+    the same A and B: the same leaves, chain and tree."""
+    var atile = stack_allocation[NI12_KS * NI12_TMP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var btile = stack_allocation[NI12_KS * NI12_TNP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var tr = tid // NI12_RS
+    var tc = tid - tr * NI12_RS
+    var row0 = Int(block_idx.x) * NI12_TM
+    var col0 = Int(block_idx.y) * NI12_TN
+    var rows = Int(rows_in)
+    var C = _gp(p, CP_C); var H = _gp(p, CP_H); var W = _gp(p, CP_W)
+    var KH = _gp(p, CP_KH); var KW = _gp(p, CP_KW)
+    var OH = _gp(p, CP_OH); var OW = _gp(p, CP_OW); var OC = _gp(p, CP_OC)
+    var SH = _gp(p, CP_SH); var SW = _gp(p, CP_SW)
+    var PH = _gp(p, CP_PH); var PW = _gp(p, CP_PW)
+    var DH = _gp(p, CP_DH); var DW = _gp(p, CP_DW)
+    var KK = KH * KW
+    var ckk = C * KK
+    var kdim = OC * KK
+    var HW = H * W
+    # A staging: this thread owns tile row `srow` for 4 taps per slab
+    var srow = tid - (tid // NI12_TM) * NI12_TM
+    var skk = tid // NI12_TM
+    var grow = row0 + srow
+    var slive = grow < rows
+    var sgb = 0
+    var sth = 0
+    var stw = 0
+    if slive:
+        var n = _ni12_udiv(grow, HW)
+        var rem = grow - n * HW
+        var h = _ni12_udiv(rem, W)
+        var wq = rem - h * W
+        sgb = n * OH * OW
+        sth = h + PH
+        stw = wq + PW
+    # B staging: tap `page + sbk` of 4 channels `col0 + sboc + 16 l`
+    var sboc = tid // NI12_KS
+    var sbk = tid - sboc * NI12_KS
+    var fl = stack_allocation[TUNED_FOLD_SLOTS * NI12_NCELL, Scalar[DType.float32]]()
+    var occ = 0
+    var leaf = Int(leaf_in)
+    for t in range(Int(count_in)):
+        var lo = t * leaf
+        var hi = min(lo + leaf, kdim)
+        var acc = SIMD[DType.float32, NI12_NCELL](0.0)
+        var page = lo
+        while page < hi:
+            var cnt = min(NI12_KS, hi - page)
+            comptime for l in range(NI12_RC):
+                var k_a = skk + NI12_RC * l
+                var av = Float32(0.0)
+                if slive and k_a < cnt:
+                    var kk = page + k_a
+                    var oc = _ni12_udiv(kk, KK)
+                    var t2 = kk - oc * KK
+                    var kh = _ni12_udiv(t2, KW)
+                    var kw = t2 - kh * KW
+                    var th = sth - kh * DH
+                    var tw = stw - kw * DW
+                    if th >= 0 and tw >= 0:
+                        var oh = _ni12_udiv(th, SH)
+                        var ow = _ni12_udiv(tw, SW)
+                        if oh * SH == th and ow * SW == tw and oh < OH and ow < OW:
+                            av = ftz(g.unsafe_load((sgb + oh * OW + ow) * OC + oc))
+                atile[k_a * NI12_TMP + srow] = av
+            comptime for l in range(NI12_RC):
+                var bc = sboc + NI12_RS * l
+                var sc = col0 + bc
+                var bv = Float32(0.0)
+                if sc < C and sbk < cnt:
+                    var kk = page + sbk
+                    var oc = _ni12_udiv(kk, KK)
+                    var t2 = kk - oc * KK
+                    bv = ftz(w.unsafe_load(oc * ckk + sc * KK + t2))
+                btile[sbk * NI12_TNP + bc] = bv
+            barrier()
+            if cnt == NI12_KS:
+                comptime for i in range(NI12_KS):
+                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    comptime for c in range(NI12_RC):
+                        av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
+                        bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
+                    comptime for a in range(NI12_RC):
+                        comptime for b in range(NI12_RC):
+                            acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
+            else:
+                for i in range(cnt):
+                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    comptime for c in range(NI12_RC):
+                        av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
+                        bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
+                    comptime for a in range(NI12_RC):
+                        comptime for b in range(NI12_RC):
+                            acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
+            barrier()
+            page += NI12_KS
+        var part = SIMD[DType.float32, NI12_NCELL](0.0)
+        comptime for e in range(NI12_NCELL):
+            part[e] = ftz(acc[e])
+        _ = _fold_push_local[NI12_NCELL, TUNED_FOLD_SLOTS](fl, occ, part)
+    var res = _fold_drain_local[NI12_NCELL, TUNED_FOLD_SLOTS](fl, occ)
+    comptime for a in range(NI12_RC):
+        var row = row0 + tr + NI12_RS * a
+        if row < rows:
+            var n = _ni12_udiv(row, HW)
+            var rem = row - n * HW
+            comptime for b in range(NI12_RC):
+                var c = col0 + tc + NI12_RS * b
+                if c < C:
+                    gx.unsafe_store((n * C + c) * HW + rem, ftz(res[a * NI12_RC + b]))
+
+
+def _implicit_dx(
+    ctx: DeviceContext, mut gx: DeviceBuffer[DType.float32], mut g: DeviceBuffer[DType.float32],
+    mut w: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], N: Int, C: Int, HW: Int, OC: Int, KK: Int,
+) raises:
+    """G1: gx (N, C, H, W) = the implicit transposed convolution of the
+    rows-layout g [N*OH*OW x OC] with W [OC x C*KK], one launch, no dcols
+    and no col2im. Leaves `contract_partition(OC * KK)` (the contract's k
+    alone sets them)."""
+    var rows = N * HW
+    var kdim = OC * KK
+    if rows <= 0 or C <= 0:
+        return
+    var lp = contract_partition(kdim)
+    ctx.enqueue_function[implicit_dx_kernel](
+        fp(g), fp(w), fp(gx), ip(dp), Int32(rows), Int32(lp[0]), Int32(lp[1]),
+        grid_dim=((rows + NI12_TM - 1) // NI12_TM, (C + NI12_TN - 1) // NI12_TN, 1),
+        block_dim=(NI12_THREADS, 1, 1),
+    )
 
 
 @always_inline
@@ -1508,7 +1659,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
     var gb = m_out(ctx, 8, a[5], OC, isdev(dev, 5))
-    var dcols = ws(ctx, 9, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
+    var dcols = ws(ctx, 9, 1 if (NN14_BOUNDED_IM2COL or IDN_CNN_DX_IMPLICIT) else rows * ckk)
     var gx = m_out(ctx, 10, a[3], nx, isdev(dev, 3))
     comptime if not NN14_BOUNDED_IM2COL and not NI12_IMPLICIT_CONV:
         _im2col(ctx, dxin, cols, dp, rows, ckk, C)
@@ -1535,6 +1686,9 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     bias_grad_gemm(ctx, gb, g, ones, OC, rows)
     comptime if NN14_BOUNDED_IM2COL:
         launch[nn14_input_grad_at](ctx, fp(g), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+    elif IDN_CNN_DX_IMPLICIT:
+        # G1: one implicit transposed-conv launch, no dcols, no col2im
+        _implicit_dx(ctx, gx, g, dw, dp, N, C, Int(prm[CP_H]) * Int(prm[CP_W]), OC, Int(prm[CP_KH]) * Int(prm[CP_KW]))
     else:
         device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
         _col2im(ctx, dcols, gx, dp, nx)
@@ -3322,10 +3476,13 @@ def conv_block_backward_into[resident: Bool = False](
         device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, grow, ones, OC, rows)
     if need_dx:
-        var dcols = ws(ctx, 16, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
+        var dcols = ws(ctx, 16, 1 if (NN14_BOUNDED_IM2COL or IDN_CNN_DX_IMPLICIT) else rows * ckk)
         var gx = outb[resident](ctx, 17, gx_out, nx)
         comptime if NN14_BOUNDED_IM2COL:
             launch[nn14_input_grad_at](ctx, fp(grow), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+        elif IDN_CNN_DX_IMPLICIT:
+            # G1: one implicit transposed-conv launch, no dcols, no col2im
+            _implicit_dx(ctx, gx, grow, dw, dp, N, C, Int(cprm[CP_H]) * Int(cprm[CP_W]), OC, Int(cprm[CP_KH]) * Int(cprm[CP_KW]))
         else:
             device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
             _col2im(ctx, dcols, gx, dp, nx)
