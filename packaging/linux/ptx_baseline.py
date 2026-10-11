@@ -13,6 +13,7 @@ independent.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -107,6 +108,32 @@ def audit_tree(root, source_commit, mojo_version, source_dirty=False):
                 files=rows, errors=errors)
 
 
+def source_witness(repo):
+    """The commit the set was built from, and whether its tracked source was dirty.
+
+    A checkout answers through git. The release build route (the GitHub Actions
+    container, the cpu build boxes) builds an exported archive of the frozen
+    commit: no .git, no git binary, and commit.txt as its witness, the same rule
+    as the route's preflight (tools/release061_remote_build.sh). An archive is
+    clean by construction. MOJOLEARN_COMMIT, when set, must agree.
+    """
+    repo = Path(repo)
+    env_sha = os.environ.get('MOJOLEARN_COMMIT', '').strip()
+    if (repo / '.git').exists():
+        sha = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+        dirty = bool(subprocess.check_output(['git', '-C', str(repo), 'status', '--porcelain',
+                                             '--untracked-files=no'], text=True).strip())
+    else:
+        witness = repo / 'commit.txt'
+        if not witness.is_file():
+            raise SystemExit('ptx_baseline: %s is neither a git checkout nor an archive with commit.txt' % repo)
+        sha, dirty = witness.read_text().strip(), False
+    if env_sha and env_sha != sha:
+        raise SystemExit('ptx_baseline: MOJOLEARN_COMMIT %s differs from the source witness %s'
+                         % (env_sha[:12], sha[:12]))
+    return sha, dirty
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -125,9 +152,7 @@ def main():
         except ValueError as error:
             parser.error(str(error))
         return 0
-    sha = subprocess.check_output(['git', '-C', str(args.repo), 'rev-parse', 'HEAD'], text=True).strip()
-    dirty = bool(subprocess.check_output(['git', '-C', str(args.repo), 'status', '--porcelain',
-                                         '--untracked-files=no'], text=True).strip())
+    sha, dirty = source_witness(args.repo)
     report = audit_tree(args.root, sha, args.mojo_version, dirty)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
     for error in report['errors']:
