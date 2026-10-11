@@ -1698,15 +1698,26 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
     ib = lane_select.identity_break()
     init = ast.parse(open(os.path.join(lane_select.ROOT, lane_select.PKG, "__init__.py"),
                           encoding="utf-8").read())
+    # STALE CASE FIXED 2026-10-10: 76c025466 (2026-10-02) made __init__.py bind
+    # the language-model names on first touch (`_CPU_INFERENCE`, name -> module)
+    # instead of `from .language_model import ...`, and binds
+    # SmallByteLanguageModelTrainer / ByteLanguageModelConfig from
+    # `._byte_lm_impl` / `._byte_lm_config`. `byte-lm` uses those two names, so
+    # it no longer executes language_model.py; the lane whose code names what
+    # language_model.py binds (LanguageModelConfig) is `language-model-config`.
+    # A lazy entry `"Name": ".<stem>"` is read as a binding from <stem>.
     for rel, want in (("python/mojolearn/umap.py", "umap"),
                       ("python/mojolearn/neural_network.py", "mlp"),
-                      ("python/mojolearn/language_model.py", "byte-lm")):
+                      ("python/mojolearn/language_model.py", "language-model-config")):
         lanes = rev.get(rel, set())
         assert want in lanes, f"{rel} is the public door for {want} and the lane does not reach it"
         stem = os.path.basename(rel)[:-3]
         bound = {a.asname or a.name for n in ast.walk(init)
                  if isinstance(n, ast.ImportFrom) and n.level == 1 and n.module == stem
                  for a in n.names}
+        bound |= {k.value for n in ast.walk(init) if isinstance(n, ast.Dict)
+                  for k, v in zip(n.keys, n.values)
+                  if isinstance(k, ast.Constant) and isinstance(v, ast.Constant) and v.value == "." + stem}
         assert bound, f"__init__.py binds nothing from {stem}; pick a new case"
         naming = {n for n, fn in ib.LANES.items()
                   if lane_select._code_names(fn, vars(ib)) & bound}
@@ -1848,8 +1859,16 @@ def test_a_seam_check_oracle_and_a_generator_select_their_expansion_lane():
     x_neighbors binding (its option lanes for SVC / SVR / RBFSampler do not)."""
     want = set(lane_select.expansion_fragment_lanes("neighbors"))
     assert want and all(n.startswith("x-neighbors-") for n in want), sorted(want)
+    # STALE PIN FIXED 2026-10-10: the seam drivers also run before the family's
+    # EXISTING lanes, which tools/identity_lanes/neighbors.core lists (8cecb1f24,
+    # 2026-09-28; the .core rule is `core_listing_lanes`, ab1e07728/77e7272db),
+    # so those lanes (gp, svc, kernel-ridge, kde, ...) are selected too. Still
+    # never every lane.
+    core = set(lane_select.core_listing_lanes("neighbors"))
+    assert core and not (core & want), sorted(core & want)[:5]
     got = lane_select.seam_check_lanes("x_neighbors/checks/oracles.mojo")
-    assert got is not None and set(got[0]) == want, got
+    assert got is not None and set(got[0]) == want | core, got
+    assert len(got[0]) < len(lane_select.lane_sources()[0]) // 2, len(got[0])
     assert lane_select.seam_check_lanes("python/mojolearn/_array.py") is None
     rev = lane_select.reverse_map()
     reach = set(rev.get("x_neighbors/device_ops.mojo", set())) & want
