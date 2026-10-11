@@ -31,8 +31,20 @@ from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty, 
 from std.sys.compile import is_defined
 from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cell, bm_column_mean_cell
 
-# lane/lars-grid-gram (2026-10-11), IDENTICAL experiment, default OFF:
-# `-D MOJOLEARN_IDN_LARS_GRID_GRAM` takes LARS / LassoLars' moments from the
+# lane/lars-grid-gram (2026-10-11), PROMOTED to the default (lane
+# i17-decide-nbr-lin-prep, 2026-10-11); `-D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF`
+# (or MOJOLEARN_IDN_ALL_OFF) restores main's moments grid. A/B one run per arm,
+# main@b2657cc89 (runs v0045/v0046, a1628/a1629), NV L40S / AMD MI325X ms:
+#   lars taxi          59.1 -> 3.1 (0.05)    / 126.1 -> 3.3 (0.03)
+#   lasso-lars taxi    58.9 -> 3.0 (0.05)    / 125.7 -> 3.3 (0.03)
+#   lasso-lars istella 112.8 -> 83.4 (0.74)  / 191.6 -> 74.6 (0.39)
+#   lars istella       165.6 -> 340.7 (2.06) / 390.2 -> 1155.2 (2.96)  SLOWER
+# Digests NV == AMD on both arms; quality equal or better (lars istella r2
+# 0.3090 -> 0.3287, the rest equal to 1e-4). OPEN FOLLOW-UP: the lars istella
+# regression (one cell of four; the net is a large win). Find its structural
+# cause and fix it by size/cost reasoning that covers neighboring shapes; no
+# dataset- or dimension-keyed dodge (CLAUDE.md, No dimension targeting).
+# The route takes LARS / LassoLars' moments from the
 # row-parallel blocked moments (core/blocked_moments.mojo: leaf column sums +
 # binary-counter fold for the means of X and y, `bm_centered_gram_panels` and
 # `bm_centered_cross_panels` at leaves of `contract_leaf_size(n)` rows) instead
@@ -46,7 +58,9 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
 # below runs the device's reference cells (`centered_gram_v1_cell`,
 # `centered_cross_v1_cell`, `bm_column_mean_cell`). Apple keeps main's
 # grid (x_linear/device.mojo `XL_IDN_LARS_GRID_GRAM`).
-comptime LARS_GRID_GRAM = is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM"]()
+comptime LARS_GRID_GRAM = not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"]() and not is_defined[
+    "MOJOLEARN_IDN_ALL_OFF"
+]()
 
 
 def _lars_host_blocked_moments(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, gg: Int, xty: Int) -> Float32:
