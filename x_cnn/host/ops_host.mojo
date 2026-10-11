@@ -44,6 +44,9 @@ from x_cnn.ops import (
 from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
 # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
 from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
+# lane cnn-resident-glue (2026-10-11, G6): the global average pool's lane/tree fold
+from x_cnn.ops import IDN_GPOOL_WARP, GPOOL_LANES, gpool_is_global, gpool_avg_lane, gpool_avg_divisor
+from checks.numerics import identical_div
 
 #: The host family's negative control (host_surface sabotage_define): the
 #: host col2im gathers in reversed (kh) order.
@@ -675,10 +678,34 @@ def maxpool2d_backward_into(dout: FP, idx: IP, gx: FP, prm: List[Int32]):
     _ = ps^
 
 
+def _gpool_avg_host(x: FP, dst: FP, p: IP, planes: Int):
+    """The device's `gpool_fwd_kernel[True]` (MOJOLEARN_IDN_GPOOL_WARP): per
+    plane, GPOOL_LANES lane sums then the same pairwise tree (s = 16 .. 1),
+    one divide; the same words as NVIDIA and AMD."""
+    var hw = Int(p.unsafe_load(PP_H)) * Int(p.unsafe_load(PP_W))
+    var div = Float32(gpool_avg_divisor(p))
+    var v = List[Float32](length=GPOOL_LANES, fill=Float32(0))
+    for nc in range(planes):
+        for t in range(GPOOL_LANES):
+            v[t] = gpool_avg_lane(nc, t, x, hw)
+        var s = GPOOL_LANES // 2
+        while s > 0:
+            for t in range(s):
+                v[t] = ftz(v[t] + v[t + s])
+            s //= 2
+        dst.unsafe_store(nc, ftz(identical_div(v[0], div)))
+
+
 def avgpool2d_forward_into(x: FP, dst: FP, prm: List[Int32]):
     var no = _pool_sizes(prm)[1]
     var ps = prm.copy()
-    run[avgpool_fwd_at](x, dst, dst, dst, hi(ps), hi(ps), no)
+    var gavg = False
+    comptime if IDN_GPOOL_WARP:
+        gavg = gpool_is_global(prm)
+    if gavg:
+        _gpool_avg_host(x, dst, hi(ps), no)
+    else:
+        run[avgpool_fwd_at](x, dst, dst, dst, hi(ps), hi(ps), no)
     _ = ps^
 
 

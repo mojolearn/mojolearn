@@ -73,6 +73,8 @@ from x_cnn.ops import (
 )
 # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
 from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
+# lane cnn-resident-glue (2026-10-11, G6): the global pool's block folds
+from x_cnn.ops import IDN_GPOOL_WARP, GPOOL_LANES, gpool_is_global, gpool_avg_lane, gpool_max_lane, gpool_max_pick, gpool_avg_divisor
 # lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
 from x_cnn.ops import (
     IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_row_val, epoch_rows_prm,
@@ -1585,6 +1587,48 @@ def _pool_sizes(prm: List[Int32]) -> Tuple[Int, Int]:
     return (nc * Int(prm[PP_H]) * Int(prm[PP_W]), nc * Int(prm[PP_OH]) * Int(prm[PP_OW]))
 
 
+# lane cnn-resident-glue (2026-10-11, G6) MOJOLEARN_IDN_GPOOL_WARP: one block
+# of GPOOL_LANES threads per (n, c) plane when the window is the plane (see
+# x_cnn/ops.mojo IDN_GPOOL_WARP for the fold, the bits and the cost reason).
+def gpool_fwd_kernel[AVG: Bool](x: FP, dst: FP, idx: IP, p: IP):
+    var sv = stack_allocation[GPOOL_LANES, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var si = stack_allocation[GPOOL_LANES, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var nc = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var hw = _gp(p, PP_H) * _gp(p, PP_W)
+    comptime if AVG:
+        sv[t] = gpool_avg_lane(nc, t, x, hw)
+    else:
+        var r = gpool_max_lane(nc, t, x, hw)
+        sv[t] = r[0]
+        si[t] = Int32(r[1])
+    barrier()
+    var s = GPOOL_LANES // 2
+    while s > 0:
+        if t < s:
+            comptime if AVG:
+                sv[t] = ftz(sv[t] + sv[t + s])
+            else:
+                if gpool_max_pick(sv[t], Int(si[t]), sv[t + s], Int(si[t + s])):
+                    sv[t] = sv[t + s]
+                    si[t] = si[t + s]
+        barrier()
+        s //= 2
+    if t == 0:
+        comptime if AVG:
+            dst.unsafe_store(nc, ftz(identical_div(sv[0], Float32(gpool_avg_divisor(p)))))
+        else:
+            dst.unsafe_store(nc, sv[0])
+            idx.unsafe_store(nc, si[0])
+
+
+def _gpool_launch[AVG: Bool](ctx: DeviceContext, x: FP, dst: FP, idx: IP, p: IP, planes: Int) raises:
+    if planes <= 0:
+        return
+    comptime k = gpool_fwd_kernel[AVG]
+    ctx.enqueue_function[k](x, dst, idx, p, grid_dim=(planes, 1, 1), block_dim=(GPOOL_LANES, 1, 1))
+
+
 def maxpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     """a = [x, out, idx (int32)]."""
     var sizes = _pool_sizes(prm)
@@ -1594,7 +1638,13 @@ def maxpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dp = put_prm(ctx, 1, prm)
     var dout = m_out(ctx, 2, a[1], no, isdev(dev, 1))
     var di = m_out_i(ctx, 3, a[2], no, isdev(dev, 2))
-    launch[maxpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(di), ip(dp), no)
+    var gmax = False
+    comptime if IDN_GPOOL_WARP:
+        gmax = gpool_is_global(prm)
+    if gmax:
+        _gpool_launch[False](ctx, fp(dx), fp(dout), ip(di), ip(dp), no)
+    else:
+        launch[maxpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(di), ip(dp), no)
     m_fetch(ctx, dout, a[1], no, isdev(dev, 1))
     m_fetch_i(ctx, di, a[2], no, isdev(dev, 2))
     ctx.synchronize()
@@ -1650,7 +1700,13 @@ def avgpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dx = m_in(ctx, 0, a[0], sizes[0], isdev(dev, 0))
     var dp = put_prm(ctx, 1, prm)
     var dout = m_out(ctx, 2, a[1], no, isdev(dev, 1))
-    launch[avgpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(dp), ip(dp), no)
+    var gavg = False
+    comptime if IDN_GPOOL_WARP:
+        gavg = gpool_is_global(prm)
+    if gavg:
+        _gpool_launch[True](ctx, fp(dx), fp(dout), ip(dp), ip(dp), no)
+    else:
+        launch[avgpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(dp), ip(dp), no)
     m_fetch(ctx, dout, a[1], no, isdev(dev, 1))
     ctx.synchronize()
     _ = dx^
