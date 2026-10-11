@@ -320,7 +320,7 @@ def gff_leaf_kernel(x: F32Ptr, y: F32Ptr, mh: F32Ptr, ml: F32Ptr, ph: F32Ptr, pl
     pl.unsafe_store(leaf * t + q, v.lo)
 
 
-# IDN_GFF_GRAM_TILED (lane ridge-ff-tiled C1, default off; module controls).
+# IDN_GFF_GRAM_TILED (lane ridge-ff-tiled C1, IDENTICAL default 2026-10-11; _OFF restores; module controls).
 #: Tile side over the extended (d + 1) columns [X | y].
 comptime GFF_TILE = 64
 #: Rows of centered words staged per chunk (4 panels x 16 x 64 floats = 16 KB shared).
