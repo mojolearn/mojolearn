@@ -433,3 +433,198 @@ def ets_team(slot: Int, team: SeqTeam, a: Args):
     _sti(rec, 0, phase)
     if team.lead():
         a.p7.unsafe_store(slot, Float32(1.0) if phase == ET_DONE else Float32(0.0))
+
+
+# ---------------------------------------------------------------------------
+# IDN_ETS_TEAM's host column (lane ets-team-idn): the team's likelihood with
+# its ETS_TEAM_CHUNKS threads run one after another over the same helpers.
+
+#: words of the replay's map buffer: the chunk maps, then the final state
+comptime ETS_REPLAY_W = 6 * ETS_TEAM_CHUNKS + 2
+
+
+struct EtsReplayObj(Objective):
+    """EtsTeamObj.eval under IDN_ETS_TEAM on one host thread: pass 1 of every
+    chunk, the same tree levels (each level's compositions in descending
+    chunk order, so each reads the level's old map k - d, as the team's
+    barrier-separated reads do), pass 2 of every chunk from map k - 1, the
+    per-chunk sums folded ascending from 0."""
+    var y: FP
+    var n: Int
+    var L: Int
+    var maps: FP
+    var oa: Bool
+    var ob: Bool
+    var op: Bool
+    var alpha: Float32
+    var beta: Float32
+    var phi: Float32
+
+    @always_inline
+    def __init__(out self, y: FP, n: Int, L: Int, maps: FP, oa: Bool, ob: Bool, op: Bool,
+                 alpha: Float32, beta: Float32, phi: Float32):
+        self.y = y
+        self.n = n
+        self.L = L
+        self.maps = maps
+        self.oa = oa
+        self.ob = ob
+        self.op = op
+        self.alpha = alpha
+        self.beta = beta
+        self.phi = phi
+
+    @always_inline
+    def unpack(self, x: FP) -> Tuple[Float32, Float32, Float32, Float32, Float32]:
+        """EtsTeamObj.unpack."""
+        var j = 0
+        var a = self.alpha
+        var b = self.beta
+        var p = self.phi
+        if self.oa:
+            a = ld(x, j)
+            j += 1
+        if self.ob:
+            b = ld(x, j)
+            j += 1
+        if self.op:
+            p = ld(x, j)
+            j += 1
+        return (a, b, p, ld(x, j), ld(x, j + 1))
+
+    @always_inline
+    def eval(mut self, x: FP) -> Float32:
+        var u = self.unpack(x)
+        var alpha = u[0]
+        var beta = u[1]
+        var phi = u[2]
+        comptime nt = ETS_TEAM_CHUNKS
+        for tid in range(nt):
+            var t0 = tid * self.L
+            var t1 = t0 + self.L
+            if t1 > self.n:
+                t1 = self.n
+            _ets_put_map(self.maps + 6 * tid, _ets_chunk_map(self.y, t0, t1, alpha, beta, phi))
+        comptime for lev in range(ETS_TEAM_LEVELS):
+            comptime d = 1 << lev
+            for kk in range(nt - d):
+                var k = nt - 1 - kk
+                var mp = self.maps + 6 * k
+                _ets_put_map(mp, _ets_compose(mp, mp - 6 * d))
+        var tot = Float32(0.0)
+        for tid in range(nt):
+            var t0 = tid * self.L
+            var t1 = t0 + self.L
+            if t1 > self.n:
+                t1 = self.n
+            var l = u[3]
+            var b = u[4]
+            if tid > 0:
+                var s0 = _ets_apply(self.maps + 6 * (tid - 1), l, b)
+                l = s0[0]
+                b = s0[1]
+            var r = _ets_chunk_sse(self.y, t0, t1, alpha, beta, phi, l, b)
+            tot = add(tot, r[0])
+            if t0 < self.n and t1 == self.n:
+                st(self.maps, 6 * nt, r[1])
+                st(self.maps, 6 * nt + 1, r[2])
+        return _ets_lik(self.n, tot)
+
+
+def ets_team_replay_applies(a: Args) -> Bool:
+    """Whether op_ets's arguments name the model the team fits (the host
+    twin of ets_team_py.ets_team_applies): additive errors (i2 0), an
+    additive trend (i3 1), no season (i6 0), n >= 4 and h >= 1."""
+    return a.i2 == 0 and a.i3 == 1 and a.i6 == 0 and a.i0 >= 4 and a.i1 >= 1
+
+
+def ets_team_replay(t: Int, a: Args):
+    """IDN_ETS_TEAM's host column for series t, op_ets's arguments (p0 y,
+    p1 forecast, p2 info, p3 scratch row of i8 floats; i0 n, i1 h, i4
+    damped, i5 fixed mask; f0 alpha, f1 beta, f2 phi): ets_team's setup,
+    statsforecast's Nelder-Mead over EtsReplayObj (nelder_mead runs
+    nm_start, nm_steps and nm_finish, the team's phases; the IDENTICAL build
+    compiles the stall stop out of both), the last evaluation's final
+    state, the team's forecast and info row."""
+    comptime assert ETS_TEAM_CHUNKS == SEQ_TEAM_TPB, "ETS_TEAM_CHUNKS must be the team's threads"
+    comptime assert (1 << ETS_TEAM_LEVELS) == ETS_TEAM_CHUNKS, "ETS_TEAM_LEVELS = log2(ETS_TEAM_CHUNKS)"
+    var n = a.i0
+    var h = a.i1
+    var damped = a.i4 != 0
+    var y = a.p0 + t * n
+    var sc = a.p3 + t * a.i8
+    # op_ets's scratch row: x / lo / hi (8 words each), then the Nelder-Mead
+    # scratch ((k + 1) k + (k + 1) + 4 k <= 56 at k 5)
+    var x = sc
+    var lo = x + 8
+    var hi = lo + 8
+    var nm_scr = hi + 8
+    var buf = InlineArray[Float32, ETS_REPLAY_W](fill=Float32(0.0))
+    var maps = FP(unsafe_from_address=Int(buf.unsafe_ptr()))
+    var L = (n + ETS_TEAM_CHUNKS - 1) // ETS_TEAM_CHUNKS
+    var fa = (a.i5 & 1) != 0
+    var fb = (a.i5 & 2) != 0
+    var fp = (a.i5 & 4) != 0
+    # ets_team's initparam
+    var lo_a = Float32(1e-4)
+    var hi_a = Float32(0.9999)
+    var alpha = a.f0 if fa else fma3(Float32(0.2), sub(hi_a, lo_a), lo_a)
+    var hi_b = hi_a if hi_a < alpha else alpha
+    var beta = a.f1 if fb else fma3(Float32(0.1), sub(hi_b, lo_a), lo_a)
+    var phi = Float32(1.0)
+    if damped:
+        phi = a.f2 if fp else fma3(Float32(0.99), sub(Float32(0.98), Float32(0.8)), Float32(0.8))
+    var oa = not fa
+    var ob = not fb
+    var op = damped and not fp
+    var k = Int(oa) + Int(ob) + Int(op) + 2
+    var obj = EtsReplayObj(y, n, L, maps, oa, ob, op, alpha, beta, phi)
+    var st0 = ets_init_state(y, n, True, SEAS_N, 1, nm_scr, nm_scr, nm_scr)
+    var j = 0
+    if oa:
+        st(x, j, alpha)
+        st(lo, j, lo_a)
+        st(hi, j, hi_a)
+        j += 1
+    if ob:
+        st(x, j, beta)
+        st(lo, j, lo_a)
+        st(hi, j, hi_b)
+        j += 1
+    if op:
+        st(x, j, phi)
+        st(lo, j, Float32(0.8))
+        st(hi, j, Float32(0.98))
+        j += 1
+    st(x, j, st0[0])
+    st(lo, j, Float32(-3.0e38))
+    st(hi, j, Float32(3.0e38))
+    j += 1
+    st(x, j, st0[1])
+    st(lo, j, Float32(-3.0e38))
+    st(hi, j, Float32(3.0e38))
+    var it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
+    # the team's phase 2: the last evaluation at the best point
+    var lik = obj.eval(x)
+    var u = obj.unpack(x)
+    var l = ld(maps, 6 * ETS_TEAM_CHUNKS)
+    var bb = ld(maps, 6 * ETS_TEAM_CHUNKS + 1)
+    var pk = u[2]
+    var phistar = u[2]
+    for i in range(h):
+        st(a.p1, t * h + i, fma3(phistar, bb, l))
+        pk = mul(pk, u[2])
+        phistar = add(phistar, pk)
+    var info = a.p2 + t * 10
+    st(info, 0, u[0])
+    st(info, 1, u[1])
+    st(info, 2, u[2])
+    st(info, 3, u[3])
+    st(info, 4, u[4])
+    st(info, 5, lik)
+    st(info, 6, Float32(it))
+    st(info, 7, Float32(k))
+    st(info, 8, Float32(0.0))
+    st(info, 9, Float32(0.0))
+    # the map buffer lives to here (Mojo ends a local at its last named use)
+    _ = buf[0]
