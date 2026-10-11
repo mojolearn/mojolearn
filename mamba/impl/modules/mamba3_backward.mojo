@@ -2383,6 +2383,8 @@ def mamba3_s17_tail_shared_kernel(
 #: M3_S17_TP x M3_D_STATE float tiles) on both arms.
 comptime M3_S17_TAIL_PAGE_BYTES = 2 * M3_S17_TP * M3_D_STATE * 4
 comptime M3_S17_TAIL_ALT_FITS = lib_smem_page_fits_for[TARGET_COLUMN, M3_S17_TAIL_PAGE_BYTES]()
+# MEASURE OWED (2026-10-11): the dbuf arm has no grid cell in g50ebe26a5 (samba-train-step); measure it once against the new
+# default (pipe) with -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF -D MOJOLEARN_IDN_M3_S17_TAIL_DBUF on NV + AMD.
 comptime M3_S17_TAIL_DBUF = (
     M3_S17_TAIL_SHARED
     and M3_S17_TAIL_ALT_FITS

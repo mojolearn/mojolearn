@@ -19,6 +19,8 @@ from training.checks.optimizer_contract import OptimizerConfig, StepScalars, ste
 
 # L11 (2026-10-07): NN55 needs NN56, so they are arms of ONE switch,
 # -D MOJOLEARN_IDN_LM_GROUPED_ADAM=0|1: 1 = NN56 grouped OOP Adam (arm 2, NN55 block-status minima, deleted 2026-10-11).
+# MEASURE OWED (2026-10-11): arm 1 (NN56 grouped OOP Adam alone) produced no grid cell in g50ebe26a5 (lm-train-step, no A/B pair);
+# measure it once on NV + AMD against today's default before keeping it.
 comptime IDN_LM_GROUPED_ADAM_ARM = get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM", 0]()
 # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM=2 (NN55 block-status minima; DELETE-slower: grid g50ebe26a5 lm-train-step NV L40S
 # 35.299 -> 43.519 ms, AMD MI325X 42.749 -> 45.657 ms, avg 1.15x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 6e44427f1.

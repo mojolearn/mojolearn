@@ -94,6 +94,9 @@ comptime NI11_DIRECT_TAPS64 = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI11_DIR
 # (conv2d 9782257b, resnet-block 263c26c1): no bit change. The bounded im2col arm
 # (-D MOJOLEARN_NN14_BOUNDED_IM2COL) is a competing cols schedule and takes its own
 # path when selected, as before.
+# MEASURE OWED / SPLIT CANDIDATE (2026-10-11): grid g50ebe26a5 has the _OFF arm FASTER on cnn-clf synthetic (NV L40S 193.6 -> 173.9 ms,
+# v1446; AMD 303.5 -> 274.0 ms, b0080; avg 0.90x) while the 2026-10-10 promotion A/B had implicit conv winning on conv2d and
+# resnet-block (0.69x-0.74x). Decide per algorithm (cnn-clf off, conv2d/resnet-block on) after one confirm run on both vendors.
 comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"]() and not NN14_BOUNDED_IM2COL
 comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and NI14_COL2IM == NI14_COL2IM_BOUNDED  # arm 1 of MOJOLEARN_NI14_COL2IM (x_cnn/neural_col2im.mojo)
 comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
