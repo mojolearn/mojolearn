@@ -55,6 +55,7 @@ from x_prep.prims import add, mul
 from x_prep.py2mojo import splitmix_at
 from x_prep.blocked import XB
 from x_prep.cpu2_prep import C2_FIRST, C2_N, run_c2_unit
+from x_prep.labels import IDN_LAB_UNIQUE_HIST, LAB_N, run_lab_unit
 from x_prep.gram_blocked import (
     IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, gb_part_unit, gb_part_row_unit, gb_fold_unit, qcb_part_unit, qcb_fold_unit,
 )
@@ -72,7 +73,10 @@ comptime IDN_LABEL_INV = True
 
 comptime F2_BASE = 230
 # lane cpu2-l3-prep: ops 242 .. are x_prep/cpu2_prep.mojo's (C2_N of them)
-comptime F2_N = C2_FIRST + C2_N
+# lane lab-binarizer: ops 271 .. are x_prep/labels.mojo's G1/G2 units (LAB_N of them,
+# compiled only under -D MOJOLEARN_IDN_LAB_UNIQUE_HIST)
+comptime LAB_FIRST = C2_FIRST + C2_N
+comptime F2_N = LAB_FIRST + LAB_N
 
 
 @always_inline
@@ -335,3 +339,7 @@ def run_f2_unit[OP: Int](t: Int, f: FP, q: IP):
     # lane cpu2-l3-prep (x_prep/cpu2_prep.mojo), every tier
     comptime if OP >= F2_BASE + C2_FIRST and OP < F2_BASE + C2_FIRST + C2_N:
         run_c2_unit[OP - F2_BASE - C2_FIRST](t, f, q)
+    # lane lab-binarizer (x_prep/labels.mojo), IDENTICAL under MOJOLEARN_IDN_LAB_UNIQUE_HIST
+    comptime if IDN_LAB_UNIQUE_HIST:
+        comptime if OP >= F2_BASE + LAB_FIRST and OP < F2_BASE + LAB_FIRST + LAB_N:
+            run_lab_unit[OP - F2_BASE - LAB_FIRST](t, f, q)
