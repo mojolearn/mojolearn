@@ -394,6 +394,10 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: Li
     _ = ps^
 
 
+# TOMBSTONE: MOJOLEARN_IDN_CNN_DX_IMPLICIT (noise 0.980) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch
+# TOMBSTONE: MOJOLEARN_IDN_CNN_WGRAD_LEAF1024 (noise 0.972) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch (the same patch: x_cnn/cnn_dx_wgrad.mojo held both)
 def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: List[Int32], need_dx: Bool) raises:
     """conv2d_backward_into from the input's im2col matrix `cols`."""
     var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])

@@ -466,6 +466,10 @@ def gemm_host_split(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int, lea
         _rows_mode(a, b, c, m, n, k, tasks)
 
 
+# TOMBSTONE: MOJOLEARN_IDN_CNN_DX_IMPLICIT (noise 0.980) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch
+# TOMBSTONE: MOJOLEARN_IDN_CNN_WGRAD_LEAF1024 (noise 0.972) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch (the same patch: x_cnn/cnn_dx_wgrad.mojo held both)
 def gemm_host_into(
     a: FP, b: FP, c: FP, op: Int, m: Int, n: Int, k: Int, tasks_override: Int = 0, leaves_override: Int = -1
 ):

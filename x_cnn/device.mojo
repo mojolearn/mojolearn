@@ -678,6 +678,10 @@ def implicit_wgrad_leaf_kernel(
                     wsp.unsafe_store(t * mn + oc * ckk + kk, ftz(acc[a * NI12_RC + b]))
 
 
+# TOMBSTONE: MOJOLEARN_IDN_CNN_DX_IMPLICIT (noise 0.980) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch
+# TOMBSTONE: MOJOLEARN_IDN_CNN_WGRAD_LEAF1024 (noise 0.972) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch (the same patch: x_cnn/cnn_dx_wgrad.mojo held both)
 def _implicit_wgrad(
     ctx: DeviceContext, mut gw: DeviceBuffer[DType.float32], mut g: DeviceBuffer[DType.float32],
     mut dx: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], slot: Int, rows: Int, OC: Int, ckk: Int,
@@ -1514,6 +1518,10 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
     var gb = m_out(ctx, 8, a[5], OC, isdev(dev, 5))
+    # TOMBSTONE: MOJOLEARN_IDN_CNN_DX_IMPLICIT (noise 0.980) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch
+    # TOMBSTONE: MOJOLEARN_IDN_CNN_WGRAD_LEAF1024 (noise 0.972) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch (the same patch: x_cnn/cnn_dx_wgrad.mojo held both)
     var dcols = ws(ctx, 9, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
     var gx = m_out(ctx, 10, a[3], nx, isdev(dev, 3))
     comptime if not NN14_BOUNDED_IM2COL and not NI12_IMPLICIT_CONV:
@@ -3446,6 +3454,10 @@ def conv_block_backward_into[resident: Bool = False](
         device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, grow, ones, OC, rows)
     if need_dx:
+        # TOMBSTONE: MOJOLEARN_IDN_CNN_DX_IMPLICIT (noise 0.980) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch
+        # TOMBSTONE: MOJOLEARN_IDN_CNN_WGRAD_LEAF1024 (noise 0.972) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch (the same patch: x_cnn/cnn_dx_wgrad.mojo held both)
         var dcols = ws(ctx, 16, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
         var gx = outb[resident](ctx, 17, gx_out, nx)
         comptime if NN14_BOUNDED_IM2COL:
