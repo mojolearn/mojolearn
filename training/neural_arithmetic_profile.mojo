@@ -19,8 +19,8 @@ def neural_arithmetic_suffix() -> String:
         # version, even when a particular model does not consume that graph.
         # Keep this module CPU-safe: mirror the pure compile-time guards,
         # without importing a device scan implementation into host bindings.
-        comptime if get_defined_int["MOJOLEARN_IDN_M1_SCAN", 0]() == 1:  # affine_prefix (NN34)
-            result += ".nn-mamba1-v2-affine32"
+        # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
         comptime if get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD", 0]() == 1:
             result += ".nn-mamba2-grad-v2-tree"
         elif get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD", 0]() == 2:

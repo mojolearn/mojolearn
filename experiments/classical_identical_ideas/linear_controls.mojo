@@ -111,14 +111,23 @@ comptime RIDGECV_FF_BLOCKED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_
 # (4096 * A * d) large against its launch and staging cost and makes the
 # second-level fold short (span / 4096 partials per alpha), which is why it
 # beats 1024 (four times the partials to write and fold for the same work).
-# Absent = 4096 in IDENTICAL; -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024
-# is the smaller-block arm; -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF is
-# the old unblocked path (value 0; an explicit =0 is refused by the guard,
-# use _OFF). FAST keeps the unblocked path.
+# Absent = 1024 in IDENTICAL (promoted 2026-10-11, lane/owed-decide; same-box
+# A/B at main 2afa942e3, one run per arm, NV v0063/v0064, AMD a1645/a1646,
+# 4096 -> 1024 ms NV / AMD:
+#   enet-cv  istella NV 464.6 -> 453.5, AMD 854.8 -> 823.1;
+#            taxi    NV 19.44 -> 17.15, AMD 222.8 -> 195.7;
+#   lasso-cv istella NV 428.9 -> 428.1, AMD 836.6 -> 799.2;
+#            taxi    NV 18.05 -> 18.57, AMD 198.7 -> 158.9;
+#   average B/A ratio 0.935, quality identical, NV digest == AMD digest).
+# The grid ge123e6f9 verdict above (4096 over 1024) predates the later
+# fold-block and staging changes on this path; the newer same-box A/B wins.
+# -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF restores the old 4096
+# default; -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096 is the same arm
+# (an explicit =1024 is the default). FAST keeps the unblocked path (0).
 comptime ENETCV_SCORE_BLOCKS_OFF = is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF"]()
-comptime _ESB_RAW = 0 if ENETCV_SCORE_BLOCKS_OFF else get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS", 4096]()
+comptime _ESB_RAW = 4096 if ENETCV_SCORE_BLOCKS_OFF else get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS", 1024]()
 comptime ENETCV_SCORE_BLOCKS = _ESB_RAW if CLASSICAL_IDN else 0
-comptime ENETCV_SCORE_BLOCKS_LEGAL = _ESB_RAW == 0 or _ESB_RAW == 1024 or _ESB_RAW == 4096
+comptime ENETCV_SCORE_BLOCKS_LEGAL = _ESB_RAW == 1024 or _ESB_RAW == 4096
 comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
 # lane/classical-structural (2026-10-07): LINEAR_GRAM_SOLVE (OLS and Ridge).
 # One resident centered-Gram fit (glm/impl/gram_solve.mojo) instead of OLS's

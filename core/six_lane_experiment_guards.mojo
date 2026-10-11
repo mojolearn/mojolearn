@@ -33,10 +33,10 @@ def _check_configuration() -> Bool:
     # Lane grid-prune (2026-10-07): c06_norms is ONE control with arms {rows2, rows4, small_d}; small_d returns before
     # norm_rows when d <= 32 (core/row_norms.mojo:220-232), so the pair is never a distinct configuration.
     comptime assert not (is_defined["MOJOLEARN_CLASSICAL_C06_NORM_ROWS"]() and is_defined["MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"]()), "c06_norms takes one arm: MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2|4 or MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD, not both"
-    # MEASURE OWED (2026-10-11): ENETCV_SCORE_BLOCKS=1024 has no grid cell in g50ebe26a5 (enet-cv/lasso-cv); measure once on NV + AMD.
-    # ENETCV_SCORE_BLOCKS promoted 2026-10-08 (lane/grid-act-2, grid ge123e6f9): absent = 4096; =1024 the smaller arm; _OFF the old unblocked path.
-    comptime assert get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",4096]() == 1024 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",4096]() == 4096, "invalid MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS (1024|4096; the unblocked path is -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF)"
-    comptime assert not (is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF"]() and is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS"]()), "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF (unblocked) and MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=N are exclusive arms"
+    # ENETCV_SCORE_BLOCKS: 1024 promoted to the IDENTICAL default 2026-10-11 (lane/owed-decide, NV v0063/v0064, AMD a1645/a1646,
+    # avg ratio 0.935): absent = 1024; =4096 or _OFF the old 4096 default. The unblocked path is FAST only.
+    comptime assert get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",1024]() == 1024 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",1024]() == 4096, "invalid MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS (1024|4096; -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF = 4096)"
+    comptime assert not (is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF"]() and is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS"]()), "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF (4096) and MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=N are exclusive arms"
     # ENETCV_FOLD_BLOCKS promoted 2026-10-10 (lane/grid-act-6, grid g50ebe26a5): absent = 64 chunks per fold; =16|32 the other arms; _OFF the old staged means + Gram path.
     comptime assert get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS",64]() == 16 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS",64]() == 32 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS",64]() == 64, "invalid MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS (16|32|64; promoted 2026-10-10, absent = 64; the old path is -D MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF)"
     comptime assert not (is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF"]() and is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS"]()), "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF (old staged path) and MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=N are exclusive arms"
@@ -144,7 +144,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_NN60_BLOCK_VIEWS"](), "retired define MOJOLEARN_NN60_BLOCK_VIEWS: use IDN_LM_VIEWS=1"
     comptime assert not is_defined["MOJOLEARN_NN60_EMB_HEAD_VIEWS"](), "retired define MOJOLEARN_NN60_EMB_HEAD_VIEWS: use IDN_LM_VIEWS=2"
     comptime assert not is_defined["MOJOLEARN_IDN_LM_PARAM_VIEWS"](), "retired define MOJOLEARN_IDN_LM_PARAM_VIEWS: use IDN_LM_VIEWS=3"
-    comptime assert not is_defined["MOJOLEARN_NN56_GROUPED_ADAM"](), "retired define MOJOLEARN_NN56_GROUPED_ADAM: use IDN_LM_GROUPED_ADAM=1"
+    comptime assert not is_defined["MOJOLEARN_NN56_GROUPED_ADAM"](), "retired define MOJOLEARN_NN56_GROUPED_ADAM: its successor MOJOLEARN_IDN_LM_GROUPED_ADAM was removed 2026-10-11 (avg 1.03x slower)"
+    # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (LOSER avg 1.33x samba-train-step, NV 0.935 / AMD 1.726) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M3_S17_TAIL_DBUF"](), "removed: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (double-buffered Mamba-3 S17 tail) deleted 2026-10-11: LOSER, samba-train-step NV 42.36 -> 39.60 ms (0.935x), AMD 69.04 -> 119.20 ms (1.726x), avg 1.33x; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_NN55_BLOCK_STATUS"](), "removed define MOJOLEARN_NN55_BLOCK_STATUS (arm 2 deleted 2026-10-11, avg 1.15x slower)"
     comptime assert not is_defined["MOJOLEARN_NN32_RETAIN_FORWARD"](), "retired define MOJOLEARN_NN32_RETAIN_FORWARD: use IDN_ACT_RETAIN=1"
     comptime assert not is_defined["MOJOLEARN_NN31_BOUNDED_CHECKPOINTS"](), "retired define MOJOLEARN_NN31_BOUNDED_CHECKPOINTS: use IDN_ACT_RETAIN=2"
@@ -164,7 +167,9 @@ def _check_configuration() -> Bool:
     comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 1, "invalid MOJOLEARN_IDN_CE_TOKEN_FOLD arm (legal: 0|1; 2 removed 2026-10-10)"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 2, "invalid MOJOLEARN_IDN_LM_RESIDENT_TOKENS arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 2 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 3, "invalid MOJOLEARN_IDN_LM_VIEWS arm (legal: 0|1|2|3)"
-    comptime assert get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 1, "invalid MOJOLEARN_IDN_LM_GROUPED_ADAM arm (legal: 0|1; arm 2 removed 2026-10-11, grid g50ebe26a5 lm-train-step avg 1.15x slower, see docs/TOMBSTONES.md)"
+    # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (arm 1, LOSER avg 1.03x lm-train-step, NV 1.019 / AMD 1.043) deleted 2026-10-11 by cdb22ee93; code recoverable at cdb22ee93^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LM_GROUPED_ADAM"](), "removed: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam) deleted 2026-10-11: LOSER, lm-train-step NV 35.51 -> 36.18 ms (1.019x), AMD 42.76 -> 44.61 ms (1.043x), avg 1.03x; arm 2 removed earlier; see docs/TOMBSTONES.md"
     comptime assert get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 0 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 1 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 2 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 3, "invalid MOJOLEARN_IDN_TRAIN_SCRATCH arm (legal: 0|1|2|3)"
     # Lane grid-prune (2026-10-07): deleted losers and dead arms (rows in docs/apple-fast/EXPERIMENTS.md
     # "IDENTICAL grid prune"); recoverable at main ab554bb4a. A stale build line must not run the incumbent silently.
@@ -176,9 +181,12 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TREES_T27"](), "removed: MOJOLEARN_TREES_T27 (alias of MOJOLEARN_2030_FUSED_EST_MOVE; inert on board walks)"
     comptime assert not is_defined["MOJOLEARN_TREES_C47_GBDT"](), "removed: MOJOLEARN_TREES_C47_GBDT (width cap subsumed by MOJOLEARN_TREES_T17_BATCH)"
     comptime assert not is_defined["MOJOLEARN_TREES_HIST_REP_BPSM"](), "merged: use -D MOJOLEARN_TREES_HIST_REP_SM=1 (device SMs x 4 blocks); BPSM=4 alone equalled SM=64"
-    comptime assert not (is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]() or is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()), "merged: use -D MOJOLEARN_IDN_M1_SCAN=1 (affine_prefix, NN34) | 2 (state_window, NI38) | 3 (persistent)"
+    comptime assert not (is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]() or is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()), "merged: use -D MOJOLEARN_IDN_M1_SCAN=2 (state_window, NI38) | 3 (persistent); 1 (affine_prefix, NN34) removed 2026-10-11"
     comptime M1S = get_defined_int["MOJOLEARN_IDN_M1_SCAN",3]()
-    comptime assert M1S >= 0 and M1S <= 3, "MOJOLEARN_IDN_M1_SCAN arms: 1 affine_prefix, 2 state_window, 3 persistent"
+    # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
+    comptime assert M1S != 1, "removed: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix) deleted 2026-10-11: LOSER, mamba1-forward NV 5.40 -> 10.41 ms (1.93x), AMD 3.14 -> 8.38 ms (2.67x), avg 2.30x; see docs/TOMBSTONES.md"
+    comptime assert M1S == 0 or M1S == 2 or M1S == 3, "MOJOLEARN_IDN_M1_SCAN arms: 0 old scan, 2 state_window, 3 persistent (1 removed 2026-10-11)"
     comptime assert M1S == 3 or not (is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS"]()), "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH/_TOKENS are read only by MOJOLEARN_IDN_M1_SCAN=3 (persistent)"
     comptime assert not (is_defined["MOJOLEARN_NI14_BOUNDED_COL2IM"]() or is_defined["MOJOLEARN_NI14_TILED_COL2IM"]()), "merged: use -D MOJOLEARN_NI14_COL2IM=1 (bounded) | 2 (tiled)"
     comptime assert get_defined_int["MOJOLEARN_NI14_COL2IM",0]() >= 0 and get_defined_int["MOJOLEARN_NI14_COL2IM",0]() <= 2, "MOJOLEARN_NI14_COL2IM arms: 1 bounded, 2 tiled"

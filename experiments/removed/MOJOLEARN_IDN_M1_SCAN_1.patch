@@ -1,0 +1,2460 @@
+diff --git a/bindings/_mojolearn_mamba.mojo b/bindings/_mojolearn_mamba.mojo
+index 7561059fa..c8533fb6a 100644
+--- a/bindings/_mojolearn_mamba.mojo
++++ b/bindings/_mojolearn_mamba.mojo
+@@ -137,8 +137,7 @@ from bindings.hostptr import f32_ptr, read_f32, copy_f32
+ from std.memory import bitcast, memcpy
+ from std.time import perf_counter_ns
+ from std.sys.compile import is_defined, get_defined_int
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
++from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS, NN34_COMPONENT_PROFILE
+ from mamba.impl.ops.mamba3_siso import m3_phase_tick
+ from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
+ from std.os import abort, getenv
+@@ -339,9 +338,26 @@ def mamba_vendor_binding() raises -> PythonObject:
+ 
+ 
+ def mamba1_profile_binding() -> PythonObject:
+-    return PythonObject(1)  # NN34 profile 2 (M1_SCAN=1) deleted 2026-10-11
++    return PythonObject(NN34_COMPONENT_PROFILE)
+ 
+ 
++def _m1_profile_load(ctx: DeviceContext, mut state: MambaDeviceState,
++    boundary: Int, sa: Int, sb: Int, position: Int, chains: Int) raises:
++    if position < 0 or position > (1 << 62) - 32:
++        raise Error("Mamba-1 NN34: invalid absolute checkpoint position")
++    if boundary == 0 or sa == 0 or sb == 0:
++        raise Error("Mamba-1 NN34: full affine checkpoint buffers required")
++    state.nn34_boundary = mamba_upload(ctx, _read_f32(boundary, chains))
++    state.nn34_sa = mamba_upload(ctx, _read_f32(sa, chains * NN34_LEVELS))
++    state.nn34_sb = mamba_upload(ctx, _read_f32(sb, chains * NN34_LEVELS))
++    state.nn34_position = position
++
++
++def _m1_profile_export(ctx: DeviceContext, mut state: MambaDeviceState,
++    boundary: Int, sa: Int, sb: Int, chains: Int) raises:
++    _m3_download_addr[False](ctx, state.nn34_boundary.value(), chains, boundary)
++    _m3_download_addr[False](ctx, state.nn34_sa.value(), chains * NN34_LEVELS, sa)
++    _m3_download_addr[False](ctx, state.nn34_sb.value(), chains * NN34_LEVELS, sb)
+ 
+ 
+ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False, absolute_start: Int = 0) raises:
+@@ -354,7 +370,7 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False, abs
+     still alive when `mamba_block_forward` returns because that function
+     synchronizes before it does, and the explicit transfers at the end
+     hold them past the last download anyway."""
+-    comptime if AFN_MAMBA_ARENA:
++    comptime if AFN_MAMBA_ARENA and not NN34_AFFINE_PREFIX:
+         _mamba1_run_arena(a, b, l, dm, decode)
+         return
+     var dims = MambaDims.of(dm)
+@@ -385,6 +401,8 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False, abs
+     var dstate = MambaDeviceState(ctx, b, dims)
+     dstate.conv_win = mamba_upload(ctx, _read_f32(a[11], b * di * D_CONV))
+     dstate.h = mamba_upload(ctx, _read_f32(a[12], b * di * D_STATE))
++    comptime if NN34_AFFINE_PREFIX:
++        _m1_profile_load(ctx, dstate, a[14], a[15], a[16], absolute_start, b * di * D_STATE)
+     var dstages = MambaDeviceStages(ctx, b, l, dims)
+     var dx = mamba_upload(ctx, _read_f32(a[0], b * l * dm))
+ 
+@@ -404,6 +422,8 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False, abs
+     _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[13])
+     _m3_download_addr[False](ctx, dstate.conv_win, b * di * D_CONV, a[11])
+     _m3_download_addr[False](ctx, dstate.h, b * di * D_STATE, a[12])
++    comptime if NN34_AFFINE_PREFIX:
++        _m1_profile_export(ctx, dstate, a[14], a[15], a[16], b * di * D_STATE)
+     ctx.synchronize()
+     _ = dw^
+     _ = dstate^
+@@ -525,7 +545,7 @@ def mamba1_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
+ 
+ 
+ def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+-    comptime count = 14
++    comptime count = 17 if NN34_AFFINE_PREFIX else 14
+     if len(addrs) != count:
+         raise Error(
+             what
+@@ -581,7 +601,7 @@ def mamba1_forward_binding(
+     disagreements are refused BY NAME in Mojo, downstream (DEVIATION
+     793's split)."""
+     var a = _mamba1_addrs(addrs, String("mamba1_forward"))
+-    if len(params) != 3:
++    if len(params) != (4 if NN34_AFFINE_PREFIX else 3):
+         raise Error(
+             "mamba1_forward: params must contain 3 values (B, L, d_model),"
+             " got "
+@@ -590,7 +610,7 @@ def mamba1_forward_binding(
+     var b = Int(py=params[0])
+     var l = Int(py=params[1])
+     var dm = Int(py=params[2])
+-    var position = 0
++    var position = Int(py=params[3]) if NN34_AFFINE_PREFIX else 0
+     with GILReleased(Python()):
+         _mamba1_run(a, b, l, dm, False, position)
+     return PythonObject(0)
+@@ -610,7 +630,7 @@ def mamba1_decode_step_binding(
+     `addrs`: the same FOURTEEN as `mamba1_forward` with L = 1 shapes
+     (x and y_out are B * d_model). `params`: 0 B, 1 d_model."""
+     var a = _mamba1_addrs(addrs, String("mamba1_decode_step"))
+-    if len(params) != 2:
++    if len(params) != (3 if NN34_AFFINE_PREFIX else 2):
+         raise Error(
+             "mamba1_decode_step: params must contain 2 values (B, d_model),"
+             " got "
+@@ -618,7 +638,7 @@ def mamba1_decode_step_binding(
+         )
+     var b = Int(py=params[0])
+     var dm = Int(py=params[1])
+-    var position = 0
++    var position = Int(py=params[2]) if NN34_AFFINE_PREFIX else 0
+     with GILReleased(Python()):
+         _mamba1_run(a, b, 1, dm, True, position)
+     return PythonObject(0)
+@@ -727,6 +747,8 @@ def _m1_session_open_run(mut s: Mamba1DecodeSession, a: List[Int], b: Int, dm: I
+     var dstate = MambaDeviceState(s.ctx.value(), b, dims)
+     dstate.conv_win = mamba_upload(s.ctx.value(), _read_f32(a[11], b * di * D_CONV))
+     dstate.h = mamba_upload(s.ctx.value(), _read_f32(a[12], b * di * D_STATE))
++    comptime if NN34_AFFINE_PREFIX:
++        _m1_profile_load(s.ctx.value(), dstate, a[13], a[14], a[15], position, b * di * D_STATE)
+     s.state = dstate^
+     s.stages = MambaDeviceStages(s.ctx.value(), b, 1, dims)
+     s.dx = mamba_zeros(s.ctx.value(), b * dm)
+@@ -779,8 +801,8 @@ def mamba1_session_open_binding(
+     in `mamba1_forward`'s order (slots 1 to 10 there), then conv_window and
+     h; `params` is [B, d_model]. Everything is COPIED to the device."""
+     var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+-    var count = 12
+-    if len(addrs) != count or len(params) != 2:
++    var count = 15 if NN34_AFFINE_PREFIX else 12
++    if len(addrs) != count or len(params) != (3 if NN34_AFFINE_PREFIX else 2):
+         raise Error("mamba1_session_open: expected 12 addresses and 2 scalars")
+     if owner[].busy:
+         raise Error("mamba1 session: busy")
+@@ -797,7 +819,7 @@ def mamba1_session_open_binding(
+     var dm = Int(py=params[1])
+     if b <= 0:
+         raise Error("mamba1_session_open: B must be positive")
+-    var position = 0
++    var position = Int(py=params[2]) if NN34_AFFINE_PREFIX else 0
+     owner[].busy = True
+     owner[].usable = False
+     try:
+@@ -843,23 +865,31 @@ def mamba1_session_export_state_binding(
+     """Copy the resident state into the caller's buffers: `addrs` =
+     [conv_window, h]. The session stays open."""
+     var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+-    if len(addrs) != 2:
++    if len(addrs) != (5 if NN34_AFFINE_PREFIX else 2):
+         raise Error("mamba1_session_export_state: expected 2 addresses")
+     var pw = Int(py=addrs[0])
+     var ph = Int(py=addrs[1])
+     if pw == 0 or ph == 0:
+         raise Error("mamba1_session_export_state: null buffer address")
+     _m1_require_session_open(owner[])
++    var pb = Int(py=addrs[2]) if NN34_AFFINE_PREFIX else 0
++    var pa = Int(py=addrs[3]) if NN34_AFFINE_PREFIX else 0
++    var pc = Int(py=addrs[4]) if NN34_AFFINE_PREFIX else 0
++    if NN34_AFFINE_PREFIX and (pb == 0 or pa == 0 or pc == 0):
++        raise Error("Mamba-1 NN34: null checkpoint buffer")
+     owner[].busy = True
+     try:
+         with GILReleased(Python()):
+             _m1_session_export_run(owner[], pw, ph)
++            comptime if NN34_AFFINE_PREFIX:
++                _m1_profile_export(owner[].ctx.value(), owner[].state.value(), pb, pa, pc, owner[].b * owner[].di * D_STATE)
++                owner[].ctx.value().synchronize()
+     except error:
+         owner[].busy = False
+         owner[].usable = False
+         raise error
+     owner[].busy = False
+-    return PythonObject(0)
++    return PythonObject(owner[].state.value().nn34_position if NN34_AFFINE_PREFIX else 0)
+ 
+ 
+ def mamba1_session_load_state_binding(
+@@ -868,18 +898,24 @@ def mamba1_session_load_state_binding(
+     """Replace the resident state with the caller's bytes: `addrs` =
+     [conv_window, h]. The explicit refresh for the state half."""
+     var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+-    if len(addrs) != 2:
++    if len(addrs) != (6 if NN34_AFFINE_PREFIX else 2):
+         raise Error("mamba1_session_load_state: expected 2 addresses")
+     var pw = Int(py=addrs[0])
+     var ph = Int(py=addrs[1])
+     if pw == 0 or ph == 0:
+         raise Error("mamba1_session_load_state: null buffer address")
+     _m1_require_session_open(owner[])
+-    var position = 0
++    var pb = Int(py=addrs[2]) if NN34_AFFINE_PREFIX else 0
++    var pa = Int(py=addrs[3]) if NN34_AFFINE_PREFIX else 0
++    var pc = Int(py=addrs[4]) if NN34_AFFINE_PREFIX else 0
++    var position = Int(py=addrs[5]) if NN34_AFFINE_PREFIX else 0
+     owner[].busy = True
+     try:
+         with GILReleased(Python()):
+             _m1_session_load_run(owner[], pw, ph)
++            comptime if NN34_AFFINE_PREFIX:
++                _m1_profile_load(owner[].ctx.value(), owner[].state.value(), pb, pa, pc, position, owner[].b * owner[].di * D_STATE)
++                owner[].ctx.value().synchronize()
+     except error:
+         owner[].busy = False
+         owner[].usable = False
+diff --git a/bindings/_mojolearn_mamba_host.mojo b/bindings/_mojolearn_mamba_host.mojo
+index 232652614..42bf66e15 100644
+--- a/bindings/_mojolearn_mamba_host.mojo
++++ b/bindings/_mojolearn_mamba_host.mojo
+@@ -71,8 +71,7 @@ from mamba.checks.mamba3_oracle import Mamba3State, mamba3_block_oracle
+ from mamba.host.gen.mamba2_prefill_backward import mamba2_prefill_backward
+ from mamba.host.gen.mamba3_prefill_backward import mamba3_prefill_backward
+ from mamba.host.gen.modeling_mamba_prefill_backward import mamba1_prefill_backward
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
++from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS, NN34_COMPONENT_PROFILE
+ from mamba.host.device_shim import DeviceContext as M1HostContext
+ from mamba.host.gen.identity_trace import IdentityTrace as M1HostTrace
+ from mamba.host.gen.modeling_mamba import MambaDeviceState as M1HostState, MambaDeviceWeights as M1HostWeights, MambaDeviceStages as M1HostStages, mamba_upload as m1_host_upload, mamba_download as m1_host_download, mamba_block_forward as m1_host_forward
+@@ -173,6 +172,29 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
+         raise Error("mamba1: B and L must be positive")
+     var w = _m1_weights(a, dm)
+     var di = w.dims.d_inner
++    comptime if NN34_AFFINE_PREFIX:
++        if position < 0 or position > (1 << 62) - l - 32:
++            raise Error("Mamba-1 NN34: invalid absolute checkpoint position")
++        var ctx = M1HostContext()
++        var state = M1HostState(ctx, b, w.dims)
++        state.conv_win = m1_host_upload(ctx, read_f32(a[11], b * di * D_CONV))
++        state.h = m1_host_upload(ctx, read_f32(a[12], b * di * D_STATE))
++        state.nn34_boundary = m1_host_upload(ctx, read_f32(a[14], b * di * D_STATE))
++        state.nn34_sa = m1_host_upload(ctx, read_f32(a[15], b * di * D_STATE * NN34_LEVELS))
++        state.nn34_sb = m1_host_upload(ctx, read_f32(a[16], b * di * D_STATE * NN34_LEVELS))
++        state.nn34_position = position
++        var weights = M1HostWeights(ctx, w)
++        var stages = M1HostStages(ctx, b, l, w.dims)
++        var input = m1_host_upload(ctx, read_f32(a[0], b * l * dm))
++        var trace = M1HostTrace.disabled()
++        m1_host_forward(ctx, stages, state, weights, input, b, l, trace, String("host.nn34"))
++        _write(a[13], m1_host_download(ctx, stages.residual_out, b * l * dm), b * l * dm)
++        _write(a[11], m1_host_download(ctx, state.conv_win, b * di * D_CONV), b * di * D_CONV)
++        _write(a[12], m1_host_download(ctx, state.h, b * di * D_STATE), b * di * D_STATE)
++        _write(a[14], m1_host_download(ctx, state.nn34_boundary.value(), b * di * D_STATE), b * di * D_STATE)
++        _write(a[15], m1_host_download(ctx, state.nn34_sa.value(), b * di * D_STATE * NN34_LEVELS), b * di * D_STATE * NN34_LEVELS)
++        _write(a[16], m1_host_download(ctx, state.nn34_sb.value(), b * di * D_STATE * NN34_LEVELS), b * di * D_STATE * NN34_LEVELS)
++        return
+     var state = MambaState(b, w.dims)
+     state.conv_win = read_f32(a[11], b * di * D_CONV)
+     state.h = read_f32(a[12], b * di * D_STATE)
+@@ -185,13 +207,13 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
+ def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+     """`bindings/_mojolearn_mamba.mojo::mamba1_forward_binding`'s contract:
+     14 addresses, params B, L, d_model."""
+-    var a = _addrs(addrs, 14, String("mamba1_forward"))
+-    if len(params) != 3:
++    var a = _addrs(addrs, 17 if NN34_AFFINE_PREFIX else 14, String("mamba1_forward"))
++    if len(params) != (4 if NN34_AFFINE_PREFIX else 3):
+         raise Error("mamba1_forward: params must contain 3 values (B, L, d_model), got " + String(len(params)))
+     var b = Int(py=params[0])
+     var l = Int(py=params[1])
+     var dm = Int(py=params[2])
+-    var position = 0
++    var position = Int(py=params[3]) if NN34_AFFINE_PREFIX else 0
+     with GILReleased(Python()):
+         _mamba1_run(a, b, l, dm, position)
+     return PythonObject(0)
+@@ -199,12 +221,12 @@ def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises ->
+ 
+ def mamba1_decode_step_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+     """The forward at L = 1 with the state carried; params B, d_model."""
+-    var a = _addrs(addrs, 14, String("mamba1_decode_step"))
+-    if len(params) != 2:
++    var a = _addrs(addrs, 17 if NN34_AFFINE_PREFIX else 14, String("mamba1_decode_step"))
++    if len(params) != (3 if NN34_AFFINE_PREFIX else 2):
+         raise Error("mamba1_decode_step: params must contain 2 values (B, d_model), got " + String(len(params)))
+     var b = Int(py=params[0])
+     var dm = Int(py=params[1])
+-    var position = 0
++    var position = Int(py=params[2]) if NN34_AFFINE_PREFIX else 0
+     with GILReleased(Python()):
+         _mamba1_run(a, b, 1, dm, position)
+     return PythonObject(0)
+@@ -615,7 +637,7 @@ def PyInit__mojolearn_mamba_host() abi("C") -> PythonObject:
+ 
+ 
+ def mamba1_profile_binding() -> PythonObject:
+-    return PythonObject(1)  # NN34 profile 2 (M1_SCAN=1) deleted 2026-10-11
++    return PythonObject(NN34_COMPONENT_PROFILE)
+ 
+ 
+ comptime NN40_OWNED_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN40_OWNED_WEIGHTS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+diff --git a/bindings/_mojolearn_neural_host.mojo b/bindings/_mojolearn_neural_host.mojo
+index 76858f560..17c12fdac 100644
+--- a/bindings/_mojolearn_neural_host.mojo
++++ b/bindings/_mojolearn_neural_host.mojo
+@@ -83,8 +83,7 @@ from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
+ from gemm.host.neural_gemm import gemm_oracle
+ from gemm.host.neural_gemm import gemm_host_rows
+ from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
++from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS, NN34_COMPONENT_PROFILE
+ from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
+ from mamba.checks.mamba2_fixture import (
+     M2_CHUNK_SIZE,
+@@ -541,10 +540,21 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
+     var state = MambaState(b, w.dims)
+     state.conv_win = read_f32(a[11], b * di * D_CONV)
+     state.h = read_f32(a[12], b * di * D_STATE)
++    comptime if NN34_AFFINE_PREFIX:
++        if position < 0 or position > (1 << 62) - l - 32:
++            raise Error("Mamba-1 NN34: invalid absolute checkpoint position")
++        state.nn34_position = position
++        state.nn34_boundary = read_f32(a[14], b * di * D_STATE)
++        state.nn34_sa = read_f32(a[15], b * di * D_STATE * NN34_LEVELS)
++        state.nn34_sb = read_f32(a[16], b * di * D_STATE * NN34_LEVELS)
+     var st = mamba_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
+     _write(a[13], st.residual_out, b * l * dm)
+     _write(a[11], state.conv_win, b * di * D_CONV)
+     _write(a[12], state.h, b * di * D_STATE)
++    comptime if NN34_AFFINE_PREFIX:
++        _write(a[14], state.nn34_boundary, b * di * D_STATE)
++        _write(a[15], state.nn34_sa, b * di * D_STATE * NN34_LEVELS)
++        _write(a[16], state.nn34_sb, b * di * D_STATE * NN34_LEVELS)
+ 
+ 
+ def mamba1_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+@@ -566,9 +576,9 @@ def mamba1_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
+ def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+     """`bindings/_mojolearn_mamba.mojo::mamba1_forward_binding`'s contract:
+     14 addresses, params B, L, d_model (lane/stateful-cpu-decoding)."""
+-    var a = _addrs(addrs, 14, String("mamba1_forward"))
+-    var s = _shape3(params, 3, String("mamba1_forward"))
+-    var position = 0
++    var a = _addrs(addrs, 17 if NN34_AFFINE_PREFIX else 14, String("mamba1_forward"))
++    var s = _shape3(params, 4 if NN34_AFFINE_PREFIX else 3, String("mamba1_forward"))
++    var position = _index(params[3]) if NN34_AFFINE_PREFIX else 0
+     with GILReleased(Python()):
+         _mamba1_run(a, s[0], s[1], s[2], position)
+     return PythonObject(0)
+@@ -576,14 +586,14 @@ def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises ->
+ 
+ def mamba1_decode_step_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+     """The forward at L = 1 with the state carried; params B, d_model."""
+-    var a = _addrs(addrs, 14, String("mamba1_decode_step"))
+-    if Int(py=len(params)) != 2:
++    var a = _addrs(addrs, 17 if NN34_AFFINE_PREFIX else 14, String("mamba1_decode_step"))
++    if Int(py=len(params)) != (3 if NN34_AFFINE_PREFIX else 2):
+         raise Error("mamba1_decode_step: params must contain 2 values (B, d_model)")
+     var b = _index(params[0])
+     var dm = _index(params[1])
+     if b < 1 or dm < 1:
+         raise Error("mamba1_decode_step: B and d_model must be positive")
+-    var position = 0
++    var position = _index(params[2]) if NN34_AFFINE_PREFIX else 0
+     with GILReleased(Python()):
+         _mamba1_run(a, b, 1, dm, position)
+     return PythonObject(0)
+@@ -962,4 +972,4 @@ def PyInit__mojolearn_neural_host() abi("C") -> PythonObject:
+ 
+ 
+ def mamba1_profile_binding() -> PythonObject:
+-    return PythonObject(1)  # NN34 profile 2 (M1_SCAN=1) deleted 2026-10-11
++    return PythonObject(NN34_COMPONENT_PROFILE)
+diff --git a/core/six_lane_experiment_guards.mojo b/core/six_lane_experiment_guards.mojo
+index 66904379d..5a100debd 100644
+--- a/core/six_lane_experiment_guards.mojo
++++ b/core/six_lane_experiment_guards.mojo
+@@ -181,12 +181,9 @@ def _check_configuration() -> Bool:
+     comptime assert not is_defined["MOJOLEARN_TREES_T27"](), "removed: MOJOLEARN_TREES_T27 (alias of MOJOLEARN_2030_FUSED_EST_MOVE; inert on board walks)"
+     comptime assert not is_defined["MOJOLEARN_TREES_C47_GBDT"](), "removed: MOJOLEARN_TREES_C47_GBDT (width cap subsumed by MOJOLEARN_TREES_T17_BATCH)"
+     comptime assert not is_defined["MOJOLEARN_TREES_HIST_REP_BPSM"](), "merged: use -D MOJOLEARN_TREES_HIST_REP_SM=1 (device SMs x 4 blocks); BPSM=4 alone equalled SM=64"
+-    comptime assert not (is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]() or is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()), "merged: use -D MOJOLEARN_IDN_M1_SCAN=2 (state_window, NI38) | 3 (persistent); 1 (affine_prefix, NN34) removed 2026-10-11"
++    comptime assert not (is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]() or is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()), "merged: use -D MOJOLEARN_IDN_M1_SCAN=1 (affine_prefix, NN34) | 2 (state_window, NI38) | 3 (persistent)"
+     comptime M1S = get_defined_int["MOJOLEARN_IDN_M1_SCAN",3]()
+-    # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
+-    comptime assert M1S != 1, "removed: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix) deleted 2026-10-11: LOSER, mamba1-forward NV 5.40 -> 10.41 ms (1.93x), AMD 3.14 -> 8.38 ms (2.67x), avg 2.30x; see docs/TOMBSTONES.md"
+-    comptime assert M1S == 0 or M1S == 2 or M1S == 3, "MOJOLEARN_IDN_M1_SCAN arms: 0 old scan, 2 state_window, 3 persistent (1 removed 2026-10-11)"
++    comptime assert M1S >= 0 and M1S <= 3, "MOJOLEARN_IDN_M1_SCAN arms: 1 affine_prefix, 2 state_window, 3 persistent"
+     comptime assert M1S == 3 or not (is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS"]()), "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH/_TOKENS are read only by MOJOLEARN_IDN_M1_SCAN=3 (persistent)"
+     comptime assert not (is_defined["MOJOLEARN_NI14_BOUNDED_COL2IM"]() or is_defined["MOJOLEARN_NI14_TILED_COL2IM"]()), "merged: use -D MOJOLEARN_NI14_COL2IM=1 (bounded) | 2 (tiled)"
+     comptime assert get_defined_int["MOJOLEARN_NI14_COL2IM",0]() >= 0 and get_defined_int["MOJOLEARN_NI14_COL2IM",0]() <= 2, "MOJOLEARN_NI14_COL2IM arms: 1 bounded, 2 tiled"
+diff --git a/mamba/checks/mamba_backward.mojo b/mamba/checks/mamba_backward.mojo
+index 9119a0104..b633495c6 100644
+--- a/mamba/checks/mamba_backward.mojo
++++ b/mamba/checks/mamba_backward.mojo
+@@ -2,11 +2,10 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Routing, workspace sizing, and topology declarations for Mamba-1 backward."""
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from std.sys.compile import is_defined
+ 
++from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX
+ from gemm.contract import OP_NT
+ from gemm.neural_dispatch import identical_gemm_workspace_max_floats
+ from gemm.neural_backward import (
+@@ -372,7 +371,7 @@ comptime T3_DB_PREFORMS_DELTA_TIMES_U = True
+ 
+ def t3_dh_floats(b: Int, l: Int, dims: MambaDims) -> Int:
+     """`B * d_inner * L * D_STATE`, the materialized `dh`. The declared spelling is GATE-SCALE; a blocked variant is phase K and its tiling must be `contract_partition(d_inner)`'s leaf boundary, never a VRAM budget, or the answer becomes a function of the machine."""
+-    return b * dims.d_inner * l * D_STATE
++    return (2 if NN34_AFFINE_PREFIX else 1) * b * dims.d_inner * l * D_STATE
+ 
+ 
+ comptime T4_DIRECTION_IS_DESCENDING_IN_T = True
+diff --git a/mamba/checks/mamba_oracle.mojo b/mamba/checks/mamba_oracle.mojo
+index 70b0ebfaf..956875d64 100644
+--- a/mamba/checks/mamba_oracle.mojo
++++ b/mamba/checks/mamba_oracle.mojo
+@@ -32,8 +32,8 @@ from checks.numerics import (
+     identical_silu,
+     identical_softplus,
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
++from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS, NN34_CHUNK, nn34_clear_slots, nn34_push, nn34_prefix, nn34_evaluate
++from mamba.host.gen.neural_mamba_scan import nn34_factors
+ from gemm.contract import OP_NT
+ from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_list
+ from gemm.host.neural_gemm import gemm_oracle
+@@ -99,10 +99,19 @@ struct MambaState(Copyable, Movable):
+ 
+     var conv_win: List[Float32]
+     var h: List[Float32]
++    var nn34_position: Int
++    var nn34_boundary: List[Float32]
++    var nn34_sa: List[Float32]
++    var nn34_sb: List[Float32]
+ 
+     def __init__(out self, b: Int, dims: MambaDims):
+         self.conv_win = List[Float32]()
+         self.h = List[Float32]()
++        self.nn34_position = 0
++        var chains = b * dims.d_inner * D_STATE if NN34_AFFINE_PREFIX else 0
++        self.nn34_boundary = List[Float32](length=chains, fill=Float32(0))
++        self.nn34_sa = List[Float32](length=chains * NN34_LEVELS, fill=Float32(0))
++        self.nn34_sb = List[Float32](length=chains * NN34_LEVELS, fill=Float32(0))
+         for _ in range(b * dims.d_inner * D_CONV):
+             self.conv_win.append(0.0)
+         for _ in range(b * dims.d_inner * D_STATE):
+@@ -217,6 +226,46 @@ def selective_scan_oracle(
+ 
+ 
+ 
++def nn34_mamba_host_scan(u: List[Float32], delta: List[Float32], a: List[Float32],
++    bmat: List[Float32], cmat: List[Float32], mut state: MambaState,
++    batch: Int, length: Int, dim: Int) raises -> List[Float32]:
++    """The public host/oracle callers share NN34 factor and prefix helpers.
++    Serialized public state travels through the dedicated Mamba binding;
++    stateless neural-host and repeated decode callers own this same state."""
++    var hidden = List[Float32](length=batch * length * dim * D_STATE, fill=Float32(0))
++    var up = u.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var dp = delta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var ap = a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var bp = bmat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    for chain in range(batch * dim * D_STATE):
++        var bb = chain // (dim * D_STATE)
++        var d = (chain // D_STATE) % dim
++        var n = chain % D_STATE
++        var boundary = ftz(state.h[chain]) if state.nn34_position == 0 else ftz(state.nn34_boundary[chain])
++        var sa = state.nn34_sa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + chain * NN34_LEVELS
++        var sb = state.nn34_sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + chain * NN34_LEVELS
++        for li in range(length):
++            var pair = nn34_factors(bb * length + li, d, n, dim, up, dp, ap, bp)
++            var count = (state.nn34_position + li) % NN34_CHUNK
++            nn34_push(count, pair[0], pair[1], sa, sb)
++            var prefix = nn34_prefix(count + 1, sa, sb)
++            var h = nn34_evaluate(prefix[0], prefix[1], boundary)
++            hidden[((bb * length + li) * dim + d) * D_STATE + n] = h
++            if count + 1 == NN34_CHUNK:
++                boundary = h
++                nn34_clear_slots(sa, sb)
++            state.h[chain] = h
++        state.nn34_boundary[chain] = boundary
++    state.nn34_position += length
++    var y = List[Float32](length=batch * length * dim, fill=Float32(0))
++    for t in range(batch * length):
++        for d in range(dim):
++            var acc = Float32(0)
++            for n in range(D_STATE):
++                acc = ftz(identical_mul_add(ftz(cmat[t * D_STATE + n]), ftz(hidden[(t * dim + d) * D_STATE + n]), acc))
++            y[t * dim + d] = acc
++    return y^
++
+ 
+ def mamba_block_oracle(
+     w: MambaWeights,
+@@ -235,6 +284,10 @@ def mamba_block_oracle(
+     refuse_bad_inputs(w, x)
+     refuse_nonfinite("state.conv_win", state.conv_win)
+     refuse_nonfinite("state.h", state.h)
++    comptime if NN34_AFFINE_PREFIX:
++        refuse_nonfinite("state.affine_boundary", state.nn34_boundary)
++        refuse_nonfinite("state.affine_a", state.nn34_sa)
++        refuse_nonfinite("state.affine_b", state.nn34_sb)
+     var dims = w.dims.copy()
+     var dm = dims.d_model
+     var di = dims.d_inner
+@@ -341,9 +394,12 @@ def mamba_block_oracle(
+             st.softplus_out.append(ftz(identical_softplus(biased)))
+ 
+     # ---- the scan (selective_scan_ref:160-187) ---------------------------
+-    st.scan_y = selective_scan_oracle(
+-        st.silu_out, st.softplus_out, st.a_out, bmat, cmat, state.h, b, l, di
+-    )
++    comptime if NN34_AFFINE_PREFIX:
++        st.scan_y = nn34_mamba_host_scan(st.silu_out, st.softplus_out, st.a_out, bmat, cmat, state, b, l, di)
++    else:
++        st.scan_y = selective_scan_oracle(
++            st.silu_out, st.softplus_out, st.a_out, bmat, cmat, state.h, b, l, di
++        )
+     for i in range(b * di * D_STATE):
+         st.scan_h.append(state.h[i])
+ 
+diff --git a/mamba/host/gen/mamba_backward_checks.mojo b/mamba/host/gen/mamba_backward_checks.mojo
+index 89ca03771..cb3f4c0e6 100644
+--- a/mamba/host/gen/mamba_backward_checks.mojo
++++ b/mamba/host/gen/mamba_backward_checks.mojo
+@@ -4,12 +4,11 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Routing, workspace sizing, and topology declarations for Mamba-1 backward."""
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
+ from mamba.host.device_shim import host_launch, launch_count
+ from mamba.host.device_shim import DeviceBuffer, DeviceContext
+ from std.sys.compile import is_defined
+ 
++from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX
+ from gemm.contract import OP_NT
+ from mamba.host.device_shim import identical_gemm_workspace_max_floats
+ from mamba.host.gen.neural_backward import (
+@@ -375,7 +374,7 @@ comptime T3_DB_PREFORMS_DELTA_TIMES_U = True
+ 
+ def t3_dh_floats(b: Int, l: Int, dims: MambaDims) -> Int:
+     """`B * d_inner * L * D_STATE`, the materialized `dh`. The declared spelling is GATE-SCALE; a blocked variant is phase K and its tiling must be `contract_partition(d_inner)`'s leaf boundary, never a VRAM budget, or the answer becomes a function of the machine."""
+-    return b * dims.d_inner * l * D_STATE
++    return (2 if NN34_AFFINE_PREFIX else 1) * b * dims.d_inner * l * D_STATE
+ 
+ 
+ comptime T4_DIRECTION_IS_DESCENDING_IN_T = True
+diff --git a/mamba/host/gen/modeling_mamba.mojo b/mamba/host/gen/modeling_mamba.mojo
+index 4efe2e40e..2874f55b1 100644
+--- a/mamba/host/gen/modeling_mamba.mojo
++++ b/mamba/host/gen/modeling_mamba.mojo
+@@ -198,8 +198,6 @@ from mamba.checks.mamba_fixture import (
+     MambaWeights,
+     RMS_EPS,
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
+ #: lane afn-mamba (2026-10-03): Apple FAST experiment switches. Every use
+ #: below is a `comptime if` whose other arm is main's spelling unchanged.
+ from mamba.host.gen.device_optimizations import (
+@@ -226,6 +224,8 @@ from mamba.host.gen.device_optimizations import (
+     afn_proj_gemm_into,
+     afn_proj_gemm_resid_into,
+ )
++from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS
++from mamba.host.gen.neural_mamba_scan import nn34_mamba_forward
+ from mamba.host.gen.selective_scan_interface import (
+     selective_scan_fn,
+ )
+@@ -754,10 +754,22 @@ struct MambaDeviceState(Movable):
+     var d_inner: Int
+     var conv_win: DeviceBuffer[DType.float32]
+     var h: DeviceBuffer[DType.float32]
++    var nn34_position: Int
++    var nn34_boundary: Optional[DeviceBuffer[DType.float32]]
++    var nn34_sa: Optional[DeviceBuffer[DType.float32]]
++    var nn34_sb: Optional[DeviceBuffer[DType.float32]]
+ 
+     def __init__(out self, ctx: DeviceContext, b: Int, dims: MambaDims) raises:
+         self.b = b
+         self.d_inner = dims.d_inner
++        self.nn34_position = 0
++        self.nn34_boundary = None
++        self.nn34_sa = None
++        self.nn34_sb = None
++        comptime if NN34_AFFINE_PREFIX:
++            self.nn34_boundary = mamba_zeros(ctx, b * dims.d_inner * D_STATE)
++            self.nn34_sa = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
++            self.nn34_sb = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
+         self.conv_win = mamba_zeros(ctx, b * dims.d_inner * D_CONV)
+         self.h = mamba_zeros(ctx, b * dims.d_inner * D_STATE)
+ 
+@@ -768,6 +780,14 @@ struct MambaDeviceState(Movable):
+         caller's arena (its one fill is the zeros)."""
+         self.b = b
+         self.d_inner = dims.d_inner
++        self.nn34_position = 0
++        self.nn34_boundary = None
++        self.nn34_sa = None
++        self.nn34_sb = None
++        comptime if NN34_AFFINE_PREFIX:
++            self.nn34_boundary = mamba_zeros(ctx, b * dims.d_inner * D_STATE)
++            self.nn34_sa = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
++            self.nn34_sb = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
+         var s = _m1_state_sizes(b, dims)
+         self.conv_win = arena.take(ctx, s[0])
+         self.h = arena.take(ctx, s[1])
+@@ -1587,27 +1607,40 @@ def mamba_selective_scan(
+     # because `delta` arrives post-softplus; `return_last_state` True because
+     # `h_state` is in-and-out on every call (contract section 5).
+     # It emits `scan.y`, `skip.out` and `scan.h` itself.
+-    selective_scan_fn(
+-        ctx,
+-        stages.skip_out,
+-        stages.scan_y,
+-        state.h,
+-        stages.silu_out,
+-        stages.softplus_out,
+-        stages.a_out,
+-        stages.b_mat,
+-        stages.c_mat,
+-        w.d_skip,
+-        b,
+-        l,
+-        di,
+-        False,
+-        False,
+-        False,
+-        True,
+-        trace,
+-        prefix,
+-    )
++    comptime if NN34_AFFINE_PREFIX:
++        if state.nn34_position == 0:
++            ctx.enqueue_copy(dst_buf=state.nn34_boundary.value(), src_buf=state.h)
++        nn34_mamba_forward(ctx, stages.silu_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.softplus_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            stages.a_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.b_mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.c_mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            w.d_skip.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.scan_y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.skip_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            state.nn34_boundary.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), state.h.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            state.nn34_sa.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), state.nn34_sb.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b, l, di, state.nn34_position)
++        state.nn34_position += l
++        trace.record_device[DType.float32](ctx, prefix + ".scan.y", stages.scan_y, m * di)
++        trace.record_device[DType.float32](ctx, prefix + ".skip.out", stages.skip_out, m * di)
++        trace.record_device[DType.float32](ctx, prefix + ".scan.h", state.h, b * di * D_STATE)
++    else:
++        selective_scan_fn(
++            ctx,
++            stages.skip_out,
++            stages.scan_y,
++            state.h,
++            stages.silu_out,
++            stages.softplus_out,
++            stages.a_out,
++            stages.b_mat,
++            stages.c_mat,
++            w.d_skip,
++            b,
++            l,
++            di,
++            False,
++            False,
++            False,
++            True,
++            trace,
++            prefix,
++        )
+     _m1_stage_sync(ctx, trace)
+ 
+     # `scan_output = scan_output * F.silu(z)` (:271). S12.
+@@ -1750,7 +1783,7 @@ def mamba_refuse_bad_inputs(
+     comptime if AFN_MAMBA_DEVICE_REFUSAL:
+         # lane afn-mamba: the same names in the same order, reduced on the
+         # device, ONE readback (afn_refusal.mojo).
+-        var batch = AfnRefusalBatch(ctx, 13)
++        var batch = AfnRefusalBatch(ctx, 16 if NN34_AFFINE_PREFIX else 13)
+         batch.add(ctx, String("x"), x, b * l * dm)
+         if not w.weights_checked:
+             batch.add(ctx, String("norm.weight"), w.norm_w, dm)
+@@ -1766,6 +1799,10 @@ def mamba_refuse_bad_inputs(
+             w.weights_checked = True
+         batch.add(ctx, String("state.conv_win"), state.conv_win, b * di * D_CONV)
+         batch.add(ctx, String("state.h"), state.h, b * di * D_STATE)
++        comptime if NN34_AFFINE_PREFIX:
++            batch.add(ctx, String("state.affine_boundary"), state.nn34_boundary.value(), b * di * D_STATE)
++            batch.add(ctx, String("state.affine_a"), state.nn34_sa.value(), b * di * D_STATE * NN34_LEVELS)
++            batch.add(ctx, String("state.affine_b"), state.nn34_sb.value(), b * di * D_STATE * NN34_LEVELS)
+         batch.finish(ctx)
+         return
+     # `x` CHANGES ON EVERY CALL and is always walked.
+@@ -1805,6 +1842,10 @@ def mamba_refuse_bad_inputs(
+     _refuse_nonfinite_named_host(
+         "state.h", mamba_download(ctx, state.h, b * di * D_STATE)
+     )
++    comptime if NN34_AFFINE_PREFIX:
++        _refuse_nonfinite_named_host("state.affine_boundary", mamba_download(ctx, state.nn34_boundary.value(), b * di * D_STATE))
++        _refuse_nonfinite_named_host("state.affine_a", mamba_download(ctx, state.nn34_sa.value(), b * di * D_STATE * NN34_LEVELS))
++        _refuse_nonfinite_named_host("state.affine_b", mamba_download(ctx, state.nn34_sb.value(), b * di * D_STATE * NN34_LEVELS))
+ 
+ 
+ 
+diff --git a/mamba/host/gen/neural_mamba_scan.mojo b/mamba/host/gen/neural_mamba_scan.mojo
+new file mode 100644
+index 000000000..418d200c8
+--- /dev/null
++++ b/mamba/host/gen/neural_mamba_scan.mojo
+@@ -0,0 +1,276 @@
++# SPDX-License-Identifier: Apache-2.0
++# GENERATED by tools/mamba_host_gen.py from mamba/impl/ops/neural_mamba_scan.mojo; do not edit.
++# 3 kernels, 6 launches restated as host loops over the launch grid, split over host tasks.
++"""NN34 Mamba-1 numerical profile: discretization, emission, checkpoints/VJP.
++
++The affine tree lives at absolute 32-token boundaries. Mamba-2/3 keep their
++own existing SSD profiles. Zero-state prefill backward differentiates the
++actual adjacent-pair prefix tree; it does not reuse the old reverse-chain
++state derivative. Same element bodies are restated in the host source.
++All code is an uncompiled, unverified source candidate, OFF by default.
++"""
++from mamba.host.device_shim import host_launch, launch_count
++from std.memory import stack_allocation
++from mamba.host.device_shim import DeviceBuffer, DeviceContext
++from checks.numerics import ftz, identical_mul, identical_mul_add, identical_exp
++from mamba.host.gen.neural_scan_profile import (
++    NN34FP, NN34_CHUNK, NN34_LEVELS, NN34_COMPONENT_PROFILE,
++    nn34_compose, nn34_evaluate, nn34_clear_slots, nn34_push, nn34_prefix,
++    nn34_component_device_prefill,
++)
++
++comptime NS = 16
++comptime NT = 128
++
++
++@always_inline
++def nn34_factors[input_origin: Origin, //](t: Int, d: Int, n: Int, dim: Int,
++    u: Pointer[Float32, input_origin], delta: Pointer[Float32, input_origin],
++    a: Pointer[Float32, input_origin], b: Pointer[Float32, input_origin]) -> Tuple[Float32, Float32]:
++    var dl = ftz(delta.unsafe_load(t * dim + d))
++    var av = ftz(a.unsafe_load(d * NS + n))
++    var bv = ftz(b.unsafe_load(t * NS + n))
++    var uv = ftz(u.unsafe_load(t * dim + d))
++    return (ftz(identical_exp(ftz(identical_mul(dl, av)))),
++            ftz(identical_mul(ftz(identical_mul(dl, bv)), uv)))
++
++
++def nn34_prepare_kernel(gid_: Int, u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP,
++    fa: NN34FP, fb: NN34FP, batch: Int32, length: Int32, width: Int32):
++    var i = gid_
++    var chains = Int(batch) * Int(width) * NS
++    if i >= chains * Int(length):
++        return
++    var token = i // chains
++    var chain = i % chains
++    var n = chain % NS
++    var d = (chain // NS) % Int(width)
++    var bb = chain // (Int(width) * NS)
++    var pair = nn34_factors(bb * Int(length) + token, d, n, Int(width), u, delta, a, b)
++    fa.unsafe_store(i, pair[0])
++    fb.unsafe_store(i, pair[1])
++
++
++def nn34_emit_kernel(gid_: Int, hidden: NN34FP, c: NN34FP, u: NN34FP, skip: NN34FP,
++    y: NN34FP, output: NN34FP, batch: Int32, length: Int32, width: Int32):
++    var i = gid_
++    var di = Int(width)
++    var L = Int(length)
++    if i >= Int(batch) * L * di:
++        return
++    var d = i % di
++    var t = i // di
++    var bb = t // L
++    var li = t % L
++    var base = li * Int(batch) * di * NS + (bb * di + d) * NS
++    var acc = Float32(0)
++    for n in range(NS):
++        acc = ftz(identical_mul_add(ftz(c.unsafe_load(t * NS + n)), ftz(hidden.unsafe_load(base + n)), acc))
++    y.unsafe_store(i, acc)
++    # The existing S11 is a separately rounded product followed by add.
++    output.unsafe_store(i, ftz(acc + ftz(identical_mul(ftz(u.unsafe_load(i)), ftz(skip.unsafe_load(d))))))
++
++
++def nn34_mamba_forward(ctx: DeviceContext, u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP,
++    c: NN34FP, skip: NN34FP, y: NN34FP, output: NN34FP,
++    boundary: NN34FP, last: NN34FP, slots_a: NN34FP, slots_b: NN34FP,
++    batch: Int, length: Int, dim: Int, absolute_start: Int) raises:
++    """Own all temporary storage through completion; commit state only after
++    independent output checkpoint and emission have completed successfully.
++    This is used at every request length including single-token decode."""
++    var chains = batch * dim * NS
++    var cells = chains * length
++    var chunks = (absolute_start % NN34_CHUNK + length + NN34_CHUNK - 1) // NN34_CHUNK
++    var fa = ctx.enqueue_create_buffer[DType.float32](cells)
++    var fb = ctx.enqueue_create_buffer[DType.float32](cells)
++    var pa = ctx.enqueue_create_buffer[DType.float32](cells)
++    var pb = ctx.enqueue_create_buffer[DType.float32](cells)
++    var hs = ctx.enqueue_create_buffer[DType.float32](cells)
++    var bounds = ctx.enqueue_create_buffer[DType.float32](max(1, chains * chunks))
++    var next_boundary = ctx.enqueue_create_buffer[DType.float32](chains)
++    var next_last = ctx.enqueue_create_buffer[DType.float32](chains)
++    var next_sa = ctx.enqueue_create_buffer[DType.float32](chains * NN34_LEVELS)
++    var next_sb = ctx.enqueue_create_buffer[DType.float32](chains * NN34_LEVELS)
++    var _l1_a0 = u
++    var _l1_a1 = delta
++    var _l1_a2 = a
++    var _l1_a3 = b
++    var _l1_a4 = fa.unsafe_ptr()
++    var _l1_a5 = fb.unsafe_ptr()
++    var _l1_a6 = Int32(batch)
++    var _l1_a7 = Int32(length)
++    var _l1_a8 = Int32(dim)
++    def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8}:
++        nn34_prepare_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8)
++    host_launch(_launch_1, launch_count(((cells + NT - 1) // NT, 1, 1), (NT, 1, 1)))
++    nn34_component_device_prefill(ctx, NN34_COMPONENT_PROFILE, chains, length, absolute_start,
++        fa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), fb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), boundary, last, slots_a, slots_b,
++        hs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_boundary.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_last.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_sa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++        pa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), pb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), bounds.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    var _l2_a0 = hs.unsafe_ptr()
++    var _l2_a1 = c
++    var _l2_a2 = u
++    var _l2_a3 = skip
++    var _l2_a4 = y
++    var _l2_a5 = output
++    var _l2_a6 = Int32(batch)
++    var _l2_a7 = Int32(length)
++    var _l2_a8 = Int32(dim)
++    def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7, imm _l2_a8}:
++        nn34_emit_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7, _l2_a8)
++    host_launch(_launch_2, launch_count(((batch * length * dim + NT - 1) // NT, 1, 1), (NT, 1, 1)))
++    ctx.synchronize()
++    # Queue-owned copies avoid depending on any temporary's last-use lifetime.
++    var _l3_a0 = next_boundary.unsafe_ptr()
++    var _l3_a1 = boundary
++    var _l3_a2 = Int32(chains)
++    def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2}:
++        nn34_copy_kernel(gid_, _l3_a0, _l3_a1, _l3_a2)
++    host_launch(_launch_3, launch_count(((chains + NT - 1) // NT, 1, 1), (NT, 1, 1)))
++    var _l4_a0 = next_last.unsafe_ptr()
++    var _l4_a1 = last
++    var _l4_a2 = Int32(chains)
++    def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2}:
++        nn34_copy_kernel(gid_, _l4_a0, _l4_a1, _l4_a2)
++    host_launch(_launch_4, launch_count(((chains + NT - 1) // NT, 1, 1), (NT, 1, 1)))
++    var _l5_a0 = next_sa.unsafe_ptr()
++    var _l5_a1 = slots_a
++    var _l5_a2 = Int32(chains * NN34_LEVELS)
++    def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2}:
++        nn34_copy_kernel(gid_, _l5_a0, _l5_a1, _l5_a2)
++    host_launch(_launch_5, launch_count(((chains * NN34_LEVELS + NT - 1) // NT, 1, 1), (NT, 1, 1)))
++    var _l6_a0 = next_sb.unsafe_ptr()
++    var _l6_a1 = slots_b
++    var _l6_a2 = Int32(chains * NN34_LEVELS)
++    def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2}:
++        nn34_copy_kernel(gid_, _l6_a0, _l6_a1, _l6_a2)
++    host_launch(_launch_6, launch_count(((chains * NN34_LEVELS + NT - 1) // NT, 1, 1), (NT, 1, 1)))
++    ctx.synchronize()
++    _ = fa^; _ = fb^; _ = pa^; _ = pb^; _ = hs^; _ = bounds^
++    _ = next_boundary^; _ = next_last^; _ = next_sa^; _ = next_sb^
++
++
++def nn34_copy_kernel(gid_: Int, src: NN34FP, dst: NN34FP, count: Int32):
++    var i = gid_
++    if i < Int(count):
++        dst.unsafe_store(i, src.unsafe_load(i))
++
++
++@always_inline
++def nn34_checkpoint_chain(chain: Int, hck: NN34FP, initial: NN34FP,
++    u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP, L: Int, dim: Int):
++    var bb = chain // (dim * NS)
++    var d = (chain // NS) % dim
++    var n = chain % NS
++    var boundary = ftz(initial.unsafe_load(chain))
++    var sa0 = stack_allocation[NN34_LEVELS, Float32]()
++    var sb0 = stack_allocation[NN34_LEVELS, Float32]()
++    var sa = sa0.unsafe_origin_cast[MutAnyOrigin]()
++    var sb = sb0.unsafe_origin_cast[MutAnyOrigin]()
++    nn34_clear_slots(sa, sb)
++    hck.unsafe_store((bb * (L + 1) * dim + d) * NS + n, boundary)
++    for li in range(L):
++        var pair = nn34_factors(bb * L + li, d, n, dim, u, delta, a, b)
++        var count = li % NN34_CHUNK
++        nn34_push(count, pair[0], pair[1], sa, sb)
++        var prefix = nn34_prefix(count + 1, sa, sb)
++        var h = nn34_evaluate(prefix[0], prefix[1], boundary)
++        hck.unsafe_store(((bb * (L + 1) + li + 1) * dim + d) * NS + n, h)
++        if count + 1 == NN34_CHUNK:
++            boundary = h
++            nn34_clear_slots(sa, sb)
++
++
++@always_inline
++def nn34_tree_vjp_chain(chain: Int, factor_grad: NN34FP, dy: NN34FP, c: NN34FP,  # device-helper: one chain per thread of nn34_tree_vjp_kernel
++    u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP, hck: NN34FP,
++    batch: Int, L: Int, dim: Int):
++    """Actual tree VJP. Prefix losses are visited newest to oldest; each
++    prefix's nodes reverse their forward creation order. A node's right-A
++    adjoint receives product-A then product-B contributions separately.
++    Chunk carry is attached only to its final prefix. No atomic reductions.
++    Layout is [dB (M*dim*16), dA (M*dim*16)] for prepared affine factors.
++    Public backward remains zero-state prefill, as its established API."""
++    var bb = chain // (dim * NS)
++    var d = (chain // NS) % dim
++    var n = chain % NS
++    var total = batch * L * dim * NS
++    var ma0 = stack_allocation[63, Float32]()
++    var mb0 = stack_allocation[63, Float32]()
++    var ga0 = stack_allocation[63, Float32]()
++    var gb0 = stack_allocation[63, Float32]()
++    var left0 = stack_allocation[63, Int]()
++    var right0 = stack_allocation[63, Int]()
++    var ids0 = stack_allocation[32, Int]()
++    var sum_a0 = stack_allocation[32, Float32]()
++    var sum_b0 = stack_allocation[32, Float32]()
++    var ma = ma0.unsafe_origin_cast[MutAnyOrigin]()
++    var mb = mb0.unsafe_origin_cast[MutAnyOrigin]()
++    var ga = ga0.unsafe_origin_cast[MutAnyOrigin]()
++    var gb = gb0.unsafe_origin_cast[MutAnyOrigin]()
++    var left = left0.unsafe_origin_cast[MutAnyOrigin]()
++    var right = right0.unsafe_origin_cast[MutAnyOrigin]()
++    var ids = ids0.unsafe_origin_cast[MutAnyOrigin]()
++    var sum_a = sum_a0.unsafe_origin_cast[MutAnyOrigin]()
++    var sum_b = sum_b0.unsafe_origin_cast[MutAnyOrigin]()
++    var carry = Float32(0)
++    var chunks = (L + NN34_CHUNK - 1) // NN34_CHUNK
++    for reverse_chunk in range(chunks):
++        var chunk = chunks - 1 - reverse_chunk
++        var begin = chunk * NN34_CHUNK
++        var count = min(NN34_CHUNK, L - begin)
++        var boundary = ftz(hck.unsafe_load(((bb * (L + 1) + begin) * dim + d) * NS + n))
++        for j in range(count):
++            sum_a.unsafe_store(j, Float32(0))
++            sum_b.unsafe_store(j, Float32(0))
++        var previous_carry = Float32(0)
++        for rp in range(count):
++            var prefix = count - rp
++            for j in range(prefix):
++                var pair = nn34_factors(bb * L + begin + j, d, n, dim, u, delta, a, b)
++                ma.unsafe_store(j, pair[0]); mb.unsafe_store(j, pair[1])
++                ids.unsafe_store(j, j)
++            for j in range(63):
++                ga.unsafe_store(j, Float32(0)); gb.unsafe_store(j, Float32(0))
++            var nodes = prefix
++            var width = prefix
++            while width > 1:
++                var next_width = (width + 1) // 2
++                for j in range(next_width):
++                    var li = ids.unsafe_load(2 * j)
++                    if 2 * j + 1 == width:
++                        ids.unsafe_store(j, li)
++                    else:
++                        var ri = ids.unsafe_load(2 * j + 1)
++                        var pair = nn34_compose(ma.unsafe_load(li), mb.unsafe_load(li), ma.unsafe_load(ri), mb.unsafe_load(ri))
++                        left.unsafe_store(nodes, li); right.unsafe_store(nodes, ri)
++                        ma.unsafe_store(nodes, pair[0]); mb.unsafe_store(nodes, pair[1])
++                        ids.unsafe_store(j, nodes)
++                        nodes += 1
++                width = next_width
++            var root = ids.unsafe_load(0)
++            var t = bb * L + begin + prefix - 1
++            var grad = ftz(identical_mul(ftz(dy.unsafe_load(t * dim + d)), ftz(c.unsafe_load(t * NS + n))))
++            if rp == 0 and reverse_chunk != 0:
++                grad = ftz(grad + carry)
++            ga.unsafe_store(root, ftz(identical_mul(grad, boundary)))
++            gb.unsafe_store(root, grad)
++            previous_carry = ftz(previous_carry + ftz(identical_mul(grad, ma.unsafe_load(root))))
++            for reverse_node in range(nodes - prefix):
++                var node = nodes - 1 - reverse_node
++                var li = left.unsafe_load(node); var ri = right.unsafe_load(node)
++                var da = ga.unsafe_load(node); var db = gb.unsafe_load(node)
++                ga.unsafe_store(li, ftz(ga.unsafe_load(li) + ftz(identical_mul(da, ma.unsafe_load(ri)))))
++                gb.unsafe_store(li, ftz(gb.unsafe_load(li) + ftz(identical_mul(db, ma.unsafe_load(ri)))))
++                var dra = ftz(ga.unsafe_load(ri) + ftz(identical_mul(da, ma.unsafe_load(li))))
++                dra = ftz(dra + ftz(identical_mul(db, mb.unsafe_load(li))))
++                ga.unsafe_store(ri, dra)
++                gb.unsafe_store(ri, ftz(gb.unsafe_load(ri) + db))
++            for j in range(prefix):
++                sum_a.unsafe_store(j, ftz(sum_a.unsafe_load(j) + ga.unsafe_load(j)))
++                sum_b.unsafe_store(j, ftz(sum_b.unsafe_load(j) + gb.unsafe_load(j)))
++        for j in range(count):
++            var index = ((bb * L + begin + j) * dim + d) * NS + n
++            factor_grad.unsafe_store(index, sum_b.unsafe_load(j))
++            factor_grad.unsafe_store(total + index, sum_a.unsafe_load(j))
++        carry = previous_carry
+diff --git a/mamba/host/gen/neural_scan_profile.mojo b/mamba/host/gen/neural_scan_profile.mojo
+new file mode 100644
+index 000000000..97a953252
+--- /dev/null
++++ b/mamba/host/gen/neural_scan_profile.mojo
+@@ -0,0 +1,429 @@
++# SPDX-License-Identifier: Apache-2.0
++# GENERATED by tools/mamba_host_gen.py from mamba/impl/ops/neural_scan_profile.mojo; do not edit.
++# 6 kernels, 5 launches restated as host loops over the launch grid, split over host tasks.
++# Copyright 2026 Andrew Hendel. Part of mojolearn.
++"""NN34 affine-prefix scan component, fp32 numerical profile v2.
++
++Mamba-1 imports this profile through neural_mamba_scan; other Mamba families
++retain their own SSD profiles.
++It supplies an actual selectable component A/B: candidate uses absolute
++32-token chunks and canonical adjacent affine-prefix trees; baseline uses
++one ascending recurrent FMA chain. All new switches are OFF by default.
++
++The input is PREPARED affine factors [tokens, chains], not raw Mamba model
++inputs: mathematically h[t] = a[t] * h[t-1] + b[t]. Discretization, emission, tree VJP and checkpoint integration are in
++`neural_mamba_scan`, modeling_mamba and the Mamba bindings. No quality,
++compilation, identity or timing evidence is claimed.
++
++Within a chunk, compose(left, right) means apply left, then right:
++  A = ftz(mul(ftz(right.A), ftz(left.A)))
++  B = ftz(fma(ftz(right.A), ftz(left.B), ftz(right.B)))
++Then evaluate the prefix with ONE rounded FMA on the completed-chunk
++boundary. Adjacent equal-sized subtrees merge first, with an unmatched
++right subtree carried unchanged. A single leaf has no fabricated identity
++composition. All columns call these exact helpers; previous-version bits
++need not match.
++
++A checkpoint contains profile id, absolute next-token position, chain
++count, boundary[chains], last[chains], and A/B slots [chains, 6]. Its occupied
++slot bits are absolute_position % 32. Consumed/inactive slots are canonical
+++0. Completed chunks reset the slots and install their final output as the
++next boundary. A checkpoint at a nonzero position MUST restore all slots;
++last hidden alone is insufficient. Profile ids must not be mixed.
++
++Prefill is three ordered phases: independent per-prefix summaries; ordered
++completed-chunk boundary propagation per chain; independent prefix outputs.
++The final prefix also produces next slots into DISJOINT state buffers.
++Decode pushes one leaf into the same binary slots and uses the same drain
++and evaluate graph. Request length and device launch shape never choose
++chunk boundaries or the arithmetic tree. Host and device entry points use
++identical per-cell functions. The explicit component APIs also remain available for isolated A/B work.
++"""
++from mamba.host.device_shim import host_launch, launch_count
++from std.memory import stack_allocation
++from std.sys.compile import is_defined, get_defined_int
++from mamba.host.device_shim import DeviceContext
++from checks.numerics import (
++    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_mul_add,
++)
++
++comptime NN34FP = MutPointer[Float32, MutAnyOrigin]
++comptime NN34_CHUNK = 32
++comptime NN34_LEVELS = 6
++comptime NN34_TPB = 128
++# `-D MOJOLEARN_IDN_M1_SCAN=<arm>` (lane/grid-prune 2026-10-07) is ONE switch
++# for the three alternative Mamba-1 scans, formerly three defines whose every
++# cross was refused or inert: 1 affine_prefix (NN34, this profile), 2
++# state_window (NI38) and 3 persistent (selective_scan_interface.mojo). The
++# old define MOJOLEARN_NN34_AFFINE_PREFIX is refused in
++# core/six_lane_experiment_guards.mojo.
++comptime M1_SCAN_AFFINE_PREFIX = 1
++comptime M1_SCAN_STATE_WINDOW = 2
++comptime M1_SCAN_PERSISTENT = 3
++# PROMOTED 2026-10-11 (grid g50ebe26a5, arm m1_scan=persistent vs today's defaults, one run per arm): mamba1-forward gaussian
++# NV L40S 5.563 -> 3.550 ms (v1242), AMD MI325X 9.934 -> 3.204 ms (a1350); avg ratio 0.454 (state_window=2: 0.468);
++# hash 602f9ec5 on both vendors. Default arm is now 3 (persistent); -D MOJOLEARN_IDN_M1_SCAN=0 restores the old scan.
++comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 3]()
++comptime NN34_AFFINE_PREFIX = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and M1_SCAN == M1_SCAN_AFFINE_PREFIX
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++comptime NN34_COMPONENT_PROFILE = 2 if NN34_AFFINE_PREFIX else 1
++
++
++@always_inline
++def nn34_compose(la: Float32, lb: Float32, ra: Float32, rb: Float32) -> Tuple[Float32, Float32]:
++    return (
++        ftz(identical_mul(ftz(ra), ftz(la))),
++        ftz(identical_mul_add(ftz(ra), ftz(lb), ftz(rb))),
++    )
++
++
++@always_inline
++def nn34_evaluate(a: Float32, b: Float32, boundary: Float32) -> Float32:
++    return ftz(identical_mul_add(ftz(a), ftz(boundary), ftz(b)))
++
++
++@always_inline
++def nn34_clear_slots(sa: NN34FP, sb: NN34FP):
++    for level in range(NN34_LEVELS):
++        sa.unsafe_store(level, Float32(0.0))
++        sb.unsafe_store(level, Float32(0.0))
++
++
++@always_inline
++def nn34_push(count: Int, a: Float32, b: Float32, sa: NN34FP, sb: NN34FP):
++    """count is 0..31; slots contain its binary decomposition, oldest left.
++    Consumed slots are cleared so a checkpoint has no scheduler-dependent
++    uninitialized words. A Float32 leaf is explicitly flushed once."""
++    var ca = ftz(a)
++    var cb = ftz(b)
++    var level = 0
++    while (count & (1 << level)) != 0:
++        var pair = nn34_compose(sa.unsafe_load(level), sb.unsafe_load(level), ca, cb)
++        ca = pair[0]
++        cb = pair[1]
++        sa.unsafe_store(level, Float32(0.0))
++        sb.unsafe_store(level, Float32(0.0))
++        level += 1
++    sa.unsafe_store(level, ca)
++    sb.unsafe_store(level, cb)
++
++
++@always_inline
++def nn34_prefix(count: Int, sa: NN34FP, sb: NN34FP) -> Tuple[Float32, Float32]:
++    """count is 1..32. Drain newest small subtree to oldest large subtree;
++    each merge puts the older subtree on the LEFT. This is the fixed
++    adjacent-pair tree with an unpaired right subtree carried unchanged."""
++    var ca = Float32(0.0)
++    var cb = Float32(0.0)
++    var have = False
++    for level in range(NN34_LEVELS):
++        if (count & (1 << level)) != 0:
++            if have:
++                var pair = nn34_compose(sa.unsafe_load(level), sb.unsafe_load(level), ca, cb)
++                ca = pair[0]
++                cb = pair[1]
++            else:
++                ca = sa.unsafe_load(level)
++                cb = sb.unsafe_load(level)
++                have = True
++    return (ca, cb)
++
++
++@always_inline
++def nn34_init_chain(chain: Int, initial: NN34FP, boundary: NN34FP, last: NN34FP, sa: NN34FP, sb: NN34FP):
++    """Initialize a new sequence at absolute position zero. A restored
++    checkpoint is a raw copy of its entire state, never this initializer."""
++    var h = ftz(initial.unsafe_load(chain))
++    boundary.unsafe_store(chain, h)
++    last.unsafe_store(chain, h)
++    nn34_clear_slots(sa + chain * NN34_LEVELS, sb + chain * NN34_LEVELS)
++
++
++@always_inline
++def nn34_decode_chain(chain: Int, absolute_position: Int, a: NN34FP, b: NN34FP,
++    boundary: NN34FP, last: NN34FP, sa: NN34FP, sb: NN34FP, output: NN34FP):
++    """One token, one owner per chain; state updates in place. The caller
++    advances the scalar absolute position exactly once after this phase."""
++    comptime if NN34_AFFINE_PREFIX:
++        var count = absolute_position % NN34_CHUNK
++        var aslots = sa + chain * NN34_LEVELS
++        var bslots = sb + chain * NN34_LEVELS
++        nn34_push(count, a.unsafe_load(chain), b.unsafe_load(chain), aslots, bslots)
++        count += 1
++        var pair = nn34_prefix(count, aslots, bslots)
++        var h = nn34_evaluate(pair[0], pair[1], boundary.unsafe_load(chain))
++        output.unsafe_store(chain, h)
++        last.unsafe_store(chain, h)
++        if count == NN34_CHUNK:
++            boundary.unsafe_store(chain, h)
++            nn34_clear_slots(aslots, bslots)
++    else:
++        var h = nn34_evaluate(a.unsafe_load(chain), b.unsafe_load(chain), last.unsafe_load(chain))
++        output.unsafe_store(chain, h)
++        last.unsafe_store(chain, h)
++        boundary.unsafe_store(chain, h)
++
++
++@always_inline
++def nn34_prefill_prefix_cell(cell: Int, a: NN34FP, b: NN34FP,
++    in_sa: NN34FP, in_sb: NN34FP, prefix_a: NN34FP, prefix_b: NN34FP,
++    out_sa: NN34FP, out_sb: NN34FP, chains: Int, tokens: Int, absolute_start: Int):
++    """Parallel phase 1. Each prefix restates the same absolute-chunk
++    binary slots as decode. No input from a future token is read. Repeated
++    subtree work is deliberate component scope; shared tree staging is a
++    later schedule candidate. Output state must not alias the input state."""
++    var t = cell // chains
++    var chain = cell % chains
++    var absolute_t = absolute_start + t
++    var chunk_start = absolute_t - absolute_t % NN34_CHUNK
++    var local_start = max(0, chunk_start - absolute_start)
++    var astack = stack_allocation[NN34_LEVELS, Float32]()
++    var bstack = stack_allocation[NN34_LEVELS, Float32]()
++    var sa = astack.unsafe_origin_cast[MutAnyOrigin]()
++    var sb = bstack.unsafe_origin_cast[MutAnyOrigin]()
++    var count = 0
++    nn34_clear_slots(sa, sb)
++    if chunk_start < absolute_start:
++        count = absolute_start % NN34_CHUNK
++        for level in range(NN34_LEVELS):
++            sa.unsafe_store(level, in_sa.unsafe_load(chain * NN34_LEVELS + level))
++            sb.unsafe_store(level, in_sb.unsafe_load(chain * NN34_LEVELS + level))
++    for token in range(local_start, t + 1):
++        var index = token * chains + chain
++        nn34_push(count, a.unsafe_load(index), b.unsafe_load(index), sa, sb)
++        count += 1
++    var pair = nn34_prefix(count, sa, sb)
++    prefix_a.unsafe_store(cell, pair[0])
++    prefix_b.unsafe_store(cell, pair[1])
++    if t == tokens - 1:
++        if count == NN34_CHUNK:
++            nn34_clear_slots(sa, sb)
++        for level in range(NN34_LEVELS):
++            out_sa.unsafe_store(chain * NN34_LEVELS + level, sa.unsafe_load(level))
++            out_sb.unsafe_store(chain * NN34_LEVELS + level, sb.unsafe_load(level))
++
++
++@always_inline
++def nn34_prefill_boundary_chain(chain: Int, prefix_a: NN34FP, prefix_b: NN34FP,  # device-helper: one chain per thread of nn34_boundary_kernel
++    in_boundary: NN34FP, chunk_boundaries: NN34FP, out_boundary: NN34FP,
++    chains: Int, tokens: Int, absolute_start: Int):
++    """Parallel over independent state chains, ordered over completed
++    absolute chunks. The last partial chunk never advances the boundary."""
++    var first = absolute_start // NN34_CHUNK
++    var chunks = (absolute_start % NN34_CHUNK + tokens + NN34_CHUNK - 1) // NN34_CHUNK
++    var carry = ftz(in_boundary.unsafe_load(chain))
++    for chunk in range(chunks):
++        chunk_boundaries.unsafe_store(chunk * chains + chain, carry)
++        var local_end = (first + chunk + 1) * NN34_CHUNK - absolute_start
++        if local_end <= tokens:
++            var end_cell = (local_end - 1) * chains + chain
++            carry = nn34_evaluate(prefix_a.unsafe_load(end_cell), prefix_b.unsafe_load(end_cell), carry)
++    out_boundary.unsafe_store(chain, carry)
++
++
++@always_inline
++def nn34_prefill_output_cell(cell: Int, prefix_a: NN34FP, prefix_b: NN34FP,
++    chunk_boundaries: NN34FP, output: NN34FP, out_last: NN34FP,
++    chains: Int, tokens: Int, absolute_start: Int):
++    var t = cell // chains
++    var chain = cell % chains
++    var chunk = (absolute_start % NN34_CHUNK + t) // NN34_CHUNK
++    var h = nn34_evaluate(prefix_a.unsafe_load(cell), prefix_b.unsafe_load(cell), chunk_boundaries.unsafe_load(chunk * chains + chain))
++    output.unsafe_store(cell, h)
++    if t == tokens - 1:
++        out_last.unsafe_store(chain, h)
++
++
++@always_inline
++def nn34_sequential_chain(chain: Int, a: NN34FP, b: NN34FP, in_last: NN34FP,
++    output: NN34FP, out_boundary: NN34FP, out_last: NN34FP,
++    out_sa: NN34FP, out_sb: NN34FP, chains: Int, tokens: Int):
++    """B arm: the prepared-factor recurrent FMA chain. This component
++    baseline is not claimed to stand in for a full public-model workload."""
++    var h = ftz(in_last.unsafe_load(chain))
++    for t in range(tokens):
++        var cell = t * chains + chain
++        h = nn34_evaluate(a.unsafe_load(cell), b.unsafe_load(cell), h)
++        output.unsafe_store(cell, h)
++    out_boundary.unsafe_store(chain, h)
++    out_last.unsafe_store(chain, h)
++    nn34_clear_slots(out_sa + chain * NN34_LEVELS, out_sb + chain * NN34_LEVELS)
++
++
++def nn34_component_metadata(profile: Int, chains: Int, tokens: Int, absolute_start: Int) raises:
++    """Scalar checks only. Tensor buffers must satisfy the documented
++    sizes/disjointness; this component does not own or inspect allocations."""
++    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++        raise Error("NN34 component requires IDENTICAL mode")
++    if profile != NN34_COMPONENT_PROFILE:
++        raise Error("NN34 checkpoint profile does not match this component build")
++    if chains <= 0 or tokens <= 0 or absolute_start < 0:
++        raise Error("NN34 requires positive chains/tokens and nonnegative position")
++    # Int32 launch extents and Int64 position arithmetic, not a board cap.
++    if chains > 2147483647 // tokens:
++        raise Error("NN34 component launch extent exceeds Int32")
++    if absolute_start > (1 << 62) - tokens - NN34_CHUNK:
++        raise Error("NN34 absolute position exceeds component index range")
++
++
++def nn34_component_host_prefill(profile: Int, chains: Int, tokens: Int, absolute_start: Int,
++    a: NN34FP, b: NN34FP, in_boundary: NN34FP, in_last: NN34FP, in_sa: NN34FP, in_sb: NN34FP,
++    output: NN34FP, out_boundary: NN34FP, out_last: NN34FP, out_sa: NN34FP, out_sb: NN34FP,
++    prefix_a: NN34FP, prefix_b: NN34FP, chunk_boundaries: NN34FP) raises:
++    """Host component runner. Buffers: a/b/output/prefix_a/prefix_b each
++    tokens*chains; in/out boundary/last each chains; in/out slots each
++    chains*6; chunk_boundaries ceil((start%32+tokens)/32)*chains. Input and
++    output state are disjoint. Advance metadata only after successful return.
++    Empty requests are deliberately not an entry point; retain state as-is."""
++    nn34_component_metadata(profile, chains, tokens, absolute_start)
++    comptime if NN34_AFFINE_PREFIX:
++        for cell in range(tokens * chains):
++            nn34_prefill_prefix_cell(cell, a, b, in_sa, in_sb, prefix_a, prefix_b, out_sa, out_sb, chains, tokens, absolute_start)
++        for chain in range(chains):
++            nn34_prefill_boundary_chain(chain, prefix_a, prefix_b, in_boundary, chunk_boundaries, out_boundary, chains, tokens, absolute_start)
++        for cell in range(tokens * chains):
++            nn34_prefill_output_cell(cell, prefix_a, prefix_b, chunk_boundaries, output, out_last, chains, tokens, absolute_start)
++    else:
++        for chain in range(chains):
++            nn34_sequential_chain(chain, a, b, in_last, output, out_boundary, out_last, out_sa, out_sb, chains, tokens)
++
++
++def nn34_component_host_decode(profile: Int, chains: Int, absolute_position: Int,
++    a: NN34FP, b: NN34FP, boundary: NN34FP, last: NN34FP, sa: NN34FP, sb: NN34FP, output: NN34FP) raises:
++    nn34_component_metadata(profile, chains, 1, absolute_position)
++    for chain in range(chains):
++        nn34_decode_chain(chain, absolute_position, a, b, boundary, last, sa, sb, output)
++
++
++def nn34_prefix_kernel(gid_: Int, a: NN34FP, b: NN34FP, in_sa: NN34FP, in_sb: NN34FP,
++    prefix_a: NN34FP, prefix_b: NN34FP, out_sa: NN34FP, out_sb: NN34FP,
++    chains: Int32, tokens: Int32, absolute_start: Int64):
++    var cell = gid_
++    if cell < Int(chains) * Int(tokens):
++        nn34_prefill_prefix_cell(cell, a, b, in_sa, in_sb, prefix_a, prefix_b, out_sa, out_sb, Int(chains), Int(tokens), Int(absolute_start))
++
++
++def nn34_boundary_kernel(gid_: Int, prefix_a: NN34FP, prefix_b: NN34FP, in_boundary: NN34FP,
++    chunk_boundaries: NN34FP, out_boundary: NN34FP, chains: Int32, tokens: Int32, absolute_start: Int64):
++    var chain = gid_
++    if chain < Int(chains):
++        nn34_prefill_boundary_chain(chain, prefix_a, prefix_b, in_boundary, chunk_boundaries, out_boundary, Int(chains), Int(tokens), Int(absolute_start))
++
++
++def nn34_output_kernel(gid_: Int, prefix_a: NN34FP, prefix_b: NN34FP, chunk_boundaries: NN34FP,
++    output: NN34FP, out_last: NN34FP, chains: Int32, tokens: Int32, absolute_start: Int64):
++    var cell = gid_
++    if cell < Int(chains) * Int(tokens):
++        nn34_prefill_output_cell(cell, prefix_a, prefix_b, chunk_boundaries, output, out_last, Int(chains), Int(tokens), Int(absolute_start))
++
++
++def nn34_sequential_kernel(gid_: Int, a: NN34FP, b: NN34FP, in_last: NN34FP,
++    output: NN34FP, out_boundary: NN34FP, out_last: NN34FP, out_sa: NN34FP, out_sb: NN34FP,
++    chains: Int32, tokens: Int32):
++    var chain = gid_
++    if chain < Int(chains):
++        nn34_sequential_chain(chain, a, b, in_last, output, out_boundary, out_last, out_sa, out_sb, Int(chains), Int(tokens))
++
++
++def nn34_decode_kernel(gid_: Int, a: NN34FP, b: NN34FP, boundary: NN34FP, last: NN34FP,
++    sa: NN34FP, sb: NN34FP, output: NN34FP, chains: Int32, absolute_position: Int64):
++    var chain = gid_
++    if chain < Int(chains):
++        nn34_decode_chain(chain, Int(absolute_position), a, b, boundary, last, sa, sb, output)
++
++
++def nn34_init_kernel(gid_: Int, initial: NN34FP, boundary: NN34FP, last: NN34FP,
++    sa: NN34FP, sb: NN34FP, chains: Int32):
++    var chain = gid_
++    if chain < Int(chains):
++        nn34_init_chain(chain, initial, boundary, last, sa, sb)
++
++
++def nn34_component_device_prefill(ctx: DeviceContext, profile: Int,
++    chains: Int, tokens: Int, absolute_start: Int,
++    a: NN34FP, b: NN34FP, in_boundary: NN34FP, in_last: NN34FP, in_sa: NN34FP, in_sb: NN34FP,
++    output: NN34FP, out_boundary: NN34FP, out_last: NN34FP, out_sa: NN34FP, out_sb: NN34FP,
++    prefix_a: NN34FP, prefix_b: NN34FP, chunk_boundaries: NN34FP) raises:
++    """Asynchronous isolated GPU component; same buffer contract as host.
++    All three phases share ctx's ordered queue. Caller owns every allocation
++    through the final synchronization, consumes output, and then commits
++    position=start+tokens and the disjoint output checkpoint. Never recycle
++    prefix or input state while any queued phase may still read it."""
++    nn34_component_metadata(profile, chains, tokens, absolute_start)
++    var cells = chains * tokens
++    var grid_cells = (cells + NN34_TPB - 1) // NN34_TPB
++    var grid_chains = (chains + NN34_TPB - 1) // NN34_TPB
++    comptime if NN34_AFFINE_PREFIX:
++        var _l1_a0 = a
++        var _l1_a1 = b
++        var _l1_a2 = in_sa
++        var _l1_a3 = in_sb
++        var _l1_a4 = prefix_a
++        var _l1_a5 = prefix_b
++        var _l1_a6 = out_sa
++        var _l1_a7 = out_sb
++        var _l1_a8 = Int32(chains)
++        var _l1_a9 = Int32(tokens)
++        var _l1_a10 = Int64(absolute_start)
++        def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10}:
++            nn34_prefix_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10)
++        host_launch(_launch_1, launch_count((grid_cells, 1, 1), (NN34_TPB, 1, 1)))
++        var _l2_a0 = prefix_a
++        var _l2_a1 = prefix_b
++        var _l2_a2 = in_boundary
++        var _l2_a3 = chunk_boundaries
++        var _l2_a4 = out_boundary
++        var _l2_a5 = Int32(chains)
++        var _l2_a6 = Int32(tokens)
++        var _l2_a7 = Int64(absolute_start)
++        def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7}:
++            nn34_boundary_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7)
++        host_launch(_launch_2, launch_count((grid_chains, 1, 1), (NN34_TPB, 1, 1)))
++        var _l3_a0 = prefix_a
++        var _l3_a1 = prefix_b
++        var _l3_a2 = chunk_boundaries
++        var _l3_a3 = output
++        var _l3_a4 = out_last
++        var _l3_a5 = Int32(chains)
++        var _l3_a6 = Int32(tokens)
++        var _l3_a7 = Int64(absolute_start)
++        def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6, imm _l3_a7}:
++            nn34_output_kernel(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6, _l3_a7)
++        host_launch(_launch_3, launch_count((grid_cells, 1, 1), (NN34_TPB, 1, 1)))
++    else:
++        var _l4_a0 = a
++        var _l4_a1 = b
++        var _l4_a2 = in_last
++        var _l4_a3 = output
++        var _l4_a4 = out_boundary
++        var _l4_a5 = out_last
++        var _l4_a6 = out_sa
++        var _l4_a7 = out_sb
++        var _l4_a8 = Int32(chains)
++        var _l4_a9 = Int32(tokens)
++        def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6, imm _l4_a7, imm _l4_a8, imm _l4_a9}:
++            nn34_sequential_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6, _l4_a7, _l4_a8, _l4_a9)
++        host_launch(_launch_4, launch_count((grid_chains, 1, 1), (NN34_TPB, 1, 1)))
++
++
++def nn34_component_device_decode(ctx: DeviceContext, profile: Int, chains: Int, absolute_position: Int,
++    a: NN34FP, b: NN34FP, boundary: NN34FP, last: NN34FP, sa: NN34FP, sb: NN34FP, output: NN34FP) raises:
++    """Asynchronous single-token decode. Caller advances position after
++    synchronization. A failed in-place decode must discard its state;
++    transactional failure handling belongs to the future model wrapper."""
++    nn34_component_metadata(profile, chains, 1, absolute_position)
++    var _l5_a0 = a
++    var _l5_a1 = b
++    var _l5_a2 = boundary
++    var _l5_a3 = last
++    var _l5_a4 = sa
++    var _l5_a5 = sb
++    var _l5_a6 = output
++    var _l5_a7 = Int32(chains)
++    var _l5_a8 = Int64(absolute_position)
++    def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7, imm _l5_a8}:
++        nn34_decode_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7, _l5_a8)
++    host_launch(_launch_5, launch_count(((chains + NN34_TPB - 1) // NN34_TPB, 1, 1), (NN34_TPB, 1, 1)))
+diff --git a/mamba/host/gen/selective_scan_backward.mojo b/mamba/host/gen/selective_scan_backward.mojo
+index 829764d62..e6c10f067 100644
+--- a/mamba/host/gen/selective_scan_backward.mojo
++++ b/mamba/host/gen/selective_scan_backward.mojo
+@@ -138,8 +138,8 @@ from mamba.host.device_shim import (
+     contract_partition,
+ )
+ from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_merge_chains
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
++from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX
++from mamba.host.gen.neural_mamba_scan import nn34_checkpoint_chain, nn34_tree_vjp_chain
+ from checks.kernel_matrix import TARGET_COLUMN, column_has_float_atomics
+ from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+ 
+@@ -437,6 +437,10 @@ def selective_scan_checkpoint_kernel[
+     if bb >= batch or d >= dim:
+         return
+ 
++    comptime if NN34_AFFINE_PREFIX:
++        for n in range(DSTATE):
++            nn34_checkpoint_chain((bb * dim + d) * DSTATE + n, hck_ptr, h_in_ptr, u_ptr, delta_ptr, a_ptr, b_ptr, seqlen, dim)
++        return
+ 
+     var slots = seqlen + 1
+ 
+@@ -697,6 +701,8 @@ def selective_scan_bwd_scan_kernel[
+                         identical_mul_add(afac, dh_state[n], contrib)
+                     )
+ 
++            comptime if NN34_AFFINE_PREFIX:
++                dh_n = ftz(dh_ptr.unsafe_load((t * dim + d) * DSTATE + n))
+             dh_state[n] = dh_n
+             da_carry[n] = da_t
+             dh_ptr.unsafe_store((t * dim + d) * DSTATE + n, dh_n)
+@@ -757,6 +763,9 @@ def selective_scan_bwd_scan_kernel[
+                 var d_da = ftz(identical_mul(dh_state[n], hprev))
+                 d_arg = ftz(identical_mul(d_da, da_carry[n]))
+ 
++            comptime if NN34_AFFINE_PREFIX:
++                var ga = ftz(dh_ptr.unsafe_load(batch * seqlen * dim * DSTATE + (t * dim + d) * DSTATE + n))
++                d_arg = ftz(identical_mul(ga, da_carry[n]))
+ 
+             comptime if SAB_BWD_DDELTA_TWO_FOLDS:
+                 # SABOTAGE: plan section 2.2's two-fold reading.
+@@ -782,6 +791,14 @@ def selective_scan_bwd_scan_kernel[
+ 
+ 
+ 
++def nn34_tree_vjp_kernel(gid_: Int, dh: MutPointer[Float32, MutAnyOrigin], dy: MutPointer[Float32, MutAnyOrigin],
++    c: MutPointer[Float32, MutAnyOrigin], u: MutPointer[Float32, MutAnyOrigin], delta: MutPointer[Float32, MutAnyOrigin],
++    a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin], hck: MutPointer[Float32, MutAnyOrigin],
++    batch: Int32, length: Int32, dim: Int32):
++    var chain = gid_
++    if chain < Int(batch) * Int(dim) * MAX_DSTATE:
++        nn34_tree_vjp_chain(chain, dh, dy, c, u, delta, a, b, hck, Int(batch), Int(length), Int(dim))
++
+ 
+ def selective_scan_bwd_scan_into(
+     ctx: DeviceContext,
+@@ -835,6 +852,24 @@ def selective_scan_bwd_scan_into(
+         "[B, L+1, dim, 16]",
+     )
+ 
++    comptime if NN34_AFFINE_PREFIX:
++        _require(len(dh), 2 * m * dim * MAX_DSTATE, "dh", "[factor-B | factor-A]")
++        var chains = batch * dim * MAX_DSTATE
++        if chains > 0:
++            var _l2_a0 = dh.unsafe_ptr()
++            var _l2_a1 = dy.unsafe_ptr()
++            var _l2_a2 = C.unsafe_ptr()
++            var _l2_a3 = u.unsafe_ptr()
++            var _l2_a4 = delta.unsafe_ptr()
++            var _l2_a5 = A.unsafe_ptr()
++            var _l2_a6 = B.unsafe_ptr()
++            var _l2_a7 = h_ckpt.unsafe_ptr()
++            var _l2_a8 = Int32(batch)
++            var _l2_a9 = Int32(seqlen)
++            var _l2_a10 = Int32(dim)
++            def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7, imm _l2_a8, imm _l2_a9, imm _l2_a10}:
++                nn34_tree_vjp_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7, _l2_a8, _l2_a9, _l2_a10)
++            host_launch(_launch_2, launch_count((_grid(chains, block_size), 1, 1), (block_size, 1, 1)))
+     var total = batch * dim
+     if total > 0:
+         comptime kern = selective_scan_bwd_scan_kernel[MAX_DSTATE]
+@@ -1253,6 +1288,10 @@ def mamba_bwd_da_partial_kernel[
+                 var d_da = ftz(identical_mul(dhv, hprev))
+                 d_arg = ftz(identical_mul(d_da, da_t))
+ 
++            comptime if NN34_AFFINE_PREFIX:
++                var ga = ftz(dh_ptr.unsafe_load(batch * seqlen * dim * DSTATE + (t * dim + d) * DSTATE + n))
++                var da_t = ftz(identical_exp(ftz(identical_mul(dl, a_vals[n]))))
++                d_arg = ftz(identical_mul(ga, da_t))
+ 
+             acc[n] = ftz(identical_mul_add(d_arg, dl, acc[n]))
+ 
+@@ -1515,7 +1554,7 @@ def bwd_h_checkpoint_floats(batch: Int, seqlen: Int, dim: Int) -> Int:
+ 
+ def bwd_dh_floats(batch: Int, seqlen: Int, dim: Int) -> Int:
+     """`M * dim * D_STATE`. No carry slot; T1's seed is structural."""
+-    return batch * seqlen * dim * MAX_DSTATE
++    return (2 if NN34_AFFINE_PREFIX else 1) * batch * seqlen * dim * MAX_DSTATE
+ 
+ 
+ def bwd_da_partial_floats(batch: Int, dim: Int) -> Int:
+diff --git a/mamba/host/gen/selective_scan_interface.mojo b/mamba/host/gen/selective_scan_interface.mojo
+index ef3a4bc77..2bdb1c174 100644
+--- a/mamba/host/gen/selective_scan_interface.mojo
++++ b/mamba/host/gen/selective_scan_interface.mojo
+@@ -252,8 +252,8 @@ comptime ANY_SABOTAGE = (
+ 
+ 
+ # `-D MOJOLEARN_IDN_M1_SCAN=<arm>` (lane/grid-prune 2026-10-07): ONE switch
+-# for the alternative Mamba-1 scans: 2 state_window (NI38), 3 persistent
+-# (arm 1 affine_prefix, NN34, deleted 2026-10-11: TOMBSTONE below). Replaces
++# for the alternative Mamba-1 scans: 1 affine_prefix (NN34,
++# neural_scan_profile.mojo), 2 state_window (NI38), 3 persistent. Replaces
+ # MOJOLEARN_NN34_AFFINE_PREFIX, MOJOLEARN_IDN_M1_STATE_WINDOW and
+ # MOJOLEARN_IDN_M1_PERSISTENT_SCAN (refused in
+ # core/six_lane_experiment_guards.mojo), whose crosses were refused or inert.
+@@ -261,8 +261,8 @@ comptime ANY_SABOTAGE = (
+ # NV L40S 5.563 -> 3.550 ms (v1242), AMD MI325X 9.934 -> 3.204 ms (a1350); avg ratio 0.454 (state_window=2: 0.468);
+ # hash 602f9ec5 on both vendors. Default arm is now 3 (persistent); -D MOJOLEARN_IDN_M1_SCAN=0 restores the old scan.
+ comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 3]()
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
++# MEASURE OWED (2026-10-11): arm 1 (affine_prefix) has no verdict in grid g50ebe26a5 (vendor split, AMD 0.82x, NVIDIA unmeasured);
++# measure it once against the new default arm 3 (persistent) on NV + AMD.
+ comptime M1_SCAN_STATE_WINDOW = 2
+ comptime M1_SCAN_PERSISTENT = 3
+ # NI38 S subarm, independent of the unfinished V affine composition. Native
+diff --git a/mamba/impl/modeling/modeling_mamba.mojo b/mamba/impl/modeling/modeling_mamba.mojo
+index 79a836eec..bb1953b07 100644
+--- a/mamba/impl/modeling/modeling_mamba.mojo
++++ b/mamba/impl/modeling/modeling_mamba.mojo
+@@ -196,8 +196,6 @@ from mamba.checks.mamba_fixture import (
+     MambaWeights,
+     RMS_EPS,
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
+ #: lane afn-mamba (2026-10-03): Apple FAST experiment switches. Every use
+ #: below is a `comptime if` whose other arm is main's spelling unchanged.
+ from mamba.impl.modules.afn_defines import (
+@@ -224,6 +222,8 @@ from mamba.impl.modules.afn_proj_gemm import (
+     afn_proj_gemm_into,
+     afn_proj_gemm_resid_into,
+ )
++from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS
++from mamba.impl.ops.neural_mamba_scan import nn34_mamba_forward
+ from mamba.impl.ops.selective_scan_interface import (
+     selective_scan_fn,
+ )
+@@ -752,10 +752,22 @@ struct MambaDeviceState(Movable):
+     var d_inner: Int
+     var conv_win: DeviceBuffer[DType.float32]
+     var h: DeviceBuffer[DType.float32]
++    var nn34_position: Int
++    var nn34_boundary: Optional[DeviceBuffer[DType.float32]]
++    var nn34_sa: Optional[DeviceBuffer[DType.float32]]
++    var nn34_sb: Optional[DeviceBuffer[DType.float32]]
+ 
+     def __init__(out self, ctx: DeviceContext, b: Int, dims: MambaDims) raises:
+         self.b = b
+         self.d_inner = dims.d_inner
++        self.nn34_position = 0
++        self.nn34_boundary = None
++        self.nn34_sa = None
++        self.nn34_sb = None
++        comptime if NN34_AFFINE_PREFIX:
++            self.nn34_boundary = mamba_zeros(ctx, b * dims.d_inner * D_STATE)
++            self.nn34_sa = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
++            self.nn34_sb = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
+         self.conv_win = mamba_zeros(ctx, b * dims.d_inner * D_CONV)
+         self.h = mamba_zeros(ctx, b * dims.d_inner * D_STATE)
+ 
+@@ -766,6 +778,14 @@ struct MambaDeviceState(Movable):
+         caller's arena (its one fill is the zeros)."""
+         self.b = b
+         self.d_inner = dims.d_inner
++        self.nn34_position = 0
++        self.nn34_boundary = None
++        self.nn34_sa = None
++        self.nn34_sb = None
++        comptime if NN34_AFFINE_PREFIX:
++            self.nn34_boundary = mamba_zeros(ctx, b * dims.d_inner * D_STATE)
++            self.nn34_sa = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
++            self.nn34_sb = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
+         var s = _m1_state_sizes(b, dims)
+         self.conv_win = arena.take(ctx, s[0])
+         self.h = arena.take(ctx, s[1])
+@@ -1594,27 +1614,40 @@ def mamba_selective_scan(
+     # because `delta` arrives post-softplus; `return_last_state` True because
+     # `h_state` is in-and-out on every call (contract section 5).
+     # It emits `scan.y`, `skip.out` and `scan.h` itself.
+-    selective_scan_fn(
+-        ctx,
+-        stages.skip_out,
+-        stages.scan_y,
+-        state.h,
+-        stages.silu_out,
+-        stages.softplus_out,
+-        stages.a_out,
+-        stages.b_mat,
+-        stages.c_mat,
+-        w.d_skip,
+-        b,
+-        l,
+-        di,
+-        False,
+-        False,
+-        False,
+-        True,
+-        trace,
+-        prefix,
+-    )
++    comptime if NN34_AFFINE_PREFIX:
++        if state.nn34_position == 0:
++            ctx.enqueue_copy(dst_buf=state.nn34_boundary.value(), src_buf=state.h)
++        nn34_mamba_forward(ctx, stages.silu_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.softplus_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            stages.a_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.b_mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.c_mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            w.d_skip.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.scan_y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.skip_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            state.nn34_boundary.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), state.h.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            state.nn34_sa.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), state.nn34_sb.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b, l, di, state.nn34_position)
++        state.nn34_position += l
++        trace.record_device[DType.float32](ctx, prefix + ".scan.y", stages.scan_y, m * di)
++        trace.record_device[DType.float32](ctx, prefix + ".skip.out", stages.skip_out, m * di)
++        trace.record_device[DType.float32](ctx, prefix + ".scan.h", state.h, b * di * D_STATE)
++    else:
++        selective_scan_fn(
++            ctx,
++            stages.skip_out,
++            stages.scan_y,
++            state.h,
++            stages.silu_out,
++            stages.softplus_out,
++            stages.a_out,
++            stages.b_mat,
++            stages.c_mat,
++            w.d_skip,
++            b,
++            l,
++            di,
++            False,
++            False,
++            False,
++            True,
++            trace,
++            prefix,
++        )
+     _m1_stage_sync(ctx, trace)
+ 
+     # `scan_output = scan_output * F.silu(z)` (:271). S12.
+@@ -1758,7 +1791,7 @@ def mamba_refuse_bad_inputs(
+     comptime if AFN_MAMBA_DEVICE_REFUSAL:
+         # lane afn-mamba: the same names in the same order, reduced on the
+         # device, ONE readback (afn_refusal.mojo).
+-        var batch = AfnRefusalBatch(ctx, 13)
++        var batch = AfnRefusalBatch(ctx, 16 if NN34_AFFINE_PREFIX else 13)
+         batch.add(ctx, String("x"), x, b * l * dm)
+         if not w.weights_checked:
+             batch.add(ctx, String("norm.weight"), w.norm_w, dm)
+@@ -1774,6 +1807,10 @@ def mamba_refuse_bad_inputs(
+             w.weights_checked = True
+         batch.add(ctx, String("state.conv_win"), state.conv_win, b * di * D_CONV)
+         batch.add(ctx, String("state.h"), state.h, b * di * D_STATE)
++        comptime if NN34_AFFINE_PREFIX:
++            batch.add(ctx, String("state.affine_boundary"), state.nn34_boundary.value(), b * di * D_STATE)
++            batch.add(ctx, String("state.affine_a"), state.nn34_sa.value(), b * di * D_STATE * NN34_LEVELS)
++            batch.add(ctx, String("state.affine_b"), state.nn34_sb.value(), b * di * D_STATE * NN34_LEVELS)
+         batch.finish(ctx)
+         return
+     # `x` CHANGES ON EVERY CALL and is always walked.
+@@ -1813,6 +1850,10 @@ def mamba_refuse_bad_inputs(
+     _refuse_nonfinite_named_host(
+         "state.h", mamba_download(ctx, state.h, b * di * D_STATE)
+     )
++    comptime if NN34_AFFINE_PREFIX:
++        _refuse_nonfinite_named_host("state.affine_boundary", mamba_download(ctx, state.nn34_boundary.value(), b * di * D_STATE))
++        _refuse_nonfinite_named_host("state.affine_a", mamba_download(ctx, state.nn34_sa.value(), b * di * D_STATE * NN34_LEVELS))
++        _refuse_nonfinite_named_host("state.affine_b", mamba_download(ctx, state.nn34_sb.value(), b * di * D_STATE * NN34_LEVELS))
+ 
+ 
+ 
+diff --git a/mamba/impl/ops/neural_mamba_scan.mojo b/mamba/impl/ops/neural_mamba_scan.mojo
+new file mode 100644
+index 000000000..6846de79a
+--- /dev/null
++++ b/mamba/impl/ops/neural_mamba_scan.mojo
+@@ -0,0 +1,232 @@
++# SPDX-License-Identifier: Apache-2.0
++"""NN34 Mamba-1 numerical profile: discretization, emission, checkpoints/VJP.
++
++The affine tree lives at absolute 32-token boundaries. Mamba-2/3 keep their
++own existing SSD profiles. Zero-state prefill backward differentiates the
++actual adjacent-pair prefix tree; it does not reuse the old reverse-chain
++state derivative. Same element bodies are restated in the host source.
++All code is an uncompiled, unverified source candidate, OFF by default.
++"""
++from std.memory import stack_allocation
++from std.gpu import block_idx, block_dim, thread_idx
++from max.gpu.host import DeviceBuffer, DeviceContext
++from checks.numerics import ftz, identical_mul, identical_mul_add, identical_exp
++from mamba.impl.ops.neural_scan_profile import (
++    NN34FP, NN34_CHUNK, NN34_LEVELS, NN34_COMPONENT_PROFILE,
++    nn34_compose, nn34_evaluate, nn34_clear_slots, nn34_push, nn34_prefix,
++    nn34_component_device_prefill,
++)
++
++comptime NS = 16
++comptime NT = 128
++
++
++@always_inline
++def nn34_factors[input_origin: Origin, //](t: Int, d: Int, n: Int, dim: Int,
++    u: Pointer[Float32, input_origin], delta: Pointer[Float32, input_origin],
++    a: Pointer[Float32, input_origin], b: Pointer[Float32, input_origin]) -> Tuple[Float32, Float32]:
++    var dl = ftz(delta.unsafe_load(t * dim + d))
++    var av = ftz(a.unsafe_load(d * NS + n))
++    var bv = ftz(b.unsafe_load(t * NS + n))
++    var uv = ftz(u.unsafe_load(t * dim + d))
++    return (ftz(identical_exp(ftz(identical_mul(dl, av)))),
++            ftz(identical_mul(ftz(identical_mul(dl, bv)), uv)))
++
++
++def nn34_prepare_kernel(u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP,
++    fa: NN34FP, fb: NN34FP, batch: Int32, length: Int32, width: Int32):
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var chains = Int(batch) * Int(width) * NS
++    if i >= chains * Int(length):
++        return
++    var token = i // chains
++    var chain = i % chains
++    var n = chain % NS
++    var d = (chain // NS) % Int(width)
++    var bb = chain // (Int(width) * NS)
++    var pair = nn34_factors(bb * Int(length) + token, d, n, Int(width), u, delta, a, b)
++    fa.unsafe_store(i, pair[0])
++    fb.unsafe_store(i, pair[1])
++
++
++def nn34_emit_kernel(hidden: NN34FP, c: NN34FP, u: NN34FP, skip: NN34FP,
++    y: NN34FP, output: NN34FP, batch: Int32, length: Int32, width: Int32):
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var di = Int(width)
++    var L = Int(length)
++    if i >= Int(batch) * L * di:
++        return
++    var d = i % di
++    var t = i // di
++    var bb = t // L
++    var li = t % L
++    var base = li * Int(batch) * di * NS + (bb * di + d) * NS
++    var acc = Float32(0)
++    for n in range(NS):
++        acc = ftz(identical_mul_add(ftz(c.unsafe_load(t * NS + n)), ftz(hidden.unsafe_load(base + n)), acc))
++    y.unsafe_store(i, acc)
++    # The existing S11 is a separately rounded product followed by add.
++    output.unsafe_store(i, ftz(acc + ftz(identical_mul(ftz(u.unsafe_load(i)), ftz(skip.unsafe_load(d))))))
++
++
++def nn34_mamba_forward(ctx: DeviceContext, u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP,
++    c: NN34FP, skip: NN34FP, y: NN34FP, output: NN34FP,
++    boundary: NN34FP, last: NN34FP, slots_a: NN34FP, slots_b: NN34FP,
++    batch: Int, length: Int, dim: Int, absolute_start: Int) raises:
++    """Own all temporary storage through completion; commit state only after
++    independent output checkpoint and emission have completed successfully.
++    This is used at every request length including single-token decode."""
++    var chains = batch * dim * NS
++    var cells = chains * length
++    var chunks = (absolute_start % NN34_CHUNK + length + NN34_CHUNK - 1) // NN34_CHUNK
++    var fa = ctx.enqueue_create_buffer[DType.float32](cells)
++    var fb = ctx.enqueue_create_buffer[DType.float32](cells)
++    var pa = ctx.enqueue_create_buffer[DType.float32](cells)
++    var pb = ctx.enqueue_create_buffer[DType.float32](cells)
++    var hs = ctx.enqueue_create_buffer[DType.float32](cells)
++    var bounds = ctx.enqueue_create_buffer[DType.float32](max(1, chains * chunks))
++    var next_boundary = ctx.enqueue_create_buffer[DType.float32](chains)
++    var next_last = ctx.enqueue_create_buffer[DType.float32](chains)
++    var next_sa = ctx.enqueue_create_buffer[DType.float32](chains * NN34_LEVELS)
++    var next_sb = ctx.enqueue_create_buffer[DType.float32](chains * NN34_LEVELS)
++    ctx.enqueue_function[nn34_prepare_kernel](u, delta, a, b, fa.unsafe_ptr(), fb.unsafe_ptr(), Int32(batch), Int32(length), Int32(dim), grid_dim=((cells + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
++    nn34_component_device_prefill(ctx, NN34_COMPONENT_PROFILE, chains, length, absolute_start,
++        fa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), fb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), boundary, last, slots_a, slots_b,
++        hs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_boundary.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_last.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_sa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++        pa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), pb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), bounds.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++    ctx.enqueue_function[nn34_emit_kernel](hs.unsafe_ptr(), c, u, skip, y, output, Int32(batch), Int32(length), Int32(dim), grid_dim=((batch * length * dim + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
++    ctx.synchronize()
++    # Queue-owned copies avoid depending on any temporary's last-use lifetime.
++    ctx.enqueue_function[nn34_copy_kernel](next_boundary.unsafe_ptr(), boundary, Int32(chains), grid_dim=((chains + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
++    ctx.enqueue_function[nn34_copy_kernel](next_last.unsafe_ptr(), last, Int32(chains), grid_dim=((chains + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
++    ctx.enqueue_function[nn34_copy_kernel](next_sa.unsafe_ptr(), slots_a, Int32(chains * NN34_LEVELS), grid_dim=((chains * NN34_LEVELS + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
++    ctx.enqueue_function[nn34_copy_kernel](next_sb.unsafe_ptr(), slots_b, Int32(chains * NN34_LEVELS), grid_dim=((chains * NN34_LEVELS + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
++    ctx.synchronize()
++    _ = fa^; _ = fb^; _ = pa^; _ = pb^; _ = hs^; _ = bounds^
++    _ = next_boundary^; _ = next_last^; _ = next_sa^; _ = next_sb^
++
++
++def nn34_copy_kernel(src: NN34FP, dst: NN34FP, count: Int32):
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(count):
++        dst.unsafe_store(i, src.unsafe_load(i))
++
++
++@always_inline
++def nn34_checkpoint_chain(chain: Int, hck: NN34FP, initial: NN34FP,
++    u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP, L: Int, dim: Int):
++    var bb = chain // (dim * NS)
++    var d = (chain // NS) % dim
++    var n = chain % NS
++    var boundary = ftz(initial.unsafe_load(chain))
++    var sa0 = stack_allocation[NN34_LEVELS, Float32]()
++    var sb0 = stack_allocation[NN34_LEVELS, Float32]()
++    var sa = sa0.unsafe_origin_cast[MutAnyOrigin]()
++    var sb = sb0.unsafe_origin_cast[MutAnyOrigin]()
++    nn34_clear_slots(sa, sb)
++    hck.unsafe_store((bb * (L + 1) * dim + d) * NS + n, boundary)
++    for li in range(L):
++        var pair = nn34_factors(bb * L + li, d, n, dim, u, delta, a, b)
++        var count = li % NN34_CHUNK
++        nn34_push(count, pair[0], pair[1], sa, sb)
++        var prefix = nn34_prefix(count + 1, sa, sb)
++        var h = nn34_evaluate(prefix[0], prefix[1], boundary)
++        hck.unsafe_store(((bb * (L + 1) + li + 1) * dim + d) * NS + n, h)
++        if count + 1 == NN34_CHUNK:
++            boundary = h
++            nn34_clear_slots(sa, sb)
++
++
++@always_inline
++def nn34_tree_vjp_chain(chain: Int, factor_grad: NN34FP, dy: NN34FP, c: NN34FP,  # device-helper: one chain per thread of nn34_tree_vjp_kernel
++    u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP, hck: NN34FP,
++    batch: Int, L: Int, dim: Int):
++    """Actual tree VJP. Prefix losses are visited newest to oldest; each
++    prefix's nodes reverse their forward creation order. A node's right-A
++    adjoint receives product-A then product-B contributions separately.
++    Chunk carry is attached only to its final prefix. No atomic reductions.
++    Layout is [dB (M*dim*16), dA (M*dim*16)] for prepared affine factors.
++    Public backward remains zero-state prefill, as its established API."""
++    var bb = chain // (dim * NS)
++    var d = (chain // NS) % dim
++    var n = chain % NS
++    var total = batch * L * dim * NS
++    var ma0 = stack_allocation[63, Float32]()
++    var mb0 = stack_allocation[63, Float32]()
++    var ga0 = stack_allocation[63, Float32]()
++    var gb0 = stack_allocation[63, Float32]()
++    var left0 = stack_allocation[63, Int]()
++    var right0 = stack_allocation[63, Int]()
++    var ids0 = stack_allocation[32, Int]()
++    var sum_a0 = stack_allocation[32, Float32]()
++    var sum_b0 = stack_allocation[32, Float32]()
++    var ma = ma0.unsafe_origin_cast[MutAnyOrigin]()
++    var mb = mb0.unsafe_origin_cast[MutAnyOrigin]()
++    var ga = ga0.unsafe_origin_cast[MutAnyOrigin]()
++    var gb = gb0.unsafe_origin_cast[MutAnyOrigin]()
++    var left = left0.unsafe_origin_cast[MutAnyOrigin]()
++    var right = right0.unsafe_origin_cast[MutAnyOrigin]()
++    var ids = ids0.unsafe_origin_cast[MutAnyOrigin]()
++    var sum_a = sum_a0.unsafe_origin_cast[MutAnyOrigin]()
++    var sum_b = sum_b0.unsafe_origin_cast[MutAnyOrigin]()
++    var carry = Float32(0)
++    var chunks = (L + NN34_CHUNK - 1) // NN34_CHUNK
++    for reverse_chunk in range(chunks):
++        var chunk = chunks - 1 - reverse_chunk
++        var begin = chunk * NN34_CHUNK
++        var count = min(NN34_CHUNK, L - begin)
++        var boundary = ftz(hck.unsafe_load(((bb * (L + 1) + begin) * dim + d) * NS + n))
++        for j in range(count):
++            sum_a.unsafe_store(j, Float32(0))
++            sum_b.unsafe_store(j, Float32(0))
++        var previous_carry = Float32(0)
++        for rp in range(count):
++            var prefix = count - rp
++            for j in range(prefix):
++                var pair = nn34_factors(bb * L + begin + j, d, n, dim, u, delta, a, b)
++                ma.unsafe_store(j, pair[0]); mb.unsafe_store(j, pair[1])
++                ids.unsafe_store(j, j)
++            for j in range(63):
++                ga.unsafe_store(j, Float32(0)); gb.unsafe_store(j, Float32(0))
++            var nodes = prefix
++            var width = prefix
++            while width > 1:
++                var next_width = (width + 1) // 2
++                for j in range(next_width):
++                    var li = ids.unsafe_load(2 * j)
++                    if 2 * j + 1 == width:
++                        ids.unsafe_store(j, li)
++                    else:
++                        var ri = ids.unsafe_load(2 * j + 1)
++                        var pair = nn34_compose(ma.unsafe_load(li), mb.unsafe_load(li), ma.unsafe_load(ri), mb.unsafe_load(ri))
++                        left.unsafe_store(nodes, li); right.unsafe_store(nodes, ri)
++                        ma.unsafe_store(nodes, pair[0]); mb.unsafe_store(nodes, pair[1])
++                        ids.unsafe_store(j, nodes)
++                        nodes += 1
++                width = next_width
++            var root = ids.unsafe_load(0)
++            var t = bb * L + begin + prefix - 1
++            var grad = ftz(identical_mul(ftz(dy.unsafe_load(t * dim + d)), ftz(c.unsafe_load(t * NS + n))))
++            if rp == 0 and reverse_chunk != 0:
++                grad = ftz(grad + carry)
++            ga.unsafe_store(root, ftz(identical_mul(grad, boundary)))
++            gb.unsafe_store(root, grad)
++            previous_carry = ftz(previous_carry + ftz(identical_mul(grad, ma.unsafe_load(root))))
++            for reverse_node in range(nodes - prefix):
++                var node = nodes - 1 - reverse_node
++                var li = left.unsafe_load(node); var ri = right.unsafe_load(node)
++                var da = ga.unsafe_load(node); var db = gb.unsafe_load(node)
++                ga.unsafe_store(li, ftz(ga.unsafe_load(li) + ftz(identical_mul(da, ma.unsafe_load(ri)))))
++                gb.unsafe_store(li, ftz(gb.unsafe_load(li) + ftz(identical_mul(db, ma.unsafe_load(ri)))))
++                var dra = ftz(ga.unsafe_load(ri) + ftz(identical_mul(da, ma.unsafe_load(li))))
++                dra = ftz(dra + ftz(identical_mul(db, mb.unsafe_load(li))))
++                ga.unsafe_store(ri, dra)
++                gb.unsafe_store(ri, ftz(gb.unsafe_load(ri) + db))
++            for j in range(prefix):
++                sum_a.unsafe_store(j, ftz(sum_a.unsafe_load(j) + ga.unsafe_load(j)))
++                sum_b.unsafe_store(j, ftz(sum_b.unsafe_load(j) + gb.unsafe_load(j)))
++        for j in range(count):
++            var index = ((bb * L + begin + j) * dim + d) * NS + n
++            factor_grad.unsafe_store(index, sum_b.unsafe_load(j))
++            factor_grad.unsafe_store(total + index, sum_a.unsafe_load(j))
++        carry = previous_carry
+diff --git a/mamba/impl/ops/neural_scan_profile.mojo b/mamba/impl/ops/neural_scan_profile.mojo
+new file mode 100644
+index 000000000..4ba29645e
+--- /dev/null
++++ b/mamba/impl/ops/neural_scan_profile.mojo
+@@ -0,0 +1,371 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn.
++"""NN34 affine-prefix scan component, fp32 numerical profile v2.
++
++Mamba-1 imports this profile through neural_mamba_scan; other Mamba families
++retain their own SSD profiles.
++It supplies an actual selectable component A/B: candidate uses absolute
++32-token chunks and canonical adjacent affine-prefix trees; baseline uses
++one ascending recurrent FMA chain. All new switches are OFF by default.
++
++The input is PREPARED affine factors [tokens, chains], not raw Mamba model
++inputs: mathematically h[t] = a[t] * h[t-1] + b[t]. Discretization, emission, tree VJP and checkpoint integration are in
++`neural_mamba_scan`, modeling_mamba and the Mamba bindings. No quality,
++compilation, identity or timing evidence is claimed.
++
++Within a chunk, compose(left, right) means apply left, then right:
++  A = ftz(mul(ftz(right.A), ftz(left.A)))
++  B = ftz(fma(ftz(right.A), ftz(left.B), ftz(right.B)))
++Then evaluate the prefix with ONE rounded FMA on the completed-chunk
++boundary. Adjacent equal-sized subtrees merge first, with an unmatched
++right subtree carried unchanged. A single leaf has no fabricated identity
++composition. All columns call these exact helpers; previous-version bits
++need not match.
++
++A checkpoint contains profile id, absolute next-token position, chain
++count, boundary[chains], last[chains], and A/B slots [chains, 6]. Its occupied
++slot bits are absolute_position % 32. Consumed/inactive slots are canonical
+++0. Completed chunks reset the slots and install their final output as the
++next boundary. A checkpoint at a nonzero position MUST restore all slots;
++last hidden alone is insufficient. Profile ids must not be mixed.
++
++Prefill is three ordered phases: independent per-prefix summaries; ordered
++completed-chunk boundary propagation per chain; independent prefix outputs.
++The final prefix also produces next slots into DISJOINT state buffers.
++Decode pushes one leaf into the same binary slots and uses the same drain
++and evaluate graph. Request length and device launch shape never choose
++chunk boundaries or the arithmetic tree. Host and device entry points use
++identical per-cell functions. The explicit component APIs also remain available for isolated A/B work.
++"""
++from std.memory import stack_allocation
++from std.sys.compile import is_defined, get_defined_int
++from std.gpu import block_dim, block_idx, thread_idx
++from max.gpu.host import DeviceContext
++from checks.numerics import (
++    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_mul_add,
++)
++
++comptime NN34FP = MutPointer[Float32, MutAnyOrigin]
++comptime NN34_CHUNK = 32
++comptime NN34_LEVELS = 6
++comptime NN34_TPB = 128
++# `-D MOJOLEARN_IDN_M1_SCAN=<arm>` (lane/grid-prune 2026-10-07) is ONE switch
++# for the three alternative Mamba-1 scans, formerly three defines whose every
++# cross was refused or inert: 1 affine_prefix (NN34, this profile), 2
++# state_window (NI38) and 3 persistent (selective_scan_interface.mojo). The
++# old define MOJOLEARN_NN34_AFFINE_PREFIX is refused in
++# core/six_lane_experiment_guards.mojo.
++comptime M1_SCAN_AFFINE_PREFIX = 1
++comptime M1_SCAN_STATE_WINDOW = 2
++comptime M1_SCAN_PERSISTENT = 3
++# PROMOTED 2026-10-11 (grid g50ebe26a5, arm m1_scan=persistent vs today's defaults, one run per arm): mamba1-forward gaussian
++# NV L40S 5.563 -> 3.550 ms (v1242), AMD MI325X 9.934 -> 3.204 ms (a1350); avg ratio 0.454 (state_window=2: 0.468);
++# hash 602f9ec5 on both vendors. Default arm is now 3 (persistent); -D MOJOLEARN_IDN_M1_SCAN=0 restores the old scan.
++comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 3]()
++comptime NN34_AFFINE_PREFIX = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and M1_SCAN == M1_SCAN_AFFINE_PREFIX
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++comptime NN34_COMPONENT_PROFILE = 2 if NN34_AFFINE_PREFIX else 1
++
++
++@always_inline
++def nn34_compose(la: Float32, lb: Float32, ra: Float32, rb: Float32) -> Tuple[Float32, Float32]:
++    return (
++        ftz(identical_mul(ftz(ra), ftz(la))),
++        ftz(identical_mul_add(ftz(ra), ftz(lb), ftz(rb))),
++    )
++
++
++@always_inline
++def nn34_evaluate(a: Float32, b: Float32, boundary: Float32) -> Float32:
++    return ftz(identical_mul_add(ftz(a), ftz(boundary), ftz(b)))
++
++
++@always_inline
++def nn34_clear_slots(sa: NN34FP, sb: NN34FP):
++    for level in range(NN34_LEVELS):
++        sa.unsafe_store(level, Float32(0.0))
++        sb.unsafe_store(level, Float32(0.0))
++
++
++@always_inline
++def nn34_push(count: Int, a: Float32, b: Float32, sa: NN34FP, sb: NN34FP):
++    """count is 0..31; slots contain its binary decomposition, oldest left.
++    Consumed slots are cleared so a checkpoint has no scheduler-dependent
++    uninitialized words. A Float32 leaf is explicitly flushed once."""
++    var ca = ftz(a)
++    var cb = ftz(b)
++    var level = 0
++    while (count & (1 << level)) != 0:
++        var pair = nn34_compose(sa.unsafe_load(level), sb.unsafe_load(level), ca, cb)
++        ca = pair[0]
++        cb = pair[1]
++        sa.unsafe_store(level, Float32(0.0))
++        sb.unsafe_store(level, Float32(0.0))
++        level += 1
++    sa.unsafe_store(level, ca)
++    sb.unsafe_store(level, cb)
++
++
++@always_inline
++def nn34_prefix(count: Int, sa: NN34FP, sb: NN34FP) -> Tuple[Float32, Float32]:
++    """count is 1..32. Drain newest small subtree to oldest large subtree;
++    each merge puts the older subtree on the LEFT. This is the fixed
++    adjacent-pair tree with an unpaired right subtree carried unchanged."""
++    var ca = Float32(0.0)
++    var cb = Float32(0.0)
++    var have = False
++    for level in range(NN34_LEVELS):
++        if (count & (1 << level)) != 0:
++            if have:
++                var pair = nn34_compose(sa.unsafe_load(level), sb.unsafe_load(level), ca, cb)
++                ca = pair[0]
++                cb = pair[1]
++            else:
++                ca = sa.unsafe_load(level)
++                cb = sb.unsafe_load(level)
++                have = True
++    return (ca, cb)
++
++
++@always_inline
++def nn34_init_chain(chain: Int, initial: NN34FP, boundary: NN34FP, last: NN34FP, sa: NN34FP, sb: NN34FP):
++    """Initialize a new sequence at absolute position zero. A restored
++    checkpoint is a raw copy of its entire state, never this initializer."""
++    var h = ftz(initial.unsafe_load(chain))
++    boundary.unsafe_store(chain, h)
++    last.unsafe_store(chain, h)
++    nn34_clear_slots(sa + chain * NN34_LEVELS, sb + chain * NN34_LEVELS)
++
++
++@always_inline
++def nn34_decode_chain(chain: Int, absolute_position: Int, a: NN34FP, b: NN34FP,
++    boundary: NN34FP, last: NN34FP, sa: NN34FP, sb: NN34FP, output: NN34FP):
++    """One token, one owner per chain; state updates in place. The caller
++    advances the scalar absolute position exactly once after this phase."""
++    comptime if NN34_AFFINE_PREFIX:
++        var count = absolute_position % NN34_CHUNK
++        var aslots = sa + chain * NN34_LEVELS
++        var bslots = sb + chain * NN34_LEVELS
++        nn34_push(count, a.unsafe_load(chain), b.unsafe_load(chain), aslots, bslots)
++        count += 1
++        var pair = nn34_prefix(count, aslots, bslots)
++        var h = nn34_evaluate(pair[0], pair[1], boundary.unsafe_load(chain))
++        output.unsafe_store(chain, h)
++        last.unsafe_store(chain, h)
++        if count == NN34_CHUNK:
++            boundary.unsafe_store(chain, h)
++            nn34_clear_slots(aslots, bslots)
++    else:
++        var h = nn34_evaluate(a.unsafe_load(chain), b.unsafe_load(chain), last.unsafe_load(chain))
++        output.unsafe_store(chain, h)
++        last.unsafe_store(chain, h)
++        boundary.unsafe_store(chain, h)
++
++
++@always_inline
++def nn34_prefill_prefix_cell(cell: Int, a: NN34FP, b: NN34FP,
++    in_sa: NN34FP, in_sb: NN34FP, prefix_a: NN34FP, prefix_b: NN34FP,
++    out_sa: NN34FP, out_sb: NN34FP, chains: Int, tokens: Int, absolute_start: Int):
++    """Parallel phase 1. Each prefix restates the same absolute-chunk
++    binary slots as decode. No input from a future token is read. Repeated
++    subtree work is deliberate component scope; shared tree staging is a
++    later schedule candidate. Output state must not alias the input state."""
++    var t = cell // chains
++    var chain = cell % chains
++    var absolute_t = absolute_start + t
++    var chunk_start = absolute_t - absolute_t % NN34_CHUNK
++    var local_start = max(0, chunk_start - absolute_start)
++    var astack = stack_allocation[NN34_LEVELS, Float32]()
++    var bstack = stack_allocation[NN34_LEVELS, Float32]()
++    var sa = astack.unsafe_origin_cast[MutAnyOrigin]()
++    var sb = bstack.unsafe_origin_cast[MutAnyOrigin]()
++    var count = 0
++    nn34_clear_slots(sa, sb)
++    if chunk_start < absolute_start:
++        count = absolute_start % NN34_CHUNK
++        for level in range(NN34_LEVELS):
++            sa.unsafe_store(level, in_sa.unsafe_load(chain * NN34_LEVELS + level))
++            sb.unsafe_store(level, in_sb.unsafe_load(chain * NN34_LEVELS + level))
++    for token in range(local_start, t + 1):
++        var index = token * chains + chain
++        nn34_push(count, a.unsafe_load(index), b.unsafe_load(index), sa, sb)
++        count += 1
++    var pair = nn34_prefix(count, sa, sb)
++    prefix_a.unsafe_store(cell, pair[0])
++    prefix_b.unsafe_store(cell, pair[1])
++    if t == tokens - 1:
++        if count == NN34_CHUNK:
++            nn34_clear_slots(sa, sb)
++        for level in range(NN34_LEVELS):
++            out_sa.unsafe_store(chain * NN34_LEVELS + level, sa.unsafe_load(level))
++            out_sb.unsafe_store(chain * NN34_LEVELS + level, sb.unsafe_load(level))
++
++
++@always_inline
++def nn34_prefill_boundary_chain(chain: Int, prefix_a: NN34FP, prefix_b: NN34FP,  # device-helper: one chain per thread of nn34_boundary_kernel
++    in_boundary: NN34FP, chunk_boundaries: NN34FP, out_boundary: NN34FP,
++    chains: Int, tokens: Int, absolute_start: Int):
++    """Parallel over independent state chains, ordered over completed
++    absolute chunks. The last partial chunk never advances the boundary."""
++    var first = absolute_start // NN34_CHUNK
++    var chunks = (absolute_start % NN34_CHUNK + tokens + NN34_CHUNK - 1) // NN34_CHUNK
++    var carry = ftz(in_boundary.unsafe_load(chain))
++    for chunk in range(chunks):
++        chunk_boundaries.unsafe_store(chunk * chains + chain, carry)
++        var local_end = (first + chunk + 1) * NN34_CHUNK - absolute_start
++        if local_end <= tokens:
++            var end_cell = (local_end - 1) * chains + chain
++            carry = nn34_evaluate(prefix_a.unsafe_load(end_cell), prefix_b.unsafe_load(end_cell), carry)
++    out_boundary.unsafe_store(chain, carry)
++
++
++@always_inline
++def nn34_prefill_output_cell(cell: Int, prefix_a: NN34FP, prefix_b: NN34FP,
++    chunk_boundaries: NN34FP, output: NN34FP, out_last: NN34FP,
++    chains: Int, tokens: Int, absolute_start: Int):
++    var t = cell // chains
++    var chain = cell % chains
++    var chunk = (absolute_start % NN34_CHUNK + t) // NN34_CHUNK
++    var h = nn34_evaluate(prefix_a.unsafe_load(cell), prefix_b.unsafe_load(cell), chunk_boundaries.unsafe_load(chunk * chains + chain))
++    output.unsafe_store(cell, h)
++    if t == tokens - 1:
++        out_last.unsafe_store(chain, h)
++
++
++@always_inline
++def nn34_sequential_chain(chain: Int, a: NN34FP, b: NN34FP, in_last: NN34FP,
++    output: NN34FP, out_boundary: NN34FP, out_last: NN34FP,
++    out_sa: NN34FP, out_sb: NN34FP, chains: Int, tokens: Int):
++    """B arm: the prepared-factor recurrent FMA chain. This component
++    baseline is not claimed to stand in for a full public-model workload."""
++    var h = ftz(in_last.unsafe_load(chain))
++    for t in range(tokens):
++        var cell = t * chains + chain
++        h = nn34_evaluate(a.unsafe_load(cell), b.unsafe_load(cell), h)
++        output.unsafe_store(cell, h)
++    out_boundary.unsafe_store(chain, h)
++    out_last.unsafe_store(chain, h)
++    nn34_clear_slots(out_sa + chain * NN34_LEVELS, out_sb + chain * NN34_LEVELS)
++
++
++def nn34_component_metadata(profile: Int, chains: Int, tokens: Int, absolute_start: Int) raises:
++    """Scalar checks only. Tensor buffers must satisfy the documented
++    sizes/disjointness; this component does not own or inspect allocations."""
++    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++        raise Error("NN34 component requires IDENTICAL mode")
++    if profile != NN34_COMPONENT_PROFILE:
++        raise Error("NN34 checkpoint profile does not match this component build")
++    if chains <= 0 or tokens <= 0 or absolute_start < 0:
++        raise Error("NN34 requires positive chains/tokens and nonnegative position")
++    # Int32 launch extents and Int64 position arithmetic, not a board cap.
++    if chains > 2147483647 // tokens:
++        raise Error("NN34 component launch extent exceeds Int32")
++    if absolute_start > (1 << 62) - tokens - NN34_CHUNK:
++        raise Error("NN34 absolute position exceeds component index range")
++
++
++def nn34_component_host_prefill(profile: Int, chains: Int, tokens: Int, absolute_start: Int,
++    a: NN34FP, b: NN34FP, in_boundary: NN34FP, in_last: NN34FP, in_sa: NN34FP, in_sb: NN34FP,
++    output: NN34FP, out_boundary: NN34FP, out_last: NN34FP, out_sa: NN34FP, out_sb: NN34FP,
++    prefix_a: NN34FP, prefix_b: NN34FP, chunk_boundaries: NN34FP) raises:
++    """Host component runner. Buffers: a/b/output/prefix_a/prefix_b each
++    tokens*chains; in/out boundary/last each chains; in/out slots each
++    chains*6; chunk_boundaries ceil((start%32+tokens)/32)*chains. Input and
++    output state are disjoint. Advance metadata only after successful return.
++    Empty requests are deliberately not an entry point; retain state as-is."""
++    nn34_component_metadata(profile, chains, tokens, absolute_start)
++    comptime if NN34_AFFINE_PREFIX:
++        for cell in range(tokens * chains):
++            nn34_prefill_prefix_cell(cell, a, b, in_sa, in_sb, prefix_a, prefix_b, out_sa, out_sb, chains, tokens, absolute_start)
++        for chain in range(chains):
++            nn34_prefill_boundary_chain(chain, prefix_a, prefix_b, in_boundary, chunk_boundaries, out_boundary, chains, tokens, absolute_start)
++        for cell in range(tokens * chains):
++            nn34_prefill_output_cell(cell, prefix_a, prefix_b, chunk_boundaries, output, out_last, chains, tokens, absolute_start)
++    else:
++        for chain in range(chains):
++            nn34_sequential_chain(chain, a, b, in_last, output, out_boundary, out_last, out_sa, out_sb, chains, tokens)
++
++
++def nn34_component_host_decode(profile: Int, chains: Int, absolute_position: Int,
++    a: NN34FP, b: NN34FP, boundary: NN34FP, last: NN34FP, sa: NN34FP, sb: NN34FP, output: NN34FP) raises:
++    nn34_component_metadata(profile, chains, 1, absolute_position)
++    for chain in range(chains):
++        nn34_decode_chain(chain, absolute_position, a, b, boundary, last, sa, sb, output)
++
++
++def nn34_prefix_kernel(a: NN34FP, b: NN34FP, in_sa: NN34FP, in_sb: NN34FP,
++    prefix_a: NN34FP, prefix_b: NN34FP, out_sa: NN34FP, out_sb: NN34FP,
++    chains: Int32, tokens: Int32, absolute_start: Int64):
++    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if cell < Int(chains) * Int(tokens):
++        nn34_prefill_prefix_cell(cell, a, b, in_sa, in_sb, prefix_a, prefix_b, out_sa, out_sb, Int(chains), Int(tokens), Int(absolute_start))
++
++
++def nn34_boundary_kernel(prefix_a: NN34FP, prefix_b: NN34FP, in_boundary: NN34FP,
++    chunk_boundaries: NN34FP, out_boundary: NN34FP, chains: Int32, tokens: Int32, absolute_start: Int64):
++    var chain = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if chain < Int(chains):
++        nn34_prefill_boundary_chain(chain, prefix_a, prefix_b, in_boundary, chunk_boundaries, out_boundary, Int(chains), Int(tokens), Int(absolute_start))
++
++
++def nn34_output_kernel(prefix_a: NN34FP, prefix_b: NN34FP, chunk_boundaries: NN34FP,
++    output: NN34FP, out_last: NN34FP, chains: Int32, tokens: Int32, absolute_start: Int64):
++    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if cell < Int(chains) * Int(tokens):
++        nn34_prefill_output_cell(cell, prefix_a, prefix_b, chunk_boundaries, output, out_last, Int(chains), Int(tokens), Int(absolute_start))
++
++
++def nn34_sequential_kernel(a: NN34FP, b: NN34FP, in_last: NN34FP,
++    output: NN34FP, out_boundary: NN34FP, out_last: NN34FP, out_sa: NN34FP, out_sb: NN34FP,
++    chains: Int32, tokens: Int32):
++    var chain = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if chain < Int(chains):
++        nn34_sequential_chain(chain, a, b, in_last, output, out_boundary, out_last, out_sa, out_sb, Int(chains), Int(tokens))
++
++
++def nn34_decode_kernel(a: NN34FP, b: NN34FP, boundary: NN34FP, last: NN34FP,
++    sa: NN34FP, sb: NN34FP, output: NN34FP, chains: Int32, absolute_position: Int64):
++    var chain = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if chain < Int(chains):
++        nn34_decode_chain(chain, Int(absolute_position), a, b, boundary, last, sa, sb, output)
++
++
++def nn34_init_kernel(initial: NN34FP, boundary: NN34FP, last: NN34FP,
++    sa: NN34FP, sb: NN34FP, chains: Int32):
++    var chain = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if chain < Int(chains):
++        nn34_init_chain(chain, initial, boundary, last, sa, sb)
++
++
++def nn34_component_device_prefill(ctx: DeviceContext, profile: Int,
++    chains: Int, tokens: Int, absolute_start: Int,
++    a: NN34FP, b: NN34FP, in_boundary: NN34FP, in_last: NN34FP, in_sa: NN34FP, in_sb: NN34FP,
++    output: NN34FP, out_boundary: NN34FP, out_last: NN34FP, out_sa: NN34FP, out_sb: NN34FP,
++    prefix_a: NN34FP, prefix_b: NN34FP, chunk_boundaries: NN34FP) raises:
++    """Asynchronous isolated GPU component; same buffer contract as host.
++    All three phases share ctx's ordered queue. Caller owns every allocation
++    through the final synchronization, consumes output, and then commits
++    position=start+tokens and the disjoint output checkpoint. Never recycle
++    prefix or input state while any queued phase may still read it."""
++    nn34_component_metadata(profile, chains, tokens, absolute_start)
++    var cells = chains * tokens
++    var grid_cells = (cells + NN34_TPB - 1) // NN34_TPB
++    var grid_chains = (chains + NN34_TPB - 1) // NN34_TPB
++    comptime if NN34_AFFINE_PREFIX:
++        ctx.enqueue_function[nn34_prefix_kernel](a, b, in_sa, in_sb, prefix_a, prefix_b, out_sa, out_sb, Int32(chains), Int32(tokens), Int64(absolute_start), grid_dim=(grid_cells, 1, 1), block_dim=(NN34_TPB, 1, 1))
++        ctx.enqueue_function[nn34_boundary_kernel](prefix_a, prefix_b, in_boundary, chunk_boundaries, out_boundary, Int32(chains), Int32(tokens), Int64(absolute_start), grid_dim=(grid_chains, 1, 1), block_dim=(NN34_TPB, 1, 1))
++        ctx.enqueue_function[nn34_output_kernel](prefix_a, prefix_b, chunk_boundaries, output, out_last, Int32(chains), Int32(tokens), Int64(absolute_start), grid_dim=(grid_cells, 1, 1), block_dim=(NN34_TPB, 1, 1))
++    else:
++        ctx.enqueue_function[nn34_sequential_kernel](a, b, in_last, output, out_boundary, out_last, out_sa, out_sb, Int32(chains), Int32(tokens), grid_dim=(grid_chains, 1, 1), block_dim=(NN34_TPB, 1, 1))
++
++
++def nn34_component_device_decode(ctx: DeviceContext, profile: Int, chains: Int, absolute_position: Int,
++    a: NN34FP, b: NN34FP, boundary: NN34FP, last: NN34FP, sa: NN34FP, sb: NN34FP, output: NN34FP) raises:
++    """Asynchronous single-token decode. Caller advances position after
++    synchronization. A failed in-place decode must discard its state;
++    transactional failure handling belongs to the future model wrapper."""
++    nn34_component_metadata(profile, chains, 1, absolute_position)
++    ctx.enqueue_function[nn34_decode_kernel](a, b, boundary, last, sa, sb, output, Int32(chains), Int64(absolute_position), grid_dim=((chains + NN34_TPB - 1) // NN34_TPB, 1, 1), block_dim=(NN34_TPB, 1, 1))
+diff --git a/mamba/impl/ops/selective_scan_backward.mojo b/mamba/impl/ops/selective_scan_backward.mojo
+index a64cee3a9..ab1024e5d 100644
+--- a/mamba/impl/ops/selective_scan_backward.mojo
++++ b/mamba/impl/ops/selective_scan_backward.mojo
+@@ -136,8 +136,8 @@ from gemm.checks.gemm_identical import (
+     contract_partition,
+ )
+ from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_merge_chains
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
++from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX
++from mamba.impl.ops.neural_mamba_scan import nn34_checkpoint_chain, nn34_tree_vjp_chain
+ from checks.kernel_matrix import TARGET_COLUMN, column_has_float_atomics
+ from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+ 
+@@ -435,6 +435,10 @@ def selective_scan_checkpoint_kernel[
+     if bb >= batch or d >= dim:
+         return
+ 
++    comptime if NN34_AFFINE_PREFIX:
++        for n in range(DSTATE):
++            nn34_checkpoint_chain((bb * dim + d) * DSTATE + n, hck_ptr, h_in_ptr, u_ptr, delta_ptr, a_ptr, b_ptr, seqlen, dim)
++        return
+ 
+     var slots = seqlen + 1
+ 
+@@ -696,6 +700,8 @@ def selective_scan_bwd_scan_kernel[
+                         identical_mul_add(afac, dh_state[n], contrib)
+                     )
+ 
++            comptime if NN34_AFFINE_PREFIX:
++                dh_n = ftz(dh_ptr.unsafe_load((t * dim + d) * DSTATE + n))
+             dh_state[n] = dh_n
+             da_carry[n] = da_t
+             dh_ptr.unsafe_store((t * dim + d) * DSTATE + n, dh_n)
+@@ -756,6 +762,9 @@ def selective_scan_bwd_scan_kernel[
+                 var d_da = ftz(identical_mul(dh_state[n], hprev))
+                 d_arg = ftz(identical_mul(d_da, da_carry[n]))
+ 
++            comptime if NN34_AFFINE_PREFIX:
++                var ga = ftz(dh_ptr.unsafe_load(batch * seqlen * dim * DSTATE + (t * dim + d) * DSTATE + n))
++                d_arg = ftz(identical_mul(ga, da_carry[n]))
+ 
+             comptime if SAB_BWD_DDELTA_TWO_FOLDS:
+                 # SABOTAGE: plan section 2.2's two-fold reading.
+@@ -781,6 +790,14 @@ def selective_scan_bwd_scan_kernel[
+ 
+ 
+ 
++def nn34_tree_vjp_kernel(dh: MutPointer[Float32, MutAnyOrigin], dy: MutPointer[Float32, MutAnyOrigin],
++    c: MutPointer[Float32, MutAnyOrigin], u: MutPointer[Float32, MutAnyOrigin], delta: MutPointer[Float32, MutAnyOrigin],
++    a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin], hck: MutPointer[Float32, MutAnyOrigin],
++    batch: Int32, length: Int32, dim: Int32):
++    var chain = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if chain < Int(batch) * Int(dim) * MAX_DSTATE:
++        nn34_tree_vjp_chain(chain, dh, dy, c, u, delta, a, b, hck, Int(batch), Int(length), Int(dim))
++
+ 
+ def selective_scan_bwd_scan_into(
+     ctx: DeviceContext,
+@@ -834,6 +851,11 @@ def selective_scan_bwd_scan_into(
+         "[B, L+1, dim, 16]",
+     )
+ 
++    comptime if NN34_AFFINE_PREFIX:
++        _require(len(dh), 2 * m * dim * MAX_DSTATE, "dh", "[factor-B | factor-A]")
++        var chains = batch * dim * MAX_DSTATE
++        if chains > 0:
++            ctx.enqueue_function[nn34_tree_vjp_kernel](dh.unsafe_ptr(), dy.unsafe_ptr(), C.unsafe_ptr(), u.unsafe_ptr(), delta.unsafe_ptr(), A.unsafe_ptr(), B.unsafe_ptr(), h_ckpt.unsafe_ptr(), Int32(batch), Int32(seqlen), Int32(dim), grid_dim=(_grid(chains, block_size), 1, 1), block_dim=(block_size, 1, 1))
+     var total = batch * dim
+     if total > 0:
+         comptime kern = selective_scan_bwd_scan_kernel[MAX_DSTATE]
+@@ -1255,6 +1277,10 @@ def mamba_bwd_da_partial_kernel[
+                 var d_da = ftz(identical_mul(dhv, hprev))
+                 d_arg = ftz(identical_mul(d_da, da_t))
+ 
++            comptime if NN34_AFFINE_PREFIX:
++                var ga = ftz(dh_ptr.unsafe_load(batch * seqlen * dim * DSTATE + (t * dim + d) * DSTATE + n))
++                var da_t = ftz(identical_exp(ftz(identical_mul(dl, a_vals[n]))))
++                d_arg = ftz(identical_mul(ga, da_t))
+ 
+             acc[n] = ftz(identical_mul_add(d_arg, dl, acc[n]))
+ 
+@@ -1522,7 +1548,7 @@ def bwd_h_checkpoint_floats(batch: Int, seqlen: Int, dim: Int) -> Int:
+ 
+ def bwd_dh_floats(batch: Int, seqlen: Int, dim: Int) -> Int:
+     """`M * dim * D_STATE`. No carry slot; T1's seed is structural."""
+-    return batch * seqlen * dim * MAX_DSTATE
++    return (2 if NN34_AFFINE_PREFIX else 1) * batch * seqlen * dim * MAX_DSTATE
+ 
+ 
+ def bwd_da_partial_floats(batch: Int, dim: Int) -> Int:
+diff --git a/mamba/impl/ops/selective_scan_interface.mojo b/mamba/impl/ops/selective_scan_interface.mojo
+index 21a6d3c07..430ddab13 100644
+--- a/mamba/impl/ops/selective_scan_interface.mojo
++++ b/mamba/impl/ops/selective_scan_interface.mojo
+@@ -250,8 +250,8 @@ comptime ANY_SABOTAGE = (
+ 
+ 
+ # `-D MOJOLEARN_IDN_M1_SCAN=<arm>` (lane/grid-prune 2026-10-07): ONE switch
+-# for the alternative Mamba-1 scans: 2 state_window (NI38), 3 persistent
+-# (arm 1 affine_prefix, NN34, deleted 2026-10-11: TOMBSTONE below). Replaces
++# for the alternative Mamba-1 scans: 1 affine_prefix (NN34,
++# neural_scan_profile.mojo), 2 state_window (NI38), 3 persistent. Replaces
+ # MOJOLEARN_NN34_AFFINE_PREFIX, MOJOLEARN_IDN_M1_STATE_WINDOW and
+ # MOJOLEARN_IDN_M1_PERSISTENT_SCAN (refused in
+ # core/six_lane_experiment_guards.mojo), whose crosses were refused or inert.
+@@ -259,8 +259,8 @@ comptime ANY_SABOTAGE = (
+ # NV L40S 5.563 -> 3.550 ms (v1242), AMD MI325X 9.934 -> 3.204 ms (a1350); avg ratio 0.454 (state_window=2: 0.468);
+ # hash 602f9ec5 on both vendors. Default arm is now 3 (persistent); -D MOJOLEARN_IDN_M1_SCAN=0 restores the old scan.
+ comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 3]()
+-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
++# MEASURE OWED (2026-10-11): arm 1 (affine_prefix) has no verdict in grid g50ebe26a5 (vendor split, AMD 0.82x, NVIDIA unmeasured);
++# measure it once against the new default arm 3 (persistent) on NV + AMD.
+ comptime M1_SCAN_STATE_WINDOW = 2
+ comptime M1_SCAN_PERSISTENT = 3
+ # NI38 S subarm, independent of the unfinished V affine composition. Native
+diff --git a/tools/mamba_host_gen.py b/tools/mamba_host_gen.py
+index 1b2a0d3b6..36acb6d6e 100644
+--- a/tools/mamba_host_gen.py
++++ b/tools/mamba_host_gen.py
+@@ -62,7 +62,8 @@ SOURCES = {
+     "core/philox_neural.mojo": "philox_neural",
+     "gemm/checks/gemm_backward.mojo": "gemm_backward",
+     "gemm/neural_backward.mojo": "neural_backward",
+-    # neural_scan_profile / neural_mamba_scan (MOJOLEARN_IDN_M1_SCAN=1) deleted 2026-10-11 (docs/TOMBSTONES.md)
++    "mamba/impl/ops/neural_scan_profile.mojo": "neural_scan_profile",
++    "mamba/impl/ops/neural_mamba_scan.mojo": "neural_mamba_scan",
+     "mamba/impl/ops/selective_scan_interface.mojo": "selective_scan_interface",
+     "mamba/impl/modeling/modeling_mamba.mojo": "modeling_mamba",
+     "mamba/impl/modules/ssd_minimal.mojo": "ssd_minimal",
+diff --git a/training/neural_arithmetic_profile.mojo b/training/neural_arithmetic_profile.mojo
+index 399ccb6d7..335eb57bc 100644
+--- a/training/neural_arithmetic_profile.mojo
++++ b/training/neural_arithmetic_profile.mojo
+@@ -19,8 +19,8 @@ def neural_arithmetic_suffix() -> String:
+         # version, even when a particular model does not consume that graph.
+         # Keep this module CPU-safe: mirror the pure compile-time guards,
+         # without importing a device scan implementation into host bindings.
+-        # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
++        comptime if get_defined_int["MOJOLEARN_IDN_M1_SCAN", 0]() == 1:  # affine_prefix (NN34)
++            result += ".nn-mamba1-v2-affine32"
+         comptime if get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD", 0]() == 1:
+             result += ".nn-mamba2-grad-v2-tree"
+         elif get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD", 0]() == 2:

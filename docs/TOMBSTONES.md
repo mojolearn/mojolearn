@@ -322,6 +322,9 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES`](#grid-act-16-2026-10-11) | Neural | DELETE-slower | 2026-10-11 | [MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES.patch) |
 | [`MOJOLEARN_KNN_DIRECT_DISTANCE`](#grid-act-16-2026-10-11) | Neighbors | DELETE-slower (turned off; reader cleanup owed) | 2026-10-11 | [MOJOLEARN_KNN_DBSCAN_DIRECT_DISTANCE.patch](../experiments/removed/MOJOLEARN_KNN_DBSCAN_DIRECT_DISTANCE.patch) |
 | [`MOJOLEARN_DBSCAN_DIRECT_DISTANCE`](#grid-act-16-2026-10-11) | Cluster | DELETE-noise (turned off; reader cleanup owed) | 2026-10-11 | [MOJOLEARN_KNN_DBSCAN_DIRECT_DISTANCE.patch](../experiments/removed/MOJOLEARN_KNN_DBSCAN_DIRECT_DISTANCE.patch) |
+| [`MOJOLEARN_IDN_LM_GROUPED_ADAM`](#owed-decide-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_LM_GROUPED_ADAM.patch](../experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch) |
+| [`MOJOLEARN_IDN_M3_S17_TAIL_DBUF`](#owed-decide-2026-10-11) | Neural | LOSER-slower (vendor split) | 2026-10-11 | [MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch](../experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch) |
+| [`MOJOLEARN_IDN_M1_SCAN=1`](#owed-decide-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_M1_SCAN_1.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch) |
 
 ## Restored
 
@@ -2997,6 +3000,30 @@ experiments/six_lane_integration/grid/results-g50ebe26a5/.
   (constant False); the reader branches in core/knn_host_predict.mojo, neighbors/impl/*, dbscan/*, hdbscan/* are dead: CLEANUP OWED.
 - `MOJOLEARN_DBSCAN_DIRECT_DISTANCE`: dbscan taxi on main ef1e7e9f9 NV 13336 -> 13184 ms (v1234 -> v1462), AMD 7108 -> 7118 ms
   (a1593 -> a1599), istella 1.00x / 1.00x, hashes unchanged. NOISE. Turned off like KNN_DIRECT_DISTANCE; reader cleanup owed.
+
+## owed-decide (2026-10-11)
+
+Owed A/B arms measured same box, same main 2afa942e3, one run per arm (NV L40S v0063-v0071, AMD MI325X a1645-a1653;
+evidence ~/mojolearn-evidence/round-20261011/owed_decisions.txt). Verdict = average of the two vendors' B/A ratios. Deleted on
+lane/owed-decide; each code is recoverable at the parent of its deletion commit.
+
+- `MOJOLEARN_IDN_LM_GROUPED_ADAM` (arm 1, NN56 grouped OOP Adam; training/neural_ab_optimizer.mojo deleted whole,
+  training/byte_lm.mojo `_byte_neural_group_update` and its branch, guard): lm-train-step bytes NV 35.51 -> 36.18 ms (1.019x),
+  AMD 42.76 -> 44.61 ms (1.043x), avg 1.03x; hash f927a24c on both arms (same bits). SLOWER. Runs NV v0067/v0068, AMD
+  r1011.owed.nlm / r1011.owed.gadam.ab. Deleted by cdb22ee93, recoverable at cdb22ee93^.
+  Patch experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch. Arm 2 was removed earlier (grid-act-16 above).
+- `MOJOLEARN_IDN_M3_S17_TAIL_DBUF` (double-buffered Mamba-3 backward S17 tail; mamba/impl/modules/mamba3_backward.mojo
+  `mamba3_s17_tail_dbuf_kernel` + launch + M3_S17_DB_TP, host twin mamba/host/gen/mamba3_backward.mojo, guard): samba-train-step
+  bytes NV 42.36 -> 39.60 ms (0.935x), AMD 69.04 -> 119.20 ms (1.726x), avg 1.33x, vendor split (NV faster); hash 16f6e13b on
+  both (same bits). SLOWER. Arm B = `_PIPE_OFF + _DBUF` against the pipe default. Deleted by b9e2282b2, recoverable at b9e2282b2^.
+  Patch experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch.
+- `MOJOLEARN_IDN_M1_SCAN=1` (NN34 affine_prefix Mamba-1 scan, numerical profile 2; mamba/impl/ops/neural_scan_profile.mojo and
+  neural_mamba_scan.mojo deleted whole with their host/gen twins, NN34 state fields and branches in modeling_mamba,
+  selective_scan_backward, mamba_oracle, mamba_backward checks, the three Mamba bindings (checkpoint slots, extra
+  addresses / params), training/neural_arithmetic_profile.mojo tag, tools/mamba_host_gen.py sources): mamba1-forward gaussian
+  NV 5.40 -> 10.41 ms (1.93x), AMD 3.14 -> 8.38 ms (2.67x), avg 2.30x against arm 3 (persistent); hash 602f9ec5 -> 045beb0b
+  (a different scan, expected). SLOWER. The guard refuses =1; `mamba1_profile` now always returns 1 (Python's profile-2
+  checkpoint path is dead glue). Deleted by 291629888, recoverable at 291629888^. Patch experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch.
 
 ## Owed deletions reviewed and kept (lane/owed-deletions-D3, 2026-10-09)
 

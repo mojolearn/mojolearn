@@ -2369,32 +2369,24 @@ def mamba3_s17_tail_shared_kernel(
 #: (0dcfceabd, fefa1db0d) onto the current tile (M3_S17_TP per column).
 #: Both walk the shared kernel's chain over the same pairs in the same
 #: order (j, then p, then n; then p, n for the state term): same bits.
-#:   -D MOJOLEARN_IDN_M3_S17_TAIL_DBUF: two half tiles resident, every
-#:      thread stages tile t while thread 0 folds tile t - 1, one barrier a
-#:      tile.
+#:   (-D MOJOLEARN_IDN_M3_S17_TAIL_DBUF, the double-buffered tail, was
+#:      deleted 2026-10-11: see the TOMBSTONE below.)
 #:   -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE: each step's operands stored as an
 #:      adjacent pair and prefetched a group of M3_S17_PIPE_GROUP ahead into
 #:      thread 0's registers. MEASURED SLOWER on the L4 (8.46 against 7.27
 #:      ms at the board shape, the same bits).
-#: Both defined: DBUF runs (PIPE is the measured loser). Neither runs under
+#: PIPE is the default (promoted below). It does not run under
 #: MOJOLEARN_IDN_ALL_OFF, under MOJOLEARN_MAMBA3_S17_TAIL_NAIVE (the shared
 #: tail must be the active arm), or where the page does not fit the column;
 #: then the shared kernel runs. The page is the shared kernel's (two
 #: M3_S17_TP x M3_D_STATE float tiles) on both arms.
 comptime M3_S17_TAIL_PAGE_BYTES = 2 * M3_S17_TP * M3_D_STATE * 4
 comptime M3_S17_TAIL_ALT_FITS = lib_smem_page_fits_for[TARGET_COLUMN, M3_S17_TAIL_PAGE_BYTES]()
-# MEASURE OWED (2026-10-11): the dbuf arm has no grid cell in g50ebe26a5 (samba-train-step); measure it once against the new
-# default (pipe) with -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF -D MOJOLEARN_IDN_M3_S17_TAIL_DBUF on NV + AMD.
-comptime M3_S17_TAIL_DBUF = (
-    M3_S17_TAIL_SHARED
-    and M3_S17_TAIL_ALT_FITS
-    and is_defined["MOJOLEARN_IDN_M3_S17_TAIL_DBUF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (double-buffered S17 tail; LOSER: samba-train-step bytes NV 42.36 -> 39.60 ms (0.935), AMD 69.04 -> 119.20 ms (1.726), avg 1.33, vendor split, hash 16f6e13b both) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch (device and host twin together); record in docs/TOMBSTONES.md.
 comptime M3_S17_TAIL_PIPE = (
     M3_S17_TAIL_SHARED
     and M3_S17_TAIL_ALT_FITS
-    and not M3_S17_TAIL_DBUF
     # PROMOTED 2026-10-11 (grid g50ebe26a5, arm m3_s17_tail=pipe vs today's defaults, one run per arm): samba-train-step bytes
     # NV L40S 40.105 -> 41.582 ms (v1372), AMD MI325X 117.272 -> 68.559 ms (a1540); avg ratio 0.779 (vendor split: NV 1.04x);
     # hash 16f6e13b on both vendors. Default ON; -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF restores the shared tail.
@@ -2402,68 +2394,8 @@ comptime M3_S17_TAIL_PIPE = (
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M3_S17_PIPE_GROUP = 16
-#: dbuf: two tiles of M3_S17_DB_TP value columns are the shared kernel's
-#: one tile of M3_S17_TP (the same page).
-comptime M3_S17_DB_TP = M3_S17_TP // 2
-
-
-def mamba3_s17_tail_dbuf_kernel(
-    d_dacs_rec:MutPointer[Float32,MutAnyOrigin],k:MutPointer[Float32,MutAnyOrigin],v:MutPointer[Float32,MutAnyOrigin],
-    dacs:MutPointer[Float32,MutAnyOrigin],states:MutPointer[Float32,MutAnyOrigin],d_states:MutPointer[Float32,MutAnyOrigin],
-    b_in:Int32,l_in:Int32,nh_in:Int32,qs_in:Int32,
-):
-    """`mamba3_s17_tail_shared_kernel` double buffered (M3_S17_TAIL_DBUF).
-    Tiles t = 0 .. ntiles - 1: the chain tiles first, `TPJ` a token in token
-    order (tile t is token j = t // TPJ, columns (t % TPJ) * TPD ..), then the
-    `TPJ` state tiles. At step t every thread stages tile t into page t % 2
-    and thread 0 folds tile t - 1 from page (t - 1) % 2; one barrier a step.
-    Thread 0 walks the same pairs in the same order as the shared kernel."""
-    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var qs=Int(qs_in);var nc=(l+qs-1)//qs
-    comptime TPD=M3_S17_DB_TP
-    comptime TILE=TPD*M3_D_STATE
-    comptime TPJ=M3_HEADDIM//TPD
-    var cs=stack_allocation[2*TILE,Scalar[DType.float32],address_space=AddressSpace.SHARED]()
-    var ts=stack_allocation[2*TILE,Scalar[DType.float32],address_space=AddressSpace.SHARED]()
-    var blk=Int(block_idx.x);var n=Int(thread_idx.x)
-    if blk>=b*nc*nh:return
-    var h=blk%nh;var c=(blk//nh)%nc;var bb=blk//(nh*nc)
-    var token=c*qs+qs-1
-    if token>l-1:token=l-1
-    var th=(bb*l+token)*nh+h
-    var last=ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+(qs-1)))
-    var el=ftz(identical_exp(last))
-    var jn=qs
-    if c*qs+qs>l:jn=l-c*qs
-    var ntiles=jn*TPJ+TPJ
-    var add=Float32(0.0)
-    for t in range(ntiles+1):
-        if t<ntiles:
-            var page=(t%2)*TILE
-            if t<jn*TPJ:
-                var j=t//TPJ;var pp0=(t%TPJ)*TPD;var tj=c*qs+j
-                var idx=((bb*nh+h)*nc+c)*qs+j;var de=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(idx)))))
-                for pp in range(TPD):
-                    var p=pp0+pp
-                    var carry=Float32(0.0)
-                    if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                    cs[page+pp*M3_D_STATE+n]=carry
-                    ts[page+pp*M3_D_STATE+n]=ftz(identical_mul(ftz(identical_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de))
-            else:
-                var pp0=(t-jn*TPJ)*TPD
-                for pp in range(TPD):
-                    var p=pp0+pp
-                    var carry=Float32(0.0)
-                    if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                    var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                    cs[page+pp*M3_D_STATE+n]=carry
-                    ts[page+pp*M3_D_STATE+n]=ftz(identical_mul(hs,el))
-        if n==0 and t>=1:
-            var page=((t-1)%2)*TILE
-            for e in range(TILE):
-                add=ftz(identical_mul_add(cs[page+e],ts[page+e],add))
-        barrier()
-    if n==0:
-        d_dacs_rec.unsafe_store(th,ftz(d_dacs_rec.unsafe_load(th)+add))
+# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (mamba3_s17_tail_dbuf_kernel + M3_S17_DB_TP; LOSER avg 1.33x samba-train-step) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
 
 
 def mamba3_s17_tail_pipe_kernel(
@@ -2562,9 +2494,9 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
             ctx.enqueue_function[mamba3_s17_operands_kernel](dq.unsafe_ptr(),ddr.unsafe_ptr(),dk.unsafe_ptr(),dv.unsafe_ptr(),ddc.unsafe_ptr(),dy.unsafe_ptr(),q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
     comptime if M3_S17_TAIL_SHARED:
         var nc=(l+qs-1)//qs
-        comptime if M3_S17_TAIL_DBUF:
-            ctx.enqueue_function[mamba3_s17_tail_dbuf_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
-        elif M3_S17_TAIL_PIPE:
+        # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF launch (LOSER avg 1.33x) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
+        comptime if M3_S17_TAIL_PIPE:
             ctx.enqueue_function[mamba3_s17_tail_pipe_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
         else:
             ctx.enqueue_function[mamba3_s17_tail_shared_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
