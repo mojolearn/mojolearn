@@ -2,7 +2,7 @@
  "schema": "mojolearn.grid-controls/1",
  "lane": "gemm-nv-microtile",
  "branch": "lane/gemm-nv-microtile",
- "head": "pending",
+ "head": "0a2e921d8",
  "controls": {
   "gemm_nv_microtile": {
    "define": "MOJOLEARN_IDN_GEMM_NV_MICROTILE",
