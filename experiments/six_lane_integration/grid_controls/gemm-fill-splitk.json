@@ -1,0 +1,37 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "gemm-fill-splitk",
+ "branch": "lane/gemm-fill-splitk",
+ "head": "a7085eead",
+ "controls": {
+  "gemm_fill_splitk": {
+   "define": "MOJOLEARN_IDN_GEMM_FILL_SPLITK",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_GEMM_FILL_SPLITK=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gemm/neural_dispatch.mojo:324",
+    "gemm/neural_dispatch.mojo:421",
+    "gemm/neural_dispatch.mojo:459"
+   ],
+   "binding": [
+    "_mojolearn_byte_lm",
+    "_mojolearn_transformer",
+    "_mojolearn_training",
+    "_mojolearn_mamba",
+    "_mojolearn_x_sequence",
+    "_mojolearn_linalg"
+   ],
+   "vendors": ["nvidia", "amd"],
+   "bits_change": false,
+   "status": "open",
+   "board": "neural: lm-train-step, lm-forward, transformer-forward, mamba2-forward, mlp-train-step, moe, gemm",
+   "note": "Idea H2 (ideas-all-gaps-20261011). GemmWorkspace.run: when a TUNED 128x128 call has tiles < 2 x compute units (MULTIPROCESSOR_COUNT read once per workspace), split the contract leaves over grid y at the coarsest power-of-two group still issuing >= 2 x units blocks; existing group kernels (AMD _mfma_run_ws, NV kpack-hg group launch) + _ksplit_fold_launch into the model workspace. Same leaves, same fold DAG: no bit can move (NV digest = off arm = AMD)."
+  }
+ }
+}
