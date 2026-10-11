@@ -49,7 +49,7 @@ from sequence.theta_spec import THETA_SPEC
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
 from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
-from sequence.ets_team import ETS_TEAM, ets_team
+from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM, ets_team
 from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
 from sequence.ops import OP_ETS, OP_GARCH
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_block
@@ -252,8 +252,9 @@ def team_kernel[OP: Int](
         var team = SeqTeam(Int(thread_idx.x), Int(block_dim.x))
         comptime if OP == OP_GARCH:
             garch_team(blk, team, a)
-        elif ETS_TEAM and OP == OP_ETS:
-            # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo)
+        elif (ETS_TEAM or IDN_ETS_TEAM) and OP == OP_ETS:
+            # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo);
+            # IDENTICAL behind -D MOJOLEARN_IDN_ETS_TEAM (default off, the tree prefix)
             ets_team(blk, team, a)
         elif PROPHET_COOP:
             # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
