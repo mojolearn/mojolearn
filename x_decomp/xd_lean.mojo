@@ -4,11 +4,7 @@
 program C3 + C4). NOT COMPILED, NOT VERIFIED, NOT MEASURED: the
 orchestrator compiles every switch off and each on.
 
-`MOJOLEARN_IDN_RR_ONE_BLOCK_D` (C3, default off): PCA / TruncatedSVD's
-round-robin two-sided Jacobi (`_eig_rr_device`) runs every sweep, its test
-and its gate in ONE launch of ONE block of RR_ONE_D_TPB = 256 threads
-(x_decomp/rr_one_block_d.mojo) where `rr_one_block_d_applies(n)`; no bit
-moves (the same cells in the same order, the host column untouched).
+`MOJOLEARN_IDN_RR_ONE_BLOCK_D` (C3) deleted 2026-10-11 (loser; docs/TOMBSTONES.md).
 
 `MOJOLEARN_IDN_SVD_TALL_LEAN` (C4, default off), two parts on
 `linalg.svd`'s tall route (python/mojolearn/_linalg_impl.py `_svd_tall`):
@@ -30,16 +26,14 @@ moves (the same cells in the same order, the host column untouched).
       itself, so that QR is the tall factorization, not a redundant one.
 """
 from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
 from x_decomp.cells import F32Ptr
 
 comptime _XD_LEAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 
-#: C3 switch (read by decomposition/impl/linalg/detail/pca.mojo, which also
-#: requires PCA_RR_EIGH)
-comptime IDN_RR_ONE_BLOCK_D = _XD_LEAN_IDN and is_defined["MOJOLEARN_IDN_RR_ONE_BLOCK_D"]()
+# TOMBSTONE: MOJOLEARN_IDN_RR_ONE_BLOCK_D (loser) deleted 2026-10-11 by SHA_RR; code recoverable at SHA_RR^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch
 #: C4 switch (x_decomp/device.mojo `_svd_on`, `orth_on_device_diag`;
 #: x_decomp/host.mojo `_orth_passes`)
 comptime IDN_SVD_TALL_LEAN = _XD_LEAN_IDN and is_defined["MOJOLEARN_IDN_SVD_TALL_LEAN"]()
@@ -50,29 +44,10 @@ comptime IDN_SVD_TALL_LEAN = _XD_LEAN_IDN and is_defined["MOJOLEARN_IDN_SVD_TALL
 #: returns on one word load); a size rule, not a shape rule.
 comptime SVD_LEAN_GROUP = 8
 
-#: C3 cost rule knob: strided cell steps a thread a round (RR_ONE_D_TPB
-#: threads) up to which one block's round is taken over two grid launches.
-#: 192 steps x 256 threads = 49,152 cells = h h + n h at n = 256: the
-#: n <= 256 cap of the idea (one block's round-robin state; past it the
-#: grid's rounds use the whole GPU). Override for the A/B crossover:
-#: -D MOJOLEARN_IDN_RR_ONE_BLOCK_D_STEPS=<k>.
-comptime RR_ONE_D_STEPS = get_defined_int["MOJOLEARN_IDN_RR_ONE_BLOCK_D_STEPS", 192]()
-comptime RR_ONE_D_TPB = 256
-
 #: C4 b: |R[i, j]| <= ORTH_LEAN_TOL min(|R[i, i]|, |R[j, j]|) for every i < j
 #: means the first pass's input was orthogonal to 2^-20 (the svd's own
 #: rotation tolerance), so the second pass is skipped
 comptime ORTH_LEAN_TOL = Float32(9.5367431640625e-07)
-
-
-def rr_one_block_d_applies(n: Int) -> Bool:
-    """C3's cost rule (no board width): a round costs the grid route two
-    launches (~5 us each on NVIDIA, 10-15 us on AMD); in one block it costs
-    ceil((h h + n h) / RR_ONE_D_TPB) strided steps of L2-resident cells.
-    Taken while that is at most RR_ONE_D_STEPS steps a thread."""
-    var m = n + (n % 2)
-    var h = m // 2
-    return n >= 2 and h * h + n * h <= RR_ONE_D_STEPS * RR_ONE_D_TPB
 
 
 def orth_lean_violates(R: F32Ptr, l: Int, i: Int, j: Int) -> Bool:
