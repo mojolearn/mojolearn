@@ -7939,7 +7939,55 @@ comptime GEMM_KPACK_CPT = TUNED_CPT if (
 #: where the narrow tile runs (`lib_gemm_kpack_narrow_for`, NVIDIA: 128
 #: registers a thread, two blocks an SM), else the GEMM kernels' bound.
 comptime GEMM_KPACK_LAUNCH_BOUND = 2 * TUNED_TPB if lib_gemm_kpack_narrow_for[TARGET_COLUMN]() else GEMM_LAUNCH_BOUND
-comptime GEMM_KPACK_KS = 16
+#: lane/gemm-nv-microtile (2026-10-11), idea A1 of
+#: ideas-dense-linalg-20261011: `-D MOJOLEARN_IDN_GEMM_NV_MICROTILE`, DEFAULT
+#: OFF, IDENTICAL builds on the NVIDIA column only. The packed body's window
+#: grows from 16 to 32 steps of `p` (`GEMM_NV_MICRO_KS`), each GATHER thread
+#: stages TWO (group, step) pairs a window instead of one, and the A page
+#: drops its 4-word pad (`_kpack_apad`) so two blocks of the 128x64 tile
+#: still share a 100 KB L40S SM (two 24,832-byte pages + admission slots +
+#: the 1 KB per-block reserve = 50.8 KB a block; with the A pad it would be
+#: 51.3 KB and one block an SM). Structural reason: per window a thread
+#: pays a barrier, the window-bound arithmetic, the admission warp minima
+#: and the 2*NW-word admission read, the gather predicates and two staging
+#: stores; at KS 16 that overhead is spread over 16 x 32 cell steps, at 32 over
+#: 64 x 32, so it halves per FMA. Expected: 5-15% on the 4096^3 NV GEMM
+#: (window overhead is roughly a tenth to a fifth of the loop by instruction
+#: count); a loss is possible if the second gather pair spills under the
+#: 128-register bound (`GEMM_KPACK_LAUNCH_BOUND`), which the resources probe
+#: (bench/gemm_step_resources_main.mojo) shows. Bits: NONE. A window is a
+#: staging unit inside one leaf (`_tuned_window_at` never crosses a leaf
+#: bound), each cell still walks `p` ascending with one accumulator, the leaf
+#: partial, push and fold are unchanged; the window admission is a per-window
+#: exactness proof and stays one over a longer window (minimum over more
+#: words), so an admitted window's bare `fma.rn` is still the contract step.
+#: The idea's candidate (a), an 8x8 tile, is the pre-2026-09-25 default the
+#: narrow 8x4 tile beat by 5-9% (`lib_gemm_kpack_narrow_for`), so it is not
+#: repeated; candidate (b), skipping the admission because `fma.rn.ftz` makes
+#: the flush free, is wrong: the single ftz FMA flushes BEFORE rounding and
+#: differs at the smallest-normal boundary (`_tuned_step`'s docstring). Not a
+#: shape rule: KS is a fixed per-column schedule for every call the packed
+#: body takes. AMD and Apple compile exactly as before.
+comptime IDN_GEMM_NV_MICROTILE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_NVIDIA
+    and is_defined["MOJOLEARN_IDN_GEMM_NV_MICROTILE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime GEMM_NV_MICRO_KS = 32
+comptime GEMM_KPACK_KS = GEMM_NV_MICRO_KS if IDN_GEMM_NV_MICROTILE else 16
+
+
+@always_inline
+def _kpack_apad[KS: Int, PAD: Int, GATHER: Bool]() -> Int:
+    """The A page's per-group pad words: `PAD`, except under
+    `IDN_GEMM_NV_MICROTILE` at its window, where it is 0 (see that define:
+    the A loads of a warp read two group starts, each broadcast to 16 lanes,
+    so the A pad bought no bank spread for the accumulate; it served only the
+    outer-contiguous staging stores). A placement only: no word moves."""
+    comptime if IDN_GEMM_NV_MICROTILE and GATHER and KS == GEMM_NV_MICRO_KS:
+        return 0
+    return PAD
 comptime GEMM_KPACK_FS = TUNED_FOLD_SLOTS
 # Oct 4 range bounds replacing exact-dimension rules (unmeasured).
 comptime APPLE_PLAN64_NARROW = 1024
@@ -8111,6 +8159,19 @@ def _kpack_gather_gs[G: Int, KS: Int](tid: Int, outer_fast: Bool) -> Tuple[Int, 
 
 
 @always_inline
+def _kpack_gather_gs_v[G: Int, KS: Int](vt: Int, outer_fast: Bool) -> Tuple[Int, Int]:
+    """lane/gemm-nv-microtile: `_kpack_gather_gs` for a VIRTUAL thread
+    `vt` in `[0, G KS)` (two per real thread when `G KS == 2 NTH`): the
+    p-contiguous operand `(vt div KS, vt mod KS)`, the outer-contiguous one
+    `(vt mod G, vt div G)`. Each map is a bijection of `[0, G KS)` onto the
+    page's (group, step) pairs, so the two pairs of every thread cover the
+    page exactly once. Equal to `_kpack_gather_gs` where `G == KS`."""
+    if outer_fast:
+        return (vt % G, vt // G)
+    return (vt // KS, vt % KS)
+
+
+@always_inline
 def _kpack_gather[
     R: Int, G: Int
 ](
@@ -8277,9 +8338,13 @@ def identical_gemm_kpack_kernel[
     comptime BN = CPT * TC
     comptime VEC = TUNED_VECLEN
     comptime KV = KS // VEC
-    comptime ASTRIDE = KS * RPT + PAD
+    comptime APAD = _kpack_apad[KS, PAD, GATHER]()
+    comptime ASTRIDE = KS * RPT + APAD
     comptime BSTRIDE = KS * CPT + PAD
     comptime APAGE = TR * ASTRIDE
+    # lane/gemm-nv-microtile: GATHER (group, step) pairs per thread per
+    # window, 1 at the shipped KS 16, 2 under IDN_GEMM_NV_MICROTILE's KS 32.
+    comptime GP = (TR * KS) // NTH
     comptime BPAGE = TC * BSTRIDE
     comptime NCELL = RPT * CPT
     comptime NR = RPT
@@ -8331,9 +8396,11 @@ def identical_gemm_kpack_kernel[
     comptime assert DIAG == 0 or is_defined["MOJOLEARN_GEMM_DIAG"](), (
         "identical_gemm_kpack_kernel: DIAG != 0 needs -D MOJOLEARN_GEMM_DIAG=1"
     )
-    comptime assert (not GATHER) or (ALIGN == 16 and TR * KS == NTH and TC * KS == NTH), (
-        "identical_gemm_kpack_kernel: GATHER needs a 16-byte page and one (group, step)"
-        " pair per thread: TR * KS == TC * KS == the block size"
+    comptime assert (not GATHER) or (
+        ALIGN == 16 and TC == TR and (TR * KS == NTH or TR * KS == 2 * NTH)
+    ), (
+        "identical_gemm_kpack_kernel: GATHER needs a 16-byte page and one or two"
+        " (group, step) pairs per thread: TR == TC and TR * KS == GP * the block size"
     )
     comptime assert (
         FS >= GEMM_FOLD_LEVELS
@@ -8447,9 +8514,21 @@ def identical_gemm_kpack_kernel[
     var gb = _kpack_gather_gs[TC, KS](tid, b_outer_fast)
     var pga = SIMD[DType.float32, RPT](0.0)
     var pgb = SIMD[DType.float32, CPT](0.0)
+    # lane/gemm-nv-microtile: the second pair (GP == 2 only; `+0.0` and
+    # never stored otherwise). Virtual thread `tid + NTH`.
+    var ga2 = _kpack_gather_gs_v[TR, KS](tid + NTH, a_outer_fast)
+    var gb2 = _kpack_gather_gs_v[TC, KS](tid + NTH, b_outer_fast)
+    comptime if GP == 2:
+        ga = _kpack_gather_gs_v[TR, KS](tid, a_outer_fast)
+        gb = _kpack_gather_gs_v[TC, KS](tid, b_outer_fast)
+    var pga2 = SIMD[DType.float32, RPT](0.0)
+    var pgb2 = SIMD[DType.float32, CPT](0.0)
     comptime if GATHER:
         pga = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, w0[0], w0[1], ga[0], ga[1])
         pgb = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, w0[0], w0[1], gb[0], gb[1])
+        comptime if GP == 2:
+            pga2 = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, w0[0], w0[1], ga2[0], ga2[1])
+            pgb2 = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, w0[0], w0[1], gb2[0], gb2[1])
     else:
         pa = _tuned_g2r[AREG, VEC, KV, BM, NTH](
             a, a_si, a_sp, i0, m, w0[0], w0[1], tid
@@ -8462,6 +8541,9 @@ def identical_gemm_kpack_kernel[
         comptime for initial_page in range(PAGES):
             as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
             bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            comptime if GP == 2:
+                as_.store[alignment=ALIGN](initial_page * APAGE + ga2[0] * ASTRIDE + ga2[1] * RPT, pga2)
+                bs_.store[alignment=ALIGN](initial_page * BPAGE + gb2[0] * BSTRIDE + gb2[1] * CPT, pgb2)
         barrier()
 
     var sub_seen = False  # DETECT seam: some step result of my cells was subnormal
@@ -8495,12 +8577,24 @@ def identical_gemm_kpack_kernel[
           comptime if DIAG != 8:
             as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
             bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            comptime if GP == 2:
+                as_.store[alignment=ALIGN](pgw * APAGE + ga2[0] * ASTRIDE + ga2[1] * RPT, pga2)
+                bs_.store[alignment=ALIGN](pgw * BPAGE + gb2[0] * BSTRIDE + gb2[1] * CPT, pgb2)
           comptime if ADMIT:
             # The exponent minima of the words this thread staged (window
             # w, flushed), reduced over the warp; lane 0 publishes them in
             # the page's slots before the barrier below.
-            var adm_ma = _admit_warp_min(_admit_exp_min(pga))
-            var adm_mb = _admit_warp_min(_admit_exp_min(pgb))
+            var adm_la = _admit_exp_min(pga)
+            var adm_lb = _admit_exp_min(pgb)
+            comptime if GP == 2:
+                # The window's minimum covers both staged pairs (an integer
+                # minimum: order-free).
+                var adm_la2 = _admit_exp_min(pga2)
+                var adm_lb2 = _admit_exp_min(pgb2)
+                adm_la = adm_la2 if adm_la2 < adm_la else adm_la
+                adm_lb = adm_lb2 if adm_lb2 < adm_lb else adm_lb
+            var adm_ma = _admit_warp_min(adm_la)
+            var adm_mb = _admit_warp_min(adm_lb)
             if _urem[WARP_SIZE](tid) == 0:
                 adm_s.unsafe_store(pgw * 2 * NW + _udiv[WARP_SIZE](tid), adm_ma)
                 adm_s.unsafe_store(pgw * 2 * NW + NW + _udiv[WARP_SIZE](tid), adm_mb)
@@ -8512,7 +8606,7 @@ def identical_gemm_kpack_kernel[
                     sla = gemm_kpack_stage_outer(tid, sa, ea, BM, KS, VEC, NTH)
                 if sla[2]:
                     as_.unsafe_store(
-                        pgw * APAGE + gemm_kpack_addr(sla[0], sla[1], TR, RPT, KS, PAD),
+                        pgw * APAGE + gemm_kpack_addr(sla[0], sla[1], TR, RPT, KS, APAD),
                         pa[sa * VEC + ea],
                     )
           comptime for sb in range(BSLOTS):
@@ -8533,6 +8627,9 @@ def identical_gemm_kpack_kernel[
                 var wn_e = nxt
                 pga = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn_e[0], wn_e[1], ga[0], ga[1])
                 pgb = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn_e[0], wn_e[1], gb[0], gb[1])
+                comptime if GP == 2:
+                    pga2 = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn_e[0], wn_e[1], ga2[0], ga2[1])
+                    pgb2 = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn_e[0], wn_e[1], gb2[0], gb2[1])
          # lane/nvidia-step-time DIAGNOSTIC variants (wrong bits by design):
          # 6 no barrier, 7 no prefetch, 8 no staging stores.
          comptime if DIAG != 6:
@@ -8545,6 +8642,9 @@ def identical_gemm_kpack_kernel[
                 comptime if GATHER:
                     pga = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn[0], wn[1], ga[0], ga[1])
                     pgb = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn[0], wn[1], gb[0], gb[1])
+                    comptime if GP == 2:
+                        pga2 = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn[0], wn[1], ga2[0], ga2[1])
+                        pgb2 = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn[0], wn[1], gb2[0], gb2[1])
                 else:
                     pa = _tuned_g2r[AREG, VEC, KV, BM, NTH](
                         a, a_si, a_sp, i0, m, wn[0], wn[1], tid
@@ -8646,6 +8746,9 @@ def identical_gemm_kpack_kernel[
                 comptime if GATHER:
                     pga = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn1[0], wn1[1], ga[0], ga[1])
                     pgb = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn1[0], wn1[1], gb[0], gb[1])
+                    comptime if GP == 2:
+                        pga2 = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn1[0], wn1[1], ga2[0], ga2[1])
+                        pgb2 = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn1[0], wn1[1], gb2[0], gb2[1])
                 else:
                     pa = _tuned_g2r[AREG, VEC, KV, BM, NTH](
                         a, a_si, a_sp, i0, m, wn1[0], wn1[1], tid
@@ -8755,7 +8858,7 @@ def _kpack_launch[
     comptime BN = CPT * TC
     # DEVIATION 2700: the kernel's page is `TR` A line groups of `KS RPT + PAD`
     # words and `TC` B line groups of `KS CPT + PAD` (PAD 0 is 2599's page).
-    comptime PAGE_BYTES = (BM * KS + TR * PAD + BN * KS + TC * PAD) * 4
+    comptime PAGE_BYTES = (BM * KS + TR * _kpack_apad[KS, PAD, GATHER]() + BN * KS + TC * PAD) * 4
     # A02 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     comptime PAGES = 1 if (NI06_ONE_PAGE or is_defined["MOJOLEARN_GEMM_ONE_PAGE"]()) else lib_smem_pages_for[
         TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
@@ -9190,7 +9293,7 @@ def _kpack_geometry_name[
     comptime TR = TUNED_TPB // TC
     comptime BM = RPT * TR
     comptime BN = CPT * TC
-    comptime PAGE_BYTES = (BM * KS + TR * PAD + BN * KS + TC * PAD) * 4
+    comptime PAGE_BYTES = (BM * KS + TR * _kpack_apad[KS, PAD, GATHER]() + BN * KS + TC * PAD) * 4
     comptime PAGES = lib_smem_pages_for[
         TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
     ]()
