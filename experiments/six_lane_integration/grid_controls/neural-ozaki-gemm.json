@@ -3,41 +3,7 @@
  "lane": "neural-ozaki-gemm",
  "branch": "lane/neural-ozaki-gemm",
  "head": "8cf3e444c",
- "controls": {
-  "neural_gemm_ozaki_slices": {
-   "define": "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES",
-   "kind": "int_sweep",
-   "arms": {
-    "off": [],
-    "4": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4"
-    ],
-    "5": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
-    ]
-   },
-   "default": "off",
-   "legal_set": [
-    4,
-    5
-   ],
-   "source": [
-    "gemm/experiments/neural_ozaki.mojo:89",
-    "gemm/experiments/neural_ozaki.mojo:600",
-    "gemm/neural_dispatch.mojo:145",
-    "gemm/neural_dispatch.mojo:84"
-   ],
-   "binding": "_mojolearn_x_cnn",
-   "bits_change": true,
-   "status": "new",
-   "notes": "Ozaki scheme: S int8 slices per row/column with a shared power-of-two scale, S(S+1)/2 int8 MMA products (IMMA m16n8k32 sm_80+, MFMA 16x16x32 i8 gfx942) into S exact Int32 diagonals, k split across blocks with exact Int32 atomic adds, one integer RNE epilogue. Identical bits on every column by construction (integer sums; PIECES kernel on columns with no int8 unit incl. host). Mutually exclusive with the other NN* neural GEMM routes (comptime assert). Also forces CNN direct-conv off (NEURAL_GEMM_EXPERIMENT_ENABLED). Products with k > ozaki_max_k[S] (131071/104857/64512) use the incumbent. Accuracy evidence owed: gemm/experiments/neural_ozaki_check.mojo. Declared (neural-small.json) for every neural lane whose GEMMs go through gemm/neural_dispatch: lm-*, transformer-forward, samba-*, mlp-train-step, mamba1/2/3-forward, cnn-clf. exclusive_with = gemm/neural_dispatch.mojo:170 assert (_ROUTES == 0 and not NEURAL_PROFILE_CHANGED). MOJOLEARN_IDN_GEMM_LEAF arms 1/2 (NN03) trip the same assert; arm 3 is refused with it too (conservative, unmeasured).",
-   "exclusive_with": [
-    "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE",
-    "MOJOLEARN_IDN_NEURAL_CHAINS",
-    "MOJOLEARN_IDN_GEMM_LEAF"
-   ]
-  }
- },
+ "controls": {},
  "algorithms": {
   "neural:cnn-clf": {
    "binding": "_mojolearn_x_cnn",
@@ -59,5 +25,11 @@
   }
  ],
  "other_reach": "non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch: training (mlp_ops, neural_session_mlp), transformer, mamba/samba backward, byte_lm",
- "removed": []
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES",
+   "control": "neural_gemm_ozaki_slices",
+   "reason": "DELETE-slower 1.2-30x on every neural workload (grid g50ebe26a5), lane/grid-act-16"
+  }
+ ]
 }

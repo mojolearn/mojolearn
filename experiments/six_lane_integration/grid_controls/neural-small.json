@@ -143,18 +143,19 @@
    "note": "Block size of the parallel angle kernel; only read with m3_angle_parallel on. Timing only."
   },
   "m3_s17_tail": {
-   "define": "MOJOLEARN_IDN_M3_S17_TAIL_DBUF / _PIPE",
+   "define": "MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF / _DBUF",
    "kind": "arms",
    "arms": {
-    "off": [],
-    "dbuf": [
-     "MOJOLEARN_IDN_M3_S17_TAIL_DBUF=1"
+    "pipe": [],
+    "off": [
+     "MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF=1"
     ],
-    "pipe": [
-     "MOJOLEARN_IDN_M3_S17_TAIL_PIPE=1"
+    "dbuf": [
+     "MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF=1",
+     "MOJOLEARN_IDN_M3_S17_TAIL_DBUF=1"
     ]
    },
-   "default": "off",
+   "default": "pipe",
    "source": [
     "mamba/impl/modules/mamba3_backward.mojo:2378",
     "mamba/impl/modules/mamba3_backward.mojo:2384",
@@ -162,7 +163,7 @@
    ],
    "binding": "_mojolearn_mamba",
    "bits_change": false,
-   "status": "kept",
+   "status": "promoted:g50ebe26a5 (lane/grid-act-16, 2026-10-11)",
    "note": "Mamba-3 backward S17 tail staging, mamba3_backward_s17_operands_into via mamba3_prefill_backward_on. One control, two arms (DBUF wins if both are set, so they are never combined). Needs the shared tail (no MAMBA3_S17_TAIL_NAIVE)."
   },
   "attn_fwd_tq_rule": {

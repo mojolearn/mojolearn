@@ -67,18 +67,18 @@
    "define": "MOJOLEARN_IDN_M2_YD_ROWS",
    "kind": "int_sweep",
    "arms": {
-    "4": [],
-    "8": [
-     "MOJOLEARN_IDN_M2_YD_ROWS=8"
+    "8": [],
+    "4": [
+     "MOJOLEARN_IDN_M2_YD_ROWS=4"
     ]
    },
-   "default": "4",
+   "default": "8",
    "source": [
     "mamba/impl/modules/ssd_minimal.mojo:755"
    ],
    "binding": "_mojolearn_mamba",
    "bits_change": false,
-   "status": "rewritten",
+   "status": "promoted:g50ebe26a5 (lane/grid-act-16, 2026-10-11)",
    "entries": [
     "NN33"
    ],
@@ -116,21 +116,21 @@
    "note": "C_state value channels per block. Was NN33_CSTATE_P16."
   },
   "m2_retain_gl": {
-   "define": "MOJOLEARN_IDN_M2_RETAIN_GL",
+   "define": "MOJOLEARN_IDN_M2_RETAIN_GL_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_M2_RETAIN_GL=1"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_M2_RETAIN_GL_OFF=1"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "mamba/impl/modules/ssd_minimal.mojo:777"
    ],
    "binding": "_mojolearn_mamba",
    "bits_change": false,
-   "status": "kept",
+   "status": "promoted:g50ebe26a5 (lane/grid-act-16, 2026-10-11)",
    "entries": [
     "NI40"
    ],
@@ -480,9 +480,6 @@
     "0": [],
     "1": [
      "MOJOLEARN_IDN_LM_GROUPED_ADAM=1"
-    ],
-    "2": [
-     "MOJOLEARN_IDN_LM_GROUPED_ADAM=2"
     ]
    },
    "default": "0",
@@ -492,7 +489,7 @@
    ],
    "binding": "_mojolearn_byte_lm",
    "bits_change": false,
-   "status": "rewritten",
+   "status": "arm 2 removed 2026-10-11 (lane/grid-act-16, avg 1.15x slower); arm 1 MEASURE OWED",
    "entries": [
     "NN55",
     "NN56",
@@ -766,29 +763,6 @@
    "tags": [],
    "note": "bits_change not re-assessed by L11 (unchanged switch)",
    "reach_note": "Declared for samba-forward and samba-train-step by lane/grid-prune 2026-10-07: samba layers are mamba3/attention (python/mojolearn/_samba_impl.py:55) and run mamba3_siso.mojo, where m3_angle_parallel is already declared for samba."
-  },
-  "m1_elementwise_fused": {
-   "define": "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "mamba/impl/modeling/modeling_mamba.mojo:406"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NI46"
-   ],
-   "board": "mamba1-forward",
-   "tags": [],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
   "m3_decode_window": {
    "define": "MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE",
@@ -1443,10 +1417,10 @@
    "define": "MOJOLEARN_IDN_M1_SCAN",
    "kind": "arms",
    "arms": {
-    "off": [],
-    "persistent": [
-     "MOJOLEARN_IDN_M1_SCAN=3"
+    "off": [
+     "MOJOLEARN_IDN_M1_SCAN=0"
     ],
+    "persistent": [],
     "state_window": [
      "MOJOLEARN_IDN_M1_SCAN=2"
     ],
@@ -1454,7 +1428,7 @@
      "MOJOLEARN_IDN_M1_SCAN=1"
     ]
    },
-   "default": "off",
+   "default": "persistent",
    "source": [
     "mamba/impl/ops/neural_scan_profile.mojo:52",
     "mamba/impl/ops/selective_scan_interface.mojo:252",
@@ -1462,7 +1436,7 @@
    ],
    "binding": "_mojolearn_mamba",
    "bits_change": true,
-   "status": "merged",
+   "status": "promoted:g50ebe26a5 (lane/grid-act-16, 2026-10-11)",
    "merged_from": [
     "m1_persistent_scan",
     "nn34_affine_prefix",
@@ -1772,6 +1746,11 @@
    "control": "ce_token_fold",
    "arm": "2",
    "reason": "DELETED 2026-10-10 (lane grid-act-15, deletion 3034789a2): noise. ni35_token_tree256_v2/default ms ratio NV/AMD: lm-forward 0.99/1.01 (48.55 -> 48.11 NV, 34.67 -> 34.93 AMD; avg 1.00), lm-train-step 1.01/1.00 (35.43 -> 35.86 NV, 42.84 -> 42.88 AMD; avg 1.01); mean_nll 9.018733 and train loss_last 8.418446 unchanged. main ca25d9321, byte-LM bytes profile, one run per arm, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557 (default v1232/a1557); identity: every arm's NV hash == AMD hash. training/loss_reduction_v2.mojo and the ce_token_tree_v2 kernels deleted; arms 0|1 stay. Code recoverable at main ca25d9321; =2 refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch."
+  },
+  {
+   "define": "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED",
+   "control": "m1_elementwise_fused",
+   "reason": "DELETE-slower avg 1.52x (grid g50ebe26a5), lane/grid-act-16"
   }
  ],
  "notes": {
