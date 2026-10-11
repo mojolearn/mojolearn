@@ -70,6 +70,7 @@ from x_decomp.cells import (
     absmax_part_cell,
     absmax_sign_cell,
     FOLD_BLOCK,
+    IDN_XD_KIT_GEMM,
     colsum_part_cell,
     rowsum_part_cell,
     fold_cell,
@@ -121,6 +122,8 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
+from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.contract import OP_NN as KIT_OP_NN, OP_NT as KIT_OP_NT, OP_TN as KIT_OP_TN
 from x_decomp.ols_trisolve import OTS_TPB, ols_r_trisolve_kernel
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
@@ -1845,7 +1848,17 @@ def _eigh_block_test(
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
-    return nb * m * n if nb > 1 else 0
+    var fold = nb * m * n if nb > 1 else 0
+    comptime if IDN_XD_KIT_GEMM:
+        # [identical GEMM workspace | op(A) transpose copy (TT only)]; the
+        # TT copy is sized unconditionally (ta/tb are not known here).
+        return max(fold, _kit_gemm_ws(m, k, n) + m * k)
+    return fold
+
+
+def _kit_gemm_ws(m: Int, k: Int, n: Int) -> Int:
+    """IDN_XD_KIT_GEMM: the identical GEMM's workspace for C (m x n) = op(A) op(B)."""
+    return identical_gemm_workspace_max_floats(m, n, k)
 
 
 #: lane/apple-fast-gap-linalg2-pca (2026-10-03): DECOMP_FAST_GEMM_MMA, the FAST +
@@ -1917,6 +1930,10 @@ def launch_gemm(
         if m > 0 and n > 0 and k > 0:
             _launch_gemm_mma(ctx, a, b, c, m, k, n, ta, tb)
             return
+    comptime if IDN_XD_KIT_GEMM:
+        if m > 0 and n > 0 and k > 0:
+            _launch_gemm_identical(ctx, a, b, c, p, m, k, n, ta, tb)
+            return
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
     if nb > 1:
         ctx.enqueue_function[gemm_part_kernel](
@@ -1929,6 +1946,53 @@ def launch_gemm(
             a, b, c, Int32(m), Int32(k), Int32(n),
             Int32(1 if ta else 0), Int32(1 if tb else 0), grid_dim=_blocks(m * n), block_dim=TPB,
         )
+
+
+def kit_transpose_kernel(src: F32Ptr, dst: F32Ptr, rows: Int32, cols: Int32):
+    """IDN_XD_KIT_GEMM: dst (cols x rows) = src (rows x cols)^T, a pure copy (no
+    arithmetic, so the words are unchanged)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var r = Int(rows)
+    var cc = Int(cols)
+    if t < r * cc:
+        var i = t // cc
+        var j = t - i * cc
+        dst.unsafe_store(j * r + i, src.unsafe_load(t))
+
+
+def _launch_gemm_identical(
+    ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, p: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
+) raises:
+    """IDN_XD_KIT_GEMM (x_decomp/cells.mojo): C = op(A) op(B) through
+    `identical_gemm_into`, enqueued (no sync; DEVIATION 2595's internal wait on
+    NVIDIA's long-k group path is stream-ordered). `p` holds
+    `gemm_scratch(m, k, n)` floats: [workspace | m*k transpose copy]. OP_NN /
+    OP_NT / OP_TN map directly; TT copies A^T (m x k) into the scratch tail and
+    runs OP_NT, the same words as the host twin (x_decomp/host.mojo
+    `_gemm_identical`). Every vendor and the host take this route together."""
+    var wsn = _kit_gemm_ws(m, k, n)
+    var dc = DeviceBuffer[DType.float32](ctx, c, m * n, owning=False)
+    var da = DeviceBuffer[DType.float32](ctx, a, m * k, owning=False)
+    var db = DeviceBuffer[DType.float32](ctx, b, k * n, owning=False)
+    var dw = DeviceBuffer[DType.float32](ctx, p, max(wsn, 1), owning=False)
+    if ta and tb:
+        var at = p + wsn
+        ctx.enqueue_function[kit_transpose_kernel](
+            a, at, Int32(k), Int32(m), grid_dim=_blocks(m * k), block_dim=TPB,
+        )
+        var dat = DeviceBuffer[DType.float32](ctx, at, m * k, owning=False)
+        identical_gemm_into(ctx, dc, dat, db, dw, m, n, k, KIT_OP_NT)
+        _ = dat^
+    elif ta:
+        identical_gemm_into(ctx, dc, da, db, dw, m, n, k, KIT_OP_TN)
+    elif tb:
+        identical_gemm_into(ctx, dc, da, db, dw, m, n, k, KIT_OP_NT)
+    else:
+        identical_gemm_into(ctx, dc, da, db, dw, m, n, k, KIT_OP_NN)
+    _ = dc^
+    _ = da^
+    _ = db^
+    _ = dw^
 
 
 def launch_gemm_ordered(
