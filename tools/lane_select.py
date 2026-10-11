@@ -5086,7 +5086,15 @@ def build_script_roots(path, seen=None):
     or runs ANOTHER build script by name inherits that script's roots.
     `build_host_family.sh` builds the host binding of whichever family it is
     handed, so its roots are every family's host binding. A `mojo build` line
-    whose source is not a literal path returns None: every lane."""
+    whose source is not a literal path returns None: every lane.
+
+    A script SOURCED or run by another that compiles nothing adds no root
+    (an empty set, not None). 82aa73532 (2026-10-07) made every device script
+    source `bindings/build_defines.sh` (`. ".../build_defines.sh"`), which
+    builds nothing; read as None it made every build script NOT ATTRIBUTABLE.
+    A changed build_defines.sh itself still compiles nothing of its own and
+    stays None at the top level."""
+    nested = seen is not None
     seen = set() if seen is None else seen
     if path in seen:
         return set()
@@ -5121,6 +5129,8 @@ def build_script_roots(path, seen=None):
         if not os.path.isfile(os.path.join(ROOT, src)):
             return None
         roots.add(src)
+    if nested:
+        return roots
     return roots or None
 
 
