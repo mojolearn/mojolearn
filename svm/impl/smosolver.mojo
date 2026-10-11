@@ -324,7 +324,11 @@ def update_f_kernel(
 #: oracle is unchanged. Expected ~6.5 -> ~2.5 us per inner iteration: svc taxi
 #: NV ~1202 -> ~750 ms. -D MOJOLEARN_IDN_SVC_ONE_BLOCK turns it on;
 #: MOJOLEARN_IDN_ALL_OFF wins.
-comptime IDN_SVC_ONE_BLOCK = is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK"]() and not is_defined[
+#: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
+#: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): svc istella 0.720 (NV 0.685, AMD 0.755),
+#: taxi 0.663 (NV 0.629, AMD 0.697); same bits; runs v0127/a1709 vs A v0126/a1708. -D
+#: MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF restores the old path.
+comptime IDN_SVC_ONE_BLOCK = not is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF"]() and not is_defined[
     "MOJOLEARN_IDN_ALL_OFF"
 ]()
 comptime SMO_GRID_TPB_CAP = 1024 if IDN_SVC_ONE_BLOCK else SMO_GRID_TPB

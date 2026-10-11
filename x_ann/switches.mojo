@@ -144,9 +144,14 @@ comptime IDN_PQ_DEVICE_CODEBOOKS = (
 #: together: the device loop and its host twin `_codebooks_host_batched`
 #: read the same n_train (x_ann/ivf_pq_device.mojo, x_ann/host/ivf_pq_host.mojo).
 #: Quality gate: recall at the board's k must hold (FAST precedent).
+#: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
+#: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): ivf-pq istella 0.458 (NV 0.456, AMD 0.460),
+#: ivf-refine 0.463 (NV 0.465, AMD 0.461); BITS CHANGE (NV==AMD, host twin follows), recall_at_10
+#: 0.8021 -> 0.8088 (ivf-pq), 0.9946 -> 0.9960 (ivf-refine); runs v0131/a1713 vs A v0128/a1710. -D
+#: MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF restores the old path.
 comptime IDN_PQ_TRAINSET_STRIDED = (
     GLOBAL_NUMERIC_MODE != NUMERIC_FAST
-    and is_defined["MOJOLEARN_IDN_PQ_TRAINSET_STRIDED"]()
+    and not is_defined["MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime IDN_PQ_TRAIN_ROWS_PER_CODE = 256

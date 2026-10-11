@@ -80,8 +80,12 @@ comptime MBK_NONFINITE_MSG = "mojolearn: X contains NaN or infinity"
 #: copies). Unit weights only (weights take the copying path). No shape
 #: rule. Expected minibatch-kmeans istella NV 510 -> ~350 ms (the host copy
 #: and scan, ~150-200 ms); the device step loop (D7b) is a separate step.
+#: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
+#: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): minibatch-kmeans istella 0.309 (NV 0.195,
+#: AMD 0.423), taxi 0.555 (NV 0.421, AMD 0.690); same bits; runs v0107/a1689 vs A v0106/a1688. -D
+#: MOJOLEARN_IDN_MBK_RESIDENT_OFF restores the old path.
 comptime MBK_IDN_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_MBK_RESIDENT"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_MBK_RESIDENT_OFF"]()
 )
 #: the binding scans X on the device (Python skips its host scan)
 comptime MBK_DEVSCAN_ANY = MBK_FAST_DEVSCAN or MBK_IDN_RESIDENT

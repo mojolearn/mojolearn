@@ -233,8 +233,12 @@ comptime _NC_FIT_LEAN_FAST = NC_COLMISS_ONLY and not is_defined["MOJOLEARN_XN_FA
 # lean op's outputs are integer counts summed by atomics (order-free), so the words
 # equal the full pass on NVIDIA, AMD and the host binding alike. Not keyed on any
 # shape. Expected knn-imputer istella NV 83 -> ~15 ms, AMD 25 -> ~6 ms.
+#: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
+#: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): knn-imputer istella 0.093 (NV 0.099, AMD
+#: 0.087); nearest-centroid 1.00/1.05 untouched; same bits; runs v0105/a1687 vs A v0104/a1686,
+#: v0103/a1685 vs A v0102/a1684. -D MOJOLEARN_IDN_NC_FIT_LEAN_OFF restores the old path.
 comptime _NC_FIT_LEAN_IDN = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-                             and is_defined["MOJOLEARN_IDN_NC_FIT_LEAN"]())
+                             and not is_defined["MOJOLEARN_IDN_NC_FIT_LEAN_OFF"]())
 comptime NC_FIT_LEAN = _NC_FIT_LEAN_FAST or _NC_FIT_LEAN_IDN
 
 
