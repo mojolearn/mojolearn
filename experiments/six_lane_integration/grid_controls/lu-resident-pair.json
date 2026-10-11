@@ -5,15 +5,15 @@
  "head": "6e9cd50b2",
  "controls": {
   "lu_resident_pair": {
-   "define": "MOJOLEARN_IDN_LU_RESIDENT_PAIR",
+   "define": "MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_LU_RESIDENT_PAIR"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "x_decomp/s_linalg_fast.mojo:IDN_LU_RESIDENT_PAIR",
     "x_decomp/s_linalg_fast.mojo:dev_lu_factor_py",
@@ -23,8 +23,8 @@
    ],
    "binding": "_mojolearn_x_decomp",
    "bits_change": false,
-   "status": "new",
-   "notes": "lu_factor uploads A once, NaN/inf scan on the device, same launch_lu, LU and piv down once and kept on the device in the pair; lu_solve on the pair uploads only B, same launch_lu_solve, no LU_QFIX refinement. Same launches, same words; host column untouched."
+   "status": "promoted:lane/i17-decide-linalg-seq",
+   "notes": "PROMOTED 2026-10-11 (A/B main@b2657cc89, one run per arm, digests NV == AMD): lu-factor synthetic NV 822.7 -> 369.0 ms (0.45x, v0032/v0033), AMD 568.0 -> 315.4 ms (0.56x, a1615/a1616), avg 0.50x; lu-solve 1.07x / 1.00x (noise); quality equal. Rollback -D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF. lu_factor uploads A once, NaN/inf scan on the device, same launch_lu, LU and piv down once and kept on the device in the pair; lu_solve on the pair uploads only B, same launch_lu_solve, no LU_QFIX refinement. Same launches, same words; host column untouched."
   }
  },
  "lanes": {
