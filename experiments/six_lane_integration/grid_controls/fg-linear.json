@@ -69,6 +69,48 @@
    "bits_change": true,
    "status": "promoted 2026-10-09 (lane/postmerge-act-5; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2.default-linear)): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
    "notes": "L3. When the fp32 Gram gate rejects a Ridge fit (alpha > 0): float-float centered Gram + cross (64 row leaves folded ascending, means split from the binary64 means by soft-f64), the same power-of-two equilibration, float-float Cholesky (one launch a column, rows in parallel) under a 2^-24 gate, float-float triangular solves, coef rounded once. Gate fails -> the ridge_resident / status-1 fallback. OLS untouched. Bits change for the fits it takes; host column runs the same cells. Quality gate owed: r2 on istella vs the eig route and vs cuML. PROMOTED: ridge istella NV 0.96x / AMD 0.51x (avg 0.74x; hash ff4ab841 -> 5a348e50 on both vendors, r2 0.328682 -> 0.328674), ridge taxi NV 0.91x / AMD 0.99x (hash unchanged), ols istella 1.00x / 1.00x, taxi 0.98x / 1.03x. Measured alone, never with jacobi_round_robin: both-on timing owed. The off arm restores the direct eig-route fallback."
+  },
+  "gff_gram_tiled": {
+   "define": "MOJOLEARN_IDN_GFF_GRAM_TILED",
+   "kind": "switch",
+   "arms": {
+    "on": [
+     "MOJOLEARN_IDN_GFF_GRAM_TILED"
+    ],
+    "off": []
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_GFF_GRAM_TILED",
+    "glm/impl/gram_solve.mojo:gff_leaf_tiled_kernel",
+    "glm/impl/gram_solve.mojo:_gs_ff_fit"
+   ],
+   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host, unchanged)",
+   "bits_change": false,
+   "status": "new",
+   "notes": "C1 (lane ridge-ff-tiled 2026-10-11). The float-float leaf Gram (the ff fallback ridge istella takes) as 64 x 64 register tiles of the extended [X|y] upper triangle, 4 x 4 cells a thread, 16 rows of centered words staged in shared memory per chunk; each cell's chain unchanged (no bit moves). Expected ridge istella NV 534 -> ~250 ms, AMD 455 -> ~200. ID check owed (digests must equal default)."
+  },
+  "gs_solve_one_launch": {
+   "define": "MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH",
+   "kind": "switch",
+   "arms": {
+    "on": [
+     "MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH"
+    ],
+    "off": []
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_GS_SOLVE_ONE_LAUNCH",
+    "glm/impl/gram_solve.mojo:gs_chol_one_kernel",
+    "glm/impl/gram_solve.mojo:gff_chol_one_kernel",
+    "glm/impl/gram_solve.mojo:linear_gram_fit",
+    "glm/impl/gram_solve.mojo:_gs_ff_fit"
+   ],
+   "binding": "_mojolearn_estimators (host twin unchanged)",
+   "bits_change": false,
+   "status": "new",
+   "notes": "C2 (lane ridge-ff-tiled 2026-10-11). The resident Gram solve's fp32 and float-float Cholesky / forward / backward chains as one launch each (one block of 256, a barrier per column step, the same per-row statements): 3 d launches -> 3 per chain set. fp32 for d <= 1024, ff for d <= 512; not on Apple. Expected ~7-15 ms NV, ~2x AMD on ridge and ols (Gram route). ID check owed."
   }
  },
  "algorithms": {
@@ -76,7 +118,8 @@
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "route": "fit: LinearRegression.fit -> linear_gram_fit (linear_pinned_upload on the X/y upload; status 0 ends) -> else _ols_tsqr_centered (x_decomp, untouched); jacobi_round_robin reaches only the lstsqEig route (ols_fit_host), not the TSQR fallback",
    "controls": [
-    "jacobi_round_robin"
+    "jacobi_round_robin",
+    "gs_solve_one_launch"
    ],
    "interaction_groups": []
   },
@@ -86,7 +129,9 @@
    "controls": [
     "ridge_resident",
     "jacobi_round_robin",
-    "gram_ff_fallback"
+    "gram_ff_fallback",
+    "gff_gram_tiled",
+    "gs_solve_one_launch"
    ],
    "interaction_groups": [
     [
