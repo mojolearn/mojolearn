@@ -924,6 +924,10 @@ def _native(key):
     return fn
 
 
+#: The two door binaries `_host_native` resolves helpers from (loaded by
+#: `_backend.load_door_host`, the same loader the doors use).
+_BYTE_LM_HOST_EXTENSION = "_mojolearn_byte_lm_host"
+_FOREST_HOST_EXTENSION = "_mojolearn_forest_host"
 #: DEVIATION 2614: the helpers the CPU inference binding also exports, and the
 #: only ones `_native` may resolve from it.
 _HOST_NATIVE_KEYS = frozenset({"all_finite_f32", "all_finite_f64", "cast_f64_to_f32"})
@@ -953,13 +957,13 @@ def _host_native(key):
     if key in _HOST_NATIVE_KEYS:
         from . import _backend
         try:
-            return getattr(_backend.load_byte_lm_host(), key)
+            return getattr(_backend.load_door_host(_BYTE_LM_HOST_EXTENSION), key)
         except (ImportError, AttributeError):
             pass
     if key in _FOREST_HOST_NATIVE_KEYS:
         from . import _backend
         try:
-            return getattr(_backend.load_forest_host(), key)
+            return getattr(_backend.load_door_host(_FOREST_HOST_EXTENSION), key)
         except (ImportError, AttributeError):
             pass
     return None

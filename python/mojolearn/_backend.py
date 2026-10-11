@@ -1398,17 +1398,38 @@ def host_module_path(basename):
 _DOOR_HOST_MODULES = {}
 
 
-def _door_binary_path(override_env, basename):
-    override = os.environ.get(override_env, "").strip()
+#: The extra words a door's sabotage refusal has always carried.
+_DOOR_SABOTAGE_NOTE = {"_mojolearn_byte_lm_host": " (DEVIATION 2612)"}
+
+
+def door_host_binary_path(basename):
+    """The door binary `basename` (`_mojolearn_byte_lm_host`,
+    `_mojolearn_forest_host`) this process loads, or would load: the file
+    `MOJOLEARN_<PREFIX>_BINARY` names (`MOJOLEARN_BYTE_LM_HOST_BINARY`,
+    `MOJOLEARN_FOREST_HOST_BINARY`), else this install's host binding of that
+    name, wherever `host_module_path` resolves it."""
+    override = os.environ.get(f"MOJOLEARN_{_host_prefix(basename).upper()}_BINARY", "").strip()
     if override:
         return os.path.abspath(override)
     return host_module_path(basename)
 
 
-def _door_module(basename, path, build_script):
+def load_door_host(basename):
+    """The door binary `basename`, loaded once per process under
+    `mojolearn._host.<basename>` and READ BACK through its own prefix
+    (`byte_lm_host_*`, `forest_host_*`): IDENTICAL, `cpu`, and a sabotage
+    build (the base arm, and for the forest binding the CTR-path arm of
+    lane/inference-gbdt-ctr-tables, 2026-09-15, and the grove association arm
+    of DEVIATION 2961, 2026-09-17) refused unless
+    `MOJOLEARN_<PREFIX>_ALLOW_SABOTAGE=1`."""
+    module = _DOOR_HOST_MODULES.get(basename)
+    if module is not None:
+        return module
+    prefix = _host_prefix(basename)
+    path = door_host_binary_path(basename)
     if not os.path.exists(path):
         raise ImportError(
-            f"mojolearn: {path} is not built. Build it with {build_script}")
+            f"mojolearn: {path} is not built. Build it with bindings/build_{prefix}.sh")
     name = _HOST_MODULE_PREFIX + basename
     module = sys.modules.get(name)
     if module is None:
@@ -1417,69 +1438,21 @@ def _door_module(basename, path, build_script):
         module = importlib.util.module_from_spec(spec)
         _exec_binding(loader, module)
         sys.modules[name] = module
-    return module
-
-
-def byte_lm_host_binary_path():
-    """The byte LM host binary this process loads, or would load: the file
-    `MOJOLEARN_BYTE_LM_HOST_BINARY` names, else this install's host binding
-    of that name, wherever `host_module_path` resolves it."""
-    return _door_binary_path("MOJOLEARN_BYTE_LM_HOST_BINARY", "_mojolearn_byte_lm_host")
-
-
-def load_byte_lm_host():
-    """`_mojolearn_byte_lm_host`, loaded once and READ BACK: IDENTICAL, `cpu`,
-    and a sabotage build refused unless MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE=1."""
-    module = _DOOR_HOST_MODULES.get("_mojolearn_byte_lm_host")
-    if module is not None:
-        return module
-    path = byte_lm_host_binary_path()
-    module = _door_module("_mojolearn_byte_lm_host", path, "bindings/build_byte_lm_host.sh")
-    if int(module.byte_lm_host_numeric_mode()) != 1:
+    if int(getattr(module, prefix + "_numeric_mode")()) != 1:
         raise RuntimeError(f"mojolearn: {path} was not compiled IDENTICAL; rebuild it")
-    if str(module.byte_lm_host_vendor()) != 'cpu':
+    if str(getattr(module, prefix + "_vendor")()) != 'cpu':
         raise RuntimeError(f"mojolearn: {path} does not read back as the CPU binding")
-    if bool(module.byte_lm_host_sabotage()) and os.environ.get('MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE') != '1':
-        raise RuntimeError(
-            f"mojolearn: {path} is the gate's SABOTAGE build (DEVIATION 2612) and "
-            "computes wrong answers on purpose; it is refused outside the gate")
-    _DOOR_HOST_MODULES["_mojolearn_byte_lm_host"] = module
-    return module
-
-
-def forest_host_binary_path():
-    """The forest host binary this process loads, or would load: the file
-    `MOJOLEARN_FOREST_HOST_BINARY` names, else this install's host binding
-    of that name, wherever `host_module_path` resolves it."""
-    return _door_binary_path("MOJOLEARN_FOREST_HOST_BINARY", "_mojolearn_forest_host")
-
-
-def load_forest_host():
-    """`_mojolearn_forest_host`, loaded once and READ BACK: IDENTICAL, `cpu`,
-    and a sabotage build (the base, CTR-path and grove arms) refused unless
-    MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1."""
-    module = _DOOR_HOST_MODULES.get("_mojolearn_forest_host")
-    if module is not None:
-        return module
-    path = forest_host_binary_path()
-    module = _door_module("_mojolearn_forest_host", path, "bindings/build_forest_host.sh")
-    if int(module.forest_host_numeric_mode()) != 1:
-        raise RuntimeError(f"mojolearn: {path} was not compiled IDENTICAL; rebuild it")
-    if str(module.forest_host_vendor()) != 'cpu':
-        raise RuntimeError(f"mojolearn: {path} does not read back as the CPU binding")
-    # the CTR-path arm (lane/inference-gbdt-ctr-tables, 2026-09-15) and the
-    # grove association arm (DEVIATION 2961, 2026-09-17) are sabotage builds
-    # too and take the same switch
-    ctr_sabotage = getattr(module, 'forest_host_gbdt_ctr_sabotage', None)
-    groves_sabotage = getattr(module, 'forest_host_groves_sabotage', None)
-    sabotaged = (bool(module.forest_host_sabotage())
+    ctr_sabotage = getattr(module, prefix + "_gbdt_ctr_sabotage", None)
+    groves_sabotage = getattr(module, prefix + "_groves_sabotage", None)
+    sabotaged = (bool(getattr(module, prefix + "_sabotage")())
                  or bool(ctr_sabotage is not None and ctr_sabotage())
                  or bool(groves_sabotage is not None and groves_sabotage()))
-    if sabotaged and os.environ.get('MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE') != '1':
+    if sabotaged and os.environ.get(f"MOJOLEARN_{prefix.upper()}_ALLOW_SABOTAGE") != '1':
         raise RuntimeError(
-            f"mojolearn: {path} is the gate's SABOTAGE build and computes "
-            "wrong answers on purpose; it is refused outside the gate")
-    _DOOR_HOST_MODULES["_mojolearn_forest_host"] = module
+            f"mojolearn: {path} is the gate's SABOTAGE build"
+            f"{_DOOR_SABOTAGE_NOTE.get(basename, '')} and computes wrong answers "
+            "on purpose; it is refused outside the gate")
+    _DOOR_HOST_MODULES[basename] = module
     return module
 
 

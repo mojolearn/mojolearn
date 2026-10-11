@@ -47,13 +47,15 @@ _IDENTICAL_CODE = 1
 # `_buffer._host_native` needs only this binary, and importing this whole
 # door from the buffer helpers put its imports in every lane's closure.
 def binary_path():
-    """The binary this process loads, or would load (`_backend.byte_lm_host_binary_path`)."""
-    return _backend.byte_lm_host_binary_path()
+    """The binary this process loads, or would load: the file
+    `MOJOLEARN_BYTE_LM_HOST_BINARY` names, else this install's host binding
+    of that name (`_backend.door_host_binary_path`)."""
+    return _backend.door_host_binary_path(_EXTENSION)
 
 
 def _load():
-    """`_mojolearn_byte_lm_host`, loaded once and read back (`_backend.load_byte_lm_host`)."""
-    return _backend.load_byte_lm_host()
+    """`_mojolearn_byte_lm_host`, loaded once and read back (`_backend.load_door_host`)."""
+    return _backend.load_door_host(_EXTENSION)
 
 
 def _native_shape(shape):
