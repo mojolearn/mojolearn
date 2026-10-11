@@ -349,7 +349,7 @@ def fma3(a: Float32, b: Float32, c: Float32) -> Float32:
     return ftz(identical_mul_add(a, b, c))
 
 
-# TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by 0c8ea9eeb; code recoverable at 0c8ea9eeb^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch
 
 

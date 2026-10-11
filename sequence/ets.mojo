@@ -97,7 +97,7 @@ def ets_lik(y: FP, n: Int, err: Int, trend: Bool, season: Int, m: Int, ring: FP,
         var ol = l
         var ob = b
         var phib = mul(phi, ob) if trend else Float32(0.0)
-        # TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+        # TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by 0c8ea9eeb; code recoverable at 0c8ea9eeb^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch
         var q = add(ol, phib)
         var f0 = q
