@@ -14,7 +14,7 @@ rows, then per init the init rows and the k-means++ picks, then per step the
 batch rows (uniform with replacement, unit weights) and any reassignment.
 Not scikit-learn's Mersenne Twister stream, so a fit agrees with sklearn's
 at a tolerance, never bit for bit (NOT_IMPLEMENTED.tsv)."""
-from experiments.classical_identical_ideas.graph_controls import C39_RETAIN_STATE
+from experiments.classical_identical_ideas.graph_controls import C39_RETAIN_STATE, XCLUSTER_KPP_DISTINCT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -90,6 +90,97 @@ def mb_fold_scratch(n: Int) -> Int:
     return total if total > 0 else 1
 
 
+def _mb_gather_slot[O: ClusterOps](mut ops: O, xs: Int, d: Int, idx: List[Int]) raises -> Int:
+    """IDN_MBK_RESIDENT: the rows `idx` of the resident X slot `xs`, gathered
+    on the device into a new slot (`common.gather_rows`' words, no host X)."""
+    var m = len(idx)
+    var i32 = List[Int32](capacity=m)
+    for t in range(m):  # small-loop(m: sampled row ids): init/validation sample ids, no data read
+        i32.append(Int32(idx[t]))
+    var ids = ops.put_i(i32)
+    var dst = ops.alloc(m * d)
+    ops.gather_rows(xs, d, ids, m, dst)
+    return dst
+
+
+def _mb_kpp_indices_slot[O: ClusterOps](
+    mut ops: O, xs: Int, m: Int, d: Int, k: Int, mut rng: SplitMix64,
+) raises -> List[Int]:
+    """IDN_MBK_RESIDENT: `common.greedy_kmeans_pp_indices` (unit weights) over
+    the resident slot `xs` (m x d) instead of a put of a host copy: the same
+    device steps in the same order and the same draws, so the same picks."""
+    from std.math import log
+
+    var n_trials = 2 + Int(log(Float64(k)))
+    var picks = List[Int](capacity=k)
+    var first = rng.below(m)
+    picks.append(first)
+    var ids = ops.zeros_i(n_trials)
+    ops.set_i(ids, [Int32(first)])
+    var cslot = ops.alloc(n_trials * d)
+    ops.gather_rows(xs, d, ids, 1, cslot)
+    var closest = ops.alloc(m)
+    ops.sqdist(cslot, 1, xs, m, d, closest)
+    var pot = ops.sum_ff(closest, -1, -1, m, FM_VAL)
+    var dc_s = ops.alloc(n_trials * m)
+    for _c in range(1, k):  # small-loop(k: centers picked): each pick launches device steps
+        var vs = List[Float64](capacity=n_trials)
+        for _t in range(n_trials):  # small-loop(n_trials: candidate uniforms): 2 + log(k) draws
+            vs.append(rng.unit() * pot)
+        ops.kpp_search(closest, -1, m, vs, ids)
+        ops.gather_rows(xs, d, ids, n_trials, cslot)
+        comptime if XCLUSTER_KPP_DISTINCT:
+            ops.kpp_distinct(cslot, ids, n_trials, xs, m, d, dc_s)
+        else:
+            ops.sqdist(cslot, n_trials, xs, m, d, dc_s)
+        var pots = ops.kpp_pots(dc_s, closest, -1, n_trials, m)
+        var best = 0
+        for t in range(1, n_trials):  # small-loop(n_trials: candidate potentials)
+            if pots[t] < pots[best]:
+                best = t
+        ops.kpp_take(dc_s, closest, best, m)
+        pot = pots[best]
+        picks.append(Int(ops.get_i(ids, n_trials)[best]))
+    return picks^
+
+
+def _mb_reassign_apply_slot[O: ClusterOps](
+    mut ops: O, xs: Int, mut c_new: List[Float32], mut w: List[Float32], to: List[Bool], nre: Int,
+    rows: List[Int], batch: Int, k: Int, d: Int, mut rng: SplitMix64,
+) raises:
+    """IDN_MBK_RESIDENT: `mb_reassign_apply` with the picked batch rows
+    gathered from the resident X slot `xs` (nre <= batch / 2 rows read back)
+    instead of read from a host copy: the same draws, the same words."""
+    var pool = List[Int](capacity=batch)
+    for t in range(batch):  # small-loop(batch: Fisher-Yates positions): index bookkeeping, no data read
+        pool.append(t)
+    var picked = List[Int](capacity=nre)
+    for q in range(nre):  # small-loop(nre: reassigned centers): seeded draws
+        var r = q + rng.below(batch - q)
+        var tmp = pool[q]
+        pool[q] = pool[r]
+        pool[r] = tmp
+        picked.append(pool[q])
+    var src_rows = List[Int](capacity=nre)
+    for q in range(nre):  # small-loop(nre: reassigned centers): row ids
+        src_rows.append(rows[picked[q]])
+    var gs = _mb_gather_slot(ops, xs, d, src_rows)
+    var src = ops.get(gs, nre * d)
+    var q = 0
+    var wmin = Float32(0)
+    var have = False
+    for j in range(k):  # small-loop(k: centers): k-sized bookkeeping
+        if not to[j] and (not have or w[j] < wmin):
+            wmin = w[j]
+            have = True
+    for j in range(k):  # small-loop(k: centers): copies nre gathered rows
+        if to[j]:
+            for f in range(d):
+                c_new[j * d + f] = src[q * d + f]
+            q += 1
+            w[j] = wmin
+
+
 @fieldwise_init
 struct MiniBatchParams(Copyable, Movable):
     var k: Int
@@ -116,8 +207,13 @@ def minibatch_fit[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, p: MiniBatchParams,
     mut centers: List[Float32], mut labels: List[Int32], mut counts: List[Float32],
     weights: List[Float32] = List[Float32](),
+    xs_res: Int = -1,
 ) raises -> MiniBatchResult:
-    """Fit; `centers` holds the init array when `p.has_init`, and is
+    """`xs_res` >= 0 (IDN_MBK_RESIDENT, x_cluster/minibatch_ptr.mojo): X is
+    already resident in that slot, `x` is empty, weights are unit, and every
+    read of X (samples, init rows, reassigned rows) is a device gather of the
+    same rows: the same words as the copying fit.
+    Fit; `centers` holds the init array when `p.has_init`, and is
     overwritten with the fitted centers. `weights` (empty: unit) are
     sklearn's sample_weight: they weigh the k-means++ potentials, the
     validation inertia and the batch draw (`choice(p=w / sum(w))`); the batch
@@ -151,13 +247,24 @@ def minibatch_fit[O: ClusterOps](
     if init_size > n:
         init_size = n
     var rng = SplitMix64(p.seed)
-    var xs = ops.put(x)
+    var resident = xs_res >= 0
+    if resident and weighted:
+        raise Error("MiniBatchKMeans: the resident fit takes unit weights only")
+    var xs: Int
+    if resident:
+        xs = xs_res
+    else:
+        xs = ops.put(x)
 
     # validation rows, then n_init inits scored on them
     var vidx = List[Int](capacity=init_size)
     for _t in range(init_size):
         vidx.append(rng.below(n))
-    var vslot = ops.put(gather_rows(x, d, vidx))
+    var vslot: Int
+    if resident:
+        vslot = _mb_gather_slot(ops, xs, d, vidx)
+    else:
+        vslot = ops.put(gather_rows(x, d, vidx))
     var best = List[Float32]()
     var best_inertia = Float64(0)
     var n_init = 1 if p.has_init else p.n_init
@@ -190,9 +297,17 @@ def minibatch_fit[O: ClusterOps](
                     var r = weighted_draw(cum, rng)
                     taken[r] = True
                     picks.append(iidx[r])
-                cand = gather_rows(x, d, picks)
+                if resident:
+                    cand = ops.get(_mb_gather_slot(ops, xs, d, picks), k * d)
+                else:
+                    cand = gather_rows(x, d, picks)
             else:
-                cand = greedy_kmeans_pp(ops, gather_rows(x, d, iidx), init_size, d, k, rng, wi)
+                if resident:
+                    var isl = _mb_gather_slot(ops, xs, d, iidx)
+                    var kp = _mb_kpp_indices_slot(ops, isl, init_size, d, k, rng)
+                    cand = ops.get(_mb_gather_slot(ops, isl, d, kp), k * d)
+                else:
+                    cand = greedy_kmeans_pp(ops, gather_rows(x, d, iidx), init_size, d, k, rng, wi)
         var vl = List[Int32]()
         var vd = List[Float32]()
         nearest_all(ops, vslot, init_size, cand, k, d, vl, vd)
@@ -332,7 +447,10 @@ def minibatch_fit[O: ClusterOps](
                         var st0 = states[g] - UInt64(batch) * SPLITMIX_GAMMA
                         for t in range(batch):
                             rows.append(Int(splitmix_at(st0, UInt64(t + 1)) % UInt64(n)))
-                    mb_reassign_apply(c_new, w, to, nre, x, rows, batch, k, d, rng)
+                    if resident:
+                        _mb_reassign_apply_slot(ops, xs, c_new, w, to, nre, rows, batch, k, d, rng)
+                    else:
+                        mb_reassign_apply(c_new, w, to, nre, x, rows, batch, k, d, rng)
                     ops.set(cslot, c_new)
                     ops.set(wslot, w)
                     rolled = True
@@ -421,7 +539,10 @@ def minibatch_fit[O: ClusterOps](
         if need_c or nre > 0:
             c_new = ops.get(cslot, k * d)
         if nre > 0:
-            mb_reassign_apply(c_new, w, to, nre, x, bidx, batch, k, d, rng)
+            if resident:
+                _mb_reassign_apply_slot(ops, xs, c_new, w, to, nre, bidx, batch, k, d, rng)
+            else:
+                mb_reassign_apply(c_new, w, to, nre, x, bidx, batch, k, d, rng)
             ops.set(cslot, c_new)
             ops.set(wslot, w)
         if not need_c:
