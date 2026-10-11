@@ -30,16 +30,18 @@ is every thread's ascending fold over the T partial sums, so every thread
 sees the same value. Same model, same bounds, same Nelder-Mead; the
 error sum's fold order differs from op_ets's and the trend update is
 beta e in place of (beta / alpha) ((l' - l) - phi b), so the bits differ:
-FAST only, and only on Apple (NVIDIA and AMD keep op_ets).
+FAST on Apple by default, and IDENTICAL behind `-D MOJOLEARN_IDN_ETS_TEAM`
+(below: a fixed tree prefix in place of the serial one, replayed on the
+host column by `ets_team_replay`).
 
 The multiplicative-error and the seasonal models keep `op_ets`."""
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from sequence.ets import SEAS_N, _log, ets_init_state
 from sequence.fit_team import SEQ_TEAM_TPB, TEAM_REC, SeqTeam, _ldi, _nm_load, _nm_save, _spend, _sti
-from sequence.nm import Objective, nm_finish, nm_start, nm_steps
+from sequence.nm import Objective, nelder_mead, nm_finish, nm_start, nm_steps
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 
 #: the switch: FAST on Apple, default ON since the M3 A/B (damped-ets
@@ -52,6 +54,36 @@ comptime ETS_TEAM = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_ETS_TEAM_OFF"]()
 )
+
+#: lane ets-team-idn (2026-10-11, idea E2). IDENTICAL, default OFF:
+#: `-D MOJOLEARN_IDN_ETS_TEAM` runs ETS(A, A|Ad, N) on NVIDIA and AMD (and
+#: Apple) with the team above, one block of SEQ_TEAM_TPB threads per series,
+#: in place of op_ets's one thread per series. Structural reason: op_ets
+#: walks the whole series serially in one thread per Nelder-Mead evaluation
+#: and keeps only B threads of the GPU busy (damped-ets taxi-hourly: AMD
+#: 1771 ms, NV 744 ms); the team cuts the per-evaluation chain from n steps
+#: to 2 n / 64 + log2(64) compositions. Expected AMD 1771 -> ~150 ms, NV 744
+#: -> ~80 ms (Apple FAST measured 612 -> 48 ms with the serial prefix).
+#: The chunk count is the constant ETS_TEAM_CHUNKS (= SEQ_TEAM_TPB, the
+#: launch's block size on every vendor; L = ceil(n / 64) points a chunk), so
+#: the bits never depend on the device. The exclusive prefix of the chunk
+#: maps is a fixed Hillis-Steele tree (6 levels, offsets 1, 2, .., 32, each
+#: level `_ets_compose`), not the serial walk of FAST, and the chunk SSEs
+#: fold ascending from 0. BITS CHANGE against op_ets (composed maps, beta e
+#: trend form, chunked SSE fold, the forecast's running phi power) on NVIDIA,
+#: AMD and the host column together: the host binding replays the same chunk
+#: maps, tree and fold in `ets_team_replay` (sequence/exec.mojo). Every other
+#: ETS model keeps op_ets. MOJOLEARN_IDN_ALL_OFF turns it off.
+comptime IDN_ETS_TEAM = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_ETS_TEAM"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: IDN_ETS_TEAM's chunk count: the team's threads (the host replay runs
+#: them one after another)
+comptime ETS_TEAM_CHUNKS = 64
+#: IDN_ETS_TEAM's tree levels: log2(ETS_TEAM_CHUNKS)
+comptime ETS_TEAM_LEVELS = 6
 
 #: ETS phases: 0 setup (the initial state, the bounds, the simplex);
 #: 1 the Nelder-Mead iterations; 2 the outputs; 3 done
