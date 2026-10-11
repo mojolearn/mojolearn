@@ -1,0 +1,78 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "hdb-ivf",
+ "branch": "lane/hdb-ivf",
+ "head": "407e20adb",
+ "controls": {
+  "idn_hdb_round_lean": {
+   "define": "MOJOLEARN_IDN_HDB_ROUND_LEAN",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_HDB_ROUND_LEAN"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo"
+   ],
+   "binding": [
+    "_mojolearn_hdbscan"
+   ],
+   "bits_change": false,
+   "status": "OPEN (ideas-all-gaps-20261011 D6(b))",
+   "note": "Phase B's list length stays on the device (smr_b_shape_kernel, the host's slice formula); search/fold/merge launch at a worst-case flat grid. One drain per Boruvka round instead of two. Same MST by the (key, j) total order. Pair with C62_SAME_COMPONENT_SKIP (zero-code, orchestrator)."
+  },
+  "idn_pq_trainset_strided": {
+   "define": "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_ann/switches.mojo",
+    "x_ann/ivf_pq_device.mojo",
+    "x_ann/host/ivf_pq_host.mojo"
+   ],
+   "binding": [
+    "_mojolearn_x_ann",
+    "_mojolearn_x_ann_host"
+   ],
+   "bits_change": true,
+   "status": "OPEN (ideas-all-gaps-20261011 D8(a))",
+   "note": "Batched PQ codebooks train on min(n, 256*n_codes) stride-sampled rows; device and host twin together. Recall gate at the board's k against arm A and cuVS."
+  }
+ },
+ "algorithms": {
+  "algos:hdbscan": {
+   "binding": "_mojolearn_hdbscan",
+   "route": "fit -> single_linkage -> sparse_mr_mst_device Boruvka rounds",
+   "controls": [
+    "idn_hdb_round_lean"
+   ],
+   "interaction_groups": []
+  },
+  "algos:ivf-refine": {
+   "binding": "_mojolearn_x_ann",
+   "route": "build -> ivf_pq_build_device -> pq_codebooks_device",
+   "controls": [
+    "idn_pq_trainset_strided"
+   ],
+   "interaction_groups": []
+  },
+  "algos:ivf-pq": {
+   "binding": "_mojolearn_x_ann",
+   "route": "build -> ivf_pq_build_device -> pq_codebooks_device",
+   "controls": [
+    "idn_pq_trainset_strided"
+   ],
+   "interaction_groups": []
+  }
+ },
+ "removed": 0
+}
