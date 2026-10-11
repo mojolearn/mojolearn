@@ -2630,6 +2630,21 @@ comptime IDN_LAYER_DEV_IO = _FAM_IDN and not is_defined["MOJOLEARN_IDN_LAYER_DEV
 #: resident and the `_m` entries read them there (glue only; the entries are
 #: the existing ones). `-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`.
 comptime IDN_PIN_WEIGHTS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PIN_WEIGHTS_OFF"]()
+#: bit 7 (lane cnn-resident-glue, 2026-10-11, G3) MOJOLEARN_IDN_CNN_RESIDENT_GRADS,
+#: default OFF: the CNN glue keeps everything of a resident call on the
+#: device: Conv2d/BasicBlock weights auto-pinned on first use (re-pinned when
+#: `weight_`/`bias_` is reassigned), dW/db and BatchNorm's running statistics
+#: and aux block left in resident arrays (`grad_weight_`, `grad_bias_`,
+#: `running_mean_`, `running_var_` download on first host read), the global
+#: pools take resident tensors (`_AdaptivePool._device_io`) with a cached pool
+#: layer, and outputs whose every word is stored come from the unfilled
+#: allocation. Structural reason: a resnet-block fit made ~24 host waits
+#: (each BN forward downloads running + aux, each backward aux and each conv
+#: backward dW/db) and three H2D weight copies per conv call; expected
+#: resnet-block NV 16.2 -> ~11 ms, AMD 15.5 -> ~10, conv2d -0.4 ms,
+#: global-maxpool 2.9 -> ~1.2 NV. Glue and buffer residency only: the same
+#: entries, kernels and operands, so no bit moves.
+comptime IDN_CNN_RESIDENT_GRADS = _FAM_IDN and is_defined["MOJOLEARN_IDN_CNN_RESIDENT_GRADS"]()
 
 
 def idn_flags() -> Int:
@@ -2647,6 +2662,8 @@ def idn_flags() -> Int:
         f |= 16
     comptime if IDN_PIN_WEIGHTS:
         f |= 32
+    comptime if IDN_CNN_RESIDENT_GRADS:
+        f |= 128
     # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
     # Tried: bit 6 (64) of x_cnn_idn_flags, the fused BatchNorm entries.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
