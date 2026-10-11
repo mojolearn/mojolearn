@@ -52,6 +52,8 @@ from x_decomp.omp_block import DECOMP_FAST_OMP_BLOCK, OMP_TPB, omp_block_fits, o
 # TOMBSTONE: MOJOLEARN_DECOMP_FAST_GEMM_TILED (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: threadgroup-tiled decomp gemm (x_decomp/fast_gemm.mojo, with its AFCL_L08 slab-depth knob); randomized-svd istella 483.56 -> 640.22 ms (+32.4%), reconstruction error equal.
 # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch; record in docs/TOMBSTONES.md.
+from x_decomp.xd_lean import IDN_SVD_TALL_LEAN, SVD_LEAN_GROUP
+from x_decomp.rr_one_block_d import orth_lean_test_kernel, rs_round_gated_kernel, rs_sweep_gate_kernel
 from x_decomp.cells import (
     lu_perm_src,
     lu_aux_clamp,
@@ -216,6 +218,11 @@ comptime XD_NO_FLAG = Int32(2147483647)
 # `-D MOJOLEARN_IDN_XD_SVD_GROUP_OFF` restores one readback per sweep.
 comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP and not is_defined["MOJOLEARN_IDN_XD_SVD_GROUP_OFF"]()
 comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
+# lane xd-rr-one-block (2026-10-11, C4): MOJOLEARN_IDN_SVD_TALL_LEAN (default off;
+# x_decomp/xd_lean.mojo) gates `_svd_on`'s rounds on a device convergence word
+# (SVD_LEAN_GROUP sweeps a readback) and skips `orth_on_device_diag`'s second
+# pass when the first pass's R is diagonal to 2^-20
+comptime XD_SVD_GROUP_MAX = SVD_LEAN_GROUP if IDN_SVD_TALL_LEAN else XD_SVD_GROUP
 
 # lane fam-decomp (2026-10-04), IDENTICAL: a small eigh (n <= IDN_EIGH_SMALL_N)
 # is ONE launch and one wait, the batched round-robin kernel
@@ -2390,9 +2397,21 @@ def orth_on_device_diag(
     var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
     # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (each pass as
     # CholeskyQR); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch.
+    # IDN_SVD_TALL_LEAN (C4 b, svd's U route only: with_diag): one word,
+    # set when the first pass's guarded R is not diagonal to 2^-20
+    var dlean = ctx.enqueue_create_buffer[DType.float32](1)
+    var hlean = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var lean_skip = False
     for p in range(2):
         var src = da if p == 0 else dq
         var dst = dq if p == 0 else da
+        if lean_skip:
+            # C4 b: the first pass already left Q orthonormal to 2^-20 times
+            # float32 rounding: its Q (in dq) is the result, ddiag holds R1's
+            # diagonal (the product with R2 = I); the same skip on the host
+            # (`HostExec._orth_passes`). Bits of U change when this skips.
+            ctx.enqueue_copy(dst_buf=dst, src_buf=src)
+            break
         ctx.enqueue_copy(dst_buf=dw, src_buf=src)
         # lane/decomp-apple2: the guard cell (k-sized: the l x l R) on one
         # device thread, in stream order after the R it reads, so R never
@@ -2410,6 +2429,17 @@ def orth_on_device_diag(
         ctx.enqueue_function[trsm_kernel](
             src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
         )
+        comptime if IDN_SVD_TALL_LEAN:
+            if p == 0 and with_diag and l > 0:
+                # the skip test on the guarded R1, one word down (one wait in
+                # place of the second pass's QR launches when it skips)
+                enqueue_fill(ctx, dlean, Float32(0.0))
+                ctx.enqueue_function[orth_lean_test_kernel](
+                    r_buf.unsafe_ptr(), dlean.unsafe_ptr(), Int32(l), grid_dim=_blocks(l * l), block_dim=TPB
+                )
+                ctx.enqueue_copy(dst_buf=hlean, src_buf=dlean)
+                ctx.synchronize()
+                lean_skip = hlean.unsafe_ptr().unsafe_load(0) == Float32(0.0)
         ctx.synchronize()
         _ = src^
         _ = dst^
@@ -2417,6 +2447,8 @@ def orth_on_device_diag(
     _ = dw^
     _ = scratch^
     _ = r_buf^
+    _ = dlean^
+    _ = hlean^
     ctx.synchronize()
 
 
@@ -3499,9 +3531,13 @@ struct DevExec(Exec):
         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         var mm = n + (n % 2)
         var h = mm // 2
-        var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1) * XD_SVD_GROUP)
-        var dfirst = ctx.enqueue_create_buffer[DType.int32](XD_SVD_GROUP)
-        var hfirst = ctx.enqueue_create_host_buffer[DType.int32](XD_SVD_GROUP)
+        var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1) * XD_SVD_GROUP_MAX)
+        var dfirst = ctx.enqueue_create_buffer[DType.int32](XD_SVD_GROUP_MAX)
+        var hfirst = ctx.enqueue_create_host_buffer[DType.int32](XD_SVD_GROUP_MAX)
+        # IDN_SVD_TALL_LEAN: done[0] converged (sticky), done[1] sweeps run
+        var ddone = ctx.enqueue_create_buffer[DType.float32](2)
+        var hdone = ctx.enqueue_create_host_buffer[DType.float32](2)
+        enqueue_fill(ctx, ddone, Float32(0.0))
         ctx.synchronize()
         # lane idn-cov-overflow: the power-of-two range scale of
         # x_decomp/eigh_scale.mojo on A before the QR (its column norms and
@@ -3515,6 +3551,35 @@ struct DevExec(Exec):
         ctx.enqueue_function[pj_identity_kernel](_p(vt), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
         var converged = n < 2
         var executed = 0
+        comptime if IDN_SVD_TALL_LEAN:
+            # C4 c: SVD_LEAN_GROUP sweeps a readback, every round behind the
+            # sticky device word (rs_round_gated_kernel): the sweeps after the
+            # converging one return at once. The same rotations as the loop
+            # below (a sweep after convergence was an identity there too),
+            # the same X_DECOMP_SVD_SWEEPS bound on the sweeps run.
+            while not converged and executed < X_DECOMP_SVD_SWEEPS:
+                var lgroup = min(SVD_LEAN_GROUP, X_DECOMP_SVD_SWEEPS - executed)
+                enqueue_fill(ctx, flags, Float32(0.0))
+                enqueue_fill(ctx, dfirst, XD_NO_FLAG)
+                for sg in range(lgroup):
+                    var lfl = _p(flags) + sg * h
+                    for rd in range(mm - 1):
+                        ctx.enqueue_function[rs_round_gated_kernel](
+                            _p(rt), _p(vt), lfl, _p(ddone), Int32(n), Int32(mm), Int32(rd), X_DECOMP_SVD_TOL,
+                            grid_dim=h, block_dim=RS_TPB,
+                        )
+                        _round_sync(ctx, rd)
+                    ctx.enqueue_function[xd_flag_first_kernel](
+                        lfl, Int32(h), dfirst.unsafe_ptr() + sg, grid_dim=_blocks(h), block_dim=TPB
+                    )
+                    ctx.enqueue_function[rs_sweep_gate_kernel](
+                        dfirst.unsafe_ptr() + sg, _p(ddone), XD_NO_FLAG, grid_dim=1, block_dim=1
+                    )
+                ctx.enqueue_copy(dst_buf=hdone, src_buf=ddone)
+                ctx.synchronize()
+                executed += lgroup
+                if hdone.unsafe_ptr().unsafe_load(0) != Float32(0.0):
+                    converged = True
         while not converged and executed < X_DECOMP_SVD_SWEEPS:
             # XD_SVD_GROUP sweeps behind one wait (IDN_XD_SVD_GROUP), sweep g
             # of the group on flag slice g and lowest-flag word g
@@ -3570,6 +3635,8 @@ struct DevExec(Exec):
         _ = flags^
         _ = dfirst^
         _ = hfirst^
+        _ = ddone^
+        _ = hdone^
 
     @staticmethod
     def lasso_rows(

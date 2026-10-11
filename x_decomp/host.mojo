@@ -38,6 +38,7 @@ from decomposition.host.linalg_public import host_eigh, host_qr_r
 from checks.numerics import ftz
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from x_decomp.xd_lean import IDN_SVD_TALL_LEAN, orth_lean_skip
 from x_decomp.cells import (
     lu_perm_src,
     lu_result_word,
@@ -608,7 +609,7 @@ struct HostExec(Exec):
 
     @staticmethod
     def _orth_passes(a: F32Ptr, m: Int, l: Int, diag: F32Ptr, with_diag: Bool) raises:
-        for _ in range(2):
+        for ps in range(2):
             var w = List[Float32](capacity=m * l)
             for t in range(m * l):
                 w.append(a.unsafe_load(t))
@@ -624,8 +625,16 @@ struct HostExec(Exec):
                 trsm_row(pw, pr, a, i, l)
 
             xd_parallel(row, m)
+            var skip = False
+            comptime if IDN_SVD_TALL_LEAN:
+                # C4 b (lane xd-rr-one-block): the device's skip of the second
+                # pass (`orth_on_device_diag`), the same test on the same R1
+                if ps == 0 and with_diag and l > 0:
+                    skip = orth_lean_skip(pr, l)
             _ = r^
             _ = w^
+            if skip:
+                break
 
     @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
