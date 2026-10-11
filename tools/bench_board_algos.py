@@ -5519,8 +5519,13 @@ def race(args):
         if frozen_config is not None:
             cmd += ["--neural-ab-config", frozen_config]
         if LANES[lane]["kind"] == "layer":    # the ours arms read x/state/dy from here; torch checks
-            cmd += ["--neural-fixtures", os.path.abspath(
-                getattr(args, "neural_fixtures", None) or _tool("neural_fixtures").default_dir(args.data))]
+            fixtures_dir = os.path.abspath(
+                getattr(args, "neural_fixtures", None) or _tool("neural_fixtures").default_dir(args.data))
+            cmd += ["--neural-fixtures", fixtures_dir]
+            # the untimed own-host reference (bench_board_host_quality.enrich) is a child of THIS driver process and
+            # reads the fixtures through the environment; the worker's own export (worker(), a1c96a5ba) never reaches
+            # it, so every layer lane's quality cell still said "neural fixtures missing" (2026-10-11, nv2 v0082-v0121)
+            os.environ[_tool("neural_fixtures").ENV_DIR] = fixtures_dir
         if getattr(args, "full_tree_workload", False):
             raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
             cmd.append("--full-tree-workload")
