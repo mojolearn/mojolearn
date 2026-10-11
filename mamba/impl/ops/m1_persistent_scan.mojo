@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel.
 """Mamba-1 persistent chunked selective scan (lane/neural-fusions, L13).
 
-`-D MOJOLEARN_IDN_M1_SCAN=3` (persistent arm; IDENTICAL only, default OFF; the
+`-D MOJOLEARN_IDN_M1_SCAN=3` (persistent arm; IDENTICAL only, DEFAULT since 2026-10-11 grid g50ebe26a5; the
 switch is read in `selective_scan_interface.mojo`, which calls
 `m1_persistent_scan`; it replaced MOJOLEARN_IDN_M1_PERSISTENT_SCAN, lane/grid-prune).
 

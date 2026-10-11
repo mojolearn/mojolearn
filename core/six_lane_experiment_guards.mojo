@@ -176,7 +176,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TREES_C47_GBDT"](), "removed: MOJOLEARN_TREES_C47_GBDT (width cap subsumed by MOJOLEARN_TREES_T17_BATCH)"
     comptime assert not is_defined["MOJOLEARN_TREES_HIST_REP_BPSM"](), "merged: use -D MOJOLEARN_TREES_HIST_REP_SM=1 (device SMs x 4 blocks); BPSM=4 alone equalled SM=64"
     comptime assert not (is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]() or is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()), "merged: use -D MOJOLEARN_IDN_M1_SCAN=1 (affine_prefix, NN34) | 2 (state_window, NI38) | 3 (persistent)"
-    comptime M1S = get_defined_int["MOJOLEARN_IDN_M1_SCAN",0]()
+    comptime M1S = get_defined_int["MOJOLEARN_IDN_M1_SCAN",3]()
     comptime assert M1S >= 0 and M1S <= 3, "MOJOLEARN_IDN_M1_SCAN arms: 1 affine_prefix, 2 state_window, 3 persistent"
     comptime assert M1S == 3 or not (is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS"]()), "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH/_TOKENS are read only by MOJOLEARN_IDN_M1_SCAN=3 (persistent)"
     comptime assert not (is_defined["MOJOLEARN_NI14_BOUNDED_COL2IM"]() or is_defined["MOJOLEARN_NI14_TILED_COL2IM"]()), "merged: use -D MOJOLEARN_NI14_COL2IM=1 (bounded) | 2 (tiled)"

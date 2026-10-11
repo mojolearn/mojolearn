@@ -58,7 +58,10 @@ comptime NN34_TPB = 128
 comptime M1_SCAN_AFFINE_PREFIX = 1
 comptime M1_SCAN_STATE_WINDOW = 2
 comptime M1_SCAN_PERSISTENT = 3
-comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 0]()
+# PROMOTED 2026-10-11 (grid g50ebe26a5, arm m1_scan=persistent vs today's defaults, one run per arm): mamba1-forward gaussian
+# NV L40S 5.563 -> 3.550 ms (v1242), AMD MI325X 9.934 -> 3.204 ms (a1350); avg ratio 0.454 (state_window=2: 0.468);
+# hash 602f9ec5 on both vendors. Default arm is now 3 (persistent); -D MOJOLEARN_IDN_M1_SCAN=0 restores the old scan.
+comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 3]()
 comptime NN34_AFFINE_PREFIX = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and M1_SCAN == M1_SCAN_AFFINE_PREFIX
