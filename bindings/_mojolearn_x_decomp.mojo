@@ -13,7 +13,7 @@ from x_decomp.api import (
     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, als_cg_rows_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py,
     rowsum_py, sqdist_py, vendor_py, fast_defines_py,
-    idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
+    idn_flags_py, lu_gesv_py, ols_tsqr_r_py, ols_r_trisolve_py,
 )
 from x_decomp.device import DevExec
 from x_decomp.fa_fast import FA_FAST_APPLE, fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
@@ -146,6 +146,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         # lane idn-dense-linalg: the one-entry OLS and solve routes
         m.def_function[idn_flags_py]("x_decomp_idn_flags")
         m.def_function[ols_tsqr_r_py[DevExec]]("x_decomp_ols_tsqr_r")
+        m.def_function[ols_r_trisolve_py[DevExec]]("x_decomp_ols_r_trisolve")
         m.def_function[lu_gesv_py[DevExec]]("x_decomp_lu_gesv")
         m.def_function[als_cg_rows_py[DevExec]]("x_decomp_als_cg_rows")
         # MinCovDet's fast_mcd and online LDA on the resident kit
