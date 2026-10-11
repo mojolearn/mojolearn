@@ -339,6 +339,11 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_RSVD_ORTH_LEAN`](#wave-2-w2-decide-linalg-2026-10-11) | Classical (decomposition) | NOISE | 2026-10-11 | [MOJOLEARN_IDN_RSVD_ORTH_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_RSVD_ORTH_LEAN.patch) |
 | [`MOJOLEARN_IDN_LG_FUSED_CHAIN`](#wave-2-w2-decide-linalg-2026-10-11) | Trees | NOISE | 2026-10-11 | [MOJOLEARN_IDN_LG_FUSED_CHAIN.patch](../experiments/removed/MOJOLEARN_IDN_LG_FUSED_CHAIN.patch) |
 | [`MOJOLEARN_IDN_CTR_PERM_GRID`](#wave-2-w2-decide-linalg-2026-10-11) | Trees | NOISE | 2026-10-11 | [MOJOLEARN_IDN_CTR_PERM_GRID.patch](../experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch) |
+| [`MOJOLEARN_IDN_GEMM_FILL_SPLITK`](#wave-2-w2-decide-lm-2026-10-11) | Neural | NOISE/LOSER | 2026-10-11 | [MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch) |
+| [`MOJOLEARN_IDN_LM_LEAN_STEP`](#wave-2-w2-decide-lm-2026-10-11) | Neural | NOISE | 2026-10-11 | [MOJOLEARN_IDN_LM_LEAN_STEP.patch](../experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch) |
+| [`MOJOLEARN_IDN_LM_LOGITS_LEAN`](#wave-2-w2-decide-lm-2026-10-11) | Neural | NOISE | 2026-10-11 | [MOJOLEARN_IDN_LM_LOGITS_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch) |
+| [`MOJOLEARN_IDN_ATTN_DEFER_REGIME`](#wave-2-w2-decide-lm-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch) |
+| [`MOJOLEARN_IDN_TF_SESSION_LEAN`](#wave-2-w2-decide-lm-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_TF_SESSION_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch) |
 
 ## Restored
 
@@ -3109,3 +3114,16 @@ digests NV == AMD on every cell. Deleted on lane/w2-decide-neural; each code is 
   in sequence/exec_device.mojo, the resident forward's fill skip in sequence/moe_dev.mojo): moe synthetic NV 5.938x, AMD 3.339x,
   avg 4.64x; same bits. SLOWER. Runs nv2 v0101 / A v0100, amd a1683 / A a1682. Deleted by 978e7f43b, recoverable at 978e7f43b^.
   Patch experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch.
+
+## wave-2 w2-decide-lm (2026-10-11)
+
+Wave-2 A/B arms measured same box, same main c8ef6c66d, one run per arm (NV L40S nv2, AMD MI325X; evidence
+~/mojolearn-evidence/round-20261011/w2_decisions.txt and w2_decide.out). Verdict = average of the two vendors' B/A time ratios;
+digests NV == AMD on every cell; no quality change on any cell (same words). Deleted on lane/w2-decide-lm; each code is recoverable at
+the parent of its deletion commit.
+
+- `MOJOLEARN_IDN_GEMM_FILL_SPLITK`: tried device-filled leaf split for under-filled TUNED GEMMs in GemmWorkspace.run (H2). Files: gemm/neural_dispatch.mojo. Result: gemm 1.045, mamba2 1.115 (NV 1.248), mlp 0.941, transformer 1.39 (NV), moe 1.010; AMD all 0.98-1.02; nv2 v0116/v0121, amd a1698/a1703. Verdict NOISE/LOSER. Deleted by 026a811d5, recoverable at 026a811d5^. Patch experiments/removed/MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch.
+- `MOJOLEARN_IDN_LM_LEAN_STEP`: tried out-of-place Adam + device status words on every column (H3). Files: training/byte_lm.mojo. Result: lm-train-step 0.982 (NV 0.975, AMD 0.990), lm-forward 0.942; nv2 v0119, amd a1701. Verdict NOISE. Deleted by 8cc78c8ae, recoverable at 8cc78c8ae^. Patch experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch.
+- `MOJOLEARN_IDN_LM_LOGITS_LEAN`: tried logits non-finite scan folded after the download wait (H4). Files: training/byte_lm_logits.mojo. Result: lm-forward 0.925 (NV 0.829, AMD 1.021; the NV gain is common to all B arms), lm-train-step 0.999; nv2 v0120, amd a1702. Verdict NOISE. Deleted by 066722146, recoverable at 066722146^. Patch experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch.
+- `MOJOLEARN_IDN_ATTN_DEFER_REGIME`: tried device-side regime verdict + deferred corner window, estash gate for forward-only calls (H1). Files: transformer/impl/llama/fused_attention.mojo, modeling_llama.mojo, bindings/_mojolearn_transformer.mojo. Result: transformer-forward 1.376 (NV 1.647, AMD 1.104; NV confirmed by v0139), lm-forward 0.914, lm-train-step 0.989; nv2 v0117, amd a1699. Verdict LOSER. Deleted by 68d9654bb, recoverable at 68d9654bb^. Patch experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch. The patch also restores TF_SESSION_LEAN (shared commit).
+- `MOJOLEARN_IDN_TF_SESSION_LEAN`: tried skip the KV cache fill when the prefill covers the whole capacity (H9). Files: bindings/_mojolearn_transformer.mojo. Result: transformer-forward 1.350 (NV 1.689, AMD 1.011); nv2 v0118, amd a1700. Verdict LOSER. Deleted by 68d9654bb, recoverable at 68d9654bb^. Patch experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch. Deleted in the same commit as ATTN_DEFER_REGIME (they shared the session wiring commit 150df49d9); the patch is the same file and restores both.
