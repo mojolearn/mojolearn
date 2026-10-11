@@ -235,19 +235,37 @@ def sparse_mr_search_tiled_kernel(
     slice_in: Int32,
     inv_alpha: Float32,
     sabotage: Int32,
+    shape: MutPointer[Int32, MutAnyOrigin],
+    lean: Int32,
 ):
     """Cells `(s, t)` for the SMR_TI listed points of this block: the same
-    answer as `sparse_mr_search_kernel`'s cell, every cell written."""
+    answer as `sparse_mr_search_kernel`'s cell, every cell written.
+    `shape` / `lean` (IDN_HDB_ROUND_LEAN only): when `lean` is set, the list
+    length, slice count, slice width and tile count come from the device
+    (`smr_b_shape_kernel`) and the flat block index maps to (tile, slice)."""
     var tx = Int(thread_idx.x)
     var ty = Int(thread_idx.y)
     var tid = ty * SMR_TX + tx
     var m = Int(m_in)
     var d = Int(d_in)
     var n_todo = Int(n_todo_in)
-    var t0 = Int(block_idx.x) * SMR_TI
+    var bx = Int(block_idx.x)
     var s = Int(block_idx.y)
-    var ja = Int(j0_in) + s * Int(slice_in)
-    var jb = ja + Int(slice_in)
+    var sl_w = Int(slice_in)
+    comptime if IDN_HDB_ROUND_LEAN:
+        if lean != 0:
+            n_todo = Int(shape[SMR_SH_N])
+            var lean_ns = Int(shape[SMR_SH_NS])
+            var lean_it = Int(shape[SMR_SH_IT])
+            sl_w = Int(shape[SMR_SH_SL])
+            # block-uniform exit before any barrier
+            if lean_it <= 0 or bx >= lean_it * lean_ns:
+                return
+            s = bx // lean_it
+            bx = bx - s * lean_it
+    var t0 = bx * SMR_TI
+    var ja = Int(j0_in) + s * sl_w
+    var jb = ja + sl_w
     if jb > Int(j1_in):
         jb = Int(j1_in)
     var a_s = stack_allocation[
@@ -431,17 +449,25 @@ def smr_fold_slices_kernel(
     out_j: MutPointer[Int32, MutAnyOrigin],
     n_todo_in: Int32,
     n_s_in: Int32,
+    shape: MutPointer[Int32, MutAnyOrigin],
+    lean: Int32,
 ):
     """Point `t`'s slices in ascending order under (key, j): the host fold of
     `_search`, on the device. A poisoned or non-finite cell is passed on as
-    its marker (the first one in slice order) for the host to refuse."""
+    its marker (the first one in slice order) for the host to refuse.
+    `lean` (IDN_HDB_ROUND_LEAN): the length and slice count from `shape`."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n_todo = Int(n_todo_in)
+    var n_s = Int(n_s_in)
+    comptime if IDN_HDB_ROUND_LEAN:
+        if lean != 0:
+            n_todo = Int(shape[SMR_SH_N])
+            n_s = Int(shape[SMR_SH_NS])
     if t >= n_todo:
         return
     var fk = WEIGHT_KEY_SENTINEL
     var fj = SMR_NONE_J
-    for s in range(Int(n_s_in)):
+    for s in range(n_s):
         var c = s * n_todo + t
         var jj = out_j[c]
         if jj == SMR_POISON_J or jj == SMR_BAD_J:
@@ -713,6 +739,69 @@ comptime IDN_HDB_ROUND_ONE_SYNC = (
 )
 
 
+#: lane hdb-ivf D6(b) (IDENTICAL, NVIDIA and AMD, DEFAULT OFF, 2026-10-11),
+#: -D MOJOLEARN_IDN_HDB_ROUND_LEAN: ONE DRAIN PER BORUVKA ROUND. Under
+#: IDN_HDB_ROUND_ONE_SYNC a round still drains twice: the round-tail read
+#: (next list A + joined count) and phase B's list count, read only to size
+#: the B search's grid. Here the B shape is computed ON THE DEVICE by
+#: `smr_b_shape_kernel` from st[COUNT] with the host's own formula (the same
+#: tile count, slice count and slice width the host would pick for that
+#: length, so every cell is the same chain over the same j range), and the
+#: search, fold and merge launch at a worst-case flat grid (ceil(m / SMR_TI)
+#: + SMR_TARGET_BLOCKS blocks: tiles x slices < SMR_TARGET_BLOCKS + tiles by
+#: the slice formula) whose surplus blocks exit before any barrier. The
+#: per-point minimum is over the total order (key, j), so it is the same
+#: MST: bits none. A poison or non-finite weight from phase B still lands in
+#: st[ERR] and is refused by name at the round-tail read, before the result
+#: leaves the fit. Expected: one host round trip (~50-100 us of GPU idle plus
+#: the launch-queue refill) fewer per round; hdbscan istella/taxi have tens
+#: of rounds. Only when one launch covers all j (no check-lowered launch
+#: bound) and the tiled kernel runs off Apple; otherwise main's read.
+comptime IDN_HDB_ROUND_LEAN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and SMR_TILED
+    and not HDB_SMR_TILED
+    and is_defined["MOJOLEARN_IDN_HDB_ROUND_LEAN"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime SMR_SH_N = 0
+comptime SMR_SH_NS = 1
+comptime SMR_SH_SL = 2
+comptime SMR_SH_IT = 3
+comptime SMR_SH_LEN = 4
+
+
+def smr_b_shape_kernel(shape: _I32P, st: _I32P, m_in: Int32, cap_in: Int32):
+    """IDN_HDB_ROUND_LEAN: the B search's (length, slices, slice width,
+    tiles) from st[COUNT], `_search`'s SMR_TILED formula with j0 = 0,
+    j1 = m. One thread."""
+    if _gid() != 0:
+        return
+    var n = Int(st[SMR_ST_COUNT])
+    var m = Int(m_in)
+    var cap = Int(cap_in)
+    if n <= 0:
+        shape[SMR_SH_N] = 0
+        shape[SMR_SH_NS] = 0
+        shape[SMR_SH_SL] = 0
+        shape[SMR_SH_IT] = 0
+        return
+    var it = (n + SMR_TI - 1) // SMR_TI
+    var n_s = (SMR_TARGET_BLOCKS + it - 1) // it
+    n_s = min(n_s, (m + SMR_TJ - 1) // SMR_TJ)
+    if n_s * n > cap:
+        n_s = cap // n
+    n_s = max(1, min(n_s, CUDA_MAX_GRID_YZ))
+    var sl = (m + n_s - 1) // n_s
+    sl = ((sl + SMR_TJ - 1) // SMR_TJ) * SMR_TJ
+    n_s = (m + sl - 1) // sl
+    shape[SMR_SH_N] = Int32(n)
+    shape[SMR_SH_NS] = Int32(n_s)
+    shape[SMR_SH_SL] = Int32(sl)
+    shape[SMR_SH_IT] = Int32(it)
+
+
 def smr_round_reset_keep_kernel(
     ub: _I32P, amin: _I32P, aidx: _I32P, ckey: _I32P, clo: _I32P,
     chi: _I32P, nxt: _I32P, win: _I32P, m_in: Int32,
@@ -894,13 +983,17 @@ def smr_flag_scatter_kernel(
 
 def smr_merge_kernel(
     pk: _I32P, pj: _I32P, fk: _I32P, fj: _I32P, todo: _I32P, st: _I32P,
-    n_todo_in: Int32, first: Int32,
+    n_todo_in: Int32, first: Int32, shape: _I32P, lean: Int32,
 ):
     """One launch's folded (key, j) per listed point into that point's best
     under (key, j), strict; the first launch of a search starts from empty.
     A surviving poison or a non-finite weight is reported in `st`."""
     var t = _gid()
-    if t >= Int(n_todo_in):
+    var n_todo = Int(n_todo_in)
+    comptime if IDN_HDB_ROUND_LEAN:
+        if lean != 0:
+            n_todo = Int(shape[SMR_SH_N])
+    if t >= n_todo:
         return
     var i = Int(todo[t])
     if first != 0:
@@ -1174,6 +1267,8 @@ def _search(
     inv_alpha: Float32,
     sabotage: Int32,
     launch_macs: Int,
+    mut shape_d: DeviceBuffer[DType.int32],
+    lean: Bool,
 ) raises -> Int:
     """Exact cheapest other-component edge of every listed point
     (`sb.todo_d[0:n_todo]`, on the device), merged into `pk_d` / `pj_d` on
@@ -1184,7 +1279,40 @@ def _search(
     smaller one, the checks', still splits the j axis, which may move no
     bit); on Apple the per-pair kernel under `SPARSE_MR_LAUNCH_MACS` with
     a drain after every launch so no command buffer holds the GPU long.
-    Returns the number of launches."""
+    Returns the number of launches.
+
+    `lean` (IDN_HDB_ROUND_LEAN): the list length is st[COUNT] on the
+    device, never read; `n_todo` is ignored and one launch covers all j."""
+    comptime if IDN_HDB_ROUND_LEAN:
+        if lean:
+            ctx.enqueue_function[smr_b_shape_kernel](
+                shape_d.unsafe_ptr(), st_d.unsafe_ptr(), Int32(m), Int32(sb.cap),
+                grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+            )
+            ctx.enqueue_memset(sb.j_d, SMR_POISON_J)
+            var lean_blocks = (m + SMR_TI - 1) // SMR_TI + SMR_TARGET_BLOCKS
+            var lean_tgrid = (m + SPARSE_MR_TPB - 1) // SPARSE_MR_TPB
+            ctx.enqueue_function[sparse_mr_search_tiled_kernel](
+                sb.key_d.unsafe_ptr(), sb.j_d.unsafe_ptr(), xt_d.unsafe_ptr(),
+                norms_d.unsafe_ptr(), core_d.unsafe_ptr(), comp_d.unsafe_ptr(),
+                sb.todo_d.unsafe_ptr(), Int32(m), Int32(d), Int32(0),
+                Int32(0), Int32(m), Int32(0), inv_alpha, sabotage,
+                shape_d.unsafe_ptr(), Int32(1),
+                grid_dim=(lean_blocks, 1, 1), block_dim=(SMR_TX, SMR_TY, 1),
+            )
+            ctx.enqueue_function[smr_fold_slices_kernel](
+                sb.fk_d.unsafe_ptr(), sb.fj_d.unsafe_ptr(), sb.key_d.unsafe_ptr(),
+                sb.j_d.unsafe_ptr(), Int32(0), Int32(0),
+                shape_d.unsafe_ptr(), Int32(1),
+                grid_dim=(lean_tgrid, 1, 1), block_dim=(SPARSE_MR_TPB, 1, 1),
+            )
+            ctx.enqueue_function[smr_merge_kernel](
+                pk_d.unsafe_ptr(), pj_d.unsafe_ptr(), sb.fk_d.unsafe_ptr(),
+                sb.fj_d.unsafe_ptr(), sb.todo_d.unsafe_ptr(), st_d.unsafe_ptr(),
+                Int32(0), Int32(1), shape_d.unsafe_ptr(), Int32(1),
+                grid_dim=(lean_tgrid, 1, 1), block_dim=(SPARSE_MR_TPB, 1, 1),
+            )
+            return 1
     if n_todo == 0:
         return 0
     var dd = d if d > 0 else 1
@@ -1233,6 +1361,7 @@ def _search(
                 norms_d.unsafe_ptr(), core_d.unsafe_ptr(), comp_d.unsafe_ptr(),
                 sb.todo_d.unsafe_ptr(), Int32(m), Int32(d), Int32(n_todo),
                 Int32(j0), Int32(j1), Int32(sl), inv_alpha, sabotage,
+                shape_d.unsafe_ptr(), Int32(0),
                 grid_dim=(i_tiles, n_s, 1), block_dim=(SMR_TX, SMR_TY, 1),
             )
         else:
@@ -1248,12 +1377,14 @@ def _search(
         ctx.enqueue_function[smr_fold_slices_kernel](
             sb.fk_d.unsafe_ptr(), sb.fj_d.unsafe_ptr(), sb.key_d.unsafe_ptr(),
             sb.j_d.unsafe_ptr(), Int32(n_todo), Int32(n_s),
+            shape_d.unsafe_ptr(), Int32(0),
             grid_dim=(tgrid, 1, 1), block_dim=(SPARSE_MR_TPB, 1, 1),
         )
         ctx.enqueue_function[smr_merge_kernel](
             pk_d.unsafe_ptr(), pj_d.unsafe_ptr(), sb.fk_d.unsafe_ptr(),
             sb.fj_d.unsafe_ptr(), sb.todo_d.unsafe_ptr(), st_d.unsafe_ptr(),
             Int32(n_todo), Int32(1) if launches == 0 else Int32(0),
+            shape_d.unsafe_ptr(), Int32(0),
             grid_dim=(tgrid, 1, 1), block_dim=(SPARSE_MR_TPB, 1, 1),
         )
         comptime if not SMR_TILED:
@@ -1458,6 +1589,8 @@ def sparse_mr_mst_device(
     var boff_d = ctx.enqueue_create_buffer[DType.int32](g)
     var st_d = ctx.enqueue_create_buffer[DType.int32](SMR_ST_LEN)
     var st_h = ctx.enqueue_create_host_buffer[DType.int32](SMR_ST_LEN)
+    # IDN_HDB_ROUND_LEAN's device-side B shape (4 words; unused otherwise)
+    var shape_d = ctx.enqueue_create_buffer[DType.int32](SMR_SH_LEN)
     ctx.enqueue_function[smr_init_kernel](
         comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
         e_key.unsafe_ptr(), e_lo.unsafe_ptr(), e_hi.unsafe_ptr(),
@@ -1506,7 +1639,7 @@ def sparse_mr_mst_device(
         var n_a = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_COUNT))
         _ = _search(
             ctx, sb, xt_d, x, norms_d, core_d, comp_d, pk_d, pj_d, st_d,
-            n_a, m, d, inv_alpha, sabotage, launch_macs,
+            n_a, m, d, inv_alpha, sabotage, launch_macs, shape_d, False,
         )
         # Phase B: A's exact keys tighten the bounds.
         ctx.enqueue_function[smr_ub_from_a_kernel](
@@ -1520,12 +1653,22 @@ def sparse_mr_mst_device(
             grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
         )
         _compact(ctx, state_d, SMR_LIST_B, bcount_d, boff_d, sb.todo_d, st_d, m)
-        _read_status(ctx, st_d, st_h)
-        var n_b = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_COUNT))
-        _ = _search(
-            ctx, sb, xt_d, x, norms_d, core_d, comp_d, pk_d, pj_d, st_d,
-            n_b, m, d, inv_alpha, sabotage, launch_macs,
-        )
+        # IDN_HDB_ROUND_LEAN: B's length stays on the device (no drain)
+        var lean_b = False
+        comptime if IDN_HDB_ROUND_LEAN:
+            lean_b = launch_macs >= SPARSE_MR_LAUNCH_MACS
+        if lean_b:
+            _ = _search(
+                ctx, sb, xt_d, x, norms_d, core_d, comp_d, pk_d, pj_d, st_d,
+                0, m, d, inv_alpha, sabotage, launch_macs, shape_d, True,
+            )
+        else:
+            _read_status(ctx, st_d, st_h)
+            var n_b = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_COUNT))
+            _ = _search(
+                ctx, sb, xt_d, x, norms_d, core_d, comp_d, pk_d, pj_d, st_d,
+                n_b, m, d, inv_alpha, sabotage, launch_macs, shape_d, False,
+            )
         # Each component's cheapest edge under (key, lo, hi).
         comptime if C34_PARALLEL_EDGES:
             ctx.enqueue_function[_c34_component_edge](comp_d.unsafe_ptr(),pk_d.unsafe_ptr(),pj_d.unsafe_ptr(),state_d.unsafe_ptr(),ckey_d.unsafe_ptr(),clo_d.unsafe_ptr(),chi_d.unsafe_ptr(),Int32(m),grid_dim=(m,1,1),block_dim=128)
