@@ -1,12 +1,12 @@
 diff --git a/cholesky/checks/potrf.mojo b/cholesky/checks/potrf.mojo
-index 396ecb80a..7298744d6 100644
+index 8435f644e..7298744d6 100644
 --- a/cholesky/checks/potrf.mojo
 +++ b/cholesky/checks/potrf.mojo
 @@ -325,8 +325,9 @@ from cholesky.checks.chol_sabotage import (
      sabotage_trsm_panel_kernel,
  )
  from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel, trsm_panel_guarded_kernel
--# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 -# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 +from cholesky.checks.potrf_blocked import CB_COLS, CB_NB, CHOL_IDN_NB128, chol_blocked_workspace_floats
 +from gemm.block_update import blk_gemm_sub
@@ -26,7 +26,7 @@ index 396ecb80a..7298744d6 100644
  #: replay of it a serial loop. A wider panel would put a fold tree inside the
  #: update, which is legal under the gemm profile and correct, and is a v2
  #: decision rather than a free one.
--# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 -# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 -comptime CHOL_NB_PINNED = 32
 +#: lane gap-linalg (2026-10-08): `-D MOJOLEARN_IDN_CHOL_NB128` (CANDIDATE,
@@ -43,7 +43,7 @@ index 396ecb80a..7298744d6 100644
                  gws = c
          j0 += nb
      var need = nt * nb + nt * nt + gws
--    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 -    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 +    # lane gap-linalg: the blocked driver's own layout (column-blocked
 +    # products: smaller than nt * nt, but its GEMM share is sized per block)
@@ -59,7 +59,7 @@ index 396ecb80a..7298744d6 100644
      return CholRun(info, CS_NB, n_panels)
  
  
--# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 -# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 +def _potrf_lower_blocked(
 +    ctx: DeviceContext,
@@ -155,7 +155,7 @@ index 396ecb80a..7298744d6 100644
              " that a small matrix will not show you"
          )
  
--    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 -    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 +    # lane gap-linalg (2026-10-08): the 128-wide blocked driver (CANDIDATE,
 +    # -D MOJOLEARN_IDN_CHOL_NB128; cholesky/checks/potrf_blocked.mojo). The
@@ -268,14 +268,14 @@ index 000000000..9eb2ea32c
 +        j0 += w
 +    return need
 diff --git a/cholesky/estimator.mojo b/cholesky/estimator.mojo
-index 222cf7874..8717fc8c2 100644
+index 101bca8dd..8717fc8c2 100644
 --- a/cholesky/estimator.mojo
 +++ b/cholesky/estimator.mojo
 @@ -80,8 +80,7 @@ from cholesky.checks.potrf import (
      potrf_lower,
  )
  from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
--# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 -# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 +from cholesky.checks.potrf_blocked import CHOL_IDN_NB128
  from cholesky.impl.linalg.cholesky_r1_update import (
@@ -285,7 +285,7 @@ index 222cf7874..8717fc8c2 100644
      var logdet = Float32(0.0)
      if run.info == 0:
          logdet = chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
--    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 -    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 -    var stage = _chol_stage_ptr(ctx, cells)
 -    ctx.enqueue_copy(dst_ptr=stage, src_buf=da)
@@ -308,7 +308,7 @@ index 222cf7874..8717fc8c2 100644
      sp.unsafe_store(1, Float64(run.nb))
      sp.unsafe_store(2, Float64(logdet))
 diff --git a/cholesky/host/chol_oracle.mojo b/cholesky/host/chol_oracle.mojo
-index 8ae9813e2..4626a7407 100644
+index 1bdb0507f..4626a7407 100644
 --- a/cholesky/host/chol_oracle.mojo
 +++ b/cholesky/host/chol_oracle.mojo
 @@ -91,10 +91,16 @@ from core.host_simd_identical import ftz_v
@@ -316,7 +316,7 @@ index 8ae9813e2..4626a7407 100644
  comptime CHOL_HOST_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
  
 -#: `potrf.mojo::CHOL_NB_PINNED`. NUMERIC (DEVIATION 1630).
--# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 -# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 -comptime CHOL_HOST_NB_PINNED = 32
 +#: `potrf.mojo::CHOL_NB_PINNED`. NUMERIC (DEVIATION 1630). lane gap-linalg
