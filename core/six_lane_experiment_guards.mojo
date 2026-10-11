@@ -181,9 +181,12 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TREES_T27"](), "removed: MOJOLEARN_TREES_T27 (alias of MOJOLEARN_2030_FUSED_EST_MOVE; inert on board walks)"
     comptime assert not is_defined["MOJOLEARN_TREES_C47_GBDT"](), "removed: MOJOLEARN_TREES_C47_GBDT (width cap subsumed by MOJOLEARN_TREES_T17_BATCH)"
     comptime assert not is_defined["MOJOLEARN_TREES_HIST_REP_BPSM"](), "merged: use -D MOJOLEARN_TREES_HIST_REP_SM=1 (device SMs x 4 blocks); BPSM=4 alone equalled SM=64"
-    comptime assert not (is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]() or is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()), "merged: use -D MOJOLEARN_IDN_M1_SCAN=1 (affine_prefix, NN34) | 2 (state_window, NI38) | 3 (persistent)"
+    comptime assert not (is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]() or is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()), "merged: use -D MOJOLEARN_IDN_M1_SCAN=2 (state_window, NI38) | 3 (persistent); 1 (affine_prefix, NN34) removed 2026-10-11"
     comptime M1S = get_defined_int["MOJOLEARN_IDN_M1_SCAN",3]()
-    comptime assert M1S >= 0 and M1S <= 3, "MOJOLEARN_IDN_M1_SCAN arms: 1 affine_prefix, 2 state_window, 3 persistent"
+    # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
+    comptime assert M1S != 1, "removed: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix) deleted 2026-10-11: LOSER, mamba1-forward NV 5.40 -> 10.41 ms (1.93x), AMD 3.14 -> 8.38 ms (2.67x), avg 2.30x; see docs/TOMBSTONES.md"
+    comptime assert M1S == 0 or M1S == 2 or M1S == 3, "MOJOLEARN_IDN_M1_SCAN arms: 0 old scan, 2 state_window, 3 persistent (1 removed 2026-10-11)"
     comptime assert M1S == 3 or not (is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS"]()), "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH/_TOKENS are read only by MOJOLEARN_IDN_M1_SCAN=3 (persistent)"
     comptime assert not (is_defined["MOJOLEARN_NI14_BOUNDED_COL2IM"]() or is_defined["MOJOLEARN_NI14_TILED_COL2IM"]()), "merged: use -D MOJOLEARN_NI14_COL2IM=1 (bounded) | 2 (tiled)"
     comptime assert get_defined_int["MOJOLEARN_NI14_COL2IM",0]() >= 0 and get_defined_int["MOJOLEARN_NI14_COL2IM",0]() <= 2, "MOJOLEARN_NI14_COL2IM arms: 1 bounded, 2 tiled"

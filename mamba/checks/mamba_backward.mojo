@@ -2,10 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Routing, workspace sizing, and topology declarations for Mamba-1 backward."""
 
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
-from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX
 from gemm.contract import OP_NT
 from gemm.neural_dispatch import identical_gemm_workspace_max_floats
 from gemm.neural_backward import (
@@ -371,7 +372,7 @@ comptime T3_DB_PREFORMS_DELTA_TIMES_U = True
 
 def t3_dh_floats(b: Int, l: Int, dims: MambaDims) -> Int:
     """`B * d_inner * L * D_STATE`, the materialized `dh`. The declared spelling is GATE-SCALE; a blocked variant is phase K and its tiling must be `contract_partition(d_inner)`'s leaf boundary, never a VRAM budget, or the answer becomes a function of the machine."""
-    return (2 if NN34_AFFINE_PREFIX else 1) * b * dims.d_inner * l * D_STATE
+    return b * dims.d_inner * l * D_STATE
 
 
 comptime T4_DIRECTION_IS_DESCENDING_IN_T = True

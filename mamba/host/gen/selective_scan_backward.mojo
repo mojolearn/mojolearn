@@ -138,8 +138,8 @@ from mamba.host.device_shim import (
     contract_partition,
 )
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_merge_chains
-from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX
-from mamba.host.gen.neural_mamba_scan import nn34_checkpoint_chain, nn34_tree_vjp_chain
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 from checks.kernel_matrix import TARGET_COLUMN, column_has_float_atomics
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
 
@@ -437,10 +437,6 @@ def selective_scan_checkpoint_kernel[
     if bb >= batch or d >= dim:
         return
 
-    comptime if NN34_AFFINE_PREFIX:
-        for n in range(DSTATE):
-            nn34_checkpoint_chain((bb * dim + d) * DSTATE + n, hck_ptr, h_in_ptr, u_ptr, delta_ptr, a_ptr, b_ptr, seqlen, dim)
-        return
 
     var slots = seqlen + 1
 
@@ -701,8 +697,6 @@ def selective_scan_bwd_scan_kernel[
                         identical_mul_add(afac, dh_state[n], contrib)
                     )
 
-            comptime if NN34_AFFINE_PREFIX:
-                dh_n = ftz(dh_ptr.unsafe_load((t * dim + d) * DSTATE + n))
             dh_state[n] = dh_n
             da_carry[n] = da_t
             dh_ptr.unsafe_store((t * dim + d) * DSTATE + n, dh_n)
@@ -763,9 +757,6 @@ def selective_scan_bwd_scan_kernel[
                 var d_da = ftz(identical_mul(dh_state[n], hprev))
                 d_arg = ftz(identical_mul(d_da, da_carry[n]))
 
-            comptime if NN34_AFFINE_PREFIX:
-                var ga = ftz(dh_ptr.unsafe_load(batch * seqlen * dim * DSTATE + (t * dim + d) * DSTATE + n))
-                d_arg = ftz(identical_mul(ga, da_carry[n]))
 
             comptime if SAB_BWD_DDELTA_TWO_FOLDS:
                 # SABOTAGE: plan section 2.2's two-fold reading.
@@ -790,14 +781,6 @@ def selective_scan_bwd_scan_kernel[
         w_ptr.unsafe_store(t * dim + d, ftz(identical_mul(dl, uv)))
 
 
-
-def nn34_tree_vjp_kernel(gid_: Int, dh: MutPointer[Float32, MutAnyOrigin], dy: MutPointer[Float32, MutAnyOrigin],
-    c: MutPointer[Float32, MutAnyOrigin], u: MutPointer[Float32, MutAnyOrigin], delta: MutPointer[Float32, MutAnyOrigin],
-    a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin], hck: MutPointer[Float32, MutAnyOrigin],
-    batch: Int32, length: Int32, dim: Int32):
-    var chain = gid_
-    if chain < Int(batch) * Int(dim) * MAX_DSTATE:
-        nn34_tree_vjp_chain(chain, dh, dy, c, u, delta, a, b, hck, Int(batch), Int(length), Int(dim))
 
 
 def selective_scan_bwd_scan_into(
@@ -852,24 +835,6 @@ def selective_scan_bwd_scan_into(
         "[B, L+1, dim, 16]",
     )
 
-    comptime if NN34_AFFINE_PREFIX:
-        _require(len(dh), 2 * m * dim * MAX_DSTATE, "dh", "[factor-B | factor-A]")
-        var chains = batch * dim * MAX_DSTATE
-        if chains > 0:
-            var _l2_a0 = dh.unsafe_ptr()
-            var _l2_a1 = dy.unsafe_ptr()
-            var _l2_a2 = C.unsafe_ptr()
-            var _l2_a3 = u.unsafe_ptr()
-            var _l2_a4 = delta.unsafe_ptr()
-            var _l2_a5 = A.unsafe_ptr()
-            var _l2_a6 = B.unsafe_ptr()
-            var _l2_a7 = h_ckpt.unsafe_ptr()
-            var _l2_a8 = Int32(batch)
-            var _l2_a9 = Int32(seqlen)
-            var _l2_a10 = Int32(dim)
-            def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7, imm _l2_a8, imm _l2_a9, imm _l2_a10}:
-                nn34_tree_vjp_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7, _l2_a8, _l2_a9, _l2_a10)
-            host_launch(_launch_2, launch_count((_grid(chains, block_size), 1, 1), (block_size, 1, 1)))
     var total = batch * dim
     if total > 0:
         comptime kern = selective_scan_bwd_scan_kernel[MAX_DSTATE]
@@ -1288,10 +1253,6 @@ def mamba_bwd_da_partial_kernel[
                 var d_da = ftz(identical_mul(dhv, hprev))
                 d_arg = ftz(identical_mul(d_da, da_t))
 
-            comptime if NN34_AFFINE_PREFIX:
-                var ga = ftz(dh_ptr.unsafe_load(batch * seqlen * dim * DSTATE + (t * dim + d) * DSTATE + n))
-                var da_t = ftz(identical_exp(ftz(identical_mul(dl, a_vals[n]))))
-                d_arg = ftz(identical_mul(ga, da_t))
 
             acc[n] = ftz(identical_mul_add(d_arg, dl, acc[n]))
 
@@ -1554,7 +1515,7 @@ def bwd_h_checkpoint_floats(batch: Int, seqlen: Int, dim: Int) -> Int:
 
 def bwd_dh_floats(batch: Int, seqlen: Int, dim: Int) -> Int:
     """`M * dim * D_STATE`. No carry slot; T1's seed is structural."""
-    return (2 if NN34_AFFINE_PREFIX else 1) * batch * seqlen * dim * MAX_DSTATE
+    return batch * seqlen * dim * MAX_DSTATE
 
 
 def bwd_da_partial_floats(batch: Int, dim: Int) -> Int:

@@ -71,7 +71,8 @@ from mamba.checks.mamba3_oracle import Mamba3State, mamba3_block_oracle
 from mamba.host.gen.mamba2_prefill_backward import mamba2_prefill_backward
 from mamba.host.gen.mamba3_prefill_backward import mamba3_prefill_backward
 from mamba.host.gen.modeling_mamba_prefill_backward import mamba1_prefill_backward
-from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS, NN34_COMPONENT_PROFILE
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 from mamba.host.device_shim import DeviceContext as M1HostContext
 from mamba.host.gen.identity_trace import IdentityTrace as M1HostTrace
 from mamba.host.gen.modeling_mamba import MambaDeviceState as M1HostState, MambaDeviceWeights as M1HostWeights, MambaDeviceStages as M1HostStages, mamba_upload as m1_host_upload, mamba_download as m1_host_download, mamba_block_forward as m1_host_forward
@@ -172,29 +173,6 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
         raise Error("mamba1: B and L must be positive")
     var w = _m1_weights(a, dm)
     var di = w.dims.d_inner
-    comptime if NN34_AFFINE_PREFIX:
-        if position < 0 or position > (1 << 62) - l - 32:
-            raise Error("Mamba-1 NN34: invalid absolute checkpoint position")
-        var ctx = M1HostContext()
-        var state = M1HostState(ctx, b, w.dims)
-        state.conv_win = m1_host_upload(ctx, read_f32(a[11], b * di * D_CONV))
-        state.h = m1_host_upload(ctx, read_f32(a[12], b * di * D_STATE))
-        state.nn34_boundary = m1_host_upload(ctx, read_f32(a[14], b * di * D_STATE))
-        state.nn34_sa = m1_host_upload(ctx, read_f32(a[15], b * di * D_STATE * NN34_LEVELS))
-        state.nn34_sb = m1_host_upload(ctx, read_f32(a[16], b * di * D_STATE * NN34_LEVELS))
-        state.nn34_position = position
-        var weights = M1HostWeights(ctx, w)
-        var stages = M1HostStages(ctx, b, l, w.dims)
-        var input = m1_host_upload(ctx, read_f32(a[0], b * l * dm))
-        var trace = M1HostTrace.disabled()
-        m1_host_forward(ctx, stages, state, weights, input, b, l, trace, String("host.nn34"))
-        _write(a[13], m1_host_download(ctx, stages.residual_out, b * l * dm), b * l * dm)
-        _write(a[11], m1_host_download(ctx, state.conv_win, b * di * D_CONV), b * di * D_CONV)
-        _write(a[12], m1_host_download(ctx, state.h, b * di * D_STATE), b * di * D_STATE)
-        _write(a[14], m1_host_download(ctx, state.nn34_boundary.value(), b * di * D_STATE), b * di * D_STATE)
-        _write(a[15], m1_host_download(ctx, state.nn34_sa.value(), b * di * D_STATE * NN34_LEVELS), b * di * D_STATE * NN34_LEVELS)
-        _write(a[16], m1_host_download(ctx, state.nn34_sb.value(), b * di * D_STATE * NN34_LEVELS), b * di * D_STATE * NN34_LEVELS)
-        return
     var state = MambaState(b, w.dims)
     state.conv_win = read_f32(a[11], b * di * D_CONV)
     state.h = read_f32(a[12], b * di * D_STATE)
@@ -207,13 +185,13 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
 def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """`bindings/_mojolearn_mamba.mojo::mamba1_forward_binding`'s contract:
     14 addresses, params B, L, d_model."""
-    var a = _addrs(addrs, 17 if NN34_AFFINE_PREFIX else 14, String("mamba1_forward"))
-    if len(params) != (4 if NN34_AFFINE_PREFIX else 3):
+    var a = _addrs(addrs, 14, String("mamba1_forward"))
+    if len(params) != 3:
         raise Error("mamba1_forward: params must contain 3 values (B, L, d_model), got " + String(len(params)))
     var b = Int(py=params[0])
     var l = Int(py=params[1])
     var dm = Int(py=params[2])
-    var position = Int(py=params[3]) if NN34_AFFINE_PREFIX else 0
+    var position = 0
     with GILReleased(Python()):
         _mamba1_run(a, b, l, dm, position)
     return PythonObject(0)
@@ -221,12 +199,12 @@ def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises -> 
 
 def mamba1_decode_step_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """The forward at L = 1 with the state carried; params B, d_model."""
-    var a = _addrs(addrs, 17 if NN34_AFFINE_PREFIX else 14, String("mamba1_decode_step"))
-    if len(params) != (3 if NN34_AFFINE_PREFIX else 2):
+    var a = _addrs(addrs, 14, String("mamba1_decode_step"))
+    if len(params) != 2:
         raise Error("mamba1_decode_step: params must contain 2 values (B, d_model), got " + String(len(params)))
     var b = Int(py=params[0])
     var dm = Int(py=params[1])
-    var position = Int(py=params[2]) if NN34_AFFINE_PREFIX else 0
+    var position = 0
     with GILReleased(Python()):
         _mamba1_run(a, b, 1, dm, position)
     return PythonObject(0)
@@ -637,7 +615,7 @@ def PyInit__mojolearn_mamba_host() abi("C") -> PythonObject:
 
 
 def mamba1_profile_binding() -> PythonObject:
-    return PythonObject(NN34_COMPONENT_PROFILE)
+    return PythonObject(1)  # NN34 profile 2 (M1_SCAN=1) deleted 2026-10-11
 
 
 comptime NN40_OWNED_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN40_OWNED_WEIGHTS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()

@@ -1390,19 +1390,15 @@
     "persistent": [],
     "state_window": [
      "MOJOLEARN_IDN_M1_SCAN=2"
-    ],
-    "affine_prefix": [
-     "MOJOLEARN_IDN_M1_SCAN=1"
     ]
    },
    "default": "persistent",
    "source": [
-    "mamba/impl/ops/neural_scan_profile.mojo:52",
     "mamba/impl/ops/selective_scan_interface.mojo:252",
     "mamba/impl/ops/m1_persistent_scan.mojo:58"
    ],
    "binding": "_mojolearn_mamba",
-   "bits_change": true,
+   "bits_change": false,
    "status": "promoted:g50ebe26a5 (lane/grid-act-16, 2026-10-11)",
    "merged_from": [
     "m1_persistent_scan",
@@ -1418,7 +1414,7 @@
    "tags": [
     "bit_version"
    ],
-   "note": "Alternative Mamba-1 scans, one arm per build (lane/grid-prune 2026-10-07 merge): affine_prefix is the NN34 bit-version scan profile (bits change, host column with it); state_window (NI38) and persistent (L13) keep the shipped bits. Every cross of the three old defines was refused (comptime assert) or inert. Arm order puts persistent first: it is the representative arm the planner pairs with the m1_persistent_scan_ch/_tokens children."
+   "note": "Arm 1 affine_prefix (NN34) deleted 2026-10-11 (lane/owed-decide, avg 2.30x slower). Alternative Mamba-1 scans, one arm per build (lane/grid-prune 2026-10-07 merge): affine_prefix is the NN34 bit-version scan profile (bits change, host column with it); state_window (NI38) and persistent (L13) keep the shipped bits. Every cross of the three old defines was refused (comptime assert) or inert. Arm order puts persistent first: it is the representative arm the planner pairs with the m1_persistent_scan_ch/_tokens children."
   },
   "ni14_col2im": {
    "define": "MOJOLEARN_NI14_COL2IM",
@@ -1717,6 +1713,10 @@
   {
    "define": "MOJOLEARN_IDN_LM_GROUPED_ADAM",
    "reason": "removed 2026-10-11 (lane/owed-decide): arm 1 NN56 grouped OOP Adam LOSER, lm-train-step NV 1.019x, AMD 1.043x, avg 1.03x (NV v0067/v0068, AMD r1011.owed.gadam.ab); arm 2 removed earlier (grid-act-16); guard refuses; patch experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch"
+  },
+  {
+   "define": "MOJOLEARN_IDN_M1_SCAN=1",
+   "reason": "removed 2026-10-11 (lane/owed-decide): affine_prefix (NN34) LOSER, mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93x), AMD 3.14 -> 8.38 ms (2.67x), avg 2.30x, hash 602f9ec5 -> 045beb0b; guard refuses =1; patch experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch"
   }
  ],
  "notes": {

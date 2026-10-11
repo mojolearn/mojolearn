@@ -252,8 +252,8 @@ comptime ANY_SABOTAGE = (
 
 
 # `-D MOJOLEARN_IDN_M1_SCAN=<arm>` (lane/grid-prune 2026-10-07): ONE switch
-# for the alternative Mamba-1 scans: 1 affine_prefix (NN34,
-# neural_scan_profile.mojo), 2 state_window (NI38), 3 persistent. Replaces
+# for the alternative Mamba-1 scans: 2 state_window (NI38), 3 persistent
+# (arm 1 affine_prefix, NN34, deleted 2026-10-11: TOMBSTONE below). Replaces
 # MOJOLEARN_NN34_AFFINE_PREFIX, MOJOLEARN_IDN_M1_STATE_WINDOW and
 # MOJOLEARN_IDN_M1_PERSISTENT_SCAN (refused in
 # core/six_lane_experiment_guards.mojo), whose crosses were refused or inert.
@@ -261,8 +261,8 @@ comptime ANY_SABOTAGE = (
 # NV L40S 5.563 -> 3.550 ms (v1242), AMD MI325X 9.934 -> 3.204 ms (a1350); avg ratio 0.454 (state_window=2: 0.468);
 # hash 602f9ec5 on both vendors. Default arm is now 3 (persistent); -D MOJOLEARN_IDN_M1_SCAN=0 restores the old scan.
 comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 3]()
-# MEASURE OWED (2026-10-11): arm 1 (affine_prefix) has no verdict in grid g50ebe26a5 (vendor split, AMD 0.82x, NVIDIA unmeasured);
-# measure it once against the new default arm 3 (persistent) on NV + AMD.
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
 comptime M1_SCAN_STATE_WINDOW = 2
 comptime M1_SCAN_PERSISTENT = 3
 # NI38 S subarm, independent of the unfinished V affine composition. Native

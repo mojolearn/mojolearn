@@ -62,8 +62,7 @@ SOURCES = {
     "core/philox_neural.mojo": "philox_neural",
     "gemm/checks/gemm_backward.mojo": "gemm_backward",
     "gemm/neural_backward.mojo": "neural_backward",
-    "mamba/impl/ops/neural_scan_profile.mojo": "neural_scan_profile",
-    "mamba/impl/ops/neural_mamba_scan.mojo": "neural_mamba_scan",
+    # neural_scan_profile / neural_mamba_scan (MOJOLEARN_IDN_M1_SCAN=1) deleted 2026-10-11 (docs/TOMBSTONES.md)
     "mamba/impl/ops/selective_scan_interface.mojo": "selective_scan_interface",
     "mamba/impl/modeling/modeling_mamba.mojo": "modeling_mamba",
     "mamba/impl/modules/ssd_minimal.mojo": "ssd_minimal",

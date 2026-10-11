@@ -83,7 +83,8 @@ from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
 from gemm.host.neural_gemm import gemm_oracle
 from gemm.host.neural_gemm import gemm_host_rows
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
-from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS, NN34_COMPONENT_PROFILE
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
@@ -540,21 +541,10 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
     var state = MambaState(b, w.dims)
     state.conv_win = read_f32(a[11], b * di * D_CONV)
     state.h = read_f32(a[12], b * di * D_STATE)
-    comptime if NN34_AFFINE_PREFIX:
-        if position < 0 or position > (1 << 62) - l - 32:
-            raise Error("Mamba-1 NN34: invalid absolute checkpoint position")
-        state.nn34_position = position
-        state.nn34_boundary = read_f32(a[14], b * di * D_STATE)
-        state.nn34_sa = read_f32(a[15], b * di * D_STATE * NN34_LEVELS)
-        state.nn34_sb = read_f32(a[16], b * di * D_STATE * NN34_LEVELS)
     var st = mamba_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
     _write(a[13], st.residual_out, b * l * dm)
     _write(a[11], state.conv_win, b * di * D_CONV)
     _write(a[12], state.h, b * di * D_STATE)
-    comptime if NN34_AFFINE_PREFIX:
-        _write(a[14], state.nn34_boundary, b * di * D_STATE)
-        _write(a[15], state.nn34_sa, b * di * D_STATE * NN34_LEVELS)
-        _write(a[16], state.nn34_sb, b * di * D_STATE * NN34_LEVELS)
 
 
 def mamba1_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -576,9 +566,9 @@ def mamba1_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
 def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """`bindings/_mojolearn_mamba.mojo::mamba1_forward_binding`'s contract:
     14 addresses, params B, L, d_model (lane/stateful-cpu-decoding)."""
-    var a = _addrs(addrs, 17 if NN34_AFFINE_PREFIX else 14, String("mamba1_forward"))
-    var s = _shape3(params, 4 if NN34_AFFINE_PREFIX else 3, String("mamba1_forward"))
-    var position = _index(params[3]) if NN34_AFFINE_PREFIX else 0
+    var a = _addrs(addrs, 14, String("mamba1_forward"))
+    var s = _shape3(params, 3, String("mamba1_forward"))
+    var position = 0
     with GILReleased(Python()):
         _mamba1_run(a, s[0], s[1], s[2], position)
     return PythonObject(0)
@@ -586,14 +576,14 @@ def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises -> 
 
 def mamba1_decode_step_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """The forward at L = 1 with the state carried; params B, d_model."""
-    var a = _addrs(addrs, 17 if NN34_AFFINE_PREFIX else 14, String("mamba1_decode_step"))
-    if Int(py=len(params)) != (3 if NN34_AFFINE_PREFIX else 2):
+    var a = _addrs(addrs, 14, String("mamba1_decode_step"))
+    if Int(py=len(params)) != 2:
         raise Error("mamba1_decode_step: params must contain 2 values (B, d_model)")
     var b = _index(params[0])
     var dm = _index(params[1])
     if b < 1 or dm < 1:
         raise Error("mamba1_decode_step: B and d_model must be positive")
-    var position = _index(params[2]) if NN34_AFFINE_PREFIX else 0
+    var position = 0
     with GILReleased(Python()):
         _mamba1_run(a, b, 1, dm, position)
     return PythonObject(0)
@@ -972,4 +962,4 @@ def PyInit__mojolearn_neural_host() abi("C") -> PythonObject:
 
 
 def mamba1_profile_binding() -> PythonObject:
-    return PythonObject(NN34_COMPONENT_PROFILE)
+    return PythonObject(1)  # NN34 profile 2 (M1_SCAN=1) deleted 2026-10-11
