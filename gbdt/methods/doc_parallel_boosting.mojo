@@ -231,6 +231,239 @@ comptime CTR_PERM_BATCH = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF"]()
 ) or IDN_CTR_PERM_BATCH
+from std.gpu import (
+    block_dim as _cpg_block_dim,
+    block_idx as _cpg_block_idx,
+    grid_dim as _cpg_grid_dim,
+    thread_idx as _cpg_thread_idx,
+)
+from gbdt.models.non_symmetric_tree import TNonSymmetricTreeStructure
+#: lane/trees-ctr-perm-grid (2026-10-11), `-D MOJOLEARN_IDN_CTR_PERM_GRID`:
+#: IDENTICAL, every vendor, DEFAULT OFF (experiment; EXPERIMENTS.md row
+#: OPEN). STRUCTURAL REASON: on a CTR-bearing Depthwise/Lossguide fit the
+#: batched estimation (IDN_CTR_PERM_BATCH above) still computes each
+#: permutation's model bins through `compute_non_symmetric_bins_for_model`,
+#: which per call stages 7 host planes, makes 7 device buffers, uploads 7
+#: times, launches once AND DRAINS (`ctx.synchronize()` inside). At the
+#: default 4 permutations that is 4 drains + 28 uploads + 4 launches per
+#: tree before the batch's own "ONE drain". Under this switch the tree's
+#: node table is staged ONCE into one packed plane (one upload), and ONE
+#: launch walks every active permutation over a grid with `block_idx.y` =
+#: permutation slot (up to `CTR_PERM_GRID_SLOTS` per launch, chunked
+#: beyond that: an arity limit of the kernel, not a data-shape rule), with
+#: no drain: the batch's existing drain settles it. Each (permutation, row)
+#: item runs the same walk statements on the same words as the serial
+#: kernel (`compute_non_symmetric_decision_tree_bins_kernel`), so every
+#: bin is unchanged. BITS: none, on every column (integer bin ids; the host
+#: column has no CTR columns outside SymmetricTree). EXPECTED: gbdt-
+#: categorical taxi ~500 trees x (3 drains + 27 uploads + 3 launches)
+#: saved, ~0.2-0.6 s of 7.3 s NV (the plan's 1-1.5 s counted the whole
+#: estimation; the partition and the oracle walks stay per permutation,
+#: already batched behind shared drains).
+#: NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
+comptime IDN_CTR_PERM_GRID = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_CTR_PERM_GRID"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: permutation slots per grid launch (the kernel's pointer arity); more
+#: active permutations take more launches, each over the same node plane
+comptime CTR_PERM_GRID_SLOTS = 4
+comptime CTR_PERM_GRID_BLOCK = 256  # NS_BINS_BLOCK_SIZE, their launch shape
+
+
+def ctr_perm_grid_bins_kernel(
+    nodes: MutPointer[UInt32, MutAnyOrigin],
+    slots_in: Int32,
+    node_count_in: Int32,
+    cindex0: MutPointer[UInt32, MutAnyOrigin],
+    cindex1: MutPointer[UInt32, MutAnyOrigin],
+    cindex2: MutPointer[UInt32, MutAnyOrigin],
+    cindex3: MutPointer[UInt32, MutAnyOrigin],
+    bins0: MutPointer[UInt32, MutAnyOrigin],
+    bins1: MutPointer[UInt32, MutAnyOrigin],
+    bins2: MutPointer[UInt32, MutAnyOrigin],
+    bins3: MutPointer[UInt32, MutAnyOrigin],
+    n_active_in: Int32,
+    n_rows_in: Int32,
+):
+    """`compute_non_symmetric_decision_tree_bins_kernel` over a grid whose
+    y index is the permutation slot. `nodes` is ONE packed plane of 7 x
+    `slots` words, plane-major: [offset | mask | shift | one_hot | bin |
+    left_subtree | right_subtree], each indexed by node (one pointer, so no
+    aliasing pair). The walk is the serial kernel's statement for
+    statement (shift THEN mask; TakeBin `==`, TakeGreater `>`; the same
+    subtree steps), so each (permutation, row) bin is its serial bin."""
+    var y = Int(_cpg_block_idx.y)
+    if y >= Int(n_active_in):
+        return
+    var cindex = cindex0
+    var out_bins = bins0
+    if y == 1:
+        cindex = cindex1
+        out_bins = bins1
+    elif y == 2:
+        cindex = cindex2
+        out_bins = bins2
+    elif y == 3:
+        cindex = cindex3
+        out_bins = bins3
+    var slots = Int(slots_in)
+    var node_count = Int(node_count_in)
+    var n_rows = Int(n_rows_in)
+    var i = Int(_cpg_block_idx.x) * Int(_cpg_block_dim.x) + Int(_cpg_thread_idx.x)
+    var stride = Int(_cpg_grid_dim.x) * Int(_cpg_block_dim.x)
+    while i < n_rows:
+        var bin = 0
+        var node = 0
+        var stop = node_count == 0
+        while not stop:
+            var off = Int(nodes.unsafe_load(node))
+            var mask = nodes.unsafe_load(slots + node)
+            var shift = nodes.unsafe_load(2 * slots + node)
+            var feature_val = (cindex.unsafe_load(off + i) >> shift) & mask
+            var this_bin = nodes.unsafe_load(4 * slots + node)
+            var split: Bool
+            if nodes.unsafe_load(3 * slots + node) != UInt32(0):
+                split = feature_val == this_bin
+            else:
+                split = feature_val > this_bin
+            var left_subtree = Int(nodes.unsafe_load(5 * slots + node))
+            var right_subtree = Int(nodes.unsafe_load(6 * slots + node))
+            if split:
+                bin += left_subtree
+                stop = right_subtree == 1
+                if not stop:
+                    node += left_subtree
+            else:
+                stop = left_subtree == 1
+                if not stop:
+                    node += 1
+        out_bins.unsafe_store(i, UInt32(bin))
+        i += stride
+
+
+struct CtrPermGridStage(Movable):
+    """Keep-alive for one tree's grid launch: the packed node plane, its
+    host staging and the padding buffers, held by the caller past the
+    batch's drain ([[mojo-buffer-freed-at-last-use]])."""
+
+    var d_nodes: DeviceBuffer[DType.uint32]
+    var h_nodes: HostBuffer[DType.uint32]
+    var pads: List[DeviceBuffer[DType.uint32]]
+
+    def __init__(
+        out self,
+        var d_nodes: DeviceBuffer[DType.uint32],
+        var h_nodes: HostBuffer[DType.uint32],
+        var pads: List[DeviceBuffer[DType.uint32]],
+    ):
+        self.d_nodes = d_nodes^
+        self.h_nodes = h_nodes^
+        self.pads = pads^
+
+
+def ctr_perm_grid_bins_enqueue(
+    ctx: DeviceContext,
+    layout: CompressedIndexLayout,
+    structure: TNonSymmetricTreeStructure,
+    mut cindexes: List[DeviceBuffer[DType.uint32]],
+    mut outs: List[DeviceBuffer[DType.uint32]],
+    n_rows: Int,
+) raises -> CtrPermGridStage:
+    """Every `compute_non_symmetric_bins_for_model(ctx, layout, structure,
+    cindexes[k], n_rows, outs[k])` of one tree, ENQUEUED (no drain): one
+    staged node plane, one upload, ceil(len / CTR_PERM_GRID_SLOTS)
+    launches. The validation is that function's (node/split-type count,
+    feature range, TakeBin vs one-hot); the staged words are its words."""
+    var n_active = len(cindexes)
+    if n_active != len(outs):
+        raise Error("ctr_perm_grid_bins_enqueue: cindex/out counts differ")
+    var n_nodes = len(structure.nodes)
+    if len(structure.split_types) != n_nodes:
+        raise Error(
+            "ctr_perm_grid_bins_enqueue: " + String(n_nodes)
+            + " nodes and " + String(len(structure.split_types))
+            + " split types"
+        )
+    var slots = n_nodes if n_nodes > 0 else 1
+    var h_nodes = ctx.enqueue_create_host_buffer[DType.uint32](7 * slots)
+    var hp = h_nodes.unsafe_ptr()
+    for i in range(slots):  # small-loop(slots: tree nodes): default words, model parameters, no row data
+        hp.unsafe_store(i, UInt32(0))
+        hp.unsafe_store(slots + i, UInt32(0))
+        hp.unsafe_store(2 * slots + i, UInt32(0))
+        hp.unsafe_store(3 * slots + i, UInt32(0))
+        hp.unsafe_store(4 * slots + i, UInt32(0))
+        hp.unsafe_store(5 * slots + i, UInt32(1))
+        hp.unsafe_store(6 * slots + i, UInt32(1))
+    for i in range(n_nodes):  # small-loop(n_nodes: tree nodes): stages each model node's split descriptor, model parameters, no row data
+        ref n = structure.nodes[i]
+        var fid = Int(n.feature_id)
+        if fid < 0 or fid >= len(layout.features):
+            raise Error(
+                "ctr_perm_grid_bins_enqueue: node " + String(i)
+                + " splits on feature " + String(fid) + " of "
+                + String(len(layout.features))
+            )
+        ref f = layout.features[fid]
+        var take_bin = Int(structure.split_types[i]) == BIN_SPLIT_TAKE_BIN
+        if take_bin != f.one_hot_feature:
+            raise Error(
+                "ctr_perm_grid_bins_enqueue: node " + String(i)
+                + " split type disagrees with the layout's one-hot flag"
+            )
+        hp.unsafe_store(i, UInt32(Int(f.offset) * n_rows))
+        hp.unsafe_store(slots + i, f.mask)
+        hp.unsafe_store(2 * slots + i, f.shift)
+        hp.unsafe_store(3 * slots + i, UInt32(1) if take_bin else UInt32(0))
+        hp.unsafe_store(4 * slots + i, UInt32(Int(n.bin)))
+        hp.unsafe_store(5 * slots + i, UInt32(Int(n.left_subtree)))
+        hp.unsafe_store(6 * slots + i, UInt32(Int(n.right_subtree)))
+    var d_nodes = ctx.enqueue_create_buffer[DType.uint32](7 * slots)
+    ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
+    # padding slots get their own one-word allocations (never read: the
+    # kernel returns for y >= n_active), so no two pointer arguments share
+    # an allocation
+    var pads = List[DeviceBuffer[DType.uint32]]()
+    for _ in range(2 * (CTR_PERM_GRID_SLOTS - 1)):  # small-loop(pad slots: kernel arity): one-word placeholders
+        pads.append(ctx.enqueue_create_buffer[DType.uint32](1))
+    var blocks = (n_rows + CTR_PERM_GRID_BLOCK - 1) // CTR_PERM_GRID_BLOCK
+    if blocks < 1:
+        blocks = 1
+    var base = 0
+    while base < n_active:  # small-loop(permutation chunks: ceil(perms / 4)): one launch per chunk
+        var k = n_active - base
+        if k > CTR_PERM_GRID_SLOTS:
+            k = CTR_PERM_GRID_SLOTS
+        var c1 = pads[0].unsafe_ptr()
+        var c2 = pads[1].unsafe_ptr()
+        var c3 = pads[2].unsafe_ptr()
+        var o1 = pads[3].unsafe_ptr()
+        var o2 = pads[4].unsafe_ptr()
+        var o3 = pads[5].unsafe_ptr()
+        if k > 1:
+            c1 = cindexes[base + 1].unsafe_ptr()
+            o1 = outs[base + 1].unsafe_ptr()
+        if k > 2:
+            c2 = cindexes[base + 2].unsafe_ptr()
+            o2 = outs[base + 2].unsafe_ptr()
+        if k > 3:
+            c3 = cindexes[base + 3].unsafe_ptr()
+            o3 = outs[base + 3].unsafe_ptr()
+        ctx.enqueue_function[ctr_perm_grid_bins_kernel](
+            d_nodes.unsafe_ptr(),
+            Int32(slots),
+            Int32(n_nodes),
+            cindexes[base].unsafe_ptr(), c1, c2, c3,
+            outs[base].unsafe_ptr(), o1, o2, o3,
+            Int32(k),
+            Int32(n_rows),
+            grid_dim=(blocks, k, 1),
+            block_dim=(CTR_PERM_GRID_BLOCK, 1, 1),
+        )
+        base += k
+    return CtrPermGridStage(d_nodes^, h_nodes^, pads^)
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
