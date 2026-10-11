@@ -283,6 +283,9 @@ def _pin_weights(layer, names):
         a = np.ascontiguousarray(arr, np.float32)
         handles[name] = (dev.upload("pin_" + name, a), int(a.size))
     layer._pins = (b, handles)
+    # lane cnn-resident-glue: the array objects pinned, so the G3 auto-pin
+    # sees a reassigned `weight_` / `bias_` and uploads again
+    layer._pin_src = tuple(getattr(layer, name, None) for name in names)  # glue: the named weight arrays
     return layer
 
 
@@ -296,6 +299,47 @@ def _pinned(layer, b, name, size):
     if hit is None or hit[1] != int(size):
         return None
     return hit[0]
+
+
+# lane cnn-resident-glue (2026-10-11, G3): MOJOLEARN_IDN_CNN_RESIDENT_GRADS,
+# `x_cnn_idn_flags` bit 7, default OFF (x_cnn/device.mojo
+# IDN_CNN_RESIDENT_GRADS has the structural reason and the expected gain).
+# With it on, a resident call keeps everything on the device: Conv2d (and
+# the BasicBlock's convs) pin their weights on first use (`_auto_pin`; a
+# reassigned `weight_` / `bias_` is uploaded again), dW / db and BatchNorm's
+# running statistics and aux block stay in resident arrays and download on
+# the first host read of `grad_weight_`, `grad_bias_`, `running_mean_`,
+# `running_var_`, the adaptive pools take resident tensors, and outputs whose
+# every word the entry stores skip the +0.0 fill (`_out_new`). Buffer
+# ownership only: the same entries and operands, so no bit moves. In-place
+# edits of a weight array (not a reassignment) need `pin_weights()` again,
+# as they always did for a pinned layer.
+_F_RESIDENT = 128
+
+
+def _resident(b):
+    """Whether binding `b` runs the G3 resident glue."""
+    return _mixed(b) and _idn(b, _F_RESIDENT) and not _device_io_off(b)
+
+
+def _out_new(b, shape):
+    """A resident output whose every word the entry stores: unfilled under
+    G3 (`DeviceTensor._new_out`), the filled `_new` otherwise."""
+    return DeviceTensor._new_out(b, shape) if _resident(b) else DeviceTensor._new(b, shape)
+
+
+def _auto_pin(layer, b, names):
+    """G3: `layer`'s arrays `names` pinned on binding `b` (uploaded now when
+    unpinned or reassigned since); whether they are pinned."""
+    if not (_resident(b) and _idn(b, _F_PIN)):
+        return False
+    d = layer.__dict__
+    p, src = d.get("_pins"), d.get("_pin_src")
+    if (p and p[0] is b and src is not None and len(src) == len(names)
+            and all(a is getattr(layer, n, None) for a, n in zip(src, names))):  # glue: the named weight arrays
+        return True
+    _pin_weights(layer, names)
+    return bool(d.get("_pins"))
 
 
 class DeviceTensor:
