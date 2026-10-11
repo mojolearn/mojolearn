@@ -1,0 +1,20 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "seq-nm-spec",
+ "branch": "lane/seq-nm-spec",
+ "head": "0e5e8debc",
+ "head_note": "head = last code commit before this file; the file is committed on top of it.",
+ "controls": {
+  "idn_nm_spec": {
+   "define": "MOJOLEARN_IDN_NM_SPEC",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_NM_SPEC"]},
+   "default": "off",
+   "source": ["sequence/theta_spec.mojo:61", "sequence/ets_spec.mojo:38", "sequence/exec_device.mojo:861"],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": false,
+   "status": "new",
+   "note": "Theta (op_theta_spec) and no-season ETS (op_ets_spec) on one 32-lane cell per series on IDENTICAL: the four Nelder-Mead candidates (and the k+1 initial/shrunk vertices) evaluated at once, every lane replays nm_steps' decision; same objective words (theta: theta_run_reg's chain incl. seq_madd), so the same bits as op_theta/op_ets and the host column. Independent of MOJOLEARN_IDN_SEQ_REG (race both arms of it too). Seasonal ETS keeps op_ets. Race theta, optimized-theta, dynamic-optimized-theta, damped-ets taxi-hourly + synthetic, nv and amd; ID check expected MATCH with main."
+  }
+ }
+}
