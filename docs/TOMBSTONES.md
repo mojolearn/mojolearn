@@ -50,11 +50,14 @@ in the tables after the sections.
 | [`MOJOLEARN_GBDT_SM_X8`](#mojolearn_gbdt_sm_x8) | Trees | DROPPED-slower | 2026-10-03 | [MOJOLEARN_GBDT_SM_X8.patch](../experiments/removed/MOJOLEARN_GBDT_SM_X8.patch) |
 | [`MOJOLEARN_IDN_ET_BINNED_U16`](#mojolearn_idn_et_binned_u16) | Trees | slower | 2026-10-07 | [MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF.patch](../experiments/removed/MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF.patch) |
 | [`MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT`](#mojolearn_idn_gbdt_frontier_resident) | Trees | DROPPED | 2026-10-07 | [MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT.patch) |
+| [`MOJOLEARN_IDN_LU_DELAYED_UPDATE`](#mojolearn_idn_lu_delayed_update) | Decomp | DROPPED-noise | 2026-10-11 | [MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch](../experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch) |
+| [`MOJOLEARN_IDN_OLS_R_TRISOLVE`](#mojolearn_idn_ols_r_trisolve) | Linear | DROPPED-noise | 2026-10-11 | [MOJOLEARN_IDN_OLS_R_TRISOLVE.patch](../experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch) |
 | [`MOJOLEARN_IDN_RF_DEVICE_LOOP_K1`](#mojolearn_idn_rf_device_loop_k1) | Trees | noise | 2026-10-07 | [MOJOLEARN_IDN_RF_DEVICE_LOOP_K1.patch](../experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K1.patch) |
 | [`MOJOLEARN_IDN_RF_DEVICE_LOOP_K2`](#mojolearn_idn_rf_device_loop_k2) | Trees | noise | 2026-10-07 | [MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch](../experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch) |
 | [`MOJOLEARN_IDN_RF_DEVICE_LOOP_K8`](#mojolearn_idn_rf_device_loop_k8) | Trees | noise | 2026-10-07 | [MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch](../experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch) |
 | [`MOJOLEARN_IDN_RF_STREAM_REPLICAS`](#mojolearn_idn_rf_stream_replicas) | Trees | DROPPED | 2026-10-07 | [MOJOLEARN_IDN_RF_STREAM_REPLICAS.patch](../experiments/removed/MOJOLEARN_IDN_RF_STREAM_REPLICAS.patch) |
 | [`MOJOLEARN_IDN_RF_TASK_ROWS256`](#mojolearn_idn_rf_task_rows256) | Trees | noise | 2026-10-07 | [MOJOLEARN_IDN_RF_TASK_ROWS256.patch](../experiments/removed/MOJOLEARN_IDN_RF_TASK_ROWS256.patch) |
+| [`MOJOLEARN_IDN_SEQ_FMA`](#mojolearn_idn_seq_fma) | Time series | DROPPED-noise | 2026-10-11 | [MOJOLEARN_IDN_SEQ_FMA.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch) |
 | [`MOJOLEARN_IF_QUERY_RAW`](#mojolearn_if_query_raw) | Trees | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_IF_SAMPLED_UPLOAD`](#mojolearn_if_sampled_upload) | Trees | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_MC_CLASS_BATCH_DERIV`](#mojolearn_mc_class_batch_deriv) | Trees | DROPPED-noise | 2026-10-09 | [MOJOLEARN_MC_CLASS_BATCH_DERIV.patch](../experiments/removed/MOJOLEARN_MC_CLASS_BATCH_DERIV.patch) |
@@ -1061,6 +1064,16 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - grid_controls: `gap-linalg.json` `chol_nb128` moved to `removed`.
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/chol-nb128-delete, dd9a3d31b): IDN_CHOL_NB128 was SLOWER: NV 0.92x / AMD 2.29x (avg 1.6x).
 
+### MOJOLEARN_IDN_OLS_R_TRISOLVE
+
+- Verdict: DROPPED-noise (loser, bits changed). Deleted 2026-10-11 by `c14beeda5` (lane/i17-decide-linalg-seq).
+- Recoverable at `c14beeda5^`. Patch: `experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch` (whole deletion reversed, code files only, taken after the tombstones were filled in so it applies to the tree as left).
+- What it tried: lane ols-r-trisolve (2026-10-11, ef0b4bf4c): IDENTICAL LinearRegression solved R x = c from the TSQR R_aug in one launch (`x_decomp/ols_trisolve.mojo`) behind a device rank gate on R's equilibrated diagonal, replacing the Jacobi SVD of R when the gate passed (idn_flags bit 9). Bits changed (NV, AMD and host together).
+- Verdict numbers: one run per arm; A = r1011.ols2 on main 2afa942e3 (nv2 r1011.ols + v0052, amd a1634), arm = r1011.olstri.ab (nv2 v0047, amd a1630): classical:ols taxi NV 15.8 -> 16.9 ms (1.07x), AMD 14.2 -> 12.6 ms (0.89x); istella NV 505.5 -> 502.9 ms (0.99x), AMD 444.7 -> 445.6 ms (1.00x); average ~0.98, noise. Quality: r2 differs at 1e-8.
+- Files the patch restores: `x_decomp/ols_trisolve.mojo` (deleted), `x_decomp/api.mojo`, `x_decomp/exec_trait.mojo`, `x_decomp/device.mojo`, `x_decomp/host.mojo`, `bindings/_mojolearn_x_decomp.mojo`, `bindings/_mojolearn_x_decomp_host.mojo`, `python/mojolearn/linear_model.py`, `python/mojolearn/_surface_decomp.py`. The default Jacobi SVD route is untouched.
+- grid_controls: `gap-linalg.json` `ols_r_trisolve` moved to `removed` (lane entry `classical:ols` dropped: it had no other control).
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/i17-decide-linalg-seq, c14beeda5): IDN_OLS_R_TRISOLVE was NOISE with bits changed.
+
 ## Neighbors
 
 ### MOJOLEARN_C29_STREAM_TOPK
@@ -1852,6 +1865,16 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - grid_controls: `fg-pca.json` `pca_device_truncate` moved to `removed`.
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): IDN_PCA_DEVICE_TRUNCATE was NOISE; code at main 9f83ea479.
 
+### MOJOLEARN_IDN_LU_DELAYED_UPDATE
+
+- Verdict: DROPPED-noise (loser, bits changed). Deleted 2026-10-11 by `aaf94d8a9` (lane/i17-decide-linalg-seq).
+- Recoverable at `aaf94d8a9^`. Patch: `experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch` (whole deletion reversed, code files only, taken after the tombstones were filled in).
+- What it tried: lane lu-delayed-update (2026-10-11, 2ae4e4a0d / 0ee57eef8), idea B2: IDENTICAL LU keeping main's 32-column one-launch panel but updating the trailing square once per 256 columns through the identical GEMM (`gemm/block_update.mojo` blk_gemm_sub) instead of once per panel; host twin `lu_delayed_host` in `x_decomp/host.mojo`. Bits changed (NV, AMD and host together).
+- Verdict numbers: A/B on main b2657cc89, one run per arm (nv2 v0034, amd a1617): lu-factor synthetic NV 822.7 -> 836.8 ms (1.02x), AMD 568.0 -> 574.9 ms (1.01x); lu-solve NV 0.94x, AMD 1.03x; average ~1.0, noise. Quality: relative_residual 2.59e-06 (bits changed for no gain).
+- Files the patch restores: `x_decomp/lu_delayed.mojo`, `x_decomp/lu_delayed_ctl.mojo` (both deleted), `x_decomp/device.mojo`, `x_decomp/host.mojo`. `gemm/block_update.mojo` stays (eigh_tridiag uses it).
+- grid_controls: `lu-delayed-update.json` `lu_delayed_update` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/i17-decide-linalg-seq, aaf94d8a9): IDN_LU_DELAYED_UPDATE was NOISE with bits changed.
+
 ## Cluster
 
 ### MOJOLEARN_AFFINITY_FAST_LOOP
@@ -2245,6 +2268,16 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Note: Code deleted 2026-10-03 by 7ff2caf99; lane/owed-deletions-D1 added the inline tombstone, the refusal and this patch (the owed list carried it because a docstring names the define).
 - EXPERIMENTS.md:544: `TSA2_KPSS`; kpss / synthetic; kpss / taxi-hourly; lane/apple-fast-gap-tsa @ e9da47064; gaptsa-tsa2kpss-kpss-taxi-hourly, gaptsa-tsa2kpss-kpss-synthetic; kpss taxi-hourly -73%, synthetic -62%; DROPPED-noise; same gain as TSA_FAST_KPSS_PACK (kept); stays opt-in; code removed from main 7ff2caf99; recover at lane/apple-fast-gap-tsa@e9da47064
 - EXPERIMENTS.md:545: `TSA2_KPSS`; kpss / taxi-hourly; lane/apple-fast-tsa2 @ b27c8169b; tsa2-kpss-taxi-hourly; compile fail on this branch; on gap-tsa: kpss taxi-hourly -73%, synthetic -62%; DROPPED-noise; same gain as TSA_FAST_KPSS_PACK, which was kept instead; stays opt-in; code removed from main 7ff2caf99; recover at lane/apple-fast-tsa2@b27c8169b
+
+### MOJOLEARN_IDN_SEQ_FMA
+
+- Verdict: DROPPED-noise (loser, bits changed). Deleted 2026-10-11 by `0c8ea9eeb` (lane/i17-decide-linalg-seq).
+- Recoverable at `0c8ea9eeb^`. Patch: `experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch` (whole deletion reversed, code files only, taken after the tombstones were filled in).
+- What it tried: lane seq-reg (2026-10-11, 46c598678): `seq_madd` in `sequence/ops.mojo` contracted the theta level/trend updates and the ETS q = phi b + l (and the ETS forecast) from add(mul) into one pinned identical_mul_add on NV, AMD and host. Bits changed.
+- Verdict numbers: A/B on main b2657cc89, one run per arm (nv2 v0039/v0040, amd a1622/a1623): theta NV 1.00x / AMD 1.00x; dynamic-optimized-theta 0.99x / 0.98-1.00x; damped-ets 1.00x / 1.08x and 0.97x; average ~1.0, noise. Quality: forecast_rmse differs (bits changed for no gain).
+- Files the patch restores: `sequence/ops.mojo`, `sequence/theta.mojo`, `sequence/ets.mojo`. MOJOLEARN_IDN_SEQ_REG (the register form) stays, promoted to the IDENTICAL default the same day (`_OFF` reverts), with the add(mul) form.
+- grid_controls: `seq-reg.json` `idn_seq_fma` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/i17-decide-linalg-seq, 0c8ea9eeb): IDN_SEQ_FMA was NOISE with bits changed.
 
 ## Kernel / GP
 
