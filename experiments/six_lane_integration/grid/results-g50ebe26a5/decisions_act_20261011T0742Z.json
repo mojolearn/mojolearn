@@ -1,0 +1,1266 @@
+{
+ "snapshot": "20261011T0742Z",
+ "source": "grid g50ebe26a5 pass 1 (pass 2 dropped 2026-10-11)",
+ "act": {
+  "PROMOTE": [
+   {
+    "control": "m1_scan",
+    "arm": "persistent",
+    "decision": {
+     "algorithms": [
+      "neural:mamba1-forward"
+     ],
+     "arms": {
+      "affine_prefix": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 1.2137613834669103,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_scan=affine_prefix"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "UNMEASURED"
+       },
+       "promote_for": [],
+       "recommendation": "NOT_MEASURED",
+       "refuse_for": []
+      },
+      "persistent": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 0.45371875906252673,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_scan=persistent"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      },
+      "state_window": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 0.4684904439427956,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_scan=state_window"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "m1_scan",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   },
+   {
+    "control": "m1_scan",
+    "arm": "state_window",
+    "decision": {
+     "algorithms": [
+      "neural:mamba1-forward"
+     ],
+     "arms": {
+      "affine_prefix": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 1.2137613834669103,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_scan=affine_prefix"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "UNMEASURED"
+       },
+       "promote_for": [],
+       "recommendation": "NOT_MEASURED",
+       "refuse_for": []
+      },
+      "persistent": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 0.45371875906252673,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_scan=persistent"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      },
+      "state_window": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 0.4684904439427956,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_scan=state_window"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "m1_scan",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   },
+   {
+    "control": "m2_retain_gl",
+    "arm": "on",
+    "decision": {
+     "algorithms": [
+      "neural:mamba2-forward"
+     ],
+     "arms": {
+      "on": {
+       "algorithms_complete": {
+        "neural:mamba2-forward": false
+       },
+       "combined_ratio": 0.6598079993133471,
+       "configurations": [
+        "G.neural:mamba2-forward.m2_retain_gl=on"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba2-forward": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "m2_retain_gl",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   },
+   {
+    "control": "m2_yd_rows",
+    "arm": "8",
+    "decision": {
+     "algorithms": [
+      "neural:mamba2-forward"
+     ],
+     "arms": {
+      "8": {
+       "algorithms_complete": {
+        "neural:mamba2-forward": false
+       },
+       "combined_ratio": 0.6476088061425298,
+       "configurations": [
+        "G.neural:mamba2-forward.m2_yd_rows=8"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba2-forward": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "m2_yd_rows",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   },
+   {
+    "control": "m3_s17_tail",
+    "arm": "pipe",
+    "decision": {
+     "algorithms": [
+      "neural:samba-train-step"
+     ],
+     "arms": {
+      "dbuf": {
+       "algorithms_complete": {
+        "neural:samba-train-step": false
+       },
+       "combined_ratio": 1.0050702901777986,
+       "configurations": [
+        "G.neural:samba-train-step.m3_s17_tail=dbuf"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:samba-train-step": "UNMEASURED"
+       },
+       "promote_for": [],
+       "recommendation": "NOT_MEASURED",
+       "refuse_for": []
+      },
+      "pipe": {
+       "algorithms_complete": {
+        "neural:samba-train-step": false
+       },
+       "combined_ratio": 0.7785543219717534,
+       "configurations": [
+        "G.neural:samba-train-step.m3_s17_tail=pipe"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:samba-train-step": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "m3_s17_tail",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   },
+   {
+    "control": "ni12_implicit_conv",
+    "arm": "off",
+    "decision": {
+     "algorithms": [
+      "neural:cnn-clf"
+     ],
+     "arms": {
+      "off": {
+       "algorithms_complete": {
+        "neural:cnn-clf": false
+       },
+       "combined_ratio": 0.9004052211945028,
+       "configurations": [
+        "G.neural:cnn-clf.ni12_implicit_conv=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:cnn-clf": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "ni12_implicit_conv",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   }
+  ],
+  "DELETE": [
+   {
+    "control": "lm_grouped_adam",
+    "arm": "2",
+    "decision": {
+     "algorithms": [
+      "neural:lm-train-step"
+     ],
+     "arms": {
+      "1": {
+       "algorithms_complete": {
+        "neural:lm-train-step": false
+       },
+       "combined_ratio": 1.0361332524280948,
+       "configurations": [
+        "G.neural:lm-train-step.lm_grouped_adam=1"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:lm-train-step": "UNMEASURED"
+       },
+       "promote_for": [],
+       "recommendation": "NOT_MEASURED",
+       "refuse_for": []
+      },
+      "2": {
+       "algorithms_complete": {
+        "neural:lm-train-step": false
+       },
+       "combined_ratio": 1.1474933971585524,
+       "configurations": [
+        "G.neural:lm-train-step.lm_grouped_adam=2"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:lm-train-step": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "lm_grouped_adam",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "lu_nb128",
+    "arm": "on",
+    "decision": {
+     "algorithms": [
+      "expanded:lu-solve"
+     ],
+     "arms": {
+      "on": {
+       "algorithms_complete": {
+        "expanded:lu-solve": false
+       },
+       "combined_ratio": 1.798780943589141,
+       "configurations": [
+        "G.expanded:lu-solve.lu_nb128=on"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "expanded:lu-solve": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "lu_nb128",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "m1_elementwise_fused",
+    "arm": "on",
+    "decision": {
+     "algorithms": [
+      "neural:mamba1-forward"
+     ],
+     "arms": {
+      "on": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 1.5195264594488533,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_elementwise_fused=on"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "m1_elementwise_fused",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "neural_gemm_ozaki_slices",
+    "arm": "4",
+    "decision": {
+     "algorithms": [
+      "neural:cnn-clf",
+      "neural:lm-forward",
+      "neural:lm-train-step",
+      "neural:mamba1-forward",
+      "neural:mamba2-forward",
+      "neural:mamba3-forward",
+      "neural:mlp-train-step",
+      "neural:samba-forward",
+      "neural:samba-train-step",
+      "neural:transformer-forward"
+     ],
+     "arms": {
+      "4": {
+       "algorithms_complete": {
+        "neural:cnn-clf": false,
+        "neural:lm-forward": false,
+        "neural:lm-train-step": false,
+        "neural:mamba1-forward": false,
+        "neural:mamba2-forward": false,
+        "neural:mamba3-forward": false,
+        "neural:mlp-train-step": false,
+        "neural:samba-forward": false,
+        "neural:samba-train-step": false,
+        "neural:transformer-forward": false
+       },
+       "combined_ratio": 7.277680208479086,
+       "configurations": [
+        "G.neural:cnn-clf.neural_gemm_ozaki_slices=4",
+        "G.neural:lm-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:lm-train-step.neural_gemm_ozaki_slices=4",
+        "G.neural:mamba1-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:mamba2-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:mamba3-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:mlp-train-step.neural_gemm_ozaki_slices=4",
+        "G.neural:samba-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:samba-train-step.neural_gemm_ozaki_slices=4",
+        "G.neural:transformer-forward.neural_gemm_ozaki_slices=4"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:cnn-clf": "SLOWER",
+        "neural:lm-forward": "SLOWER",
+        "neural:lm-train-step": "SLOWER",
+        "neural:mamba1-forward": "SLOWER",
+        "neural:mamba2-forward": "SLOWER",
+        "neural:mamba3-forward": "SLOWER",
+        "neural:mlp-train-step": "SLOWER",
+        "neural:samba-forward": "SLOWER",
+        "neural:samba-train-step": "SLOWER",
+        "neural:transformer-forward": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      },
+      "5": {
+       "algorithms_complete": {
+        "neural:cnn-clf": false,
+        "neural:lm-forward": false,
+        "neural:lm-train-step": false,
+        "neural:mamba1-forward": false,
+        "neural:mamba2-forward": false,
+        "neural:mamba3-forward": false,
+        "neural:mlp-train-step": false,
+        "neural:samba-forward": false,
+        "neural:samba-train-step": false,
+        "neural:transformer-forward": false
+       },
+       "combined_ratio": 7.130242872514122,
+       "configurations": [
+        "G.neural:cnn-clf.neural_gemm_ozaki_slices=5",
+        "G.neural:lm-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:lm-train-step.neural_gemm_ozaki_slices=5",
+        "G.neural:mamba1-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:mamba2-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:mamba3-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:mlp-train-step.neural_gemm_ozaki_slices=5",
+        "G.neural:samba-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:samba-train-step.neural_gemm_ozaki_slices=5",
+        "G.neural:transformer-forward.neural_gemm_ozaki_slices=5"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:cnn-clf": "SLOWER",
+        "neural:lm-forward": "SLOWER",
+        "neural:lm-train-step": "SLOWER",
+        "neural:mamba1-forward": "SLOWER",
+        "neural:mamba2-forward": "SLOWER",
+        "neural:mamba3-forward": "SLOWER",
+        "neural:mlp-train-step": "SLOWER",
+        "neural:samba-forward": "SLOWER",
+        "neural:samba-train-step": "SLOWER",
+        "neural:transformer-forward": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "neural_gemm_ozaki_slices",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "neural_gemm_ozaki_slices",
+    "arm": "5",
+    "decision": {
+     "algorithms": [
+      "neural:cnn-clf",
+      "neural:lm-forward",
+      "neural:lm-train-step",
+      "neural:mamba1-forward",
+      "neural:mamba2-forward",
+      "neural:mamba3-forward",
+      "neural:mlp-train-step",
+      "neural:samba-forward",
+      "neural:samba-train-step",
+      "neural:transformer-forward"
+     ],
+     "arms": {
+      "4": {
+       "algorithms_complete": {
+        "neural:cnn-clf": false,
+        "neural:lm-forward": false,
+        "neural:lm-train-step": false,
+        "neural:mamba1-forward": false,
+        "neural:mamba2-forward": false,
+        "neural:mamba3-forward": false,
+        "neural:mlp-train-step": false,
+        "neural:samba-forward": false,
+        "neural:samba-train-step": false,
+        "neural:transformer-forward": false
+       },
+       "combined_ratio": 7.277680208479086,
+       "configurations": [
+        "G.neural:cnn-clf.neural_gemm_ozaki_slices=4",
+        "G.neural:lm-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:lm-train-step.neural_gemm_ozaki_slices=4",
+        "G.neural:mamba1-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:mamba2-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:mamba3-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:mlp-train-step.neural_gemm_ozaki_slices=4",
+        "G.neural:samba-forward.neural_gemm_ozaki_slices=4",
+        "G.neural:samba-train-step.neural_gemm_ozaki_slices=4",
+        "G.neural:transformer-forward.neural_gemm_ozaki_slices=4"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:cnn-clf": "SLOWER",
+        "neural:lm-forward": "SLOWER",
+        "neural:lm-train-step": "SLOWER",
+        "neural:mamba1-forward": "SLOWER",
+        "neural:mamba2-forward": "SLOWER",
+        "neural:mamba3-forward": "SLOWER",
+        "neural:mlp-train-step": "SLOWER",
+        "neural:samba-forward": "SLOWER",
+        "neural:samba-train-step": "SLOWER",
+        "neural:transformer-forward": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      },
+      "5": {
+       "algorithms_complete": {
+        "neural:cnn-clf": false,
+        "neural:lm-forward": false,
+        "neural:lm-train-step": false,
+        "neural:mamba1-forward": false,
+        "neural:mamba2-forward": false,
+        "neural:mamba3-forward": false,
+        "neural:mlp-train-step": false,
+        "neural:samba-forward": false,
+        "neural:samba-train-step": false,
+        "neural:transformer-forward": false
+       },
+       "combined_ratio": 7.130242872514122,
+       "configurations": [
+        "G.neural:cnn-clf.neural_gemm_ozaki_slices=5",
+        "G.neural:lm-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:lm-train-step.neural_gemm_ozaki_slices=5",
+        "G.neural:mamba1-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:mamba2-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:mamba3-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:mlp-train-step.neural_gemm_ozaki_slices=5",
+        "G.neural:samba-forward.neural_gemm_ozaki_slices=5",
+        "G.neural:samba-train-step.neural_gemm_ozaki_slices=5",
+        "G.neural:transformer-forward.neural_gemm_ozaki_slices=5"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:cnn-clf": "SLOWER",
+        "neural:lm-forward": "SLOWER",
+        "neural:lm-train-step": "SLOWER",
+        "neural:mamba1-forward": "SLOWER",
+        "neural:mamba2-forward": "SLOWER",
+        "neural:mamba3-forward": "SLOWER",
+        "neural:mlp-train-step": "SLOWER",
+        "neural:samba-forward": "SLOWER",
+        "neural:samba-train-step": "SLOWER",
+        "neural:transformer-forward": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "neural_gemm_ozaki_slices",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   }
+  ],
+  "SPLIT": [
+   {
+    "control": "linear_gram_solve",
+    "arm": "off",
+    "decision": {
+     "algorithms": [
+      "classical:ols",
+      "more:ridge"
+     ],
+     "arms": {
+      "off": {
+       "algorithms_complete": {
+        "classical:ols": false,
+        "more:ridge": false
+       },
+       "combined_ratio": 1.283561557718427,
+       "configurations": [
+        "G.classical:ols.linear_gram_solve=off",
+        "G.more:ridge.linear_gram_solve=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "classical:ols": "FASTER",
+        "more:ridge": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_SPLIT",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "linear_gram_solve",
+     "recommendation": "PARTIAL_SPLIT"
+    }
+   }
+  ],
+  "KEEP_DEFAULT (off arm slower)": [
+   {
+    "control": "c08_unique_scan",
+    "arm": "off",
+    "decision": {
+     "algorithms": [
+      "expanded:onehot",
+      "expanded:ordinal",
+      "expanded:target-encoder"
+     ],
+     "arms": {
+      "off": {
+       "algorithms_complete": {
+        "expanded:onehot": false,
+        "expanded:ordinal": false,
+        "expanded:target-encoder": false
+       },
+       "combined_ratio": 2.00750265198506,
+       "configurations": [
+        "G.expanded:onehot.c08_unique_scan=off",
+        "G.expanded:ordinal.c08_unique_scan=off",
+        "G.expanded:target-encoder.c08_unique_scan=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "expanded:onehot": "SLOWER",
+        "expanded:ordinal": "SLOWER",
+        "expanded:target-encoder": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "c08_unique_scan",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "enetcv_score_blocks",
+    "arm": "off",
+    "decision": {
+     "algorithms": [
+      "expanded:enet-cv",
+      "expanded:lasso-cv"
+     ],
+     "arms": {
+      "1024": {
+       "algorithms_complete": {
+        "expanded:enet-cv": false,
+        "expanded:lasso-cv": false
+       },
+       "combined_ratio": 1.0100098230959855,
+       "configurations": [
+        "G.expanded:enet-cv.enetcv_score_blocks=1024",
+        "G.expanded:lasso-cv.enetcv_score_blocks=1024"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "expanded:enet-cv": "UNMEASURED",
+        "expanded:lasso-cv": "UNMEASURED"
+       },
+       "promote_for": [],
+       "recommendation": "NOT_MEASURED",
+       "refuse_for": []
+      },
+      "off": {
+       "algorithms_complete": {
+        "expanded:enet-cv": false,
+        "expanded:lasso-cv": false
+       },
+       "combined_ratio": 1.963081682909227,
+       "configurations": [
+        "G.expanded:enet-cv.enetcv_score_blocks=off",
+        "G.expanded:lasso-cv.enetcv_score_blocks=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "expanded:enet-cv": "SLOWER",
+        "expanded:lasso-cv": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "enetcv_score_blocks",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "hdb_mst_seed_knn",
+    "arm": "off",
+    "decision": {
+     "algorithms": [
+      "classical:hdbscan"
+     ],
+     "arms": {
+      "off": {
+       "algorithms_complete": {
+        "classical:hdbscan": false
+       },
+       "combined_ratio": 1.3081827144832203,
+       "configurations": [
+        "G.classical:hdbscan.hdb_mst_seed_knn=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "classical:hdbscan": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "hdb_mst_seed_knn",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "rsvd_idn_direct_in",
+    "arm": "off",
+    "decision": {
+     "algorithms": [
+      "expanded:randomized-svd"
+     ],
+     "arms": {
+      "off": {
+       "algorithms_complete": {
+        "expanded:randomized-svd": false
+       },
+       "combined_ratio": 1.9311778354651414,
+       "configurations": [
+        "G.expanded:randomized-svd.rsvd_idn_direct_in=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "expanded:randomized-svd": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "rsvd_idn_direct_in",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "samba_resident_step",
+    "arm": "off",
+    "decision": {
+     "algorithms": [
+      "neural:samba-forward",
+      "neural:samba-train-step"
+     ],
+     "arms": {
+      "off": {
+       "algorithms_complete": {
+        "neural:samba-forward": false,
+        "neural:samba-train-step": false
+       },
+       "combined_ratio": 1.6309588905414711,
+       "configurations": [
+        "G.neural:samba-forward.samba_resident_step=off",
+        "G.neural:samba-train-step.samba_resident_step=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:samba-forward": "SLOWER",
+        "neural:samba-train-step": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "samba_resident_step",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "tsvd_one_upload",
+    "arm": "off",
+    "decision": {
+     "algorithms": [
+      "more:tsvd"
+     ],
+     "arms": {
+      "off": {
+       "algorithms_complete": {
+        "more:tsvd": false
+       },
+       "combined_ratio": 1.6101353779308407,
+       "configurations": [
+        "G.more:tsvd.tsvd_one_upload=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "more:tsvd": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "tsvd_one_upload",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "ivf_direct",
+    "arm": "off",
+    "decision": {
+     "algorithms": [
+      "more:ivf"
+     ],
+     "arms": {
+      "off": {
+       "algorithms_complete": {
+        "more:ivf": false
+       },
+       "combined_ratio": 0.9944216231811459,
+       "configurations": [
+        "G.more:ivf.ivf_direct=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "more:ivf": "HOLD_QUALITY"
+       },
+       "promote_for": [],
+       "recommendation": "HOLD_QUALITY",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "ivf_direct",
+     "recommendation": "HOLD_QUALITY"
+    }
+   }
+  ],
+  "ALREADY_ACTED (A14)": [
+   {
+    "control": "PCA_COV",
+    "arm": "c04",
+    "decision": {
+     "algorithms": [
+      "classical:pca"
+     ],
+     "arms": {
+      "c04": {
+       "algorithms_complete": {
+        "classical:pca": false
+       },
+       "combined_ratio": 1.0604464834416272,
+       "configurations": [
+        "G.classical:pca.PCA_COV=c04"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "classical:pca": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "PCA_COV",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "TSVD_FUSED_STATS",
+    "arm": "on",
+    "decision": {
+     "algorithms": [
+      "more:tsvd"
+     ],
+     "arms": {
+      "on": {
+       "algorithms_complete": {
+        "more:tsvd": false
+       },
+       "combined_ratio": 2.128527118305684,
+       "configurations": [
+        "G.more:tsvd.TSVD_FUSED_STATS=on"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "more:tsvd": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "TSVD_FUSED_STATS",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "enetcv_fold_blocks",
+    "arm": "64",
+    "decision": {
+     "algorithms": [
+      "expanded:enet-cv",
+      "expanded:lasso-cv"
+     ],
+     "arms": {
+      "16": {
+       "algorithms_complete": {
+        "expanded:enet-cv": false,
+        "expanded:lasso-cv": false
+       },
+       "combined_ratio": 0.5822355444835561,
+       "configurations": [
+        "G.expanded:enet-cv.enetcv_fold_blocks=16",
+        "G.expanded:lasso-cv.enetcv_fold_blocks=16"
+       ],
+       "consistent_small_win": {
+        "cells": 8,
+        "geo_mean": 0.5822355444835561,
+        "worst": 0.9139918169811112
+       },
+       "per_algorithm": {
+        "expanded:enet-cv": "FASTER",
+        "expanded:lasso-cv": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      },
+      "32": {
+       "algorithms_complete": {
+        "expanded:enet-cv": false,
+        "expanded:lasso-cv": false
+       },
+       "combined_ratio": 0.6037999831802772,
+       "configurations": [
+        "G.expanded:enet-cv.enetcv_fold_blocks=32",
+        "G.expanded:lasso-cv.enetcv_fold_blocks=32"
+       ],
+       "consistent_small_win": {
+        "cells": 8,
+        "geo_mean": 0.6037999831802772,
+        "worst": 0.9819834966897276
+       },
+       "per_algorithm": {
+        "expanded:enet-cv": "FASTER",
+        "expanded:lasso-cv": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      },
+      "64": {
+       "algorithms_complete": {
+        "expanded:enet-cv": false,
+        "expanded:lasso-cv": false
+       },
+       "combined_ratio": 0.5646189119220489,
+       "configurations": [
+        "G.expanded:enet-cv.enetcv_fold_blocks=64",
+        "G.expanded:lasso-cv.enetcv_fold_blocks=64"
+       ],
+       "consistent_small_win": {
+        "cells": 8,
+        "geo_mean": 0.5646189119220489,
+        "worst": 0.9572193643916431
+       },
+       "per_algorithm": {
+        "expanded:enet-cv": "FASTER",
+        "expanded:lasso-cv": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "enetcv_fold_blocks",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   },
+   {
+    "control": "rsvd_tsqr_ortho",
+    "arm": "on",
+    "decision": {
+     "algorithms": [
+      "expanded:randomized-svd"
+     ],
+     "arms": {
+      "on": {
+       "algorithms_complete": {
+        "expanded:randomized-svd": false
+       },
+       "combined_ratio": 0.6729768374279513,
+       "configurations": [
+        "G.expanded:randomized-svd.rsvd_tsqr_ortho=on"
+       ],
+       "consistent_small_win": {
+        "cells": 4,
+        "geo_mean": 0.6729768374279513,
+        "worst": 0.8235689736097079
+       },
+       "per_algorithm": {
+        "expanded:randomized-svd": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "rsvd_tsqr_ortho",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   }
+  ],
+  "UNMEASURED": [
+   {
+    "control": "lm_grouped_adam",
+    "arm": "1",
+    "decision": {
+     "algorithms": [
+      "neural:lm-train-step"
+     ],
+     "arms": {
+      "1": {
+       "algorithms_complete": {
+        "neural:lm-train-step": false
+       },
+       "combined_ratio": 1.0361332524280948,
+       "configurations": [
+        "G.neural:lm-train-step.lm_grouped_adam=1"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:lm-train-step": "UNMEASURED"
+       },
+       "promote_for": [],
+       "recommendation": "NOT_MEASURED",
+       "refuse_for": []
+      },
+      "2": {
+       "algorithms_complete": {
+        "neural:lm-train-step": false
+       },
+       "combined_ratio": 1.1474933971585524,
+       "configurations": [
+        "G.neural:lm-train-step.lm_grouped_adam=2"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:lm-train-step": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "lm_grouped_adam",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   },
+   {
+    "control": "m1_scan",
+    "arm": "affine_prefix",
+    "decision": {
+     "algorithms": [
+      "neural:mamba1-forward"
+     ],
+     "arms": {
+      "affine_prefix": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 1.2137613834669103,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_scan=affine_prefix"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "UNMEASURED"
+       },
+       "promote_for": [],
+       "recommendation": "NOT_MEASURED",
+       "refuse_for": []
+      },
+      "persistent": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 0.45371875906252673,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_scan=persistent"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      },
+      "state_window": {
+       "algorithms_complete": {
+        "neural:mamba1-forward": false
+       },
+       "combined_ratio": 0.4684904439427956,
+       "configurations": [
+        "G.neural:mamba1-forward.m1_scan=state_window"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:mamba1-forward": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "m1_scan",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   },
+   {
+    "control": "m3_s17_tail",
+    "arm": "dbuf",
+    "decision": {
+     "algorithms": [
+      "neural:samba-train-step"
+     ],
+     "arms": {
+      "dbuf": {
+       "algorithms_complete": {
+        "neural:samba-train-step": false
+       },
+       "combined_ratio": 1.0050702901777986,
+       "configurations": [
+        "G.neural:samba-train-step.m3_s17_tail=dbuf"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:samba-train-step": "UNMEASURED"
+       },
+       "promote_for": [],
+       "recommendation": "NOT_MEASURED",
+       "refuse_for": []
+      },
+      "pipe": {
+       "algorithms_complete": {
+        "neural:samba-train-step": false
+       },
+       "combined_ratio": 0.7785543219717534,
+       "configurations": [
+        "G.neural:samba-train-step.m3_s17_tail=pipe"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "neural:samba-train-step": "FASTER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_PROMOTE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "m3_s17_tail",
+     "recommendation": "PARTIAL_PROMOTE"
+    }
+   },
+   {
+    "control": "enetcv_score_blocks",
+    "arm": "1024",
+    "decision": {
+     "algorithms": [
+      "expanded:enet-cv",
+      "expanded:lasso-cv"
+     ],
+     "arms": {
+      "1024": {
+       "algorithms_complete": {
+        "expanded:enet-cv": false,
+        "expanded:lasso-cv": false
+       },
+       "combined_ratio": 1.0100098230959855,
+       "configurations": [
+        "G.expanded:enet-cv.enetcv_score_blocks=1024",
+        "G.expanded:lasso-cv.enetcv_score_blocks=1024"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "expanded:enet-cv": "UNMEASURED",
+        "expanded:lasso-cv": "UNMEASURED"
+       },
+       "promote_for": [],
+       "recommendation": "NOT_MEASURED",
+       "refuse_for": []
+      },
+      "off": {
+       "algorithms_complete": {
+        "expanded:enet-cv": false,
+        "expanded:lasso-cv": false
+       },
+       "combined_ratio": 1.963081682909227,
+       "configurations": [
+        "G.expanded:enet-cv.enetcv_score_blocks=off",
+        "G.expanded:lasso-cv.enetcv_score_blocks=off"
+       ],
+       "consistent_small_win": null,
+       "per_algorithm": {
+        "expanded:enet-cv": "SLOWER",
+        "expanded:lasso-cv": "SLOWER"
+       },
+       "promote_for": [],
+       "recommendation": "PARTIAL_DELETE",
+       "refuse_for": []
+      }
+     },
+     "best_arm": null,
+     "control": "enetcv_score_blocks",
+     "recommendation": "PARTIAL_DELETE"
+    }
+   }
+  ]
+ }
+}
