@@ -3801,7 +3801,7 @@ def _neural_fixture_drift_check(lane, D, x_cpu, state, torch):
     NF = _tool("neural_fixtures")
     s = LANES[lane]
     try:
-        fx = NF.load_for_lane(_NEURAL_FIXTURES or os.environ.get(NF.ENV_DIR), lane, s, _DATASET, D)
+        fx = NF.load_for_lane(_NEURAL_FIXTURES or os.environ.get(NF.ENV_DIR), lane, s, _DATASET or os.environ.get("MOJOLEARN_BOARD_DATASET"), D)
     except NF.FixturesMissing as exc:
         return {"status": "absent", "detail": str(exc)[:300]}
     bad = []
@@ -3900,7 +3900,7 @@ def _build_layer(lane, arm, D):
         # (_layer_inputs, make(), Generator(SEED + 1)), sha256-verified on load. A missing set
         # refuses (not_ready, infrastructure); there is no torch fallback here
         NF = _tool("neural_fixtures")
-        fx = NF.load_for_lane(_NEURAL_FIXTURES or os.environ.get(NF.ENV_DIR), lane, s, _DATASET, D)
+        fx = NF.load_for_lane(_NEURAL_FIXTURES or os.environ.get(NF.ENV_DIR), lane, s, _DATASET or os.environ.get("MOJOLEARN_BOARD_DATASET"), D)
         state = fx["state"]
         if s["task"] in ("gcn", "sage"):      # x and edges are the dataset's (numpy, no draw)
             x_np, edges = _graph_layer_inputs(D)
@@ -5647,6 +5647,9 @@ def race(args):
         result["quality"] = quality(lane, D, outs)
         hq = _tool("bench_board_host_quality")
         hq_dir = os.path.join(args.work, tag + "-host-quality")
+        # the host-quality child rebuilds the lane through board.build() with _DATASET unset; the layer lanes key their
+        # fixtures by (lane, dataset, variant), so without this the child asked for "<lane>/None/nb64" (nv2 v0137, amd a1719)
+        os.environ["MOJOLEARN_BOARD_DATASET"] = ds
         result["host_quality_receipt"] = hq.enrich(
             lane, D, outs, result["quality"], args.ours_python, hq_dir, args.round_seconds,
             fit_calls=args.rounds + (0 if external_warmup else 1))
