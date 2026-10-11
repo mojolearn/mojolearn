@@ -26,6 +26,7 @@ from std.memory import memcpy, memset_zero
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from sequence.dispatch import apply
+from sequence.ets_team import IDN_ETS_TEAM, ets_team_replay, ets_team_replay_applies
 from sequence.exec_trait import Exec
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.ops import (
@@ -159,6 +160,19 @@ def host_launch_tasks(n: Int, weight: Int, workers: Int) -> Int:
     return t
 
 
+
+@always_inline
+def _host_apply[OP: Int](t: Int, a: Args):
+    """Element t of OP on the host column. IDN_ETS_TEAM (sequence/ets_team.mojo,
+    default off): ETS(A, A|Ad, N) replays the device team's chunked
+    likelihood, tree prefix and fold (`ets_team_replay`), since op_ets's
+    serial recurrence has other bits; every other op and model is apply's."""
+    comptime if IDN_ETS_TEAM and OP == OP_ETS:
+        if ets_team_replay_applies(a):
+            ets_team_replay(t, a)
+            return
+    apply[OP](t, a)
+
 struct HostExec(Exec):
     var bufs: List[FP]
     #: The task ceiling, read once per Exec (one entry call).
@@ -268,7 +282,7 @@ struct HostExec(Exec):
         var tasks = host_launch_tasks(n, _element_weight[OP](a), self.workers)
         if tasks <= 1:
             for t in range(n):
-                apply[OP](t, a)
+                _host_apply[OP](t, a)
             return
         var chunk = host_predict_chunk(n, tasks)
 
@@ -276,7 +290,7 @@ struct HostExec(Exec):
             var lo = c * chunk
             var hi = min(lo + chunk, n)
             for t in range(lo, hi):
-                apply[OP](t, a)
+                _host_apply[OP](t, a)
 
         host_parallelize(_chunk, tasks)
 
