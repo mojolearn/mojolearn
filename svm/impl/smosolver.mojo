@@ -308,6 +308,28 @@ def update_f_kernel(
             f.unsafe_store(p, ftz(f.unsafe_load(p) + acc))
 
 
+#: svc-tsne D4 (IDENTICAL, NVIDIA and AMD, DEFAULT OFF, lane svc-tsne
+#: 2026-10-11): THE BLOCK SOLVE AS ONE BLOCK whenever the working set fits
+#: the 1024-thread block every NVIDIA and AMD column launches. Structural
+#: reason: at the default 256-thread width a 1024-element working set runs on
+#: 4 blocks, and each inner iteration pays two grid exchanges (`_publish` /
+#: `_await` flag spins through global memory) on top of the block trees; one
+#: block of up to 1024 threads skips the exchange (`n_blocks == 1`), so every
+#: selection is barrier-only (cuML's own `SmoBlockSolve<<<1, n_ws>>>` shape).
+#: The cap is the hardware block limit, not a dataset size: any n_ws <= 1024
+#: gets the smallest power-of-two block >= n_ws, larger sets keep the grid.
+#: Bits none: the selections are over the total order (value, then the
+#: smaller training index), so the winner, and every word, is the same at any
+#: block width (the launch-invariance gate already passes 1024); the host
+#: oracle is unchanged. Expected ~6.5 -> ~2.5 us per inner iteration: svc taxi
+#: NV ~1202 -> ~750 ms. -D MOJOLEARN_IDN_SVC_ONE_BLOCK turns it on;
+#: MOJOLEARN_IDN_ALL_OFF wins.
+comptime IDN_SVC_ONE_BLOCK = is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK"]() and not is_defined[
+    "MOJOLEARN_IDN_ALL_OFF"
+]()
+comptime SMO_GRID_TPB_CAP = 1024 if IDN_SVC_ONE_BLOCK else SMO_GRID_TPB
+
+
 def _block_solve_threads_for(n_ws: Int, requested: Int) -> Int:
     """The block width of the grid solve: `requested` if given (the
     launch-invariance gate passes 1024, theirs, and the smallest power of
@@ -318,7 +340,7 @@ def _block_solve_threads_for(n_ws: Int, requested: Int) -> Int:
     if requested > 0:
         return requested if requested > SMO_GRID_TPB_MIN else SMO_GRID_TPB_MIN
     var b = SMO_GRID_TPB_MIN
-    while b < n_ws and b < SMO_GRID_TPB:
+    while b < n_ws and b < SMO_GRID_TPB_CAP:
         b *= 2
     return b
 
