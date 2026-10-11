@@ -138,7 +138,7 @@ from mamba.host.device_shim import (
     contract_partition,
 )
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_merge_chains
-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 from checks.kernel_matrix import TARGET_COLUMN, column_has_float_atomics
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul

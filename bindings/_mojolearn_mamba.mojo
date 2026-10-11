@@ -137,7 +137,7 @@ from bindings.hostptr import f32_ptr, read_f32, copy_f32
 from std.memory import bitcast, memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined, get_defined_int
-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
 from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download

@@ -83,7 +83,7 @@ from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
 from gemm.host.neural_gemm import gemm_oracle
 from gemm.host.neural_gemm import gemm_host_rows
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
 from mamba.checks.mamba2_fixture import (

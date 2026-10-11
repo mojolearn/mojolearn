@@ -198,7 +198,7 @@ from mamba.checks.mamba_fixture import (
     MambaWeights,
     RMS_EPS,
 )
-# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 #: lane afn-mamba (2026-10-03): Apple FAST experiment switches. Every use
 #: below is a `comptime if` whose other arm is main's spelling unchanged.
