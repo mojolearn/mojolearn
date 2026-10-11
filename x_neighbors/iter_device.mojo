@@ -2500,8 +2500,13 @@ def op_svgp_fit_ff(
     # MOJOLEARN_IDN_SVGP_B_FP32_GATED: the whole Kfu stays resident (n x m,
     # 205 MB at 100k x 512) so B32 = Kfu^T Kfu is one identical-GEMM product
     # over k = n (the contract's leaves + fold); b stays float-float per tile.
-    comptime assert not (IDN_SVGP_B_FP32_GATED and (SVGP_FAST_BSPLIT or SVGP_FAST_SYMTILE)), (
-        "MOJOLEARN_IDN_SVGP_B_FP32_GATED is IDENTICAL-only (not with the FAST SYMTILE/BSPLIT B kernels)"
+    # With the gate on, r0 starts at n below, so the tiled B loop (SYMTILE or
+    # plain) never launches: SYMTILE being the IDENTICAL default is harmless.
+    # BSPLIT is the one real conflict: its final partial sum would overwrite
+    # the gated B (integration compile 2026-10-11: the old assert also
+    # refused SYMTILE and so could never pass in an IDENTICAL build).
+    comptime assert not (IDN_SVGP_B_FP32_GATED and SVGP_FAST_BSPLIT), (
+        "MOJOLEARN_IDN_SVGP_B_FP32_GATED is IDENTICAL-only (not with the FAST BSPLIT B kernel)"
     )
     var d_kf = ctx.enqueue_create_buffer[DType.float32](max(n * m, 1) if IDN_SVGP_B_FP32_GATED else 1)
     var d_b32 = ctx.enqueue_create_buffer[DType.float32](max(mm, 1) if IDN_SVGP_B_FP32_GATED else 1)
