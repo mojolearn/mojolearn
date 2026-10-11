@@ -19,6 +19,23 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   exact reference folds the background mean in one fixed order. The opponents keep the NumPy ridge they were scored with
   (no re-score); `tools/shap_xvendor_probe.py` prints both models' digests per box.
 
+## 0.8.39 (published 2026-10-12)
+
+- Wave-2 IDENTICAL defaults, each decided by a same-box A/B on NVIDIA L40S and AMD MI325X (one run per arm, average of
+  the two vendors, digests equal across vendors). New defaults, each with a `_OFF` define that restores the old path:
+  CNN resident grads (no host waits inside conv/BN/pool calls; global pools 0.08x), BatchNorm grid statistics (0.47x,
+  bits change, host column agrees), speculative Nelder-Mead for theta and no-season ETS (0.10-0.34x), the ETS(A, A|Ad, N)
+  team (0.015x, forecast error unchanged), register-tiled float Gram for ridge (0.95x), range-pass radix sort for the
+  prep lanes (0.95x), KDE query tiles (0.34x on taxi, 1.24x on istella), lean KNNImputer fit (0.09x), one-block SVC
+  solve (0.69x), resident permutation SHAP (0.02-0.10x), resident MiniBatchKMeans (0.43x), strided IVF-PQ trainset
+  (0.46x, recall up). Also from the owed round: ElasticNetCV score blocks 1024 (0.94x).
+- Nineteen wave-2 experiments that lost or stayed within noise were deleted with tombstones, restore patches under
+  experiments/removed/ and guard refusals (docs/TOMBSTONES.md); three owed losers likewise (LM grouped Adam, Mamba-3 S17
+  tail double buffer, Mamba-1 affine-prefix scan).
+- Reference table re-recorded for the lanes whose bits changed (NVIDIA == AMD), every other row kept.
+- Board tools: the neural layer lanes' quality cells read the fixtures again (the host-quality child now receives the
+  fixture directory and the dataset).
+
 ## 0.8.38 (published 2026-10-10)
 
 - Linux only (macOS stays at 0.8.37): the Linux core, mojolearn-nvidia and mojolearn-amd, from the 0.8.37 source plus
