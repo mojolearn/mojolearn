@@ -186,13 +186,8 @@ trait Exec:
         every difference `center_cell` (glm/impl/center_items.mojo)."""
         ...
 
-    @staticmethod
-    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
-        """MOJOLEARN_IDN_OLS_R_TRISOLVE (x_decomp/ols_trisolve.mojo): res
-        (d) = the back-substitution of R_aug's ((d + 1) x (d + 1)) R x = c
-        when the equilibrated diagonal rank gate passes; returns the gate
-        (1 pass, 0 fail: res is then not meaningful)."""
-        ...
+    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 
     @staticmethod
     def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:

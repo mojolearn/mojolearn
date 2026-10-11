@@ -587,11 +587,8 @@ def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises 
 # refused. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime IDN_OLS_ONE_ENTRY = _API_IDN
-# MOJOLEARN_IDN_OLS_R_TRISOLVE (bit 9, lane ols-r-trisolve 2026-10-11, DEFAULT OFF, verdict OPEN):
-# LinearRegression solves R x = c from the TSQR's R in one launch behind a rank gate on R's equilibrated
-# diagonal (x_decomp/ols_trisolve.mojo), keeping the SVD route only when the gate fails. Removes the
-# ~2.5k-launch Jacobi SVD of the (d+1) x (d+1) R and ~10 kit crossings; expected ~100-200 ms on NV istella.
-comptime IDN_OLS_R_TRISOLVE = _API_IDN and is_defined["MOJOLEARN_IDN_OLS_R_TRISOLVE"]()
+# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 comptime IDN_LU_GESV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 # lane fam-decomp (2026-10-04): LLE builds F0 = [F^ | u] in three cells and
 # takes F^ X as F0 [X; 0] on every column of an IDENTICAL build (device and
@@ -650,11 +647,8 @@ def idn_flags_py() raises -> PythonObject:
     (IDN_NMF_L2_CELL); bit 6: FastICA's limit on the device
     (IDN_ICA_LIM_DEV); bit 7: `_polar`'s max on the device
     (IDN_POLAR_MAX_DEV); bit 8: LLE's zero-row pad on the device
-    (IDN_LLE_PAD_DEV); bit 9: LinearRegression solves from R behind a
-    rank gate (`ols_r_trisolve_py`, IDN_OLS_R_TRISOLVE)."""
+    (IDN_LLE_PAD_DEV); bit 9 was IDN_OLS_R_TRISOLVE (deleted 2026-10-11)."""
     var bits = 0
-    comptime if IDN_OLS_R_TRISOLVE:
-        bits |= 512
     comptime if IDN_NMF_L2_CELL:
         bits |= 32
     comptime if IDN_ICA_LIM_DEV:
@@ -702,20 +696,8 @@ def ols_tsqr_r_py[E: Exec](
     return PythonObject(n)
 
 
-def ols_r_trisolve_py[E: Exec](r: PythonObject, res: PythonObject, p: PythonObject) raises -> PythonObject:
-    """res (float32 [d]) = R's back-substitution R x = c of R_aug (r,
-    (d + 1) x (d + 1), as `ols_tsqr_r_py` wrote it) when the rank gate on
-    R's equilibrated diagonal passes; returns the gate (1 pass, 0 fail:
-    the caller keeps the SVD route). p = [d]."""
-    var d = _n(p, 0)
-    if d < 1 or d + 1 > TS_MAX_N:
-        raise Error("x_decomp: ols_r_trisolve needs 1 <= d, d + 1 <= " + String(TS_MAX_N))
-    var pr = _f(r)
-    var po = _f(res)
-    var ok = 0
-    with GILReleased(Python()):
-        ok = E.ols_r_trisolve(pr, po, d)
-    return PythonObject(ok)
+# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 
 
 def lu_gesv_py[E: Exec](a: PythonObject, b: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:

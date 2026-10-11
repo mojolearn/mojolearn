@@ -122,7 +122,8 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
-from x_decomp.ols_trisolve import OTS_TPB, ols_r_trisolve_kernel
+# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
@@ -4039,29 +4040,8 @@ struct DevExec(Exec):
         _ = da^
         _ = ctx^
 
-    @staticmethod
-    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
-        """MOJOLEARN_IDN_OLS_R_TRISOLVE: R_aug up (n x n words, n <= TS_MAX_N),
-        ONE launch (gate + back-substitution, x_decomp/ols_trisolve.mojo),
-        d + 1 words down (x, then the gate word)."""
-        var n = d + 1
-        var ctx = xd_ctx()
-        var dr = _up(ctx, r, n * n)
-        var dout = ctx.enqueue_create_buffer[DType.float32](n)
-        ctx.enqueue_function[ols_r_trisolve_kernel](  # small-launch(d: R_aug columns): one block over the d x d factor, never data rows
-            _p(dr), _p(dout), Int32(d), grid_dim=1, block_dim=OTS_TPB,
-        )
-        var host = List[Float32](length=n, fill=Float32(0))
-        _down(ctx, dout, F32Ptr(unsafe_from_address=Int(host.unsafe_ptr())), n)
-        ctx.synchronize()
-        for j in range(d):  # small-loop(d: coefficients): copy-res of d words
-            res.unsafe_store(j, host[j])
-        var ok = 1 if host[d] != Float32(0) else 0
-        _ = host^
-        _ = dr^
-        _ = dout^
-        _ = ctx^
-        return ok
+    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 
     @staticmethod
     def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:
