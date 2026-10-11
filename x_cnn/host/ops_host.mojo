@@ -684,6 +684,8 @@ def maxpool2d_backward_into(dout: FP, idx: IP, gx: FP, prm: List[Int32]):
 def avgpool2d_forward_into(x: FP, dst: FP, prm: List[Int32]):
     var no = _pool_sizes(prm)[1]
     var ps = prm.copy()
+    # TOMBSTONE: MOJOLEARN_IDN_GPOOL_WARP (noise/NV spike, bits changed on global-avgpool) deleted 2026-10-11 by f5aafae7f; code recoverable at f5aafae7f^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch
     run[avgpool_fwd_at](x, dst, dst, dst, hi(ps), hi(ps), no)
     _ = ps^
 

@@ -670,6 +670,8 @@ def avgpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
             acc = ftz(acc + g)
     dx.unsafe_store(i, acc)
 
+# TOMBSTONE: MOJOLEARN_IDN_GPOOL_WARP (noise/NV spike, bits changed on global-avgpool) deleted 2026-10-11 by f5aafae7f; code recoverable at f5aafae7f^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch
 
 # ---------------------------------------------------------------- trainer ops
 # Parameter blocks: bias rows / linear [rows, in, out]; softmax [n, k];

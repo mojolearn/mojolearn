@@ -27,26 +27,13 @@
    "status": "promoted:w2-decide-neural-20261011",
    "notes": "G3 (ideas-all-gaps-20261011): x_cnn_idn_flags bit 7 turns on resident glue: conv weights auto-pinned, dW/db and BN running/aux resident (lazy host reads), adaptive pools take DeviceTensors with a cached pool layer, unfilled outputs. Same entries and operands. Workloads: neural resnet-block, conv2d, conv1d, global-maxpool, global-avgpool, maxpool1d, avgpool2d, batchnorm2d, batchnorm1d synthetic; nv+amd.",
    "note": "PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-neural): A/B on main c8ef6c66d, one run per arm, same bits NV==AMD, avg 0.754 over the 9 layer lanes (global-avgpool 0.092, global-maxpool 0.078, avgpool2d 0.750, batchnorm1d 0.920, batchnorm2d 0.966, conv2d 0.967, resnet-block 0.982, maxpool1d 0.915, conv1d 1.111 NV spike); nv2 v0085 / A v0082, amd a1667 / A a1664. Arm off = MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF. "
-  },
-  "gpool_warp": {
-   "define": "MOJOLEARN_IDN_GPOOL_WARP",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GPOOL_WARP"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_cnn/ops.mojo:IDN_GPOOL_WARP",
-    "x_cnn/device.mojo:gpool_fwd_kernel",
-    "x_cnn/host/ops_host.mojo:_gpool_avg_host"
-   ],
-   "binding": "_mojolearn_x_cnn,_mojolearn_x_cnn host twin",
-   "bits_change": true,
-   "status": "new",
-   "notes": "G6: window = plane pools (global max/avg) run one 32-thread block per (n, c): strided lane folds then a fixed shared-memory pairwise tree (no shuffles, same on 32/64-wide). Max bits unchanged (associative pick reproduces the serial winner); avg bits change (tree sum), same on NV, AMD and host twin. Needs ID check nv+amd. Workloads: neural global-maxpool, global-avgpool synthetic."
   }
- }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_GPOOL_WARP",
+   "control": "gpool_warp",
+   "reason": "DELETED 2026-10-11 (lane/w2-decide-neural, f5aafae7f): A/B on main c8ef6c66d, one run per arm, found noise/unusable: global-avgpool 0.868 with BITS CHANGED (NV .942, AMD .794), global-maxpool AMD 1.065, NV cell a 216 ms spike; CNN_RESIDENT_GRADS (promoted) already takes both pools to ~0.1 ms. nv2 v0086, amd a1668. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at f5aafae7f^; restore with experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch."
+  }
+ ]
 }

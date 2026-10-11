@@ -1606,6 +1606,8 @@ def maxpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dp = put_prm(ctx, 1, prm)
     var dout = m_out(ctx, 2, a[1], no, isdev(dev, 1))
     var di = m_out_i(ctx, 3, a[2], no, isdev(dev, 2))
+    # TOMBSTONE: MOJOLEARN_IDN_GPOOL_WARP (noise/NV spike, bits changed on global-avgpool) deleted 2026-10-11 by f5aafae7f; code recoverable at f5aafae7f^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch
     launch[maxpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(di), ip(dp), no)
     m_fetch(ctx, dout, a[1], no, isdev(dev, 1))
     m_fetch_i(ctx, di, a[2], no, isdev(dev, 2))
@@ -1662,6 +1664,8 @@ def avgpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dx = m_in(ctx, 0, a[0], sizes[0], isdev(dev, 0))
     var dp = put_prm(ctx, 1, prm)
     var dout = m_out(ctx, 2, a[1], no, isdev(dev, 1))
+    # TOMBSTONE: MOJOLEARN_IDN_GPOOL_WARP (noise/NV spike, bits changed on global-avgpool) deleted 2026-10-11 by f5aafae7f; code recoverable at f5aafae7f^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch
     launch[avgpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(dp), ip(dp), no)
     m_fetch(ctx, dout, a[1], no, isdev(dev, 1))
     ctx.synchronize()
