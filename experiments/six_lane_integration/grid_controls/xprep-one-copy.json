@@ -1,0 +1,26 @@
+{
+  "schema": "mojolearn.grid-controls/1",
+  "lane": "xprep-one-copy",
+  "branch": "lane/xprep-one-copy",
+  "head": "4ce613da2",
+  "controls": {
+    "idn_dradix_range_passes": {
+      "define": "MOJOLEARN_IDN_DRADIX_RANGE_PASSES",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_IDN_DRADIX_RANGE_PASSES"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "x_prep/dradix.mojo"
+      ],
+      "binding": "_mojolearn_x_prep",
+      "bits_change": false,
+      "status": "new",
+      "note": "I3: the IDENTICAL sort_cols radix sort skips, per column, the digit passes whose digit is constant (OR mask of key ^ first key; parity of active passes picks the key block on the device) and caps the sort chunk at 512 rows; same words. A/B owed: onehot + ordinal istella + taxi, kbins istella on nv and amd; ID check expected MATCH."
+    }
+  }
+}
