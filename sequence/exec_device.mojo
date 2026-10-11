@@ -46,6 +46,7 @@ from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_C
 from sequence.adafactor import AF_COL_CHUNK_FOLD
 from sequence.adafactor_candidates import AF_COL_LANES, af_col_chunk_kernel
 from sequence.theta_spec import THETA_SPEC
+from sequence.ets_spec import ETS_SPEC, op_ets_spec
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
 from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
@@ -290,7 +291,12 @@ def coop_kernel[OP: Int](
                      _lo(i67), _hi(i67), _lo(i89), _hi(i89), _lo(i1011), _hi(i1011),
                      _flo(f01), _fhi(f01), _flo(f23), _fhi(f23),
                      _flo(f45), _fhi(f45), _flo(f67), _fhi(f67))
-        apply_coop[OP](cell, g - cell * COOP_W, a)
+        comptime if ETS_SPEC and OP == OP_ETS:
+            # MOJOLEARN_IDN_NM_SPEC: no-season ETS with the Nelder-Mead
+            # candidates on the cell's lanes (sequence/ets_spec.mojo)
+            op_ets_spec(cell, g - cell * COOP_W, a)
+        else:
+            apply_coop[OP](cell, g - cell * COOP_W, a)
 
 
 
@@ -852,9 +858,13 @@ struct DeviceExec(Exec):
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
+        # THETA_SPEC: FAST + Apple, and the IDENTICAL twin under -D MOJOLEARN_IDN_NM_SPEC
+        # (sequence/theta_spec.mojo); ETS_SPEC: that define's no-season ETS (sequence/ets_spec.mojo).
+        # Both admitted on NVIDIA/AMD by SEQ_COOP_NVAMD; same bits as op_theta / op_ets.
         comptime if (SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
                                    or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
                                    or (THETA_SPEC and OP == OP_THETA)
+                                   or (ETS_SPEC and OP == OP_ETS)
                                    or (SEQ_FAST_VAR_COOP and (OP == OP_COLSCALE or OP == OP_VAR_SIGMA)))) or (
                 SEQ_LN_COOP and (OP == OP_LN_FWD or OP == OP_LN_BWD_X)) or (
                 SEQ_AF_COOP and (OP == OP_AF_ROW or OP == OP_AF_RMEAN)):
@@ -867,6 +877,11 @@ struct DeviceExec(Exec):
                     coop = coop or a.i11 == 1
             elif OP == OP_AF_ALPHA or OP == OP_AF_DENOM:
                 coop = a.i0 >= 4096
+            elif OP == OP_ETS:
+                # MOJOLEARN_IDN_NM_SPEC: the model form decides, never a size: only
+                # a model without a season (a.i6 == 0, SEAS_N) has a side-effect-free
+                # objective the four candidate lanes can share; seasonal models keep op_ets
+                coop = a.i6 == 0
             if coop:
                 self.ctx.enqueue_function[coop_kernel[OP]](
                     a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
