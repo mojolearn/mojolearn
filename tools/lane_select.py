@@ -1900,6 +1900,7 @@ def lane_sources():
         used = _own(lane)[1]
         mojo = set()
         binding_use = {}
+        source_only_hosts = set()
         for binding in bindings:
             gpu_src = os.path.join("bindings", binding + ".mojo")
             # PER EXPORT FOR EVERY BINDING (2026-09-23). Wide (no export named
@@ -1929,7 +1930,10 @@ def lane_sources():
                 # hands every core lane the k-means, DBSCAN, k-NN and scaler
                 # oracles at once. A lane not declared for it (reached through
                 # a shared helper only) falls back to the source, not the tree.
-                mojo |= binding_seeds(host_src, used, True if _whole(lane, host) else "narrow")
+                host_seeds = binding_seeds(host_src, used, True if _whole(lane, host) else "narrow")
+                if host_seeds == {host_src}:
+                    source_only_hosts.add(host_src)
+                mojo |= host_seeds
         # THE HOST FAMILIES THIS LANE BELONGS TO, from the host bindings it is
         # declared for by code (`_declared`), never from a lane list.
         hosts = set(bindings) | set().union(*[routed.get(b, set()) for b in bindings]) \
@@ -1948,6 +1952,28 @@ def lane_sources():
             # lane's Python closure already, or the lane does not load them.
             mojo |= binding_seeds(src, used)
             mojo.add(hs.build_shim(fam))
+        # THE SOURCE CARRIES ITS EXECUTORS (lane/lazy-imports-2, 2026-10-11).
+        # A host binding taken as its source alone (the lane loads the binary on
+        # a CPU-only install and calls none of its exports) still links every
+        # struct the source imports, among them conformers of a repo trait
+        # (`HostExec` in bindings/_mojolearn_x_sequence_host.mojo). A lane that
+        # reaches the trait through the GPU twin (`DeviceExec`) then reached the
+        # declaration and not the host implementation: embedding and
+        # embedding-sort, once the `np` false seed stopped handing every lane
+        # the sequence doors. Widened, the safe direction, but only for a trait
+        # the lane already reaches (to a fixed point): taking every conformer
+        # the sources import handed 40 lanes x_cluster's host ops and with them
+        # the ClusterOps trait without its device implementation.
+        if source_only_hosts:
+            imported = set().union(*[_mojo_imports(h) for h in source_only_hosts])
+            pending = [(f, b) for f, _, b in mojo_conformance_edges() if f in imported]
+            grew = True
+            while grew:
+                grew = False
+                for f, b in pending:
+                    if b in mojo and f not in mojo:
+                        mojo |= _mojo_closure([f])
+                        grew = True
         sources[lane] = files | mojo
         declared = {b for b, use in binding_use.items() if use["wide"] is True}
         declared |= {h for b in bindings for h in routed.get(b, ()) if _whole(lane, h)}
