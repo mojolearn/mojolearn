@@ -3,25 +3,12 @@
  "lane": "gram-rb4",
  "branch": "lane/gram-rb4",
  "head": "5f3bb4e90",
- "controls": {
-  "bm_gram_rb4": {
+ "controls": {},
+ "removed": [
+  {
    "define": "MOJOLEARN_IDN_BM_GRAM_RB4",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_BM_GRAM_RB4"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "core/blocked_moments.mojo:bm_leaf_gram_rb4_kernel",
-    "core/blocked_moments.mojo:bm_centered_gram_panels"
-   ],
-   "binding": "_mojolearn_linalg,_mojolearn_estimators,_mojolearn_x_decomp,_mojolearn_scoped_gemm_probe",
-   "bits_change": false,
-   "status": "new",
-   "notes": "Leaf Gram with 64x64 tile pairs and a 4x4 register micro-tile per thread (16 FMAs per 8 shared loads vs 1 per 2; 4x fewer global re-reads of each staged row). Each cell keeps its ascending-row chain from +0.0, so leaf partial words and the fold are unchanged. Workloads: ridge/OLS-Gram istella, PCA, LDA (d >= 64)."
+   "control": "bm_gram_rb4",
+   "reason": "DELETED 2026-10-11 (lane/i17-decide-nbr-lin-prep, deletion bde9c2243): SLOWER net ~1.0-1.1x: ridge istella 0.98, ridge taxi 1.08, pca istella 1.14/0.99, pca taxi 1.24/1.00, ols istella 0.99/0.98, ols taxi NV 1.18 (AMD 0.37 = old A arm noise); runs v0049, a1632, main b2657cc89. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_BM_GRAM_RB4.patch."
   }
- }
+ ]
 }
