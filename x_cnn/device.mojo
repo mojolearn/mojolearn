@@ -2330,7 +2330,7 @@ def _bn_use_block[fwd: Bool](
     return pick == 1
 
 
-# lane bn-grid-stats (2026-10-11, G5, `-D MOJOLEARN_IDN_BN_GRID_STATS`, x_cnn/ops.mojo
+# lane bn-grid-stats (2026-10-11, G5, IDENTICAL default since 2026-10-11, `_OFF` restores; x_cnn/ops.mojo
 # IDN_BN_GRID_STATS): one BN_GS_LANES-thread block per (channel, chunk).
 # Each thread takes its lane sum (bn_gs_lane, the host twin's function),
 # then the fixed halving tree v[i] += v[i + s], s = 128 .. 1, folds the

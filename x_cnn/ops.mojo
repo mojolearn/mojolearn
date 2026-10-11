@@ -1290,8 +1290,15 @@ def bn_blk_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
     aux.unsafe_store(_bn(aux, BN_SUMGX, c, C), _bn_blk_total(C + c, part, NB))
 
 
-# lane bn-grid-stats (2026-10-11, G5): `-D MOJOLEARN_IDN_BN_GRID_STATS`,
-# IDENTICAL only, DEFAULT OFF. BatchNorm's per-channel statistics as
+# lane bn-grid-stats (2026-10-11, G5): IDENTICAL only, PROMOTED to the
+# IDENTICAL default 2026-10-11 (lane/w2-decide-neural; A/B on main c8ef6c66d,
+# one run per arm: batchnorm1d 0.471 (NV 0.589, AMD 0.354), batchnorm2d 0.486
+# (NV 0.647, AMD 0.326), resnet-block 0.916; ids nv2 v0087, amd a1669). Bits
+# CHANGE versus BN_FOLD_BLOCK, NV == AMD on every cell. The quality cell was
+# broken for both arms (fixture env bug, fixed c8ff77698); the quality re-race
+# is nv2 v0137 (A) / v0138 (B), amd a1719 (A) / a1720 (B): the promotion stands
+# unless it shows a quality drop. `-D MOJOLEARN_IDN_BN_GRID_STATS_OFF` restores
+# the BN_FOLD_BLOCK folds. BatchNorm's per-channel statistics as
 # coalesced two-level folds. Structural reason: the BN_FOLD_BLOCK folds run
 # one thread per (channel, block) over a block of up to sqrt(count) words, a
 # serial dependent chain of ~512 adds on ~25k threads; the time is that
@@ -1310,7 +1317,7 @@ def bn_blk_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
 # shape changes, so bits CHANGE versus BN_FOLD_BLOCK on every column
 # together. Expected: BN2d AMD 2.2 -> ~1.0 ms, BN1d 2.1 -> ~1.0, NV 1.2 ->
 # ~0.9 / 1.6 -> ~1.1; resnet-block gets it twice.
-comptime IDN_BN_GRID_STATS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_BN_GRID_STATS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime IDN_BN_GRID_STATS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_BN_GRID_STATS_OFF"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime BN_GS_LANES = 256
 comptime BN_GS_PER = 4
 comptime BN_GS_CHUNK = BN_GS_LANES * BN_GS_PER

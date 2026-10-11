@@ -6,15 +6,15 @@
  "head_note": "Gap program 2026-10-11 lane 18 (G5): BatchNorm statistics as coalesced two-level folds, IDENTICAL, default OFF, bits change",
  "controls": {
   "bn_grid_stats": {
-   "define": "MOJOLEARN_IDN_BN_GRID_STATS",
+   "define": "MOJOLEARN_IDN_BN_GRID_STATS,MOJOLEARN_IDN_BN_GRID_STATS_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_BN_GRID_STATS=1"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_BN_GRID_STATS_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "x_cnn/ops.mojo:1220",
     "x_cnn/device.mojo:2129",
@@ -25,9 +25,13 @@
     "_mojolearn_x_cnn_host"
    ],
    "bits_change": true,
-   "workloads": ["neural:batchnorm2d", "neural:batchnorm1d", "neural:resnet-block"],
-   "status": "OPEN",
-   "note": "IDENTICAL only. Per channel, fixed 1024-value chunks; 256 lanes x 4 consecutive values ascending, fixed halving tree over the lane sums (device shared memory, host registers), chunk partials ascending per channel. Replaces the size-derived bn_fold_block B rule for the forward mean/var and backward sum_g/sum_gx folds. Bits change on NVIDIA, AMD and host together; ID check nv/amd owed. Expected BN2d AMD 2.2 -> ~1.0 ms, BN1d 2.1 -> ~1.0."
+   "workloads": [
+    "neural:batchnorm2d",
+    "neural:batchnorm1d",
+    "neural:resnet-block"
+   ],
+   "status": "promoted:w2-decide-neural-20261011",
+   "note": "PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-neural): A/B on main c8ef6c66d, one run per arm: batchnorm1d 0.471 (NV .589 AMD .354), batchnorm2d 0.486 (NV .647 AMD .326), resnet-block 0.916; nv2 v0087, amd a1669. BITS CHANGE, NV==AMD. Quality re-race nv2 v0137(A)/v0138(B), amd a1719(A)/a1720(B); promotion stands unless it shows a quality drop. Arm off = MOJOLEARN_IDN_BN_GRID_STATS_OFF. IDENTICAL only. Per channel, fixed 1024-value chunks; 256 lanes x 4 consecutive values ascending, fixed halving tree over the lane sums (device shared memory, host registers), chunk partials ascending per channel. Replaces the size-derived bn_fold_block B rule for the forward mean/var and backward sum_g/sum_gx folds. Bits change on NVIDIA, AMD and host together; ID check nv/amd owed. Expected BN2d AMD 2.2 -> ~1.0 ms, BN1d 2.1 -> ~1.0."
   }
  }
 }
