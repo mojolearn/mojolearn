@@ -95,7 +95,8 @@ from training.checks.optimizer import (
     OPT_TPB, _grid_for as _opt_grid_for, adam_update_kernel, adam_update_oop_kernel, adam_update_oop_status_kernel,
     device_step_scalars, opt_refuse_device_inputs,
 )
-from training.neural_ab_optimizer import NN55_BLOCK_STATUS, NN56_GROUPED_ADAM, NN_ADAM_TPB, nn_adam_scalar_table, nn_grouped_adam_into
+# TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam, arm 1; LOSER: lm-train-step bytes NV 35.51 -> 36.18 ms (1.019), AMD 42.76 -> 44.61 ms (1.043), avg 1.03, NV v0067/v0068, AMD r1011.owed.gadam.ab) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
 from training.checks.optimizer_contract import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
 from core.device_arena import arena_begin, arena_end, arena_release
@@ -1922,9 +1923,8 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
         # H3: out-of-place update + device status words, no shadow copies.
         glue_update = True
         live_validated = _byte_glue_update(ctx, tr, next_step, STEP_GLUE_OPTSKIP | STEP_GLUE_NOSHADOW)
-    elif NN56_GROUPED_ADAM and not BYTE_LM_FAULT_INJECT:
-        glue_update = True
-        live_validated = _byte_neural_group_update(ctx, tr, next_step)
+        # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam, arm 1; LOSER: lm-train-step bytes NV 35.51 -> 36.18 ms (1.019), AMD 42.76 -> 44.61 ms (1.043), avg 1.03, NV v0067/v0068, AMD r1011.owed.gadam.ab) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
     elif STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
         var glue_arm = step_glue_arm_from_env()
         if (glue_arm & STEP_GLUE_UPDATE_BITS) != 0:
@@ -2087,62 +2087,8 @@ def byte_glue_update_launch(
 
 
 
-def _byte_neural_group_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int) raises -> Bool:
-    """NN56 actual byte-LM transactional update; NN55 replaces output scans.
-
-    The tensor registry defines groups. This model has one admitted AdamW
-    config, repeated in metadata, while the kernel supports distinct configs.
-    Gradients and all carried state retain their existing entry scans. Updates
-    are tentative until the normal finish/rollback boundary accepts them.
-    """
-    var n = tr.config.n_total()
-    opt_refuse_device_inputs(ctx, tr.buffers.param, tr.buffers.grad,
-        tr.buffers.m_state, tr.buffers.v_state, tr.buffers.offsets, tr.optimizer)
-    # byte_validate_optimizer currently refuses clipping and non-AdamW options;
-    # this native arm inherits that admission rather than silently dropping it.
-    var offsets = List[Int32]()
-    var configs = List[OptimizerConfig]()
-    var steps = List[Int]()
-    var kinds = List[Int32]()
-    var groups = len(tr.buffers.offsets) - 1
-    var largest = 0
-    for j in range(groups):  # small-loop(groups: optimizer parameter groups): builds per-group metadata, not data
-        offsets.append(Int32(tr.buffers.offsets[j]))
-        largest = max(largest, tr.buffers.offsets[j + 1] - tr.buffers.offsets[j])
-        configs.append(tr.optimizer.copy())
-        steps.append(next_step)
-        kinds.append(Int32(1))
-    offsets.append(Int32(n))
-    var d_table = nn_adam_scalar_table(ctx, configs, steps)
-    var d_offsets = ctx.enqueue_create_buffer[DType.int32](groups + 1)
-    var d_kinds = ctx.enqueue_create_buffer[DType.int32](groups)
-    ctx.enqueue_copy(dst_buf=d_offsets, src_ptr=offsets.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_kinds, src_ptr=kinds.unsafe_ptr())
-    var parts = ctx.enqueue_create_buffer[DType.int32](4 * groups * ((largest + NN_ADAM_TPB - 1) // NN_ADAM_TPB))
-    var status = ctx.enqueue_create_buffer[DType.int32](4)
-    tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
-    tr.shadow_step = tr.completed_steps
-    nn_grouped_adam_into[NN55_BLOCK_STATUS](ctx, tr.buffers.shadow_p, tr.buffers.shadow_m,
-        tr.buffers.shadow_v, tr.buffers.param, tr.buffers.grad, tr.buffers.m_state,
-        tr.buffers.v_state, d_offsets, d_kinds, d_table, parts, status, n, groups, largest)
-    ctx.synchronize()
-    # The old state remains in the three original handles until the launch has
-    # finished. After swapping, existing recovery owns exactly that old state.
-    swap(tr.buffers.param, tr.buffers.shadow_p)
-    swap(tr.buffers.m_state, tr.buffers.shadow_m)
-    swap(tr.buffers.v_state, tr.buffers.shadow_v)
-    tr.shadow_valid = True
-    # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM=2 (NN55 block-status minima; DELETE-slower: grid g50ebe26a5 lm-train-step NV L40S
-    # 35.299 -> 43.519 ms, AMD MI325X 42.749 -> 45.657 ms, avg 1.15x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 6e44427f1.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM-arm2.patch; record in docs/TOMBSTONES.md.
-    _ = offsets
-    _ = kinds
-    _ = d_offsets^
-    _ = d_kinds^
-    _ = d_table^
-    _ = parts^
-    _ = status^
-    return NN55_BLOCK_STATUS
+# TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam, arm 1; LOSER: lm-train-step bytes NV 35.51 -> 36.18 ms (1.019), AMD 42.76 -> 44.61 ms (1.043), avg 1.03, NV v0067/v0068, AMD r1011.owed.gadam.ab) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
 
 
 def _byte_live_status_launch(ctx: DeviceContext,mut tr: ByteTrainer,mut status: DeviceBuffer[DType.int32],next_step: Int) raises:

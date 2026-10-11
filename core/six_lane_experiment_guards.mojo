@@ -144,7 +144,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_NN60_BLOCK_VIEWS"](), "retired define MOJOLEARN_NN60_BLOCK_VIEWS: use IDN_LM_VIEWS=1"
     comptime assert not is_defined["MOJOLEARN_NN60_EMB_HEAD_VIEWS"](), "retired define MOJOLEARN_NN60_EMB_HEAD_VIEWS: use IDN_LM_VIEWS=2"
     comptime assert not is_defined["MOJOLEARN_IDN_LM_PARAM_VIEWS"](), "retired define MOJOLEARN_IDN_LM_PARAM_VIEWS: use IDN_LM_VIEWS=3"
-    comptime assert not is_defined["MOJOLEARN_NN56_GROUPED_ADAM"](), "retired define MOJOLEARN_NN56_GROUPED_ADAM: use IDN_LM_GROUPED_ADAM=1"
+    comptime assert not is_defined["MOJOLEARN_NN56_GROUPED_ADAM"](), "retired define MOJOLEARN_NN56_GROUPED_ADAM: its successor MOJOLEARN_IDN_LM_GROUPED_ADAM was removed 2026-10-11 (avg 1.03x slower)"
     comptime assert not is_defined["MOJOLEARN_NN55_BLOCK_STATUS"](), "removed define MOJOLEARN_NN55_BLOCK_STATUS (arm 2 deleted 2026-10-11, avg 1.15x slower)"
     comptime assert not is_defined["MOJOLEARN_NN32_RETAIN_FORWARD"](), "retired define MOJOLEARN_NN32_RETAIN_FORWARD: use IDN_ACT_RETAIN=1"
     comptime assert not is_defined["MOJOLEARN_NN31_BOUNDED_CHECKPOINTS"](), "retired define MOJOLEARN_NN31_BOUNDED_CHECKPOINTS: use IDN_ACT_RETAIN=2"
@@ -164,7 +164,9 @@ def _check_configuration() -> Bool:
     comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 1, "invalid MOJOLEARN_IDN_CE_TOKEN_FOLD arm (legal: 0|1; 2 removed 2026-10-10)"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 2, "invalid MOJOLEARN_IDN_LM_RESIDENT_TOKENS arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 2 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 3, "invalid MOJOLEARN_IDN_LM_VIEWS arm (legal: 0|1|2|3)"
-    comptime assert get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 1, "invalid MOJOLEARN_IDN_LM_GROUPED_ADAM arm (legal: 0|1; arm 2 removed 2026-10-11, grid g50ebe26a5 lm-train-step avg 1.15x slower, see docs/TOMBSTONES.md)"
+    # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (arm 1, LOSER avg 1.03x lm-train-step, NV 1.019 / AMD 1.043) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LM_GROUPED_ADAM"](), "removed: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam) deleted 2026-10-11: LOSER, lm-train-step NV 35.51 -> 36.18 ms (1.019x), AMD 42.76 -> 44.61 ms (1.043x), avg 1.03x; arm 2 removed earlier; see docs/TOMBSTONES.md"
     comptime assert get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 0 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 1 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 2 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 3, "invalid MOJOLEARN_IDN_TRAIN_SCRATCH arm (legal: 0|1|2|3)"
     # Lane grid-prune (2026-10-07): deleted losers and dead arms (rows in docs/apple-fast/EXPERIMENTS.md
     # "IDENTICAL grid prune"); recoverable at main ab554bb4a. A stale build line must not run the incumbent silently.

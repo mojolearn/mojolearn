@@ -473,39 +473,6 @@
     "3": "ni27_all_incl_layer_pool"
    }
   },
-  "lm_grouped_adam": {
-   "define": "MOJOLEARN_IDN_LM_GROUPED_ADAM",
-   "kind": "arms",
-   "arms": {
-    "0": [],
-    "1": [
-     "MOJOLEARN_IDN_LM_GROUPED_ADAM=1"
-    ]
-   },
-   "default": "0",
-   "source": [
-    "training/neural_ab_optimizer.mojo:22",
-    "training/byte_lm.mojo:1850"
-   ],
-   "binding": "_mojolearn_byte_lm",
-   "bits_change": false,
-   "status": "arm 2 removed 2026-10-11 (lane/grid-act-16, avg 1.15x slower); arm 1 MEASURE OWED",
-   "entries": [
-    "NN55",
-    "NN56",
-    "NI30"
-   ],
-   "board": "lm-train-step",
-   "tags": [
-    "peripheral"
-   ],
-   "arm_names": {
-    "0": "per_group",
-    "1": "nn56_grouped",
-    "2": "nn56_grouped_nn55_block_status"
-   },
-   "note": "NN55 required NN56; arm 1 isolates NN56, arm 2 adds NN55. NI30 has no define."
-  },
   "act_retain": {
    "define": "MOJOLEARN_IDN_ACT_RETAIN,MOJOLEARN_IDN_ACT_RETAIN_OFF",
    "kind": "arms",
@@ -1497,7 +1464,6 @@
     "ce_grad_fused",
     "lm_resident_tokens",
     "lm_views",
-    "lm_grouped_adam",
     "train_scratch",
     "train_live_status",
     "nn50_owned_runs"
@@ -1506,10 +1472,6 @@
     [
      "ce_token_fold",
      "ce_grad_fused"
-    ],
-    [
-     "lm_grouped_adam",
-     "train_live_status"
     ],
     [
      "lm_views",
@@ -1751,6 +1713,10 @@
    "define": "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED",
    "control": "m1_elementwise_fused",
    "reason": "DELETE-slower avg 1.52x (grid g50ebe26a5), lane/grid-act-16"
+  },
+  {
+   "define": "MOJOLEARN_IDN_LM_GROUPED_ADAM",
+   "reason": "removed 2026-10-11 (lane/owed-decide): arm 1 NN56 grouped OOP Adam LOSER, lm-train-step NV 1.019x, AMD 1.043x, avg 1.03x (NV v0067/v0068, AMD r1011.owed.gadam.ab); arm 2 removed earlier (grid-act-16); guard refuses; patch experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch"
   }
  ],
  "notes": {
