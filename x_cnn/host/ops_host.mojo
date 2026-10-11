@@ -23,7 +23,6 @@ from checks.numerics import ftz
 from bindings.hostptr import i32_ptr, f32_ptr
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_cnn.cnn_dx_wgrad import IDN_CNN_DX_IMPLICIT, IDN_CNN_WGRAD_LEAF1024, cnn_wgrad_partition
 from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
 from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
 from x_cnn.ops import (
@@ -395,65 +394,6 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: Li
     _ = ps^
 
 
-def _conv_dx_implicit_host(g: FP, w: FP, gx: FP, prm: List[Int32]) raises:
-    """G1 host twin (`implicit_dx_kernel`'s words): A [N*H*W x OC*KH*KW] with
-    A[(n, h, w), oc*KK + kh*KW + kw] = g[(n, oh, ow), oc] at
-    oh = (h + PH - kh DH) / SH, ow = (w + PW - kw DW) / SW when integral and in
-    range, else +0.0; B [OC*KK x C] with B[oc*KK + t, c] = W[oc, c, t];
-    gemm_host_into OP_NN (leaves contract_leaf_size(OC*KK), the chain and the
-    balanced tree the kernel runs), then the [N*H*W x C] result to NCHW."""
-    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var H = Int(prm[CP_H]); var W = Int(prm[CP_W])
-    var KH = Int(prm[CP_KH]); var KW = Int(prm[CP_KW])
-    var OH = Int(prm[CP_OH]); var OW = Int(prm[CP_OW]); var OC = Int(prm[CP_OC])
-    var SH = Int(prm[CP_SH]); var SW = Int(prm[CP_SW])
-    var PH = Int(prm[CP_PH]); var PW = Int(prm[CP_PW])
-    var DH = Int(prm[CP_DH]); var DW = Int(prm[CP_DW])
-    var KK = KH * KW
-    var kdim = OC * KK
-    var HW = H * W
-    var rows = N * HW
-    if rows <= 0 or C <= 0:
-        return
-    var a = scratch(rows * kdim)
-    var b = scratch(kdim * C)
-    var y = scratch(rows * C)
-    for kk in range(kdim):
-        var oc = kk // KK
-        var t2 = kk - oc * KK
-        for c in range(C):
-            b.unsafe_store(kk * C + c, w.unsafe_load(oc * C * KK + c * KK + t2))
-    var tasks = _tasks_for(N, HW * kdim)
-    var chunk = (N + tasks - 1) // tasks
-
-    def _fill(t: Int) {imm a, imm g, imm chunk, imm N, imm H, imm W, imm KH, imm KW, imm OH, imm OW, imm OC, imm SH, imm SW, imm PH, imm PW, imm DH, imm DW, imm KK, imm kdim}:
-        for n in range(t * chunk, min(t * chunk + chunk, N)):
-            for h in range(H):
-                for wq in range(W):
-                    var arow = a + ((n * H + h) * W + wq) * kdim
-                    for oc in range(OC):
-                        for kh in range(KH):
-                            var th = h + PH - kh * DH
-                            for kw in range(KW):
-                                var tw = wq + PW - kw * DW
-                                var v = Float32(0)
-                                if th >= 0 and tw >= 0 and th % SH == 0 and tw % SW == 0 and th // SH < OH and tw // SW < OW:
-                                    v = g.unsafe_load(((n * OH + th // SH) * OW + tw // SW) * OC + oc)
-                                arow.unsafe_store(oc * KK + kh * KW + kw, v)
-
-    if tasks <= 1:
-        _fill(0)
-    else:
-        host_parallelize(_fill, tasks)
-    gemm_host_into(a, b, y, OP_NN, rows, C, kdim)
-    for n in range(N):
-        for c in range(C):
-            for q in range(HW):
-                gx.unsafe_store((n * C + c) * HW + q, y.unsafe_load((n * HW + q) * C + c))
-    a.free()
-    b.free()
-    y.free()
-
-
 def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: List[Int32], need_dx: Bool) raises:
     """conv2d_backward_into from the input's im2col matrix `cols`."""
     var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
@@ -465,19 +405,8 @@ def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm:
     var g = scratch(rows * OC)
     dout_rows_host(dout, g, ps)
     var ones = List[Float32](length=rows, fill=Float32(1))
-    comptime if IDN_CNN_WGRAD_LEAF1024:
-        # G2 (x_cnn/cnn_dx_wgrad.mojo): the device leaf kernel's 1024-row leaves
-        gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows, leaf_override=cnn_wgrad_partition(rows)[0])
-    else:
-        gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
+    gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
     gemm_host_into(g, hp(ones), gb, OP_TN, OC, 1, rows)
-    comptime if IDN_CNN_DX_IMPLICIT:
-        if need_dx:
-            _conv_dx_implicit_host(g, w, gx, prm)
-        g.free()
-        _ = ones^
-        _ = ps^
-        return
     if need_dx:
         var dcols = scratch(rows * ckk)
         gemm_host_into(g, w, dcols, OP_NN, rows, ckk, OC)
