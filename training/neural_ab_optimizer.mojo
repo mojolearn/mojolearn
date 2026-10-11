@@ -18,14 +18,12 @@ from training.checks.optimizer import _adam_oop_cell
 from training.checks.optimizer_contract import OptimizerConfig, StepScalars, step_scalars
 
 # L11 (2026-10-07): NN55 needs NN56, so they are arms of ONE switch,
-# -D MOJOLEARN_IDN_LM_GROUPED_ADAM=0|1|2: 1 = NN56 grouped OOP Adam,
-# 2 = NN56 plus NN55 block-status minima. Arm 1 alone isolates NN56.
+# -D MOJOLEARN_IDN_LM_GROUPED_ADAM=0|1: 1 = NN56 grouped OOP Adam (arm 2, NN55 block-status minima, deleted 2026-10-11).
 comptime IDN_LM_GROUPED_ADAM_ARM = get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM", 0]()
-comptime NN55_BLOCK_STATUS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_LM_GROUPED_ADAM_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM=2 (NN55 block-status minima; DELETE-slower: grid g50ebe26a5 lm-train-step NV L40S
+# 35.299 -> 43.519 ms, AMD MI325X 42.749 -> 45.657 ms, avg 1.15x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 6e44427f1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM-arm2.patch; record in docs/TOMBSTONES.md.
+comptime NN55_BLOCK_STATUS = False  # arm 2 deleted; the guard refuses =2
 comptime NN56_GROUPED_ADAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and IDN_LM_GROUPED_ADAM_ARM >= 1

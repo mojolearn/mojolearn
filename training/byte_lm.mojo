@@ -2102,9 +2102,9 @@ def _byte_neural_group_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step
     swap(tr.buffers.m_state, tr.buffers.shadow_m)
     swap(tr.buffers.v_state, tr.buffers.shadow_v)
     tr.shadow_valid = True
-    comptime if NN55_BLOCK_STATUS:
-        _byte_live_status_finish(ctx, status, n, next_step)
-        tr.live_status_steps += 1
+    # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM=2 (NN55 block-status minima; DELETE-slower: grid g50ebe26a5 lm-train-step NV L40S
+    # 35.299 -> 43.519 ms, AMD MI325X 42.749 -> 45.657 ms, avg 1.15x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 6e44427f1.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM-arm2.patch; record in docs/TOMBSTONES.md.
     _ = offsets
     _ = kinds
     _ = d_offsets^
