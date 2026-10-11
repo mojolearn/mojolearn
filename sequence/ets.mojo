@@ -38,7 +38,7 @@ errors, prediction intervals."""
 from std.memory import bitcast
 
 from sequence.nm import Objective, nelder_mead
-from sequence.ops import FP, Args, add, fma3, ld, mul, seq_madd, st, sub
+from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import ftz, identical_cos, identical_div, identical_log, identical_pow, identical_sin, identical_sqrt
 
 comptime ERR_A = 0
@@ -97,9 +97,9 @@ def ets_lik(y: FP, n: Int, err: Int, trend: Bool, season: Int, m: Int, ring: FP,
         var ol = l
         var ob = b
         var phib = mul(phi, ob) if trend else Float32(0.0)
-        # MOJOLEARN_IDN_SEQ_FMA (sequence/ops.mojo SEQ_IDN_FMA): q = phi b + l
-        # in one pinned fma; phib stays the rounded product the trend update reads.
-        var q = seq_madd(phi, ob, ol) if trend else add(ol, phib)
+        # TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch
+        var q = add(ol, phib)
         var f0 = q
         var sl = Float32(0.0)
         var last = 0
@@ -519,7 +519,7 @@ def op_ets(t: Int, a: Args):
     var head = r[3]
     var phistar = u[3]
     for i in range(h):
-        var f = seq_madd(phistar, b, l) if trend else l
+        var f = add(l, mul(phistar, b)) if trend else l
         if season != SEAS_N:
             var j = m - 1 - (i % m)
             var ix = head + j

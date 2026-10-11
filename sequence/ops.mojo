@@ -349,33 +349,8 @@ def fma3(a: Float32, b: Float32, c: Float32) -> Float32:
     return ftz(identical_mul_add(a, b, c))
 
 
-#: lane/seq-reg (2026-10-11), experiment MOJOLEARN_IDN_SEQ_FMA, default off.
-#: The theta and ETS recurrences spell several multiply-adds as
-#: `add(mul(a, b), c)` (two roundings, two dependent instructions on a
-#: one-thread-per-series chain that is latency bound: 64 threads on the whole
-#: GPU, 1,392 serial steps inside up to 1,000 Nelder-Mead evaluations).
-#: `seq_madd` contracts those into ONE pinned fused multiply-add
-#: (`identical_mul_add`: a single fma on NVIDIA, AMD and the host binding,
-#: the same instruction semantics everywhere), so bits change on every vendor
-#: and in the host column together. Structural reason: one rounding and one
-#: instruction off each step's dependent chain. Expected: the Apple FAST twin
-#: (SEQ_FAST_FMA with THETA_REG) went 1,769 -> 220 ms on the M3; on NVIDIA/AMD
-#: a 1.2-2x on theta/damped-ets on top of MOJOLEARN_IDN_SEQ_REG (latency bound).
-#: Off, `seq_madd` is exactly the old `add(mul(a, b), c)`.
-comptime SEQ_IDN_FMA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_SEQ_FMA"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-
-
-@always_inline
-def seq_madd(a: Float32, b: Float32, c: Float32) -> Float32:
-    """a * b + c: one pinned fma under MOJOLEARN_IDN_SEQ_FMA, else the
-    rounded product then the rounded sum (the pre-experiment form)."""
-    comptime if SEQ_IDN_FMA:
-        return ftz(identical_mul_add(a, b, c))
-    return add(mul(a, b), c)
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch
 
 
 @always_inline

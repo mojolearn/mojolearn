@@ -16,7 +16,9 @@ std::pow; the objective's 1-step forecast is the state update's mu (the
 reference computes nmse-step forecasts and uses only the first for the
 objective); the ACF, the decomposition and the objective are float32."""
 from sequence.nm import Objective, nelder_mead
-from sequence.ops import FP, Args, add, fma3, ld, mul, seq_madd, st, sub
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch (the theta level/trend updates go back to seq_madd).
+from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -150,7 +152,7 @@ def theta_run(
         var An = ld(states, r0 + 2)
         var Bn = ld(states, r0 + 3)
         var pw1 = mul(pw, oma)
-        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
         var yi = ld(y, i)
         st(e, i, sub(yi, m))
         st(states, r + 4, m)
@@ -158,7 +160,7 @@ def theta_run(
         var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
         st(states, r + 1, my2)
         if dyn:
-            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
                          Float32(i + 2))
             st(states, r + 3, b2)
             st(states, r + 2, sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0))))
@@ -220,7 +222,7 @@ def theta_run_reg(
     var pw = oma          # (1 - alpha)^i at i = 1
     for i in range(1, n):
         var pw1 = mul(pw, oma)
-        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
         var yi = ld(y, i)
         var ei = sub(yi, m)
         if i >= 3:
@@ -228,7 +230,7 @@ def theta_run_reg(
         var lev2 = fma3(alpha, yi, mul(oma, lev))
         var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
         if dyn:
-            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
                          Float32(i + 2))
             Bn = b2
             An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
@@ -330,11 +332,11 @@ def theta_forecast_reg(n: Int, h: Int, model: Int, alpha: Float32, theta: Float3
     for j in range(h):
         var i = n + j
         var pw1 = mul(pw, oma)
-        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
         var lev2 = fma3(alpha, m, mul(oma, lev))
         var my2 = div(fma3(Float32(i), my, m), Float32(i + 1))
         if dyn:
-            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
                          Float32(i + 2))
             Bn = b2
             An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
@@ -362,13 +364,13 @@ def theta_forecast(n: Int, h: Int, model: Int, alpha: Float32, theta: Float32, s
         var An = ld(states, r0 + 2)
         var Bn = ld(states, r0 + 3)
         var pw1 = mul(pw, oma)
-        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
         st(states, r + 4, m)
         st(states, r, fma3(alpha, m, mul(oma, lev)))
         var my2 = div(fma3(Float32(i), my, m), Float32(i + 1))
         st(states, r + 1, my2)
         if dyn:
-            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
                          Float32(i + 2))
             st(states, r + 3, b2)
             st(states, r + 2, sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0))))
