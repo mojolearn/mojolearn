@@ -31,7 +31,6 @@ from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from x_prep.fastmaxabs import maxabs_fit_direct
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
-from x_prep.labels import IDN_LAB_UNIQUE_HIST, IDN_LAB_CODES_DIRECT, IDN_LAB_ONE_ENTRY
 from x_prep.label_fast import LABEL_PRESENT, IDN_LABEL
 
 
@@ -263,15 +262,6 @@ def target_scratch_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
-def lab_hist_binding() raises -> PythonObject:
-    """Lane lab-binarizer (x_prep/labels.mojo, IDENTICAL, default off): bits
-    read by python/mojolearn/_expansion_prep.py `_lab_hist`: 1
-    IDN_LAB_UNIQUE_HIST, 2 IDN_LAB_CODES_DIRECT, 4 IDN_LAB_ONE_ENTRY;
-    registered only when G1 is on."""
-    return PythonObject((1 if IDN_LAB_UNIQUE_HIST else 0) | (2 if IDN_LAB_CODES_DIRECT else 0)
-                        | (4 if IDN_LAB_ONE_ENTRY else 0))
-
-
 def label_present_binding() raises -> PythonObject:
     return PythonObject(1)
 
@@ -368,6 +358,8 @@ def idn_fam2_binding() raises -> PythonObject:
     )
 
 
+# TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
 @export
 def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
     try:
@@ -426,8 +418,6 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[target_scratch_binding]("x_prep_target_scratch")
         comptime if LABEL_PRESENT:
             m.def_function[label_present_binding]("x_prep_label_present")
-        comptime if IDN_LAB_UNIQUE_HIST:
-            m.def_function[lab_hist_binding]("x_prep_lab_hist")
         comptime if X_PREP_POOL_ARENA:
             m.def_function[pool_arena_binding]("x_prep_pool_arena")
         comptime if CAT_CLS2_PACK:
