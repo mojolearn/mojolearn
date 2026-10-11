@@ -32,7 +32,7 @@ from std.sys.compile import is_defined
 from sequence.coop_lane import coop_src
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from sequence.theta import (
-    DOTM, DSTM, OTM, STM, THETA_REG, THETA_SNAP, _acf_decide, _decompose, div, theta_forecast_reg,
+    DOTM, DSTM, OTM, STM, THETA_REG, THETA_REG_FAST, THETA_SNAP, _acf_decide, _decompose, div, theta_forecast_reg,
     theta_invariants, theta_run_reg, theta_sse_hoisted,
 )
 from checks.numerics import ftz, identical_div, identical_sqrt
@@ -41,7 +41,7 @@ from checks.numerics import ftz, identical_div, identical_sqrt
 #: quality identical; theta taxi-hourly 218 -> 20.3 ms);
 #: -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF turns it off; the old
 #: -D MOJOLEARN_SEQ_FAST_THETA_SPEC is harmless.
-comptime THETA_SPEC = THETA_REG and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"]()
+comptime THETA_SPEC = THETA_REG_FAST and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"]()
 
 
 @fieldwise_init
