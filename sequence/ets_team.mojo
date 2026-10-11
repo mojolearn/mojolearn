@@ -106,6 +106,108 @@ def ets_team_shared() -> Int:
     return 7 * SEQ_TEAM_TPB + 2
 
 
+@always_inline
+def _ets_chunk_map(y: FP, t0: Int, t1: Int, alpha: Float32, beta: Float32, phi: Float32
+) -> Tuple[Float32, Float32, Float32, Float32, Float32, Float32]:
+    """Pass 1: chunk [t0, t1)'s affine map (m00, m01, m10, m11, v0, v1) from
+    an unknown start, (M, v) <- (A M, A v + c y) per point. The device team
+    and the host replay run these statements."""
+    # the step map: l' = a00 l + a01 b + alpha y; b' = a10 l + a11 b + beta y
+    var a00 = sub(Float32(1.0), alpha)
+    var a01 = mul(a00, phi)
+    var a10 = sub(Float32(0.0), beta)
+    var a11 = mul(phi, sub(Float32(1.0), beta))
+    var m00 = Float32(1.0)
+    var m01 = Float32(0.0)
+    var m10 = Float32(0.0)
+    var m11 = Float32(1.0)
+    var v0 = Float32(0.0)
+    var v1 = Float32(0.0)
+    for t in range(t0, t1):
+        var yt = ld(y, t)
+        var n00 = fma3(a00, m00, mul(a01, m10))
+        var n01 = fma3(a00, m01, mul(a01, m11))
+        var n10 = fma3(a10, m00, mul(a11, m10))
+        var n11 = fma3(a10, m01, mul(a11, m11))
+        var w0 = fma3(a00, v0, fma3(a01, v1, mul(alpha, yt)))
+        var w1 = fma3(a10, v0, fma3(a11, v1, mul(beta, yt)))
+        m00 = n00
+        m01 = n01
+        m10 = n10
+        m11 = n11
+        v0 = w0
+        v1 = w1
+    return (m00, m01, m10, m11, v0, v1)
+
+
+@always_inline
+def _ets_compose(hi: FP, lo: FP) -> Tuple[Float32, Float32, Float32, Float32, Float32, Float32]:
+    """IDN_ETS_TEAM's tree step: the map `lo` (6 words) then the map `hi`,
+    (Mh Ml, Mh vl + vh). One spelling for the device tree and the host
+    replay."""
+    var h00 = ld(hi, 0)
+    var h01 = ld(hi, 1)
+    var h10 = ld(hi, 2)
+    var h11 = ld(hi, 3)
+    var l00 = ld(lo, 0)
+    var l01 = ld(lo, 1)
+    var l10 = ld(lo, 2)
+    var l11 = ld(lo, 3)
+    return (
+        fma3(h00, l00, mul(h01, l10)),
+        fma3(h00, l01, mul(h01, l11)),
+        fma3(h10, l00, mul(h11, l10)),
+        fma3(h10, l01, mul(h11, l11)),
+        fma3(h00, ld(lo, 4), fma3(h01, ld(lo, 5), ld(hi, 4))),
+        fma3(h10, ld(lo, 4), fma3(h11, ld(lo, 5), ld(hi, 5))),
+    )
+
+
+@always_inline
+def _ets_put_map(p: FP, m: Tuple[Float32, Float32, Float32, Float32, Float32, Float32]):
+    st(p, 0, m[0])
+    st(p, 1, m[1])
+    st(p, 2, m[2])
+    st(p, 3, m[3])
+    st(p, 4, m[4])
+    st(p, 5, m[5])
+
+
+@always_inline
+def _ets_apply(mj: FP, l: Float32, b: Float32) -> Tuple[Float32, Float32]:
+    """The state (l, b) through the map mj (the FAST prefix's step)."""
+    var nl = fma3(ld(mj, 0), l, fma3(ld(mj, 1), b, ld(mj, 4)))
+    var nb = fma3(ld(mj, 2), l, fma3(ld(mj, 3), b, ld(mj, 5)))
+    return (nl, nb)
+
+
+@always_inline
+def _ets_chunk_sse(y: FP, t0: Int, t1: Int, alpha: Float32, beta: Float32, phi: Float32,
+                   l_in: Float32, b_in: Float32) -> Tuple[Float32, Float32, Float32]:
+    """Pass 2: chunk [t0, t1) from its start state; (sse, l, b) at its end."""
+    var l = l_in
+    var b = b_in
+    var sse = Float32(0.0)
+    for t in range(t0, t1):
+        var q = fma3(phi, b, l)
+        var e = sub(ld(y, t), q)
+        sse = fma3(e, e, sse)
+        l = fma3(alpha, e, q)
+        b = fma3(beta, e, mul(phi, b))
+    return (sse, l, b)
+
+
+@always_inline
+def _ets_lik(n: Int, tot: Float32) -> Float32:
+    """n log(sum e^2), clamped below as op_ets's objective."""
+    var lik: Float32
+    if tot > Float32(0.0):
+        lik = mul(Float32(n), _log(tot))
+    else:
+        lik = mul(Float32(n), _log(add(tot, Float32(1e-8))))
+    return lik if lik > Float32(-1e10) else Float32(-1e10)
+
+
 struct EtsTeamObj(Objective):
     """ets_lik for ETS(A, A|Ad, N) over a block (the module docstring)."""
     var team: SeqTeam
@@ -169,72 +271,47 @@ struct EtsTeamObj(Objective):
         var t1 = t0 + self.L
         if t1 > self.n:
             t1 = self.n
-        # the step map: l' = a00 l + a01 b + alpha y; b' = a10 l + a11 b + beta y
-        var a00 = sub(Float32(1.0), alpha)
-        var a01 = mul(a00, phi)
-        var a10 = sub(Float32(0.0), beta)
-        var a11 = mul(phi, sub(Float32(1.0), beta))
-        # pass 1: this chunk's map from an unknown start, (M, v) <- (A M, A v + c y)
-        var m00 = Float32(1.0)
-        var m01 = Float32(0.0)
-        var m10 = Float32(0.0)
-        var m11 = Float32(1.0)
-        var v0 = Float32(0.0)
-        var v1 = Float32(0.0)
-        for t in range(t0, t1):
-            var yt = ld(self.y, t)
-            var n00 = fma3(a00, m00, mul(a01, m10))
-            var n01 = fma3(a00, m01, mul(a01, m11))
-            var n10 = fma3(a10, m00, mul(a11, m10))
-            var n11 = fma3(a10, m01, mul(a11, m11))
-            var w0 = fma3(a00, v0, fma3(a01, v1, mul(alpha, yt)))
-            var w1 = fma3(a10, v0, fma3(a11, v1, mul(beta, yt)))
-            m00 = n00
-            m01 = n01
-            m10 = n10
-            m11 = n11
-            v0 = w0
-            v1 = w1
         var mp = self.maps + 6 * tid
-        st(mp, 0, m00)
-        st(mp, 1, m01)
-        st(mp, 2, m10)
-        st(mp, 3, m11)
-        st(mp, 4, v0)
-        st(mp, 5, v1)
+        _ets_put_map(mp, _ets_chunk_map(self.y, t0, t1, alpha, beta, phi))
         self.team.sync()
         # the exclusive prefix: this chunk's start state through the maps before it
         var l = u[3]
         var b = u[4]
-        for j in range(tid):
-            var mj = self.maps + 6 * j
-            var nl = fma3(ld(mj, 0), l, fma3(ld(mj, 1), b, ld(mj, 4)))
-            var nb = fma3(ld(mj, 2), l, fma3(ld(mj, 3), b, ld(mj, 5)))
-            l = nl
-            b = nb
+        comptime if IDN_ETS_TEAM:
+            # a fixed Hillis-Steele tree (module comment at IDN_ETS_TEAM): at
+            # offset d, thread k >= d composes its map after map k - d; the
+            # reads land before the barrier, the writes after it. Map k then
+            # holds chunks 0 .. k, and chunk k starts from map k - 1.
+            comptime for lev in range(ETS_TEAM_LEVELS):
+                comptime d = 1 << lev
+                var cm = (ld(mp, 0), ld(mp, 1), ld(mp, 2), ld(mp, 3), ld(mp, 4), ld(mp, 5))
+                if tid >= d:
+                    cm = _ets_compose(mp, mp - 6 * d)
+                self.team.sync()
+                if tid >= d:
+                    _ets_put_map(mp, cm)
+                self.team.sync()
+            if tid > 0:
+                var s0 = _ets_apply(mp - 6, l, b)
+                l = s0[0]
+                b = s0[1]
+        else:
+            for j in range(tid):
+                var s0 = _ets_apply(self.maps + 6 * j, l, b)
+                l = s0[0]
+                b = s0[1]
         # pass 2: the chunk from its start state, its squared errors
-        var sse = Float32(0.0)
-        for t in range(t0, t1):
-            var q = fma3(phi, b, l)
-            var e = sub(ld(self.y, t), q)
-            sse = fma3(e, e, sse)
-            l = fma3(alpha, e, q)
-            b = fma3(beta, e, mul(phi, b))
-        st(self.parts, tid, sse)
+        var r = _ets_chunk_sse(self.y, t0, t1, alpha, beta, phi, l, b)
+        st(self.parts, tid, r[0])
         if t0 < self.n and t1 == self.n:
             # the chunk holding the last point: the final state
-            st(self.fin, 0, l)
-            st(self.fin, 1, b)
+            st(self.fin, 0, r[1])
+            st(self.fin, 1, r[2])
         self.team.sync()
         var tot = Float32(0.0)
         for j in range(self.team.nt):
             tot = add(tot, ld(self.parts, j))
-        var lik: Float32
-        if tot > Float32(0.0):
-            lik = mul(Float32(self.n), _log(tot))
-        else:
-            lik = mul(Float32(self.n), _log(add(tot, Float32(1e-8))))
-        return lik if lik > Float32(-1e10) else Float32(-1e10)
+        return _ets_lik(self.n, tot)
 
 
 def ets_team(slot: Int, team: SeqTeam, a: Args):
