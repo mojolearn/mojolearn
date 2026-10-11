@@ -76,6 +76,7 @@ from x_decomp.cells import (
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
+from x_decomp.lu_delayed_host import IDN_LU_DELAYED_UPDATE, lu_delayed_host
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.host.center_host import center_on_cpu, col_sums_on_cpu
@@ -362,6 +363,11 @@ struct HostExec(Exec):
         # TOMBSTONE: MOJOLEARN_IDN_LU_NB128 (DELETE-slower: grid g50ebe26a5 lu-solve synthetic NV L40S 352.1 -> 541.4 ms, AMD MI325X
         # 331.3 -> 697.0 ms, avg 1.80x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 885c23dc7.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_NB128.patch; record in docs/TOMBSTONES.md.
+        # lane/lu-delayed-update: MOJOLEARN_IDN_LU_DELAYED_UPDATE's host
+        # column (x_decomp/lu_delayed_host.mojo), the device's launch_lu twin
+        comptime if IDN_LU_DELAYED_UPDATE:
+            lu_delayed_host(a, piv, n, info)
+            return
         # lu_serial's statements; each step's row eliminations are tasks of
         # LU_ROWS rows, SIMD across the row (x_decomp/host_simd.mojo lu_rows)
         info.unsafe_store(0, Float32(0))
