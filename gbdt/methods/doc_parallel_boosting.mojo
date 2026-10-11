@@ -3903,11 +3903,40 @@ def fit_with_test(
                                 )
                             bk_cap_rows = n_rows
                             bk_cap_leaves = bk_cap
+                    # lane/trees-ctr-perm-grid IDN_CTR_PERM_GRID (default
+                    # off): every active permutation's model bins in one
+                    # staged node plane and one grid launch, no per-call
+                    # drain; `cpg_keep` holds the staging past the ONE
+                    # drain below. Same bins (see the define's comment).
+                    var cpg_on = False
+                    var cpg_keep = Optional[CtrPermGridStage]()
+                    comptime if IDN_CTR_PERM_GRID:
+                        cpg_on = True
+                        var cpg_cidx = List[DeviceBuffer[DType.uint32]]()
+                        var cpg_outs = List[DeviceBuffer[DType.uint32]]()
+                        for p in range(perm_count):  # small-loop(perm_count: learn permutations, a handful): buffer handles, no data
+                            if inherit_learn and p == learn_p:
+                                continue
+                            if p == learn_p:
+                                cpg_cidx.append(lc.copy())
+                            else:
+                                cpg_cidx.append(perm_cindexes[p].copy())
+                            cpg_outs.append(perm_leaf_parts[p].bins.copy())
+                        if len(cpg_cidx) > 0:
+                            cpg_keep = Optional(
+                                ctr_perm_grid_bins_enqueue(
+                                    ctx, layout_for_test,
+                                    tree.model_structure,
+                                    cpg_cidx, cpg_outs, n_rows,
+                                )
+                            )
                     for p in range(perm_count):
                         if inherit_learn and p == learn_p:
                             continue
                         ref lp = perm_leaf_parts[p]
-                        if p == learn_p:
+                        if cpg_on:
+                            pass
+                        elif p == learn_p:
                             compute_non_symmetric_bins_for_model(
                                 ctx, layout_for_test, tree.model_structure,
                                 lc, n_rows, lp.bins,
@@ -3930,6 +3959,7 @@ def fit_with_test(
                     var t_part_b = loop_times.start()
                     # ONE drain settles every permutation's leaf bounds
                     ctx.synchronize()
+                    _ = cpg_keep^  # IDN_CTR_PERM_GRID staging, past the drain
                     var parts = List[LeafPartition]()
                     for p in range(perm_count):
                         if sortfree:
