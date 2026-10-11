@@ -30,6 +30,7 @@ from x_decomp.tsqr_core import (
     TS_TREE_PAR,
     TS_NB,
     TS_P,
+    TS_RSTACK_TREE,
     TS_W2,
     TS_WY_PAIR,
     ts_block_hi,
@@ -57,6 +58,12 @@ struct _TsHost(Defaultable, Movable):
     var m: Int
     var n: Int
     var live: Bool
+    # TS_RSTACK_TREE: per stacked level (0 = the leaves) the factored
+    # matrix, the panels' T, the pairs' T2 and the level's rows
+    var la: List[List[Float32]]
+    var lt: List[List[Float32]]
+    var lt2: List[List[Float32]]
+    var lrows: List[Int]
 
     def __init__(out self):
         self.a = List[Float32]()
@@ -67,6 +74,10 @@ struct _TsHost(Defaultable, Movable):
         self.m = 0
         self.n = 0
         self.live = False
+        self.la = List[List[Float32]]()
+        self.lt = List[List[Float32]]()
+        self.lt2 = List[List[Float32]]()
+        self.lrows = List[Int]()
 
 
 comptime TS_HOST_STATE = _Global[StorageType=_TsHost, name="MojoXDecompTsqrHost", init_fn=_TsHost.__init__]
@@ -82,6 +93,10 @@ def ts_free_host() raises:
     st[].m = 0
     st[].n = 0
     st[].live = False
+    st[].la = List[List[Float32]]()
+    st[].lt = List[List[Float32]]()
+    st[].lt2 = List[List[Float32]]()
+    st[].lrows = List[Int]()
 
 
 def _p(l: List[Float32]) -> F32Ptr:
@@ -404,11 +419,105 @@ def _capply_level_host(pcb: F32Ptr, ptl: F32Ptr, ptau: F32Ptr, n: Int, k: Int, n
             host_parallelize(_pair, pairs)
 
 
+# TS_RSTACK_TREE (x_decomp/tsqr_core.mojo; the device's `_ts_factor_rstack`):
+# the stacked levels, statement for statement the device's order. Level L's
+# matrix is level L - 1's block R tiles stacked (rtile's words); every level
+# is factored by the leaf blocks; the last level has one block, whose R tile
+# is the result.
+def _ts_factor_rstack_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+    var n = d + nrhs
+    var npan = ts_panels(n)
+    var npair = ts_pairs(n)
+    var st = TS_HOST_STATE.get_or_create_ptr()
+    var cur = List[Float32](length=m * n, fill=Float32(0.0))
+    var p0 = _p(cur)
+    if nrhs == 0:
+        memcpy(dest=p0, src=a, count=m * n)
+    else:
+        for i in range(m):
+            memcpy(dest=p0 + i * n, src=a + i * d, count=d)
+            memcpy(dest=p0 + i * n + d, src=bp + i * nrhs, count=nrhs)
+    var mc = m
+    while True:
+        var nb = ts_blocks(mc)
+        var t = List[Float32](length=nb * npan * _TT, fill=Float32(0.0))
+        var t2 = List[Float32](length=(nb * npair * TS_T2) if TS_WY_PAIR else 1, fill=Float32(0.0))
+        var tiles = List[Float32](length=nb * n * n, fill=Float32(0.0))
+        var pa = _p(cur)
+        var pt = _p(t)
+        var pt2 = _p(t2)
+        var ptl = _p(tiles)
+
+        def _blk(b: Int) {imm pa, imm pt, imm pt2, imm ptl, imm mc, imm n, imm nb, imm npan, imm npair}:
+            var lo = ts_block_lo(b)
+            var hi = ts_block_hi(b, nb, mc)
+            ts_factor_block_host(pa + lo * n, hi - lo, n, pt + b * npan * _TT, pt2 + b * npair * TS_T2)
+            ts_rtile_host(pa + lo * n, n, ptl + b * n * n)
+
+        if nb <= 1:
+            _blk(0)
+        else:
+            host_parallelize(_blk, nb)
+        st[].la.append(cur^)
+        st[].lt.append(t^)
+        st[].lt2.append(t2^)
+        st[].lrows.append(mc)
+        if nb == 1:
+            memcpy(dest=r, src=ptl, count=n * n)
+            break
+        cur = tiles^
+        mc = nb * n
+    if keep:
+        st[].m = m
+        st[].n = n
+        st[].live = True
+    else:
+        ts_free_host()
+
+
+def _ts_apply_rstack_host(c: F32Ptr, q: F32Ptr, n: Int, k: Int) raises:
+    """q = Q c through the kept stacked levels, top down (the device's
+    `_ts_apply_rstack`): each level's output is the C rows of the level
+    below; level 0 writes q."""
+    var st = TS_HOST_STATE.get_or_create_ptr()
+    var npan = ts_panels(n)
+    var npair = ts_pairs(n)
+    var nlev = len(st[].lrows)
+    var cin = List[Float32](length=n * k, fill=Float32(0.0))
+    memcpy(dest=_p(cin), src=c, count=n * k)
+    for li in range(nlev):
+        var lv = nlev - 1 - li
+        var mc = st[].lrows[lv]
+        var nb = ts_blocks(mc)
+        var out = List[Float32](length=(mc * k) if lv > 0 else 1, fill=Float32(0.0))
+        var po = _p(out) if lv > 0 else q
+        var pcb = _p(cin)
+        var pa = _p(st[].la[lv])
+        var pt = _p(st[].lt[lv])
+        var pt2 = _p(st[].lt2[lv])
+
+        def _blk(b: Int) {imm pa, imm pt, imm pt2, imm pcb, imm po, imm mc, imm n, imm k, imm nb, imm npan, imm npair}:
+            var lo = ts_block_lo(b)
+            var hi = ts_block_hi(b, nb, mc)
+            ts_apply_block_host(
+                pa + lo * n, n, pt + b * npan * _TT, pt2 + b * npair * TS_T2, po + lo * k, k, hi - lo, pcb + b * n * k
+            )
+
+        if nb <= 1:
+            _blk(0)
+        else:
+            host_parallelize(_blk, nb)
+        cin = out^
+
+
 def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
     """R (n x n, n = d + nrhs) of [a | bp] (m x d and m x nrhs, row major)
     into r; with `keep` the factored state stays for `ts_apply_host`."""
     var n = d + nrhs
     ts_free_host()
+    comptime if TS_RSTACK_TREE:
+        _ts_factor_rstack_host(a, bp, r, m, d, nrhs, keep)
+        return
     var st = TS_HOST_STATE.get_or_create_ptr()
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
@@ -460,6 +569,10 @@ def ts_apply_host(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
     if not st[].live or st[].m != m or st[].n != n:
         ts_free_host()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
+    comptime if TS_RSTACK_TREE:
+        _ts_apply_rstack_host(c, q, n, k)
+        ts_free_host()
+        return
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
     var npair = ts_pairs(n)
