@@ -1,0 +1,43 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "xd-rr-one-block",
+ "branch": "lane/xd-rr-one-block",
+ "head": "d10fa40fd",
+ "controls": {
+  "rr_one_block_d": {
+   "define": "MOJOLEARN_IDN_RR_ONE_BLOCK_D",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_RR_ONE_BLOCK_D"]},
+   "default": "off",
+   "source": [
+    "x_decomp/xd_lean.mojo:IDN_RR_ONE_BLOCK_D",
+    "x_decomp/xd_lean.mojo:rr_one_block_d_applies",
+    "x_decomp/rr_one_block_d.mojo:rr_eigh_one_block_d_kernel",
+    "decomposition/impl/linalg/detail/pca.mojo:_eig_rr_device"
+   ],
+   "binding": "_mojolearn_estimators",
+   "bits_change": false,
+   "status": "open",
+   "workloads": ["algos:pca:istella", "algos:pca:taxi", "algos:tsvd:istella"],
+   "notes": "C3 of ideas-all-gaps-20261011. One launch of one 256-thread block per solve for h h + n h <= RR_ONE_D_STEPS (192) x 256 cells a round; knob -D MOJOLEARN_IDN_RR_ONE_BLOCK_D_STEPS=<k> for the crossover."
+  },
+  "svd_tall_lean": {
+   "define": "MOJOLEARN_IDN_SVD_TALL_LEAN",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_SVD_TALL_LEAN"]},
+   "default": "off",
+   "source": [
+    "x_decomp/xd_lean.mojo:IDN_SVD_TALL_LEAN",
+    "x_decomp/device.mojo:DevExec._svd_on",
+    "x_decomp/device.mojo:orth_on_device_diag",
+    "x_decomp/host.mojo:HostExec._orth_passes",
+    "x_decomp/rr_one_block_d.mojo:rs_round_gated_kernel"
+   ],
+   "binding": "_mojolearn_linalg",
+   "bits_change": true,
+   "status": "open",
+   "workloads": ["algos:svd:istella", "algos:svd:taxi", "algos:lstsq:istella", "algos:lstsq:taxi", "algos:ols:istella"],
+   "notes": "C4 of ideas-all-gaps-20261011. Gated Jacobi rounds (no bits) + orth second-pass skip (U bits change when R1 is diagonal to 2^-20, same on nv/amd/host). Also built into _mojolearn_x_decomp (Kit svd/orth_diag entries)."
+  }
+ }
+}
