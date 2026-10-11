@@ -8115,6 +8115,240 @@ def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
     return f^
 
 
+# ===========================================================================
+# IDN_ATTN_NO_HOST_REGIME (lane/lm-attn-nohost, 2026-10-11, idea H1)
+# ===========================================================================
+
+comptime IDN_ATTN_NO_HOST_REGIME = (
+    is_defined["MOJOLEARN_IDN_ATTN_NO_HOST_REGIME"]()
+    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN != COLUMN_APPLE
+)
+"""Default OFF experiment, `-D MOJOLEARN_IDN_ATTN_NO_HOST_REGIME`.
+
+Structural reason: every fused forward reads the regime scan and the corner
+flag on the host (one or two waits per layer: 16 round trips per LM forward,
+2 of transformer-forward's ~3.2 ms on AMD). Under this switch a DRIVER that
+promises to check arms a deferred window (`attention_defer_begin`); inside
+it the fused forward evaluates the regime bound ON THE DEVICE
+(`attn_regime_flag_kernel`, the same partials and the same max fold as the
+host, the same Float64 bound) and ORs the refusal and the kernels' corner
+flag into one per-context word buffer, then returns `FUSED_RAN` with no
+wait. The driver reads that buffer ONCE (`attention_defer_end`) behind the
+output readback it already does; when any word is set it reruns the whole
+forward with the window disarmed, which is today's path and today's words.
+A refusal never lets a wrong output escape: the rerun overwrites it.
+Bits: none (the regime only chooses between paths; the speculative fused
+words are kept only when no flag is set, and then they are the words today's
+path keeps). Drivers that never arm (byte-LM training today) are unchanged.
+Expected: transformer-forward AMD 3.2 -> ~2.6 ms, NV 4.0 -> ~3.6 ms; the
+LM forward/train inherits once training/byte_lm.mojo arms the window.
+Not on the Apple column (Float64 in a kernel; Apple keeps `_attn_speculative`)."""
+
+comptime _DEFER_WORDS = 4
+"""Deferred words: 0 the corner flag (any layer), 1-2 the masked-tail
+repair counters the kernels may write (never read here), 3 the regime
+refusal (any layer)."""
+
+
+struct _AttnDeferState(Defaultable, Movable):
+    # One entry per device context (core/ctx_key.mojo), as the scan cache.
+    var ids: List[Int]
+    var armed: List[Bool]
+    var flag: List[DeviceBuffer[DType.float32]]  # each [_DEFER_WORDS]
+    var part: List[DeviceBuffer[DType.float32]]  # each [3 * ABSMAX_BLOCKS]
+    var host: List[HostBuffer[DType.float32]]  # each [_DEFER_WORDS]
+
+    def __init__(out self):
+        self.ids = List[Int]()
+        self.armed = List[Bool]()
+        self.flag = List[DeviceBuffer[DType.float32]]()
+        self.part = List[DeviceBuffer[DType.float32]]()
+        self.host = List[HostBuffer[DType.float32]]()
+
+
+comptime _ATTN_DEFER_STATE = _Global[StorageType=_AttnDeferState,
+    name="MojolearnAttnDeferStateV1", init_fn=_AttnDeferState.__init__]
+
+
+def _attn_defer_slot(ctx: DeviceContext) raises -> Int:
+    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
+    var si = ctx_cache_slot(g[].ids, ctx)
+    if si >= 0:
+        return si
+    step_count_device_alloc()
+    g[].flag.append(ctx.enqueue_create_buffer[DType.float32](_DEFER_WORDS))
+    step_count_device_alloc()
+    g[].part.append(ctx.enqueue_create_buffer[DType.float32](3 * ABSMAX_BLOCKS))
+    step_count_host_alloc()
+    g[].host.append(ctx.enqueue_create_host_buffer[DType.float32](_DEFER_WORDS))
+    g[].armed.append(False)
+    g[].ids.append(ctx_cache_key(ctx))
+    return len(g[].ids) - 1
+
+
+def attention_defer_begin(ctx: DeviceContext) raises -> Bool:
+    """Arm the deferred window for one forward on `ctx`: zero the words
+    (an enqueued fill, no wait). Returns False, arming nothing, on a build
+    without the switch; the caller then runs exactly as before."""
+    comptime if not IDN_ATTN_NO_HOST_REGIME:
+        return False
+    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
+    var si = _attn_defer_slot(ctx)
+    step_count_launch()
+    g[].flag[si].enqueue_fill(Float32(0.0))
+    g[].armed[si] = True
+    return True
+
+
+def attention_defer_end(ctx: DeviceContext) raises -> Bool:
+    """Disarm the window and read its words with ONE wait (put it where the
+    caller already waits for its output). True when any layer refused the
+    regime or hit a corner: the caller must rerun the forward disarmed."""
+    comptime if not IDN_ATTN_NO_HOST_REGIME:
+        return False
+    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
+    var si = _attn_defer_slot(ctx)
+    g[].armed[si] = False
+    var hp = g[].host[si].unsafe_ptr()
+    step_count_d2h()
+    ctx.enqueue_copy(dst_ptr=hp, src_buf=g[].flag[si])
+    step_count_sync()
+    ctx.synchronize()
+    return hp.unsafe_load(0) != Float32(0.0) or hp.unsafe_load(3) != Float32(0.0)
+
+
+def attention_defer_disarm(ctx: DeviceContext) raises:
+    """Disarm without reading (an error path)."""
+    comptime if IDN_ATTN_NO_HOST_REGIME:
+        var g = _ATTN_DEFER_STATE.get_or_create_ptr()
+        var si = ctx_cache_slot(g[].ids, ctx)
+        if si >= 0:
+            g[].armed[si] = False
+
+
+def _attn_defer_armed(ctx: DeviceContext) raises -> Bool:
+    comptime if not IDN_ATTN_NO_HOST_REGIME:
+        return False
+    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
+    var si = ctx_cache_slot(g[].ids, ctx)
+    if si < 0:
+        return False
+    return g[].armed[si]
+
+
+def _attn_defer_corner(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
+    """The deferred words as the kernels' corner buffer: NOT zeroed (the
+    window's fill did that once), so every layer's corner ORs into word 0."""
+    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
+    var si = _attn_defer_slot(ctx)
+    return g[].flag[si].create_sub_buffer[DType.float32](0, _DEFER_WORDS)
+
+
+def attn_regime_flag_kernel(
+    flag: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    k0_in: Int32,
+    k1_in: Int32,
+    k2_in: Int32,
+    hd_in: Int32,
+):
+    """One block of ABSMAX_TPB threads: fold the three operands' absmax
+    partials (q, k, v) with the host fold's rule (`v > m` from 0.0; `max`
+    of non-NaN words is exact in any order, and the partials already read
+    NaN as +inf), then apply `regime_product_ok(hd, qmax, kmax)` and
+    `regime_finite(vmax)` in Float64 exactly as the host does (two products
+    and a compare: nothing to contract). A refusal sets word 3; nothing
+    clears it, so the window ORs every layer."""
+    var red = stack_allocation[
+        3 * ABSMAX_TPB,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var k0 = Int(k0_in)
+    var k1 = Int(k1_in)
+    var k2 = Int(k2_in)
+    var lo = 0
+    for which in range(3):
+        var kb = k0
+        if which == 1:
+            kb = k1
+        elif which == 2:
+            kb = k2
+        var m = Float32(0.0)
+        var i = tid
+        while i < kb:
+            var v = part.unsafe_load(lo + i)
+            if v > m:
+                m = v
+            i += ABSMAX_TPB
+        red.unsafe_store(which * ABSMAX_TPB + tid, m)
+        lo += kb
+    barrier()
+    var active = ABSMAX_TPB // 2
+    while active > 0:
+        if tid < active:
+            for which in range(3):
+                var base = which * ABSMAX_TPB
+                var o = red.unsafe_load(base + tid + active)
+                if o > red.unsafe_load(base + tid):
+                    red.unsafe_store(base + tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        var qmax = Float64(red.unsafe_load(0))
+        var kmax = Float64(red.unsafe_load(ABSMAX_TPB))
+        var vmax = Float64(red.unsafe_load(2 * ABSMAX_TPB))
+        var inf = Float64(bitcast[DType.float32](UInt32(0x7F800000)))
+        var ok = qmax < inf and kmax < inf and vmax < inf
+        if ok:
+            ok = Float64(Int(hd_in)) * qmax * kmax < REGIME_BOUND
+        if not ok:
+            flag.unsafe_store(3, Float32(1.0))
+
+
+def _attn_defer_regime(
+    ctx: DeviceContext,
+    q_p: MutPointer[Float32, MutAnyOrigin], nq: Int,
+    k_p: MutPointer[Float32, MutAnyOrigin],
+    v_p: MutPointer[Float32, MutAnyOrigin], nkv: Int,
+    hd: Int,
+) raises:
+    """Enqueue the regime scan and its device-side verdict into the
+    window's word 3: the partials are `device_absmax4`'s launches at its
+    grids; no copy, no wait."""
+    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
+    var si = _attn_defer_slot(ctx)
+    var k0 = _absmax_blocks(nq)
+    var k1 = _absmax_blocks(nkv)
+    var k2 = _absmax_blocks(nkv)
+    var pp = g[].part[si].unsafe_ptr()
+    if k0 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            pp, q_p, Int32(nq),
+            grid_dim=(k0, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    if k1 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            pp + k0, k_p, Int32(nkv),
+            grid_dim=(k1, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    if k2 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            pp + k0 + k1, v_p, Int32(nkv),
+            grid_dim=(k2, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    step_count_launch()
+    ctx.enqueue_function[attn_regime_flag_kernel](
+        g[].flag[si].unsafe_ptr(), pp, Int32(k0), Int32(k1), Int32(k2), Int32(hd),
+        grid_dim=(1, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+    )
+
+
 def fused_forward_launch(
     ctx: DeviceContext,
     mut ctxv: DeviceBuffer[DType.float32],
@@ -8214,7 +8448,18 @@ def fused_forward_launch_ran(
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
     var speculative = _attn_speculative()
-    if not speculative:
+    # IDN_ATTN_NO_HOST_REGIME: inside an armed window the regime verdict is
+    # enqueued on the device and the corner ORs into the window's words; no
+    # wait here (the driver reads the words once and reruns on a flag).
+    var deferred = _attn_defer_armed(ctx)
+    if deferred:
+        speculative = False
+        _attn_defer_regime(
+            ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+            k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd, hd,
+        )
+    if not speculative and not deferred:
         var amx = device_absmax4(
             ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
@@ -8230,7 +8475,11 @@ def fused_forward_launch_ran(
         if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
             return FUSED_REFUSED_REGIME
         _attn_tick(ctx, ton, tk, "fwd_regime_scan")
-    var corner = _zero_flag(ctx)
+    var corner: DeviceBuffer[DType.float32]
+    if deferred:
+        corner = _attn_defer_corner(ctx)
+    else:
+        corner = _zero_flag(ctx)
     var tq = fused_rows_per_block(hd)
     var blocks = b * nh * ((l + tq - 1) // tq)
     var nt = hd * tq
@@ -8432,6 +8681,11 @@ def fused_forward_launch_ran(
                 grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
             )
         _attn_tick(ctx, ton, tk, "fwd_kernel")
+    if deferred:
+        # IDN_ATTN_NO_HOST_REGIME: speculative FUSED_RAN; the window's words
+        # carry this call's regime refusal and corner to the driver.
+        _ = corner^
+        return FUSED_RAN
     if speculative:
         # The scan behind the kernels: its one wait covers them, and the
         # flag read after it finds nothing pending.
