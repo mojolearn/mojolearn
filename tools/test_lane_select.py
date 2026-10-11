@@ -1698,26 +1698,26 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
     ib = lane_select.identity_break()
     init = ast.parse(open(os.path.join(lane_select.ROOT, lane_select.PKG, "__init__.py"),
                           encoding="utf-8").read())
-    # STALE CASE FIXED 2026-10-10: 76c025466 (2026-10-02) made __init__.py bind
-    # the language-model names on first touch (`_CPU_INFERENCE`, name -> module)
-    # instead of `from .language_model import ...`, and binds
-    # SmallByteLanguageModelTrainer / ByteLanguageModelConfig from
-    # `._byte_lm_impl` / `._byte_lm_config`. `byte-lm` uses those two names, so
-    # it no longer executes language_model.py; the lane whose code names what
-    # language_model.py binds (LanguageModelConfig) is `language-model-config`.
-    # A lazy entry `"Name": ".<stem>"` is read as a binding from <stem>.
-    for rel, want in (("python/mojolearn/umap.py", "umap"),
-                      ("python/mojolearn/neural_network.py", "mlp"),
-                      ("python/mojolearn/language_model.py", "language-model-config")):
+    # STALE CASE DROPPED 2026-10-10: language_model.py is no longer a door.
+    # 76c025466 (2026-10-02) made __init__.py bind the language-model names on
+    # first touch (`_CPU_INFERENCE`, name -> module) instead of an eager
+    # `from .language_model import ...`, and binds the names `byte-lm` uses
+    # (SmallByteLanguageModelTrainer, ByteLanguageModelConfig) from
+    # `._byte_lm_impl` / `._byte_lm_config`, which define them. So `byte-lm`
+    # no longer executes language_model.py, and __init__.py binds nothing from
+    # it by import (this test's own "pick a new case" guard below). The file
+    # stays in `language-model-config`'s map by the definition rule
+    # (`LanguageModelConfig = ByteLanguageModelConfig`), not by a door. The
+    # door rule is still held on the two eager doors.
+    _DOORS = (("python/mojolearn/umap.py", "umap"),
+              ("python/mojolearn/neural_network.py", "mlp"))
+    for rel, want in _DOORS:
         lanes = rev.get(rel, set())
         assert want in lanes, f"{rel} is the public door for {want} and the lane does not reach it"
         stem = os.path.basename(rel)[:-3]
         bound = {a.asname or a.name for n in ast.walk(init)
                  if isinstance(n, ast.ImportFrom) and n.level == 1 and n.module == stem
                  for a in n.names}
-        bound |= {k.value for n in ast.walk(init) if isinstance(n, ast.Dict)
-                  for k, v in zip(n.keys, n.values)
-                  if isinstance(k, ast.Constant) and isinstance(v, ast.Constant) and v.value == "." + stem}
         assert bound, f"__init__.py binds nothing from {stem}; pick a new case"
         naming = {n for n, fn in ib.LANES.items()
                   if lane_select._code_names(fn, vars(ib)) & bound}
@@ -1742,9 +1742,7 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
     try:
         lane_select.reset_caches()
         blind = lane_select.reverse_map()
-        for rel, want in (("python/mojolearn/umap.py", "umap"),
-                          ("python/mojolearn/neural_network.py", "mlp"),
-                          ("python/mojolearn/language_model.py", "byte-lm")):
+        for rel, want in _DOORS:
             assert want not in blind.get(rel, set()), \
                 f"{want} reaches {rel} without the public door rule, so this test cannot fail"
     finally:
