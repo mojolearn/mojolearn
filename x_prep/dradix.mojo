@@ -72,9 +72,12 @@ comptime RADIX_MIN_ROWS = 8192
 # occupancy, not a board shape. The sort has ONE answer (stable, total order),
 # so the words are identical to the default on every vendor and the host.
 # Expected: onehot/ordinal istella + taxi AMD 19-22 -> ~8-10 ms with I1.
-comptime IDN_DRADIX_RANGE_PASSES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
-    "MOJOLEARN_IDN_DRADIX_RANGE_PASSES"
-]()
+#: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
+#: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): ordinal NV/AMD 0.744/0.782, onehot
+#: 0.816/0.808, kbins taxi 0.712 (istella 1.127, NV 1.308 vs AMD 0.946); mean over 14 prep cells 0.945
+#: (AMD 0.59-0.69 on ordinal/onehot); same bits; runs v0125/a1707 vs A v0124/a1706. -D
+#: MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF restores the old path.
+comptime IDN_DRADIX_RANGE_PASSES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF"]()
 #: the sort chunk cap of IDN_DRADIX_RANGE_PASSES
 comptime RANGE_CHUNK_ROWS = 512
 

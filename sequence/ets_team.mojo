@@ -30,7 +30,7 @@ is every thread's ascending fold over the T partial sums, so every thread
 sees the same value. Same model, same bounds, same Nelder-Mead; the
 error sum's fold order differs from op_ets's and the trend update is
 beta e in place of (beta / alpha) ((l' - l) - phi b), so the bits differ:
-FAST on Apple by default, and IDENTICAL behind `-D MOJOLEARN_IDN_ETS_TEAM`
+FAST on Apple by default, and the IDENTICAL default (`IDN_ETS_TEAM`)
 (below: a fixed tree prefix in place of the serial one, replayed on the
 host column by `ets_team_replay`).
 
@@ -55,8 +55,12 @@ comptime ETS_TEAM = (
     and not is_defined["MOJOLEARN_ETS_TEAM_OFF"]()
 )
 
-#: lane ets-team-idn (2026-10-11, idea E2). IDENTICAL, default OFF:
-#: `-D MOJOLEARN_IDN_ETS_TEAM` runs ETS(A, A|Ad, N) on NVIDIA and AMD (and
+#: lane ets-team-idn (2026-10-11, idea E2). PROMOTED to the IDENTICAL default
+#: 2026-10-11 (lane/w2-decide-neural; A/B on main c8ef6c66d, one run per arm:
+#: damped-ets synthetic 0.017, taxi-hourly 0.014 (NV 0.017/0.014, AMD
+#: 0.017/0.014); BITS CHANGE, NV == AMD; forecast_rmse 13.93 -> 13.94
+#: synthetic, 96.69 -> 96.69 taxi-hourly: equal; nv2 v0099, amd a1681).
+#: `-D MOJOLEARN_IDN_ETS_TEAM_OFF` restores op_ets. It runs ETS(A, A|Ad, N) on NVIDIA and AMD (and
 #: Apple) with the team above, one block of SEQ_TEAM_TPB threads per series,
 #: in place of op_ets's one thread per series. Structural reason: op_ets
 #: walks the whole series serially in one thread per Nelder-Mead evaluation
@@ -76,7 +80,7 @@ comptime ETS_TEAM = (
 #: ETS model keeps op_ets. MOJOLEARN_IDN_ALL_OFF turns it off.
 comptime IDN_ETS_TEAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_ETS_TEAM"]()
+    and not is_defined["MOJOLEARN_IDN_ETS_TEAM_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: IDN_ETS_TEAM's chunk count: the team's threads (the host replay runs

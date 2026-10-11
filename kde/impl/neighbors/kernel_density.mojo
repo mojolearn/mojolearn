@@ -3631,7 +3631,12 @@ def kde_chunk_lse_kernel(
 # bits on the four device distance sites and the host oracle's three; it is
 # left for a separate define, not folded into this one.)
 # ===========================================================================
-comptime KDE_IDN_QTILE = KDE_IDN_CHUNK_LSE and is_defined["MOJOLEARN_IDN_KDE_QTILE"]()
+#: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
+#: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): kde taxi 0.343 (NV 0.300, AMD 0.387), kde
+#: istella 1.239 (NV 1.231, AMD 1.246): REGRESSION +24% on istella on both vendors, kept by the average
+#: rule (avg 0.791); same bits; runs v0123/a1705 vs A v0122/a1704. -D MOJOLEARN_IDN_KDE_QTILE_OFF
+#: restores the old path.
+comptime KDE_IDN_QTILE = KDE_IDN_CHUNK_LSE and not is_defined["MOJOLEARN_IDN_KDE_QTILE_OFF"]()
 comptime KDE_QT_Q = 4
 comptime KDE_QT_CELL = 16
 comptime KDE_QT_FEAT = 256

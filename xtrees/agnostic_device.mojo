@@ -117,8 +117,12 @@ comptime AGN_ANY_DEVICE_MODEL = AGN_IDN_DEVICE_MODEL or KSHAP_FAST_DEVICE_MODEL 
 #: last, then the link), the same mean/marginal kernels. The host column
 #: keeps the model callback (the same decision statements on the host).
 #: Expected: permutation-shap istella NV 7394 -> ~2000 ms.
+#: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
+#: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): permutation-shap istella 0.097 (NV 3873 ->
+#: 258 ms), taxi 0.022 (NV 66 -> 0.68 ms; AMD 0.128/0.033); kernel-shap 1.02 untouched; same bits; runs
+#: v0109/a1691 vs A v0108/a1690. -D MOJOLEARN_IDN_PSHAP_RESIDENT_OFF restores the old path.
 comptime PSHAP_IDN_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_PSHAP_RESIDENT"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_PSHAP_RESIDENT_OFF"]()
 )
 #: Default FAST + Apple; MOJOLEARN_PSHAP_DELTA_OFF restores full synthesis.
 #: M3 w2-pdelta-pshap-istella: 28,222.8 -> 14,788.6 ms (-47.6%).

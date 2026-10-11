@@ -325,6 +325,25 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_LM_GROUPED_ADAM`](#owed-decide-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_LM_GROUPED_ADAM.patch](../experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch) |
 | [`MOJOLEARN_IDN_M3_S17_TAIL_DBUF`](#owed-decide-2026-10-11) | Neural | LOSER-slower (vendor split) | 2026-10-11 | [MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch](../experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch) |
 | [`MOJOLEARN_IDN_M1_SCAN=1`](#owed-decide-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_M1_SCAN_1.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch) |
+| [`MOJOLEARN_IDN_TSNE_REP_RB4`](#wave-2-w2-decide-algos-2026-10-11) | Manifold | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_TSNE_REP_RB4.patch](../experiments/removed/MOJOLEARN_IDN_TSNE_REP_RB4.patch) |
+| [`MOJOLEARN_IDN_HDB_ROUND_LEAN`](#wave-2-w2-decide-algos-2026-10-11) | Cluster | LOSER-noise | 2026-10-11 | [MOJOLEARN_IDN_HDB_ROUND_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch) |
+| [`MOJOLEARN_IDN_CNN_DX_IMPLICIT`](#wave-2-w2-decide-neural-2026-10-11) | Neural | DROPPED-noise | 2026-10-11 | [MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch](../experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch) |
+| [`MOJOLEARN_IDN_CNN_WGRAD_LEAF1024`](#wave-2-w2-decide-neural-2026-10-11) | Neural | DROPPED-noise | 2026-10-11 | [MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch](../experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch) |
+| [`MOJOLEARN_IDN_GPOOL_WARP`](#wave-2-w2-decide-neural-2026-10-11) | Neural | DROPPED-noise (bits change, NV spike) | 2026-10-11 | [MOJOLEARN_IDN_GPOOL_WARP.patch](../experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch) |
+| [`MOJOLEARN_IDN_MOE_RESIDENT`](#wave-2-w2-decide-neural-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_MOE_RESIDENT.patch](../experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch) |
+| [`MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH`](#wave-2-w2-decide-linalg-2026-10-11) | Classical | NOISE | 2026-10-11 | [MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch](../experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch) |
+| [`MOJOLEARN_IDN_RR_ONE_BLOCK_D`](#wave-2-w2-decide-linalg-2026-10-11) | Classical (decomposition) | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch](../experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch) |
+| [`MOJOLEARN_IDN_SVD_TALL_LEAN`](#wave-2-w2-decide-linalg-2026-10-11) | Classical (decomposition) | NOISE | 2026-10-11 | [MOJOLEARN_IDN_SVD_TALL_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch) |
+| [`MOJOLEARN_IDN_TSQR_RSTACK_TREE`](#wave-2-w2-decide-linalg-2026-10-11) | Classical (decomposition) | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch) |
+| [`MOJOLEARN_IDN_XD_KIT_GEMM`](#wave-2-w2-decide-linalg-2026-10-11) | Classical (decomposition) | NOISE | 2026-10-11 | [MOJOLEARN_IDN_XD_KIT_GEMM.patch](../experiments/removed/MOJOLEARN_IDN_XD_KIT_GEMM.patch) |
+| [`MOJOLEARN_IDN_RSVD_ORTH_LEAN`](#wave-2-w2-decide-linalg-2026-10-11) | Classical (decomposition) | NOISE | 2026-10-11 | [MOJOLEARN_IDN_RSVD_ORTH_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_RSVD_ORTH_LEAN.patch) |
+| [`MOJOLEARN_IDN_LG_FUSED_CHAIN`](#wave-2-w2-decide-linalg-2026-10-11) | Trees | NOISE | 2026-10-11 | [MOJOLEARN_IDN_LG_FUSED_CHAIN.patch](../experiments/removed/MOJOLEARN_IDN_LG_FUSED_CHAIN.patch) |
+| [`MOJOLEARN_IDN_CTR_PERM_GRID`](#wave-2-w2-decide-linalg-2026-10-11) | Trees | NOISE | 2026-10-11 | [MOJOLEARN_IDN_CTR_PERM_GRID.patch](../experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch) |
+| [`MOJOLEARN_IDN_GEMM_FILL_SPLITK`](#wave-2-w2-decide-lm-2026-10-11) | Neural | NOISE/LOSER | 2026-10-11 | [MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch) |
+| [`MOJOLEARN_IDN_LM_LEAN_STEP`](#wave-2-w2-decide-lm-2026-10-11) | Neural | NOISE | 2026-10-11 | [MOJOLEARN_IDN_LM_LEAN_STEP.patch](../experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch) |
+| [`MOJOLEARN_IDN_LM_LOGITS_LEAN`](#wave-2-w2-decide-lm-2026-10-11) | Neural | NOISE | 2026-10-11 | [MOJOLEARN_IDN_LM_LOGITS_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch) |
+| [`MOJOLEARN_IDN_ATTN_DEFER_REGIME`](#wave-2-w2-decide-lm-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch) |
+| [`MOJOLEARN_IDN_TF_SESSION_LEAN`](#wave-2-w2-decide-lm-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_TF_SESSION_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch) |
 
 ## Restored
 
@@ -3025,6 +3044,38 @@ lane/owed-decide; each code is recoverable at the parent of its deletion commit.
   (a different scan, expected). SLOWER. The guard refuses =1; `mamba1_profile` now always returns 1 (Python's profile-2
   checkpoint path is dead glue). Deleted by 291629888, recoverable at 291629888^. Patch experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch.
 
+## wave-2 w2-decide-algos (2026-10-11)
+
+Wave-2 A/B arms measured same box, same main c8ef6c66d, one run per arm, NV L40S / AMD MI325X, digests NV == AMD on every cell
+(evidence ~/mojolearn-evidence/round-20261011/w2_decisions.txt, w2_decide.out). Verdict = average of the two vendors' B/A
+ratios. Deleted on lane/w2-decide-algos by 826f3d57e; code recoverable at 826f3d57e^. Seven switches of the same round were promoted
+(see docs/apple-fast/EXPERIMENTS.md, wave-2 w2-decide-algos).
+
+- `MOJOLEARN_IDN_TSNE_REP_RB4` (t-SNE repulsion tile with 4 rows per thread, 64 rows per staged tile, `repulse_rep_rb4_kernel`
+  and its dispatch in `_enq_repulse_split`, x_ann/tsne_device.mojo; added by 4be6c31b8 on lane/svc-tsne): tsne istella 1.036x,
+  taxi 1.362x (NV 1.581x, AMD 1.142x). Same bits (no quality change). SLOWER. Runs v0130/a1712 vs A v0128/a1710 + v0129/a1711.
+  Deleted by 826f3d57e, recoverable at 826f3d57e^. Patch experiments/removed/MOJOLEARN_IDN_TSNE_REP_RB4.patch.
+- `MOJOLEARN_IDN_HDB_ROUND_LEAN` (HDBSCAN sparse mutual-reachability Boruvka: phase B's list length kept on the device, one
+  drain per round; the `shape`/`lean` kernel arguments, the one-thread shape kernel and the `_search` / `sparse_mr_mst_device`
+  branches, hdbscan/impl/cluster/detail/sparse_mr_mst.mojo; added by e84eaae8b + 0ec740298 on lane/hdb-ivf): hdbscan istella
+  0.997x, taxi 1.008x. Same bits (no quality change). NOISE. Runs v0133/a1715 vs A v0132/a1714. Deleted by 826f3d57e, recoverable
+  at 826f3d57e^. Patch experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch.
+## wave-2 w2-decide-linalg (2026-10-11)
+
+A/B on main c8ef6c66d, same box, one run per arm (NV L40S nv2, AMD MI325X), digests NV == AMD on every cell; evidence
+~/mojolearn-evidence/round-20261011/w2_decisions.txt and w2_decide.out. Ratio = B / A; verdict by the average of the two vendors.
+Deleted on lane/w2-decide-linalg; each code is recoverable at the parent of its deletion commit. Promoted in the same lane:
+MOJOLEARN_IDN_GFF_GRAM_TILED (ridge istella 0.917, taxi 0.973; `_OFF` restores).
+
+- `MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH` (NOISE). Tried: C2 (lane ridge-ff-tiled): the resident Gram solve's Cholesky, forward and backward solves (fp32 and the float-float second chance) as one launch of one 256-thread block each, a barrier between column steps; same statements, no bit moves. Files: glm/impl/gram_solve.mojo (gs_/gff_ chol/forward/backward one kernels, GS_ONE_* knobs, the two `one` branches), experiments/classical_identical_ideas/fg_linear_controls.mojo. Host twin unchanged. Result: ols istella 0.997 / taxi 1.036, ridge istella 1.008 / taxi 0.961, ridge-cv / ard / bayesian-ridge 1.00; same bits, quality equal. Runs nv2 v0136 / v0081, amd a1718 / a1663. Deleted by fbf3d50a0, recoverable at fbf3d50a0^. Patch experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch; guard refusal in core/six_lane_experiment_guards.mojo; grid_controls `removed` entry.
+- `MOJOLEARN_IDN_RR_ONE_BLOCK_D` (LOSER-slower). Tried: C3 (lane xd-rr-one-block): PCA / TruncatedSVD's round-robin two-sided Jacobi (`_eig_rr_device`) with every sweep, test and gate in one launch of one 256-thread block (`rr_eigh_one_block_d_kernel`) under the cost rule `rr_one_block_d_applies` (knob MOJOLEARN_IDN_RR_ONE_BLOCK_D_STEPS). Files: decomposition/impl/linalg/detail/pca.mojo, x_decomp/rr_one_block_d.mojo, x_decomp/xd_lean.mojo (both files later removed whole by the SVD_TALL_LEAN deletion f4b8fa942: apply MOJOLEARN_IDN_SVD_TALL_LEAN.patch first, then this one). Result: pca istella 2.103x (AMD 2.715x), tsvd istella 3.082x (AMD 4.061x), pca taxi 0.885x, lstsq / qr / svd / rsvd ~1.0; same bits. Runs nv2 v0095 (A v0094), v0089 (A v0088); amd a1677 (A a1676), a1671 (A a1670). Deleted by 19eed6fa1, recoverable at 19eed6fa1^. Patch experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch; guard refusal in core/six_lane_experiment_guards.mojo; grid_controls `removed` entry.
+- `MOJOLEARN_IDN_SVD_TALL_LEAN` (NOISE). Tried: C4 (lane xd-rr-one-block): `_svd_on`'s one-sided Jacobi rounds behind a sticky device convergence word (`rs_round_gated_kernel`, `rs_sweep_gate_kernel`, SVD_LEAN_GROUP = 8 sweeps a readback) and `orth_on_device_diag`'s second sliced-QR pass skipped when R1 is diagonal to 2^-20 (`orth_lean_test_kernel`, host twin `orth_lean_skip` in `HostExec._orth_passes`). Files: x_decomp/device.mojo, x_decomp/host.mojo, x_decomp/xd_lean.mojo and x_decomp/rr_one_block_d.mojo (removed whole). Result: 11 cells mean 0.990 (lstsq taxi 0.936, pca taxi 0.910, qr 1.03-1.04); bits changed on lstsq / svd taxi, quality equal. Runs nv2 v0090 / v0096, amd a1672 / a1678. Deleted by f4b8fa942, recoverable at f4b8fa942^. Patch experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch; guard refusal in core/six_lane_experiment_guards.mojo; grid_controls `removed` entry.
+- `MOJOLEARN_IDN_TSQR_RSTACK_TREE` (LOSER-slower). Tried: Lane tsqr-rstack: stacked-R levels replace the blocked TSQR's fixed combine tree on the device, level rows kept in the state, with a host replay of the same levels; retained apply refused under the switch. Files: x_decomp/tsqr_core.mojo (TS_RSTACK_TREE), x_decomp/tsqr_device.mojo, x_decomp/tsqr_host.mojo. Result: 8 cells mean 1.087, every cell > 1 (lstsq 1.12 / 1.10, randomized-svd istella 1.196, svd taxi 1.128); bits changed. Runs nv2 v0093, amd a1675. Deleted by 7d76f567e, recoverable at 7d76f567e^. Patch experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch; guard refusal in core/six_lane_experiment_guards.mojo; grid_controls `removed` entry.
+- `MOJOLEARN_IDN_XD_KIT_GEMM` (NOISE). Tried: C6 (lane xd-kit-gemm): every x_decomp kit `launch_gemm` through `identical_gemm_into` (TT via a transpose copy, `kit_transpose_kernel`, `_launch_gemm_identical`, `_kit_gemm_ws`), host twin through `gemm_oracle_cell`. Files: x_decomp/cells.mojo, x_decomp/device.mojo, x_decomp/host.mojo. Result: 8 cells mean 0.971 (randomized-svd 0.937 / 0.895, lstsq taxi 0.968, svd taxi 1.063 with NV 1.145); bits changed, quality equal. Runs nv2 v0091, amd a1673. Deleted by 2256fff37, recoverable at 2256fff37^. Patch experiments/removed/MOJOLEARN_IDN_XD_KIT_GEMM.patch; guard refusal in core/six_lane_experiment_guards.mojo; grid_controls `removed` entry.
+- `MOJOLEARN_IDN_RSVD_ORTH_LEAN` (NOISE). Tried: C7 (lane xd-kit-gemm): `_orth_tsqr_device` with pooled orth buffers, a device R copy and no end sync. Files: x_decomp/device.mojo. Result: randomized-svd istella 0.990, taxi 0.977; same bits. Runs nv2 v0092, amd a1674. Deleted by fdf3608ff, recoverable at fdf3608ff^. Patch experiments/removed/MOJOLEARN_IDN_RSVD_ORTH_LEAN.patch; guard refusal in core/six_lane_experiment_guards.mojo; grid_controls `removed` entry.
+- `MOJOLEARN_IDN_LG_FUSED_CHAIN` (NOISE). Tried: F2 (lane trees-lossguide): Lossguide on the fused 4-launch split chain (`_launch_fused_split_chain` + histogram copy) in place of the eight-launch chain. Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo. Result: gbdt-lossguide istella 1.001, taxi 0.988, gbdt-categorical 1.024; same bits. Runs nv2 v0113 (A v0112), amd a1695 (A a1694). Deleted by 9ea0ceea2, recoverable at 9ea0ceea2^. Patch experiments/removed/MOJOLEARN_IDN_LG_FUSED_CHAIN.patch; guard refusal in core/six_lane_experiment_guards.mojo; grid_controls `removed` entry.
+- `MOJOLEARN_IDN_CTR_PERM_GRID` (NOISE). Tried: Lane trees-ctr-perm-grid: Depthwise / Lossguide CTR permutation bins for every permutation in one grid kernel and one-stage enqueue in the batched permutation loop. Files: gbdt/methods/doc_parallel_boosting.mojo. Result: gbdt-categorical taxi 1.001; same bits. Runs nv2 v0114, amd a1696. Deleted by d092b6e2d, recoverable at d092b6e2d^. Patch experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch; guard refusal in core/six_lane_experiment_guards.mojo; grid_controls `removed` entry.
+
 ## Owed deletions reviewed and kept (lane/owed-deletions-D3, 2026-10-09)
 
 A DROP row was listed as owed, but the define stays: the reason is in each row.
@@ -3034,3 +3085,45 @@ A DROP row was listed as owed, but the define stays: the reason is in each row.
 | `MOJOLEARN_HDB_ONE_SYNC` | EXPERIMENTS.md:494 | its route (one wait per output download set, extract.mojo / runner.mojo) is the IDENTICAL default through IDN_HDB_ONE_SYNC (hdbscan/impl/detail/idn_switches.mojo), and a later FAST Apple measurement (F15/hdbscan-downloads, M3 2026-10-06) was faster: cold B/A 0.95 / 0.92 / 0.89, repeated 0.90 / 0.94 / 0.87, quality equal; combined timing with the promoted linkage is owed |
 | `MOJOLEARN_HDB_SELECT_DEVICE` | EXPERIMENTS.md:495 | the code it selects (extract.mojo _extract_one_read) is the IDENTICAL default through IDN_HDB_SELECT_ONE_READ (hdbscan/impl/detail/idn_switches.mojo, the same comptime if); the define is only the FAST Apple switch of that default route, so no loser code can be removed; F15/hdbscan-selection (M3 2026-10-06) B/A 0.917-1.030, mixed |
 | `MOJOLEARN_KMEANS_ROW_ASSIGN` | EXPERIMENTS.md:1706 | the DROP row (EXPERIMENTS.md:1706) is MOJOLEARN_KMEANS_DIRECT_DISTANCE's (direct4 = ROW_ASSIGN=4 + it), already deleted and refused (guard line 196: 'MOJOLEARN_KMEANS_ROW_ASSIGN=2|4 stays'); ROW_ASSIGN itself is a live grid control (grid_controls/classical-kmeans.json kmeans_assign, arm rows4) with no verdict of its own |
+
+## wave-2 w2-decide-neural (2026-10-11)
+
+Wave-2 A/B arms measured same box, same main c8ef6c66d, one run per arm (NV L40S nv2, AMD MI325X; evidence
+~/mojolearn-evidence/round-20261011/w2_decisions.txt and w2_decide.out). Verdict = average of the two vendors' B/A time ratios;
+digests NV == AMD on every cell. Deleted on lane/w2-decide-neural; each code is recoverable at the parent of its deletion commit.
+
+- `MOJOLEARN_IDN_CNN_DX_IMPLICIT` (G1, lane/cnn-dx-wgrad: conv backward dx as an implicit transposed convolution,
+  `implicit_dx_kernel` + `_implicit_dx` in x_cnn/device.mojo, the gate module x_cnn/cnn_dx_wgrad.mojo deleted whole, host twin
+  `_conv_dx_implicit_host` in x_cnn/host/ops_host.mojo): target cells conv2d 0.931 (NV 0.980, AMD 0.882), resnet-block 0.955
+  (NV 1.033, AMD 0.876), conv1d 1.055 (NV 1.062, AMD 1.048), target mean 0.980. Same bits on both arms (B vs A); no quality
+  change. NOISE. Runs nv2 v0083 / A v0082, amd a1665 / A a1664. Deleted by 499997a56, recoverable at 499997a56^.
+  Patch experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch (also restores G2: they shared x_cnn/cnn_dx_wgrad.mojo).
+- `MOJOLEARN_IDN_CNN_WGRAD_LEAF1024` (G2, lane/cnn-dx-wgrad: 1024-row dW leaves in `_implicit_wgrad`, `cnn_wgrad_partition`,
+  host twin's leaf in x_cnn/host/ops_host.mojo, `gemm_host_into(leaves_override)` in x_cnn/host/gemm_host.mojo): conv1d 0.954
+  (NV 0.931, AMD 0.976), conv2d 0.976 (NV 0.972, AMD 0.981), resnet-block 0.985 (NV 0.977, AMD 0.994), target mean 0.972 (both
+  vendors < 1 but under 3%). Same bits; no quality change. NOISE. Runs nv2 v0084 / A v0082, amd a1666 / A a1664. Deleted by
+  499997a56, recoverable at 499997a56^. Patch experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch.
+- `MOJOLEARN_IDN_GPOOL_WARP` (G6, lane/cnn-resident-glue: one block per (n, c) plane for window = plane pools, the lane folds
+  and max pick in x_cnn/ops.mojo, `gpool_fwd_kernel` + `_gpool_launch` in x_cnn/device.mojo, host avg tree `_gpool_avg_host` in
+  x_cnn/host/ops_host.mojo): global-avgpool 0.868 (NV 0.942, AMD 0.794) with BITS CHANGED, global-maxpool AMD 1.065 and an NV
+  cell 67x (a 216 ms spike); CNN_RESIDENT_GRADS (promoted the same day) already takes both pools to ~0.1 ms. NOISE / unusable.
+  Runs nv2 v0086 / A v0082, amd a1668 / A a1664. Deleted by f5aafae7f, recoverable at f5aafae7f^.
+  Patch experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch.
+- `MOJOLEARN_IDN_MOE_RESIDENT` (idea H5, lane/moe-resident: grouped device-offset GEMM kernel + launchers in
+  sequence/moe_grouped.mojo, the define in sequence/moe_grouped_fold.mojo, DeviceExec `nofill` and the grouped hidden/out routing
+  in sequence/exec_device.mojo, the resident forward's fill skip in sequence/moe_dev.mojo): moe synthetic NV 5.938x, AMD 3.339x,
+  avg 4.64x; same bits. SLOWER. Runs nv2 v0101 / A v0100, amd a1683 / A a1682. Deleted by 978e7f43b, recoverable at 978e7f43b^.
+  Patch experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch.
+
+## wave-2 w2-decide-lm (2026-10-11)
+
+Wave-2 A/B arms measured same box, same main c8ef6c66d, one run per arm (NV L40S nv2, AMD MI325X; evidence
+~/mojolearn-evidence/round-20261011/w2_decisions.txt and w2_decide.out). Verdict = average of the two vendors' B/A time ratios;
+digests NV == AMD on every cell; no quality change on any cell (same words). Deleted on lane/w2-decide-lm; each code is recoverable at
+the parent of its deletion commit.
+
+- `MOJOLEARN_IDN_GEMM_FILL_SPLITK`: tried device-filled leaf split for under-filled TUNED GEMMs in GemmWorkspace.run (H2). Files: gemm/neural_dispatch.mojo. Result: gemm 1.045, mamba2 1.115 (NV 1.248), mlp 0.941, transformer 1.39 (NV), moe 1.010; AMD all 0.98-1.02; nv2 v0116/v0121, amd a1698/a1703. Verdict NOISE/LOSER. Deleted by 026a811d5, recoverable at 026a811d5^. Patch experiments/removed/MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch.
+- `MOJOLEARN_IDN_LM_LEAN_STEP`: tried out-of-place Adam + device status words on every column (H3). Files: training/byte_lm.mojo. Result: lm-train-step 0.982 (NV 0.975, AMD 0.990), lm-forward 0.942; nv2 v0119, amd a1701. Verdict NOISE. Deleted by 8cc78c8ae, recoverable at 8cc78c8ae^. Patch experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch.
+- `MOJOLEARN_IDN_LM_LOGITS_LEAN`: tried logits non-finite scan folded after the download wait (H4). Files: training/byte_lm_logits.mojo. Result: lm-forward 0.925 (NV 0.829, AMD 1.021; the NV gain is common to all B arms), lm-train-step 0.999; nv2 v0120, amd a1702. Verdict NOISE. Deleted by 066722146, recoverable at 066722146^. Patch experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch.
+- `MOJOLEARN_IDN_ATTN_DEFER_REGIME`: tried device-side regime verdict + deferred corner window, estash gate for forward-only calls (H1). Files: transformer/impl/llama/fused_attention.mojo, modeling_llama.mojo, bindings/_mojolearn_transformer.mojo. Result: transformer-forward 1.376 (NV 1.647, AMD 1.104; NV confirmed by v0139), lm-forward 0.914, lm-train-step 0.989; nv2 v0117, amd a1699. Verdict LOSER. Deleted by 68d9654bb, recoverable at 68d9654bb^. Patch experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch. The patch also restores TF_SESSION_LEAN (shared commit).
+- `MOJOLEARN_IDN_TF_SESSION_LEAN`: tried skip the KV cache fill when the prefill covers the whole capacity (H9). Files: bindings/_mojolearn_transformer.mojo. Result: transformer-forward 1.350 (NV 1.689, AMD 1.011); nv2 v0118, amd a1700. Verdict LOSER. Deleted by 68d9654bb, recoverable at 68d9654bb^. Patch experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch. Deleted in the same commit as ATTN_DEFER_REGIME (they shared the session wiring commit 150df49d9); the patch is the same file and restores both.

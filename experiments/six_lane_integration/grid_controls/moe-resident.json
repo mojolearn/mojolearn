@@ -3,30 +3,12 @@
  "lane": "moe-resident",
  "branch": "lane/moe-resident",
  "head": "26ef6a308",
- "controls": {
-  "moe_resident": {
+ "controls": {},
+ "removed": [
+  {
    "define": "MOJOLEARN_IDN_MOE_RESIDENT",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_MOE_RESIDENT=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "sequence/moe_grouped_fold.mojo:57",
-    "sequence/moe_grouped.mojo:220",
-    "sequence/exec_device.mojo:747",
-    "sequence/exec_device.mojo:792",
-    "sequence/moe_dev.mojo:66"
-   ],
-   "binding": "_mojolearn_x_sequence",
-   "host_binding": "_mojolearn_x_sequence_host",
-   "bits_change": false,
-   "status": "open 2026-10-11 (lane/moe-resident, idea H5); A/B owed nv + amd",
-   "board": "neural:moe (synthetic)",
-   "note": "Idea H5: the grouped MoE path without the E+1 offsets download + mid-forward sync, the per-call GEMM workspace and the scratch zero fills. One launch per product over all experts (grid.z = expert, row extent = capacity bound T), blocks read poff on the device and exit past their expert's count; cells are moe_contract_cell term for term (same bits as the grouped GEMM). Needs MOE_GROUPED_GEMM on (the default)."
+   "control": "moe_resident",
+   "reason": "DELETED 2026-10-11 (lane/w2-decide-neural, 978e7f43b): A/B on main c8ef6c66d, one run per arm, found it SLOWER: moe synthetic 4.64x (NV 5.94, AMD 3.34); nv2 v0101 / A v0100, amd a1683 / A a1682. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at 978e7f43b^; restore with experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch."
   }
- }
+ ]
 }

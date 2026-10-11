@@ -3,51 +3,7 @@
  "lane": "lm-attn-nohost",
  "branch": "lane/lm-attn-nohost",
  "head": "150df49d9",
- "controls": {
-  "attn_defer_regime": {
-   "define": "MOJOLEARN_IDN_ATTN_DEFER_REGIME",
-   "kind": "bool",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_ATTN_DEFER_REGIME"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "transformer/impl/llama/fused_attention.mojo (IDN_ATTN_DEFER_REGIME block after _zero_flag; fused_forward_launch_ran deferred branch)",
-    "transformer/impl/llama/modeling_llama.mojo (estash gate, attn_forward_only)",
-    "bindings/_mojolearn_transformer.mojo (_transformer_run_session arm/read/rerun)"
-   ],
-   "binding": [
-    "_mojolearn_transformer",
-    "_mojolearn_byte_lm"
-   ],
-   "bits_change": false,
-   "status": "new",
-   "note": "Idea H1 (renamed from IDN_ATTN_NO_HOST_REGIME: the host-route fence reads *HOST* define names as host knobs). Regime verdict on the device + deferred corner window, read once with the session downloads; rerun disarmed on a flag. Forward-only calls also skip the fused exp stash (reaches lm-forward via byte_lm's forward_only). byte_lm training does not arm the window yet (training/byte_lm.mojo is another lane's file). ID check needed on the estash gate (plain vs estash launcher ctxv)."
-  },
-  "tf_session_lean": {
-   "define": "MOJOLEARN_IDN_TF_SESSION_LEAN",
-   "kind": "bool",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_TF_SESSION_LEAN"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "bindings/_mojolearn_transformer.mojo (_transformer_run_session discard_cache fill)"
-   ],
-   "binding": [
-    "_mojolearn_transformer"
-   ],
-   "bits_change": false,
-   "status": "new",
-   "note": "Idea H9, partial: skips the stateless prefill's cache zero-fill when l == smax (every slot written). Weight version stamp left out (needs the Python API file)."
-  }
- },
+ "controls": {},
  "algorithms": {
   "neural:transformer-forward": {
    "binding": "_mojolearn_transformer",
@@ -88,6 +44,17 @@
    ]
   }
  },
- "removed": [],
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_ATTN_DEFER_REGIME",
+   "control": "attn_defer_regime",
+   "reason": "DELETED 2026-10-11 (lane/w2-decide-lm, 68d9654bb): A/B on main c8ef6c66d, one run per arm, NV==AMD digests, verdict LOSER: transformer-forward 1.376 (NV 1.647, AMD 1.104; NV confirmed by v0139), lm-forward 0.914, lm-train-step 0.989; nv2 v0117, amd a1699. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at 68d9654bb^; restore with experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch."
+  },
+  {
+   "define": "MOJOLEARN_IDN_TF_SESSION_LEAN",
+   "control": "tf_session_lean",
+   "reason": "DELETED 2026-10-11 (lane/w2-decide-lm, 68d9654bb): A/B on main c8ef6c66d, one run per arm, NV==AMD digests, verdict LOSER: transformer-forward 1.350 (NV 1.689, AMD 1.011); nv2 v0118, amd a1700. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at 68d9654bb^; restore with experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch."
+  }
+ ],
  "notes": {}
 }

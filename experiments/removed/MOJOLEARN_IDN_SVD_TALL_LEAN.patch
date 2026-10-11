@@ -1,0 +1,373 @@
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index c3ee705f6..b371c6b0f 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -52,6 +52,8 @@ from x_decomp.omp_block import DECOMP_FAST_OMP_BLOCK, OMP_TPB, omp_block_fits, o
+ # TOMBSTONE: MOJOLEARN_DECOMP_FAST_GEMM_TILED (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: threadgroup-tiled decomp gemm (x_decomp/fast_gemm.mojo, with its AFCL_L08 slab-depth knob); randomized-svd istella 483.56 -> 640.22 ms (+32.4%), reconstruction error equal.
+ # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch; record in docs/TOMBSTONES.md.
++from x_decomp.xd_lean import IDN_SVD_TALL_LEAN, SVD_LEAN_GROUP
++from x_decomp.rr_one_block_d import orth_lean_test_kernel, rs_round_gated_kernel, rs_sweep_gate_kernel
+ from x_decomp.cells import (
+     lu_perm_src,
+     lu_aux_clamp,
+@@ -219,8 +221,11 @@ comptime XD_NO_FLAG = Int32(2147483647)
+ # `-D MOJOLEARN_IDN_XD_SVD_GROUP_OFF` restores one readback per sweep.
+ comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP and not is_defined["MOJOLEARN_IDN_XD_SVD_GROUP_OFF"]()
+ comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
+-# TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by SHA_SVL; code recoverable at SHA_SVL^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
++# lane xd-rr-one-block (2026-10-11, C4): MOJOLEARN_IDN_SVD_TALL_LEAN (default off;
++# x_decomp/xd_lean.mojo) gates `_svd_on`'s rounds on a device convergence word
++# (SVD_LEAN_GROUP sweeps a readback) and skips `orth_on_device_diag`'s second
++# pass when the first pass's R is diagonal to 2^-20
++comptime XD_SVD_GROUP_MAX = SVD_LEAN_GROUP if IDN_SVD_TALL_LEAN else XD_SVD_GROUP
+ 
+ # lane fam-decomp (2026-10-04), IDENTICAL: a small eigh (n <= IDN_EIGH_SMALL_N)
+ # is ONE launch and one wait, the batched round-robin kernel
+@@ -2518,8 +2523,6 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int,
+     _ = none^
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by SHA_SVL; code recoverable at SHA_SVL^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
+ def orth_on_device_diag(
+     ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int, mut ddiag: DeviceBuffer[DType.float32],
+     with_diag: Bool,
+@@ -2536,9 +2539,21 @@ def orth_on_device_diag(
+     var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
+     # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (each pass as
+     # CholeskyQR); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch.
++    # IDN_SVD_TALL_LEAN (C4 b, svd's U route only: with_diag): one word,
++    # set when the first pass's guarded R is not diagonal to 2^-20
++    var dlean = ctx.enqueue_create_buffer[DType.float32](1)
++    var hlean = ctx.enqueue_create_host_buffer[DType.float32](1)
++    var lean_skip = False
+     for p in range(2):
+         var src = da if p == 0 else dq
+         var dst = dq if p == 0 else da
++        if lean_skip:
++            # C4 b: the first pass already left Q orthonormal to 2^-20 times
++            # float32 rounding: its Q (in dq) is the result, ddiag holds R1's
++            # diagonal (the product with R2 = I); the same skip on the host
++            # (`HostExec._orth_passes`). Bits of U change when this skips.
++            ctx.enqueue_copy(dst_buf=dst, src_buf=src)
++            break
+         ctx.enqueue_copy(dst_buf=dw, src_buf=src)
+         # lane/decomp-apple2: the guard cell (k-sized: the l x l R) on one
+         # device thread, in stream order after the R it reads, so R never
+@@ -2556,6 +2571,17 @@ def orth_on_device_diag(
+         ctx.enqueue_function[trsm_kernel](
+             src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
+         )
++        comptime if IDN_SVD_TALL_LEAN:
++            if p == 0 and with_diag and l > 0:
++                # the skip test on the guarded R1, one word down (one wait in
++                # place of the second pass's QR launches when it skips)
++                enqueue_fill(ctx, dlean, Float32(0.0))
++                ctx.enqueue_function[orth_lean_test_kernel](
++                    r_buf.unsafe_ptr(), dlean.unsafe_ptr(), Int32(l), grid_dim=_blocks(l * l), block_dim=TPB
++                )
++                ctx.enqueue_copy(dst_buf=hlean, src_buf=dlean)
++                ctx.synchronize()
++                lean_skip = hlean.unsafe_ptr().unsafe_load(0) == Float32(0.0)
+         ctx.synchronize()
+         _ = src^
+         _ = dst^
+@@ -2563,6 +2589,8 @@ def orth_on_device_diag(
+     _ = dw^
+     _ = scratch^
+     _ = r_buf^
++    _ = dlean^
++    _ = hlean^
+     ctx.synchronize()
+ 
+ 
+@@ -3645,11 +3673,13 @@ struct DevExec(Exec):
+         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
+         var mm = n + (n % 2)
+         var h = mm // 2
+-        # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by SHA_SVL; code recoverable at SHA_SVL^.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
+-        var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1) * XD_SVD_GROUP)
+-        var dfirst = ctx.enqueue_create_buffer[DType.int32](XD_SVD_GROUP)
+-        var hfirst = ctx.enqueue_create_host_buffer[DType.int32](XD_SVD_GROUP)
++        var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1) * XD_SVD_GROUP_MAX)
++        var dfirst = ctx.enqueue_create_buffer[DType.int32](XD_SVD_GROUP_MAX)
++        var hfirst = ctx.enqueue_create_host_buffer[DType.int32](XD_SVD_GROUP_MAX)
++        # IDN_SVD_TALL_LEAN: done[0] converged (sticky), done[1] sweeps run
++        var ddone = ctx.enqueue_create_buffer[DType.float32](2)
++        var hdone = ctx.enqueue_create_host_buffer[DType.float32](2)
++        enqueue_fill(ctx, ddone, Float32(0.0))
+         ctx.synchronize()
+         # lane idn-cov-overflow: the power-of-two range scale of
+         # x_decomp/eigh_scale.mojo on A before the QR (its column norms and
+@@ -3663,6 +3693,35 @@ struct DevExec(Exec):
+         ctx.enqueue_function[pj_identity_kernel](_p(vt), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+         var converged = n < 2
+         var executed = 0
++        comptime if IDN_SVD_TALL_LEAN:
++            # C4 c: SVD_LEAN_GROUP sweeps a readback, every round behind the
++            # sticky device word (rs_round_gated_kernel): the sweeps after the
++            # converging one return at once. The same rotations as the loop
++            # below (a sweep after convergence was an identity there too),
++            # the same X_DECOMP_SVD_SWEEPS bound on the sweeps run.
++            while not converged and executed < X_DECOMP_SVD_SWEEPS:
++                var lgroup = min(SVD_LEAN_GROUP, X_DECOMP_SVD_SWEEPS - executed)
++                enqueue_fill(ctx, flags, Float32(0.0))
++                enqueue_fill(ctx, dfirst, XD_NO_FLAG)
++                for sg in range(lgroup):
++                    var lfl = _p(flags) + sg * h
++                    for rd in range(mm - 1):
++                        ctx.enqueue_function[rs_round_gated_kernel](
++                            _p(rt), _p(vt), lfl, _p(ddone), Int32(n), Int32(mm), Int32(rd), X_DECOMP_SVD_TOL,
++                            grid_dim=h, block_dim=RS_TPB,
++                        )
++                        _round_sync(ctx, rd)
++                    ctx.enqueue_function[xd_flag_first_kernel](
++                        lfl, Int32(h), dfirst.unsafe_ptr() + sg, grid_dim=_blocks(h), block_dim=TPB
++                    )
++                    ctx.enqueue_function[rs_sweep_gate_kernel](
++                        dfirst.unsafe_ptr() + sg, _p(ddone), XD_NO_FLAG, grid_dim=1, block_dim=1
++                    )
++                ctx.enqueue_copy(dst_buf=hdone, src_buf=ddone)
++                ctx.synchronize()
++                executed += lgroup
++                if hdone.unsafe_ptr().unsafe_load(0) != Float32(0.0):
++                    converged = True
+         while not converged and executed < X_DECOMP_SVD_SWEEPS:
+             # XD_SVD_GROUP sweeps behind one wait (IDN_XD_SVD_GROUP), sweep g
+             # of the group on flag slice g and lowest-flag word g
+@@ -3718,6 +3777,8 @@ struct DevExec(Exec):
+         _ = flags^
+         _ = dfirst^
+         _ = hfirst^
++        _ = ddone^
++        _ = hdone^
+ 
+     @staticmethod
+     def lasso_rows(
+diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
+index 8e976329c..42a9ab9ff 100644
+--- a/x_decomp/host.mojo
++++ b/x_decomp/host.mojo
+@@ -38,6 +38,7 @@ from decomposition.host.linalg_public import host_eigh, host_qr_r
+ from checks.numerics import ftz
+ from core.host_parallel import host_parallelize
+ from core.host_predict_threads import host_predict_chunk, host_predict_task_count
++from x_decomp.xd_lean import IDN_SVD_TALL_LEAN, orth_lean_skip
+ from x_decomp.cells import (
+     lu_perm_src,
+     lu_result_word,
+@@ -653,9 +654,7 @@ struct HostExec(Exec):
+ 
+     @staticmethod
+     def _orth_passes(a: F32Ptr, m: Int, l: Int, diag: F32Ptr, with_diag: Bool) raises:
+-        # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by SHA_SVL; code recoverable at SHA_SVL^.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
+-        for _ in range(2):
++        for ps in range(2):
+             var w = List[Float32](capacity=m * l)
+             for t in range(m * l):
+                 w.append(a.unsafe_load(t))
+@@ -671,8 +670,16 @@ struct HostExec(Exec):
+                 trsm_row(pw, pr, a, i, l)
+ 
+             xd_parallel(row, m)
++            var skip = False
++            comptime if IDN_SVD_TALL_LEAN:
++                # C4 b (lane xd-rr-one-block): the device's skip of the second
++                # pass (`orth_on_device_diag`), the same test on the same R1
++                if ps == 0 and with_diag and l > 0:
++                    skip = orth_lean_skip(pr, l)
+             _ = r^
+             _ = w^
++            if skip:
++                break
+ 
+     @staticmethod
+     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
+diff --git a/x_decomp/rr_one_block_d.mojo b/x_decomp/rr_one_block_d.mojo
+new file mode 100644
+index 000000000..dda036bc5
+--- /dev/null
++++ b/x_decomp/rr_one_block_d.mojo
+@@ -0,0 +1,95 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""Device kernels of lane xd-rr-one-block (2026-10-11; switches and cost
++rule in x_decomp/xd_lean.mojo). NOT COMPILED, NOT VERIFIED, NOT MEASURED.
++
++C3 `rr_eigh_one_block_d_kernel` (MOJOLEARN_IDN_RR_ONE_BLOCK_D) deleted 2026-10-11 (loser).
++
++C4 c `rs_round_gated_kernel` + `rs_sweep_gate_kernel`
++(MOJOLEARN_IDN_SVD_TALL_LEAN): `rs_round_kernel`'s statements unchanged
++behind a sticky device convergence word, set after the first sweep whose
++rotation flags are all clear. No bit moves.
++
++C4 b `orth_lean_test_kernel`: the skip test of the orth's second pass.
++"""
++from std.gpu import block_dim, block_idx, thread_idx
++from std.memory import stack_allocation
++from max.gpu.memory import AddressSpace
++from max.gpu.sync import barrier
++
++from checks.numerics import ftz
++from x_decomp.cells import F32Ptr, I32Ptr
++from x_decomp.jacobi2 import dev_barrier
++from x_decomp.rr import RR_OFF_TPB, rr_block, rr_cs, rr_gate_state, rr_row_off, rr_vrow
++from x_decomp.rr_svd import RS_TPB, rs_apply_lane, rs_decide, rs_lane3, rs_pair
++from x_decomp.xd_lean import orth_lean_violates
++
++
++# TOMBSTONE: MOJOLEARN_IDN_RR_ONE_BLOCK_D (loser) deleted 2026-10-11 by SHA_RR; code recoverable at SHA_RR^.
++# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch
++
++
++def rs_round_gated_kernel(
++    rt: F32Ptr, vt: F32Ptr, flag: F32Ptr, done: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32, tol: Float32
++):
++    """`rs_round_kernel` (x_decomp/rr_svd_device.mojo) unchanged behind the
++    sticky word done[0] (`rs_sweep_gate_kernel`): nothing once converged.
++    The load of done[0] is block-uniform, so the early return precedes
++    every barrier for all threads alike."""
++    if done.unsafe_load(0) != Float32(0.0):
++        return
++    var n = Int(n_in)
++    var b = Int(block_idx.x)
++    var t = Int(thread_idx.x)
++    var pq = rs_pair(Int(round_in), b, Int(m_in))
++    if pq[1] >= n:
++        return
++    var s0 = stack_allocation[RS_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var s1 = stack_allocation[RS_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var s2 = stack_allocation[RS_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var l = rs_lane3(rt, n, pq[0], pq[1], t)
++    s0[t] = l[0]
++    s1[t] = l[1]
++    s2[t] = l[2]
++    barrier()
++    var w = RS_TPB // 2
++    while w > 0:
++        if t < w:
++            s0[t] = ftz(s0[t] + s0[t + w])
++            s1[t] = ftz(s1[t] + s1[t + w])
++            s2[t] = ftz(s2[t] + s2[t + w])
++        barrier()
++        w = w // 2
++    var d = rs_decide(s0[0], s1[0], s2[0], tol)
++    if d[0] > Float32(0.0):
++        rs_apply_lane(rt, vt, n, pq[0], pq[1], d[1], d[2], t)
++        if t == 0:
++            flag.unsafe_store(b, Float32(1.0))
++
++
++def rs_sweep_gate_kernel(first: I32Ptr, done: F32Ptr, no_flag: Int32):
++    """After a sweep's `xd_flag_first_kernel`: while not converged, done[1]
++    += 1 (sweeps run) and done[0] = 1 when the sweep rotated nothing
++    (first[0] still `no_flag`). A gated sweep (done[0] already 1) leaves
++    both. One thread."""
++    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
++        if done.unsafe_load(0) == Float32(0.0):
++            done.unsafe_store(1, done.unsafe_load(1) + Float32(1.0))
++            if first.unsafe_load(0) == no_flag:
++                done.unsafe_store(0, Float32(1.0))
++
++
++def orth_lean_test_kernel(r: F32Ptr, out_flag: F32Ptr, l_in: Int32):
++    """out_flag[0] = 1 when some cell (i, j), i < j, of the guarded R
++    violates `orth_lean_violates` (the caller fills 0). Every writer stores
++    the same word, so the result does not depend on their order. Thread per
++    (i, j) of the l x l grid."""
++    var l = Int(l_in)
++    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if t < l * l:
++        var i = t // l
++        var j = t - i * l
++        if i < j and orth_lean_violates(r, l, i, j):
++            out_flag.unsafe_store(0, Float32(1.0))
++        elif l == 1 and t == 0 and r.unsafe_load(0) == Float32(0.0):
++            out_flag.unsafe_store(0, Float32(1.0))
+diff --git a/x_decomp/xd_lean.mojo b/x_decomp/xd_lean.mojo
+new file mode 100644
+index 000000000..f2f83b1f3
+--- /dev/null
++++ b/x_decomp/xd_lean.mojo
+@@ -0,0 +1,77 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""Switches and host-safe cells of lane xd-rr-one-block (2026-10-11, gap
++program C3 + C4). NOT COMPILED, NOT VERIFIED, NOT MEASURED: the
++orchestrator compiles every switch off and each on.
++
++`MOJOLEARN_IDN_RR_ONE_BLOCK_D` (C3) deleted 2026-10-11 (loser; docs/TOMBSTONES.md).
++
++`MOJOLEARN_IDN_SVD_TALL_LEAN` (C4, default off), two parts on
++`linalg.svd`'s tall route (python/mojolearn/_linalg_impl.py `_svd_tall`):
++  (c) `DevExec._svd_on`'s one-sided Jacobi rounds sit behind a sticky
++      device convergence word (`rs_round_gated_kernel`): the sweeps enqueued
++      after the converging one return at once instead of rotating nothing
++      over the whole grid, so a readback covers SVD_LEAN_GROUP = 8 sweeps
++      (was XD_SVD_GROUP = 4) at the cost of cheap no-op launches. No bit
++      moves (a sweep after convergence was already an identity).
++  (b) `orth_diag`'s second sliced-QR pass (U = orth(A V / s)) is skipped
++      when the first pass's guarded R is diagonal to 2^-20 relative
++      (`orth_lean_skip`): the first pass already left Q orthonormal to that
++      tolerance times float32 rounding, so the second pass only rounds again.
++      BITS CHANGE when it skips (U only; S, V never), the same decision on
++      NVIDIA, AMD and the host (`HostExec._orth_passes`): exact compares of
++      the same words, no fold.
++  (a) of the idea (skip the QR inside `_svd_on` because its input is a
++      TSQR's R) does not apply: `_svd_tall` hands `Kit.svd` the tall A
++      itself, so that QR is the tall factorization, not a redundant one.
++"""
++from std.sys.compile import is_defined
++
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
++from x_decomp.cells import F32Ptr
++
++comptime _XD_LEAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++
++# TOMBSTONE: MOJOLEARN_IDN_RR_ONE_BLOCK_D (loser) deleted 2026-10-11 by SHA_RR; code recoverable at SHA_RR^.
++# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch
++#: C4 switch (x_decomp/device.mojo `_svd_on`, `orth_on_device_diag`;
++#: x_decomp/host.mojo `_orth_passes`)
++comptime IDN_SVD_TALL_LEAN = _XD_LEAN_IDN and is_defined["MOJOLEARN_IDN_SVD_TALL_LEAN"]()
++
++#: sweeps between two convergence readbacks of the gated Jacobi (C4 c): a
++#: well-conditioned R converges in ~8-12 sweeps, so one readback lands near
++#: convergence and the up to 7 sweeps past it are gated no-op launches (each
++#: returns on one word load); a size rule, not a shape rule.
++comptime SVD_LEAN_GROUP = 8
++
++#: C4 b: |R[i, j]| <= ORTH_LEAN_TOL min(|R[i, i]|, |R[j, j]|) for every i < j
++#: means the first pass's input was orthogonal to 2^-20 (the svd's own
++#: rotation tolerance), so the second pass is skipped
++comptime ORTH_LEAN_TOL = Float32(9.5367431640625e-07)
++
++
++def orth_lean_violates(R: F32Ptr, l: Int, i: Int, j: Int) -> Bool:
++    """Cell (i, j), i < j, of the skip test on the guarded l x l R: True
++    when R[i, j] is not negligible against the two pivots, or a pivot is 0
++    (a guarded dependent column: the second pass then runs as before).
++    Exact float32 compares of stored words: the same verdict everywhere."""
++    var di = abs(ftz(R.unsafe_load(i * l + i)))
++    var dj = abs(ftz(R.unsafe_load(j * l + j)))
++    var lo = min(di, dj)
++    if lo == Float32(0):
++        return True
++    var off = abs(ftz(R.unsafe_load(i * l + j)))
++    return not (off <= ftz(identical_mul(ORTH_LEAN_TOL, lo)))
++
++
++def orth_lean_skip(R: F32Ptr, l: Int) -> Bool:
++    """The host column's verdict (`HostExec._orth_passes`): True when no
++    cell violates (the device's `orth_lean_test_kernel` sets one word per
++    violating cell; any order gives the same word)."""
++    for i in range(l):
++        for j in range(i + 1, l):
++            if orth_lean_violates(R, l, i, j):
++                return False
++    if l == 1:
++        return abs(ftz(R.unsafe_load(0))) != Float32(0)
++    return l > 0

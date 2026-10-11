@@ -5,24 +5,6 @@
   "head": "a4f3506a2",
   "mode": "IDENTICAL",
   "controls": {
-    "IDN_LG_FUSED_CHAIN": {
-      "define": "MOJOLEARN_IDN_LG_FUSED_CHAIN",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_IDN_LG_FUSED_CHAIN"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
-      ],
-      "binding": "_mojolearn_gbdt,_mojolearn_gbdt_host",
-      "bits_change": false,
-      "status": "pending",
-      "note": "F2: Lossguide on the fused 4-launch split chain; K2 stat propagation skipped (stat count 0) so DEVIATION 352 recomputes child stats; split-time right-child histogram copy kept (T19 dropped it). Gate on istella logloss (T19 trap)."
-    },
     "hist_packed_gh": {
       "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
       "kind": "switch",
@@ -73,14 +55,10 @@
       "binding": "_mojolearn_gbdt",
       "route": "fit: doc_parallel_boosting -> fit_non_symmetric_tree (greedy_search_helper_depthwise, Lossguide, LG_EXACT_ID) -> split chain (8 launches; IDN_LG_FUSED_CHAIN: _launch_fused_split_chain + histogram copy)",
       "controls": [
-        "IDN_LG_FUSED_CHAIN",
         "hist_packed_gh",
         "hist_warp_agg"
       ],
       "interaction_groups": [
-        [
-          "IDN_LG_FUSED_CHAIN"
-        ],
         [
           "hist_packed_gh",
           "hist_warp_agg"
@@ -91,19 +69,22 @@
       "binding": "_mojolearn_gbdt",
       "route": "fit: CatBoost CTR columns -> doc_parallel_boosting -> fit_non_symmetric_tree (Lossguide) per permutation",
       "controls": [
-        "IDN_LG_FUSED_CHAIN",
         "hist_packed_gh",
         "hist_warp_agg"
       ],
       "interaction_groups": [
-        [
-          "IDN_LG_FUSED_CHAIN"
-        ],
         [
           "hist_packed_gh",
           "hist_warp_agg"
         ]
       ]
     }
-  }
+  },
+  "removed": [
+    {
+      "define": "MOJOLEARN_IDN_LG_FUSED_CHAIN",
+      "control": "IDN_LG_FUSED_CHAIN",
+      "reason": "DELETED 2026-10-11 (lane w2-decide-linalg, deletion 9ea0ceea2; recoverable at 9ea0ceea2^; patch experiments/removed/MOJOLEARN_IDN_LG_FUSED_CHAIN.patch): NOISE: gbdt-lossguide istella 1.001, taxi 0.988, gbdt-categorical 1.024; nv2 v0113, amd a1695 (A v0112/a1694). A/B on main c8ef6c66d, same box, one run per arm, NV==AMD digests; see docs/TOMBSTONES.md"
+    }
+  ]
 }

@@ -872,32 +872,8 @@ comptime BYTE_LM_EMB_HEAD_VIEWS = (
     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
 )
 
-# H3 (lane lm-lean-step, 2026-10-11): `-D MOJOLEARN_IDN_LM_LEAN_STEP`, default OFF.
-# Structural reason: the shipped AMD/host update copies param, m and v into
-# the shadows (3 x n floats), runs the entry scans over param/grad/m/v, the
-# in-place Adam, then `validate_device_state` re-reads param/m/v (another
-# 4 x n) with its own waits. Under the switch every column takes the existing
-# out-of-place glue update (`optskip | noshadow`, NVIDIA's shipped arm since
-# DEVIATION 2649): the kernel writes the new state into `shadow_*` and the
-# handles swap, so the pre-update state IS the shadow (no copies), and the
-# status kernel (`adam_update_oop_status_kernel`, the I10 live-status path)
-# ORs the non-finite / negative-v refusal into four device words read with
-# the one final wait, replacing the post-update scans. The gradient scan
-# before the update stays (it refuses before any state moves). Same Adam
-# arithmetic per word as the OOP kernel NVIDIA ships, so NVIDIA keeps its
-# bits and AMD/host move to the same bits (OOP == in-place per word).
-# Expected: ~1 GB less traffic and ~4 fewer waits per step:
-# lm-train-step NV 35 -> ~33 ms, AMD 43 -> ~38 ms.
-# Not in this switch (left for a later lane): the grouped dW|dX launch (c),
-# the chunked head (d: already the runtime `lm_chunked_head_v2` flag) and
-# moving the CE/ids waits to device words (e).
-comptime IDN_LM_LEAN_STEP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_LM_LEAN_STEP"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    and not BYTE_LM_FAULT_INJECT
-)
-
+# TOMBSTONE: MOJOLEARN_IDN_LM_LEAN_STEP (noise: lm-train-step 0.982) deleted 2026-10-11 by 8cc78c8ae; code recoverable at 8cc78c8ae^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch
 # NI27 source candidate, not a promotion of the Apple FAST experiment.
 # Only aliases change; every gradient writer keeps the same arithmetic.
 # Both parameter and gradient views are rebound before each use, including
@@ -1919,13 +1895,9 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     # path, unchanged.
     var glue_update = False
     var live_validated = False
-    comptime if IDN_LM_LEAN_STEP:
-        # H3: out-of-place update + device status words, no shadow copies.
-        glue_update = True
-        live_validated = _byte_glue_update(ctx, tr, next_step, STEP_GLUE_OPTSKIP | STEP_GLUE_NOSHADOW)
-        # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam, arm 1; LOSER: lm-train-step bytes NV 35.51 -> 36.18 ms (1.019), AMD 42.76 -> 44.61 ms (1.043), avg 1.03, NV v0067/v0068, AMD r1011.owed.gadam.ab) deleted 2026-10-11 by cdb22ee93; code recoverable at cdb22ee93^.
-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
-    elif STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
+    # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam, arm 1; LOSER: lm-train-step bytes NV 35.51 -> 36.18 ms (1.019), AMD 42.76 -> 44.61 ms (1.043), avg 1.03, NV v0067/v0068, AMD r1011.owed.gadam.ab) deleted 2026-10-11 by cdb22ee93; code recoverable at cdb22ee93^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
+    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
         var glue_arm = step_glue_arm_from_env()
         if (glue_arm & STEP_GLUE_UPDATE_BITS) != 0:
             glue_update = True
@@ -2141,7 +2113,7 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     The fault-injection build is refused at compile time: its `opt_refuse`
     site writes `m_state` between the shadow copy and the optimizer, which
     is the one write the `optskip` argument excludes (brief section 5.2)."""
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE or IDN_LM_LEAN_STEP:
+    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
         comptime assert not BYTE_LM_FAULT_INJECT, (
             "the step glue update path and MOJOLEARN_BYTE_LM_FAULT_INJECT are"
             " not combined: the G4 fault sites assume the shipped update order"
@@ -2192,9 +2164,6 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
         # OOP Adam path. Fault builds keep the required post-fault scan;
         # the path already refuses fault injection before it changes state.
         use_live_status = out_of_place and not BYTE_LM_FAULT_INJECT
-    comptime if IDN_LM_LEAN_STEP:
-        # H3: the status words replace validate_after's four scans.
-        use_live_status = out_of_place
     var live = List[DeviceBuffer[DType.int32]]()
     if use_live_status:
         live.append(ctx.enqueue_create_buffer[DType.int32](4))

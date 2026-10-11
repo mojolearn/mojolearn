@@ -5,69 +5,41 @@
  "head": "524c1ffff",
  "head_note": "head = last code commit before this file; the file is committed on top of it.",
  "controls": {
-  "idn_tsne_rep_rb4": {
-   "define": "MOJOLEARN_IDN_TSNE_REP_RB4",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_TSNE_REP_RB4"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_ann/tsne_device.mojo:720",
-    "x_ann/tsne_device.mojo:729"
-   ],
-   "binding": "_mojolearn_x_ann",
-   "bits_change": false,
-   "status": "new",
-   "note": "t-SNE repulsion tile with 4 rows per thread (64 rows per block per staged 256-candidate tile): same lane folds, same skip branch, same Z pinned tree; ideas-all-gaps D2. A/B owed: tsne taxi + istella nv (+ amd); ID check expected MATCH with main."
-  },
   "idn_svc_one_block": {
-   "define": "MOJOLEARN_IDN_SVC_ONE_BLOCK",
+   "define": "MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_SVC_ONE_BLOCK"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "svm/impl/smosolver.mojo:327",
     "svm/impl/smosolver.mojo:343"
    ],
    "binding": "_mojolearn_svm",
    "bits_change": false,
-   "status": "new",
-   "note": "SMO block solve: block width cap 256 -> 1024 (hardware block limit), so n_ws <= 1024 runs as one block with no grid exchange; selections are total-order so same words; ideas-all-gaps D4 (which predicted a bit change: wrong, the winner is width-invariant). A/B owed: svc taxi + istella nv (+ amd)."
+   "status": "promoted:w2-decide-algos-20261011",
+   "note": "PROMOTED to the IDENTICAL default 2026-10-11 by lane/w2-decide-algos (same-box A/B on main c8ef6c66d, one run per arm, NV L40S + AMD MI325X): svc istella 0.720, taxi 0.663 (NV .685/.629 AMD .755/.697); v0127/a1709 vs A v0126/a1708. `MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF` restores the old path. Before: SMO block solve: block width cap 256 -> 1024 (hardware block limit), so n_ws <= 1024 runs as one block with no grid exchange; selections are total-order so same words; ideas-all-gaps D4 (which predicted a bit change: wrong, the winner is width-invariant). A/B owed: svc taxi + istella nv (+ amd)."
   }
  },
  "algorithms": {
-  "algos:tsne": {
-   "binding": "_mojolearn_x_ann",
-   "route": "TSNE.fit -> tsne_device _enq_repulse_split (repulse_rep_rb4_kernel) [idn_tsne_rep_rb4]",
-   "controls": [
-    "idn_tsne_rep_rb4"
-   ],
-   "interaction_groups": [
-    [
-     "idn_tsne_rep_rb4"
-    ]
-   ]
-  },
   "algos:svc": {
    "binding": "_mojolearn_svm",
    "route": "SVC.fit -> smosolver launch_block_solve (smo_grid_solve_kernel[1024], one block) [idn_svc_one_block]",
    "controls": [
     "idn_svc_one_block"
    ],
-   "interaction_groups": [
-    [
-     "idn_svc_one_block"
-    ]
-   ]
+   "interaction_groups": []
   }
- }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_TSNE_REP_RB4",
+   "control": "idn_tsne_rep_rb4",
+   "reason": "DELETED 2026-10-11 (lane w2-decide-algos, deletion 826f3d57e): LOSER: tsne istella 1.036, taxi 1.362 (NV 1.581 AMD 1.142); v0130/a1712 vs A v0128/a1710 + v0129/a1711. Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_REP_RB4.patch; docs/TOMBSTONES.md."
+  }
+ ]
 }

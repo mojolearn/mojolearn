@@ -40,25 +40,8 @@ comptime MOE_GROUPED_GEMM = (
     and not is_defined["MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-
-#: MOJOLEARN_IDN_MOE_RESIDENT (lane moe-resident, 2026-10-11; idea H5, default
-#: OFF, an experiment): the grouped path without the mid-forward offsets
-#: download + `ctx.synchronize()`, without the per-call GEMM workspace and
-#: without the zero fills of the MoE scratch. The per-expert products become
-#: ONE launch per product (grid.z = expert) whose blocks read their expert's
-#: row range from the device `poff` and exit at the top past its count; the
-#: grid's row extent is the capacity bound T (top-k picks are distinct
-#: experts, so no expert owns more than T pairs: a cost bound covering every
-#: shape, not a benchmark dimension). Each cell is `moe_contract_cell` term
-#: for term (same leaves, same chains, same tree, same flushes), so the
-#: stored words equal the grouped GEMM's: NO BIT CHANGE, host twin unchanged.
-#: Expected: moe NV 14.2 -> ~10 ms, AMD 15.2 -> ~9 ms (the sync, ~600 MB of
-#: fills and 16 under-filled launches go). A/B on nv + amd decides.
-comptime MOE_RESIDENT = (
-    MOE_GROUPED_GEMM
-    and is_defined["MOJOLEARN_IDN_MOE_RESIDENT"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
 
 #: the fold stack's depth: 2^12 leaves cover the contract's CONTRACT_MAX_LEAVES = 1024
 comptime MOE_FOLD_LEVELS = 12

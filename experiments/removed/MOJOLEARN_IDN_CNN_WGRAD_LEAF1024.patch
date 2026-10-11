@@ -1,0 +1,484 @@
+diff --git a/x_cnn/cnn_dx_wgrad.mojo b/x_cnn/cnn_dx_wgrad.mojo
+new file mode 100644
+index 000000000..f0db640a9
+--- /dev/null
++++ b/x_cnn/cnn_dx_wgrad.mojo
+@@ -0,0 +1,67 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""Lane cnn-dx-wgrad (2026-10-11, ideas-all-gaps G1/G2): the two conv
++backward switches, shared by the device path (x_cnn/device.mojo) and the
++host twin (x_cnn/host/ops_host.mojo) so both columns read ONE gate and ONE
++leaf rule. Both default OFF; both change bits on NVIDIA, AMD and the host
++together (same contract, same fold order).
++
++`MOJOLEARN_IDN_CNN_DX_IMPLICIT` (G1): dx as an implicit transposed
++convolution. Each dx cell (n, c, h, w) is one contract over
++k = OC * KH * KW (k index `oc * KH*KW + kh * KW + kw`), the A operand
++gathered from the rows-layout output gradient g at (oh, ow) =
++((h + PH - kh DH) / SH, (w + PW - kw DW) / SW) (zero where not integral or
++out of range), the B operand W[oc, c, kh, kw]; leaves
++`contract_partition(k)`, the contract's balanced fold. Structural reason:
++today dcols = g . W (rows x C*KH*KW, 462 MB at conv2d) is written and
++re-read uncoalesced by col2im; the implicit form never materializes it and
++is one forward-shaped launch. Expected: conv2d NV 6.3 -> ~4.3 ms, AMD
++6.2 -> ~4.0 ms; conv1d 10.1 -> ~7. B arm: the define off (dcols + col2im,
++including `MOJOLEARN_NI14_COL2IM`).
++
++`MOJOLEARN_IDN_CNN_WGRAD_LEAF1024` (G2): the dW contract over the
++N*OH*OW rows takes leaves of `CNN_WGRAD_LEAF` = 1024 rows (raised only to
++keep P <= CONTRACT_MAX_LEAVES = 1024) instead of `contract_partition(rows)`
++(leaf ~196 at conv2d, P capped at 1024). Structural reason: the leaf
++partial workspace is P * OC * C*KH*KW floats (151 MB at conv2d, written
++then re-read by the fold); 1024-row leaves cut P ~5x (~29 MB) and reuse
++each staged tile 5x longer. The 1024 is a cost constant (partial traffic
++vs leaf-kernel parallelism; at 1024 rows a leaf is 64 staged pages, and
++every conv with >= 64k rows keeps >= 64 leaves of parallelism), never a
++shape rule. The fold is the contract's balanced tree over the P partials
++(the GEMM's fold kernels, unchanged). Expected: dW share ~1.5 -> ~0.6 ms per
++conv on NV; conv2d 6.3 -> ~5.3 ms.
++"""
++
++from std.sys.compile import is_defined
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from x_cnn.ops import NN14_BOUNDED_IM2COL
++
++#: the implicit-conv route of x_cnn/device.mojo (NI12_IMPLICIT_CONV), spelled
++#: here without its GPU imports so the host twin reads the same gate
++comptime _CNN_IMPLICIT_ROUTE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    and not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"]()
++    and not NN14_BOUNDED_IM2COL
++)
++comptime IDN_CNN_DX_IMPLICIT = _CNN_IMPLICIT_ROUTE and is_defined["MOJOLEARN_IDN_CNN_DX_IMPLICIT"]()
++comptime IDN_CNN_WGRAD_LEAF1024 = _CNN_IMPLICIT_ROUTE and is_defined["MOJOLEARN_IDN_CNN_WGRAD_LEAF1024"]()
++
++#: G2's leaf (rows per dW leaf partial), see the module doc
++comptime CNN_WGRAD_LEAF = 1024
++#: the GEMM fold kernels' leaf cap (contract 13.4, CONTRACT_MAX_LEAVES)
++comptime CNN_WGRAD_MAX_LEAVES = 1024
++
++
++def cnn_wgrad_partition(rows: Int) -> Tuple[Int, Int]:
++    """(leaf, P) of G2's dW contract over `rows`: leaf = max(1024,
++    ceil(rows / 1024)), P = ceil(rows / leaf). The device leaf kernel and
++    the host twin both call this; nothing else produces G2's partition."""
++    if rows <= 0:
++        return (CNN_WGRAD_LEAF, 0)
++    var leaf = CNN_WGRAD_LEAF
++    var need = (rows + CNN_WGRAD_MAX_LEAVES - 1) // CNN_WGRAD_MAX_LEAVES
++    if need > leaf:
++        leaf = need
++    return (leaf, (rows + leaf - 1) // leaf)
+diff --git a/x_cnn/device.mojo b/x_cnn/device.mojo
+index 45386e903..12586a365 100644
+--- a/x_cnn/device.mojo
++++ b/x_cnn/device.mojo
+@@ -39,6 +39,7 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN
+ from gemm.contract import OP_NN, OP_NT, OP_TN
+ from gemm.experiments.neural_tiled_v2 import NI09_TILED_BIAS, neural_bias_gemm
+ from x_cnn.neural_col2im import NI14_TILED_COL2IM, NI14_COL2IM, NI14_COL2IM_BOUNDED, neural_col2im_tiled
++from x_cnn.cnn_dx_wgrad import IDN_CNN_DX_IMPLICIT, IDN_CNN_WGRAD_LEAF1024, cnn_wgrad_partition
+ from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
+ from core.staged_download import download_f32_into
+ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+@@ -688,6 +689,10 @@ def _implicit_wgrad(
+     if rows <= 0 or OC <= 0 or ckk <= 0:
+         return
+     var lp = contract_partition(rows)
++    comptime if IDN_CNN_WGRAD_LEAF1024:
++        # G2 (x_cnn/cnn_dx_wgrad.mojo): 1024-row leaves, P ~5x smaller; the
++        # host twin passes the same partition to gemm_host_into
++        lp = cnn_wgrad_partition(rows)
+     var mn = OC * ckk
+     var wsp = ws(ctx, slot, lp[1] * mn)
+     ctx.enqueue_function[implicit_wgrad_leaf_kernel](
+@@ -708,6 +713,152 @@ def _implicit_wgrad(
+     _ = wsp^
+ 
+ 
++def implicit_dx_kernel(g: FP, w: FP, gx: FP, p: IP, rows_in: Int32, leaf_in: Int32, count_in: Int32):
++    """G1 `MOJOLEARN_IDN_CNN_DX_IMPLICIT` (x_cnn/cnn_dx_wgrad.mojo): dx as an
++    implicit transposed convolution. Row r = (n, h, w) of the N*H*W input
++    pixels, column c of the C input channels, contract index
++    kk = oc * KH*KW + kh * KW + kw over k = OC * KH*KW:
++    A[r, kk] = g[(n, oh, ow), oc] with oh = (h + PH - kh DH) / SH and
++    ow = (w + PW - kw DW) / SW when both are integral and in range, else
++    +0.0; B[kk, c] = W[oc, c, kh, kw]. `implicit_conv_kernel`'s tile, chain
++    and leaf fold (64 rows x 64 channels a block, 4 x 4 cells a thread, the
++    leaf partials on `_fold_push_local`); `leaf_in`, `count_in` are
++    `contract_partition(OC*KH*KW)`. The cell is stored ftz'd into gx (NCHW).
++    The host twin (ops_host `_conv_dx_implicit_host`) runs gemm_host_into on
++    the same A and B: the same leaves, chain and tree."""
++    var atile = stack_allocation[NI12_KS * NI12_TMP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
++    var btile = stack_allocation[NI12_KS * NI12_TNP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
++    var tid = Int(thread_idx.x)
++    var tr = tid // NI12_RS
++    var tc = tid - tr * NI12_RS
++    var row0 = Int(block_idx.x) * NI12_TM
++    var col0 = Int(block_idx.y) * NI12_TN
++    var rows = Int(rows_in)
++    var C = _gp(p, CP_C); var H = _gp(p, CP_H); var W = _gp(p, CP_W)
++    var KH = _gp(p, CP_KH); var KW = _gp(p, CP_KW)
++    var OH = _gp(p, CP_OH); var OW = _gp(p, CP_OW); var OC = _gp(p, CP_OC)
++    var SH = _gp(p, CP_SH); var SW = _gp(p, CP_SW)
++    var PH = _gp(p, CP_PH); var PW = _gp(p, CP_PW)
++    var DH = _gp(p, CP_DH); var DW = _gp(p, CP_DW)
++    var KK = KH * KW
++    var ckk = C * KK
++    var kdim = OC * KK
++    var HW = H * W
++    # A staging: this thread owns tile row `srow` for 4 taps per slab
++    var srow = tid - (tid // NI12_TM) * NI12_TM
++    var skk = tid // NI12_TM
++    var grow = row0 + srow
++    var slive = grow < rows
++    var sgb = 0
++    var sth = 0
++    var stw = 0
++    if slive:
++        var n = _ni12_udiv(grow, HW)
++        var rem = grow - n * HW
++        var h = _ni12_udiv(rem, W)
++        var wq = rem - h * W
++        sgb = n * OH * OW
++        sth = h + PH
++        stw = wq + PW
++    # B staging: tap `page + sbk` of 4 channels `col0 + sboc + 16 l`
++    var sboc = tid // NI12_KS
++    var sbk = tid - sboc * NI12_KS
++    var fl = stack_allocation[TUNED_FOLD_SLOTS * NI12_NCELL, Scalar[DType.float32]]()
++    var occ = 0
++    var leaf = Int(leaf_in)
++    for t in range(Int(count_in)):
++        var lo = t * leaf
++        var hi = min(lo + leaf, kdim)
++        var acc = SIMD[DType.float32, NI12_NCELL](0.0)
++        var page = lo
++        while page < hi:
++            var cnt = min(NI12_KS, hi - page)
++            comptime for l in range(NI12_RC):
++                var k_a = skk + NI12_RC * l
++                var av = Float32(0.0)
++                if slive and k_a < cnt:
++                    var kk = page + k_a
++                    var oc = _ni12_udiv(kk, KK)
++                    var t2 = kk - oc * KK
++                    var kh = _ni12_udiv(t2, KW)
++                    var kw = t2 - kh * KW
++                    var th = sth - kh * DH
++                    var tw = stw - kw * DW
++                    if th >= 0 and tw >= 0:
++                        var oh = _ni12_udiv(th, SH)
++                        var ow = _ni12_udiv(tw, SW)
++                        if oh * SH == th and ow * SW == tw and oh < OH and ow < OW:
++                            av = ftz(g.unsafe_load((sgb + oh * OW + ow) * OC + oc))
++                atile[k_a * NI12_TMP + srow] = av
++            comptime for l in range(NI12_RC):
++                var bc = sboc + NI12_RS * l
++                var sc = col0 + bc
++                var bv = Float32(0.0)
++                if sc < C and sbk < cnt:
++                    var kk = page + sbk
++                    var oc = _ni12_udiv(kk, KK)
++                    var t2 = kk - oc * KK
++                    bv = ftz(w.unsafe_load(oc * ckk + sc * KK + t2))
++                btile[sbk * NI12_TNP + bc] = bv
++            barrier()
++            if cnt == NI12_KS:
++                comptime for i in range(NI12_KS):
++                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
++                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
++                    comptime for c in range(NI12_RC):
++                        av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
++                        bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
++                    comptime for a in range(NI12_RC):
++                        comptime for b in range(NI12_RC):
++                            acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
++            else:
++                for i in range(cnt):
++                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
++                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
++                    comptime for c in range(NI12_RC):
++                        av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
++                        bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
++                    comptime for a in range(NI12_RC):
++                        comptime for b in range(NI12_RC):
++                            acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
++            barrier()
++            page += NI12_KS
++        var part = SIMD[DType.float32, NI12_NCELL](0.0)
++        comptime for e in range(NI12_NCELL):
++            part[e] = ftz(acc[e])
++        _ = _fold_push_local[NI12_NCELL, TUNED_FOLD_SLOTS](fl, occ, part)
++    var res = _fold_drain_local[NI12_NCELL, TUNED_FOLD_SLOTS](fl, occ)
++    comptime for a in range(NI12_RC):
++        var row = row0 + tr + NI12_RS * a
++        if row < rows:
++            var n = _ni12_udiv(row, HW)
++            var rem = row - n * HW
++            comptime for b in range(NI12_RC):
++                var c = col0 + tc + NI12_RS * b
++                if c < C:
++                    gx.unsafe_store((n * C + c) * HW + rem, ftz(res[a * NI12_RC + b]))
++
++
++def _implicit_dx(
++    ctx: DeviceContext, mut gx: DeviceBuffer[DType.float32], mut g: DeviceBuffer[DType.float32],
++    mut w: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], N: Int, C: Int, HW: Int, OC: Int, KK: Int,
++) raises:
++    """G1: gx (N, C, H, W) = the implicit transposed convolution of the
++    rows-layout g [N*OH*OW x OC] with W [OC x C*KK], one launch, no dcols
++    and no col2im. Leaves `contract_partition(OC * KK)` (the contract's k
++    alone sets them)."""
++    var rows = N * HW
++    var kdim = OC * KK
++    if rows <= 0 or C <= 0:
++        return
++    var lp = contract_partition(kdim)
++    ctx.enqueue_function[implicit_dx_kernel](
++        fp(g), fp(w), fp(gx), ip(dp), Int32(rows), Int32(lp[0]), Int32(lp[1]),
++        grid_dim=((rows + NI12_TM - 1) // NI12_TM, (C + NI12_TN - 1) // NI12_TN, 1),
++        block_dim=(NI12_THREADS, 1, 1),
++    )
++
++
+ @always_inline
+ def _gp(p: IP, k: Int) -> Int:
+     return Int(p.unsafe_load(k))
+@@ -1514,7 +1665,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
+     var ones = ones_buf(ctx, 6, rows)
+     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
+     var gb = m_out(ctx, 8, a[5], OC, isdev(dev, 5))
+-    var dcols = ws(ctx, 9, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
++    var dcols = ws(ctx, 9, 1 if (NN14_BOUNDED_IM2COL or IDN_CNN_DX_IMPLICIT) else rows * ckk)
+     var gx = m_out(ctx, 10, a[3], nx, isdev(dev, 3))
+     comptime if not NN14_BOUNDED_IM2COL and not NI12_IMPLICIT_CONV:
+         _im2col(ctx, dxin, cols, dp, rows, ckk, C)
+@@ -1541,6 +1692,9 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
+     bias_grad_gemm(ctx, gb, g, ones, OC, rows)
+     comptime if NN14_BOUNDED_IM2COL:
+         launch[nn14_input_grad_at](ctx, fp(g), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
++    elif IDN_CNN_DX_IMPLICIT:
++        # G1: one implicit transposed-conv launch, no dcols, no col2im
++        _implicit_dx(ctx, gx, g, dw, dp, N, C, Int(prm[CP_H]) * Int(prm[CP_W]), OC, Int(prm[CP_KH]) * Int(prm[CP_KW]))
+     else:
+         device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
+         _col2im(ctx, dcols, gx, dp, nx)
+@@ -3446,10 +3600,13 @@ def conv_block_backward_into[resident: Bool = False](
+         device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
+     bias_grad_gemm(ctx, gb, grow, ones, OC, rows)
+     if need_dx:
+-        var dcols = ws(ctx, 16, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
++        var dcols = ws(ctx, 16, 1 if (NN14_BOUNDED_IM2COL or IDN_CNN_DX_IMPLICIT) else rows * ckk)
+         var gx = outb[resident](ctx, 17, gx_out, nx)
+         comptime if NN14_BOUNDED_IM2COL:
+             launch[nn14_input_grad_at](ctx, fp(grow), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
++        elif IDN_CNN_DX_IMPLICIT:
++            # G1: one implicit transposed-conv launch, no dcols, no col2im
++            _implicit_dx(ctx, gx, grow, dw, dp, N, C, Int(cprm[CP_H]) * Int(cprm[CP_W]), OC, Int(cprm[CP_KH]) * Int(cprm[CP_KW]))
+         else:
+             device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
+             _col2im(ctx, dcols, gx, dp, nx)
+diff --git a/x_cnn/host/gemm_host.mojo b/x_cnn/host/gemm_host.mojo
+index a615fa7ac..4a231d5d2 100644
+--- a/x_cnn/host/gemm_host.mojo
++++ b/x_cnn/host/gemm_host.mojo
+@@ -360,9 +360,11 @@ def _finish(stack: FP, cnt: Int, dst: FP, n: Int):
+ # ------------------------------------------------------------------ kernels
+ 
+ 
+-def _rows_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
++def _rows_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int, leaf_in: Int = 0):
+     """Rows split across tasks; every row's whole tree in one task."""
+-    var leaf = contract_leaf_size(k)
++    # leaf_in > 0: a caller's explicit contract leaf (x_cnn G2,
++    # cnn_wgrad_partition); the same chain and tree at that leaf
++    var leaf = leaf_in if leaf_in > 0 else contract_leaf_size(k)
+     var pcount = leaf_count(k, leaf)
+     var chunk = (m + tasks - 1) // tasks
+ 
+@@ -398,12 +400,14 @@ def _rows_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
+         host_parallelize(_task, tasks)
+ 
+ 
+-def _leaves_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
++def _leaves_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int, leaf_in: Int = 0):
+     """Few rows, many leaves: aligned power-of-two leaf chunks across tasks.
+     Chunk q's root is the tree's node (s, q) for chunk size 2^s, so the
+     chunk roots, folded in ascending order by the same counter, are the
+     tree's root."""
+-    var leaf = contract_leaf_size(k)
++    # leaf_in > 0: a caller's explicit contract leaf (x_cnn G2,
++    # cnn_wgrad_partition); the same chain and tree at that leaf
++    var leaf = leaf_in if leaf_in > 0 else contract_leaf_size(k)
+     var pcount = leaf_count(k, leaf)
+     var span = 1
+     while span * tasks < pcount:
+@@ -452,22 +456,23 @@ def _leaves_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
+     _ = roots^
+ 
+ 
+-def gemm_host_split(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int, leaves: Bool):
++def gemm_host_split(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int, leaves: Bool, leaf_in: Int = 0):
+     """The kernels on prepared operands (`a` [m x k] and `b` [k x n], both
+     flushed), at an explicit task count and split mode: the check's door."""
+     if k <= 0:
+         for x in range(m * n):
+             c.unsafe_store(x, Float32(0))
+         return
+-    var pcount = leaf_count(k, contract_leaf_size(k))
++    var pcount = leaf_count(k, leaf_in if leaf_in > 0 else contract_leaf_size(k))
+     if leaves and pcount > 1 and tasks > 1:
+-        _leaves_mode(a, b, c, m, n, k, tasks)
++        _leaves_mode(a, b, c, m, n, k, tasks, leaf_in)
+     else:
+-        _rows_mode(a, b, c, m, n, k, tasks)
++        _rows_mode(a, b, c, m, n, k, tasks, leaf_in)
+ 
+ 
+ def gemm_host_into(
+-    a: FP, b: FP, c: FP, op: Int, m: Int, n: Int, k: Int, tasks_override: Int = 0, leaves_override: Int = -1
++    a: FP, b: FP, c: FP, op: Int, m: Int, n: Int, k: Int, tasks_override: Int = 0, leaves_override: Int = -1,
++    leaf_override: Int = 0,
+ ):
+     """C [m x n] = op(A, B) under mojolearn.identical.gemm.fp32.v1, written
+     to `c`: OP_NT A [m x k] . B [n x k]^T, OP_TN A [k x m]^T . B [k x n],
+@@ -488,17 +493,19 @@ def gemm_host_into(
+             c.unsafe_store(x, r[x])
+         return
+     comptime if NEURAL_PROFILE_CHANGED:
+-        var part = neural_partition[NEURAL_LEAF](k)
+-        var strides = neural_strides(op, m, n, k)
+-        var tasks = tasks_override if tasks_override > 0 else gemm_tasks(m, m * n * k)
+-        def selected_rows(task: Int) {imm a, imm b, imm c, imm m, imm n, imm k, imm part, imm strides, imm tasks}:
+-            for row in range(task * m // tasks, (task + 1) * m // tasks):
+-                for col in range(n):
+-                    c.unsafe_store(row * n + col, neural_cell[NEURAL_CHAINS](a, b, row, col, k, part[0], part[1], strides[0], strides[1], strides[2], strides[3]))
+-        host_parallelize(selected_rows, tasks)
+-        return
++        if leaf_override <= 0:
++            var part = neural_partition[NEURAL_LEAF](k)
++            var strides = neural_strides(op, m, n, k)
++            var tasks = tasks_override if tasks_override > 0 else gemm_tasks(m, m * n * k)
++            def selected_rows(task: Int) {imm a, imm b, imm c, imm m, imm n, imm k, imm part, imm strides, imm tasks}:
++                for row in range(task * m // tasks, (task + 1) * m // tasks):
++                    for col in range(n):
++                        c.unsafe_store(row * n + col, neural_cell[NEURAL_CHAINS](a, b, row, col, k, part[0], part[1], strides[0], strides[1], strides[2], strides[3]))
++            host_parallelize(selected_rows, tasks)
++            return
+     var work = m * n * k
+-    var pcount = leaf_count(k, contract_leaf_size(k))
++    var leaf = leaf_override if leaf_override > 0 else contract_leaf_size(k)
++    var pcount = leaf_count(k, leaf)
+     var tasks = tasks_override
+     var leaves = False
+     if tasks <= 0:
+@@ -535,6 +542,6 @@ def gemm_host_into(
+         leaves = leaves_override == 1
+     if tasks > 1 and not leaves and tasks > m:
+         tasks = m
+-    gemm_host_split(ap, bp, c, m, n, k, tasks, leaves)
++    gemm_host_split(ap, bp, c, m, n, k, tasks, leaves, leaf_override)
+     _ = aw^
+     _ = bw^
+diff --git a/x_cnn/host/ops_host.mojo b/x_cnn/host/ops_host.mojo
+index e535a16c0..4b0a00297 100644
+--- a/x_cnn/host/ops_host.mojo
++++ b/x_cnn/host/ops_host.mojo
+@@ -23,6 +23,7 @@ from checks.numerics import ftz
+ from bindings.hostptr import i32_ptr, f32_ptr
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
++from x_cnn.cnn_dx_wgrad import IDN_CNN_DX_IMPLICIT, IDN_CNN_WGRAD_LEAF1024, cnn_wgrad_partition
+ from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
+ from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
+ from x_cnn.ops import (
+@@ -394,6 +395,65 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: Li
+     _ = ps^
+ 
+ 
++def _conv_dx_implicit_host(g: FP, w: FP, gx: FP, prm: List[Int32]) raises:
++    """G1 host twin (`implicit_dx_kernel`'s words): A [N*H*W x OC*KH*KW] with
++    A[(n, h, w), oc*KK + kh*KW + kw] = g[(n, oh, ow), oc] at
++    oh = (h + PH - kh DH) / SH, ow = (w + PW - kw DW) / SW when integral and in
++    range, else +0.0; B [OC*KK x C] with B[oc*KK + t, c] = W[oc, c, t];
++    gemm_host_into OP_NN (leaves contract_leaf_size(OC*KK), the chain and the
++    balanced tree the kernel runs), then the [N*H*W x C] result to NCHW."""
++    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var H = Int(prm[CP_H]); var W = Int(prm[CP_W])
++    var KH = Int(prm[CP_KH]); var KW = Int(prm[CP_KW])
++    var OH = Int(prm[CP_OH]); var OW = Int(prm[CP_OW]); var OC = Int(prm[CP_OC])
++    var SH = Int(prm[CP_SH]); var SW = Int(prm[CP_SW])
++    var PH = Int(prm[CP_PH]); var PW = Int(prm[CP_PW])
++    var DH = Int(prm[CP_DH]); var DW = Int(prm[CP_DW])
++    var KK = KH * KW
++    var kdim = OC * KK
++    var HW = H * W
++    var rows = N * HW
++    if rows <= 0 or C <= 0:
++        return
++    var a = scratch(rows * kdim)
++    var b = scratch(kdim * C)
++    var y = scratch(rows * C)
++    for kk in range(kdim):
++        var oc = kk // KK
++        var t2 = kk - oc * KK
++        for c in range(C):
++            b.unsafe_store(kk * C + c, w.unsafe_load(oc * C * KK + c * KK + t2))
++    var tasks = _tasks_for(N, HW * kdim)
++    var chunk = (N + tasks - 1) // tasks
++
++    def _fill(t: Int) {imm a, imm g, imm chunk, imm N, imm H, imm W, imm KH, imm KW, imm OH, imm OW, imm OC, imm SH, imm SW, imm PH, imm PW, imm DH, imm DW, imm KK, imm kdim}:
++        for n in range(t * chunk, min(t * chunk + chunk, N)):
++            for h in range(H):
++                for wq in range(W):
++                    var arow = a + ((n * H + h) * W + wq) * kdim
++                    for oc in range(OC):
++                        for kh in range(KH):
++                            var th = h + PH - kh * DH
++                            for kw in range(KW):
++                                var tw = wq + PW - kw * DW
++                                var v = Float32(0)
++                                if th >= 0 and tw >= 0 and th % SH == 0 and tw % SW == 0 and th // SH < OH and tw // SW < OW:
++                                    v = g.unsafe_load(((n * OH + th // SH) * OW + tw // SW) * OC + oc)
++                                arow.unsafe_store(oc * KK + kh * KW + kw, v)
++
++    if tasks <= 1:
++        _fill(0)
++    else:
++        host_parallelize(_fill, tasks)
++    gemm_host_into(a, b, y, OP_NN, rows, C, kdim)
++    for n in range(N):
++        for c in range(C):
++            for q in range(HW):
++                gx.unsafe_store((n * C + c) * HW + q, y.unsafe_load((n * HW + q) * C + c))
++    a.free()
++    b.free()
++    y.free()
++
++
+ def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: List[Int32], need_dx: Bool) raises:
+     """conv2d_backward_into from the input's im2col matrix `cols`."""
+     var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
+@@ -405,8 +465,19 @@ def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm:
+     var g = scratch(rows * OC)
+     dout_rows_host(dout, g, ps)
+     var ones = List[Float32](length=rows, fill=Float32(1))
+-    gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
++    comptime if IDN_CNN_WGRAD_LEAF1024:
++        # G2 (x_cnn/cnn_dx_wgrad.mojo): the device leaf kernel's 1024-row leaves
++        gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows, leaf_override=cnn_wgrad_partition(rows)[0])
++    else:
++        gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
+     gemm_host_into(g, hp(ones), gb, OP_TN, OC, 1, rows)
++    comptime if IDN_CNN_DX_IMPLICIT:
++        if need_dx:
++            _conv_dx_implicit_host(g, w, gx, prm)
++        g.free()
++        _ = ones^
++        _ = ps^
++        return
+     if need_dx:
+         var dcols = scratch(rows * ckk)
+         gemm_host_into(g, w, dcols, OP_NN, rows, ckk, OC)

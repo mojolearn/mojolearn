@@ -4,36 +4,16 @@
  "branch": "lane/hdb-ivf",
  "head": "407e20adb",
  "controls": {
-  "idn_hdb_round_lean": {
-   "define": "MOJOLEARN_IDN_HDB_ROUND_LEAN",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_HDB_ROUND_LEAN"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo"
-   ],
-   "binding": [
-    "_mojolearn_hdbscan"
-   ],
-   "bits_change": false,
-   "status": "OPEN (ideas-all-gaps-20261011 D6(b))",
-   "note": "Phase B's list length stays on the device (smr_b_shape_kernel, the host's slice formula); search/fold/merge launch at a worst-case flat grid. One drain per Boruvka round instead of two. Same MST by the (key, j) total order. Pair with C62_SAME_COMPONENT_SKIP (zero-code, orchestrator)."
-  },
   "idn_pq_trainset_strided": {
-   "define": "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED",
+   "define": "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF",
    "kind": "switch",
    "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED"
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF"
     ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "x_ann/switches.mojo",
     "x_ann/ivf_pq_device.mojo",
@@ -44,19 +24,11 @@
     "_mojolearn_x_ann_host"
    ],
    "bits_change": true,
-   "status": "OPEN (ideas-all-gaps-20261011 D8(a))",
-   "note": "Batched PQ codebooks train on min(n, 256*n_codes) stride-sampled rows; device and host twin together. Recall gate at the board's k against arm A and cuVS."
+   "status": "promoted:w2-decide-algos-20261011",
+   "note": "PROMOTED to the IDENTICAL default 2026-10-11 by lane/w2-decide-algos (same-box A/B on main c8ef6c66d, one run per arm, NV L40S + AMD MI325X): ivf-pq istella 0.458, ivf-refine 0.463; bits change NV==AMD; recall_at_10 0.8021->0.8088 / 0.9946->0.9960; v0131/a1713 vs A v0128/a1710. `MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF` restores the old path. Before: Batched PQ codebooks train on min(n, 256*n_codes) stride-sampled rows; device and host twin together. Recall gate at the board's k against arm A and cuVS."
   }
  },
  "algorithms": {
-  "algos:hdbscan": {
-   "binding": "_mojolearn_hdbscan",
-   "route": "fit -> single_linkage -> sparse_mr_mst_device Boruvka rounds",
-   "controls": [
-    "idn_hdb_round_lean"
-   ],
-   "interaction_groups": []
-  },
   "algos:ivf-refine": {
    "binding": "_mojolearn_x_ann",
    "route": "build -> ivf_pq_build_device -> pq_codebooks_device",
@@ -74,5 +46,11 @@
    "interaction_groups": []
   }
  },
- "removed": 0
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_HDB_ROUND_LEAN",
+   "control": "idn_hdb_round_lean",
+   "reason": "DELETED 2026-10-11 (lane w2-decide-algos, deletion 826f3d57e): NOISE: hdbscan istella 0.997, taxi 1.008; v0133/a1715 vs A v0132/a1714. Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch; docs/TOMBSTONES.md."
+  }
+ ]
 }
