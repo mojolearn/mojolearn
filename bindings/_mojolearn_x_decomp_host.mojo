@@ -102,7 +102,7 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         # lane idn-dense-linalg: the one-entry OLS and solve routes
         m.def_function[idn_flags_py]("x_decomp_idn_flags")
         m.def_function[ols_tsqr_r_py[HostExec]]("x_decomp_ols_tsqr_r")
-        # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+        # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
         m.def_function[lu_gesv_py[HostExec]]("x_decomp_lu_gesv")
         m.def_function[als_cg_rows_py[HostExec]]("x_decomp_als_cg_rows")

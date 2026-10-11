@@ -587,7 +587,7 @@ def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises 
 # refused. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime IDN_OLS_ONE_ENTRY = _API_IDN
-# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 comptime IDN_LU_GESV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 # lane fam-decomp (2026-10-04): LLE builds F0 = [F^ | u] in three cells and
@@ -696,7 +696,7 @@ def ols_tsqr_r_py[E: Exec](
     return PythonObject(n)
 
 
-# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by <SHA>; code recoverable at <SHA>^.
+# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 
 
