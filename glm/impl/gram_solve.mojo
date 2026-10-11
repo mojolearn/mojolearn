@@ -48,6 +48,10 @@ glm/host/gram_solve_host.mojo, runs the same cells in the same order:
 leaf kernels reproduce), `chol_serial`, and the same solve statements.
 """
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from std.sys.info import has_apple_gpu_accelerator
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_mul, identical_mul_add
 from x_decomp.cells import F32Ptr, chol_diag, div0, sqrt0
@@ -57,7 +61,12 @@ from gemm.contract import contract_leaf_size
 from glm.impl.center_device import col_means_buf, col_sums_pair_buf
 from glm.impl.linalg.detail.lstsq import ols_equilibration_scale
 from glm.impl.gram_solve_cells import gs_equilibrated_cell, gs_pivot_trusted, gs_regularized_diag, gs_scaled_rhs
-from experiments.classical_identical_ideas.fg_linear_controls import IDN_GRAM_FF_FALLBACK, IDN_RIDGE_RESIDENT
+from experiments.classical_identical_ideas.fg_linear_controls import (
+    IDN_GFF_GRAM_TILED,
+    IDN_GRAM_FF_FALLBACK,
+    IDN_GS_SOLVE_ONE_LAUNCH,
+    IDN_RIDGE_RESIDENT,
+)
 from glm.impl.gram_ff_cells import (
     GFF_LEAVES,
     gff_backward_cell,
@@ -68,11 +77,12 @@ from glm.impl.gram_ff_cells import (
     gff_fold_cell,
     gff_forward_cell,
     gff_leaf_cell,
+    gff_leaf_rows,
     gff_mean_split,
     gff_pivot_trusted,
     gff_regularized_diag_f32,
 )
-from x_linear.ff import ff_ld, ff_mul_f, ff_st
+from x_linear.ff import FF, ff_add, ff_centered, ff_ld, ff_mul, ff_mul_f, ff_st
 from glm.impl.center_device import center_buf
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced
 from core.identity_trace import IdentityTrace
@@ -129,6 +139,13 @@ def gs_chol_step_kernel(a: F32Ptr, adiag: F32Ptr, info: F32Ptr, j: Int32, n: Int
     var i = jj + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= nn:
         return
+    _gs_chol_row(a, adiag, info, i, jj, nn)
+
+
+@always_inline
+def _gs_chol_row(a: F32Ptr, adiag: F32Ptr, info: F32Ptr, i: Int, jj: Int, nn: Int):
+    """Row i >= jj of column step jj (the step kernel's body; shared by
+    `gs_chol_step_kernel` and the IDN_GS_SOLVE_ONE_LAUNCH walk)."""
     if i == jj:
         chol_diag(a, info, jj, nn)
         return
@@ -170,6 +187,12 @@ def gs_forward_step_kernel(l: F32Ptr, b: F32Ptr, z: F32Ptr, j: Int32, n: Int32):
     var i = jj + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= nn:
         return
+    _gs_forward_row(l, b, z, i, jj, nn)
+
+
+@always_inline
+def _gs_forward_row(l: F32Ptr, b: F32Ptr, z: F32Ptr, i: Int, jj: Int, nn: Int):
+    """Row i >= jj of forward step jj (the step kernel's body)."""
     var zj = div0(ftz(b.unsafe_load(jj)), l.unsafe_load(jj * nn + jj))
     if i == jj:
         z.unsafe_store(jj, zj)
@@ -186,11 +209,67 @@ def gs_backward_step_kernel(l: F32Ptr, z: F32Ptr, w: F32Ptr, j: Int32, n: Int32)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i > jj:
         return
+    _gs_backward_row(l, z, w, i, jj, nn)
+
+
+@always_inline
+def _gs_backward_row(l: F32Ptr, z: F32Ptr, w: F32Ptr, i: Int, jj: Int, nn: Int):
+    """Row i <= jj of backward step jj (the step kernel's body)."""
     var wj = div0(ftz(z.unsafe_load(jj)), l.unsafe_load(jj * nn + jj))
     if i == jj:
         w.unsafe_store(jj, wj)
     else:
         z.unsafe_store(i, ftz(identical_mul_add(-ftz(l.unsafe_load(jj * nn + i)), wj, ftz(z.unsafe_load(i)))))
+
+
+# ---------------------------------------------------------------------------
+# IDN_GS_SOLVE_ONE_LAUNCH (lane ridge-ff-tiled C2, default off;
+# experiments/classical_identical_ideas/fg_linear_controls.mojo): each chain
+# as one launch of one block, a barrier between column steps, the rows of a
+# step strided over the threads, the per-row bodies above unchanged. Within
+# a step no thread writes a word another thread of the step reads (the step
+# kernels' contract), so only the step boundaries need the barrier.
+# ---------------------------------------------------------------------------
+comptime GS_ONE_TPB = 256
+#: Widest d the fp32 walk takes (<= 4 rows a thread a step; module controls).
+comptime GS_ONE_MAX_D = 1024
+#: Widest d the float-float walk takes (<= 2 rows a thread a step).
+comptime GFF_ONE_MAX_D = 512
+comptime GS_ONE_ON = IDN_GS_SOLVE_ONE_LAUNCH and not has_apple_gpu_accelerator()
+
+
+def gs_chol_one_kernel(a: F32Ptr, adiag: F32Ptr, info: F32Ptr, n: Int32):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    for jj in range(nn):
+        var i = jj + tid
+        while i < nn:
+            _gs_chol_row(a, adiag, info, i, jj, nn)
+            i += GS_ONE_TPB
+        barrier()
+
+
+def gs_forward_one_kernel(l: F32Ptr, b: F32Ptr, z: F32Ptr, n: Int32):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    for jj in range(nn):
+        var i = jj + tid
+        while i < nn:
+            _gs_forward_row(l, b, z, i, jj, nn)
+            i += GS_ONE_TPB
+        barrier()
+
+
+def gs_backward_one_kernel(l: F32Ptr, z: F32Ptr, w: F32Ptr, n: Int32):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    for k in range(nn):
+        var jj = nn - 1 - k
+        var i = tid
+        while i <= jj:
+            _gs_backward_row(l, z, w, i, jj, nn)
+            i += GS_ONE_TPB
+        barrier()
 
 
 def gs_unscale_kernel(w: F32Ptr, sv: F32Ptr, d_in: Int32):
