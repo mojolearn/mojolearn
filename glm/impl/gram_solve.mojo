@@ -76,7 +76,6 @@ from x_linear.ff import ff_ld, ff_mul_f, ff_st
 from glm.impl.center_device import center_buf
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced
 from core.identity_trace import IdentityTrace
-from glm.impl.pinned_upload import linear_upload_f32
 
 comptime GS_TPB = 128
 
@@ -500,10 +499,10 @@ def linear_gram_fit_host(
     var cells = n_rows * d
     var d_x = ctx.enqueue_create_buffer[DType.float32](cells)
     var d_y = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    # lane fg-linear L4 (IDN_LINEAR_PINNED_UPLOAD, default on): through the
-    # pinned stage when large; the direct copy otherwise (no bit moves)
-    linear_upload_f32(ctx, d_x, x_ptr, cells)
-    linear_upload_f32(ctx, d_y, y_ptr, n_rows)
+    # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by SHA_DEL; code recoverable at SHA_DEL^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
+    ctx.enqueue_copy(dst_buf=d_x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=y_ptr)
     var d_mx = ctx.enqueue_create_buffer[DType.float32](d)
     var d_my = ctx.enqueue_create_buffer[DType.float32](1)
     # the binary64 means stay alive for the fit (lane fg-linear L3 reads them)
