@@ -76,6 +76,10 @@ from x_cnn.ops import (
 from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
 # lane cnn-resident-glue (2026-10-11, G6): the global pool's block folds
 from x_cnn.ops import IDN_GPOOL_WARP, GPOOL_LANES, gpool_is_global, gpool_avg_lane, gpool_max_lane, gpool_max_pick, gpool_avg_divisor
+# lane bn-grid-stats (2026-10-11, G5): coalesced two-level BN statistics folds
+from x_cnn.ops import (
+    IDN_BN_GRID_STATS, BN_GS_LANES, bn_gs_chunks, bn_gs_lane, bn_gs_mean_at, bn_gs_var_at, bn_gs_red_fin_at,
+)
 # lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
 from x_cnn.ops import (
     IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_row_val, epoch_rows_prm,
@@ -2326,6 +2330,37 @@ def _bn_use_block[fwd: Bool](
     return pick == 1
 
 
+# lane bn-grid-stats (2026-10-11, G5, `-D MOJOLEARN_IDN_BN_GRID_STATS`, x_cnn/ops.mojo
+# IDN_BN_GRID_STATS): one BN_GS_LANES-thread block per (channel, chunk).
+# Each thread takes its lane sum (bn_gs_lane, the host twin's function),
+# then the fixed halving tree v[i] += v[i + s], s = 128 .. 1, folds the
+# lane sums in shared memory (shared memory only between barriers; every
+# thread reaches every barrier). MODE as bn_gs_lane; part as the host twin.
+def bn_gs_chunk_kernel[MODE: Int](x: FP, g: FP, aux: FP, part: FP, p: IP):
+    var sh0 = stack_allocation[BN_GS_LANES, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sh1 = stack_allocation[BN_GS_LANES, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var t = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var r = bn_gs_lane[MODE](t, tid, x, g, aux, p)
+    sh0[tid] = r[0]
+    comptime if MODE == 2:
+        sh1[tid] = r[1]
+    barrier()
+    var s = BN_GS_LANES // 2
+    while s > 0:
+        if tid < s:
+            sh0[tid] = ftz(sh0[tid] + sh0[tid + s])
+            comptime if MODE == 2:
+                sh1[tid] = ftz(sh1[tid] + sh1[tid + s])
+        barrier()
+        s //= 2
+    if tid == 0:
+        part.unsafe_store(t, sh0[0])
+        comptime if MODE == 2:
+            var N = _gp(p, 0); var C = _gp(p, 1); var HW = _gp(p, 2)
+            part.unsafe_store(C * bn_gs_chunks(N * HW) + t, sh1[0])
+
+
 def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool) raises:
     """a = [x, running (2C, in place), aux (2 + 7C, in place: the statistics
     the backward reads), y]."""
@@ -2344,9 +2379,16 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
     # lane idn-loss-norm-folds: the blocked folds' partials (x_cnn/ops.mojo
     # BN_FOLD_BLOCK), C * NB words; one word when the single chain runs
     var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    comptime if IDN_BN_GRID_STATS:
+        nblk = C * bn_gs_chunks(Int(prm[0]) * Int(prm[2]))
     var dpart = ws(ctx, 5, nblk)
     if training:
-        comptime if BN_FOLD_BLOCK:
+        comptime if IDN_BN_GRID_STATS:
+            ctx.enqueue_function[bn_gs_chunk_kernel[0]](fp(dx), fp(dx), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
+            launch[bn_gs_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            ctx.enqueue_function[bn_gs_chunk_kernel[1]](fp(dx), fp(dx), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
+            launch[bn_gs_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+        elif BN_FOLD_BLOCK:
             launch[bn_blk_sum_at](ctx, fp(dx), fp(dpart), fp(dpart), fp(dpart), ip(dp), ip(dp), nblk)
             launch[bn_blk_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
             launch[bn_blk_sq_at](ctx, fp(dx), fp(dpart), fp(da), fp(da), ip(dp), ip(dp), nblk)
@@ -2414,8 +2456,13 @@ def batchnorm_backward_m(a: List[Int], dev: Int, prm: List[Int32], training: Boo
     # lane idn-loss-norm-folds: blocked folds (x_cnn/ops.mojo BN_FOLD_BLOCK),
     # partials [sum_g C * NB | sum_gx C * NB]
     var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    comptime if IDN_BN_GRID_STATS:
+        nblk = C * bn_gs_chunks(Int(prm[0]) * Int(prm[2]))
     var dpart = ws(ctx, 5, 2 * nblk)
-    comptime if BN_FOLD_BLOCK:
+    comptime if IDN_BN_GRID_STATS:
+        ctx.enqueue_function[bn_gs_chunk_kernel[2]](fp(dx), fp(dg), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
+        launch[bn_gs_red_fin_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+    elif BN_FOLD_BLOCK:
         launch[bn_blk_red_at](ctx, fp(dx), fp(dg), fp(da), fp(dpart), ip(dp), ip(dp), nblk)
         launch[bn_blk_red_fin_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
