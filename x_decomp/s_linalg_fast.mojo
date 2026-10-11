@@ -8,8 +8,9 @@ verdicts batch 6 (2026-10-05), each with an _OFF rollback:
   bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`)
   bit 2  DECOMP_FAST_ORTH_WS (`-D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`)
   bit 4  LU_FAST_RESIDENT    (`-D MOJOLEARN_LU_FAST_RESIDENT_OFF`)
+  bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL experiment, `-D MOJOLEARN_IDN_LU_RESIDENT_PAIR`, default off)
 
-IDENTICAL and every other vendor compile none of this.
+IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries, and only with its define.
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.python import Python, PythonObject
@@ -20,6 +21,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 from core.householder_qr import qr_factor, qr_slice_count
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import (
     LU_SCAL_LEN, TPB, XD_FAST_APPLE, _blocks, _down, _p, _up, _up_into, launch_lu, launch_lu_solve,
@@ -88,10 +90,31 @@ comptime DECOMP_FAST_ORTH_WS = XD_FAST_APPLE and not is_defined["MOJOLEARN_DECOM
 #: FAST + Apple default; rollback -D MOJOLEARN_LU_FAST_RESIDENT_OFF.
 comptime LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX and not is_defined["MOJOLEARN_LU_FAST_RESIDENT_OFF"]()
 
+#: lane/lu-resident-pair (2026-10-11), idea B1 (ideas-dense-linalg-20261011.md):
+#: LU_FAST_RESIDENT's glue on the IDENTICAL route (NVIDIA / AMD GPU binding).
+#: Structural reason: the two-call `lu_factor` + `lu_solve` pays the host
+#: crossings twice (F3): `_M.from_input` runs a single-thread host finiteness
+#: loop and a host copy over A, `Kit.lu` uploads it, downloads LU, then
+#: `lu_solve` copies, host-scans and uploads the 268 MB LU again. Here
+#: `dev_lu_factor_py` uploads A once, scans it on the device
+#: (`device_first_nonfinite`, a parallel scan, no host step), runs the same
+#: `launch_lu`, downloads LU and piv once and keeps the device LU / piv on the
+#: returned pair; `lu_solve` on that pair (`dev_lu_solve_py`, refine = 0: the
+#: LU_QFIX refinement is FAST only) uploads only B and runs the same
+#: `launch_lu_solve`. Same launches on the same words: no bit moves, host
+#: column untouched. Expect lu-factor 1180 -> ~470 ms NV (the one-entry
+#: `solve` measures the same kernels at 462 ms), AMD by the same ratio.
+#: Default OFF; -D MOJOLEARN_IDN_LU_RESIDENT_PAIR turns it on (A/B: grid).
+comptime IDN_LU_RESIDENT_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
+    "MOJOLEARN_IDN_LU_RESIDENT_PAIR"
+]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+#: Whether the binding registers `x_decomp_dev_lu_factor` / `_dev_lu_solve`.
+comptime LU_RESIDENT_ENTRIES = LU_FAST_RESIDENT or IDN_LU_RESIDENT_PAIR
+
 
 def s_flags_py() raises -> PythonObject:
     """Bit 1 RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS, bit 4
-    LU_FAST_RESIDENT (0 when none)."""
+    LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR (0 when none)."""
     var f = 0
     comptime if RSVD_FAST_DEVSCAN:
         f |= 1
@@ -99,6 +122,8 @@ def s_flags_py() raises -> PythonObject:
         f |= 2
     comptime if LU_FAST_RESIDENT:
         f |= 4
+    comptime if IDN_LU_RESIDENT_PAIR:
+        f |= 8
     return PythonObject(f)
 
 

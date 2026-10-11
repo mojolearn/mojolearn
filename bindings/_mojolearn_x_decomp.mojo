@@ -93,7 +93,7 @@ from x_decomp.qfix import LU_QFIX, lu_resid_py, qfix_flags_py
 # Tried: TSVD_QFIX's R from shifted CholeskyQR3 on the matrix unit (x_decomp/tsvd_fast.mojo) instead of the Householder TSQR; tsvd istella +19.9% (verdicts batch 6).
 # Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
 from x_decomp.s_linalg_fast import (
-    DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, RSVD_FAST_DEVSCAN, dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py,
+    DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, LU_RESIDENT_ENTRIES, RSVD_FAST_DEVSCAN, dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py,
     dev_upload_scan_py, s_flags_py,
 )
 
@@ -233,7 +233,8 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
             m.def_function[dev_upload_scan_py]("x_decomp_dev_upload_scan")
         comptime if DECOMP_FAST_ORTH_WS:
             m.def_function[dev_orth_ws_py]("x_decomp_dev_orth_ws")
-        comptime if LU_FAST_RESIDENT:
+        # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL, opt-in define)
+        comptime if LU_RESIDENT_ENTRIES:
             m.def_function[dev_lu_factor_py]("x_decomp_dev_lu_factor")
             m.def_function[dev_lu_solve_py]("x_decomp_dev_lu_solve")
         comptime if LLE_FAST_DEV_LU:
