@@ -15,6 +15,7 @@ function of (n, d) and the profile constants only, so NVIDIA and AMD agree.
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -185,6 +186,136 @@ def bm_leaf_gram_kernel(
         part.unsafe_store(base + i * d + j, acc)
         if ti != tj:
             part.unsafe_store(base + j * d + i, acc)
+
+# ---------------------------------------------------------------------------
+# MOJOLEARN_IDN_BM_GRAM_RB4 (lane gram-rb4, 2026-10-11, default off, verdict OPEN)
+# Structural reason: `bm_leaf_gram_kernel` gives each thread one cell of a
+# 16 x 16 tile, so every FMA costs two shared loads, and the 16-wide column
+# tiles re-read each staged row 2 x (d/16) times from global memory. The RB4
+# kernel gives each of the 256 threads a 4 x 4 register micro-tile of a
+# 64 x 64 tile pair: 8 shared loads feed 16 FMAs (4x less shared traffic per
+# FMA) and a staged row is read 2 x (d/64) times (4x less global traffic).
+# Expected: the leaf Gram 2-4x faster on NVIDIA and AMD (ridge / OLS-Gram /
+# PCA / LDA at d >= 64); the grid A/B decides.
+# Bits: unchanged. Each cell (i, j) is still one chain
+# `acc = bm_fma(x_ri - c_i, x_rj - c_j, acc)` over the leaf's rows in
+# ascending order from +0.0, and the own-center means keep the same
+# BM_GRAM_MEAN_CHAINS interleaved chains added in the same order, so every
+# leaf partial word, and the fold over them, is the v1 word. The tile edge is
+# a register/shared budget choice (64 x 4 B x 2 x 32 rows = 16 KiB shared),
+# not keyed on any dataset dimension.
+# ---------------------------------------------------------------------------
+
+comptime BM_RB_TILE = 64
+comptime BM_RB_MICRO = 4
+comptime BM_RB_LANES = BM_RB_TILE // BM_RB_MICRO  # 16 x 16 threads = BM_TPB
+comptime BM_GRAM_RB4 = is_defined["MOJOLEARN_IDN_BM_GRAM_RB4"]()
+
+
+def bm_leaf_gram_rb4_kernel(
+    part: BmPtr, leaf_mean: BmPtr, x: BmPtr, center: BmPtr,
+    n_in: Int32, d_in: Int32, leaf_in: Int32, tiles_in: Int32, own_center: Int32,
+):
+    """`bm_leaf_gram_kernel` with BM_RB_TILE tiles and a BM_RB_MICRO^2
+    register micro-tile per thread; same cells, same words. Thread (a, b)
+    owns rows I*64 + a + 16 p and columns J*64 + b + 16 s (p, s < 4), the
+    strided layout keeping a warp's shared reads conflict-free."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var leaf = Int(leaf_in)
+    var k = Int(block_idx.x)
+    var pair = bm_tile_pair(Int(block_idx.y), Int(tiles_in))
+    var ti = pair[0]
+    var tj = pair[1]
+    var t = Int(thread_idx.x)
+    var a = t // BM_RB_LANES
+    var b = t - a * BM_RB_LANES
+    var r0 = k * leaf
+    var r1 = min(n, r0 + leaf)
+    comptime W = 2 * BM_RB_TILE
+    var ci = stack_allocation[BM_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var cj = stack_allocation[BM_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sums = stack_allocation[W * BM_GRAM_MEAN_CHAINS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var xa = stack_allocation[BM_ROW_TILE * BM_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var xb = stack_allocation[BM_ROW_TILE * BM_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    if own_center != 0:
+        # slot = s * W + u: column u, chain s (rows r0 + s, r0 + s + CHAINS, ...),
+        # the v1 chains exactly; W * CHAINS slots over BM_TPB threads
+        comptime for h in range(W * BM_GRAM_MEAN_CHAINS // BM_TPB):
+            var slot = t + h * BM_TPB
+            var u = slot % W
+            var s = slot // W
+            var col = ti * BM_RB_TILE + u if u < BM_RB_TILE else tj * BM_RB_TILE + (u - BM_RB_TILE)
+            var macc = Float32(0.0)
+            if col < d:
+                var r = r0 + s
+                while r < r1:
+                    macc = bm_add(macc, x.unsafe_load(r * d + col))
+                    r += BM_GRAM_MEAN_CHAINS
+            sums[slot] = macc
+        barrier()
+        if t < W:
+            var tot = sums[t]
+            for q in range(1, BM_GRAM_MEAN_CHAINS):
+                tot = bm_add(tot, sums[q * W + t])
+            var mean = bm_div(tot, Float32(r1 - r0))
+            if t < BM_RB_TILE:
+                ci[t] = mean
+            else:
+                cj[t - BM_RB_TILE] = mean
+        barrier()
+        if ti == tj and t < BM_RB_TILE and ti * BM_RB_TILE + t < d:
+            leaf_mean.unsafe_store(k * d + ti * BM_RB_TILE + t, ci[t])
+    else:
+        if t < BM_RB_TILE:
+            var gi = ti * BM_RB_TILE + t
+            ci[t] = ftz(center.unsafe_load(gi)) if gi < d else Float32(0.0)
+        elif t < 2 * BM_RB_TILE:
+            var gj = tj * BM_RB_TILE + (t - BM_RB_TILE)
+            cj[t - BM_RB_TILE] = ftz(center.unsafe_load(gj)) if gj < d else Float32(0.0)
+        barrier()
+    var acc = InlineArray[Float32, BM_RB_MICRO * BM_RB_MICRO](fill=Float32(0.0))
+    var ra = InlineArray[Float32, BM_RB_MICRO](fill=Float32(0.0))
+    var rb = InlineArray[Float32, BM_RB_MICRO](fill=Float32(0.0))
+    var rt = r0
+    while rt < r1:
+        comptime for h in range(BM_ROW_TILE * BM_RB_TILE // BM_TPB):
+            var slot = t + h * BM_TPB
+            var lr = slot // BM_RB_TILE
+            var lc = slot - lr * BM_RB_TILE
+            var rr = rt + lr
+            var ga = ti * BM_RB_TILE + lc
+            var gb = tj * BM_RB_TILE + lc
+            var va = Float32(0.0)
+            var vb = Float32(0.0)
+            if rr < r1 and ga < d:
+                va = bm_sub(x.unsafe_load(rr * d + ga), ci[lc])
+            if rr < r1 and gb < d:
+                vb = bm_sub(x.unsafe_load(rr * d + gb), cj[lc])
+            xa[slot] = va
+            xb[slot] = vb
+        barrier()
+        var here = min(BM_ROW_TILE, r1 - rt)
+        for q in range(here):
+            comptime for p in range(BM_RB_MICRO):
+                ra[p] = xa[q * BM_RB_TILE + a + p * BM_RB_LANES]
+                rb[p] = xb[q * BM_RB_TILE + b + p * BM_RB_LANES]
+            comptime for p in range(BM_RB_MICRO):
+                comptime for s in range(BM_RB_MICRO):
+                    acc[p * BM_RB_MICRO + s] = bm_fma(ra[p], rb[s], acc[p * BM_RB_MICRO + s])
+        barrier()
+        rt += BM_ROW_TILE
+    var base = k * d * d
+    comptime for p in range(BM_RB_MICRO):
+        comptime for s in range(BM_RB_MICRO):
+            var i = ti * BM_RB_TILE + a + p * BM_RB_LANES
+            var j = tj * BM_RB_TILE + b + s * BM_RB_LANES
+            if i < d and j < d:
+                var v = acc[p * BM_RB_MICRO + s]
+                part.unsafe_store(base + i * d + j, v)
+                if ti != tj:
+                    part.unsafe_store(base + j * d + i, v)
+
 
 
 # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
@@ -461,13 +592,23 @@ def bm_centered_gram_panels(
         )
         ctx.synchronize()
         return
-    var tiles = (d + BM_TILE - 1) // BM_TILE
     var part = ctx.enqueue_create_buffer[DType.float32](leaves * cells)
-    ctx.enqueue_function[bm_leaf_gram_kernel](
-        _bp(part), _bp(part), x, center,
-        Int32(n), Int32(d), Int32(leaf), Int32(tiles), Int32(0),
-        grid_dim=(leaves, tiles * (tiles + 1) // 2, 1), block_dim=BM_TPB,
-    )
+    comptime if BM_GRAM_RB4:
+        # MOJOLEARN_IDN_BM_GRAM_RB4: same words, 64 x 64 tiles with 4 x 4
+        # register micro-tiles (see bm_leaf_gram_rb4_kernel)
+        var tiles = (d + BM_RB_TILE - 1) // BM_RB_TILE
+        ctx.enqueue_function[bm_leaf_gram_rb4_kernel](
+            _bp(part), _bp(part), x, center,
+            Int32(n), Int32(d), Int32(leaf), Int32(tiles), Int32(0),
+            grid_dim=(leaves, tiles * (tiles + 1) // 2, 1), block_dim=BM_TPB,
+        )
+    else:
+        var tiles = (d + BM_TILE - 1) // BM_TILE
+        ctx.enqueue_function[bm_leaf_gram_kernel](
+            _bp(part), _bp(part), x, center,
+            Int32(n), Int32(d), Int32(leaf), Int32(tiles), Int32(0),
+            grid_dim=(leaves, tiles * (tiles + 1) // 2, 1), block_dim=BM_TPB,
+        )
     bm_sum_fold(ctx, part, leaves, cells, dst, 0)
     _ = part^
 
