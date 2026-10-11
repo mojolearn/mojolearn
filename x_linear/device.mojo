@@ -28,6 +28,9 @@ from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, decision_code_row, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_RIDGE, ALGO_BAYES, ALGO_ARD
 from x_linear.cd_grid import enetcv_fit_grid
 from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
+from x_linear.lars import LARS_GRID_GRAM
+from core.blocked_moments import bm_column_mean, bm_centered_gram_panels, bm_centered_cross_panels
+from gemm.contract import contract_leaf_size
 from x_linear.ops import ld, st, ldi, fd, i2f, fa, fs, fm, fabs, shuffle, fmad, flog, fill, copy, row_dot, mean_of
 from x_linear.ops import sti, fmax, fmin, fsqrt
 from std.atomic import Atomic
@@ -647,6 +650,16 @@ comptime XL_APPLE_SLICE_MACS = 1 << 27
 #: (one thread per cell walking the fold's rows). Unweighted fits only.
 comptime XL_LARS_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                               and not is_defined["MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF"]())
+
+
+#: lane/lars-grid-gram (2026-10-11), IDENTICAL experiment, default OFF
+#: (`-D MOJOLEARN_IDN_LARS_GRID_GRAM`; the reason and the expected speedup at
+#: x_linear/lars.mojo `LARS_GRID_GRAM`): LARS / LassoLars' means, centered
+#: Gram and X'y from core/blocked_moments.mojo (one block per leaf of rows,
+#: binary-counter fold) instead of main's moments grid. NVIDIA and AMD (and
+#: the host column) change bits together; Apple keeps main's grid (its
+#: completion witness wraps the moments grid's launches, not these).
+comptime XL_IDN_LARS_GRID_GRAM = LARS_GRID_GRAM and not has_apple_gpu_accelerator()
 
 
 @always_inline
@@ -5317,7 +5330,25 @@ def fit_device(
                 var px = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
                 var py = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
                 fast_gram_into(ctx, px, py, 0, n, d, 1, hip[1] != 0, pfw, pfw + (3 * d + 2 * d * d), pfw + d, pfw + (d + d * d))
-        if lars_pre:
+        var lars_blocked = False
+        comptime if XL_IDN_LARS_GRID_GRAM:
+            lars_blocked = lars_pre
+        if lars_blocked:
+            # MOJOLEARN_IDN_LARS_GRID_GRAM: the same fw words (xm 0, G d, X'y
+            # d + d*d, y's mean parked in prev = 2d + d*d) by the blocked
+            # moments; fw is zero from the fill above, so without an intercept
+            # the means (and y's mean) stay +0.0 and the Gram is uncentered
+            var pfw = FP(unsafe_from_address=Int(dfw.unsafe_ptr()))
+            var px = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
+            var py = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+            var ym_o = 2 * d + d * d
+            if hip[1] != 0:
+                bm_column_mean(ctx, pfw, px, n, d)
+                bm_column_mean(ctx, pfw + ym_o, py, n, 1)
+            var leaf = contract_leaf_size(n)
+            bm_centered_gram_panels(ctx, pfw + d, px, pfw, n, d, leaf)
+            bm_centered_cross_panels(ctx, pfw + (d + d * d), px, pfw, py, pfw + ym_o, n, d, leaf)
+        elif lars_pre:
             # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
             # d + d*d, y's mean parked in prev = 2d + d*d)
             ctx.enqueue_function[mg_means_kernel](
