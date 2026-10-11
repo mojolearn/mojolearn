@@ -6,6 +6,7 @@ The scalar is shared by host and device, independently of GPU geometry.
 """
 from checks.numerics import ftz, identical_mul_add
 from gemm.contract import contract_leaf_size
+from core.blocked_moments_ops import BM_TPB, bm_add, bm_div, bm_mean_leaf_rows, bm_sub_chains
 
 
 def centered_gram_v1_cell(
@@ -77,3 +78,44 @@ def centered_cross_v1_cell(
         depth -= 1
         result = ftz(ftz(stack[depth])+ftz(result))
     return ftz(result)
+
+
+def bm_column_mean_cell(x: MutPointer[Float32, MutAnyOrigin], rows: Int, cols: Int, j: Int) -> Float32:
+    """One column of core/blocked_moments.mojo::bm_column_mean as a scalar
+    cell (lane lars-grid-gram, 2026-10-11; the statements of
+    core/blocked_moments_host.mojo::host_bm_column_mean for column j): leaves
+    of `bm_mean_leaf_rows(rows)` rows, each leaf `bm_sub_chains(cols)`
+    interleaved chains added in order (one chain when cols >= BM_TPB), the
+    leaves folded by the binary counter (the stack form of `bm_sum_fold`'s
+    levels, as `centered_gram_v1_cell`), one division by rows."""
+    if rows < 1:
+        return Float32(0)
+    var leaf = bm_mean_leaf_rows(rows)
+    var chains = bm_sub_chains(cols) if cols <= BM_TPB else 1
+    var stack = InlineArray[Float32, 32](fill=Float32(0))
+    var depth = 0
+    var leaves = 0
+    for start in range(0, rows, leaf):
+        var stop = min(start + leaf, rows)
+        var acc = Float32(0)
+        for s in range(chains):
+            var c = Float32(0)
+            var r = start + s
+            while r < stop:
+                c = bm_add(c, x.unsafe_load(r * cols + j))
+                r += chains
+            acc = c if s == 0 else bm_add(acc, c)
+        var carry = leaves
+        while (carry & 1) != 0:
+            depth -= 1
+            acc = bm_add(stack[depth], acc)
+            carry >>= 1
+        stack[depth] = acc
+        depth += 1
+        leaves += 1
+    depth -= 1
+    var result = stack[depth]
+    while depth > 0:
+        depth -= 1
+        result = bm_add(stack[depth], result)
+    return bm_div(result, Float32(rows))

@@ -16,6 +16,7 @@ from x_prep.host.program import run_program_host
 from x_prep.user_host import F32P, F64P, I32P, ii_rows, ii_gather, ii_scatter, ii_conv
 from x_prep.folds import kfold_folds, strat_folds
 from x_prep.py2mojo import PY2MOJO_PREP
+from x_prep.labels import IDN_LAB_UNIQUE_HIST, IDN_LAB_CODES_DIRECT, IDN_LAB_ONE_ENTRY
 from x_prep.label_fast import IDN_LABEL
 from x_prep.blocked import IDN_NB_ONEPASS
 from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
@@ -178,6 +179,15 @@ def py2mojo_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def lab_hist_binding() raises -> PythonObject:
+    """Lane lab-binarizer (x_prep/labels.mojo, IDENTICAL, default off): bits
+    read by python/mojolearn/_expansion_prep.py `_lab_hist`: 1
+    IDN_LAB_UNIQUE_HIST, 2 IDN_LAB_CODES_DIRECT, 4 IDN_LAB_ONE_ENTRY;
+    registered only when G1 is on."""
+    return PythonObject((1 if IDN_LAB_UNIQUE_HIST else 0) | (2 if IDN_LAB_CODES_DIRECT else 0)
+                        | (4 if IDN_LAB_ONE_ENTRY else 0))
+
+
 def label_present_binding() raises -> PythonObject:
     return PythonObject(1)
 
@@ -256,6 +266,8 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
         # IDENTICAL device binding (x_prep/label_fast.mojo, x_prep/blocked.mojo)
         comptime if IDN_LABEL:
             m.def_function[label_present_binding]("x_prep_label_present")
+        comptime if IDN_LAB_UNIQUE_HIST:
+            m.def_function[lab_hist_binding]("x_prep_lab_hist")
         comptime if IDN_LABEL or IDN_NB_ONEPASS:
             m.def_function[idn_int_binding]("x_prep_idn_int")
         comptime if IDN_STATS_BLOCKED or IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED or IDN_RR_EIGH:

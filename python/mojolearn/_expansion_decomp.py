@@ -2749,8 +2749,11 @@ def lu_factor(a, *, numeric_mode=None):
     ties broken by the LOWEST row index. A zero pivot is kept (getrf's
     info > 0) and warned about, as scipy warns."""
     k = _Kit(_mode(numeric_mode))
-    if k.s_flags() & 4 and k.qfix_flags() & 4 and not _is_sparse(a):
-        # LU_FAST_RESIDENT (FAST + Apple default, rollback _OFF; x_decomp/s_linalg_fast.mojo)
+    sf = k.s_flags()
+    if ((sf & 4 and k.qfix_flags() & 4) or sf & 8) and not _is_sparse(a):
+        # LU_FAST_RESIDENT (bit 4, FAST + Apple default, rollback _OFF) or
+        # IDN_LU_RESIDENT_PAIR (bit 8, IDENTICAL, -D MOJOLEARN_IDN_LU_RESIDENT_PAIR);
+        # x_decomp/s_linalg_fast.mojo
         return _lu_factor_resident(k, a)
     A = _M.from_input(a, "a")
     if A.r != A.c:
@@ -2793,9 +2796,10 @@ def _lu_factor_resident(k, a):
     return _LUPair((lu, piv), None, dev=(dA, dLU, dP, lu, piv))
 
 
-def _lu_solve_resident(k, dev, b):
+def _lu_solve_resident(k, dev, b, refine=True):
     """LU_FAST_RESIDENT's `lu_solve` (trans 0) on the pair's device A, LU and
-    piv: B up, the solve, LU_QFIX's refinement step and X down."""
+    piv: B up, the solve, LU_QFIX's refinement step (refine; FAST only, off
+    on IDN_LU_RESIDENT_PAIR) and X down."""
     dA, dLU, dP, lu, _ = dev
     n = lu.shape[0]
     vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
@@ -2808,7 +2812,7 @@ def _lu_solve_resident(k, dev, b):
     if _host_all_finite(bb) is False:
         raise ValueError("b: input must be finite; NaN/inf are unsupported")
     out = _empty((n,) if vec else (n, nrhs), "<f4")
-    k.b.x_decomp_dev_lu_solve(dLU.id, dP.id, dA.id, addr_ro(bb, name="b"), _addr(out, name="x"), [n, nrhs, 1])
+    k.b.x_decomp_dev_lu_solve(dLU.id, dP.id, dA.id, addr_ro(bb, name="b"), _addr(out, name="x"), [n, nrhs, 1 if refine else 0])
     return out
 
 
@@ -2841,9 +2845,10 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     lu, piv = lu_and_piv
     k = _Kit(_mode(numeric_mode))
     dev = getattr(lu_and_piv, "_dev", None)
-    if dev is not None and not trans and lu is dev[3] and piv is dev[4] and k.s_flags() & 4:
-        # LU_FAST_RESIDENT (FAST + Apple default, rollback _OFF): the pair's device factor
-        X = _lu_solve_resident(k, dev, b)
+    if dev is not None and not trans and lu is dev[3] and piv is dev[4] and k.s_flags() & 12:
+        # LU_FAST_RESIDENT (bit 4, FAST + Apple default, rollback _OFF) or
+        # IDN_LU_RESIDENT_PAIR (bit 8, IDENTICAL, no refinement): the pair's device factor
+        X = _lu_solve_resident(k, dev, b, refine=bool(k.s_flags() & 4))
         if X is not None:
             return X
     L = _M.from_input(lu, "lu")

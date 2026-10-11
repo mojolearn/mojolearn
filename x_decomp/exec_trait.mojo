@@ -187,6 +187,14 @@ trait Exec:
         ...
 
     @staticmethod
+    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
+        """MOJOLEARN_IDN_OLS_R_TRISOLVE (x_decomp/ols_trisolve.mojo): res
+        (d) = the back-substitution of R_aug's ((d + 1) x (d + 1)) R x = c
+        when the equilibrated diagonal rank gate passes; returns the gate
+        (1 pass, 0 fail: res is then not meaningful)."""
+        ...
+
+    @staticmethod
     def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:
         """b (n x nrhs) = `lu_solve(lu(a), b)` with trans 0; a is only read,
         info (1) as `lu` writes it."""

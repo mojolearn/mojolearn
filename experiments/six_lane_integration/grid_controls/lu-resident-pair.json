@@ -1,0 +1,41 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "lu-resident-pair",
+ "branch": "lane/lu-resident-pair",
+ "head": "6e9cd50b2",
+ "controls": {
+  "lu_resident_pair": {
+   "define": "MOJOLEARN_IDN_LU_RESIDENT_PAIR",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_LU_RESIDENT_PAIR"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_decomp/s_linalg_fast.mojo:IDN_LU_RESIDENT_PAIR",
+    "x_decomp/s_linalg_fast.mojo:dev_lu_factor_py",
+    "x_decomp/s_linalg_fast.mojo:dev_lu_solve_py",
+    "bindings/_mojolearn_x_decomp.mojo:LU_RESIDENT_ENTRIES",
+    "python/mojolearn/_expansion_decomp.py:lu_factor"
+   ],
+   "binding": "_mojolearn_x_decomp",
+   "bits_change": false,
+   "status": "new",
+   "notes": "lu_factor uploads A once, NaN/inf scan on the device, same launch_lu, LU and piv down once and kept on the device in the pair; lu_solve on the pair uploads only B, same launch_lu_solve, no LU_QFIX refinement. Same launches, same words; host column untouched."
+  }
+ },
+ "lanes": {
+  "algos:lu-factor": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "python/mojolearn/_expansion_decomp.py lu_factor -> _lu_factor_resident (on) | _M.from_input + Kit.lu (off); lu_solve -> _lu_solve_resident (on) | Kit.lu_solve (off)",
+   "controls": [
+    "lu_resident_pair"
+   ],
+   "interaction_groups": []
+  }
+ },
+ "removed": []
+}

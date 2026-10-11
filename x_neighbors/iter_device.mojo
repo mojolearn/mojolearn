@@ -30,6 +30,13 @@ from x_neighbors.svgp_ff import (
     SVGP_TREE, SVGP_TREE_ON, SV8, svgp_ff_tree_comb, svgp_ff_tree_slot, svgp_ff_bound, svgp_ff_failed,
 )
 from x_linear.ff import FF
+from x_neighbors.svgp_b32_gate import (
+    IDN_SVGP_B_FP32_GATED, svgp_b32_sigma_item, svgp_b32_chol_item, svgp_b32_trusted, svgp_b32_select_item,
+)
+from gemm.checks.gemm_identical import (
+    identical_gemm_into as _svgp_gemm_into, identical_gemm_workspace_max_floats as _svgp_gemm_ws,
+)
+from gemm.contract import OP_TN as _SVGP_OP_TN
 from x_linear.ff import ff_of, ff_add, ff_sub, ff_mul, ff_div, ff_sqrt, ff_ld, ff_st
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
@@ -2058,6 +2065,44 @@ def matmul_tn_acc_ff_kernel(a: FP, b: FP, rh: FP, rl: FP, rows_: Int64, n_: Int6
         matmul_tn_acc_ff_item(t, a, b, rh, rl, Int(rows_), Int(n_), Int(m_))
 
 
+# MOJOLEARN_IDN_SVGP_B_FP32_GATED (x_neighbors/svgp_b32_gate.mojo): the gate's
+# kernels. The float-float B tile accumulation reads the device flag and does
+# nothing on a trusted fit, so the route is decided on the device (no host read).
+def matmul_tn_acc_ff_gated_kernel(flag: FP, a: FP, rh: FP, rl: FP, rows_: Int64, n_: Int64):
+    if flag.unsafe_load(0) == Float32(1):
+        return
+    var t = _tid()
+    if t < Int(n_) * Int(n_):
+        matmul_tn_acc_ff_item(t, a, a, rh, rl, Int(rows_), Int(n_), Int(n_))
+
+
+def svgp_b32_sigma_kernel(kuu: FP, b32: FP, a: FP, adiag: FP, info: FP, m_: Int64, noise: Float32, jitter: Float32):
+    var t = _tid()
+    if t == 0:
+        info.unsafe_store(0, Float32(0))
+    if t < Int(m_) * Int(m_):
+        svgp_b32_sigma_item(t, kuu, b32, a, adiag, Int(m_), noise, jitter)
+
+
+def svgp_b32_chol_kernel(a: FP, adiag: FP, info: FP, m_: Int64, j_: Int64):
+    var i = Int(j_) + _tid()
+    if i < Int(m_):
+        svgp_b32_chol_item(i, a, adiag, info, Int(j_), Int(m_))
+
+
+def svgp_b32_trust_kernel(a: FP, adiag: FP, info: FP, flag: FP, m_: Int64):
+    # one thread over the m pivots (the launch site carries the small-launch note)
+    if block_idx.x != 0 or thread_idx.x != 0:
+        return
+    flag.unsafe_store(0, Float32(1) if svgp_b32_trusted(a, adiag, info, Int(m_)) else Float32(0))
+
+
+def svgp_b32_select_kernel(flag: FP, b32: FP, bh: FP, bl: FP, mm_: Int64):
+    var t = _tid()
+    if t < Int(mm_):
+        svgp_b32_select_item(t, flag, b32, bh, bl)
+
+
 #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
 #: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical); -D
 #: MOJOLEARN_SVGP_FAST_SYMTILE_OFF reverts.
@@ -2452,7 +2497,69 @@ def op_svgp_fit_ff(
         enqueue_fill(ctx, d_pbl, Float32(0))
         enqueue_fill(ctx, d_pvh, Float32(0))
         enqueue_fill(ctx, d_pvl, Float32(0))
-    var r0 = 0
+    # MOJOLEARN_IDN_SVGP_B_FP32_GATED: the whole Kfu stays resident (n x m,
+    # 205 MB at 100k x 512) so B32 = Kfu^T Kfu is one identical-GEMM product
+    # over k = n (the contract's leaves + fold); b stays float-float per tile.
+    # With the gate on, r0 starts at n below, so the tiled B loop (SYMTILE or
+    # plain) never launches: SYMTILE being the IDENTICAL default is harmless.
+    # BSPLIT is the one real conflict: its final partial sum would overwrite
+    # the gated B (integration compile 2026-10-11: the old assert also
+    # refused SYMTILE and so could never pass in an IDENTICAL build).
+    comptime assert not (IDN_SVGP_B_FP32_GATED and SVGP_FAST_BSPLIT), (
+        "MOJOLEARN_IDN_SVGP_B_FP32_GATED is IDENTICAL-only (not with the FAST BSPLIT B kernel)"
+    )
+    var d_kf = ctx.enqueue_create_buffer[DType.float32](max(n * m, 1) if IDN_SVGP_B_FP32_GATED else 1)
+    var d_b32 = ctx.enqueue_create_buffer[DType.float32](max(mm, 1) if IDN_SVGP_B_FP32_GATED else 1)
+    var d_ga = ctx.enqueue_create_buffer[DType.float32](max(mm, 1) if IDN_SVGP_B_FP32_GATED else 1)
+    var d_gd = ctx.enqueue_create_buffer[DType.float32](max(m, 1) if IDN_SVGP_B_FP32_GATED else 1)
+    var d_ginfo = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_gflag = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_gws = ctx.enqueue_create_buffer[DType.float32](
+        max(_svgp_gemm_ws(m, m, n), 1) if (IDN_SVGP_B_FP32_GATED and mm > 0 and n > 0) else 1
+    )
+    comptime if IDN_SVGP_B_FP32_GATED:
+        enqueue_fill(ctx, d_gflag, Float32(0))
+        var g0 = 0
+        while g0 < n:
+            var grows = min(tile, n - g0)
+            var kfp = _p(d_kf) + g0 * m
+            _launch_scaled_rbf(ctx, xp + g0 * d, _p(d_z), _p(d_k), kfp, grows, m, d, gamma, variance)
+            ctx.enqueue_function[matmul_tn_acc_ff_kernel](
+                kfp, yp + g0, _p(d_bvh), _p(d_bvl), Int64(grows), Int64(m), Int64(1),
+                grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
+            )
+            g0 += grows
+        if mm > 0 and n > 0:
+            # B32 = Kfu^T Kfu (OP_TN: A and B both k x m = n x m); the second
+            # operand is a non-owning view of the same words
+            var d_kf2 = d_kf.create_sub_buffer[DType.float32](0, n * m)
+            _svgp_gemm_into[False](ctx, d_b32, d_kf, d_kf2, d_gws, m, m, n, _SVGP_OP_TN)
+            ctx.enqueue_function[svgp_b32_sigma_kernel](
+                _p(d_kuu), _p(d_b32), _p(d_ga), _p(d_gd), _p(d_ginfo), Int64(m), noise, jitter,
+                grid_dim=_grid(mm), block_dim=BLOCK,
+            )
+            for j in range(m):
+                ctx.enqueue_function[svgp_b32_chol_kernel](
+                    _p(d_ga), _p(d_gd), _p(d_ginfo), Int64(m), Int64(j), grid_dim=_grid(m - j), block_dim=BLOCK,
+                )
+            ctx.enqueue_function[svgp_b32_trust_kernel](  # small-launch(m: inducing points): reads the m pivots of the m x m factor, never rows
+                _p(d_ga), _p(d_gd), _p(d_ginfo), _p(d_gflag), Int64(m), grid_dim=1, block_dim=1,
+            )
+            _ = d_kf2^
+        # rejected fits only: today's float-float B over the same row tiles
+        g0 = 0
+        while g0 < n:
+            var grows = min(tile, n - g0)
+            ctx.enqueue_function[matmul_tn_acc_ff_gated_kernel](
+                _p(d_gflag), _p(d_kf) + g0 * m, _p(d_bh), _p(d_bl), Int64(grows), Int64(m),
+                grid_dim=_grid(mm), block_dim=(BLOCK if mm > 1 else 1),
+            )
+            g0 += grows
+        if mm > 0:
+            ctx.enqueue_function[svgp_b32_select_kernel](
+                _p(d_gflag), _p(d_b32), _p(d_bh), _p(d_bl), Int64(mm), grid_dim=_grid(mm), block_dim=BLOCK,
+            )
+    var r0 = n if IDN_SVGP_B_FP32_GATED else 0
     while r0 < n:
         var rows = min(tile, n - r0)
         _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
@@ -2584,6 +2691,13 @@ def op_svgp_fit_ff(
     _ = d_pbl^
     _ = d_pvh^
     _ = d_pvl^
+    _ = d_kf^
+    _ = d_b32^
+    _ = d_ga^
+    _ = d_gd^
+    _ = d_ginfo^
+    _ = d_gflag^
+    _ = d_gws^
     _ = ctx^
 
 
