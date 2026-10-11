@@ -3,48 +3,17 @@
  "lane": "lm-lean-step",
  "branch": "lane/lm-lean-step",
  "head": "ac6fef7c9",
- "controls": {
-  "lm_lean_step": {
+ "controls": {},
+ "removed": [
+  {
    "define": "MOJOLEARN_IDN_LM_LEAN_STEP",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_LM_LEAN_STEP"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "training/byte_lm.mojo"
-   ],
-   "binding": "_mojolearn_byte_lm",
-   "bits_change": true,
-   "status": "open",
-   "entries": [],
-   "board": "lm-train-step",
-   "tags": [],
-   "note": "H3: every column takes the out-of-place glue update (optskip|noshadow) with device status words; no shadow copies, no post-update scans. NVIDIA bits unchanged (already OOP); AMD/host move to the OOP kernel (same per-word Adam), check NV==AMD."
+   "control": "lm_lean_step",
+   "reason": "DELETED 2026-10-11 (lane/w2-decide-lm, 8cc78c8ae): A/B on main c8ef6c66d, one run per arm, NV==AMD digests, verdict NOISE: lm-train-step 0.982 (NV 0.975, AMD 0.990), lm-forward 0.942; nv2 v0119, amd a1701. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at 8cc78c8ae^; restore with experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch."
   },
-  "lm_logits_lean": {
+  {
    "define": "MOJOLEARN_IDN_LM_LOGITS_LEAN",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_LM_LOGITS_LEAN"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "training/byte_lm_logits.mojo"
-   ],
-   "binding": "_mojolearn_byte_lm",
-   "bits_change": false,
-   "status": "open",
-   "entries": [],
-   "board": "lm-forward",
-   "tags": [],
-   "note": "H4: logits non-finite scan queued before the download and folded after its final wait; one wait fewer. Same words."
+   "control": "lm_logits_lean",
+   "reason": "DELETED 2026-10-11 (lane/w2-decide-lm, 066722146): A/B on main c8ef6c66d, one run per arm, NV==AMD digests, verdict NOISE: lm-forward 0.925 (NV 0.829, AMD 1.021; the NV gain is common to all B arms), lm-train-step 0.999; nv2 v0120, amd a1702. Define refused by core/six_lane_experiment_guards.mojo. Code recoverable at 066722146^; restore with experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch."
   }
- }
+ ]
 }

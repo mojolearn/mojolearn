@@ -426,6 +426,23 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_LG_FUSED_CHAIN"](), "removed 2026-10-11 (lane/w2-decide-linalg, 9ea0ceea2): IDN_LG_FUSED_CHAIN Lossguide on the fused split chain (F2) was NOISE: gbdt-lossguide istella 1.001, taxi 0.988, gbdt-categorical 1.024 (nv2 v0113, amd a1695); see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch
     comptime assert not is_defined["MOJOLEARN_IDN_CTR_PERM_GRID"](), "removed 2026-10-11 (lane/w2-decide-linalg, d092b6e2d): IDN_CTR_PERM_GRID CTR permutation grid bins were NOISE: gbdt-categorical taxi 1.001 (nv2 v0114, amd a1696); see docs/TOMBSTONES.md"
+    # wave-2 w2-decide-lm (2026-10-11): A/B on main c8ef6c66d, same box, one run per arm, NV==AMD digests (docs/TOMBSTONES.md,
+    # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch). Five deleted, none promoted.
+    # TOMBSTONE: MOJOLEARN_IDN_GEMM_FILL_SPLITK (NOISE/LOSER) deleted 2026-10-11 by 026a811d5; code recoverable at 026a811d5^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_FILL_SPLITK"](), "removed 2026-10-11 (lane/w2-decide-lm, 026a811d5): IDN_GEMM_FILL_SPLITK was NOISE/LOSER: gemm 1.045, mamba2 1.115 (NV 1.248), mlp 0.941, transformer 1.39 (NV), moe 1.010; AMD all 0.98-1.02; nv2 v0116/v0121, amd a1698/a1703. Restore with experiments/removed/MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch."
+    # TOMBSTONE: MOJOLEARN_IDN_LM_LEAN_STEP (NOISE) deleted 2026-10-11 by 8cc78c8ae; code recoverable at 8cc78c8ae^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LM_LEAN_STEP"](), "removed 2026-10-11 (lane/w2-decide-lm, 8cc78c8ae): IDN_LM_LEAN_STEP was NOISE: lm-train-step 0.982 (NV 0.975, AMD 0.990), lm-forward 0.942; nv2 v0119, amd a1701. Restore with experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch."
+    # TOMBSTONE: MOJOLEARN_IDN_LM_LOGITS_LEAN (NOISE) deleted 2026-10-11 by 066722146; code recoverable at 066722146^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LM_LOGITS_LEAN"](), "removed 2026-10-11 (lane/w2-decide-lm, 066722146): IDN_LM_LOGITS_LEAN was NOISE: lm-forward 0.925 (NV 0.829, AMD 1.021; the NV gain is common to all B arms), lm-train-step 0.999; nv2 v0120, amd a1702. Restore with experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch."
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (LOSER) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_DEFER_REGIME"](), "removed 2026-10-11 (lane/w2-decide-lm, 68d9654bb): IDN_ATTN_DEFER_REGIME was LOSER: transformer-forward 1.376 (NV 1.647, AMD 1.104; NV confirmed by v0139), lm-forward 0.914, lm-train-step 0.989; nv2 v0117, amd a1699. Restore with experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch."
+    # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (LOSER) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TF_SESSION_LEAN"](), "removed 2026-10-11 (lane/w2-decide-lm, 68d9654bb): IDN_TF_SESSION_LEAN was LOSER: transformer-forward 1.350 (NV 1.689, AMD 1.011); nv2 v0118, amd a1700. Restore with experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch."
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
