@@ -285,7 +285,8 @@ def test_a_bindings_edge_always_has_a_door_that_resolves_it():
 
     This replaces an assertion that `tokenizer` never sees the forest host
     binding. It does see it, and legitimately: `_bufcheck.py` -> `_buffer.py`,
-    whose line 807 is `from . import _forest_host`. That widens the tokenizer
+    which names it (`_FOREST_HOST_EXTENSION`, for `_host_native`; until
+    lane/lazy-imports it imported `_forest_host` itself). That widens the tokenizer
     lane, which is the safe direction, and the narrowing this file has to
     protect is covered by FAMILY_CASES."""
     sources, why = lane_select.lane_sources()
@@ -1635,11 +1636,22 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      (80: agglomerative and its two x-cluster
                                      lanes dropped). A SELECTOR BUG, fixed in
                                      `enumerator_files` (a host twin counts
-                                     once), not re-pinned"""
+                                     once), not re-pinned
+
+    REMEASURED 2026-10-10 (lane/lazy-imports, against main f6812f421):
+      forest_host_predict  91 -> 88  bootstrap, lowbit-conversions and
+                                     metrics-classification reached the forest
+                                     door only as `_buffer.py` -> `_forest_host.py`
+                                     (for `_load()`); `_buffer` now resolves its
+                                     helpers through `_backend.load_door_host`, so
+                                     they carry the forest host binding and
+                                     host_helpers.mojo (both still every lane)
+                                     but no forest predict code they never run;
+                                     no lane gained"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 83),
                       ("core/gbdt_host_predict.mojo", 53),
-                      ("core/forest_host_predict.mojo", 91),
+                      ("core/forest_host_predict.mojo", 88),
                       ("core/forest_inference.mojo", 50),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
@@ -1670,11 +1682,18 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     # (3c8a34fc4, 2026-10-04) -> _metrics_impl and linear_model; the
     # x_decomp, x_metrics and metrics bindings those name (and `_mode.py`
     # names _mojolearn_metrics) bring their Mojo closures, the neighbors/impl
-    # kernels the metrics and decomp bindings import among them. Cutting the chain
-    # (lazy imports in _byte_lm_host / _linalg_impl) is package work, not a
-    # selector fix; this ceiling holds the line until it is done.
-    assert len(every) <= 251, \
-        f"{len(every)} files now select every lane, against 251 measured on 2026-10-10"
+    # kernels the metrics and decomp bindings import among them.
+    # CUT 2026-10-10 (lane/lazy-imports): 42, below the old 55. Two causes, both
+    # fixed at the edge rather than by widening anything: `_buffer._host_native`
+    # imported the byte LM and forest DOORS for their `_load()` (the loaders
+    # are `_backend.load_door_host` now; `_buffer` still names both bindings,
+    # which stay on every lane with host_helpers.mojo), and `np =
+    # require_numpy(...)` in fourteen `_x_sequence_*.py` files was indexed as a
+    # package symbol named `np`, which almost every lane spec uses (251 -> 235
+    # -> 42). What remains is the buffer helpers, the base/core-host/byte-LM-
+    # host/forest-host bindings and their shared Mojo closure.
+    assert len(every) <= 42, \
+        f"{len(every)} files now select every lane, against 42 measured on 2026-10-10"
 
 
 # --------------------------------------------------------------------------
