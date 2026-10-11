@@ -8116,15 +8116,15 @@ def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
 
 
 # ===========================================================================
-# IDN_ATTN_NO_HOST_REGIME (lane/lm-attn-nohost, 2026-10-11, idea H1)
+# IDN_ATTN_DEFER_REGIME (lane/lm-attn-nohost, 2026-10-11, idea H1)
 # ===========================================================================
 
-comptime IDN_ATTN_NO_HOST_REGIME = (
-    is_defined["MOJOLEARN_IDN_ATTN_NO_HOST_REGIME"]()
+comptime IDN_ATTN_DEFER_REGIME = (
+    is_defined["MOJOLEARN_IDN_ATTN_DEFER_REGIME"]()
     and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN != COLUMN_APPLE
 )
-"""Default OFF experiment, `-D MOJOLEARN_IDN_ATTN_NO_HOST_REGIME`.
+"""Default OFF experiment, `-D MOJOLEARN_IDN_ATTN_DEFER_REGIME`.
 
 Structural reason: every fused forward reads the regime scan and the corner
 flag on the host (one or two waits per layer: 16 round trips per LM forward,
@@ -8191,7 +8191,7 @@ def attention_defer_begin(ctx: DeviceContext) raises -> Bool:
     """Arm the deferred window for one forward on `ctx`: zero the words
     (an enqueued fill, no wait). Returns False, arming nothing, on a build
     without the switch; the caller then runs exactly as before."""
-    comptime if not IDN_ATTN_NO_HOST_REGIME:
+    comptime if not IDN_ATTN_DEFER_REGIME:
         return False
     var g = _ATTN_DEFER_STATE.get_or_create_ptr()
     var si = _attn_defer_slot(ctx)
@@ -8205,7 +8205,7 @@ def attention_defer_end(ctx: DeviceContext) raises -> Bool:
     """Disarm the window and read its words with ONE wait (put it where the
     caller already waits for its output). True when any layer refused the
     regime or hit a corner: the caller must rerun the forward disarmed."""
-    comptime if not IDN_ATTN_NO_HOST_REGIME:
+    comptime if not IDN_ATTN_DEFER_REGIME:
         return False
     var g = _ATTN_DEFER_STATE.get_or_create_ptr()
     var si = _attn_defer_slot(ctx)
@@ -8220,7 +8220,7 @@ def attention_defer_end(ctx: DeviceContext) raises -> Bool:
 
 def attention_defer_disarm(ctx: DeviceContext) raises:
     """Disarm without reading (an error path)."""
-    comptime if IDN_ATTN_NO_HOST_REGIME:
+    comptime if IDN_ATTN_DEFER_REGIME:
         var g = _ATTN_DEFER_STATE.get_or_create_ptr()
         var si = ctx_cache_slot(g[].ids, ctx)
         if si >= 0:
@@ -8228,7 +8228,7 @@ def attention_defer_disarm(ctx: DeviceContext) raises:
 
 
 def _attn_defer_armed(ctx: DeviceContext) raises -> Bool:
-    comptime if not IDN_ATTN_NO_HOST_REGIME:
+    comptime if not IDN_ATTN_DEFER_REGIME:
         return False
     var g = _ATTN_DEFER_STATE.get_or_create_ptr()
     var si = ctx_cache_slot(g[].ids, ctx)
@@ -8448,7 +8448,7 @@ def fused_forward_launch_ran(
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
     var speculative = _attn_speculative()
-    # IDN_ATTN_NO_HOST_REGIME: inside an armed window the regime verdict is
+    # IDN_ATTN_DEFER_REGIME: inside an armed window the regime verdict is
     # enqueued on the device and the corner ORs into the window's words; no
     # wait here (the driver reads the words once and reruns on a flag).
     var deferred = _attn_defer_armed(ctx)
@@ -8682,7 +8682,7 @@ def fused_forward_launch_ran(
             )
         _attn_tick(ctx, ton, tk, "fwd_kernel")
     if deferred:
-        # IDN_ATTN_NO_HOST_REGIME: speculative FUSED_RAN; the window's words
+        # IDN_ATTN_DEFER_REGIME: speculative FUSED_RAN; the window's words
         # carry this call's regime refusal and corner to the driver.
         _ = corner^
         return FUSED_RAN
