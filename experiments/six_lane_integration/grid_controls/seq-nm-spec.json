@@ -10,7 +10,7 @@
    "kind": "switch",
    "arms": {"off": [], "on": ["MOJOLEARN_IDN_NM_SPEC"]},
    "default": "off",
-   "source": ["sequence/theta_spec.mojo:61", "sequence/ets_spec.mojo:38", "sequence/exec_device.mojo:861"],
+   "source": ["sequence/theta_spec.mojo:61", "sequence/ets_spec.mojo:38", "sequence/exec_device.mojo:867"],
    "binding": "_mojolearn_x_sequence",
    "bits_change": false,
    "status": "new",
