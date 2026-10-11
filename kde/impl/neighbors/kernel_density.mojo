@@ -3661,35 +3661,38 @@ def _kde_qt_step(
 
 
 @always_inline
-def _kde_qt_fold(
-    acc: SIMD[DType.float32, KDE_QT_CELL],
-    cells: Int,
-    j_base: Int,
+def _kde_qt_cell(
+    dist_in: Float32,
+    w_log: Float32,
     has_weights: Bool,
-    logw: MutPointer[Float32, MutAnyOrigin],
     bandwidth: Float32,
     kernel: Int,
     metric: Int,
-    mut m: Float32,
-    mut s: Float32,
-):
-    """The default body's per-cell epilogue and (m, s) update, ascending c."""
+) -> Float32:
+    """The default body's per-cell epilogue: sqrt for euclidean, the
+    log-kernel, the log weight."""
+    var dist = dist_in
+    if metric == DIST_L2_SQRT_UNEXPANDED:
+        dist = ftz(identical_sqrt(dist))
+    var v = compute_log_kernel(ftz(dist), bandwidth, kernel)
+    if has_weights:
+        v = ftz(v + w_log)
+    return v
+
+
+@always_inline
+def _kde_qt_lse(mut m: Float32, mut s: Float32, v: Float32):
+    """The default body's (m, s) update for one cell (rescale on a new
+    strict max)."""
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
-    for c in range(cells):
-        var dist = acc[c]
-        if metric == DIST_L2_SQRT_UNEXPANDED:
-            dist = ftz(identical_sqrt(dist))
-        var v = compute_log_kernel(ftz(dist), bandwidth, kernel)
-        if has_weights:
-            v = ftz(v + logw.unsafe_load(j_base + c))
-        if v > m:
-            if m == neg_inf:
-                s = Float32(1.0)
-            else:
-                s = ftz(identical_mul_add(s, ftz(identical_exp(ftz(m - v))), Float32(1.0)))
-            m = v
-        elif v != neg_inf:
-            s = ftz(s + ftz(identical_exp(ftz(v - m))))
+    if v > m:
+        if m == neg_inf:
+            s = Float32(1.0)
+        else:
+            s = ftz(identical_mul_add(s, ftz(identical_exp(ftz(m - v))), Float32(1.0)))
+        m = v
+    elif v != neg_inf:
+        s = ftz(s + ftz(identical_exp(ftz(v - m))))
 
 
 def kde_chunk_lse_qtile_kernel(
@@ -3795,14 +3798,17 @@ def kde_chunk_lse_qtile_kernel(
                     a2 = _kde_qt_step(a2, query.unsafe_load(b2 + fo), row, metric)
                     a3 = _kde_qt_step(a3, query.unsafe_load(b3 + fo), row, metric)
             f0 += KDE_QT_FEAT
-        if v0:
-            _kde_qt_fold(a0, cells, j_base, has_weights, logw, bandwidth, kernel, metric, m0, s0)
-        if v1:
-            _kde_qt_fold(a1, cells, j_base, has_weights, logw, bandwidth, kernel, metric, m1, s1)
-        if v2:
-            _kde_qt_fold(a2, cells, j_base, has_weights, logw, bandwidth, kernel, metric, m2, s2)
-        if v3:
-            _kde_qt_fold(a3, cells, j_base, has_weights, logw, bandwidth, kernel, metric, m3, s3)
+        # Each query folds its cells in ascending c, as the default body.
+        for c in range(cells):
+            var wl = logw.unsafe_load(j_base + c) if has_weights else Float32(0.0)
+            if v0:
+                _kde_qt_lse(m0, s0, _kde_qt_cell(a0[c], wl, has_weights, bandwidth, kernel, metric))
+            if v1:
+                _kde_qt_lse(m1, s1, _kde_qt_cell(a1[c], wl, has_weights, bandwidth, kernel, metric))
+            if v2:
+                _kde_qt_lse(m2, s2, _kde_qt_cell(a2[c], wl, has_weights, bandwidth, kernel, metric))
+            if v3:
+                _kde_qt_lse(m3, s3, _kde_qt_cell(a3[c], wl, has_weights, bandwidth, kernel, metric))
         j_base += KDE_QT_CELL
     if v0:
         part_max.unsafe_store(q0 * n_chunks + chunk, m0)
