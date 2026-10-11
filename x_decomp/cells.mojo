@@ -363,18 +363,8 @@ def bidx(mode: Int, i: Int, d: Int) -> Int:
 #: then folded ascending. The block count is a function of the SHAPE only
 #: (IDENTITY_PATHS row 7's rule), never of the device.
 comptime FOLD_BLOCK = 4096
-
-
-#: lane/xd-kit-gemm (2026-10-11, idea C6/A3): -D MOJOLEARN_IDN_XD_KIT_GEMM, default
-#: OFF. The kit's `launch_gemm` (x_decomp/device.mojo) and `HostExec.gemm`
-#: (x_decomp/host.mojo) run the identical GEMM (`identical_gemm_into`) and its
-#: normative host oracle (`gemm_oracle_cell`) instead of the per-cell FOLD_BLOCK
-#: chains. Structural reason: the per-cell kernel is one thread per output walking
-#: all of k from global memory (rsvd's 900k x 18 products read ~8 B per row per
-#: warp); the identical GEMM tiles through shared memory. Expected: svd istella
-#: -40 ms, randomized-svd istella 162 -> ~90 ms NV. BITS CHANGE (FOLD_BLOCK partials
-#: -> contract leaves + balanced tree) equally on NVIDIA, AMD and the host column.
-comptime IDN_XD_KIT_GEMM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_XD_KIT_GEMM"]()
+# TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by SHA_KIT; code recoverable at SHA_KIT^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_KIT_GEMM.patch
 
 
 # DEVIATION 5300 (PIN; IDENTITY_PATHS row 130): p ascending inside a block, one
