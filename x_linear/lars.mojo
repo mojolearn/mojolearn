@@ -29,6 +29,49 @@ from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty, t_cholesky
 from std.sys.compile import is_defined
+from core.blocked_moments_host import host_bm_column_mean_ptr
+from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cell
+
+# lane/lars-grid-gram (2026-10-11), IDENTICAL experiment, default OFF:
+# `-D MOJOLEARN_IDN_LARS_GRID_GRAM` takes LARS / LassoLars' moments from the
+# row-parallel blocked moments (core/blocked_moments.mojo: leaf column sums +
+# binary-counter fold for the means of X and y, `bm_centered_gram_panels` and
+# `bm_centered_cross_panels` at leaves of `contract_leaf_size(n)` rows) instead
+# of main's moments grid (x_linear/moments_grid.mojo: one block per 16-column
+# tile pair, one serial chain over every row per cell). Structural reason: at
+# taxi's 16 features main's grid is 2 tiles -> 3 blocks, each cell one
+# 1M-row dependent chain; the blocked form puts one block on every leaf of
+# rows (hundreds of blocks) and folds the leaves in log2 levels. Expected
+# lars taxi 60.8 -> ~10 ms NV (ideas-dense-linalg-20261011 F5). Bits change
+# (the fold order), on NVIDIA, AMD and this host column together: the host
+# below runs the device's reference cells (`centered_gram_v1_cell`,
+# `centered_cross_v1_cell`, `host_bm_column_mean_ptr`). Apple keeps main's
+# grid (x_linear/device.mojo `XL_IDN_LARS_GRID_GRAM`).
+comptime LARS_GRID_GRAM = is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM"]()
+
+
+def _lars_host_blocked_moments(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, gg: Int, xty: Int) -> Float32:
+    """The host column of MOJOLEARN_IDN_LARS_GRID_GRAM: the means (zeros
+    without an intercept), the centered Gram (upper cells, mirrored: the
+    product a*b is commutative, so the mirror is the same word) and the
+    centered X'y, each by the blocked fold the device runs. Returns y's mean."""
+    var ym = Float32(0)
+    fill(fw, xm, d, Float32(0))
+    if fi and n > 0:
+        var mu = host_bm_column_mean_ptr(x, n, d)
+        for j in range(d):
+            st(fw, xm + j, mu[j])
+        var my = host_bm_column_mean_ptr(y, n, 1)
+        ym = my[0]
+    var mp = fw + xm
+    for i in range(d):
+        for j in range(i, d):
+            var v = centered_gram_v1_cell(x, mp, n, d, i, j)
+            st(fw, gg + i * d + j, v)
+            st(fw, gg + j * d + i, v)
+    for j in range(d):
+        st(fw, xty + j, centered_cross_v1_cell(x, mp, y, ym, n, d, j))
+    return ym
 
 comptime BIG = Float32(3.0e38)
 comptime TINY32 = Float32(1.1754944e-38)
@@ -71,20 +114,23 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
         t.sync()
     else:
         # the host: one row pass per statistic, vector accumulators (lane linear-cpu)
-        if fi:
-            fill(fw, xm, d, Float32(0))
-            for i in range(n):
-                add_acc(fw, xm, x, i * d, d)
-            for j in range(d):
-                st(fw, xm + j, fd(ld(fw, xm + j), i2f(n)))
-            var acc = Float32(0)
-            for i in range(n):
-                acc = fa(acc, ld(y, i))
-            ym = fd(acc, i2f(n))
+        comptime if LARS_GRID_GRAM:
+            ym = _lars_host_blocked_moments(x, y, n, d, fi, fw, xm, gg, xty)
         else:
-            fill(fw, xm, d, Float32(0))
-        centered_gram(x, n, d, fw, xm, fw, gg)
-        centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
+            if fi:
+                fill(fw, xm, d, Float32(0))
+                for i in range(n):
+                    add_acc(fw, xm, x, i * d, d)
+                for j in range(d):
+                    st(fw, xm + j, fd(ld(fw, xm + j), i2f(n)))
+                var acc = Float32(0)
+                for i in range(n):
+                    acc = fa(acc, ld(y, i))
+                ym = fd(acc, i2f(n))
+            else:
+                fill(fw, xm, d, Float32(0))
+            centered_gram(x, n, d, fw, xm, fw, gg)
+            centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
     comptime if is_gpu():
         if t.nt > 1:
             _lars_path_team(t, n, d, max_iter, lasso, positive, alpha_min, fi, ym, fw, iw, res,
