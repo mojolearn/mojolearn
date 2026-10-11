@@ -1,0 +1,49 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "lu-delayed-update",
+ "branch": "lane/lu-delayed-update",
+ "head": "2ae4e4a0d",
+ "controls": {
+  "lu_delayed_update": {
+   "define": "MOJOLEARN_IDN_LU_DELAYED_UPDATE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_LU_DELAYED_UPDATE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_decomp/lu_delayed.mojo:lu_delayed_factor",
+    "x_decomp/lu_delayed_host.mojo:IDN_LU_DELAYED_UPDATE",
+    "x_decomp/lu_delayed_host.mojo:lu_delayed_host",
+    "x_decomp/device.mojo:launch_lu",
+    "x_decomp/host.mojo:HostExec.lu",
+    "gemm/block_update.mojo:blk_gemm_sub"
+   ],
+   "binding": "_mojolearn_x_decomp",
+   "bits_change": true,
+   "status": "new",
+   "notes": "LAPACK getrf delayed update on IDENTICAL: lu_fast_panel at 32 columns unchanged; per panel the swaps on every later column + U rows inside the 256-column block, rank-32 update of the block's remaining columns via blk_gemm_sub (k = 32); after the block the band rows solved per 32-row chunk (lfm_swaps_trsm_kernel + blk_gemm_sub k = 32) and the trailing square ONE blk_gemm_sub at k = 256 (two contract leaves + fold). Zero-pivot L columns masked. Host column (_mojolearn_x_decomp_host): lu_delayed_host spells the same chains and the contract fold. Unlike NB128 the panel width stays 32."
+  }
+ },
+ "algorithms": {
+  "algos:lu-factor": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "python/mojolearn/_expansion_decomp.py lu_factor -> x_decomp/api.mojo lu_py -> x_decomp/device.mojo DevExec.lu -> launch_lu -> lu_delayed_factor (on) | 32-column rb loop (off)",
+   "controls": [
+    "lu_delayed_update"
+   ],
+   "interaction_groups": []
+  },
+  "expanded:lu-solve": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "python/mojolearn/_expansion_decomp.py solve -> x_decomp/api.mojo lu_gesv_py -> DevExec.lu_gesv -> launch_lu (lu_delayed_factor on) + launch_lu_solve",
+   "controls": [
+    "lu_delayed_update"
+   ],
+   "interaction_groups": []
+  }
+ }
+}
