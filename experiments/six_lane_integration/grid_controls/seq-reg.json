@@ -1,0 +1,31 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "seq-reg",
+ "branch": "lane/seq-reg",
+ "head": "46c598678",
+ "head_note": "head = last code commit before this file; the file is committed on top of it.",
+ "controls": {
+  "idn_seq_reg": {
+   "define": "MOJOLEARN_IDN_SEQ_REG",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_SEQ_REG"]},
+   "default": "off",
+   "source": ["sequence/theta.mojo:52"],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": false,
+   "status": "new",
+   "note": "Theta (op_theta) on IDENTICAL runs theta_run_reg: state in registers, row n-1 written, same operations in the same order (bit-identical, host column unchanged). ETS needs no port: ets_lik already keeps l/b in registers (only the seasonal ring is stored; damped-ets AAN has none). A/B owed: theta + dynamic-optimized-theta taxi-hourly and synthetic, nv and amd; ID check expected MATCH with main."
+  },
+  "idn_seq_fma": {
+   "define": "MOJOLEARN_IDN_SEQ_FMA",
+   "kind": "switch",
+   "arms": {"off": [], "on": ["MOJOLEARN_IDN_SEQ_FMA"]},
+   "default": "off",
+   "source": ["sequence/ops.mojo:373", "sequence/theta.mojo:146", "sequence/ets.mojo:102"],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": true,
+   "status": "new",
+   "note": "theta mu/B updates and ETS q = phi*b + l (and the ETS forecast) contracted from add(mul) into one pinned identical_mul_add on NV, AMD and host (same binding source). Bits change on all columns together. Race with and without MOJOLEARN_IDN_SEQ_REG; damped-ets, theta, dynamic-optimized-theta taxi-hourly + synthetic, nv and amd; forecast_rmse must not drop; ID check owed (nv == amd)."
+  }
+ }
+}
