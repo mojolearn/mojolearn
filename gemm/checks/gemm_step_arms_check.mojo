@@ -157,8 +157,6 @@ from gemm.checks.gemm_identical import (
     gemm_default_ksplit_leaves,
     gemm_default_ksplit_leaves_at,
     _kpack_gather_gs,
-    _kpack_gather_gs_v,
-    _kpack_apad,
     gemm_kpack_addr,
     gemm_kpack_fold_slots_for,
     gemm_kpack_register_slots,
@@ -717,6 +715,8 @@ def check_kpack_page_is_a_bijection(mut failures: List[String]) raises:
     )
 
 
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch
 def check_kpack_gather_covers_the_page(mut failures: List[String]) raises:
     """DEVIATION 2706: under GATHER every thread stores the `R` lines
     `g + u G` at its `(g, step)` to `g stride + step R + u`; over the 256
@@ -734,20 +734,14 @@ def check_kpack_gather_covers_the_page(mut failures: List[String]) raises:
             var g_count = TR if is_a else TUNED_TC
             var per = GEMM_KPACK_RPT if is_a else GEMM_KPACK_CPT
             var ks = GEMM_KPACK_KS
-            # lane/gemm-nv-microtile: the A pad is `_kpack_apad` (0 under
-            # IDN_GEMM_NV_MICROTILE), and each thread stages GP pairs.
-            var pad = GEMM_KPACK_PAD
-            if is_a:
-                pad = _kpack_apad[GEMM_KPACK_KS, GEMM_KPACK_PAD, True]()
-            var stride = ks * per + pad
-            var gp = (g_count * ks) // NTH
+            var stride = ks * per + GEMM_KPACK_PAD
             var total = g_count * stride
             var hits = List[Int]()
             for _ in range(total):
                 hits.append(0)
             var bad = 0
-            for vt in range(NTH * gp):
-                var gs = _kpack_gather_gs_v[16, GEMM_KPACK_KS](vt, outer)
+            for tid in range(NTH):
+                var gs = _kpack_gather_gs[16, 16](tid, outer)
                 var g = gs[0]
                 var step = gs[1]
                 if g < 0 or g >= g_count or step < 0 or step >= ks:
@@ -756,7 +750,7 @@ def check_kpack_gather_covers_the_page(mut failures: List[String]) raises:
                 for u in range(per):
                     var ad = g * stride + step * per + u
                     var line = g + u * g_count
-                    if ad >= total or gemm_kpack_addr(line, step, g_count, per, ks, pad) != ad:
+                    if ad >= total or gemm_kpack_addr(line, step, g_count, per, ks, GEMM_KPACK_PAD) != ad:
                         bad += 1
                         continue
                     hits[ad] += 1
@@ -770,7 +764,7 @@ def check_kpack_gather_covers_the_page(mut failures: List[String]) raises:
             var tag = String("check_kpack_gather_covers_the_page [") + (String("A") if is_a else String("B"))
             tag += String(" outer]") if outer else String(" p]")
             print(tag + " threads=" + String(NTH) + " groups=" + String(g_count) + " per_thread=" + String(per)
-                  + " KS=" + String(ks) + " pad=" + String(pad) + " addresses=" + String(total)
+                  + " KS=" + String(ks) + " pad=" + String(GEMM_KPACK_PAD) + " addresses=" + String(total)
                   + " disagreements=" + String(bad))
             if bad != 0:
                 failures.append(tag + ": " + String(bad) + " disagreements")
