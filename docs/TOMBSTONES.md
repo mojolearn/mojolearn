@@ -129,6 +129,7 @@ in the tables after the sections.
 | [`MOJOLEARN_QN_FAST_COALESCED_OFF`](#mojolearn_qn_fast_coalesced_off) | Linear | DROPPED-slower | 2026-10-09 | [MOJOLEARN_QN_FAST_COALESCED_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_COALESCED_OFF.patch) |
 | [`MOJOLEARN_IDN_CD_GRAM_EPOCHS_64`](#mojolearn_idn_cd_gram_epochs_64) | Linear | DROPPED-slower | 2026-10-10 | [MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch](../experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch) |
 | [`MOJOLEARN_IDN_CHOL_NB128`](#mojolearn_idn_chol_nb128) | Linear | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_CHOL_NB128.patch](../experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch) |
+| [`MOJOLEARN_IDN_BM_GRAM_RB4`](#mojolearn_idn_bm_gram_rb4) | Linear | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_BM_GRAM_RB4.patch](../experiments/removed/MOJOLEARN_IDN_BM_GRAM_RB4.patch) |
 | [`MOJOLEARN_C29_STREAM_TOPK`](#mojolearn_c29_stream_topk) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_STREAM_TOPK.patch](../experiments/removed/MOJOLEARN_C29_STREAM_TOPK.patch) |
 | [`MOJOLEARN_C29_TILE`](#mojolearn_c29_tile) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_TILE.patch](../experiments/removed/MOJOLEARN_C29_TILE.patch) |
 | [`MOJOLEARN_CAGRA_FAST_DOT`](#mojolearn_cagra_fast_dot) | Neighbors | DROPPED-semantics | 2026-10-03 | [MOJOLEARN_CAGRA_FAST_DOT.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch) |
@@ -194,6 +195,9 @@ in the tables after the sections.
 | [`MOJOLEARN_XPREP_PINNED_UPLOAD_OFF`](#mojolearn_xprep_pinned_upload_off) | Prep | slower | 2026-10-09 | [MOJOLEARN_XPREP_PINNED_UPLOAD.patch](../experiments/removed/MOJOLEARN_XPREP_PINNED_UPLOAD.patch) |
 | [`MOJOLEARN_X_PREP_FAST_NONEG`](#mojolearn_x_prep_fast_noneg) | Prep | DROPPED-noise | 2026-10-03 | [MOJOLEARN_X_PREP_FAST_NONEG.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_NONEG.patch) |
 | [`MOJOLEARN_X_PREP_PINNED_OUT`](#mojolearn_x_prep_pinned_out) | Prep | DROPPED | 2026-10-04 | lane only |
+| [`MOJOLEARN_IDN_LAB_UNIQUE_HIST`](#mojolearn_idn_lab_unique_hist) | Prep | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch](../experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch) |
+| [`MOJOLEARN_IDN_LAB_CODES_DIRECT`](#mojolearn_idn_lab_codes_direct) | Prep | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch](../experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch) |
+| [`MOJOLEARN_IDN_LAB_ONE_ENTRY`](#mojolearn_idn_lab_one_entry) | Prep | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch](../experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch) |
 | [`MOJOLEARN_AFCL_L09`](#mojolearn_afcl_l09) | Decomp | never run (sub-arm) | 2026-10-09 | [MOJOLEARN_QR_FAST_DEV.patch](../experiments/removed/MOJOLEARN_QR_FAST_DEV.patch) |
 | [`MOJOLEARN_CLASSICAL_PCA_COV=23`](#mojolearn_classical_pca_cov-arm23) | Decomp | slower | 2026-10-08 | [MOJOLEARN_CLASSICAL_PCA_COV-arm23.patch](../experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm23.patch) |
 | [`MOJOLEARN_CLASSICAL_PCA_COV=4`](#mojolearn_classical_pca_cov-arm4) | Decomp | noise/slower | 2026-10-10 | [MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch](../experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch) |
@@ -308,6 +312,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1`](#mojolearn_idn_neural_gemm_epilogue-arm1) | GEMM | slower | 2026-10-09 | [MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE-arm1.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE-arm1.patch) |
 | [`MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3`](#mojolearn_idn_neural_gemm_schedule-arm3) | GEMM | slower | 2026-10-08 | [MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm3.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm3.patch) |
 | [`MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8`](#mojolearn_idn_neural_gemm_schedule-arm8) | GEMM | slower | 2026-10-07 | [MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm8.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm8.patch) |
+| [`MOJOLEARN_IDN_GEMM_NV_MICROTILE`](#mojolearn_idn_gemm_nv_microtile) | GEMM | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch) |
 | [`MOJOLEARN_IDN_NN20_SPLIT_KV`](#mojolearn_idn_nn20_split_kv) | Other | slower | 2026-10-08 | [MOJOLEARN_IDN_NN20_SPLIT_KV.patch](../experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV.patch) |
 | [`MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES`](#mojolearn_idn_nn20_split_kv_leaves) | Other | slower | 2026-10-08 | [MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES.patch](../experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES.patch) |
 | [`MOJOLEARN_IDN_LU_NB128`](#grid-act-16-2026-10-11) | Decomp | DELETE-slower | 2026-10-11 | [MOJOLEARN_IDN_LU_NB128.patch](../experiments/removed/MOJOLEARN_IDN_LU_NB128.patch) |
@@ -1073,6 +1078,15 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Files the patch restores: `x_decomp/ols_trisolve.mojo` (deleted), `x_decomp/api.mojo`, `x_decomp/exec_trait.mojo`, `x_decomp/device.mojo`, `x_decomp/host.mojo`, `bindings/_mojolearn_x_decomp.mojo`, `bindings/_mojolearn_x_decomp_host.mojo`, `python/mojolearn/linear_model.py`, `python/mojolearn/_surface_decomp.py`. The default Jacobi SVD route is untouched.
 - grid_controls: `gap-linalg.json` `ols_r_trisolve` moved to `removed` (lane entry `classical:ols` dropped: it had no other control).
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/i17-decide-linalg-seq, c14beeda5): IDN_OLS_R_TRISOLVE was NOISE with bits changed.
+### MOJOLEARN_IDN_BM_GRAM_RB4
+
+- Verdict: DROPPED-slower (loser). Deleted 2026-10-11 by `bde9c2243` (lane/i17-decide-nbr-lin-prep).
+- Recoverable at `bde9c2243^` (lane head after the LARS promotion; main 2afa942e3 + promotions). Patch: `experiments/removed/MOJOLEARN_IDN_BM_GRAM_RB4.patch` (code files only, `git diff <filled-tombstone head> bde9c2243^ -- core/blocked_moments.mojo`, so it applies to the tree as left).
+- What it tried: lane gram-rb4 (2026-10-11): `bm_leaf_gram_rb4_kernel`, the blocked-moments leaf Gram as 64 x 64 tile pairs with a 4 x 4 register micro-tile a thread (8 shared loads feed 16 FMAs, a staged row read 2 x (d/64) times) instead of 16 x 16 tiles with one cell a thread. Bits unchanged by construction (same per-cell chains).
+- Verdict numbers: A/B on main b2657cc89, one run per arm, NV L40S / AMD MI325X ratio: ridge istella 0.98, ridge taxi 1.08, pca istella 1.14 / 0.99, pca taxi 1.24 / 1.00, ols istella 0.99 / 0.98, ols taxi NV 1.18 (the AMD 0.37 is the old A arm's noise, shared by an unrelated arm). Net ~1.0-1.1x slower. Quality and digests unchanged. Runs v0049, a1632.
+- Files the patch restores: `core/blocked_moments.mojo`.
+- grid_controls: `gram-rb4.json` `bm_gram_rb4` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, bde9c2243): IDN_BM_GRAM_RB4 was SLOWER net ~1.0-1.1x.
 
 ## Neighbors
 
@@ -1618,6 +1632,20 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Files the patch restores: `resample/estimator.mojo`, `resample/fast_apple.mojo`
 - Guard refusal: core/six_lane_experiment_guards.mojo (lane owed-deletions-D1 block).
 - EXPERIMENTS.md:386: `RESAMPLE_FAST_RANK_SORT`; bootstrap / taxi, istella; lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf; M3 afc_ab_def, full board, 1 run/arm, 2026-10-04; taxi 14.38 -> 13.64; istella 11.59 -> 14.46; DROPPED-slower; mixed: slower on istella. Stays opt-in OFF (resample/estimator.mojo)
+
+### MOJOLEARN_IDN_LAB_UNIQUE_HIST
+
+One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HIST`, `MOJOLEARN_IDN_LAB_CODES_DIRECT`, `MOJOLEARN_IDN_LAB_ONE_ENTRY`); G2 needed G1 and G3 needed G2, so they were deleted together with one patch.
+
+<a id="mojolearn_idn_lab_codes_direct"></a><a id="mojolearn_idn_lab_one_entry"></a>
+
+- Verdict: DROPPED-slower (losers, all three). Deleted 2026-10-11 by `de9ce7b39` (lane/i17-decide-nbr-lin-prep).
+- Recoverable at `de9ce7b39^` (lane code at lane/lab-binarizer 3fef1d762). Patch: `experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch` (code files only, the reverse of the deletion taken after the tombstones were filled, so it applies to the tree as left).
+- What it tried: lane lab-binarizer (2026-10-11), IDENTICAL: G1 UNIQUE_HIST, classes_ from a device min + presence flags + flag scan (range cap from the row count, max 2^24) instead of the radix sort; G2 CODES_DIRECT, each label's code as the flag rank RK[v - min] instead of a binary search; G3 ONE_ENTRY, LabelBinarizer.fit_transform feeding the fit program's codes to the dense output with no second label upload. Same words as the incumbent.
+- Verdict numbers: A/B on main b2657cc89, one run per arm, NV L40S / AMD MI325X: label-encoder 2.1-2.6x slower on both vendors (istella 5.7 -> 12.8 ms NV, 2.9 -> 6.1 ms AMD); label-binarizer istella 1.15-1.39x slower, taxi ~1.0. Digests NV == AMD, quality unchanged. Runs v0041-v0044, a1624-a1627.
+- Files the patch restores: `x_prep/labels.mojo`, `x_prep/fam2.mojo`, `python/mojolearn/_expansion_prep.py`, `bindings/_mojolearn_x_prep.mojo`, `bindings/_mojolearn_x_prep_host.mojo`.
+- grid_controls: `lab-binarizer.json` `idn_lab_unique_hist`, `idn_lab_codes_direct`, `idn_lab_one_entry` moved to `removed` (interaction groups cleared).
+- Guard refusals (core/six_lane_experiment_guards.mojo): one per define, removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, de9ce7b39).
 
 ## Decomp
 
@@ -2673,6 +2701,16 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - grid_controls/neural-gemm-attn-dedupe.json removed (control neural_gemm_schedule): DELETED by lane/grid-prune 2026-10-07: OVN N03 NVIDIA async pipeline 2.2x/4.2x slower than its sync control; guards refuse arm 8. Recoverable at main ab554bb4a.
 - EXPERIMENTS.md:1592 (IDENTICAL grid prune: losers and dead arms deleted (lane/gri): `MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8` on neural GEMM callers (lm, transformer, mamba, samba, training), NVIDIA, main @ ab554bb4a, A/B OVN N03 `async_operand_pipeline_check` (`overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json`), 0.185 -> 0.411 ms and 2.76 -> 11.69 ms vs its synchronous control ms, **DROPPED-slower, arm deleted (`SCHED_ASYNC`, `NN08`, `neural_async_ab`)**: NVIDIA ran `pipeline_gemm[True]` 2.2x / 4.2x slower; AMD ran the sync control (A/A). `gemm/experiments/async_operand_pipeline.mojo` stays for its standalone check
 
+
+### MOJOLEARN_IDN_GEMM_NV_MICROTILE
+
+- Verdict: DROPPED-slower (loser). Deleted 2026-10-11 by `c38d7bc89` (lane/i17-decide-nbr-lin-prep).
+- Recoverable at `c38d7bc89^` (lane code at lane/gemm-nv-microtile 0a2e921d8). Patch: `experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch` (code files only, the reverse of the deletion taken after the tombstones were filled).
+- What it tried: lane gemm-nv-microtile (2026-10-11), idea A1 of ideas-dense-linalg-20261011: the NVIDIA IDENTICAL packed GEMM body at K window 32 instead of 16 (`GEMM_NV_MICRO_KS`), two gather (group, step) pairs a thread a window, and no A-page pad (`_kpack_apad`) so two blocks still share an L40S SM. Bits unchanged by construction.
+- Verdict numbers: neural:gemm gaussian NV L40S 48.5 -> 55.9 ms (1.15x slower), run v0050 against r1011.nfwd, main b2657cc89, one run per arm. NVIDIA-only switch (AMD not applicable).
+- Files the patch restores: `gemm/checks/gemm_identical.mojo`, `gemm/checks/gemm_step_arms_check.mojo`.
+- grid_controls: `gemm-nv-microtile.json` `gemm_nv_microtile` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, c38d7bc89): IDN_GEMM_NV_MICROTILE was SLOWER: NV 1.15x.
 
 ## Other
 

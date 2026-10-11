@@ -1,0 +1,451 @@
+diff --git a/bindings/_mojolearn_x_prep.mojo b/bindings/_mojolearn_x_prep.mojo
+index a08f714da..edbe99f0f 100644
+--- a/bindings/_mojolearn_x_prep.mojo
++++ b/bindings/_mojolearn_x_prep.mojo
+@@ -31,6 +31,7 @@ from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
+ from x_prep.fastmaxabs import maxabs_fit_direct
+ 
+ from x_prep.fastpt import PTIMPUTE_FLAGS
++from x_prep.labels import IDN_LAB_UNIQUE_HIST, IDN_LAB_CODES_DIRECT, IDN_LAB_ONE_ENTRY
+ from x_prep.label_fast import LABEL_PRESENT, IDN_LABEL
+ 
+ 
+@@ -262,6 +263,15 @@ def target_scratch_binding() raises -> PythonObject:
+     return PythonObject(1)
+ 
+ 
++def lab_hist_binding() raises -> PythonObject:
++    """Lane lab-binarizer (x_prep/labels.mojo, IDENTICAL, default off): bits
++    read by python/mojolearn/_expansion_prep.py `_lab_hist`: 1
++    IDN_LAB_UNIQUE_HIST, 2 IDN_LAB_CODES_DIRECT, 4 IDN_LAB_ONE_ENTRY;
++    registered only when G1 is on."""
++    return PythonObject((1 if IDN_LAB_UNIQUE_HIST else 0) | (2 if IDN_LAB_CODES_DIRECT else 0)
++                        | (4 if IDN_LAB_ONE_ENTRY else 0))
++
++
+ def label_present_binding() raises -> PythonObject:
+     return PythonObject(1)
+ 
+@@ -358,8 +368,6 @@ def idn_fam2_binding() raises -> PythonObject:
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
+ @export
+ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
+     try:
+@@ -418,6 +426,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
+             m.def_function[target_scratch_binding]("x_prep_target_scratch")
+         comptime if LABEL_PRESENT:
+             m.def_function[label_present_binding]("x_prep_label_present")
++        comptime if IDN_LAB_UNIQUE_HIST:
++            m.def_function[lab_hist_binding]("x_prep_lab_hist")
+         comptime if X_PREP_POOL_ARENA:
+             m.def_function[pool_arena_binding]("x_prep_pool_arena")
+         comptime if CAT_CLS2_PACK:
+diff --git a/bindings/_mojolearn_x_prep_host.mojo b/bindings/_mojolearn_x_prep_host.mojo
+index 1ffe28ce5..cec2fa58d 100644
+--- a/bindings/_mojolearn_x_prep_host.mojo
++++ b/bindings/_mojolearn_x_prep_host.mojo
+@@ -16,6 +16,7 @@ from x_prep.host.program import run_program_host
+ from x_prep.user_host import F32P, F64P, I32P, ii_rows, ii_gather, ii_scatter, ii_conv
+ from x_prep.folds import kfold_folds, strat_folds
+ from x_prep.py2mojo import PY2MOJO_PREP
++from x_prep.labels import IDN_LAB_UNIQUE_HIST, IDN_LAB_CODES_DIRECT, IDN_LAB_ONE_ENTRY
+ from x_prep.label_fast import IDN_LABEL
+ from x_prep.blocked import IDN_NB_ONEPASS
+ from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
+@@ -178,6 +179,15 @@ def py2mojo_binding() raises -> PythonObject:
+     return PythonObject(1)
+ 
+ 
++def lab_hist_binding() raises -> PythonObject:
++    """Lane lab-binarizer (x_prep/labels.mojo, IDENTICAL, default off): bits
++    read by python/mojolearn/_expansion_prep.py `_lab_hist`: 1
++    IDN_LAB_UNIQUE_HIST, 2 IDN_LAB_CODES_DIRECT, 4 IDN_LAB_ONE_ENTRY;
++    registered only when G1 is on."""
++    return PythonObject((1 if IDN_LAB_UNIQUE_HIST else 0) | (2 if IDN_LAB_CODES_DIRECT else 0)
++                        | (4 if IDN_LAB_ONE_ENTRY else 0))
++
++
+ def label_present_binding() raises -> PythonObject:
+     return PythonObject(1)
+ 
+@@ -233,8 +243,6 @@ def idn_fam2_binding() raises -> PythonObject:
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
+ @export
+ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
+     try:
+@@ -258,6 +266,8 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
+         # IDENTICAL device binding (x_prep/label_fast.mojo, x_prep/blocked.mojo)
+         comptime if IDN_LABEL:
+             m.def_function[label_present_binding]("x_prep_label_present")
++        comptime if IDN_LAB_UNIQUE_HIST:
++            m.def_function[lab_hist_binding]("x_prep_lab_hist")
+         comptime if IDN_LABEL or IDN_NB_ONEPASS:
+             m.def_function[idn_int_binding]("x_prep_idn_int")
+         comptime if IDN_STATS_BLOCKED or IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED or IDN_RR_EIGH:
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index 9e925a194..57e786b6c 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -122,8 +122,10 @@ _OPS = dict(
+     c2_gt=255, c2_rfe_step=256, c2_rfe_rank=257, c2_ii_miss=258, c2_ii_pos=259, c2_ii_ord=260, c2_ii_rand=261,
+     c2_colmax=262, c2_grid=263, c2_nan_sub=264, c2_nan_rows=265, c2_cnt0=266, c2_mm_keep=267, c2_mm_merge=268,
+     c2_add_i64=269, c2_nonfinite=270,
+-    # TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
++    # lane lab-binarizer (x_prep/labels.mojo, in fam2's range): IDENTICAL builds with
++    # -D MOJOLEARN_IDN_LAB_UNIQUE_HIST only (they export x_prep_lab_hist)
++    lab_min_part=271, lab_min_fold=272, lab_zero=273, lab_present=274, lab_flag_count=275,
++    lab_hist_write=276, lab_code_direct=277,
+     # lane apple-fast-q-clf (x_prep/proba64.mojo, in the py2mojo range): staged only when the
+     # binding exports x_prep_proba64 (FAST, not -D MOJOLEARN_PROBA64_QOLD)
+     q64_softmax=213,
+@@ -4575,11 +4577,90 @@ def _label_fit_present(mode, lb, codes):
+     return got[0], got[1], (pr.get_i32(out, n) if codes else None)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
++_LAB_HIST = {}
++
++
++def _lab_hist(mode):
++    """Lane lab-binarizer: the IDENTICAL binding's label switches
++    (bindings/_mojolearn_x_prep.mojo `lab_hist_binding`: 1
++    MOJOLEARN_IDN_LAB_UNIQUE_HIST, 2 MOJOLEARN_IDN_LAB_CODES_DIRECT, 4
++    MOJOLEARN_IDN_LAB_ONE_ENTRY), 0 on another tier or a build without them."""
++    if mode != "identical":
++        return 0
++    binding = _prep_binding(mode)
++    key = id(binding)
++    v = _LAB_HIST.get(key)
++    if v is None:
++        fn = _optional_prep_entry(binding, "x_prep_lab_hist")
++        v = int(fn()) if fn is not None else 0
++        _LAB_HIST[key] = v
++    return v
++
++
++def _lab_hist_range(n):
++    """Presence flags of the G1 route for n labels. Cost reasoning, not a label
++    range: zeroing and scanning R flags must stay a small multiple of the n-row
++    passes it replaces (the radix sort reads and writes every row several
++    times), so R grows with n (2 flags a row, at least 4096 = 16 KB so small
++    inputs keep the [0, 4096) presence route's reach), and stops at 2^24 flags
++    (64 MB of scratch; the float32 codes stay exact below 2^24). A wider label
++    range sets BAD on the device and the call takes the sort route."""
++    return min(1 << 24, max(4096, 2 * int(n)))  # glue: buffer size from the row count
++
++
++def _label_fit_hist(mode, lb, codes, direct):
++    """G1 (MOJOLEARN_IDN_LAB_UNIQUE_HIST): integral labels within R of their
++    device minimum: min (chunk minima + fold), presence flags relative to the
++    minimum, the flag scan, the sorted distinct words; no sort. G2 (direct):
++    codes by the flag rank RK[v - min] instead of `lookup`. Every number is
++    the device's; a BAD flag (a non-integral label, a range over R) returns
++    None and the caller takes the sort route."""
++    n = lb.n
++    R = _lab_hist_range(n)
++    pr = _Prog()
++    x = _label_load(pr, lb)
++    ch = _label_chunk(n)
++    nch = -(-n // ch)
++    pmin, mn, bad = pr.work(nch), pr.work(1), pr.alloc(1)
++    pr.stage("lab_min_part", nch, x, n, ch, pmin, bad)
++    pr.stage("lab_min_fold", 1, pmin, nch, mn)
++    fl = pr.work(R)
++    pr.stage("lab_zero", R, fl)
++    pr.stage("lab_present", n, x, mn, R, fl, bad)
++    fch = _label_chunk(R)
++    fnch = -(-R // fch)
++    cnt, off = pr.work(fnch), pr.work(fnch)
++    u, k = pr.alloc(R), pr.alloc(1)
++    rk = pr.work(R) if (codes and direct) else _NONE
++    pr.stage("lab_flag_count", fnch, fl, R, fch, cnt)
++    pr.stage("uniq_scan", 1, cnt, fnch, off, k)
++    pr.stage("lab_hist_write", fnch, fl, R, fch, off, u, mn, rk)
++    out = None
++    if codes:
++        c = pr.work(n)
++        if direct:
++            pr.stage("lab_code_direct", n, x, mn, R, rk, c)
++        else:
++            pr.stage("lookup", n, x, n, 1, u, R, k, c)
++        out = pr.output(n, "i")
++        pr.stage("f2i", n, c, out)
++    pr.run(mode)
++    if pr.get_i32(bad, 1).tolist()[0]:
++        return None
++    got = _label_classes_of(pr, lb, u, k)
++    if got is None:
++        return None
++    return got[0], got[1], (pr.get_i32(out, n) if codes else None)
++
++
+ def _label_fit_device(mode, lb, codes=False):
+     """One program: (classes, cats, int32 codes Array or None), or None for
+     the old route."""
++    bits = _lab_hist(mode)
++    if bits & 1:
++        got = _label_fit_hist(mode, lb, codes, bool(bits & 2))
++        if got is not None:
++            return got
+     if _label_present_enabled(mode):
+         got = _label_fit_present(mode, lb, codes)
+         if got is not None:
+@@ -4779,7 +4860,48 @@ class LabelBinarizer(_PrepBase):
+         self.y_type_ = "binary" if len(self._classes) <= 2 else "multiclass"
+         return self
+ 
++    def _check_params(self):
++        if self.sparse_output:
++            raise NotImplementedError("mojolearn: LabelBinarizer(sparse_output=True) is not implemented")
++        if not (isinstance(self.neg_label, numbers.Integral) and isinstance(self.pos_label, numbers.Integral)
++                and self.neg_label < self.pos_label):
++            raise ValueError("mojolearn: neg_label must be an integer below pos_label")
++
++    def _fit_transform_one(self, y):
++        """G3 (MOJOLEARN_IDN_LAB_ONE_ENTRY, lane lab-binarizer): the fit
++        program's codes (G1 + G2) feed the dense output, instead of a second
++        upload + lab_load + lookup over the raw labels; the int32 output and
++        every word are `transform`'s. None: the two-step route."""
++        mode = _mode()
++        if not (_lab_hist(mode) & 4):
++            return None
++        self._check_params()
++        if _multilabel_indicator(y) is not None:
++            return None
++        lb = _label_buffer(y)
++        got = _label_fit_device(mode, lb, codes=True) if lb is not None else None
++        if got is None or len(got[0]) < 2:
++            return None
++        self.numeric_mode_ = mode
++        self._classes, self._cats = got[0], got[1]
++        self.classes_ = _classes_array(self._classes)
++        K = len(self._classes)
++        self.y_type_ = "binary" if K <= 2 else "multiclass"
++        binary = K <= 2
++        W = 1 if binary else K
++        n = lb.n
++        pr = _Prog()
++        codes = pr.put_codes(got[2])
++        out = pr.output(n * W, "i")
++        pr.stage("label_binarize", n * W, codes, n, K, 1 if binary else 0, int(self.neg_label),
++                 int(self.pos_label), W, out)
++        pr.run(mode)
++        return pr.get_i32(out, (n, W))
++
+     def fit_transform(self, y):
++        got = self._fit_transform_one(y)
++        if got is not None:
++            return got
+         return self.fit(y).transform(y)
+ 
+     def _check_fitted(self):
+diff --git a/x_prep/fam2.mojo b/x_prep/fam2.mojo
+index 1c4b6dabe..5a3155c31 100644
+--- a/x_prep/fam2.mojo
++++ b/x_prep/fam2.mojo
+@@ -55,6 +55,7 @@ from x_prep.prims import add, mul
+ from x_prep.py2mojo import splitmix_at
+ from x_prep.blocked import XB
+ from x_prep.cpu2_prep import C2_FIRST, C2_N, run_c2_unit
++from x_prep.labels import IDN_LAB_UNIQUE_HIST, LAB_N, run_lab_unit
+ from x_prep.gram_blocked import (
+     IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, gb_part_unit, gb_part_row_unit, gb_fold_unit, qcb_part_unit, qcb_fold_unit,
+ )
+@@ -72,9 +73,10 @@ comptime IDN_LABEL_INV = True
+ 
+ comptime F2_BASE = 230
+ # lane cpu2-l3-prep: ops 242 .. are x_prep/cpu2_prep.mojo's (C2_N of them)
+-comptime F2_N = C2_FIRST + C2_N
+-# TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
++# lane lab-binarizer: ops 271 .. are x_prep/labels.mojo's G1/G2 units (LAB_N of them,
++# compiled only under -D MOJOLEARN_IDN_LAB_UNIQUE_HIST)
++comptime LAB_FIRST = C2_FIRST + C2_N
++comptime F2_N = LAB_FIRST + LAB_N
+ 
+ 
+ @always_inline
+@@ -337,3 +339,7 @@ def run_f2_unit[OP: Int](t: Int, f: FP, q: IP):
+     # lane cpu2-l3-prep (x_prep/cpu2_prep.mojo), every tier
+     comptime if OP >= F2_BASE + C2_FIRST and OP < F2_BASE + C2_FIRST + C2_N:
+         run_c2_unit[OP - F2_BASE - C2_FIRST](t, f, q)
++    # lane lab-binarizer (x_prep/labels.mojo), IDENTICAL under MOJOLEARN_IDN_LAB_UNIQUE_HIST
++    comptime if IDN_LAB_UNIQUE_HIST:
++        comptime if OP >= F2_BASE + LAB_FIRST and OP < F2_BASE + LAB_FIRST + LAB_N:
++            run_lab_unit[OP - F2_BASE - LAB_FIRST](t, f, q)
+diff --git a/x_prep/labels.mojo b/x_prep/labels.mojo
+index b36343e75..945f83101 100644
+--- a/x_prep/labels.mojo
++++ b/x_prep/labels.mojo
+@@ -9,9 +9,36 @@ words come out of a chunked run scan in three parallel stages instead of one
+ thread walking every row (`unique_cols`). Integer arithmetic only: the same
+ words on every vendor and the host, and the same words as `unique_cols`."""
+ from std.memory import bitcast
++from std.sys.compile import is_defined
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, key, canonical_nan
+-# TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
++
++# Lane lab-binarizer (2026-10-11), ideas-dense-linalg G1-G3, IDENTICAL only, every
++# vendor and the host column, DEFAULT OFF (A/B owed on NV + AMD, label-binarizer /
++# label-encoder taxi + istella):
++#   G1 MOJOLEARN_IDN_LAB_UNIQUE_HIST: integral labels whose range from their device
++#     minimum fits R flags (R chosen in python/mojolearn/_expansion_prep.py
++#     `_lab_hist_range` from the row count and a 2^24 cap, never a label range)
++#     take min + presence flags + a flag scan for the sorted distinct words: no
++#     radix sort and no run scan (about 6 launches instead of the sort's ~20). The
++#     flags, scan and words are integers, so classes are the sort route's words
++#     (as IDN_LABEL's [0, 4096) presence route, x_prep/label_fast.mojo).
++#     Expected: the fit drops from sort-bound to two n-row passes (several x on fit).
++#   G2 MOJOLEARN_IDN_LAB_CODES_DIRECT (needs G1): each label's code is RK[v - min],
++#     the flag scan's rank, instead of a binary search among the K classes. Same
++#     codes by construction (rank among the ascending distinct values).
++#   G3 MOJOLEARN_IDN_LAB_ONE_ENTRY (needs G2): LabelBinarizer.fit_transform takes
++#     the fit program's codes into the dense output instead of a second
++#     upload + lab_load + lookup over the raw labels. The int32 output dtype is
++#     kept (the public API's); a narrower dtype would change what callers get.
++comptime IDN_LAB_UNIQUE_HIST = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_LAB_UNIQUE_HIST"]()
++comptime IDN_LAB_CODES_DIRECT = IDN_LAB_UNIQUE_HIST and is_defined["MOJOLEARN_IDN_LAB_CODES_DIRECT"]()
++comptime IDN_LAB_ONE_ENTRY = IDN_LAB_CODES_DIRECT and is_defined["MOJOLEARN_IDN_LAB_ONE_ENTRY"]()
++#: ops F2_BASE + LAB_FIRST .. (x_prep/fam2.mojo `run_f2_unit`): lab_min_part,
++#: lab_min_fold, lab_zero, lab_present, lab_flag_count, lab_hist_write, lab_code_direct
++comptime LAB_N = 7
++#: |label| bound of the integral test: int32 arithmetic on v - min never overflows
++comptime _LAB_ABS = 1 << 30
+ 
+ 
+ @always_inline
+@@ -159,3 +186,122 @@ def row_ones_unit(t: Int, f: FP, q: IP):
+         var code = Int(ld(f, C + j))
+         if code >= 0:
+             sti(f, O + code, 1)
++
++
++@always_inline
++def _lab_int(x: Float32) -> Tuple[Bool, Int]:
++    """(ok, v): the float32 word x is the integer v exactly with |v| < 2^30
++    (-0.0 is 0), by bits (Metal flushes compare operands); NaN, infinities,
++    fractions and larger words are not ok."""
++    var b = bitcast[DType.uint32](x)
++    if b == UInt32(0x80000000):
++        b = UInt32(0)
++    var a = b & UInt32(0x7FFFFFFF)
++    if a >= bitcast[DType.uint32](Float32(_LAB_ABS)):
++        return (False, 0)
++    var v = Int(bitcast[DType.float32](b))
++    return (bitcast[DType.uint32](Float32(v)) == b, v)
++
++
++def lab_min_part_unit(t: Int, f: FP, q: IP):
++    """G1. q = [X, n, CH, PMIN, BAD]; t = chunk of CH rows: the least integral
++    label of the chunk at PMIN[t] (int32 bits; 2^30 when none), BAD[0] = 1 when
++    a row is not integral (every writer stores the same word)."""
++    var X = p(q, 0)
++    var lo = t * p(q, 2)
++    var hi = min(lo + p(q, 2), p(q, 1))
++    var m = _LAB_ABS
++    var bad = False
++    for i in range(lo, hi):
++        var r = _lab_int(raw(f, X + i))
++        if r[0]:
++            m = min(m, r[1])
++        else:
++            bad = True
++    sti(f, p(q, 3) + t, m)
++    if bad:
++        sti(f, p(q, 4), 1)
++
++
++def lab_min_fold_unit(t: Int, f: FP, q: IP):
++    """G1. q = [PMIN, nch, MN]; one unit: MN = the least of the nch chunk
++    minima (int32 bits; nch is about sqrt(n), `_label_chunk`, as `uniq_scan`)."""
++    var m = _LAB_ABS
++    for c in range(p(q, 1)):
++        m = min(m, ldi(f, p(q, 0) + c))
++    sti(f, p(q, 2), m)
++
++
++def lab_zero_unit(t: Int, f: FP, q: IP):
++    """G1. q = [OUT]; OUT[t] = 0 (int32 bits)."""
++    sti(f, p(q, 0) + t, 0)
++
++
++def lab_present_unit(t: Int, f: FP, q: IP):
++    """G1. q = [X, MN, R, FL, BAD]; t = row: FL[v - MN] = 1 for an integral
++    label v with v - MN < R, else BAD[0] = 1 (every writer stores 1)."""
++    var r = _lab_int(raw(f, p(q, 0) + t))
++    var d = r[1] - ldi(f, p(q, 1))
++    if r[0] and d >= 0 and d < p(q, 2):
++        sti(f, p(q, 3) + d, 1)
++    else:
++        sti(f, p(q, 4), 1)
++
++
++def lab_flag_count_unit(t: Int, f: FP, q: IP):
++    """G1. q = [FL, R, CH, CNT]; t = chunk of CH flags: how many are set."""
++    var lo = t * p(q, 2)
++    var hi = min(lo + p(q, 2), p(q, 1))
++    var k = 0
++    for r in range(lo, hi):
++        if ldi(f, p(q, 0) + r) != 0:
++            k += 1
++    sti(f, p(q, 3) + t, k)
++
++
++def lab_hist_write_unit(t: Int, f: FP, q: IP):
++    """G1/G2. q = [FL, R, CH, OFF, U, MN, RK]; t = chunk: every set flag r of
++    the chunk writes the float word of r + MN at U[OFF[t] ..], ascending (an
++    exact float32 integer: it is a label's own word); RK >= 0 (G2): RK[r] = its
++    rank among the distinct labels (int32 bits; unset flags are never read)."""
++    var lo = t * p(q, 2)
++    var hi = min(lo + p(q, 2), p(q, 1))
++    var k = ldi(f, p(q, 3) + t)
++    var mn = ldi(f, p(q, 5))
++    var RK = p(q, 6)
++    for r in range(lo, hi):
++        if ldi(f, p(q, 0) + r) != 0:
++            f.unsafe_store(p(q, 4) + k, Float32(r + mn))
++            if RK >= 0:
++                sti(f, RK + r, k)
++            k += 1
++
++
++def lab_code_direct_unit(t: Int, f: FP, q: IP):
++    """G2. q = [X, MN, R, RK, C]; t = row: C[t] = the float code RK[v - MN]
++    (`lookup`'s word: the label's index among the ascending classes); -1 for
++    a row outside the flags (BAD is then set and the caller discards C)."""
++    var r = _lab_int(raw(f, p(q, 0) + t))
++    var d = r[1] - ldi(f, p(q, 1))
++    var c = -1
++    if r[0] and d >= 0 and d < p(q, 2):
++        c = ldi(f, p(q, 3) + d)
++    st(f, p(q, 4) + t, Float32(c))
++
++
++def run_lab_unit[K: Int](t: Int, f: FP, q: IP):
++    """K = op - F2_BASE - LAB_FIRST (x_prep/fam2.mojo)."""
++    comptime if K == 0:
++        lab_min_part_unit(t, f, q)
++    comptime if K == 1:
++        lab_min_fold_unit(t, f, q)
++    comptime if K == 2:
++        lab_zero_unit(t, f, q)
++    comptime if K == 3:
++        lab_present_unit(t, f, q)
++    comptime if K == 4:
++        lab_flag_count_unit(t, f, q)
++    comptime if K == 5:
++        lab_hist_write_unit(t, f, q)
++    comptime if K == 6:
++        lab_code_direct_unit(t, f, q)

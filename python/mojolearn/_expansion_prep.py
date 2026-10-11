@@ -122,10 +122,8 @@ _OPS = dict(
     c2_gt=255, c2_rfe_step=256, c2_rfe_rank=257, c2_ii_miss=258, c2_ii_pos=259, c2_ii_ord=260, c2_ii_rand=261,
     c2_colmax=262, c2_grid=263, c2_nan_sub=264, c2_nan_rows=265, c2_cnt0=266, c2_mm_keep=267, c2_mm_merge=268,
     c2_add_i64=269, c2_nonfinite=270,
-    # lane lab-binarizer (x_prep/labels.mojo, in fam2's range): IDENTICAL builds with
-    # -D MOJOLEARN_IDN_LAB_UNIQUE_HIST only (they export x_prep_lab_hist)
-    lab_min_part=271, lab_min_fold=272, lab_zero=273, lab_present=274, lab_flag_count=275,
-    lab_hist_write=276, lab_code_direct=277,
+    # TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
     # lane apple-fast-q-clf (x_prep/proba64.mojo, in the py2mojo range): staged only when the
     # binding exports x_prep_proba64 (FAST, not -D MOJOLEARN_PROBA64_QOLD)
     q64_softmax=213,
@@ -4577,90 +4575,11 @@ def _label_fit_present(mode, lb, codes):
     return got[0], got[1], (pr.get_i32(out, n) if codes else None)
 
 
-_LAB_HIST = {}
-
-
-def _lab_hist(mode):
-    """Lane lab-binarizer: the IDENTICAL binding's label switches
-    (bindings/_mojolearn_x_prep.mojo `lab_hist_binding`: 1
-    MOJOLEARN_IDN_LAB_UNIQUE_HIST, 2 MOJOLEARN_IDN_LAB_CODES_DIRECT, 4
-    MOJOLEARN_IDN_LAB_ONE_ENTRY), 0 on another tier or a build without them."""
-    if mode != "identical":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _LAB_HIST.get(key)
-    if v is None:
-        fn = _optional_prep_entry(binding, "x_prep_lab_hist")
-        v = int(fn()) if fn is not None else 0
-        _LAB_HIST[key] = v
-    return v
-
-
-def _lab_hist_range(n):
-    """Presence flags of the G1 route for n labels. Cost reasoning, not a label
-    range: zeroing and scanning R flags must stay a small multiple of the n-row
-    passes it replaces (the radix sort reads and writes every row several
-    times), so R grows with n (2 flags a row, at least 4096 = 16 KB so small
-    inputs keep the [0, 4096) presence route's reach), and stops at 2^24 flags
-    (64 MB of scratch; the float32 codes stay exact below 2^24). A wider label
-    range sets BAD on the device and the call takes the sort route."""
-    return min(1 << 24, max(4096, 2 * int(n)))  # glue: buffer size from the row count
-
-
-def _label_fit_hist(mode, lb, codes, direct):
-    """G1 (MOJOLEARN_IDN_LAB_UNIQUE_HIST): integral labels within R of their
-    device minimum: min (chunk minima + fold), presence flags relative to the
-    minimum, the flag scan, the sorted distinct words; no sort. G2 (direct):
-    codes by the flag rank RK[v - min] instead of `lookup`. Every number is
-    the device's; a BAD flag (a non-integral label, a range over R) returns
-    None and the caller takes the sort route."""
-    n = lb.n
-    R = _lab_hist_range(n)
-    pr = _Prog()
-    x = _label_load(pr, lb)
-    ch = _label_chunk(n)
-    nch = -(-n // ch)
-    pmin, mn, bad = pr.work(nch), pr.work(1), pr.alloc(1)
-    pr.stage("lab_min_part", nch, x, n, ch, pmin, bad)
-    pr.stage("lab_min_fold", 1, pmin, nch, mn)
-    fl = pr.work(R)
-    pr.stage("lab_zero", R, fl)
-    pr.stage("lab_present", n, x, mn, R, fl, bad)
-    fch = _label_chunk(R)
-    fnch = -(-R // fch)
-    cnt, off = pr.work(fnch), pr.work(fnch)
-    u, k = pr.alloc(R), pr.alloc(1)
-    rk = pr.work(R) if (codes and direct) else _NONE
-    pr.stage("lab_flag_count", fnch, fl, R, fch, cnt)
-    pr.stage("uniq_scan", 1, cnt, fnch, off, k)
-    pr.stage("lab_hist_write", fnch, fl, R, fch, off, u, mn, rk)
-    out = None
-    if codes:
-        c = pr.work(n)
-        if direct:
-            pr.stage("lab_code_direct", n, x, mn, R, rk, c)
-        else:
-            pr.stage("lookup", n, x, n, 1, u, R, k, c)
-        out = pr.output(n, "i")
-        pr.stage("f2i", n, c, out)
-    pr.run(mode)
-    if pr.get_i32(bad, 1).tolist()[0]:
-        return None
-    got = _label_classes_of(pr, lb, u, k)
-    if got is None:
-        return None
-    return got[0], got[1], (pr.get_i32(out, n) if codes else None)
-
-
+# TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
 def _label_fit_device(mode, lb, codes=False):
     """One program: (classes, cats, int32 codes Array or None), or None for
     the old route."""
-    bits = _lab_hist(mode)
-    if bits & 1:
-        got = _label_fit_hist(mode, lb, codes, bool(bits & 2))
-        if got is not None:
-            return got
     if _label_present_enabled(mode):
         got = _label_fit_present(mode, lb, codes)
         if got is not None:
@@ -4860,48 +4779,7 @@ class LabelBinarizer(_PrepBase):
         self.y_type_ = "binary" if len(self._classes) <= 2 else "multiclass"
         return self
 
-    def _check_params(self):
-        if self.sparse_output:
-            raise NotImplementedError("mojolearn: LabelBinarizer(sparse_output=True) is not implemented")
-        if not (isinstance(self.neg_label, numbers.Integral) and isinstance(self.pos_label, numbers.Integral)
-                and self.neg_label < self.pos_label):
-            raise ValueError("mojolearn: neg_label must be an integer below pos_label")
-
-    def _fit_transform_one(self, y):
-        """G3 (MOJOLEARN_IDN_LAB_ONE_ENTRY, lane lab-binarizer): the fit
-        program's codes (G1 + G2) feed the dense output, instead of a second
-        upload + lab_load + lookup over the raw labels; the int32 output and
-        every word are `transform`'s. None: the two-step route."""
-        mode = _mode()
-        if not (_lab_hist(mode) & 4):
-            return None
-        self._check_params()
-        if _multilabel_indicator(y) is not None:
-            return None
-        lb = _label_buffer(y)
-        got = _label_fit_device(mode, lb, codes=True) if lb is not None else None
-        if got is None or len(got[0]) < 2:
-            return None
-        self.numeric_mode_ = mode
-        self._classes, self._cats = got[0], got[1]
-        self.classes_ = _classes_array(self._classes)
-        K = len(self._classes)
-        self.y_type_ = "binary" if K <= 2 else "multiclass"
-        binary = K <= 2
-        W = 1 if binary else K
-        n = lb.n
-        pr = _Prog()
-        codes = pr.put_codes(got[2])
-        out = pr.output(n * W, "i")
-        pr.stage("label_binarize", n * W, codes, n, K, 1 if binary else 0, int(self.neg_label),
-                 int(self.pos_label), W, out)
-        pr.run(mode)
-        return pr.get_i32(out, (n, W))
-
     def fit_transform(self, y):
-        got = self._fit_transform_one(y)
-        if got is not None:
-            return got
         return self.fit(y).transform(y)
 
     def _check_fitted(self):

@@ -1,7 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""MOJOLEARN_IDN_SVGP_B_FP32_GATED (lane/svgp-b-gated, 2026-10-11, IDENTICAL,
-default off, verdict OPEN): B = Kuf Kfu through the identical GEMM in float32,
+"""MOJOLEARN_IDN_SVGP_B_FP32_GATED (lane/svgp-b-gated, 2026-10-11, IDENTICAL):
+PROMOTED to the IDENTICAL default (lane i17-decide-nbr-lin-prep, 2026-10-11).
+A/B one run per arm, main@b2657cc89, algos svgp (runs v0035/v0036, a1618/a1619):
+  istella NV L40S 344.4 -> 206.5 ms (0.60), AMD MI325X 1091.7 -> 620.7 ms (0.57)
+  taxi    NV L40S 337.0 -> 334.6 ms (0.99), AMD MI325X 1086.9 -> 716.6 ms (0.66)
+  digests NV == AMD on both arms; r2 equal (istella -0.10601568648, taxi -0.19498).
+`-D MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+float-float B everywhere. FAST builds never take it (IDENTICAL-only, so the
+SVGP_FAST_BSPLIT assert in iter_device.mojo cannot fire there).
+
+B = Kuf Kfu through the identical GEMM in float32,
 with a float32 Cholesky trust gate decided on the device; the float-float B
 accumulation (svgp_ff.mojo) runs only when the gate rejects.
 
@@ -34,13 +43,15 @@ the host column, x_neighbors/iter_device.mojo wraps them in kernels.
 """
 from std.sys.compile import is_defined
 from x_neighbors.items import FP
-from checks.numerics import ftz, identical_div, identical_mul_add
+from checks.numerics import ftz, identical_div, identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_decomp.cells import chol_diag, div0, sqrt0
 from glm.impl.gram_solve_cells import gs_pivot_trusted
 
-comptime IDN_SVGP_B_FP32_GATED = is_defined["MOJOLEARN_IDN_SVGP_B_FP32_GATED"]() and not is_defined[
-    "MOJOLEARN_IDN_ALL_OFF"
-]()
+comptime IDN_SVGP_B_FP32_GATED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 @always_inline
