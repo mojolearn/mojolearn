@@ -234,7 +234,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
             m.def_function[dev_upload_scan_py]("x_decomp_dev_upload_scan")
         comptime if DECOMP_FAST_ORTH_WS:
             m.def_function[dev_orth_ws_py]("x_decomp_dev_orth_ws")
-        # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL, opt-in define)
+        # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default, rollback _OFF)
         comptime if LU_RESIDENT_ENTRIES:
             m.def_function[dev_lu_factor_py]("x_decomp_dev_lu_factor")
             m.def_function[dev_lu_solve_py]("x_decomp_dev_lu_solve")

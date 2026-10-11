@@ -34,8 +34,15 @@ from std.sys.info import has_apple_gpu_accelerator
 #: alone 1,770 -> 1,326 ms; with MOJOLEARN_SEQ_FAST_FMA 1,769 -> 220 ms,
 #: forecast_rmse 49.28 -> 49.02. -D MOJOLEARN_SEQ_THETA_REG_OFF restores the
 #: stored-row code; the old -D MOJOLEARN_SEQ_THETA_REG=1 is harmless.
-#: IDENTICAL compiles the stored-row code unless -D MOJOLEARN_IDN_SEQ_REG
-#: (lane/seq-reg 2026-10-11, default off): the same register form on
+#: IDENTICAL compiles the register form by default (MOJOLEARN_IDN_SEQ_REG,
+#: lane/seq-reg 2026-10-11, PROMOTED 2026-10-11 by lane/i17-decide-linalg-seq;
+#: A/B main b2657cc89, one run per arm, NV v0037/v0038, AMD a1620/a1621,
+#: digests equal NV == AMD, quality equal: theta synthetic NV 93.4 -> 56.2 ms
+#: / AMD 189.2 -> 122.4 (avg 0.62x); theta taxi-hourly 294.6 -> 173.5 /
+#: 596.8 -> 397.6 (0.63x); dynamic-optimized-theta synthetic 476.5 -> 340.4
+#: / 1117.1 -> 792.2 (0.71x), taxi-hourly 2161.6 -> 1807.9 / 6295.8 ->
+#: 4603.4 (0.78x); damped-ets 1.00x). -D MOJOLEARN_IDN_SEQ_REG_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores the stored-row code. The same register form on
 #: NVIDIA/AMD and the host binding. Structural reason: the stored-row run
 #: makes ~1.4M dependent device-memory round trips per thread (five state
 #: words and one error per step, the previous row read back) on a kernel of
@@ -51,7 +58,7 @@ comptime THETA_REG_FAST = (
 )
 comptime THETA_REG = THETA_REG_FAST or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_SEQ_REG"]()
+    and not is_defined["MOJOLEARN_IDN_SEQ_REG_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 

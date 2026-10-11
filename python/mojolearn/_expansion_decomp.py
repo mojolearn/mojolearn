@@ -2752,7 +2752,7 @@ def lu_factor(a, *, numeric_mode=None):
     sf = k.s_flags()
     if ((sf & 4 and k.qfix_flags() & 4) or sf & 8) and not _is_sparse(a):
         # LU_FAST_RESIDENT (bit 4, FAST + Apple default, rollback _OFF) or
-        # IDN_LU_RESIDENT_PAIR (bit 8, IDENTICAL, -D MOJOLEARN_IDN_LU_RESIDENT_PAIR);
+        # IDN_LU_RESIDENT_PAIR (bit 8, IDENTICAL default, rollback -D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF);
         # x_decomp/s_linalg_fast.mojo
         return _lu_factor_resident(k, a)
     A = _M.from_input(a, "a")
