@@ -1864,7 +1864,7 @@ class BatchNorm2d(_Layer):
         if ad is None or ad[0].b is not b or not self._res_bn(b):
             return False
         n, c, hw = self._x3shape
-        self._grads_host()
+        self.__dict__["_g_dev"] = None   # superseded by this backward (no download)
         b.x_cnn_batchnorm_backward_m([xh, gh, dxh, ad[1]], 0b1001 | (0b0010 if dev_g else 0) | (0b0100 if dev_dx else 0),
                                      [n, c, hw, 1 if self._mode else 0])
         self.__dict__["_g_dev"] = ad
