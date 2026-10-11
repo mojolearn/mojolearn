@@ -49,7 +49,6 @@ leaf kernels reproduce), `chol_serial`, and the same solve statements.
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -64,7 +63,6 @@ from glm.impl.gram_solve_cells import gs_equilibrated_cell, gs_pivot_trusted, gs
 from experiments.classical_identical_ideas.fg_linear_controls import (
     IDN_GFF_GRAM_TILED,
     IDN_GRAM_FF_FALLBACK,
-    IDN_GS_SOLVE_ONE_LAUNCH,
     IDN_RIDGE_RESIDENT,
 )
 from glm.impl.gram_ff_cells import (
@@ -145,7 +143,7 @@ def gs_chol_step_kernel(a: F32Ptr, adiag: F32Ptr, info: F32Ptr, j: Int32, n: Int
 @always_inline
 def _gs_chol_row(a: F32Ptr, adiag: F32Ptr, info: F32Ptr, i: Int, jj: Int, nn: Int):
     """Row i >= jj of column step jj (the step kernel's body; shared by
-    `gs_chol_step_kernel` and the IDN_GS_SOLVE_ONE_LAUNCH walk)."""
+    `gs_chol_step_kernel`)."""
     if i == jj:
         chol_diag(a, info, jj, nn)
         return
@@ -222,54 +220,8 @@ def _gs_backward_row(l: F32Ptr, z: F32Ptr, w: F32Ptr, i: Int, jj: Int, nn: Int):
         z.unsafe_store(i, ftz(identical_mul_add(-ftz(l.unsafe_load(jj * nn + i)), wj, ftz(z.unsafe_load(i)))))
 
 
-# ---------------------------------------------------------------------------
-# IDN_GS_SOLVE_ONE_LAUNCH (lane ridge-ff-tiled C2, default off;
-# experiments/classical_identical_ideas/fg_linear_controls.mojo): each chain
-# as one launch of one block, a barrier between column steps, the rows of a
-# step strided over the threads, the per-row bodies above unchanged. Within
-# a step no thread writes a word another thread of the step reads (the step
-# kernels' contract), so only the step boundaries need the barrier.
-# ---------------------------------------------------------------------------
-comptime GS_ONE_TPB = 256
-#: Widest d the fp32 walk takes (<= 4 rows a thread a step; module controls).
-comptime GS_ONE_MAX_D = 1024
-#: Widest d the float-float walk takes (<= 2 rows a thread a step).
-comptime GFF_ONE_MAX_D = 512
-comptime GS_ONE_ON = IDN_GS_SOLVE_ONE_LAUNCH and not has_apple_gpu_accelerator()
-
-
-def gs_chol_one_kernel(a: F32Ptr, adiag: F32Ptr, info: F32Ptr, n: Int32):
-    var nn = Int(n)
-    var tid = Int(thread_idx.x)
-    for jj in range(nn):
-        var i = jj + tid
-        while i < nn:
-            _gs_chol_row(a, adiag, info, i, jj, nn)
-            i += GS_ONE_TPB
-        barrier()
-
-
-def gs_forward_one_kernel(l: F32Ptr, b: F32Ptr, z: F32Ptr, n: Int32):
-    var nn = Int(n)
-    var tid = Int(thread_idx.x)
-    for jj in range(nn):
-        var i = jj + tid
-        while i < nn:
-            _gs_forward_row(l, b, z, i, jj, nn)
-            i += GS_ONE_TPB
-        barrier()
-
-
-def gs_backward_one_kernel(l: F32Ptr, z: F32Ptr, w: F32Ptr, n: Int32):
-    var nn = Int(n)
-    var tid = Int(thread_idx.x)
-    for k in range(nn):
-        var jj = nn - 1 - k
-        var i = tid
-        while i <= jj:
-            _gs_backward_row(l, z, w, i, jj, nn)
-            i += GS_ONE_TPB
-        barrier()
+# TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
 
 
 def gs_unscale_kernel(w: F32Ptr, sv: F32Ptr, d_in: Int32):
@@ -488,39 +440,8 @@ def gff_backward_step_kernel(lh: F32Ptr, ll: F32Ptr, zh: F32Ptr, zl: F32Ptr, wh:
         gff_backward_cell(lh, ll, zh, zl, wh, wl, i, jj, Int(n))
 
 
-# IDN_GS_SOLVE_ONE_LAUNCH, float-float: the step kernels' cells in one block.
-def gff_chol_one_kernel(ah: F32Ptr, al: F32Ptr, adh: F32Ptr, adl: F32Ptr, info: F32Ptr, n: Int32):
-    var nn = Int(n)
-    var tid = Int(thread_idx.x)
-    for jj in range(nn):
-        var i = jj + tid
-        while i < nn:
-            gff_chol_cell(ah, al, adh, adl, info, i, jj, nn)
-            i += GS_ONE_TPB
-        barrier()
-
-
-def gff_forward_one_kernel(lh: F32Ptr, ll: F32Ptr, bh: F32Ptr, bl: F32Ptr, zh: F32Ptr, zl: F32Ptr, n: Int32):
-    var nn = Int(n)
-    var tid = Int(thread_idx.x)
-    for jj in range(nn):
-        var i = jj + tid
-        while i < nn:
-            gff_forward_cell(lh, ll, bh, bl, zh, zl, i, jj, nn)
-            i += GS_ONE_TPB
-        barrier()
-
-
-def gff_backward_one_kernel(lh: F32Ptr, ll: F32Ptr, zh: F32Ptr, zl: F32Ptr, wh: F32Ptr, wl: F32Ptr, n: Int32):
-    var nn = Int(n)
-    var tid = Int(thread_idx.x)
-    for k in range(nn):
-        var jj = nn - 1 - k
-        var i = tid
-        while i <= jj:
-            gff_backward_cell(lh, ll, zh, zl, wh, wl, i, jj, nn)
-            i += GS_ONE_TPB
-        barrier()
+# TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
 
 
 def gff_coef_kernel(wh: F32Ptr, wl: F32Ptr, sv: F32Ptr, dst: F32Ptr, d_in: Int32):
@@ -586,19 +507,13 @@ def _gs_ff_fit(
     var d_info = ctx.enqueue_create_buffer[DType.float32](1)
     var d_flag = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.enqueue_function[gs_info_init_kernel](_p(d_info), grid_dim=1, block_dim=1)
-    var ff_one = False
-    comptime if GS_ONE_ON:
-        ff_one = d <= GFF_ONE_MAX_D
-    if ff_one:
-        ctx.enqueue_function[gff_chol_one_kernel](  # small-launch(d: feature count): one block walks the d column steps of the d x d float-float factor, never rows
-            _p(d_ah), _p(d_al), _p(d_adh), _p(d_adl), _p(d_info), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB,
+    # TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
+    for j in range(d):
+        ctx.enqueue_function[gff_chol_step_kernel](
+            _p(d_ah), _p(d_al), _p(d_adh), _p(d_adl), _p(d_info), Int32(j), Int32(d),
+            grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
         )
-    else:
-        for j in range(d):
-            ctx.enqueue_function[gff_chol_step_kernel](
-                _p(d_ah), _p(d_al), _p(d_adh), _p(d_adl), _p(d_info), Int32(j), Int32(d),
-                grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
-            )
     ctx.enqueue_function[gff_trust_kernel](
         _p(d_ah), _p(d_adh), _p(d_info), _p(d_flag), Int32(d), grid_dim=1, block_dim=1
     )
@@ -612,25 +527,17 @@ def _gs_ff_fit(
         var d_wh = ctx.enqueue_create_buffer[DType.float32](d)
         var d_wl = ctx.enqueue_create_buffer[DType.float32](d)
         var d_w = ctx.enqueue_create_buffer[DType.float32](d)
-        if ff_one:
-            ctx.enqueue_function[gff_forward_one_kernel](  # small-launch(d: feature count): one block walks the d forward steps over d-vectors, never rows
-                _p(d_ah), _p(d_al), _p(d_bh), _p(d_bl), _p(d_zh), _p(d_zl), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB,
+        for j in range(d):
+            ctx.enqueue_function[gff_forward_step_kernel](
+                _p(d_ah), _p(d_al), _p(d_bh), _p(d_bl), _p(d_zh), _p(d_zl), Int32(j), Int32(d),
+                grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
             )
-            ctx.enqueue_function[gff_backward_one_kernel](  # small-launch(d: feature count): one block walks the d backward steps over d-vectors, never rows
-                _p(d_ah), _p(d_al), _p(d_zh), _p(d_zl), _p(d_wh), _p(d_wl), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB,
+        for jj in range(d):
+            var j = d - 1 - jj
+            ctx.enqueue_function[gff_backward_step_kernel](
+                _p(d_ah), _p(d_al), _p(d_zh), _p(d_zl), _p(d_wh), _p(d_wl), Int32(j), Int32(d),
+                grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB,
             )
-        else:
-            for j in range(d):
-                ctx.enqueue_function[gff_forward_step_kernel](
-                    _p(d_ah), _p(d_al), _p(d_bh), _p(d_bl), _p(d_zh), _p(d_zl), Int32(j), Int32(d),
-                    grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
-                )
-            for jj in range(d):
-                var j = d - 1 - jj
-                ctx.enqueue_function[gff_backward_step_kernel](
-                    _p(d_ah), _p(d_al), _p(d_zh), _p(d_zl), _p(d_wh), _p(d_wl), Int32(j), Int32(d),
-                    grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB,
-                )
         ctx.enqueue_function[gff_coef_kernel](
             _p(d_wh), _p(d_wl), _p(d_s), _p(d_w), Int32(d), grid_dim=_gs_blocks(d), block_dim=GS_TPB
         )
@@ -785,19 +692,12 @@ def linear_gram_fit_host(
         grid_dim=_gs_blocks(d * d), block_dim=GS_TPB,
     )
     ctx.enqueue_function[gs_info_init_kernel](_p(d_info), grid_dim=1, block_dim=1)
-    var one = False
-    comptime if GS_ONE_ON:
-        # lane ridge-ff-tiled C2 (default off): one launch per chain, same statements
-        one = d <= GS_ONE_MAX_D
-    if one:
-        ctx.enqueue_function[gs_chol_one_kernel](  # small-launch(d: feature count): one block walks the d column steps of the d x d factor, never rows
-            _p(d_a), _p(d_adiag), _p(d_info), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB
+    # TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
+    for j in range(d):
+        ctx.enqueue_function[gs_chol_step_kernel](
+            _p(d_a), _p(d_adiag), _p(d_info), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
         )
-    else:
-        for j in range(d):
-            ctx.enqueue_function[gs_chol_step_kernel](
-                _p(d_a), _p(d_adiag), _p(d_info), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
-            )
     ctx.enqueue_function[gs_trust_kernel](
         _p(d_a), _p(d_adiag), _p(d_info), _p(d_flag), Int32(d), grid_dim=1, block_dim=1
     )
@@ -807,23 +707,15 @@ def linear_gram_fit_host(
     var trusted = h_flag.unsafe_ptr().unsafe_load(0) != Float32(0)
     var status = 1
     if trusted:
-        if one:
-            ctx.enqueue_function[gs_forward_one_kernel](  # small-launch(d: feature count): one block walks the d forward steps over d-vectors, never rows
-                _p(d_a), _p(d_b), _p(d_z), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB
+        for j in range(d):
+            ctx.enqueue_function[gs_forward_step_kernel](
+                _p(d_a), _p(d_b), _p(d_z), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
             )
-            ctx.enqueue_function[gs_backward_one_kernel](  # small-launch(d: feature count): one block walks the d backward steps over d-vectors, never rows
-                _p(d_a), _p(d_z), _p(d_w), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB
+        for jj in range(d):
+            var j = d - 1 - jj
+            ctx.enqueue_function[gs_backward_step_kernel](
+                _p(d_a), _p(d_z), _p(d_w), Int32(j), Int32(d), grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB
             )
-        else:
-            for j in range(d):
-                ctx.enqueue_function[gs_forward_step_kernel](
-                    _p(d_a), _p(d_b), _p(d_z), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
-                )
-            for jj in range(d):
-                var j = d - 1 - jj
-                ctx.enqueue_function[gs_backward_step_kernel](
-                    _p(d_a), _p(d_z), _p(d_w), Int32(j), Int32(d), grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB
-                )
         ctx.enqueue_function[gs_unscale_kernel](_p(d_w), _p(d_s), Int32(d), grid_dim=_gs_blocks(d), block_dim=GS_TPB)
         ctx.enqueue_copy(dst_ptr=coef_ptr, src_buf=d_w)
         ctx.synchronize()

@@ -120,22 +120,8 @@ comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_
 # leaf cut), so the host column (glm/host/gram_solve_host.mojo) is untouched.
 comptime IDN_GFF_GRAM_TILED = IDN_GRAM_FF_FALLBACK and not is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED_OFF"]()
 
-# C2 (lane ridge-ff-tiled, 2026-10-11; DEFAULT OFF, -D MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH).
-# The resident Gram solve's Cholesky, forward and backward solves (fp32 and
-# the float-float second chance) as ONE launch each: one block of 256 threads
-# walks the d column steps with a barrier between steps, the rows of a step
-# strided over the threads, the SAME per-cell statements (the step kernels'
-# bodies, `chol_serial`'s order) -> no bit moves, host untouched. Today 3 d
-# launches per chain set (660 at d = 220, each a few us of work behind a
-# ~5-10 us launch gap). Cost reasoning: for d <= 256 every row of a step has
-# its own thread, the parallelism the per-column grids had; above, rows per
-# thread grow, so the switch keeps the one-launch walk only while a thread's
-# worst step stays near one launch gap: d <= 1024 for fp32 (<= 4 rows a
-# thread), d <= 512 for float-float (~20 fp32 ops per term, <= 2 rows a
-# thread); wider keeps the per-column launches. Not on Apple (Metal's
-# barrier does not order device memory; x_decomp/omp_block.mojo).
-# Expected: ~7-15 ms per chain set NV, ~2x AMD (ridge, ols-Gram).
-comptime IDN_GS_SOLVE_ONE_LAUNCH = LINEAR_GRAM_SOLVE and is_defined["MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH"]()
+# TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
 
 # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
