@@ -347,6 +347,13 @@ def _check_configuration() -> Bool:
     # Lane postmerge-act-7 (2026-10-10), removed: losers of the same fg2 A/B (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main ca8ea1f8d.
     comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE"](), "removed 2026-10-10 (lane/postmerge-act-7): IDN_DBSCAN_BATCH_SAMPLE (D4: DBSCAN first ranges sized from a 1,024-row sampled degree) was NOISE on top of EPS_TILE: dbscan istella NV 0.42x / AMD 0.35x against EPS_TILE alone 0.42x / 0.34x (fg2 nv2 v1044, amd a1184), hash unchanged; code at main ca8ea1f8d; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_CC_HOOK"](), "removed 2026-10-10 (lane/postmerge-act-7): IDN_DBSCAN_CC_HOOK (D5: DBSCAN weak_cc fixed point by lock-free hook and compress) was NOISE: dbscan istella NV 1.00x / AMD 0.96x (fg2 nv2 v1045, amd a1185), hash unchanged; code at main ca8ea1f8d; see docs/TOMBSTONES.md"
+    # Lane grid-act-16 (2026-10-11), removed: grid g50ebe26a5 pass-1 losers against today's defaults, one run per arm (docs/TOMBSTONES.md,
+    # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch). Deleted code recoverable at main 885c23dc7^ / the lane shas in TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_LU_NB128"](), "removed 2026-10-11 (lane/grid-act-16): IDN_LU_NB128 (128-wide blocked LU) was SLOWER: lu-solve synthetic NV 1.54x / AMD 2.10x (avg 1.80x), grid g50ebe26a5"
+    comptime assert not is_defined["MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"](), "removed 2026-10-11 (lane/grid-act-16): IDN_MAMBA1_ELEMENTWISE_FUSED (NI46) was SLOWER: mamba1-forward NV 2.31x / AMD 1.00x (avg 1.52x), grid g50ebe26a5"
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES"](), "removed 2026-10-11 (lane/grid-act-16): IDN_NEURAL_GEMM_OZAKI_SLICES (NN-OZ int8 Ozaki neural GEMM) was SLOWER on every neural workload: slices 4/5 1.2x-30x, grid g50ebe26a5"
+    comptime assert not is_defined["MOJOLEARN_KNN_DIRECT_DISTANCE"](), "removed 2026-10-11 (lane/grid-act-16): KNN_DIRECT_DISTANCE was SLOWER: knn istella 34.2x, hdbscan istella 10.2x, dbscan taxi timeout, grid g50ebe26a5"
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_DIRECT_DISTANCE"](), "removed 2026-10-11 (lane/grid-act-16): DBSCAN_DIRECT_DISTANCE was NOISE: dbscan taxi NV 0.99x / AMD 1.00x, istella 1.00x, main ef1e7e9f9"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

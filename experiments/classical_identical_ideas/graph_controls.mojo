@@ -17,9 +17,16 @@ comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # behavior for that family. The KMeans family (Lloyd, k-means++, transform, the
 # GaussianMixture kmeans init through kmeans_fit) is the KMEANS_ASSIGN control
 # below. MiniBatch/Bisecting live in x_cluster (XCLUSTER_ROW_ASSIGN).
-comptime KNN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KNN_DIRECT_DISTANCE"]()
+# TOMBSTONE: MOJOLEARN_KNN_DIRECT_DISTANCE (DELETE-slower: grid g50ebe26a5 vs today's defaults, knn istella NV L40S 44.9 -> 1069.3 ms,
+# AMD MI325X 30.1 -> 1480.2 ms; knn taxi avg 1.89x; hdbscan istella 10.2x, taxi 1.51x; dbscan istella 4.96x; dbscan taxi timed out
+# on main ef1e7e9f9 (nv2 v1463, amd a1600)) turned off 2026-10-11 by lane/grid-act-16; code recoverable at 49a19b003. The reader
+# branches (core/knn_host_predict, neighbors/*, dbscan/*, hdbscan/*) are now dead comptime code: CLEANUP OWED (docs/TOMBSTONES.md).
+comptime KNN_DIRECT_DISTANCE = False
 comptime KDE_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_KDE_DIRECT_DISTANCE"]()
-comptime DBSCAN_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_DBSCAN_DIRECT_DISTANCE"]()
+# TOMBSTONE: MOJOLEARN_DBSCAN_DIRECT_DISTANCE (DELETE-noise: dbscan taxi on main ef1e7e9f9 NV L40S 13336 -> 13184 ms (v1462 vs v1234),
+# AMD MI325X 7108 -> 7118 ms (a1599 vs a1593), 0.99x / 1.00x; istella 1.00x / 1.00x; hash d6fa652f / 7494ce8e unchanged) turned off
+# 2026-10-11 by lane/grid-act-16; code recoverable at 49a19b003. Reader branches are dead comptime code: CLEANUP OWED.
+comptime DBSCAN_DIRECT_DISTANCE = False
 # KNN covers the brute-force/RBC kNN primitive and its
 # host twin wherever it is called (KNN, the kNN graphs of HDBSCAN/UMAP/Spectral,
 # DBSCAN's RBC eps route through rbc_cmp_dist). KDE covers kde/impl/distance,
