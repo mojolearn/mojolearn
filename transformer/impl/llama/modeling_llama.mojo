@@ -356,7 +356,6 @@ from mamba.impl.modeling.modeling_mamba import (
 )
 
 from transformer.impl.llama.fused_attention import (
-    IDN_ATTN_DEFER_REGIME,
     ATTN_ARM_TRIAL,
     ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
@@ -1711,12 +1710,6 @@ struct LlamaDeviceStages(Movable):
     carry planes). Set by `llama_decoder_layer_forward_planted` on every
     call; read by S11 and by the attention path choice."""
     var attn_prefer_eager: Bool  # byte-LM auto policy; explicit fused overrides
-    var attn_forward_only: Bool
-    """IDN_ATTN_DEFER_REGIME (lane/lm-attn-nohost, idea H1): THIS call is
-    forward-only (`forward_only` of `llama_decoder_layer_forward_planted`,
-    set on every call), so no backward reads an exp stash: under the switch
-    the fused forward takes the plain launcher instead of the `_estash` one
-    (fewer bytes written, no stash kept). Off-switch builds never read it."""
     var attn_recompute_backward: Bool
     """Model-kind attention stash policy (lane grid-act-4, 2026-10-08): the
     caller's training step wants the backward to recompute the attention
@@ -1848,7 +1841,6 @@ struct LlamaDeviceStages(Movable):
         self.qk_sumsq = _zeros[False](ctx, m * nh)
         self.attn_prefer_eager = False
         self.attn_recompute_backward = False
-        self.attn_forward_only = False
         self.attn_forward_status = -1
         self.attn_fused_off = False
         self.attn_materialized = False
@@ -1930,7 +1922,6 @@ struct LlamaDeviceStages(Movable):
         self.qk_sumsq.enqueue_fill(Float32(0))
         self.attn_prefer_eager = False
         self.attn_recompute_backward = False
-        self.attn_forward_only = False
         self.attn_forward_status = -1
         self.attn_fused_off = False
         self.attn_materialized = False
@@ -4236,12 +4227,7 @@ def eager_attention_forward(
             # A caller that asked for the recompute policy
             # (`attn_recompute_backward`, the Samba train step) keeps no
             # stash: the plain launcher below runs, as under ATTN_STASH=1.
-            # IDN_ATTN_DEFER_REGIME: a forward-only call keeps no stash.
-            var stash_wanted = not stages.attn_recompute_backward
-            comptime if IDN_ATTN_DEFER_REGIME:
-                if stages.attn_forward_only:
-                    stash_wanted = False
-            if (not need_eager) and fused_attention_arm_estash_runs(arm) and stash_wanted:
+            if (not need_eager) and fused_attention_arm_estash_runs(arm) and not stages.attn_recompute_backward:
                 var ran = 0
                 status = fused_forward_launch_estash_ran(
                     ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
@@ -6042,7 +6028,6 @@ def llama_decoder_layer_forward_planted(
     # lane/lowbit-blocks: this call runs under `fixed15_v1` exactly when its
     # weights carry planes.
     stages.int15_on = Bool(w.int15)
-    stages.attn_forward_only = forward_only
 
     trace.record_device[DType.float32](ctx, prefix + ".input.x", x, m * dm)
 
