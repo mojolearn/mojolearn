@@ -3801,7 +3801,7 @@ def _neural_fixture_drift_check(lane, D, x_cpu, state, torch):
     NF = _tool("neural_fixtures")
     s = LANES[lane]
     try:
-        fx = NF.load_for_lane(_NEURAL_FIXTURES, lane, s, _DATASET, D)
+        fx = NF.load_for_lane(_NEURAL_FIXTURES or os.environ.get(NF.ENV_DIR), lane, s, _DATASET, D)
     except NF.FixturesMissing as exc:
         return {"status": "absent", "detail": str(exc)[:300]}
     bad = []
@@ -3900,7 +3900,7 @@ def _build_layer(lane, arm, D):
         # (_layer_inputs, make(), Generator(SEED + 1)), sha256-verified on load. A missing set
         # refuses (not_ready, infrastructure); there is no torch fallback here
         NF = _tool("neural_fixtures")
-        fx = NF.load_for_lane(_NEURAL_FIXTURES, lane, s, _DATASET, D)
+        fx = NF.load_for_lane(_NEURAL_FIXTURES or os.environ.get(NF.ENV_DIR), lane, s, _DATASET, D)
         state = fx["state"]
         if s["task"] in ("gcn", "sage"):      # x and edges are the dataset's (numpy, no draw)
             x_np, edges = _graph_layer_inputs(D)
@@ -4945,6 +4945,11 @@ def worker(args):
             raise ValueError("neural A/B configuration requires the ours IDENTICAL arm")
         _NEURAL_FIXTURES = (getattr(args, "neural_fixtures", None)
                             or _tool("neural_fixtures").default_dir(args.data))
+        # the untimed own-host reference (bench_board_host_quality.enrich) is a child process that reads the
+        # fixtures through the environment; without this every layer lane's quality cell said "neural fixtures
+        # missing" on a box that had them (2026-10-11, nv2 v0065 / amd a1647 conv2d + resnet-block)
+        if _NEURAL_FIXTURES:
+            os.environ[_tool("neural_fixtures").ENV_DIR] = _NEURAL_FIXTURES
         B, rec = _load_block(args.lane, args.dataset, args.data)
         D = lane_arrays(args.lane, B)
         runner = build(args.lane, args.arm, D)
