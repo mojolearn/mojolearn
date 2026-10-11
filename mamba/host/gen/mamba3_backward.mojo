@@ -1978,7 +1978,7 @@ def mamba3_s17_tail_shared_kernel(gid_: Int,
 
 comptime M3_S17_TAIL_PAGE_BYTES = 2 * M3_S17_TP * M3_D_STATE * 4
 comptime M3_S17_TAIL_ALT_FITS = False
-# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (double-buffered S17 tail; LOSER: samba-train-step bytes NV 42.36 -> 39.60 ms (0.935), AMD 69.04 -> 119.20 ms (1.726), avg 1.33, vendor split, hash 16f6e13b both) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (double-buffered S17 tail; LOSER: samba-train-step bytes NV 42.36 -> 39.60 ms (0.935), AMD 69.04 -> 119.20 ms (1.726), avg 1.33, vendor split, hash 16f6e13b both) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch (device and host twin together); record in docs/TOMBSTONES.md.
 comptime M3_S17_TAIL_PIPE = (
     M3_S17_TAIL_SHARED
@@ -1990,7 +1990,7 @@ comptime M3_S17_TAIL_PIPE = (
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M3_S17_PIPE_GROUP = 16
-# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (mamba3_s17_tail_dbuf_kernel + M3_S17_DB_TP; LOSER avg 1.33x samba-train-step) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (mamba3_s17_tail_dbuf_kernel + M3_S17_DB_TP; LOSER avg 1.33x samba-train-step) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
 
 
@@ -2067,7 +2067,7 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
             host_launch(_launch_41, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
     comptime if M3_S17_TAIL_SHARED:
         var nc=(l+qs-1)//qs
-        # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF launch (LOSER avg 1.33x) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+        # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF launch (LOSER avg 1.33x) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
         comptime if M3_S17_TAIL_PIPE:
             var _l43_a0 = ddc.unsafe_ptr()

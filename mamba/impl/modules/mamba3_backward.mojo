@@ -2382,7 +2382,7 @@ def mamba3_s17_tail_shared_kernel(
 #: M3_S17_TP x M3_D_STATE float tiles) on both arms.
 comptime M3_S17_TAIL_PAGE_BYTES = 2 * M3_S17_TP * M3_D_STATE * 4
 comptime M3_S17_TAIL_ALT_FITS = lib_smem_page_fits_for[TARGET_COLUMN, M3_S17_TAIL_PAGE_BYTES]()
-# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (double-buffered S17 tail; LOSER: samba-train-step bytes NV 42.36 -> 39.60 ms (0.935), AMD 69.04 -> 119.20 ms (1.726), avg 1.33, vendor split, hash 16f6e13b both) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (double-buffered S17 tail; LOSER: samba-train-step bytes NV 42.36 -> 39.60 ms (0.935), AMD 69.04 -> 119.20 ms (1.726), avg 1.33, vendor split, hash 16f6e13b both) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch (device and host twin together); record in docs/TOMBSTONES.md.
 comptime M3_S17_TAIL_PIPE = (
     M3_S17_TAIL_SHARED
@@ -2394,7 +2394,7 @@ comptime M3_S17_TAIL_PIPE = (
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M3_S17_PIPE_GROUP = 16
-# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (mamba3_s17_tail_dbuf_kernel + M3_S17_DB_TP; LOSER avg 1.33x samba-train-step) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (mamba3_s17_tail_dbuf_kernel + M3_S17_DB_TP; LOSER avg 1.33x samba-train-step) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
 
 
@@ -2494,7 +2494,7 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
             ctx.enqueue_function[mamba3_s17_operands_kernel](dq.unsafe_ptr(),ddr.unsafe_ptr(),dk.unsafe_ptr(),dv.unsafe_ptr(),ddc.unsafe_ptr(),dy.unsafe_ptr(),q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
     comptime if M3_S17_TAIL_SHARED:
         var nc=(l+qs-1)//qs
-        # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF launch (LOSER avg 1.33x) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+        # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF launch (LOSER avg 1.33x) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
         comptime if M3_S17_TAIL_PIPE:
             ctx.enqueue_function[mamba3_s17_tail_pipe_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
