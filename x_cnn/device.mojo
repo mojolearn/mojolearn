@@ -2831,8 +2831,12 @@ comptime IDN_LAYER_DEV_IO = _FAM_IDN and not is_defined["MOJOLEARN_IDN_LAYER_DEV
 #: resident and the `_m` entries read them there (glue only; the entries are
 #: the existing ones). `-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`.
 comptime IDN_PIN_WEIGHTS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PIN_WEIGHTS_OFF"]()
-#: bit 7 (lane cnn-resident-glue, 2026-10-11, G3) MOJOLEARN_IDN_CNN_RESIDENT_GRADS,
-#: default OFF: the CNN glue keeps everything of a resident call on the
+#: bit 7 (lane cnn-resident-glue, 2026-10-11, G3) CNN resident grads, PROMOTED to the
+#: IDENTICAL default 2026-10-11 (lane/w2-decide-neural; A/B on main c8ef6c66d, one run per
+#: arm, same bits NV==AMD: avg 0.754 over the 9 layer lanes, global-avgpool 0.092,
+#: global-maxpool 0.078, avgpool2d 0.750, batchnorm1d 0.920, batchnorm2d 0.966, conv2d
+#: 0.967, resnet-block 0.982, maxpool1d 0.915, conv1d 1.111 (NV spike); nv2 v0085 / A v0082,
+#: amd a1667 / A a1664). `-D MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF` restores the old glue. The CNN glue keeps everything of a resident call on the
 #: device: Conv2d/BasicBlock weights auto-pinned on first use (re-pinned when
 #: `weight_`/`bias_` is reassigned), dW/db and BatchNorm's running statistics
 #: and aux block left in resident arrays (`grad_weight_`, `grad_bias_`,
@@ -2845,7 +2849,7 @@ comptime IDN_PIN_WEIGHTS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PIN_WEIGHT
 #: resnet-block NV 16.2 -> ~11 ms, AMD 15.5 -> ~10, conv2d -0.4 ms,
 #: global-maxpool 2.9 -> ~1.2 NV. Glue and buffer residency only: the same
 #: entries, kernels and operands, so no bit moves.
-comptime IDN_CNN_RESIDENT_GRADS = _FAM_IDN and is_defined["MOJOLEARN_IDN_CNN_RESIDENT_GRADS"]()
+comptime IDN_CNN_RESIDENT_GRADS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF"]()
 
 
 def idn_flags() -> Int:

@@ -301,8 +301,10 @@ def _pinned(layer, b, name, size):
     return hit[0]
 
 
-# lane cnn-resident-glue (2026-10-11, G3): MOJOLEARN_IDN_CNN_RESIDENT_GRADS,
-# `x_cnn_idn_flags` bit 7, default OFF (x_cnn/device.mojo
+# lane cnn-resident-glue (2026-10-11, G3): CNN resident grads,
+# `x_cnn_idn_flags` bit 7, default ON since 2026-10-11 (lane/w2-decide-neural,
+# avg 0.754 over 9 layer lanes, same bits); `-D MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF`
+# clears the bit (x_cnn/device.mojo
 # IDN_CNN_RESIDENT_GRADS has the structural reason and the expected gain).
 # With it on, a resident call keeps everything on the device: Conv2d (and
 # the BasicBlock's convs) pin their weights on first use (`_auto_pin`; a
