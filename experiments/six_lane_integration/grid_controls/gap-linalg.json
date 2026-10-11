@@ -45,6 +45,29 @@
    "bits_change": true,
    "status": "new",
    "notes": "The Apple FAST tridiagonal eigh (Householder panels, df64 bisection, twisted vectors, compact-WY back-transform) on IDENTICAL NVIDIA/AMD: every product-meets-add / division / sqrt through checks/numerics seams, fixed 256-slot block folds, rank-2k update as ONE OP_NT identical GEMM at k = 64, back-transform as three identical GEMMs; clustered-spectrum refusal falls back to the identical Jacobi (decided by T's bits). Host column keeps the Jacobi (digest recorded, not required). Also linked by _mojolearn_linalg (its eigh_binding calls DevExec.eigh)."
+  },
+  "ols_r_trisolve": {
+   "define": "MOJOLEARN_IDN_OLS_R_TRISOLVE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_OLS_R_TRISOLVE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_decomp/ols_trisolve.mojo:1",
+    "x_decomp/api.mojo:IDN_OLS_R_TRISOLVE",
+    "x_decomp/api.mojo:ols_r_trisolve_py",
+    "x_decomp/device.mojo:DevExec.ols_r_trisolve",
+    "x_decomp/host.mojo:HostExec.ols_r_trisolve",
+    "python/mojolearn/linear_model.py:_ols_tsqr_centered"
+   ],
+   "binding": "_mojolearn_x_decomp",
+   "bits_change": true,
+   "status": "new",
+   "notes": "lane ols-r-trisolve (ideas-dense-linalg F1): LinearRegression solves R x = c from the TSQR's R_aug in one one-block launch behind a rank gate on R's p2-equilibrated diagonal (min > eps32*d*max), computed and returned by Mojo; gate 0 keeps the Jacobi-SVD route. Bits: coefficients from the back-substitution (fixed 256-lane fold + halving tree, same on NV/AMD/host) instead of V diag(1/s) U^T c; r2 expected equal. Host column _mojolearn_x_decomp_host takes the same define."
   }
  },
  "algorithms": {
@@ -77,6 +100,14 @@
    "route": "python/mojolearn/_expansion_decomp.py _Kit.eigh -> x_decomp/api.mojo eigh_py -> DevExec.eigh -> _eigh_on -> _eigh_td_try (on) | _eigh_par_on Jacobi (off, and the refusal fallback)",
    "controls": [
     "eigh_tridiag_idn"
+   ],
+   "interaction_groups": []
+  },
+  "classical:ols": {
+   "binding": "_mojolearn_x_decomp (host column _mojolearn_x_decomp_host)",
+   "route": "fit: LinearRegression.fit -> _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> [x_decomp_ols_r_trisolve: gate 1 ends (on)] -> _tsqr_lstsq_core(Ra=...) small-R SVD (off, and gate 0)",
+   "controls": [
+    "ols_r_trisolve"
    ],
    "interaction_groups": []
   }

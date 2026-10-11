@@ -80,6 +80,7 @@ from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
 from x_decomp.lu_delayed_ctl import IDN_LU_DELAYED_UPDATE, LDP, LDU_MAX_LEAVES, LDU_NB
 from gemm.contract import CONTRACT_K_LEAF_MIN, contract_leaf_size, leaf_begin, leaf_count, leaf_end
+from x_decomp.ols_trisolve import ols_r_trisolve_host
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.host.center_host import center_on_cpu, col_sums_on_cpu
@@ -954,6 +955,17 @@ struct HostExec(Exec):
         _ = mf^
         _ = ca^
         _ = cb^
+
+    @staticmethod
+    def ols_r_trisolve(r: F32Ptr, out: F32Ptr, d: Int) raises -> Int:
+        """The host column of DevExec.ols_r_trisolve: the same fold."""
+        var tmp = List[Float32](length=d + 1, fill=Float32(0))
+        ols_r_trisolve_host(r, F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr())), d)
+        for j in range(d):  # small-loop(d: coefficients): copy-out of d words
+            out.unsafe_store(j, tmp[j])
+        var ok = 1 if tmp[d] != Float32(0) else 0
+        _ = tmp^
+        return ok
 
     @staticmethod
     def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:
