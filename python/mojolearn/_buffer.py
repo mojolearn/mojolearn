@@ -944,16 +944,22 @@ def _host_native(key):
     then the forest host binding for its seven. None when `key` is not one of
     them or neither binary is built; a refused sabotage build raises rather
     than hiding."""
+    # THE LOADERS, NOT THE DOORS (lane/lazy-imports, 2026-10-10). Importing
+    # `_byte_lm_host` / `_forest_host` here for their `_load()` put the byte LM
+    # door (lowbit, linalg, the decomp and metrics expansions) and the forest
+    # door (`_classical_host` and every classical door) in every lane's import
+    # closure, since every lane loads this file: 251 files selected every lane
+    # in tools/test_lane_select.py. The binaries load from the same code.
     if key in _HOST_NATIVE_KEYS:
-        from . import _byte_lm_host
+        from . import _byte_lm_host_binary
         try:
-            return getattr(_byte_lm_host._load(), key)
+            return getattr(_byte_lm_host_binary._load(), key)
         except (ImportError, AttributeError):
             pass
     if key in _FOREST_HOST_NATIVE_KEYS:
-        from . import _forest_host
+        from . import _forest_host_binary
         try:
-            return getattr(_forest_host._load(), key)
+            return getattr(_forest_host_binary._load(), key)
         except (ImportError, AttributeError):
             pass
     return None

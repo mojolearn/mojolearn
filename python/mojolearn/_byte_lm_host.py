@@ -32,54 +32,23 @@ import sys
 from pathlib import Path
 
 from . import _backend
+# THE LOADER LIVES IN `_byte_lm_host_binary.py` (lane/lazy-imports, 2026-10-10):
+# `_buffer._host_native` needs only `_load()`, and importing this whole door
+# from the buffer helpers put lowbit, linalg and the decomposition and metrics
+# expansions in every lane's import closure. Re-exported here unchanged.
+from ._byte_lm_host_binary import _IDENTICAL_CODE, _load, binary_path  # noqa: F401
+# The door still NAMES its binding (the name `_byte_lm_host_binary` loads): tools/lane_select.py
+# reads a file's bindings from these assignments.
+_EXTENSION = '_mojolearn_byte_lm_host'
+_MODULE_NAME = 'mojolearn._host.' + _EXTENSION
 from . import _numeric_profile
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, frombytes, zeros
 from ._bufcheck import flat_view, le_bytes
 from ._byte_lm_config import ByteLanguageModelConfig
 from . import _ragged
 
-_EXTENSION = '_mojolearn_byte_lm_host'
-_MODULE_NAME = 'mojolearn._host.' + _EXTENSION
-_IDENTICAL_CODE = 1
-_MODULE = None
 
 
-def binary_path():
-    """The binary this process loads, or would load: the file
-    `MOJOLEARN_BYTE_LM_HOST_BINARY` names, else this install's host binding
-    of that name, wherever `_backend.host_module_path` resolves it."""
-    override = os.environ.get('MOJOLEARN_BYTE_LM_HOST_BINARY', '').strip()
-    if override:
-        return os.path.abspath(override)
-    return _backend.host_module_path(_EXTENSION)
-
-
-def _load():
-    global _MODULE
-    if _MODULE is not None:
-        return _MODULE
-    path = binary_path()
-    if not os.path.exists(path):
-        raise ImportError(
-            f"mojolearn: {path} is not built. Build it with "
-            "bindings/build_byte_lm_host.sh")
-    module = sys.modules.get(_MODULE_NAME)
-    if module is None:
-        loader = importlib.machinery.ExtensionFileLoader(_MODULE_NAME, path)
-        spec = importlib.util.spec_from_loader(_MODULE_NAME, loader, origin=path)
-        module = importlib.util.module_from_spec(spec)
-        _backend._exec_binding(loader, module)
-        sys.modules[_MODULE_NAME] = module
-    if int(module.byte_lm_host_numeric_mode()) != _IDENTICAL_CODE:
-        raise RuntimeError(f"mojolearn: {path} was not compiled IDENTICAL; rebuild it")
-    if str(module.byte_lm_host_vendor()) != 'cpu':
-        raise RuntimeError(f"mojolearn: {path} does not read back as the CPU binding")
-    if bool(module.byte_lm_host_sabotage()) and os.environ.get('MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE') != '1':
-        raise RuntimeError(
-            f"mojolearn: {path} is the gate's SABOTAGE build (DEVIATION 2612) and "
-            "computes wrong answers on purpose; it is refused outside the gate")
-    _MODULE = module
-    return module
 
 
 def _native_shape(shape):

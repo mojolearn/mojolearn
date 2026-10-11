@@ -42,15 +42,20 @@ import sys
 import weakref
 
 from . import _backend
+# THE LOADER LIVES IN `_forest_host_binary.py` (lane/lazy-imports, 2026-10-10):
+# `_buffer._host_native` needs only `_load()`, and importing this whole door
+# from the buffer helpers put `_classical_host` and every classical door it
+# names in every lane's import closure. Re-exported here unchanged.
+from ._forest_host_binary import _IDENTICAL_CODE, _load, binary_path  # noqa: F401
+# The door still NAMES its binding (the name `_forest_host_binary` loads): tools/lane_select.py
+# reads a file's bindings from these assignments.
+_EXTENSION = '_mojolearn_forest_host'
+_MODULE_NAME = 'mojolearn._host.' + _EXTENSION
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._labels import argmax_rows, classes_from_member, decode_labels
 
-_EXTENSION = '_mojolearn_forest_host'
-_MODULE_NAME = 'mojolearn._host.' + _EXTENSION
-_IDENTICAL_CODE = 1
-_MODULE = None
 
 #: The sequential archive formats and the family each belongs to; a
 #: `-parallel-groves-1` archive of either is the same family under the
@@ -71,50 +76,6 @@ _ESTIMATORS = {
 }
 
 
-def binary_path():
-    """The binary this process loads, or would load: the file
-    `MOJOLEARN_FOREST_HOST_BINARY` names, else this install's host binding
-    of that name, wherever `_backend.host_module_path` resolves it."""
-    override = os.environ.get('MOJOLEARN_FOREST_HOST_BINARY', '').strip()
-    if override:
-        return os.path.abspath(override)
-    return _backend.host_module_path(_EXTENSION)
-
-
-def _load():
-    global _MODULE
-    if _MODULE is not None:
-        return _MODULE
-    path = binary_path()
-    if not os.path.exists(path):
-        raise ImportError(
-            f"mojolearn: {path} is not built. Build it with "
-            "bindings/build_forest_host.sh")
-    module = sys.modules.get(_MODULE_NAME)
-    if module is None:
-        loader = importlib.machinery.ExtensionFileLoader(_MODULE_NAME, path)
-        spec = importlib.util.spec_from_loader(_MODULE_NAME, loader, origin=path)
-        module = importlib.util.module_from_spec(spec)
-        _backend._exec_binding(loader, module)
-        sys.modules[_MODULE_NAME] = module
-    if int(module.forest_host_numeric_mode()) != _IDENTICAL_CODE:
-        raise RuntimeError(f"mojolearn: {path} was not compiled IDENTICAL; rebuild it")
-    if str(module.forest_host_vendor()) != 'cpu':
-        raise RuntimeError(f"mojolearn: {path} does not read back as the CPU binding")
-    # the CTR-path arm (lane/inference-gbdt-ctr-tables, 2026-09-15) and the
-    # grove association arm (DEVIATION 2961, 2026-09-17) are sabotage builds
-    # too and take the same switch
-    ctr_sabotage = getattr(module, 'forest_host_gbdt_ctr_sabotage', None)
-    groves_sabotage = getattr(module, 'forest_host_groves_sabotage', None)
-    sabotaged = (bool(module.forest_host_sabotage())
-                 or bool(ctr_sabotage is not None and ctr_sabotage())
-                 or bool(groves_sabotage is not None and groves_sabotage()))
-    if sabotaged and os.environ.get('MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE') != '1':
-        raise RuntimeError(
-            f"mojolearn: {path} is the gate's SABOTAGE build and computes "
-            "wrong answers on purpose; it is refused outside the gate")
-    _MODULE = module
-    return module
 
 
 _MODEL_ARRAYS = (('offsets', '<i4'), ('colid', '<i4'), ('quesval', '<f4'),
