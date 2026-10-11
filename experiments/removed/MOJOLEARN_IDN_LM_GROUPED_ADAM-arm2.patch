@@ -1,0 +1,63 @@
+diff --git a/core/six_lane_experiment_guards.mojo b/core/six_lane_experiment_guards.mojo
+index e47223684..e27d267e4 100644
+--- a/core/six_lane_experiment_guards.mojo
++++ b/core/six_lane_experiment_guards.mojo
+@@ -144,7 +144,7 @@ def _check_configuration() -> Bool:
+     comptime assert not is_defined["MOJOLEARN_NN60_EMB_HEAD_VIEWS"](), "retired define MOJOLEARN_NN60_EMB_HEAD_VIEWS: use IDN_LM_VIEWS=2"
+     comptime assert not is_defined["MOJOLEARN_IDN_LM_PARAM_VIEWS"](), "retired define MOJOLEARN_IDN_LM_PARAM_VIEWS: use IDN_LM_VIEWS=3"
+     comptime assert not is_defined["MOJOLEARN_NN56_GROUPED_ADAM"](), "retired define MOJOLEARN_NN56_GROUPED_ADAM: use IDN_LM_GROUPED_ADAM=1"
+-    comptime assert not is_defined["MOJOLEARN_NN55_BLOCK_STATUS"](), "removed define MOJOLEARN_NN55_BLOCK_STATUS (arm 2 deleted 2026-10-11, avg 1.15x slower)"
++    comptime assert not is_defined["MOJOLEARN_NN55_BLOCK_STATUS"](), "retired define MOJOLEARN_NN55_BLOCK_STATUS: use IDN_LM_GROUPED_ADAM=2"
+     comptime assert not is_defined["MOJOLEARN_NN32_RETAIN_FORWARD"](), "retired define MOJOLEARN_NN32_RETAIN_FORWARD: use IDN_ACT_RETAIN=1"
+     comptime assert not is_defined["MOJOLEARN_NN31_BOUNDED_CHECKPOINTS"](), "retired define MOJOLEARN_NN31_BOUNDED_CHECKPOINTS: use IDN_ACT_RETAIN=2"
+     comptime assert not is_defined["MOJOLEARN_IDN_SAMBA_FORWARD_TAPE"](), "retired define MOJOLEARN_IDN_SAMBA_FORWARD_TAPE: use IDN_ACT_RETAIN=3"
+@@ -163,7 +163,7 @@ def _check_configuration() -> Bool:
+     comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 1, "invalid MOJOLEARN_IDN_CE_TOKEN_FOLD arm (legal: 0|1; 2 removed 2026-10-10)"
+     comptime assert get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 2, "invalid MOJOLEARN_IDN_LM_RESIDENT_TOKENS arm (legal: 0|1|2)"
+     comptime assert get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 2 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 3, "invalid MOJOLEARN_IDN_LM_VIEWS arm (legal: 0|1|2|3)"
+-    comptime assert get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 1, "invalid MOJOLEARN_IDN_LM_GROUPED_ADAM arm (legal: 0|1; arm 2 removed 2026-10-11, grid g50ebe26a5 lm-train-step avg 1.15x slower, see docs/TOMBSTONES.md)"
++    comptime assert get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 2, "invalid MOJOLEARN_IDN_LM_GROUPED_ADAM arm (legal: 0|1|2)"
+     comptime assert get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 0 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 1 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 2 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 3, "invalid MOJOLEARN_IDN_TRAIN_SCRATCH arm (legal: 0|1|2|3)"
+     # Lane grid-prune (2026-10-07): deleted losers and dead arms (rows in docs/apple-fast/EXPERIMENTS.md
+     # "IDENTICAL grid prune"); recoverable at main ab554bb4a. A stale build line must not run the incumbent silently.
+diff --git a/training/byte_lm.mojo b/training/byte_lm.mojo
+index acb8ca4bd..3281fee27 100644
+--- a/training/byte_lm.mojo
++++ b/training/byte_lm.mojo
+@@ -2102,9 +2102,9 @@ def _byte_neural_group_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step
+     swap(tr.buffers.m_state, tr.buffers.shadow_m)
+     swap(tr.buffers.v_state, tr.buffers.shadow_v)
+     tr.shadow_valid = True
+-    # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM=2 (NN55 block-status minima; DELETE-slower: grid g50ebe26a5 lm-train-step NV L40S
+-    # 35.299 -> 43.519 ms, AMD MI325X 42.749 -> 45.657 ms, avg 1.15x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 6e44427f1.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM-arm2.patch; record in docs/TOMBSTONES.md.
++    comptime if NN55_BLOCK_STATUS:
++        _byte_live_status_finish(ctx, status, n, next_step)
++        tr.live_status_steps += 1
+     _ = offsets
+     _ = kinds
+     _ = d_offsets^
+diff --git a/training/neural_ab_optimizer.mojo b/training/neural_ab_optimizer.mojo
+index e9ef63c69..6f7f13655 100644
+--- a/training/neural_ab_optimizer.mojo
++++ b/training/neural_ab_optimizer.mojo
+@@ -18,12 +18,14 @@ from training.checks.optimizer import _adam_oop_cell
+ from training.checks.optimizer_contract import OptimizerConfig, StepScalars, step_scalars
+ 
+ # L11 (2026-10-07): NN55 needs NN56, so they are arms of ONE switch,
+-# -D MOJOLEARN_IDN_LM_GROUPED_ADAM=0|1: 1 = NN56 grouped OOP Adam (arm 2, NN55 block-status minima, deleted 2026-10-11).
++# -D MOJOLEARN_IDN_LM_GROUPED_ADAM=0|1|2: 1 = NN56 grouped OOP Adam,
++# 2 = NN56 plus NN55 block-status minima. Arm 1 alone isolates NN56.
+ comptime IDN_LM_GROUPED_ADAM_ARM = get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM", 0]()
+-# TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM=2 (NN55 block-status minima; DELETE-slower: grid g50ebe26a5 lm-train-step NV L40S
+-# 35.299 -> 43.519 ms, AMD MI325X 42.749 -> 45.657 ms, avg 1.15x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 6e44427f1.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM-arm2.patch; record in docs/TOMBSTONES.md.
+-comptime NN55_BLOCK_STATUS = False  # arm 2 deleted; the guard refuses =2
++comptime NN55_BLOCK_STATUS = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and IDN_LM_GROUPED_ADAM_ARM == 2
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime NN56_GROUPED_ADAM = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and IDN_LM_GROUPED_ADAM_ARM >= 1

@@ -1,0 +1,27 @@
+diff --git a/mamba/impl/modeling/modeling_mamba.mojo b/mamba/impl/modeling/modeling_mamba.mojo
+index bb1953b07..c4fe6dd8f 100644
+--- a/mamba/impl/modeling/modeling_mamba.mojo
++++ b/mamba/impl/modeling/modeling_mamba.mojo
+@@ -397,11 +397,17 @@ comptime BLOCK_ANY_SABOTAGE = (
+ )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED (DELETE-slower: grid g50ebe26a5 mamba1-forward gaussian NV L40S 5.563 ->
+-# 12.860 ms, AMD MI325X 9.934 -> 9.922 ms, avg 1.52x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at b056f35e0.
+-# Only the IDENTICAL arm (NI46) is gone: the fused kernels stay for the Apple FAST AFN_MAMBA1_FUSE_IN route.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED.patch; record in docs/TOMBSTONES.md.
+-comptime MAMBA1_ELEMENTWISE_FUSED = AFN_MAMBA1_FUSE_IN
++# NI46: existing elementwise fusion exposed as an independent IDENTICAL A/B.
++# The serial host remains the S counterpart: bias seed/tap order, split copies,
++# portable exp and all saved stages are the same. Sabotage uses original kernels.
++# Default OFF; no compilation, identity, quality or timing run in this lane.
++comptime MAMBA1_ELEMENTWISE_FUSED = AFN_MAMBA1_FUSE_IN or (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
++    and not BLOCK_ANY_SABOTAGE
++)
+ 
+ 
+ def mamba_block_sabotage_name() -> String:

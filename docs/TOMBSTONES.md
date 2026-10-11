@@ -306,7 +306,12 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8`](#mojolearn_idn_neural_gemm_schedule-arm8) | GEMM | slower | 2026-10-07 | [MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm8.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm8.patch) |
 | [`MOJOLEARN_IDN_NN20_SPLIT_KV`](#mojolearn_idn_nn20_split_kv) | Other | slower | 2026-10-08 | [MOJOLEARN_IDN_NN20_SPLIT_KV.patch](../experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV.patch) |
 | [`MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES`](#mojolearn_idn_nn20_split_kv_leaves) | Other | slower | 2026-10-08 | [MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES.patch](../experiments/removed/MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES.patch) |
-
+| [`MOJOLEARN_IDN_LU_NB128`](#grid-act-16-2026-10-11) | Decomp | DELETE-slower | 2026-10-11 | [MOJOLEARN_IDN_LU_NB128.patch](../experiments/removed/MOJOLEARN_IDN_LU_NB128.patch) |
+| [`MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED`](#grid-act-16-2026-10-11) | Neural | DELETE-slower | 2026-10-11 | [MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED.patch) |
+| [`MOJOLEARN_IDN_LM_GROUPED_ADAM=2`](#grid-act-16-2026-10-11) | Neural | DELETE-slower | 2026-10-11 | [MOJOLEARN_IDN_LM_GROUPED_ADAM-arm2.patch](../experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM-arm2.patch) |
+| [`MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES`](#grid-act-16-2026-10-11) | Neural | DELETE-slower | 2026-10-11 | [MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES.patch) |
+| [`MOJOLEARN_KNN_DIRECT_DISTANCE`](#grid-act-16-2026-10-11) | Neighbors | DELETE-slower (turned off; reader cleanup owed) | 2026-10-11 | [MOJOLEARN_KNN_DBSCAN_DIRECT_DISTANCE.patch](../experiments/removed/MOJOLEARN_KNN_DBSCAN_DIRECT_DISTANCE.patch) |
+| [`MOJOLEARN_DBSCAN_DIRECT_DISTANCE`](#grid-act-16-2026-10-11) | Cluster | DELETE-noise (turned off; reader cleanup owed) | 2026-10-11 | [MOJOLEARN_KNN_DBSCAN_DIRECT_DISTANCE.patch](../experiments/removed/MOJOLEARN_KNN_DBSCAN_DIRECT_DISTANCE.patch) |
 
 ## Restored
 
@@ -2875,6 +2880,31 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_TSA2_KPSS` | EXPERIMENTS.md:544 DROPPED-noise (lane/apple-fast-gap-tsa @ e9da47064) | `tsa/impl/timeSeries/kpss_fused.mojo:7` |
 | `MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID` | EXPERIMENTS.md:150 DROPPED-noise (lane/apple-fast-yetirank @ c7b35fd7c) | `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2945` |
 
+
+
+## grid-act-16 (2026-10-11)
+
+Grid g50ebe26a5 (freeze grid/freeze-20261010 @ 50ebe26a5), single-switch arms against today's defaults, one run per arm, NVIDIA L40S (nv2)
+and AMD MI325X (amd / amd2 Hot Aisle MI300X for some AMD cells); verdict = average of the two vendors' ratios against the stored noise floor.
+Pass 2 was dropped (Andrew 2026-10-11): pass-1 PARTIAL verdicts are final. Deleted on lane/grid-act-16; code recoverable at the
+parent of each deletion commit (base 885c23dc7). Evidence: ~/mojolearn-evidence/grid-lq/decisions_act_20261011T0742Z.json and
+experiments/six_lane_integration/grid/results-g50ebe26a5/.
+
+- `MOJOLEARN_IDN_LU_NB128` (128-wide blocked LU with a GEMM trailing update and GEMM solve feed; x_decomp/cells.mojo, device.mojo,
+  host.mojo, lu_blocked.mojo): lu-solve synthetic NV 352.1 -> 541.4 ms (1.54x), AMD 331.3 -> 697.0 ms (2.10x), avg 1.80x. SLOWER.
+- `MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED` (NI46 IDENTICAL arm of the mamba1 elementwise fusion; mamba/impl/modeling/modeling_mamba.mojo;
+  the FAST AFN_MAMBA1_FUSE_IN fusion stays): mamba1-forward gaussian NV 5.563 -> 12.860 ms, AMD 9.934 -> 9.922 ms, avg 1.52x. SLOWER.
+- `MOJOLEARN_IDN_LM_GROUPED_ADAM=2` (NN55 block-status minima on the grouped Adam; training/neural_ab_optimizer.mojo, training/byte_lm.mojo):
+  lm-train-step NV 35.30 -> 43.52 ms, AMD 42.75 -> 45.66 ms, avg 1.15x. SLOWER. Arm 1 stays (MEASURE OWED).
+- `MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES` (NN-OZ int8 Ozaki-split neural GEMM, slices 4/5/6; gemm/neural_dispatch.mojo,
+  gemm/experiments/neural_ozaki.mojo, neural_ozaki_check.mojo): slices 4/5 slower on all 10 neural workloads, 1.20x (mlp-train-step)
+  to 30.1x (cnn-clf); lm-train-step NV 35.3 -> 3172.6 / 3709.4 ms, AMD 42.7 -> 334.3 / 407.5 ms. SLOWER. Slices 6 does more work than 5.
+- `MOJOLEARN_KNN_DIRECT_DISTANCE` ((x-c)^2 direct distances in kNN / ball cover / DBSCAN / HDBSCAN neighborhoods): knn istella NV 44.9 ->
+  1069.3 ms, AMD 30.1 -> 1480.2 ms (34.2x); knn taxi 1.89x; hdbscan istella 10.2x, taxi 1.51x; dbscan istella 4.96x; dbscan taxi
+  REFUSED(timeout) on main ef1e7e9f9 (nv2 v1463, amd a1600). SLOWER. Turned off at experiments/classical_identical_ideas/graph_controls.mojo
+  (constant False); the reader branches in core/knn_host_predict.mojo, neighbors/impl/*, dbscan/*, hdbscan/* are dead: CLEANUP OWED.
+- `MOJOLEARN_DBSCAN_DIRECT_DISTANCE`: dbscan taxi on main ef1e7e9f9 NV 13336 -> 13184 ms (v1234 -> v1462), AMD 7108 -> 7118 ms
+  (a1593 -> a1599), istella 1.00x / 1.00x, hashes unchanged. NOISE. Turned off like KNN_DIRECT_DISTANCE; reader cleanup owed.
 
 ## Owed deletions reviewed and kept (lane/owed-deletions-D3, 2026-10-09)
 
