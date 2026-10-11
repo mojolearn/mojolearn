@@ -25,7 +25,7 @@ identical GEMM) against the rb kernel's share; if the rb kernel already runs
 above the GEMM's rate on NVIDIA this loses on NV and wins on AMD (measure:
 lu-solve synthetic nv+amd, ID lines on both).
 
-THE ORDER (device below and `lu_delayed_host`, the host column, spell it
+THE ORDER (device below and `lu_delayed_host` in x_decomp/host.mojo, the host column, spell it
 once each; LDP = 32, LDU_NB = 256):
 
   for each outer block [K0, K1), K1 = min(K0 + LDU_NB, n):
@@ -66,7 +66,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from gemm.block_update import blk_gemm_sub, blk_workspace_floats
 from gemm.contract import OP_NN
 from x_decomp.cells import F32Ptr, I32Ptr
-from x_decomp.lu_delayed_host import IDN_LU_DELAYED_UPDATE, LDP, LDU_NB
+from x_decomp.lu_delayed_ctl import IDN_LU_DELAYED_UPDATE, LDP, LDU_NB
 from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lu_fast_mma import lfm_swaps_trsm_kernel
 

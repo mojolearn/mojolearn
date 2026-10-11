@@ -16,8 +16,8 @@
    "default": "off",
    "source": [
     "x_decomp/lu_delayed.mojo:lu_delayed_factor",
-    "x_decomp/lu_delayed_host.mojo:IDN_LU_DELAYED_UPDATE",
-    "x_decomp/lu_delayed_host.mojo:lu_delayed_host",
+    "x_decomp/lu_delayed_ctl.mojo:IDN_LU_DELAYED_UPDATE",
+    "x_decomp/host.mojo:lu_delayed_host",
     "x_decomp/device.mojo:launch_lu",
     "x_decomp/host.mojo:HostExec.lu",
     "gemm/block_update.mojo:blk_gemm_sub"
