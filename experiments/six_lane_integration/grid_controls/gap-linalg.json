@@ -4,28 +4,6 @@
  "branch": "lane/gap-linalg",
  "head": "0e8ebb636",
  "controls": {
-  "chol_nb128": {
-   "define": "MOJOLEARN_IDN_CHOL_NB128",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_CHOL_NB128"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "cholesky/checks/potrf_blocked.mojo:1",
-    "cholesky/checks/potrf.mojo:_potrf_lower_blocked",
-    "cholesky/host/chol_oracle.mojo:CHOL_HOST_NB_PINNED",
-    "cholesky/estimator.mojo:cholesky_factor_poolio",
-    "gemm/block_update.mojo:1"
-   ],
-   "binding": "_mojolearn_gp",
-   "bits_change": true,
-   "status": "new",
-   "notes": "Panel width 128 (= CONTRACT_K_LEAF_MIN, one GEMM leaf) instead of 32: guarded diagonal factor + guarded panel solve + trailing update through the identical GEMM in 512-column blocks, lower cells only, no per-panel wait, one info read. Host column (_mojolearn_gp_host) pins 128 with the same define. Bits: a cell's trailing sum bracketed per 128 columns (one 128-chain and one subtraction where v1 had four 32-chains)."
-  },
   "eigh_tridiag_idn": {
    "define": "MOJOLEARN_IDN_EIGH_TRIDIAG_OFF",
    "kind": "switch",
@@ -117,6 +95,11 @@
    "define": "MOJOLEARN_IDN_LU_NB128",
    "control": "lu_nb128",
    "reason": "DELETE-slower avg 1.80x (grid g50ebe26a5), lane/grid-act-16"
+  },
+  {
+   "define": "MOJOLEARN_IDN_CHOL_NB128",
+   "control": "chol_nb128",
+   "reason": "DELETED 2026-10-11 (lane/chol-nb128-delete, deletion dd9a3d31b): SLOWER, cholesky synthetic NV 296.2 -> 271.3 ms (0.92x, v0005) / AMD 163.4 -> 374.8 ms (2.29x, a1614), avg 1.6x (vendor split), main 5876e9205, one run per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch."
   }
  ]
 }

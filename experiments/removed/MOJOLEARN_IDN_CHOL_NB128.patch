@@ -1,0 +1,351 @@
+diff --git a/cholesky/checks/potrf.mojo b/cholesky/checks/potrf.mojo
+index 8435f644e..7298744d6 100644
+--- a/cholesky/checks/potrf.mojo
++++ b/cholesky/checks/potrf.mojo
+@@ -325,8 +325,9 @@ from cholesky.checks.chol_sabotage import (
+     sabotage_trsm_panel_kernel,
+ )
+ from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel, trsm_panel_guarded_kernel
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
++from cholesky.checks.potrf_blocked import CB_COLS, CB_NB, CHOL_IDN_NB128, chol_blocked_workspace_floats
++from gemm.block_update import blk_gemm_sub
++from x_decomp.cells import I32Ptr
+ from cholesky.checks.potrf_strip import (
+     CHOL_STRIP_ROUTE,
+     CHOL_STRIP_W,
+@@ -360,6 +361,7 @@ from gemm.checks.gemm_identical import (
+     identical_gemm_workspace_max_floats,
+ )
+ from gemm.contract import OP_NT
++from x_decomp.cells import F32Ptr
+ # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: blocked right-looking Cholesky (x_decomp/fast_chol.mojo, 3 n / 32 launches); cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6.
+ # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
+@@ -393,9 +395,13 @@ comptime CHOL_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
+ #: replay of it a serial loop. A wider panel would put a fold tree inside the
+ #: update, which is legal under the gemm profile and correct, and is a v2
+ #: decision rather than a free one.
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
+-comptime CHOL_NB_PINNED = 32
++#: lane gap-linalg (2026-10-08): `-D MOJOLEARN_IDN_CHOL_NB128` (CANDIDATE,
++#: default off; cholesky/checks/potrf_blocked.mojo) pins 128 instead: still
++#: ONE leaf (128 = CONTRACT_K_LEAF_MIN), a 128-long chain per panel, and
++#: the blocked driver `_potrf_lower_blocked`. The host column
++#: (`chol_oracle.CHOL_HOST_NB_PINNED`) reads the same define. Bits change
++#: against v1; NVIDIA, AMD and the host move together.
++comptime CHOL_NB_PINNED = CB_NB if CHOL_IDN_NB128 else 32
+ 
+ #: FAST on Apple: `potrf_lower` runs the trailing update through the vendor
+ #: GEMM (MAX `matmul`, the Apple simdgroup path) instead of the pinned
+@@ -1642,8 +1648,13 @@ def chol_workspace_floats(n: Int, nb: Int) -> Int:
+                 gws = c
+         j0 += nb
+     var need = nt * nb + nt * nt + gws
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
++    # lane gap-linalg: the blocked driver's own layout (column-blocked
++    # products: smaller than nt * nt, but its GEMM share is sized per block)
++    comptime if CHOL_IDN_NB128:
++        if nb == CB_NB:
++            var nb128 = chol_blocked_workspace_floats(n)
++            if nb128 > need:
++                need = nb128
+     if need < 1:
+         return 1
+     return need
+@@ -1886,8 +1897,93 @@ def _potrf_lower_strips(
+     return CholRun(info, CS_NB, n_panels)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
++def _potrf_lower_blocked(
++    ctx: DeviceContext,
++    mut a: DeviceBuffer[DType.float32],
++    mut ws: DeviceBuffer[DType.float32],
++    n: Int,
++    panel_tpb: Int,
++    solve_tpb: Int,
++    elem_tpb: Int,
++    mut trace: IdentityTrace,
++) raises -> CholRun:
++    """`potrf_lower` at CB_NB = 128 (lane gap-linalg, CHOL_IDN_NB128;
++    cholesky/checks/potrf_blocked.mojo states the argument): per panel the
++    guarded diagonal factor, the guarded panel solve, and the trailing
++    update `A22 -= L21 L21^T` through `blk_gemm_sub` in column blocks of
++    CB_COLS over the cells on or below the diagonal; no wait inside the
++    loop, every launch after a failed panel returns at once on `info`, one
++    readback at the end. The same per-cell statements as the generic loop
++    below at nb = 128 (the traced and sabotage runs take that loop), so the
++    two agree bit for bit; `ws` holds `chol_workspace_floats(n, CB_NB)`."""
++    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
++    hinfo.unsafe_ptr().unsafe_store(0, Int32(0))
++    ctx.enqueue_copy(dst_buf=dinfo, src_ptr=hinfo.unsafe_ptr())
++    var ap = F32Ptr(unsafe_from_address=Int(a.unsafe_ptr()))
++    var ip = I32Ptr(unsafe_from_address=Int(dinfo.unsafe_ptr()))
++    var j0 = 0
++    while j0 < n:
++        var w = min(CB_NB, n - j0)
++        var n_trail = n - j0 - w
++        ctx.enqueue_function[panel_factor_guarded_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
++            a.unsafe_ptr(),
++            dinfo.unsafe_ptr(),
++            Int32(n),
++            Int32(j0),
++            Int32(w),
++            grid_dim=(1, 1, 1),
++            block_dim=(panel_tpb, 1, 1),
++        )
++        if n_trail > 0:
++            var solve_grid = (n_trail + solve_tpb - 1) // solve_tpb
++            ctx.enqueue_function[trsm_panel_guarded_kernel](
++                a.unsafe_ptr(),
++                dinfo.unsafe_ptr(),
++                Int32(n),
++                Int32(j0),
++                Int32(w),
++                Int32(n_trail),
++                grid_dim=(solve_grid, 1, 1),
++                block_dim=(solve_tpb, 1, 1),
++            )
++            # A22[cb:, cb:cb+cbw] -= L21[cb:, :] L21[cb:cb+cbw, :]^T, lower
++            # cells only; every column block is one identical GEMM at k = w
++            var base = j0 + w
++            var cb = 0
++            while cb < n_trail:
++                var cbw = min(CB_COLS, n_trail - cb)
++                blk_gemm_sub[True](
++                    ctx, ap, n, base + cb, base + cb,
++                    ap, n, base + cb, j0,
++                    ap, n, base + cb, j0,
++                    n_trail - cb, cbw, w, OP_NT, True, ws, ip, ap, False,
++                )
++                cb += cbw
++        j0 += w
++    ctx.enqueue_function[zero_upper_guarded_kernel](
++        a.unsafe_ptr(),
++        dinfo.unsafe_ptr(),
++        Int32(n),
++        grid_dim=((n * n + elem_tpb - 1) // elem_tpb, 1, 1),
++        block_dim=(elem_tpb, 1, 1),
++    )
++    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
++    ctx.synchronize()
++    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
++    var n_panels = (n + CB_NB - 1) // CB_NB
++    if info != 0:
++        n_panels = (info - 1) // CB_NB + 1
++    trace.record_device(ctx, "chol.factor", a, n * n)
++    var nb_record = List[Int32]()
++    nb_record.append(Int32(CB_NB))
++    nb_record.append(Int32(n_panels))
++    nb_record.append(Int32(info))
++    trace.record_list_i32("chol.nb", nb_record)
++    ctx.synchronize()
++    _ = dinfo^
++    _ = hinfo^
++    return CholRun(info, CB_NB, n_panels)
+ 
+ 
+ def potrf_lower(
+@@ -1974,8 +2070,18 @@ def potrf_lower(
+             " that a small matrix will not show you"
+         )
+ 
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
++    # lane gap-linalg (2026-10-08): the 128-wide blocked driver (CANDIDATE,
++    # -D MOJOLEARN_IDN_CHOL_NB128; cholesky/checks/potrf_blocked.mojo). The
++    # same cells as the loop below at nb = 128 without its per-panel waits;
++    # a trace, a sabotage or a multi-GPU owner set takes the loop.
++    comptime if CHOL_IDN_NB128:
++        if (
++            sabotage == CHOL_SAB_NONE
++            and not trace.enabled
++            and chol_device_count() == 1
++            and nb == CB_NB
++        ):
++            return _potrf_lower_blocked(ctx, a, ws, n, panel_tpb, solve_tpb, elem_tpb, trace)
+     # The strip schedule (cholesky/checks/potrf_strip.mojo): the same cells,
+     # the same steps, the same order. Only without a trace, a sabotage or a
+     # multi-GPU owner set, at the pinned width. MOJOLEARN_CHOL_STRIP_OFF=1
+diff --git a/cholesky/checks/potrf_blocked.mojo b/cholesky/checks/potrf_blocked.mojo
+new file mode 100644
+index 000000000..9eb2ea32c
+--- /dev/null
++++ b/cholesky/checks/potrf_blocked.mojo
+@@ -0,0 +1,89 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The 128-wide blocked Cholesky of lane gap-linalg (2026-10-08;
++docs/plans/gaps-2026-10-08.md section 3.3). CANDIDATE, default off:
++`-D MOJOLEARN_IDN_CHOL_NB128` on an IDENTICAL build (NVIDIA, AMD and the
++host column together).
++
++What changes with the define: the profile's panel width (`potrf.CHOL_NB_PINNED`
++and `chol_oracle.CHOL_HOST_NB_PINNED`) is 128 instead of 32, and the device
++driver is `potrf._potrf_lower_blocked` instead of the 32-wide strip schedule:
++
++  * the diagonal block factored by `panel_factor_guarded_kernel` (one block,
++    columns serial, the panel's own columns' chains: the v1 statements at
++    w = 128);
++  * the panel solve `L21 = A21 L11^{-T}` by `trsm_panel_guarded_kernel` (one
++    thread per trailing row, c ascending, k ascending: the v1 statements);
++  * the trailing update `A22 -= L21 L21^T` through `gemm/block_update.mojo`
++    in column blocks of CB_COLS, rows on or below the diagonal only (about
++    half the square's products), every cell the identical GEMM's one-leaf
++    chain at k = 128 then one subtraction (`block_update`'s header states
++    it; the host column spells the same chain through `gemm_oracle_cell`
++    at `contract_leaf_size(128)`);
++  * no wait inside the loop: every kernel after a failed panel returns at
++    once on `info`, one readback at the end (the strip route's rule), so a
++    failure leaves LAPACK's partial factor exactly as the per-panel-wait
++    loop does (it stops after the failing panel's factor kernel).
++
++BITS CHANGE against v1 (DEVIATION 1630 called a wider panel "a v2 decision
++rather than a free one"): a cell's trailing sum is now bracketed per 128
++columns instead of per 32, with a 128-long fma chain where v1 had four
++32-long chains and three extra subtractions. The three columns move
++together, so the cross-vendor claim is kept; the A/B on nv and amd decides
++whether the define becomes the default (then the profile string moves to
++v2).
++
++Why 128 and not 256: 128 is `CONTRACT_K_LEAF_MIN`, the widest panel whose
++trailing product is still ONE leaf (a plain ascending chain, statable in
++one sentence and replayed by a serial loop on the host); at 256 the GEMM
++would fold two leaves per cell. Why column blocks of 512: the lower-only
++update computes and discards the cells above the diagonal inside each
++column block, CB_COLS / n_trail of the useful work (6% at n = 8192), and
++every column block is one GEMM launch (16 a panel at n = 8192); a narrower
++block wastes less and launches more. Both are size/cost reasoning, not a
++board shape.
++"""
++
++from std.sys.compile import is_defined
++
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from gemm.block_update import blk_workspace_floats
++
++#: The route (see the module note). IDENTICAL builds only; FAST keeps its own
++#: Apple schedule and its honored hints.
++comptime CHOL_IDN_NB128 = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_CHOL_NB128"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++#: The panel width of the route: `CONTRACT_K_LEAF_MIN` (one GEMM leaf).
++comptime CB_NB = 128
++#: SCHEDULING: columns per trailing-update GEMM (bits do not depend on it:
++#: the contract's batch-composition invariance).
++comptime CB_COLS = 512
++
++
++def chol_blocked_workspace_floats(n: Int) -> Int:
++    """Floats `_potrf_lower_blocked` needs beside the matrix: the largest
++    `blk_workspace_floats` over every (panel, column block) this `n` walks
++    (sized by the GEMM's own helper, as `chol_workspace_floats` is: a
++    workspace sized for one plan and run under another is an out-of-bounds
++    write a small matrix will not show). Never below 1."""
++    var need = 1
++    var j0 = 0
++    while j0 < n:
++        var w = CB_NB
++        if j0 + w > n:
++            w = n - j0
++        var n_trail = n - j0 - w
++        var cb = 0
++        while cb < n_trail:
++            var cbw = CB_COLS
++            if cb + cbw > n_trail:
++                cbw = n_trail - cb
++            var c = blk_workspace_floats(n_trail - cb, cbw, w)
++            if c > need:
++                need = c
++            cb += cbw
++        j0 += w
++    return need
+diff --git a/cholesky/estimator.mojo b/cholesky/estimator.mojo
+index 101bca8dd..8717fc8c2 100644
+--- a/cholesky/estimator.mojo
++++ b/cholesky/estimator.mojo
+@@ -80,8 +80,7 @@ from cholesky.checks.potrf import (
+     potrf_lower,
+ )
+ from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
++from cholesky.checks.potrf_blocked import CHOL_IDN_NB128
+ from cholesky.impl.linalg.cholesky_r1_update import (
+     chol_rank1_update,
+     chol_rank1_update_workspace_floats,
+@@ -354,12 +353,19 @@ def cholesky_factor_poolio(
+     var logdet = Float32(0.0)
+     if run.info == 0:
+         logdet = chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
+-    var stage = _chol_stage_ptr(ctx, cells)
+-    ctx.enqueue_copy(dst_ptr=stage, src_buf=da)
+-    ctx.synchronize()
+-    copy_f32(stage, lp, cells)
++    # lane gap-linalg (2026-10-08), CHOL_IDN_NB128: the factor straight into
++    # the caller's array (one device-to-host copy; the pinned stage and the
++    # host `copy_f32` of n^2 floats after it are Metal's transfer rule,
++    # x_decomp/device.mojo `_down`'s note, not NVIDIA's or AMD's). A copy:
++    # no bit moves.
++    comptime if CHOL_IDN_NB128:
++        ctx.enqueue_copy(dst_ptr=lp, src_buf=da.create_sub_buffer[DType.float32](0, cells))
++        ctx.synchronize()
++    else:
++        var stage = _chol_stage_ptr(ctx, cells)
++        ctx.enqueue_copy(dst_ptr=stage, src_buf=da)
++        ctx.synchronize()
++        copy_f32(stage, lp, cells)
+     sp.unsafe_store(0, Float64(run.info))
+     sp.unsafe_store(1, Float64(run.nb))
+     sp.unsafe_store(2, Float64(logdet))
+diff --git a/cholesky/host/chol_oracle.mojo b/cholesky/host/chol_oracle.mojo
+index 1bdb0507f..4626a7407 100644
+--- a/cholesky/host/chol_oracle.mojo
++++ b/cholesky/host/chol_oracle.mojo
+@@ -91,10 +91,16 @@ from core.host_simd_identical import ftz_v
+ #: `cholesky/checks/potrf.mojo::CHOL_PROFILE`.
+ comptime CHOL_HOST_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
+ 
+-#: `potrf.mojo::CHOL_NB_PINNED`. NUMERIC (DEVIATION 1630).
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
+-comptime CHOL_HOST_NB_PINNED = 32
++#: `potrf.mojo::CHOL_NB_PINNED`. NUMERIC (DEVIATION 1630). lane gap-linalg
++#: (2026-10-08): 128 under `-D MOJOLEARN_IDN_CHOL_NB128` (the device's
++#: `potrf_blocked.CHOL_IDN_NB128`: the host column moves with NVIDIA and
++#: AMD; the loop below is generic in the width, `contract_leaf_size(128)`
++#: is still one leaf).
++comptime CHOL_HOST_NB_PINNED = 128 if (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_CHOL_NB128"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++) else 32
+ 
+ #: `potrf.mojo::CHOL_JITTER_BITS`, 2^-20 (DEVIATION 1637).
+ comptime CHOL_HOST_JITTER_BITS: UInt32 = 0x35800000
+diff --git a/python/mojolearn/tests/test_cpu_training_gp.py b/python/mojolearn/tests/test_cpu_training_gp.py
+index f69416ef8..43ac26d60 100644
+--- a/python/mojolearn/tests/test_cpu_training_gp.py
++++ b/python/mojolearn/tests/test_cpu_training_gp.py
+@@ -116,8 +116,10 @@ def test_oracles_import_no_gpu_and_no_device_module():
+ 
+ def test_oracles_spell_the_bit_carrying_constructs():
+     chol = _read(CHOL_ORACLE)
+-    # pinned 32 (MOJOLEARN_IDN_CHOL_NB128 deleted 2026-10-11, docs/TOMBSTONES.md)
+-    assert "comptime CHOL_HOST_NB_PINNED = 32" in chol
++    # 32 by default; 128 under MOJOLEARN_IDN_CHOL_NB128 with the device
++    # (lane gap-linalg, 153a626f9)
++    assert "comptime CHOL_HOST_NB_PINNED = 128 if (" in chol
++    assert 'and is_defined["MOJOLEARN_IDN_CHOL_NB128"]()' in chol and ") else 32" in chol
+     assert "comptime CHOL_HOST_JITTER_BITS: UInt32 = 0x35800000" in chol
+     assert "if not (s > Float32(0.0)):" in chol, "the pivot is spelled not (s > 0)"
+     assert "a[jc * n + jc] = ftz(identical_sqrt(s))" in chol, "the root goes through the IDENTICAL sqrt seam"
