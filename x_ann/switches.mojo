@@ -130,6 +130,27 @@ comptime IDN_PQ_DEVICE_CODEBOOKS = (
     GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS_OFF"]()
 )
 
+#: lane hdb-ivf D8(a) (IDENTICAL, DEFAULT OFF, 2026-10-11),
+#: -D MOJOLEARN_IDN_PQ_TRAINSET_STRIDED: the batched PQ codebook loop
+#: (IDN_PQ_DEVICE_CODEBOOKS) trains on at most IDN_PQ_TRAIN_ROWS_PER_CODE
+#: rows per code, the loop's own stride sample (sample s = row (s n) //
+#: n_train), instead of every residual row. Cost reasoning, not a shape rule:
+#: k-means with K codes needs O(K) points per code to place them (FAISS's
+#: max_points_per_centroid = 256, cuVS's PQ default, and the FAST arm's
+#: PQ_FAST_ROWS_PER_CODE); beyond that the Lloyd iterations cost n x pq_dim
+#: x n_codes x pq_len per pass for no placement gain. Every row is still
+#: encoded. Expected: ivf-refine / ivf-pq istella build NV 2186 -> ~1600 ms
+#: (the PQ phase trains on ~1/4 of the rows). Bits change on every column
+#: together: the device loop and its host twin `_codebooks_host_batched`
+#: read the same n_train (x_ann/ivf_pq_device.mojo, x_ann/host/ivf_pq_host.mojo).
+#: Quality gate: recall at the board's k must hold (FAST precedent).
+comptime IDN_PQ_TRAINSET_STRIDED = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+    and is_defined["MOJOLEARN_IDN_PQ_TRAINSET_STRIDED"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime IDN_PQ_TRAIN_ROWS_PER_CODE = 256
+
 #: lane fg-ivf (read_ivf.md idea A3), DEFAULT ON outside FAST
 #: (`-D MOJOLEARN_IVF_PQ_ONE_UPLOAD_OFF` restores the old path): IVF-PQ's
 #: coarse step is IVF-Flat's RESIDENT build (`ivf_flat_build_resident_host`
