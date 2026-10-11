@@ -79,8 +79,8 @@ comptime EIGH_FAST_TRIDIAG = (
     and not is_defined["MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF"]()
 )
 #: lane gap-linalg (2026-10-08; docs/plans/gaps-2026-10-08.md section 3.1):
-#: the same algorithm promoted to IDENTICAL on NVIDIA and AMD. CANDIDATE,
-#: default off: `-D MOJOLEARN_IDN_EIGH_TRIDIAG`. What makes it identical:
+#: the same algorithm promoted to IDENTICAL on NVIDIA and AMD. Default on
+#: since 2026-10-11 (see below); `_OFF` reverts. What makes it identical:
 #:   1. every product that meets an add, every division and every sqrt in
 #:      this file is spelled through checks/numerics (`identical_mul_add`,
 #:      `identical_mul`, `identical_div`, `identical_sqrt`): one rounding
@@ -107,9 +107,17 @@ comptime EIGH_FAST_TRIDIAG = (
 #: move together, the host column keeps the Jacobi (its digest is recorded,
 #: not required). The FAST Apple route is untouched in structure
 #: (`td_syr2k_kernel`, `td_bt_*_kernel`).
+#: PROMOTED to the IDENTICAL default (lane eigh-promote, 2026-10-11).
+#: A/B one run per arm, main@5876e9205, eigh/synthetic (algos family):
+#:   AMD MI325X  8620.1 ms -> 353.7 ms (run a1600)
+#:   NVIDIA L40S 21119.9 ms -> 367.2 ms (run v0006)
+#:   digest dbbb891997... on both vendors (NV == AMD: identical);
+#:   max_eigenvalue_error 5.95e-05 -> 3.69e-07, relative_residual 6.67e-07.
+#: `-D MOJOLEARN_IDN_EIGH_TRIDIAG_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores
+#: the Jacobi path, which stays compiled as the refusal fallback.
 comptime EIGH_TD_IDN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_EIGH_TRIDIAG"]()
+    and not is_defined["MOJOLEARN_IDN_EIGH_TRIDIAG_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: Either route: `DevExec._eigh_on` reads this.
