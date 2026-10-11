@@ -698,6 +698,8 @@ def kl_kernel(n: Int32, y: F32P, indptr: I32P, indices: I32P, values: F32P, z: F
     if i < Int(n):
         ts_kl_cell(i, y, indptr, indices, values, z, kl)
 
+# TOMBSTONE: MOJOLEARN_IDN_TSNE_REP_RB4 (LOSER: tsne istella 1.036, taxi 1.362 (NV 1.581, AMD 1.142), v0130/a1712 vs A v0128/a1710 + v0129/a1711) deleted 2026-10-11 by 826f3d57e; code recoverable at 826f3d57e^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_REP_RB4.patch; record in docs/TOMBSTONES.md.
 
 def _enq_repulse_split(
     ctx: DeviceContext, n: Int, mut ycur: DeviceBuffer[DType.float32], mut drz: DeviceBuffer[DType.float32],
@@ -705,6 +707,8 @@ def _enq_repulse_split(
     mut dparts: DeviceBuffer[DType.float32],
 ) raises:
     """TS_SPLIT's repulsion + Z launch (IDN_TSNE_REP_TILE picks the shape)."""
+    # TOMBSTONE: MOJOLEARN_IDN_TSNE_REP_RB4 (LOSER: tsne istella 1.036, taxi 1.362 (NV 1.581, AMD 1.142), v0130/a1712 vs A v0128/a1710 + v0129/a1711) deleted 2026-10-11 by 826f3d57e; code recoverable at 826f3d57e^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_REP_RB4.patch; record in docs/TOMBSTONES.md.
     comptime if IDN_TSNE_REP_TILE:
         ctx.enqueue_function[repulse_rep_tile_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(),
                                                       drep.unsafe_ptr(), dz.unsafe_ptr(), dcnt.unsafe_ptr(),

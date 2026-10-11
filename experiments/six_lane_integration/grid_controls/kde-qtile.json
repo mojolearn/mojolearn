@@ -6,23 +6,23 @@
  "head_note": "head = last code commit before this file; the file is committed on top of it.",
  "controls": {
   "kde_qtile": {
-   "define": "MOJOLEARN_IDN_KDE_QTILE",
+   "define": "MOJOLEARN_IDN_KDE_QTILE_OFF",
    "kind": "experiment",
    "arms": {
-    "on": [
-     "MOJOLEARN_IDN_KDE_QTILE"
-    ],
-    "off": []
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_KDE_QTILE_OFF"
+    ]
    },
-   "default": "off",
+   "default": "on",
    "source": [
     "kde/impl/neighbors/kernel_density.mojo:3634",
     "kde/impl/neighbors/kernel_density.mojo:3698"
    ],
    "binding": "_mojolearn_kde",
    "bits_change": false,
-   "status": "new",
-   "note": "KDE chunked log-sum-exp (IDENTICAL): 4 queries per thread, 16-row train tile staged coalesced along features, only cells x feats words staged; per-pair feature order and per-chunk ascending-j (m, s) fold unchanged, so same partial planes. Workloads algos kde istella + taxi nv (+ amd ID)."
+   "status": "promoted:w2-decide-algos-20261011",
+   "note": "PROMOTED to the IDENTICAL default 2026-10-11 by lane/w2-decide-algos (same-box A/B on main c8ef6c66d, one run per arm, NV L40S + AMD MI325X): kde taxi 0.343 (NV .300 AMD .387), istella 1.239 (NV 1.231 AMD 1.246, a real +24% regression on both vendors), avg 0.791; v0123/a1705 vs A v0122/a1704. `MOJOLEARN_IDN_KDE_QTILE_OFF` restores the old path. Before: KDE chunked log-sum-exp (IDENTICAL): 4 queries per thread, 16-row train tile staged coalesced along features, only cells x feats words staged; per-pair feature order and per-chunk ascending-j (m, s) fold unchanged, so same partial planes. Workloads algos kde istella + taxi nv (+ amd ID)."
   }
  }
 }

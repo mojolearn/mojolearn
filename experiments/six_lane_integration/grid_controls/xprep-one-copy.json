@@ -5,22 +5,22 @@
   "head": "4ce613da2",
   "controls": {
     "idn_dradix_range_passes": {
-      "define": "MOJOLEARN_IDN_DRADIX_RANGE_PASSES",
+      "define": "MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF",
       "kind": "switch",
       "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_IDN_DRADIX_RANGE_PASSES"
+        "on": [],
+        "off": [
+          "MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF"
         ]
       },
-      "default": "off",
+      "default": "on",
       "source": [
         "x_prep/dradix.mojo"
       ],
       "binding": "_mojolearn_x_prep",
       "bits_change": false,
-      "status": "new",
-      "note": "I3: the IDENTICAL sort_cols radix sort skips, per column, the digit passes whose digit is constant (OR mask of key ^ first key; parity of active passes picks the key block on the device) and caps the sort chunk at 512 rows; same words. A/B owed: onehot + ordinal istella + taxi, kbins istella on nv and amd; ID check expected MATCH."
+      "status": "promoted:w2-decide-algos-20261011",
+      "note": "PROMOTED to the IDENTICAL default 2026-10-11 by lane/w2-decide-algos (same-box A/B on main c8ef6c66d, one run per arm, NV L40S + AMD MI325X): ordinal NV/AMD 0.744/0.782, onehot 0.816/0.808, kbins taxi 0.712 (istella 1.127); mean 14 prep cells 0.945; v0125/a1707 vs A v0124/a1706. `MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF` restores the old path. Before: I3: the IDENTICAL sort_cols radix sort skips, per column, the digit passes whose digit is constant (OR mask of key ^ first key; parity of active passes picks the key block on the device) and caps the sort chunk at 512 rows; same words. A/B owed: onehot + ordinal istella + taxi, kbins istella on nv and amd; ID check expected MATCH."
     }
   }
 }

@@ -712,6 +712,8 @@ comptime IDN_HDB_ROUND_ONE_SYNC = (
     )
 )
 
+# TOMBSTONE: MOJOLEARN_IDN_HDB_ROUND_LEAN (NOISE: hdbscan istella 0.997, taxi 1.008, v0133/a1715 vs A v0132/a1714) deleted 2026-10-11 by 826f3d57e; code recoverable at 826f3d57e^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch; record in docs/TOMBSTONES.md.
 
 def smr_round_reset_keep_kernel(
     ub: _I32P, amin: _I32P, aidx: _I32P, ckey: _I32P, clo: _I32P,
@@ -1185,6 +1187,8 @@ def _search(
     bit); on Apple the per-pair kernel under `SPARSE_MR_LAUNCH_MACS` with
     a drain after every launch so no command buffer holds the GPU long.
     Returns the number of launches."""
+    # TOMBSTONE: MOJOLEARN_IDN_HDB_ROUND_LEAN (NOISE: hdbscan istella 0.997, taxi 1.008, v0133/a1715 vs A v0132/a1714) deleted 2026-10-11 by 826f3d57e; code recoverable at 826f3d57e^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch; record in docs/TOMBSTONES.md.
     if n_todo == 0:
         return 0
     var dd = d if d > 0 else 1
@@ -1520,6 +1524,8 @@ def sparse_mr_mst_device(
             grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
         )
         _compact(ctx, state_d, SMR_LIST_B, bcount_d, boff_d, sb.todo_d, st_d, m)
+        # TOMBSTONE: MOJOLEARN_IDN_HDB_ROUND_LEAN (NOISE: hdbscan istella 0.997, taxi 1.008, v0133/a1715 vs A v0132/a1714) deleted 2026-10-11 by 826f3d57e; code recoverable at 826f3d57e^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch; record in docs/TOMBSTONES.md.
         _read_status(ctx, st_d, st_h)
         var n_b = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_COUNT))
         _ = _search(
