@@ -10,7 +10,7 @@
    "kind": "switch",
    "arms": {"off": [], "on": ["MOJOLEARN_IDN_ETS_TEAM"]},
    "default": "off",
-   "source": ["sequence/ets_team.mojo:57", "sequence/exec_device.mojo:255", "sequence/exec.mojo:165", "bindings/_mojolearn_x_sequence.mojo:201"],
+   "source": ["sequence/ets_team.mojo:77", "sequence/exec_device.mojo:255", "sequence/exec.mojo:165", "bindings/_mojolearn_x_sequence.mojo:201"],
    "binding": ["_mojolearn_x_sequence", "_mojolearn_x_sequence_host"],
    "bits_change": true,
    "status": "new",
