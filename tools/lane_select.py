@@ -882,6 +882,18 @@ def enumerator_files():
                 continue
             named = {b for b in set(_BINDING_RE.findall(_read(rel)))
                      if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
+            # A HOST TWIN IS THE SAME SURFACE (2026-10-10). `<b>_host` is the
+            # CPU column of binding `<b>`, not another family, so the pair
+            # counts once. fe5587bb0 (2026-10-04) gave `_hierarchy_impl.py`
+            # (one estimator, AgglomerativeClustering) a fourth name, the
+            # x_neighbors zero-row kernel, beside estimators, its host twin
+            # and solver; read as a registry it became a sink and the
+            # agglomerative lanes lost the cluster, solver and linear files
+            # behind it (kmeans_oracle 83 -> 80). The registries keep counts
+            # far above the cap with twins collapsed (_backend 27, host_surface
+            # 33, _classical_host 22, __init__ 8, the parallel and distributed
+            # drivers 4).
+            named = {b[:-len("_host")] if b.endswith("_host") else b for b in named}
             if len(named) > ENUMERATOR_MAX_BINDINGS:
                 out.add(rel)
         _ENUMERATORS = out
