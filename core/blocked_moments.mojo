@@ -187,7 +187,7 @@ def bm_leaf_gram_kernel(
         if ti != tj:
             part.unsafe_store(base + j * d + i, acc)
 
-# TOMBSTONE: MOJOLEARN_IDN_BM_GRAM_RB4 (loser: ridge/pca/ols ~1.0-1.24x slower, NV + AMD) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_BM_GRAM_RB4 (loser: ridge/pca/ols ~1.0-1.24x slower, NV + AMD) deleted 2026-10-11 by bde9c2243; code recoverable at bde9c2243^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_BM_GRAM_RB4.patch
 
 
@@ -466,7 +466,7 @@ def bm_centered_gram_panels(
         ctx.synchronize()
         return
     var part = ctx.enqueue_create_buffer[DType.float32](leaves * cells)
-    # TOMBSTONE: MOJOLEARN_IDN_BM_GRAM_RB4 (loser: ridge/pca/ols ~1.0-1.24x slower, NV + AMD) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+    # TOMBSTONE: MOJOLEARN_IDN_BM_GRAM_RB4 (loser: ridge/pca/ols ~1.0-1.24x slower, NV + AMD) deleted 2026-10-11 by bde9c2243; code recoverable at bde9c2243^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_BM_GRAM_RB4.patch
     var tiles = (d + BM_TILE - 1) // BM_TILE
     ctx.enqueue_function[bm_leaf_gram_kernel](

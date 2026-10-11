@@ -7939,7 +7939,7 @@ comptime GEMM_KPACK_CPT = TUNED_CPT if (
 #: where the narrow tile runs (`lib_gemm_kpack_narrow_for`, NVIDIA: 128
 #: registers a thread, two blocks an SM), else the GEMM kernels' bound.
 comptime GEMM_KPACK_LAUNCH_BOUND = 2 * TUNED_TPB if lib_gemm_kpack_narrow_for[TARGET_COLUMN]() else GEMM_LAUNCH_BOUND
-# TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by c38d7bc89; code recoverable at c38d7bc89^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch
 comptime GEMM_KPACK_KS = 16
 comptime GEMM_KPACK_FS = TUNED_FOLD_SLOTS
@@ -8170,7 +8170,7 @@ def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
     return _tuned_step(a, b, acc)
 
 
-# TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by c38d7bc89; code recoverable at c38d7bc89^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
 def identical_gemm_kpack_kernel[

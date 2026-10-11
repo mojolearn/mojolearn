@@ -715,7 +715,7 @@ def check_kpack_page_is_a_bijection(mut failures: List[String]) raises:
     )
 
 
-# TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by c38d7bc89; code recoverable at c38d7bc89^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch
 def check_kpack_gather_covers_the_page(mut failures: List[String]) raises:
     """DEVIATION 2706: under GATHER every thread stores the `R` lines
