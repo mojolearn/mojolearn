@@ -18,6 +18,19 @@ case "$SET" in https://*)
     SET="$D/cuda/sm_80" ;;
 esac
 [ -f "$SET/PTX_BASELINE.json" ] || { echo "PTXREC no PTX_BASELINE.json in $SET"; exit 2; }
+# The loader admits the PTX set only from a clean tree at the set's own source
+# commit (_backend.py _installed_source_commit vs PTX_BASELINE.json
+# source_commit; nv2 v1318 refused it from the lq tree at a later commit). When
+# this lq tree is elsewhere, record from a detached worktree at that commit,
+# sharing this tree's pixi environment.
+SRC=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["source_commit"])' "$SET/PTX_BASELINE.json")
+if [ "$(git rev-parse HEAD)" != "$SRC" ]; then
+    W=/root/ptx-src; git worktree remove --force "$W" 2>/dev/null; rm -rf "$W"
+    git worktree add --detach "$W" "$SRC" > /dev/null || { echo "PTXREC no worktree at ${SRC:0:12}"; exit 2; }
+    ln -s "$PWD/.pixi" "$W/.pixi"
+    echo "PTXREC recording from $W at ${SRC:0:12}"
+    cd "$W" || exit 2
+fi
 rm -rf python/mojolearn/cuda/sm_80
 mkdir -p python/mojolearn/cuda
 cp -a "$SET" python/mojolearn/cuda/sm_80
