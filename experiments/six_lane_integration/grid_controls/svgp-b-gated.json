@@ -2,7 +2,7 @@
  "schema": "mojolearn.grid-controls/1",
  "lane": "svgp-b-gated",
  "branch": "lane/svgp-b-gated",
- "head": "",
+ "head": "e19ca6776",
  "controls": {
   "svgp_b_fp32_gated": {
    "define": "MOJOLEARN_IDN_SVGP_B_FP32_GATED",
