@@ -1431,6 +1431,35 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_NB128.patch; record in docs/TOMBSTONES.md.
 
 
+# DEVIATION 5309 (PIN; row 134): the orthonormal basis of a tall A is two
+# passes of {R = the Householder QR's R of decomposition/ (qr_factor, TSQR
+# slices a function of the shape); orth_rank_guard(R); Q = A R^-1, one thread
+# per row}; not LAPACK's orgqr; arm 5309_orth_trsm_order.
+
+#: DEVIATION 5318 (PIN; row 134): a column of A whose residual after the
+#: earlier columns is at most 2^-16 of its own norm (R[j, j]^2 <= 2^-32 *
+#: sum_t R[t, j]^2) is numerically dependent: its Q column is 0, never the
+#: rounding noise A R^-1 divides out of a tiny R[j, j] (that column is neither
+#: unit nor orthogonal, and a later one-sided Jacobi SVD of Q^T M rotates it
+#: forever; measured: randomized_svd on the `denormal` fixture). 2^-16 sits
+#: above float32 QR noise at 4000 rows (sqrt(m) eps = 7.5e-6) and far below
+#: an independent column (>= 7e-2 on every fixture). Arm 5318_orth_rank_guard.
+comptime ORTH_RANK_TOL2 = Float32(2.3283064365386963e-10)
+
+
+# ------------------------------------------------------------------ trisolve
+# The right-looking triangular solves on an LU factor (lane neural-pass134,
+# LocallyLinearEmbedding's shift-invert): each solved row is applied to the
+# rows it feeds at once, so a cell's chain runs in the order its operands
+# finish (ascending j below the diagonal, DESCENDING j above it). getrs's
+# ascending back substitution is one n^2 / 2 chain per column; this order
+# blocks on the device (a diagonal block, then every row it feeds a cell at
+# a time) with the same chains. lu_solve runs it too (DEVIATION 5308).
+# tri: 0 = unit L forward (coef lu[i, j]), 1 = U backward (lu[i, j], divide),
+# 2 = U^T forward (lu[j, i], divide), 3 = unit L^T backward (lu[j, i]).
+
+
+@always_inline
 def trs_coef(lu: F32Ptr, n: Int, tri: Int, i: Int, j: Int) -> Float32:
     return lu.unsafe_load(j * n + i) if tri >= 2 else lu.unsafe_load(i * n + j)
 
