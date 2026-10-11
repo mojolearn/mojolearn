@@ -30,12 +30,12 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer
 from std.sys.info import has_apple_gpu_accelerator
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_cluster.bodies import SplitMix64
 from x_cluster.common import nearest_all, sum_f64
 from x_cluster.post_bodies import FM_VAL
 from x_cluster.device_ops import DeviceOps
-from x_cluster.minibatch import MiniBatchParams
+from x_cluster.minibatch import MiniBatchParams, minibatch_fit
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
@@ -64,6 +64,27 @@ comptime MBK_ZEROCOPY = (
 comptime MBK_FAST_DEVSCAN = MBK_ZEROCOPY and not is_defined["MOJOLEARN_MBK_FAST_DEVSCAN_OFF"]()
 #: the message Python maps back to its ValueError
 comptime MBK_NONFINITE_MSG = "mojolearn: X contains NaN or infinity"
+
+#: lane/neighbors-small-ports (2026-10-11, idea D7a), IDENTICAL, DEFAULT OFF
+#: (OPEN): `-D MOJOLEARN_IDN_MBK_RESIDENT`. Structural reason: the IDENTICAL
+#: fit copies X into a fresh host list (`read_f32`, 880 MB at 1M x 220 with
+#: page faults), Python scans every value on the host (`all_finite`), and
+#: `minibatch_fit` gathers its samples from the host list then re-uploads
+#: them. Here X is uploaded from the caller's pointer once, scanned on the
+#: device (`device_first_nonfinite`, Python skips its scan through
+#: x_cluster_mbk_devscan), and `minibatch_fit` runs on the resident slot
+#: (`xs_res`): the validation/init samples, the k-means++ picks and the
+#: reassigned rows are device gathers of the same rows, the steps are the
+#: IDENTICAL group loop unchanged. Same words as the copying fit on NVIDIA,
+#: AMD and the host column (which keeps its list; the gathers are exact
+#: copies). Unit weights only (weights take the copying path). No shape
+#: rule. Expected minibatch-kmeans istella NV 510 -> ~350 ms (the host copy
+#: and scan, ~150-200 ms); the device step loop (D7b) is a separate step.
+comptime MBK_IDN_RESIDENT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_MBK_RESIDENT"]()
+)
+#: the binding scans X on the device (Python skips its host scan)
+comptime MBK_DEVSCAN_ANY = MBK_FAST_DEVSCAN or MBK_IDN_RESIDENT
 
 comptime XPtr = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -271,5 +292,54 @@ def minibatch_entry_ptr(
         out.s.append(inertia)
         out.s.append(Float64(steps_done))
         out.s.append(Float64(n_iter))
+        return True
+    return False
+
+
+def minibatch_entry_ptr_idn(
+    mut ops: DeviceOps, xp: XPtr, nx: Int, a: List[Float32], ip: List[Int], fp: List[Float64],
+    mut out: ClusterOut,
+) raises -> Bool:
+    """IDN_MBK_RESIDENT: `entries.minibatch_entry` with X uploaded from `xp`
+    (nx values, alive for the call) and the fit run on the resident slot.
+    False (nothing done) outside the switch, for weights or a size mismatch:
+    the binding then copies X and runs `minibatch_entry`."""
+    comptime if MBK_IDN_RESIDENT:
+        var n = ip[0]
+        var d = ip[1]
+        var has_w = len(ip) > 11 and ip[11] != 0
+        if has_w or n * d != nx:
+            return False
+        var p = MiniBatchParams(
+            k=ip[2], max_iter=ip[3], batch_size=ip[4], tol=fp[0], max_no_improvement=ip[5],
+            init_size=ip[6], n_init=ip[7], reassignment_ratio=fp[1], seed=UInt64(ip[9]),
+            has_init=ip[8] != 0, init_random=len(ip) > 10 and ip[10] != 0,
+        )
+        var n_c = p.k * d if p.has_init else 0
+        if len(a) < n_c:
+            return False
+        var centers = List[Float32](capacity=n_c)
+        for t in range(n_c):  # small-loop(n_c: user init center words): the k x d init array
+            centers.append(a[t])
+        var xbuf = ops.ctx.enqueue_create_buffer[DType.float32](nx)
+        ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
+        if len(ip) > 12 and ip[12] != 0:
+            # Python skipped its host scan: scan the device copy (one word back)
+            if device_first_nonfinite(ops.ctx, xbuf, nx) >= 0:
+                ops.ctx.synchronize()
+                raise Error(MBK_NONFINITE_MSG)
+        ops.f.append(xbuf^)
+        var xs = len(ops.f) - 1
+        var labels = List[Int32]()
+        var counts = List[Float32]()
+        var r = minibatch_fit(ops, List[Float32](), n, d, p, centers, labels, counts, List[Float32](), xs)
+        # nearest_all read its labels back; drain before `xp` is released
+        ops.ctx.synchronize()
+        out.f.append(centers^)
+        out.f.append(counts^)
+        out.i.append(labels^)
+        out.s.append(r.inertia)
+        out.s.append(Float64(r.n_steps))
+        out.s.append(Float64(r.n_iter))
         return True
     return False

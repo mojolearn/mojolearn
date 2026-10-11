@@ -18,7 +18,8 @@ from x_cluster.device_ops import DeviceOps
 from core.device_scan import device_first_nonfinite
 from x_cluster.bisect_fast import BISECT_FAST_ZEROCOPY, bisect_entry_ptr
 from x_cluster.entries import ENTRY_BISECT, ENTRY_MINIBATCH, run_entry
-from x_cluster.minibatch_ptr import MBK_FAST_DEVSCAN, MBK_NONFINITE_MSG, MBK_ZEROCOPY, minibatch_entry_ptr
+from x_cluster.minibatch_ptr import MBK_DEVSCAN_ANY, MBK_IDN_RESIDENT, MBK_NONFINITE_MSG, MBK_ZEROCOPY, minibatch_entry_ptr
+from x_cluster.minibatch_ptr import minibatch_entry_ptr_idn
 from x_cluster.out import ClusterOut, py_floats, py_ints
 from x_cluster.minibatch_fast import MBK_CLS2_POOL, MBK_W2_SUMCMP
 from x_cluster.tree_cut import PY2MOJO_CLUSTER
@@ -64,6 +65,22 @@ def call_binding(
                 took1 = bisect_entry_ptr(ops1, xp1, nx, na > 0, ints1, floats1, res1)
             if took1:
                 return res1.to_py()
+    # lane/neighbors-small-ports, IDENTICAL, default off (-D MOJOLEARN_IDN_MBK_RESIDENT):
+    # MiniBatchKMeans uploads X from the caller's array and fits on the
+    # resident copy (x_cluster/minibatch_ptr.mojo); False falls through
+    comptime if MBK_IDN_RESIDENT:
+        if w == ENTRY_MINIBATCH and nx > 0:
+            var a2 = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
+            var ints2 = py_ints(ip)
+            var floats2 = py_floats(fp)
+            var xp2 = f32_ptr(Int(py=x_addr))
+            var res2 = ClusterOut()
+            var took2 = False
+            with GILReleased(Python()):
+                var ops2 = DeviceOps()
+                took2 = minibatch_entry_ptr_idn(ops2, xp2, nx, a2, ints2, floats2, res2)
+            if took2:
+                return res2.to_py()
     var x = read_f32(Int(py=x_addr), nx) if nx > 0 else List[Float32]()
     var a = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
     var ints = py_ints(ip)
@@ -71,7 +88,7 @@ def call_binding(
     # (ip[12] = 1) and the zero-copy path did not take the fit: scan X on the
     # device (merge 2026-10-05: was a host walk, refused on the GPU route)
     var scan_dev = False
-    comptime if MBK_FAST_DEVSCAN:
+    comptime if MBK_DEVSCAN_ANY:
         scan_dev = w == ENTRY_MINIBATCH and len(ints) > 12 and ints[12] != 0 and nx > 0
     var floats = py_floats(fp)
     var res = ClusterOut()
@@ -93,7 +110,7 @@ def call_binding(
 def mbk_devscan_binding() raises -> PythonObject:
     """1 when MiniBatchKMeans' NaN/inf scan runs in this binding
     (FAST + Apple default, rollback -D MOJOLEARN_MBK_FAST_DEVSCAN_OFF, x_cluster/minibatch_ptr.mojo), else 0."""
-    return PythonObject(1 if MBK_FAST_DEVSCAN else 0)
+    return PythonObject(1 if MBK_DEVSCAN_ANY else 0)
 
 
 def mbk_policy_binding() raises -> PythonObject:
