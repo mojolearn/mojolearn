@@ -1385,6 +1385,104 @@ def host_module_path(basename):
     return os.path.join(host_dir(), basename + ".so")
 
 
+# THE BYTE LM AND FOREST INFERENCE DOORS' BINARY LOADERS (lane/lazy-imports,
+# 2026-10-10). They lived in `_byte_lm_host.py` and `_forest_host.py`, and
+# `_buffer._host_native` (the three, and seven, native helpers a CPU-only
+# install resolves from those binaries) imported each whole door for its
+# `_load()`. Every lane loads `_buffer.py`, so every lane's import closure
+# carried the byte LM door (lowbit, linalg, the decomposition and metrics
+# expansions) and the forest door (`_classical_host` and every classical door
+# it names): 251 files selected every lane in tools/test_lane_select.py. The
+# loaders are CPU-side backend plumbing and live here now; the doors keep
+# `binary_path` and `_load` as the same calls. Caches are per binding name.
+_DOOR_HOST_MODULES = {}
+
+
+def _door_binary_path(override_env, basename):
+    override = os.environ.get(override_env, "").strip()
+    if override:
+        return os.path.abspath(override)
+    return host_module_path(basename)
+
+
+def _door_module(basename, path, build_script):
+    if not os.path.exists(path):
+        raise ImportError(
+            f"mojolearn: {path} is not built. Build it with {build_script}")
+    name = _HOST_MODULE_PREFIX + basename
+    module = sys.modules.get(name)
+    if module is None:
+        loader = importlib.machinery.ExtensionFileLoader(name, path)
+        spec = importlib.util.spec_from_loader(name, loader, origin=path)
+        module = importlib.util.module_from_spec(spec)
+        _exec_binding(loader, module)
+        sys.modules[name] = module
+    return module
+
+
+def byte_lm_host_binary_path():
+    """The byte LM host binary this process loads, or would load: the file
+    `MOJOLEARN_BYTE_LM_HOST_BINARY` names, else this install's host binding
+    of that name, wherever `host_module_path` resolves it."""
+    return _door_binary_path("MOJOLEARN_BYTE_LM_HOST_BINARY", "_mojolearn_byte_lm_host")
+
+
+def load_byte_lm_host():
+    """`_mojolearn_byte_lm_host`, loaded once and READ BACK: IDENTICAL, `cpu`,
+    and a sabotage build refused unless MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE=1."""
+    module = _DOOR_HOST_MODULES.get("_mojolearn_byte_lm_host")
+    if module is not None:
+        return module
+    path = byte_lm_host_binary_path()
+    module = _door_module("_mojolearn_byte_lm_host", path, "bindings/build_byte_lm_host.sh")
+    if int(module.byte_lm_host_numeric_mode()) != 1:
+        raise RuntimeError(f"mojolearn: {path} was not compiled IDENTICAL; rebuild it")
+    if str(module.byte_lm_host_vendor()) != 'cpu':
+        raise RuntimeError(f"mojolearn: {path} does not read back as the CPU binding")
+    if bool(module.byte_lm_host_sabotage()) and os.environ.get('MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE') != '1':
+        raise RuntimeError(
+            f"mojolearn: {path} is the gate's SABOTAGE build (DEVIATION 2612) and "
+            "computes wrong answers on purpose; it is refused outside the gate")
+    _DOOR_HOST_MODULES["_mojolearn_byte_lm_host"] = module
+    return module
+
+
+def forest_host_binary_path():
+    """The forest host binary this process loads, or would load: the file
+    `MOJOLEARN_FOREST_HOST_BINARY` names, else this install's host binding
+    of that name, wherever `host_module_path` resolves it."""
+    return _door_binary_path("MOJOLEARN_FOREST_HOST_BINARY", "_mojolearn_forest_host")
+
+
+def load_forest_host():
+    """`_mojolearn_forest_host`, loaded once and READ BACK: IDENTICAL, `cpu`,
+    and a sabotage build (the base, CTR-path and grove arms) refused unless
+    MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1."""
+    module = _DOOR_HOST_MODULES.get("_mojolearn_forest_host")
+    if module is not None:
+        return module
+    path = forest_host_binary_path()
+    module = _door_module("_mojolearn_forest_host", path, "bindings/build_forest_host.sh")
+    if int(module.forest_host_numeric_mode()) != 1:
+        raise RuntimeError(f"mojolearn: {path} was not compiled IDENTICAL; rebuild it")
+    if str(module.forest_host_vendor()) != 'cpu':
+        raise RuntimeError(f"mojolearn: {path} does not read back as the CPU binding")
+    # the CTR-path arm (lane/inference-gbdt-ctr-tables, 2026-09-15) and the
+    # grove association arm (DEVIATION 2961, 2026-09-17) are sabotage builds
+    # too and take the same switch
+    ctr_sabotage = getattr(module, 'forest_host_gbdt_ctr_sabotage', None)
+    groves_sabotage = getattr(module, 'forest_host_groves_sabotage', None)
+    sabotaged = (bool(module.forest_host_sabotage())
+                 or bool(ctr_sabotage is not None and ctr_sabotage())
+                 or bool(groves_sabotage is not None and groves_sabotage()))
+    if sabotaged and os.environ.get('MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE') != '1':
+        raise RuntimeError(
+            f"mojolearn: {path} is the gate's SABOTAGE build and computes "
+            "wrong answers on purpose; it is refused outside the gate")
+    _DOOR_HOST_MODULES["_mojolearn_forest_host"] = module
+    return module
+
+
 def host_families_built():
     """The basenames of every `_mojolearn_*_host.so` under mojolearn/host/,
     sorted. What `tools/identity_break.py` records as `host.families`, so a

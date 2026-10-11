@@ -42,19 +42,27 @@ import sys
 import weakref
 
 from . import _backend
-# THE LOADER LIVES IN `_forest_host_binary.py` (lane/lazy-imports, 2026-10-10):
-# `_buffer._host_native` needs only `_load()`, and importing this whole door
-# from the buffer helpers put `_classical_host` and every classical door it
-# names in every lane's import closure. Re-exported here unchanged.
-from ._forest_host_binary import _IDENTICAL_CODE, _load, binary_path  # noqa: F401
-# The door still NAMES its binding (the name `_forest_host_binary` loads): tools/lane_select.py
-# reads a file's bindings from these assignments.
-_EXTENSION = '_mojolearn_forest_host'
-_MODULE_NAME = 'mojolearn._host.' + _EXTENSION
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._labels import argmax_rows, classes_from_member, decode_labels
+
+_EXTENSION = '_mojolearn_forest_host'
+_MODULE_NAME = 'mojolearn._host.' + _EXTENSION
+_IDENTICAL_CODE = 1
+
+
+# THE LOADER LIVES IN `_backend` (lane/lazy-imports, 2026-10-10):
+# `_buffer._host_native` needs only this binary, and importing this whole
+# door from the buffer helpers put its imports in every lane's closure.
+def binary_path():
+    """The binary this process loads, or would load (`_backend.forest_host_binary_path`)."""
+    return _backend.forest_host_binary_path()
+
+
+def _load():
+    """`_mojolearn_forest_host`, loaded once and read back (`_backend.load_forest_host`)."""
+    return _backend.load_forest_host()
 
 
 #: The sequential archive formats and the family each belongs to; a
@@ -74,8 +82,6 @@ _ESTIMATORS = {
     'ExtraTreesClassifier': ('et', True),
     'ExtraTreesRegressor': ('et', False),
 }
-
-
 
 
 _MODEL_ARRAYS = (('offsets', '<i4'), ('colid', '<i4'), ('quesval', '<f4'),

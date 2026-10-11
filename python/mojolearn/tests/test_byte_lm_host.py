@@ -16,8 +16,6 @@ import pytest
 from mojolearn import ByteLanguageModelConfig
 from mojolearn import _backend, _buffer
 from mojolearn import _byte_lm_host as host_mod
-# the loader and its one-module cache moved to `_byte_lm_host_binary` (lane/lazy-imports)
-from mojolearn import _byte_lm_host_binary as host_bin
 from mojolearn.tests.test_byte_lm_surface import buffer
 
 
@@ -64,7 +62,8 @@ def fake_host(monkeypatch, tmp_path):
         lambda addresses, native, threaded, threads: m.calls.append(('loss', threaded, threads)) or 0x3F800000)
     m.all_finite_f32 = lambda addr, n: int(np.isfinite(buffer(addr, n)).all())
     monkeypatch.setitem(sys.modules, host_mod._MODULE_NAME, m)
-    monkeypatch.setattr(host_bin, '_MODULE', None)
+    # the loader's one-module cache lives in `_backend` (lane/lazy-imports)
+    monkeypatch.delitem(_backend._DOOR_HOST_MODULES, host_mod._EXTENSION, raising=False)
     # A PRIVATE helper cache, not an item planted in the process-wide one.
     # `_buffer._native` caches every helper it resolves for the life of the
     # process, so any earlier module that converted an array (a transpose,
@@ -173,7 +172,7 @@ def test_sabotage_build_refused_outside_the_gate(fake_host, monkeypatch):
     with pytest.raises(RuntimeError, match='SABOTAGE'):
         host_mod.LanguageModelInference(np.zeros(34944, np.float32))
     monkeypatch.setenv('MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE', '1')
-    monkeypatch.setattr(host_bin, '_MODULE', None)
+    monkeypatch.delitem(_backend._DOOR_HOST_MODULES, host_mod._EXTENSION, raising=False)
     host_mod.LanguageModelInference(np.zeros(34944, np.float32))
 
 
@@ -183,7 +182,7 @@ def test_wrong_mode_or_vendor_refused(fake_host, monkeypatch):
         host_mod.LanguageModelInference(np.zeros(34944, np.float32))
     fake_host.byte_lm_host_vendor = lambda: 'cpu'
     fake_host.byte_lm_host_numeric_mode = lambda: 0
-    monkeypatch.setattr(host_bin, '_MODULE', None)
+    monkeypatch.delitem(_backend._DOOR_HOST_MODULES, host_mod._EXTENSION, raising=False)
     with pytest.raises(RuntimeError):
         host_mod.LanguageModelInference(np.zeros(34944, np.float32))
 

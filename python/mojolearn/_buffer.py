@@ -949,17 +949,17 @@ def _host_native(key):
     # door (lowbit, linalg, the decomp and metrics expansions) and the forest
     # door (`_classical_host` and every classical door) in every lane's import
     # closure, since every lane loads this file: 251 files selected every lane
-    # in tools/test_lane_select.py. The binaries load from the same code.
+    # in tools/test_lane_select.py. `_backend` holds the loaders now.
     if key in _HOST_NATIVE_KEYS:
-        from . import _byte_lm_host_binary
+        from . import _backend
         try:
-            return getattr(_byte_lm_host_binary._load(), key)
+            return getattr(_backend.load_byte_lm_host(), key)
         except (ImportError, AttributeError):
             pass
     if key in _FOREST_HOST_NATIVE_KEYS:
-        from . import _forest_host_binary
+        from . import _backend
         try:
-            return getattr(_forest_host_binary._load(), key)
+            return getattr(_backend.load_forest_host(), key)
         except (ImportError, AttributeError):
             pass
     return None
