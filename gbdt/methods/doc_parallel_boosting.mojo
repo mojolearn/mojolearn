@@ -436,21 +436,21 @@ def ctr_perm_grid_bins_enqueue(
         var k = n_active - base
         if k > CTR_PERM_GRID_SLOTS:
             k = CTR_PERM_GRID_SLOTS
-        var c1 = pads[0].unsafe_ptr()
-        var c2 = pads[1].unsafe_ptr()
-        var c3 = pads[2].unsafe_ptr()
-        var o1 = pads[3].unsafe_ptr()
-        var o2 = pads[4].unsafe_ptr()
-        var o3 = pads[5].unsafe_ptr()
+        var c1 = pads[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var c2 = pads[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var c3 = pads[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var o1 = pads[3].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var o2 = pads[4].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var o3 = pads[5].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if k > 1:
-            c1 = cindexes[base + 1].unsafe_ptr()
-            o1 = outs[base + 1].unsafe_ptr()
+            c1 = cindexes[base + 1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            o1 = outs[base + 1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if k > 2:
-            c2 = cindexes[base + 2].unsafe_ptr()
-            o2 = outs[base + 2].unsafe_ptr()
+            c2 = cindexes[base + 2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            o2 = outs[base + 2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if k > 3:
-            c3 = cindexes[base + 3].unsafe_ptr()
-            o3 = outs[base + 3].unsafe_ptr()
+            c3 = cindexes[base + 3].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            o3 = outs[base + 3].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         ctx.enqueue_function[ctr_perm_grid_bins_kernel](
             d_nodes.unsafe_ptr(),
             Int32(slots),
