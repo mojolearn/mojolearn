@@ -69,6 +69,8 @@ from x_decomp.jacobi_par import (
     pj_identity_kernel,
 )
 from x_decomp.cells import F32Ptr
+from x_decomp.rr_one_block_d import rr_eigh_one_block_d_kernel
+from x_decomp.xd_lean import IDN_RR_ONE_BLOCK_D, RR_ONE_D_TPB, rr_one_block_d_applies
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale_diag
 from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_gate_state, rr_vrow
 from core.gram_splitk import (
@@ -705,7 +707,24 @@ def _eig_rr_device(
     # (the whole round-robin solve in one launch of one block) was BROKEN on NVIDIA:
     # nv2 v1030, pca and tsvd on taxi and istella REFUSED at this launch. Deleted;
     # recoverable at main 0a7b206f1 (x_decomp/rr_one_block.mojo and this branch).
+    # Lane xd-rr-one-block (2026-10-11, C3) rebuilds it at 256 threads, the
+    # refusal's cause being 1024 threads' 64-register cap (x_decomp/rr_one_block_d.mojo).
+    var one_block = False
+    comptime if PCA_RR_EIGH and IDN_RR_ONE_BLOCK_D:
+        one_block = rr_one_block_d_applies(n)
+    if one_block:
+        # MOJOLEARN_IDN_RR_ONE_BLOCK_D (default off): every sweep, its test,
+        # gate and rounds in one launch; the same cells, the same order, the
+        # same state words as the loop below, which is then skipped
+        ctx.enqueue_function[rr_eigh_one_block_d_kernel](  # small-launch(n: bounded by rr_one_block_d_applies, h h + n h <= RR_ONE_D_STEPS x RR_ONE_D_TPB cells a round): 256 threads share every round's cells in parallel, default off, wider n keeps the grid launches
+            cov.unsafe_ptr(), vec_buf.unsafe_ptr(), dcs.unsafe_ptr(), doff.unsafe_ptr(),
+            dpart.unsafe_ptr(), dfold.unsafe_ptr(), dstate.unsafe_ptr(),
+            Int32(n), Int32(PCA_RR_SWEEPS), Float32(JACOBI_TOL),
+            grid_dim=1, block_dim=RR_ONE_D_TPB,
+        )
     for sweep in range(PCA_RR_SWEEPS + 1):
+        if one_block:
+            break
         ctx.enqueue_function[eigh_par_off_part_kernel](
             cov.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n),
             grid_dim=nb, block_dim=RR_OFF_TPB,
