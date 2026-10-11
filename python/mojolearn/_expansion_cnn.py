@@ -538,6 +538,68 @@ class Conv2d(_Layer):
         self._pins = None
         return self
 
+    # lane cnn-resident-glue (G3): the weight gradients of a resident
+    # backward stay in this layer's resident arrays (`_gw_dev`, `_gb_dev`)
+    # until read; the host value lives under the same name in `__dict__`.
+    @property
+    def grad_weight_(self):
+        d = self.__dict__
+        pend = d.get("_gw_dev")
+        if pend is not None:
+            np = _np()
+            w = pend[0].download(pend[1], np.empty(self.weight_.shape, np.float32))
+            d["grad_weight_"] = w[:, :, 0, :] if d.get("_gw_1d") else w
+            d["_gw_dev"] = None
+        if "grad_weight_" not in d:
+            raise AttributeError("grad_weight_")
+        return d["grad_weight_"]
+
+    @grad_weight_.setter
+    def grad_weight_(self, v):
+        self.__dict__.update(grad_weight_=v, _gw_dev=None, _gw_1d=False)
+
+    @property
+    def grad_bias_(self):
+        d = self.__dict__
+        pend = d.get("_gb_dev")
+        if pend is not None:
+            d["grad_bias_"] = pend[0].download(pend[1], _np().empty(self.out_channels, _np().float32))
+            d["_gb_dev"] = None
+        if "grad_bias_" not in d:
+            raise AttributeError("grad_bias_")
+        return d["grad_bias_"]
+
+    @grad_bias_.setter
+    def grad_bias_(self, v):
+        self.__dict__.update(grad_bias_=v, _gb_dev=None)
+
+    def _res_w(self, b):
+        """G3: (weight handle, bias handle) of the auto-pinned weights on
+        binding `b`, or (None, None) when the switch is off or not pinned."""
+        if self.groups != 1 or not _auto_pin(self, b, ("weight_", "bias_")):
+            return None, None
+        return _pinned(self, b, "weight_", self.weight_.size), _pinned(self, b, "bias_", self.bias_.size)
+
+    def _backward_res(self, b, xh, gh, dxh, prm):
+        """G3: the groups == 1 resident backward with dW / db left in this
+        layer's resident arrays; False when the switch is off here."""
+        if not _resident(b) or self.groups != 1:
+            return False
+        np = _np()
+        dev = _dev_of(self, b)
+        pw, _ = self._res_w(b)
+        w = None if pw is not None else np.ascontiguousarray(self.weight_, np.float32)
+        gwh = dev.get("gw", self.weight_.size)
+        gbh = dev.get("gb", self.out_channels)
+        b.x_cnn_conv2d_backward_m([xh, pw if pw is not None else w.ctypes.data, gh, dxh, gwh, gbh],
+                                  0b111111 if pw is not None else 0b111101, prm)
+        self.__dict__.update(_gw_dev=(dev, gwh), _gw_1d=False)
+        if self.bias:
+            self.__dict__["_gb_dev"] = (dev, gbh)
+        else:
+            self.grad_bias_ = np.zeros(self.out_channels, np.float32)
+        return True
+
     def _params(self, shape):
         """The binding block for ONE group's conv over the (padded) input `shape`."""
         n, c, h, w = shape
@@ -582,7 +644,7 @@ class Conv2d(_Layer):
         where they live), or `x` itself when the conv carries the pad."""
         if not self._explicit:
             return x
-        xp = DeviceTensor._new(b, self._padded_shape(x.shape))
+        xp = _out_new(b, self._padded_shape(x.shape))   # the pad stores every word
         b.x_cnn_pad2d_m([x.h, xp.h], 0b11, self._pad_params(x.shape) + [0])
         return xp
 
@@ -604,10 +666,11 @@ class Conv2d(_Layer):
         self._check_x(x)
         if not self._res_ok(b, x):
             return DeviceTensor._wrap(b, Conv2d.forward(self, x.numpy()))
-        out = DeviceTensor._new(b, self._out_shape(x.shape))
+        out = _out_new(b, self._out_shape(x.shape))   # the conv stores every word
         xp = self._pad_t(b, x)
         prm = self._params(xp.shape)
         if self.groups == 1:
+            self._res_w(b)   # G3: pins on first use (a no-op with the switch off)
             pw = _pinned(self, b, "weight_", self.weight_.size)
             pb = _pinned(self, b, "bias_", self.bias_.size)
             if pw is not None and pb is not None:
@@ -655,10 +718,12 @@ class Conv2d(_Layer):
         else:
             xp = self._pad_t(b, xs)
         prm = self._params(xp.shape)
-        dxp = DeviceTensor._new(b, xp.shape)
+        dxp = _out_new(b, xp.shape)   # col2im stores every word
         dw = np.empty(self.weight_.shape, np.float32)
         db = np.empty(self.out_channels, np.float32)
-        if self.groups == 1:
+        if self._backward_res(b, xp.h, grad_out.h, dxp.h, prm):
+            dw = None   # G3: dW / db stay resident
+        elif self.groups == 1:
             pw = _pinned(self, b, "weight_", self.weight_.size)
             if pw is not None:
                 b.x_cnn_conv2d_backward_m([xp.h, pw, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
@@ -686,11 +751,12 @@ class Conv2d(_Layer):
                 db[g * og:(g + 1) * og] = dbg
         dx = dxp
         if self._explicit:
-            dx = DeviceTensor._new(b, xs.shape)
+            dx = _out_new(b, xs.shape)   # the pad's backward stores every word
             b.x_cnn_pad2d_m([dxp.h, dx.h], 0b11, self._pad_params(xs.shape) + [1])
         self._x, self._xp = xs, xp
-        self.grad_weight_ = dw
-        self.grad_bias_ = db if self.bias else np.zeros_like(db)
+        if dw is not None:
+            self.grad_weight_ = dw
+            self.grad_bias_ = db if self.bias else np.zeros_like(db)
         return dx
 
     def forward(self, x):
@@ -857,7 +923,10 @@ class Conv1d(Conv2d):
             g = _t4(grad_out) if _is_t(grad_out) else _f32(grad_out, "grad_out")[:, :, None, :]
             xx = x if x is None else (_t4(x) if _is_t(x) else _f32(x, "x")[:, :, None, :])
             dx = super().backward(g, xx)
-            self.grad_weight_ = self.grad_weight_[:, :, 0, :]
+            if self.__dict__.get("_gw_dev") is not None:
+                self.__dict__["_gw_1d"] = True   # G3: squeezed when downloaded
+            else:
+                self.grad_weight_ = self.grad_weight_[:, :, 0, :]
             return _t3(dx) if _is_t(dx) else dx[:, :, 0, :]
         g = _f32(grad_out, "grad_out")
         xx = None if x is None else _f32(x, "x")[:, :, None, :]
