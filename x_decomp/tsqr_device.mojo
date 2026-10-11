@@ -963,12 +963,15 @@ struct _TsDev(Defaultable, Movable):
     # level 0 the leaves, then the final R tile); 0 for the binary tree's
     # five buffers
     var levels: Int
+    # the rows of each kept level (level 0: m)
+    var rows: List[Int]
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.m = 0
         self.n = 0
         self.levels = 0
+        self.rows = List[Int]()
 
 
 comptime TS_DEV_STATE = _Global[StorageType=_TsDev, name="MojoXDecompTsqrDevice", init_fn=_TsDev.__init__]
@@ -980,6 +983,7 @@ def ts_free_device() raises:
     st[].m = 0
     st[].n = 0
     st[].levels = 0
+    st[].rows = List[Int]()
 
 
 def _ts_state_ok(m: Int, n: Int) raises -> Bool:
@@ -1241,6 +1245,7 @@ def _ts_factor_rstack(
     var cur = da
     var mc = m
     var nlev = 0
+    var rows = List[Int]()
     while True:
         var nb = ts_blocks(mc)
         var dt = ctx.enqueue_create_buffer[DType.float32](nb * npan * _TT)
@@ -1249,6 +1254,7 @@ def _ts_factor_rstack(
         kept.append(cur)
         kept.append(dt)
         kept.append(dt2)
+        rows.append(mc)
         nlev += 1
         if nb == 1:
             ctx.enqueue_function[ts_rtile_kernel](
@@ -1279,13 +1285,12 @@ def _ts_factor_rstack(
         raise Error("x_decomp tsqr: R entry " + String(first_nan) + " is NaN (a NaN input, or a device launch cut short): refused")
     if keep:
         var st = TS_DEV_STATE.get_or_create_ptr()
-        for i in range(len(kept)):
-            st[].bufs.append(kept[i])
-        st[].bufs.append(dtl)
+        kept.append(dtl)
+        st[].bufs = kept^
+        st[].rows = rows^
         st[].levels = nlev
         st[].m = m
         st[].n = n
-    _ = kept^
     _ = dtl^
     _ = cur^
 
@@ -1298,11 +1303,6 @@ def _ts_apply_rstack(
     output the next level's C rows. The intermediates live until the sync."""
     var st = TS_DEV_STATE.get_or_create_ptr()
     var nlev = st[].levels
-    var rows = List[Int]()
-    var mc = m
-    for _ in range(nlev):
-        rows.append(mc)
-        mc = ts_blocks(mc) * n
     var hold = List[DeviceBuffer[DType.float32]]()
     var cin = dcb^
     for li in range(nlev):
@@ -1310,7 +1310,7 @@ def _ts_apply_rstack(
         var da = st[].bufs[3 * lv]
         var dt = st[].bufs[3 * lv + 1]
         var dt2 = st[].bufs[3 * lv + 2]
-        var q = _ts_leaf_apply(ctx, da, dt, dt2, cin, rows[lv], n, k)
+        var q = _ts_leaf_apply(ctx, da, dt, dt2, cin, st[].rows[lv], n, k)
         hold.append(cin)
         cin = q
     ctx.synchronize()
@@ -1350,7 +1350,9 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
         comptime if not (_TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_REUSE"]()):
             raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
         var retained_bytes = 0
-        for i in range(len(st[].bufs)):  # every kept buffer (the tree's five, or TS_RSTACK_TREE's levels)
+        comptime if TS_RSTACK_TREE:
+            raise Error("x_decomp tsqr: retained apply is not admitted with MOJOLEARN_IDN_TSQR_RSTACK_TREE")
+        for i in range(5):  # admitted factor, panel, R tiles, tau and pair T2 buffers
             retained_bytes += len(st[].bufs[i])*4
         if retained_bytes>16*1024*1024:
             raise Error("x_decomp tsqr: retained factor state exceeds16 MiB experiment budget")
