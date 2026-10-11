@@ -51,27 +51,6 @@ from training.byte_lm import (
 from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into, download_f32_into_scanned
 from core.device_arena import arena_begin, arena_end, arena_release
 from core.device_scan import device_first_nonfinite, device_first_token_oob
-from core.device_scan import SCAN_TPB, _fold_partials, _scan_blocks, nonfinite_partial_kernel
-from core.step_phase import step_count_d2h, step_count_launch
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-
-# H4 (lane lm-lean-step, 2026-10-11): `-D MOJOLEARN_IDN_LM_LOGITS_LEAN`, default OFF.
-# Structural reason: `_logits_forward_into` waited once for the non-finite
-# scan's partials BEFORE the 64 MiB logits download started, so the copy
-# engine sat idle for one host round trip and the queue drained. Under the
-# switch the scan kernel and its partials copy are queued ahead of the
-# download on the same in-order context and folded after the download's own
-# final wait: one wait fewer per call, the same refusal (same first flat
-# index, same message). On a refusal the caller's memory holds the copy (it
-# is unspecified on a raise, as `download_f32_into` already says). Same words
-# on every vendor: the scan reads, never writes. Expected: lm-forward
-# NV 48 -> ~45 ms, AMD 34 -> ~31 ms (one wait + overlap of the scan). The
-# token-bounds scan keeps its wait: it guards the embedding gather.
-comptime IDN_LM_LOGITS_LEAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_LM_LOGITS_LEAN"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.experiments.neural_streaming import NN16
@@ -392,36 +371,12 @@ def _logits_forward_into(
     # (`device_first_nonfinite`: one launch, one partials copy, the same
     # first flat index the host walk returned), run before the download, so
     # no host loop reads the m * vocab logits. The download is unscanned.
-    comptime if IDN_LM_LOGITS_LEAN:
-        # IDN_LM_LOGITS_LEAN: scan + partials copy queued, no wait; the
-        # download's last wait completes them (in-order context).
-        var blocks = _scan_blocks(m * vocab)
-        var part = ctx.enqueue_create_buffer[DType.int32](blocks)
-        step_count_launch()
-        ctx.enqueue_function[nonfinite_partial_kernel](
-            part.unsafe_ptr(),
-            sc.logits.unsafe_ptr(),
-            Int32(m * vocab),
-            grid_dim=(blocks, 1, 1),
-            block_dim=(SCAN_TPB, 1, 1),
-        )
-        var host = ctx.enqueue_create_host_buffer[DType.int32](blocks)
-        step_count_d2h()
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
-        _ = download_f32_into_scanned(ctx, sc.logits, m * vocab, destination, False)
-        var bad_lean = _fold_partials(host, blocks)
-        timing_tick(ctx, ton, tk, "logits.scan_and_download")
-        _ = part^
-        _ = host^
-        if bad_lean >= 0:
-            _raise_nonfinite_logit(bad_lean)
-    else:
-        var bad = device_first_nonfinite(ctx, sc.logits, m * vocab)
-        timing_tick(ctx, ton, tk, "logits.scan")
-        if bad >= 0:
-            _raise_nonfinite_logit(bad)
-        _ = download_f32_into_scanned(ctx, sc.logits, m * vocab, destination, False)
-        timing_tick(ctx, ton, tk, "logits.download")
+    var bad = device_first_nonfinite(ctx, sc.logits, m * vocab)
+    timing_tick(ctx, ton, tk, "logits.scan")
+    if bad >= 0:
+        _raise_nonfinite_logit(bad)
+    _ = download_f32_into_scanned(ctx, sc.logits, m * vocab, destination, False)
+    timing_tick(ctx, ton, tk, "logits.download")
     comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
         destination.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](destination.unsafe_load(0)) ^ UInt32(1)))
 
