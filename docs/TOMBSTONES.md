@@ -325,6 +325,8 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_LM_GROUPED_ADAM`](#owed-decide-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_LM_GROUPED_ADAM.patch](../experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch) |
 | [`MOJOLEARN_IDN_M3_S17_TAIL_DBUF`](#owed-decide-2026-10-11) | Neural | LOSER-slower (vendor split) | 2026-10-11 | [MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch](../experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch) |
 | [`MOJOLEARN_IDN_M1_SCAN=1`](#owed-decide-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_M1_SCAN_1.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch) |
+| [`MOJOLEARN_IDN_TSNE_REP_RB4`](#wave-2-w2-decide-algos-2026-10-11) | Manifold | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_TSNE_REP_RB4.patch](../experiments/removed/MOJOLEARN_IDN_TSNE_REP_RB4.patch) |
+| [`MOJOLEARN_IDN_HDB_ROUND_LEAN`](#wave-2-w2-decide-algos-2026-10-11) | Cluster | LOSER-noise | 2026-10-11 | [MOJOLEARN_IDN_HDB_ROUND_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch) |
 
 ## Restored
 
@@ -3024,6 +3026,23 @@ lane/owed-decide; each code is recoverable at the parent of its deletion commit.
   NV 5.40 -> 10.41 ms (1.93x), AMD 3.14 -> 8.38 ms (2.67x), avg 2.30x against arm 3 (persistent); hash 602f9ec5 -> 045beb0b
   (a different scan, expected). SLOWER. The guard refuses =1; `mamba1_profile` now always returns 1 (Python's profile-2
   checkpoint path is dead glue). Deleted by 291629888, recoverable at 291629888^. Patch experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch.
+
+## wave-2 w2-decide-algos (2026-10-11)
+
+Wave-2 A/B arms measured same box, same main c8ef6c66d, one run per arm, NV L40S / AMD MI325X, digests NV == AMD on every cell
+(evidence ~/mojolearn-evidence/round-20261011/w2_decisions.txt, w2_decide.out). Verdict = average of the two vendors' B/A
+ratios. Deleted on lane/w2-decide-algos by 826f3d57e; code recoverable at 826f3d57e^. Seven switches of the same round were promoted
+(see docs/apple-fast/EXPERIMENTS.md, wave-2 w2-decide-algos).
+
+- `MOJOLEARN_IDN_TSNE_REP_RB4` (t-SNE repulsion tile with 4 rows per thread, 64 rows per staged tile, `repulse_rep_rb4_kernel`
+  and its dispatch in `_enq_repulse_split`, x_ann/tsne_device.mojo; added by 4be6c31b8 on lane/svc-tsne): tsne istella 1.036x,
+  taxi 1.362x (NV 1.581x, AMD 1.142x). Same bits (no quality change). SLOWER. Runs v0130/a1712 vs A v0128/a1710 + v0129/a1711.
+  Deleted by 826f3d57e, recoverable at 826f3d57e^. Patch experiments/removed/MOJOLEARN_IDN_TSNE_REP_RB4.patch.
+- `MOJOLEARN_IDN_HDB_ROUND_LEAN` (HDBSCAN sparse mutual-reachability Boruvka: phase B's list length kept on the device, one
+  drain per round; the `shape`/`lean` kernel arguments, the one-thread shape kernel and the `_search` / `sparse_mr_mst_device`
+  branches, hdbscan/impl/cluster/detail/sparse_mr_mst.mojo; added by e84eaae8b + 0ec740298 on lane/hdb-ivf): hdbscan istella
+  0.997x, taxi 1.008x. Same bits (no quality change). NOISE. Runs v0133/a1715 vs A v0132/a1714. Deleted by 826f3d57e, recoverable
+  at 826f3d57e^. Patch experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch.
 
 ## Owed deletions reviewed and kept (lane/owed-deletions-D3, 2026-10-09)
 
