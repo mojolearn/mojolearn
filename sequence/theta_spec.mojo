@@ -30,7 +30,7 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from sequence.coop_lane import coop_src
-from sequence.ops import FP, Args, add, fma3, ld, mul st, sub
+from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from sequence.theta import (
     DOTM, DSTM, OTM, STM, THETA_REG, THETA_REG_FAST, THETA_SNAP, _acf_decide, _decompose, div, theta_forecast_reg,
     theta_invariants, theta_run_reg, theta_sse_hoisted,

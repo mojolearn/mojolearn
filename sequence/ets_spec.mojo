@@ -32,7 +32,7 @@ from std.sys.compile import is_defined
 
 from sequence.coop_lane import coop_src
 from sequence.ets import SEAS_N, ets_init_state, ets_lik
-from sequence.ops import FP, Args, add, fma3, ld, mul st, sub
+from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_pow, identical_sqrt
 
 comptime ETS_SPEC = (
