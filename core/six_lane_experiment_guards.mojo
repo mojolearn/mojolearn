@@ -406,6 +406,26 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
     comptime assert not is_defined["MOJOLEARN_IDN_MOE_RESIDENT"](), "removed 2026-10-11 (lane/w2-decide-neural, 978e7f43b): IDN_MOE_RESIDENT (grouped device-offset MoE GEMM, no fills) was SLOWER: moe synthetic NV 5.94x / AMD 3.34x, avg 4.64x (nv2 v0101, amd a1683)"
+    # wave-2 w2-decide-linalg (2026-10-11): A/B on main c8ef6c66d, same box, one run per arm, NV==AMD digests (docs/TOMBSTONES.md,
+    # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch). Promoted: MOJOLEARN_IDN_GFF_GRAM_TILED (ridge istella 0.917, taxi 0.973).
+    comptime assert not is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED"](), "promoted 2026-10-11 (lane/w2-decide-linalg, d9441e439): the tiled float-float leaf Gram is the IDENTICAL default (ridge istella 0.917 NV 0.857 / AMD 0.977, taxi 0.973; nv2 v0135/v0080, amd a1717/a1662); -D MOJOLEARN_IDN_GFF_GRAM_TILED_OFF restores gff_leaf_kernel"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH"](), "removed 2026-10-11 (lane/w2-decide-linalg, fbf3d50a0): IDN_GS_SOLVE_ONE_LAUNCH one-launch Gram Cholesky/solve walks (C2) were NOISE: ols 0.997/1.036, ridge 1.008/0.961, ridge-cv/ard/bayesian-ridge 1.00 (nv2 v0136/v0081, amd a1718/a1663); see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RR_ONE_BLOCK_D"](), "removed 2026-10-11 (lane/w2-decide-linalg, 19eed6fa1): IDN_RR_ONE_BLOCK_D one-block round-robin eigh at 256 threads (C3) was SLOWER: pca istella 2.103x (AMD 2.715x), tsvd istella 3.082x (AMD 4.061x), pca taxi 0.885x (nv2 v0095/v0089, amd a1677/a1671); see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_IDN_RR_ONE_BLOCK_D_STEPS"](), "removed 2026-10-11 (lane/w2-decide-linalg, 19eed6fa1): IDN_RR_ONE_BLOCK_D_STEPS knob of the deleted MOJOLEARN_IDN_RR_ONE_BLOCK_D (C3, SLOWER: pca istella 2.10x, tsvd istella 3.08x); see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SVD_TALL_LEAN"](), "removed 2026-10-11 (lane/w2-decide-linalg, f4b8fa942): IDN_SVD_TALL_LEAN gated svd rounds + orth second-pass skip (C4) were NOISE: 11 cells mean 0.990, bits changed on lstsq/svd taxi (nv2 v0090/v0096, amd a1672/a1678); see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TSQR_RSTACK_TREE"](), "removed 2026-10-11 (lane/w2-decide-linalg, 7d76f567e): IDN_TSQR_RSTACK_TREE stacked-R TSQR levels were SLOWER: 8 cells mean 1.087, every cell > 1 (lstsq 1.12/1.10, rsvd istella 1.196, svd taxi 1.128; nv2 v0093, amd a1675); see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_KIT_GEMM.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_XD_KIT_GEMM"](), "removed 2026-10-11 (lane/w2-decide-linalg, 2256fff37): IDN_XD_KIT_GEMM x_decomp kit GEMM through identical_gemm_into (C6) was NOISE: 8 cells mean 0.971, svd taxi NV 1.145x, bits changed (nv2 v0091, amd a1673); see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RSVD_ORTH_LEAN.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RSVD_ORTH_LEAN"](), "removed 2026-10-11 (lane/w2-decide-linalg, fdf3608ff): IDN_RSVD_ORTH_LEAN pooled rsvd orth buffers (C7) were NOISE: randomized-svd 0.990/0.977 (nv2 v0092, amd a1674); see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LG_FUSED_CHAIN.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LG_FUSED_CHAIN"](), "removed 2026-10-11 (lane/w2-decide-linalg, 9ea0ceea2): IDN_LG_FUSED_CHAIN Lossguide on the fused split chain (F2) was NOISE: gbdt-lossguide istella 1.001, taxi 0.988, gbdt-categorical 1.024 (nv2 v0113, amd a1695); see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CTR_PERM_GRID"](), "removed 2026-10-11 (lane/w2-decide-linalg, d092b6e2d): IDN_CTR_PERM_GRID CTR permutation grid bins were NOISE: gbdt-categorical taxi 1.001 (nv2 v0114, amd a1696); see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

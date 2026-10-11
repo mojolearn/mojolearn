@@ -65,29 +65,6 @@
    "bits_change": false,
    "status": "new",
    "note": "The small SVD of R (DevExec.svd, the round-robin one-sided Jacobi) enqueues 4 sweeps per convergence readback, each sweep on its own flag slice and lowest-flag word, instead of one wait and one readback per sweep. Bit-neutral: a sweep without a rotation is the identity, so the sweeps enqueued after the converging one change nothing; the convergence test and the X_DECOMP_SVD_SWEEPS bound are the same. Requires IDN_XD_SWEEP (IDENTICAL). NOT COMPILED, NOT MEASURED."
-  },
-  "tsqr_rstack_tree": {
-   "define": "MOJOLEARN_IDN_TSQR_RSTACK_TREE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_TSQR_RSTACK_TREE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_decomp/tsqr_core.mojo:TS_RSTACK_TREE",
-    "x_decomp/tsqr_device.mojo:_ts_factor_rstack",
-    "x_decomp/tsqr_device.mojo:_ts_apply_rstack",
-    "x_decomp/tsqr_host.mojo:_ts_factor_rstack_host",
-    "x_decomp/tsqr_host.mojo:_ts_apply_rstack_host"
-   ],
-   "binding": "_mojolearn_x_decomp (device) + _mojolearn_x_decomp_host (host column); _mojolearn_linalg, _mojolearn_estimators (OLS TSQR) import it",
-   "bits_change": true,
-   "status": "new",
-   "lane_branch": "lane/tsqr-rstack",
-   "note": "Idea C5 (ideas-all-gaps-20261011). The TSQR combine tree is replaced by stacked levels: the nb leaf R tiles stacked row-major are an (nb n) x n matrix factored by the same leaf blocks (TS_ROWS rows, panel/pair WY kernels at full grid), repeated until one block remains (220 columns at 1M rows: 3 stacked levels instead of 9 serial tree levels of one threadgroup per pair). Q C mirrors it top down through the leaf apply. Bits change on NVIDIA, AMD and the host replay together. tsqr_tree_par is inert when this is on (no combine kernels run). Retained-apply REUSE is refused under it. NOT COMPILED, NOT MEASURED."
   }
  },
  "algorithms": {
@@ -96,14 +73,12 @@
    "route": "_linalg_impl.py _qr_tsqr -> x_decomp_tsqr_r (ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> x_decomp_r_signs -> x_decomp_tsqr_q (_ts_apply_dcb [tsqr_wy_pair, tsqr_tree_par])",
    "controls": [
     "tsqr_wy_pair",
-    "tsqr_tree_par",
-    "tsqr_rstack_tree"
+    "tsqr_tree_par"
    ],
    "interaction_groups": [
     [
      "tsqr_wy_pair",
-     "tsqr_tree_par",
-     "tsqr_rstack_tree"
+     "tsqr_tree_par"
     ]
    ]
   },
@@ -113,15 +88,13 @@
    "controls": [
     "tsqr_wy_pair",
     "tsqr_tree_par",
-    "xd_svd_group",
-    "tsqr_rstack_tree"
+    "xd_svd_group"
    ],
    "interaction_groups": [
     [
      "tsqr_wy_pair",
      "tsqr_tree_par",
-     "xd_svd_group",
-     "tsqr_rstack_tree"
+     "xd_svd_group"
     ]
    ]
   },
@@ -130,14 +103,12 @@
    "route": "_expansion_decomp.py _tsqr_lstsq_core -> x_decomp_tsqr_r (nrhs > 0, ts_pack_device + ts_factor_device [tsqr_wy_pair, tsqr_tree_par]) -> SVD of the small R [xd_svd_group]",
    "controls": [
     "tsqr_wy_pair",
-    "tsqr_tree_par",
-    "tsqr_rstack_tree"
+    "tsqr_tree_par"
    ],
    "interaction_groups": [
     [
      "tsqr_wy_pair",
-     "tsqr_tree_par",
-     "tsqr_rstack_tree"
+     "tsqr_tree_par"
     ]
    ]
   },
@@ -146,16 +117,21 @@
    "route": "ols_tsqr_r_py -> DevExec.ols_tsqr_factor -> ts_factor_device [tsqr_wy_pair, tsqr_tree_par]",
    "controls": [
     "tsqr_wy_pair",
-    "tsqr_tree_par",
-    "tsqr_rstack_tree"
+    "tsqr_tree_par"
    ],
    "interaction_groups": [
     [
      "tsqr_wy_pair",
-     "tsqr_tree_par",
-     "tsqr_rstack_tree"
+     "tsqr_tree_par"
     ]
    ]
   }
- }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_TSQR_RSTACK_TREE",
+   "control": "tsqr_rstack_tree",
+   "reason": "DELETED 2026-10-11 (lane w2-decide-linalg, deletion 7d76f567e; recoverable at 7d76f567e^; patch experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch): LOSER: 8 cells mean 1.087, every cell > 1 (lstsq 1.12/1.10, rsvd istella 1.196, svd taxi 1.128), bits changed; nv2 v0093, amd a1675. A/B on main c8ef6c66d, same box, one run per arm, NV==AMD digests; see docs/TOMBSTONES.md"
+  }
+ ]
 }
