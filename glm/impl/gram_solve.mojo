@@ -220,7 +220,7 @@ def _gs_backward_row(l: F32Ptr, z: F32Ptr, w: F32Ptr, i: Int, jj: Int, nn: Int):
         z.unsafe_store(i, ftz(identical_mul_add(-ftz(l.unsafe_load(jj * nn + i)), wj, ftz(z.unsafe_load(i)))))
 
 
-# TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+# TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by fbf3d50a0; code recoverable at fbf3d50a0^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
 
 
@@ -440,7 +440,7 @@ def gff_backward_step_kernel(lh: F32Ptr, ll: F32Ptr, zh: F32Ptr, zl: F32Ptr, wh:
         gff_backward_cell(lh, ll, zh, zl, wh, wl, i, jj, Int(n))
 
 
-# TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+# TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by fbf3d50a0; code recoverable at fbf3d50a0^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
 
 
@@ -507,7 +507,7 @@ def _gs_ff_fit(
     var d_info = ctx.enqueue_create_buffer[DType.float32](1)
     var d_flag = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.enqueue_function[gs_info_init_kernel](_p(d_info), grid_dim=1, block_dim=1)
-    # TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+    # TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by fbf3d50a0; code recoverable at fbf3d50a0^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
     for j in range(d):
         ctx.enqueue_function[gff_chol_step_kernel](
@@ -692,7 +692,7 @@ def linear_gram_fit_host(
         grid_dim=_gs_blocks(d * d), block_dim=GS_TPB,
     )
     ctx.enqueue_function[gs_info_init_kernel](_p(d_info), grid_dim=1, block_dim=1)
-    # TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+    # TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by fbf3d50a0; code recoverable at fbf3d50a0^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
     for j in range(d):
         ctx.enqueue_function[gs_chol_step_kernel](

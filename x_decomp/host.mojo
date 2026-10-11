@@ -200,7 +200,7 @@ def xd_parallel[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
 struct HostExec(Exec):
     @staticmethod
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
-        # TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by SHA_KIT; code recoverable at SHA_KIT^.
+        # TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by 2256fff37; code recoverable at 2256fff37^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_KIT_GEMM.patch
         # the cell's arithmetic and order, SIMD across outputs (x_decomp/host_simd.mojo)
         if gemm_rowdot(m, n, ta):
@@ -611,7 +611,7 @@ struct HostExec(Exec):
 
     @staticmethod
     def _orth_passes(a: F32Ptr, m: Int, l: Int, diag: F32Ptr, with_diag: Bool) raises:
-        # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by SHA_SVL; code recoverable at SHA_SVL^.
+        # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
         for _ in range(2):
             var w = List[Float32](capacity=m * l)

@@ -1,0 +1,259 @@
+diff --git a/decomposition/impl/linalg/detail/pca.mojo b/decomposition/impl/linalg/detail/pca.mojo
+index 31087e1dc..dae3efaec 100644
+--- a/decomposition/impl/linalg/detail/pca.mojo
++++ b/decomposition/impl/linalg/detail/pca.mojo
+@@ -69,6 +69,8 @@ from x_decomp.jacobi_par import (
+     pj_identity_kernel,
+ )
+ from x_decomp.cells import F32Ptr
++from x_decomp.rr_one_block_d import rr_eigh_one_block_d_kernel
++from x_decomp.xd_lean import IDN_RR_ONE_BLOCK_D, RR_ONE_D_TPB, rr_one_block_d_applies
+ from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale_diag
+ from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_gate_state, rr_vrow
+ from core.gram_splitk import (
+@@ -705,10 +707,24 @@ def _eig_rr_device(
+     # (the whole round-robin solve in one launch of one block) was BROKEN on NVIDIA:
+     # nv2 v1030, pca and tsvd on taxi and istella REFUSED at this launch. Deleted;
+     # recoverable at main 0a7b206f1 (x_decomp/rr_one_block.mojo and this branch).
+-    # TOMBSTONE: MOJOLEARN_IDN_RR_ONE_BLOCK_D (loser) deleted 2026-10-11 by SHA_RR; code recoverable at SHA_RR^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch
+-    # (C3 rebuilt it at 256 threads: pca istella 2.10x, tsvd istella 3.08x slower.)
++    # Lane xd-rr-one-block (2026-10-11, C3) rebuilds it at 256 threads, the
++    # refusal's cause being 1024 threads' 64-register cap (x_decomp/rr_one_block_d.mojo).
++    var one_block = False
++    comptime if PCA_RR_EIGH and IDN_RR_ONE_BLOCK_D:
++        one_block = rr_one_block_d_applies(n)
++    if one_block:
++        # MOJOLEARN_IDN_RR_ONE_BLOCK_D (default off): every sweep, its test,
++        # gate and rounds in one launch; the same cells, the same order, the
++        # same state words as the loop below, which is then skipped
++        ctx.enqueue_function[rr_eigh_one_block_d_kernel](  # small-launch(n: bounded by rr_one_block_d_applies, h h + n h <= RR_ONE_D_STEPS x RR_ONE_D_TPB cells a round): 256 threads share every round's cells in parallel, default off, wider n keeps the grid launches
++            cov.unsafe_ptr(), vec_buf.unsafe_ptr(), dcs.unsafe_ptr(), doff.unsafe_ptr(),
++            dpart.unsafe_ptr(), dfold.unsafe_ptr(), dstate.unsafe_ptr(),
++            Int32(n), Int32(PCA_RR_SWEEPS), Float32(JACOBI_TOL),
++            grid_dim=1, block_dim=RR_ONE_D_TPB,
++        )
+     for sweep in range(PCA_RR_SWEEPS + 1):
++        if one_block:
++            break
+         ctx.enqueue_function[eigh_par_off_part_kernel](
+             cov.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n),
+             grid_dim=nb, block_dim=RR_OFF_TPB,
+diff --git a/x_decomp/rr_one_block_d.mojo b/x_decomp/rr_one_block_d.mojo
+index dda036bc5..49293371f 100644
+--- a/x_decomp/rr_one_block_d.mojo
++++ b/x_decomp/rr_one_block_d.mojo
+@@ -3,7 +3,25 @@
+ """Device kernels of lane xd-rr-one-block (2026-10-11; switches and cost
+ rule in x_decomp/xd_lean.mojo). NOT COMPILED, NOT VERIFIED, NOT MEASURED.
+ 
+-C3 `rr_eigh_one_block_d_kernel` (MOJOLEARN_IDN_RR_ONE_BLOCK_D) deleted 2026-10-11 (loser).
++C3 `rr_eigh_one_block_d_kernel` (MOJOLEARN_IDN_RR_ONE_BLOCK_D): the whole
++round-robin two-sided Jacobi of `_eig_rr_device` in one launch of one block.
++Rebuilt from the deleted MOJOLEARN_IDN_PCA_RR_ONE_BLOCK kernel (recoverable
++at main 0a7b206f1, x_decomp/rr_one_block.mojo), which REFUSED at its launch
++on NVIDIA (nv2 v1030) with RR_ONE_TPB = 1024 threads. The cause read from
++the code: a 1024-thread block may use at most 64 registers a thread (64 K
++registers an SM on sm_89), and the fused kernel (rr_block's 2 x 2 update,
++rr_cs, the test trees, the gate) needs more, so the launch is refused for
++resources; nothing in it is a cross-block hazard. Here the block is
++RR_ONE_D_TPB = 256 = RR_OFF_TPB threads (the register cap is then 255, and
++the test's part tree is then exactly `eigh_par_off_part_kernel`'s block
++tree, one block b a pass, with no thread-group mapping).
++
++BITS: none. A round's cells have one writer and no other reader
++(x_decomp/rr.mojo), so strided loops in one block store the words the grid
++stored; `dev_barrier` (orders device memory) stands where the launch
++boundaries were; the test folds in `eigh_par_off_part_kernel` then
++`eigh_par_off_fold_kernel`'s order; the gate is `rr_gate_state`. The host
++column (`host_eigh_rr`) is unchanged.
+ 
+ C4 c `rs_round_gated_kernel` + `rs_sweep_gate_kernel`
+ (MOJOLEARN_IDN_SVD_TALL_LEAN): `rs_round_kernel`'s statements unchanged
+@@ -22,11 +40,115 @@ from x_decomp.cells import F32Ptr, I32Ptr
+ from x_decomp.jacobi2 import dev_barrier
+ from x_decomp.rr import RR_OFF_TPB, rr_block, rr_cs, rr_gate_state, rr_row_off, rr_vrow
+ from x_decomp.rr_svd import RS_TPB, rs_apply_lane, rs_decide, rs_lane3, rs_pair
+-from x_decomp.xd_lean import orth_lean_violates
++from x_decomp.xd_lean import RR_ONE_D_TPB, orth_lean_violates
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_RR_ONE_BLOCK_D (loser) deleted 2026-10-11 by SHA_RR; code recoverable at SHA_RR^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch
++def rr_eigh_one_block_d_kernel(
++    a: F32Ptr,
++    v: F32Ptr,
++    cs: F32Ptr,
++    doff: F32Ptr,
++    part: F32Ptr,
++    fold: F32Ptr,
++    state: F32Ptr,
++    n_in: Int32,
++    sweeps_in: Int32,
++    tol: Float32,
++):
++    """The solve on `a` (n x n, in place) and `v` (n x n, already the
++    identity); the decision in `state` (PCA_RR_STATE words initialized as
++    `_eig_rr_device` does: zeros, state[2] = -1). Scratch as the grid
++    route's: cs 2 h, doff 3 n, part 3 nb, fold 3. Launch grid 1, block
++    RR_ONE_D_TPB (== RR_OFF_TPB)."""
++    var n = Int(n_in)
++    var sweeps = Int(sweeps_in)
++    var m = n + (n % 2)
++    var h = m // 2
++    var nb = (n + RR_OFF_TPB - 1) // RR_OFF_TPB
++    var tid = Int(thread_idx.x)
++    var so = stack_allocation[RR_ONE_D_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var sd = stack_allocation[RR_ONE_D_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var sm = stack_allocation[RR_ONE_D_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var stop = stack_allocation[1, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    for sweep in range(sweeps + 1):
++        # ---- the test, part: `eigh_par_off_part_kernel`'s block b on pass b
++        for b in range(nb):
++            var k = b * RR_OFF_TPB + tid
++            var o = SIMD[DType.float32, 2](0.0, 0.0)
++            if k < n:
++                o = rr_row_off(a, n, k)
++                doff.unsafe_store(2 * n + k, a.unsafe_load(k * n + k))
++            so[tid] = o[0]
++            sd[tid] = o[1]
++            dev_barrier()
++            var w = RR_OFF_TPB // 2
++            while w > 0:
++                if tid < w:
++                    so[tid] = ftz(so[tid] + so[tid + w])
++                    sd[tid] = ftz(sd[tid] + sd[tid + w])
++                dev_barrier()
++                w = w // 2
++            if tid == 0:
++                part.unsafe_store(3 * b, so[0])
++                part.unsafe_store(3 * b + 1, sd[0])
++                part.unsafe_store(3 * b + 2, Float32(0.0))
++            dev_barrier()
++        # ---- the test, fold: `eigh_par_off_fold_kernel`'s statements
++        var ao = Float32(0.0)
++        var ad = Float32(0.0)
++        var am = Float32(0.0)
++        var bb = tid
++        while bb < nb:
++            ao = ftz(ao + part.unsafe_load(3 * bb))
++            ad = ftz(ad + part.unsafe_load(3 * bb + 1))
++            am = min(am, part.unsafe_load(3 * bb + 2))
++            bb += RR_OFF_TPB
++        so[tid] = ao
++        sd[tid] = ad
++        sm[tid] = am
++        dev_barrier()
++        var w2 = RR_OFF_TPB // 2
++        while w2 > 0:
++            if tid < w2:
++                so[tid] = ftz(so[tid] + so[tid + w2])
++                sd[tid] = ftz(sd[tid] + sd[tid + w2])
++                sm[tid] = min(sm[tid], sm[tid + w2])
++            dev_barrier()
++            w2 = w2 // 2
++        # ---- the gate (`pca_rr_gate_kernel`'s statements) and the stop
++        if tid == 0:
++            fold.unsafe_store(0, so[0])
++            fold.unsafe_store(1, sd[0])
++            fold.unsafe_store(2, sm[0])
++            rr_gate_state(so[0], sd[0], sm[0], state, tol)
++            var done = state.unsafe_load(0) == Float32(1.0) or state.unsafe_load(4) < Float32(0.0)
++            stop[0] = Float32(1.0) if done else Float32(0.0)
++        dev_barrier()
++        # block-uniform: every thread reads the one shared word after the barrier
++        if stop[0] != Float32(0.0) or sweep == sweeps:
++            break
++        # ---- the sweep's rounds: (c, s), barrier, blocks + V rows, barrier
++        for rd in range(m - 1):
++            var p = tid
++            while p < h:
++                var got = rr_cs(a, n, m, rd, p)
++                cs.unsafe_store(2 * p, got[0])
++                cs.unsafe_store(2 * p + 1, got[1])
++                p += RR_ONE_D_TPB
++            dev_barrier()
++            var u = tid
++            while u < h * h + n * h:
++                if u < h * h:
++                    var i = u // h
++                    var j = u - i * h
++                    if i <= j:
++                        rr_block(a, cs, n, m, rd, i, j)
++                else:
++                    var x = u - h * h
++                    var kk = x // h
++                    rr_vrow(v, cs, n, m, rd, kk, x - kk * h)
++                u += RR_ONE_D_TPB
++            dev_barrier()
+ 
+ 
+ def rs_round_gated_kernel(
+diff --git a/x_decomp/xd_lean.mojo b/x_decomp/xd_lean.mojo
+index f2f83b1f3..e4e82f59e 100644
+--- a/x_decomp/xd_lean.mojo
++++ b/x_decomp/xd_lean.mojo
+@@ -4,7 +4,11 @@
+ program C3 + C4). NOT COMPILED, NOT VERIFIED, NOT MEASURED: the
+ orchestrator compiles every switch off and each on.
+ 
+-`MOJOLEARN_IDN_RR_ONE_BLOCK_D` (C3) deleted 2026-10-11 (loser; docs/TOMBSTONES.md).
++`MOJOLEARN_IDN_RR_ONE_BLOCK_D` (C3, default off): PCA / TruncatedSVD's
++round-robin two-sided Jacobi (`_eig_rr_device`) runs every sweep, its test
++and its gate in ONE launch of ONE block of RR_ONE_D_TPB = 256 threads
++(x_decomp/rr_one_block_d.mojo) where `rr_one_block_d_applies(n)`; no bit
++moves (the same cells in the same order, the host column untouched).
+ 
+ `MOJOLEARN_IDN_SVD_TALL_LEAN` (C4, default off), two parts on
+ `linalg.svd`'s tall route (python/mojolearn/_linalg_impl.py `_svd_tall`):
+@@ -26,14 +30,16 @@ orchestrator compiles every switch off and each on.
+       itself, so that QR is the tall factorization, not a redundant one.
+ """
+ from std.sys.compile import is_defined
++from std.sys.defines import get_defined_int
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
+ from x_decomp.cells import F32Ptr
+ 
+ comptime _XD_LEAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_RR_ONE_BLOCK_D (loser) deleted 2026-10-11 by SHA_RR; code recoverable at SHA_RR^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch
++#: C3 switch (read by decomposition/impl/linalg/detail/pca.mojo, which also
++#: requires PCA_RR_EIGH)
++comptime IDN_RR_ONE_BLOCK_D = _XD_LEAN_IDN and is_defined["MOJOLEARN_IDN_RR_ONE_BLOCK_D"]()
+ #: C4 switch (x_decomp/device.mojo `_svd_on`, `orth_on_device_diag`;
+ #: x_decomp/host.mojo `_orth_passes`)
+ comptime IDN_SVD_TALL_LEAN = _XD_LEAN_IDN and is_defined["MOJOLEARN_IDN_SVD_TALL_LEAN"]()
+@@ -44,12 +50,31 @@ comptime IDN_SVD_TALL_LEAN = _XD_LEAN_IDN and is_defined["MOJOLEARN_IDN_SVD_TALL
+ #: returns on one word load); a size rule, not a shape rule.
+ comptime SVD_LEAN_GROUP = 8
+ 
++#: C3 cost rule knob: strided cell steps a thread a round (RR_ONE_D_TPB
++#: threads) up to which one block's round is taken over two grid launches.
++#: 192 steps x 256 threads = 49,152 cells = h h + n h at n = 256: the
++#: n <= 256 cap of the idea (one block's round-robin state; past it the
++#: grid's rounds use the whole GPU). Override for the A/B crossover:
++#: -D MOJOLEARN_IDN_RR_ONE_BLOCK_D_STEPS=<k>.
++comptime RR_ONE_D_STEPS = get_defined_int["MOJOLEARN_IDN_RR_ONE_BLOCK_D_STEPS", 192]()
++comptime RR_ONE_D_TPB = 256
++
+ #: C4 b: |R[i, j]| <= ORTH_LEAN_TOL min(|R[i, i]|, |R[j, j]|) for every i < j
+ #: means the first pass's input was orthogonal to 2^-20 (the svd's own
+ #: rotation tolerance), so the second pass is skipped
+ comptime ORTH_LEAN_TOL = Float32(9.5367431640625e-07)
+ 
+ 
++def rr_one_block_d_applies(n: Int) -> Bool:
++    """C3's cost rule (no board width): a round costs the grid route two
++    launches (~5 us each on NVIDIA, 10-15 us on AMD); in one block it costs
++    ceil((h h + n h) / RR_ONE_D_TPB) strided steps of L2-resident cells.
++    Taken while that is at most RR_ONE_D_STEPS steps a thread."""
++    var m = n + (n % 2)
++    var h = m // 2
++    return n >= 2 and h * h + n * h <= RR_ONE_D_STEPS * RR_ONE_D_TPB
++
++
+ def orth_lean_violates(R: F32Ptr, l: Int, i: Int, j: Int) -> Bool:
+     """Cell (i, j), i < j, of the skip test on the guarded l x l R: True
+     when R[i, j] is not negligible against the two pivots, or a pivot is 0

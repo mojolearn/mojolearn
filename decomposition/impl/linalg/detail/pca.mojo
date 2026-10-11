@@ -705,7 +705,7 @@ def _eig_rr_device(
     # (the whole round-robin solve in one launch of one block) was BROKEN on NVIDIA:
     # nv2 v1030, pca and tsvd on taxi and istella REFUSED at this launch. Deleted;
     # recoverable at main 0a7b206f1 (x_decomp/rr_one_block.mojo and this branch).
-    # TOMBSTONE: MOJOLEARN_IDN_RR_ONE_BLOCK_D (loser) deleted 2026-10-11 by SHA_RR; code recoverable at SHA_RR^.
+    # TOMBSTONE: MOJOLEARN_IDN_RR_ONE_BLOCK_D (loser) deleted 2026-10-11 by 19eed6fa1; code recoverable at 19eed6fa1^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_ONE_BLOCK_D.patch
     # (C3 rebuilt it at 256 threads: pca istella 2.10x, tsvd istella 3.08x slower.)
     for sweep in range(PCA_RR_SWEEPS + 1):

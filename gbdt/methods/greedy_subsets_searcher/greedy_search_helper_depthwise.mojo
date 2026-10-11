@@ -320,7 +320,7 @@ comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not is_defined[
 comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not is_defined[
     "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
 ]()
-# TOMBSTONE: MOJOLEARN_IDN_LG_FUSED_CHAIN (noise) deleted 2026-10-11 by SHA_LG; code recoverable at SHA_LG^.
+# TOMBSTONE: MOJOLEARN_IDN_LG_FUSED_CHAIN (noise) deleted 2026-10-11 by 9ea0ceea2; code recoverable at 9ea0ceea2^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LG_FUSED_CHAIN.patch
 #: The histogram prefix scan over a shared-memory copy of 16 features'
 #: cells; the same serial fold, so the same bits. FAST on Apple, default
@@ -3651,7 +3651,7 @@ def fit_non_symmetric_tree[
             var fused_chain = False
             comptime if DW_FUSED_CHAIN:
                 # Depthwise only: Lossguide keeps the eight-launch chain
-                # TOMBSTONE: MOJOLEARN_IDN_LG_FUSED_CHAIN (noise) deleted 2026-10-11 by SHA_LG; code recoverable at SHA_LG^.
+                # TOMBSTONE: MOJOLEARN_IDN_LG_FUSED_CHAIN (noise) deleted 2026-10-11 by 9ea0ceea2; code recoverable at 9ea0ceea2^.
                 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LG_FUSED_CHAIN.patch
                 fused_chain = use_ridx and not lossguide
             if level_synced:

@@ -216,7 +216,7 @@ comptime XD_NO_FLAG = Int32(2147483647)
 # `-D MOJOLEARN_IDN_XD_SVD_GROUP_OFF` restores one readback per sweep.
 comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP and not is_defined["MOJOLEARN_IDN_XD_SVD_GROUP_OFF"]()
 comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
-# TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by SHA_SVL; code recoverable at SHA_SVL^.
+# TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
 
 # lane fam-decomp (2026-10-04), IDENTICAL: a small eigh (n <= IDN_EIGH_SMALL_N)
@@ -1848,7 +1848,7 @@ def _eigh_block_test(
 
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
-    # TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by SHA_KIT; code recoverable at SHA_KIT^.
+    # TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by 2256fff37; code recoverable at 2256fff37^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_KIT_GEMM.patch
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
     return nb * m * n if nb > 1 else 0
@@ -1923,7 +1923,7 @@ def launch_gemm(
         if m > 0 and n > 0 and k > 0:
             _launch_gemm_mma(ctx, a, b, c, m, k, n, ta, tb)
             return
-    # TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by SHA_KIT; code recoverable at SHA_KIT^.
+    # TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by 2256fff37; code recoverable at 2256fff37^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_KIT_GEMM.patch
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
     if nb > 1:
@@ -2333,7 +2333,7 @@ def orth_tsqr_select_kernel(r: F32Ptr, c: F32Ptr, l: Int32):
         c.unsafe_store(q, v)
 
 
-# TOMBSTONE: MOJOLEARN_IDN_RSVD_ORTH_LEAN (noise) deleted 2026-10-11 by SHA_RO; code recoverable at SHA_RO^.
+# TOMBSTONE: MOJOLEARN_IDN_RSVD_ORTH_LEAN (noise) deleted 2026-10-11 by fdf3608ff; code recoverable at fdf3608ff^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_RSVD_ORTH_LEAN.patch
 def _orth_tsqr_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int) raises:
     """RSVD_IDN_TSQR_ORTHO (x_decomp/tsqr_core.mojo): `da` (m x l) replaced
@@ -2382,7 +2382,7 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, 
     _ = none^
 
 
-# TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by SHA_SVL; code recoverable at SHA_SVL^.
+# TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
 def orth_on_device_diag(
     ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int, mut ddiag: DeviceBuffer[DType.float32],
@@ -3509,7 +3509,7 @@ struct DevExec(Exec):
         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         var mm = n + (n % 2)
         var h = mm // 2
-        # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by SHA_SVL; code recoverable at SHA_SVL^.
+        # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
         var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1) * XD_SVD_GROUP)
         var dfirst = ctx.enqueue_create_buffer[DType.int32](XD_SVD_GROUP)

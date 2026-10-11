@@ -404,7 +404,7 @@ def _capply_level_host(pcb: F32Ptr, ptl: F32Ptr, ptau: F32Ptr, n: Int, k: Int, n
             host_parallelize(_pair, pairs)
 
 
-# TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by SHA_TS; code recoverable at SHA_TS^.
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
 def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
     """R (n x n, n = d + nrhs) of [a | bp] (m x d and m x nrhs, row major)

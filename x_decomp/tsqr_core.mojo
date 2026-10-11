@@ -99,7 +99,7 @@ comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 comptime TS_TREE_PAR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-# TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by SHA_TS; code recoverable at SHA_TS^.
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
 #: reflectors of a panel pair (the pair's T2 is TS_W2 x TS_W2)
 comptime TS_W2 = 2 * TS_NB

@@ -231,7 +231,7 @@ comptime CTR_PERM_BATCH = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF"]()
 ) or IDN_CTR_PERM_BATCH
-# TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by SHA_CPG; code recoverable at SHA_CPG^.
+# TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by d092b6e2d; code recoverable at d092b6e2d^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
@@ -3672,7 +3672,7 @@ def fit_with_test(
                                 )
                             bk_cap_rows = n_rows
                             bk_cap_leaves = bk_cap
-                    # TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by SHA_CPG; code recoverable at SHA_CPG^.
+                    # TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by d092b6e2d; code recoverable at d092b6e2d^.
                     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch
                     for p in range(perm_count):
                         if inherit_learn and p == learn_p:

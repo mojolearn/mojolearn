@@ -363,7 +363,7 @@ def bidx(mode: Int, i: Int, d: Int) -> Int:
 #: then folded ascending. The block count is a function of the SHAPE only
 #: (IDENTITY_PATHS row 7's rule), never of the device.
 comptime FOLD_BLOCK = 4096
-# TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by SHA_KIT; code recoverable at SHA_KIT^.
+# TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by 2256fff37; code recoverable at 2256fff37^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_KIT_GEMM.patch
 
 

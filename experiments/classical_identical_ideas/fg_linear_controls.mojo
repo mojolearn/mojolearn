@@ -120,7 +120,7 @@ comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_
 # leaf cut), so the host column (glm/host/gram_solve_host.mojo) is untouched.
 comptime IDN_GFF_GRAM_TILED = IDN_GRAM_FF_FALLBACK and not is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED_OFF"]()
 
-# TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by SHA_GS; code recoverable at SHA_GS^.
+# TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by fbf3d50a0; code recoverable at fbf3d50a0^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch
 
 # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
