@@ -1748,6 +1748,128 @@ class BatchNorm2d(_Layer):
     def eval(self):
         return self.train(False)
 
+    # lane cnn-resident-glue (G3, MOJOLEARN_IDN_CNN_RESIDENT_GRADS): on a
+    # resident forward the running statistics stay in the resident array
+    # "running" (uploaded when the host arrays were set since) and the aux
+    # block (the statistics the backward reads, and its dgamma / dbeta) in
+    # one of two resident arrays "aux0" / "aux1" (alternating, so the next
+    # forward never overwrites the gradients of the last backward). The
+    # attributes download on the first host read; the host values live under
+    # the same names in `__dict__`.
+    def _sync_running(self):
+        d = self.__dict__
+        if not d.get("_run_stale"):
+            return
+        d["_run_stale"] = False
+        dev = d.get("_run_dev")
+        if dev is not None and "running" in dev.h:
+            np = _np()
+            C = self.num_features
+            r = dev.download(dev.h["running"][0], np.empty(2 * C, np.float32))
+            d["running_mean_"], d["running_var_"] = r[:C].copy(), r[C:].copy()
+
+    @property
+    def running_mean_(self):
+        self._sync_running()
+        return self.__dict__.get("running_mean_")
+
+    @running_mean_.setter
+    def running_mean_(self, v):
+        self._sync_running()
+        self.__dict__.update(running_mean_=v, _run_dev=None)
+
+    @property
+    def running_var_(self):
+        self._sync_running()
+        return self.__dict__.get("running_var_")
+
+    @running_var_.setter
+    def running_var_(self, v):
+        self._sync_running()
+        self.__dict__.update(running_var_=v, _run_dev=None)
+
+    def _grads_host(self):
+        """Download the pending resident dgamma / dbeta (G3)."""
+        d = self.__dict__
+        pend = d.get("_g_dev")
+        if pend is None:
+            return
+        d["_g_dev"] = None
+        np = _np()
+        C = self.num_features
+        aux = pend[0].download(pend[1], np.empty(2 + 7 * C, np.float32))
+        gb, gw = aux[2 + 3 * C:2 + 4 * C].copy(), aux[2 + 4 * C:2 + 5 * C].copy()
+        if not self.affine:
+            gw[:] = 0
+            gb[:] = 0
+        d["grad_weight_"], d["grad_bias_"] = gw, gb
+
+    @property
+    def grad_weight_(self):
+        self._grads_host()
+        if "grad_weight_" not in self.__dict__:
+            raise AttributeError("grad_weight_")
+        return self.__dict__["grad_weight_"]
+
+    @grad_weight_.setter
+    def grad_weight_(self, v):
+        self._grads_host()
+        self.__dict__["grad_weight_"] = v
+
+    @property
+    def grad_bias_(self):
+        self._grads_host()
+        if "grad_bias_" not in self.__dict__:
+            raise AttributeError("grad_bias_")
+        return self.__dict__["grad_bias_"]
+
+    @grad_bias_.setter
+    def grad_bias_(self, v):
+        self._grads_host()
+        self.__dict__["grad_bias_"] = v
+
+    def _res_bn(self, b):
+        return self.track_running_stats and _resident(b)
+
+    def _forward_res(self, b, xh, yh, n, c, hw, dev_y):
+        """G3: `_forward_dev` with running and aux resident (no download)."""
+        np = _np()
+        d = self.__dict__
+        dev = _dev_of(self, b)
+        aux, _, batch_stats = self._prep(n, c, hw, need_running=False)
+        k = 1 - d.get("_aux_k", 1)
+        name = "aux%d" % k
+        pend = d.get("_g_dev")
+        cur = dev.h.get(name)
+        if pend is not None and cur is not None and pend[1] == cur[0]:
+            self._grads_host()   # unread gradients in the array this forward reuses
+        ah = dev.upload(name, aux)
+        if d.get("_run_dev") is not dev or "running" not in dev.h:
+            r = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)  # glue: packs running statistics for the binding (running_mean_-sized: BatchNorm channels)
+            dev.upload("running", r)
+            d["_run_dev"] = dev
+        rh = dev.h["running"][0]
+        b.x_cnn_batchnorm_forward_m([xh, yh, rh, ah], 0b1111 if dev_y else 0b1101,
+                                    [n, c, hw, 1 if batch_stats else 0])
+        if self.training:
+            d["_run_stale"] = True
+        d["_aux_k"] = k
+        self._aux, self._aux_dev, self._mode, self._x3shape = aux, (dev, ah), batch_stats, (n, c, hw)
+        return aux
+
+    def _backward_res(self, b, xh, gh, dxh, dev_dx, dev_g):
+        """G3: the backward into the forward's resident aux; dgamma / dbeta
+        stay there until read. False when that forward was not resident."""
+        ad = self.__dict__.get("_aux_dev")
+        if ad is None or ad[0].b is not b or not self._res_bn(b):
+            return False
+        n, c, hw = self._x3shape
+        self._grads_host()
+        b.x_cnn_batchnorm_backward_m([xh, gh, dxh, ad[1]], 0b1001 | (0b0010 if dev_g else 0) | (0b0100 if dev_dx else 0),
+                                     [n, c, hw, 1 if self._mode else 0])
+        self.__dict__["_g_dev"] = ad
+        return True
+
     def _nchw(self, x):
         x = _f32(x, "x")
         shape = x.shape
@@ -1758,9 +1880,10 @@ class BatchNorm2d(_Layer):
             raise ValueError(f"mojolearn: input has {c} channels, the layer {self.num_features}")
         return np_reshape(x, (n, c, -1)), shape
 
-    def _prep(self, n, c, hw):
+    def _prep(self, n, c, hw, need_running=True):
         """The host words of one forward: (aux, running, batch_stats); the
-        batch counter moves here, as it did in `forward`."""
+        batch counter moves here, as it did in `forward`. `need_running`
+        False (G3: the running statistics are resident) gives running None."""
         np = _np()
         C = self.num_features
         # PyTorch: batch statistics in training mode, and in eval mode too when
@@ -1774,7 +1897,9 @@ class BatchNorm2d(_Layer):
         aux[0], aux[1] = np.float32(self.eps), np.float32(factor)
         aux[2 + 5 * C:2 + 6 * C] = self.weight_
         aux[2 + 6 * C:2 + 7 * C] = self.bias_
-        if self.track_running_stats:
+        if not need_running:
+            running = None
+        elif self.track_running_stats:
             running = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)  # glue: packs fitted running statistics for the binding (running_mean_-sized: BatchNorm channels)
         else:
             running = np.concatenate([np.zeros(C, np.float32), np.ones(C, np.float32)])  # glue: packs initial running statistics for the binding (C-sized: BatchNorm channels)
@@ -1789,6 +1914,9 @@ class BatchNorm2d(_Layer):
         """The forward of resident x (`xh`) into resident y (`yh`, or a host
         array's address with `dev_y` False); the backward reads `xh` (lane
         gap-neural-overhead2)."""
+        if self._res_bn(b):
+            return self._forward_res(b, xh, yh, n, c, hw, dev_y)
+        self._aux_dev = None
         aux, running, batch_stats = self._prep(n, c, hw)
         b.x_cnn_batchnorm_forward_m([xh, yh, running.ctypes.data, aux.ctypes.data], 0b0011 if dev_y else 0b0001,
                                     [n, c, hw, 1 if batch_stats else 0])
@@ -1799,6 +1927,8 @@ class BatchNorm2d(_Layer):
     def _backward_dev(self, b, xh, gh, dxh, dev_dx=True):
         """The backward from resident g (`gh`) into resident dx (`dxh`, or a
         host array's address with `dev_dx` False); sets the gradients."""
+        if self._backward_res(b, xh, gh, dxh, dev_dx, True):
+            return
         n, c, hw = self._x3shape
         C = self.num_features
         aux = self._aux.copy()
@@ -1851,6 +1981,7 @@ class BatchNorm2d(_Layer):
         b.x_cnn_batchnorm_forward(x3.ctypes.data, y.ctypes.data, running.ctypes.data, aux.ctypes.data,
                                   [n, c, hw, 1 if batch_stats else 0])
         self._finish(running)
+        self._aux_dev = None
         self._x, self._aux, self._shape, self._mode = x3, aux, shape, batch_stats
         self._x3shape, self._xdev = x3.shape, None
         return y.reshape(shape) if len(shape) != 2 else y[:, :, 0]
@@ -1874,6 +2005,9 @@ class BatchNorm2d(_Layer):
         dx = np.empty(self._x3shape, np.float32)
         xh = self.__dict__.get("_xdev")
         owner = self.__dict__.get("_xdev_dev")
+        if (xh is not None and owner is not None and owner.b is b and _mixed(b)
+                and self._backward_res(b, xh, g3.ctypes.data, dx.ctypes.data, False, False)):
+            return dx.reshape(self._shape) if len(self._shape) != 2 else dx[:, :, 0]
         if xh is not None and owner is not None and owner.b is b and _mixed(b):
             aux = self._aux.copy()
             b.x_cnn_batchnorm_backward_m([xh, g3.ctypes.data, dx.ctypes.data, aux.ctypes.data], 0b0001,
