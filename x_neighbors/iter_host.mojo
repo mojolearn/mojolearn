@@ -6,6 +6,11 @@ from x_neighbors.classical_graph import classical_graph_degree, classical_graph_
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from x_neighbors.svgp_ff import matmul_tn_acc_ff_item, svgp_ff_solve
+from x_neighbors.svgp_b32_gate import (
+    IDN_SVGP_B_FP32_GATED, svgp_b32_sigma_item, svgp_b32_chol_item, svgp_b32_trusted,
+)
+from gemm.host.gemm_oracle import gemm_oracle
+from gemm.contract import OP_TN as _SVGP_OP_TN
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from std.python import PythonObject
@@ -397,7 +402,58 @@ def op_svgp_fit_ff(
     if mm > 0:
         _scaled_rbf_rows(zp, zp, kp, kuup, m, m, d, gamma, variance)
     var tile = _tile_rows(n, m)
-    var r0 = 0
+    comptime if IDN_SVGP_B_FP32_GATED:
+        # MOJOLEARN_IDN_SVGP_B_FP32_GATED (x_neighbors/svgp_b32_gate.mojo):
+        # the device op's order: whole Kfu, b in float-float per tile, B32 by
+        # the GEMM contract's oracle, the float32 gate, then float-float B
+        # only on a rejected fit.
+        var kf = List[Float32](length=max(n * m, 1), fill=Float32(0))
+        var kfp = FP(unsafe_from_address=Int(kf.unsafe_ptr()))
+        var g0 = 0
+        while g0 < n:
+            var grows = min(tile, n - g0)
+            _scaled_rbf_rows(FP(unsafe_from_address=x) + g0 * d, zp, kp, kfp + g0 * m, grows, m, d, gamma, variance)
+            var gyp = FP(unsafe_from_address=y) + g0
+            for t in range(m):
+                matmul_tn_acc_ff_item(t, kfp + g0 * m, gyp, vhp, vlp, grows, m, 1)
+            g0 += grows
+        var trusted = False
+        var b32 = List[Float32](length=max(mm, 1), fill=Float32(0))
+        if mm > 0 and n > 0:
+            b32 = gemm_oracle(kf, kf, _SVGP_OP_TN, m, m, n)
+            var ga = List[Float32](length=mm, fill=Float32(0))
+            var gd = List[Float32](length=m, fill=Float32(0))
+            var gi = List[Float32](length=1, fill=Float32(0))
+            var gap = FP(unsafe_from_address=Int(ga.unsafe_ptr()))
+            var gdp = FP(unsafe_from_address=Int(gd.unsafe_ptr()))
+            var gip = FP(unsafe_from_address=Int(gi.unsafe_ptr()))
+            var b32p = FP(unsafe_from_address=Int(b32.unsafe_ptr()))
+            for t in range(mm):
+                svgp_b32_sigma_item(t, kuup, b32p, gap, gdp, m, noise, jitter)
+            for j in range(m):
+                for i in range(j, m):
+                    svgp_b32_chol_item(i, gap, gdp, gip, j, m)
+            trusted = svgp_b32_trusted(gap, gdp, gip, m)
+            _ = ga^
+            _ = gd^
+            _ = gi^
+        if trusted:
+            for t in range(mm):
+                bhb[t] = b32[t]
+                blb[t] = Float32(0)
+        else:
+            g0 = 0
+            while g0 < n:
+                var grows = min(tile, n - g0)
+                var kt = kfp + g0 * m
+
+                def gb(t: Int) {imm kt, imm bhp, imm blp, imm grows, imm m}:
+                    matmul_tn_acc_ff_item(t, kt, kt, bhp, blp, grows, m, m)
+                _cells(gb, mm)
+                g0 += grows
+        _ = kf^
+        _ = b32^
+    var r0 = n if IDN_SVGP_B_FP32_GATED else 0
     while r0 < n:
         var rows = min(tile, n - r0)
         _scaled_rbf_rows(FP(unsafe_from_address=x) + r0 * d, zp, kp, ksp, rows, m, d, gamma, variance)
