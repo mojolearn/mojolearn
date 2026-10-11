@@ -2091,7 +2091,7 @@ def svgp_b32_chol_kernel(a: FP, adiag: FP, info: FP, m_: Int64, j_: Int64):
 
 
 def svgp_b32_trust_kernel(a: FP, adiag: FP, info: FP, flag: FP, m_: Int64):
-    # small-launch(m: one thread reads the m pivots of the m x m factor; d-sized, not rows)
+    # one thread over the m pivots (the launch site carries the small-launch note)
     if block_idx.x != 0 or thread_idx.x != 0:
         return
     flag.unsafe_store(0, Float32(1) if svgp_b32_trusted(a, adiag, info, Int(m_)) else Float32(0))
@@ -2537,7 +2537,7 @@ def op_svgp_fit_ff(
                 ctx.enqueue_function[svgp_b32_chol_kernel](
                     _p(d_ga), _p(d_gd), _p(d_ginfo), Int64(m), Int64(j), grid_dim=_grid(m - j), block_dim=BLOCK,
                 )
-            ctx.enqueue_function[svgp_b32_trust_kernel](
+            ctx.enqueue_function[svgp_b32_trust_kernel](  # small-launch(m: inducing points): reads the m pivots of the m x m factor, never rows
                 _p(d_ga), _p(d_gd), _p(d_ginfo), _p(d_gflag), Int64(m), grid_dim=1, block_dim=1,
             )
             _ = d_kf2^
