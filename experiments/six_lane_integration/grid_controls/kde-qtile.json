@@ -17,7 +17,7 @@
    "default": "off",
    "source": [
     "kde/impl/neighbors/kernel_density.mojo:3634",
-    "kde/impl/neighbors/kernel_density.mojo:3695"
+    "kde/impl/neighbors/kernel_density.mojo:3698"
    ],
    "binding": "_mojolearn_kde",
    "bits_change": false,
