@@ -843,6 +843,19 @@ def _python_symbols(files):
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 index.setdefault(node.name, set()).add(rel)
             elif isinstance(node, ast.Assign):
+                # THE OPTIONAL-NUMPY GUARD BINDS NUMPY, NOT A PACKAGE SYMBOL
+                # (lane/lazy-imports, 2026-10-10). Fourteen `_x_sequence_*.py`
+                # files say `np = require_numpy(...)` at module level, the one
+                # form packaging/portable_math/wheel.py allows for importing
+                # NumPy. Indexed as a definition, the name `np`, which nearly
+                # every lane's spec in tools/identity_break.py uses, seeded all
+                # fourteen into every lane, and through them `_arima_impl`,
+                # `_tsa_impl`, `linear_model` and the decomposition and metrics
+                # expansions: 235 files selected every lane. An alias of a
+                # third-party module defines nothing a lane can call here.
+                if (isinstance(node.value, ast.Call)
+                        and getattr(node.value.func, "id", None) == "require_numpy"):
+                    continue
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         index.setdefault(target.id, set()).add(rel)
