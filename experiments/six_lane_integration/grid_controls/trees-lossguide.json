@@ -1,0 +1,109 @@
+{
+  "schema": "mojolearn.grid-controls/1",
+  "lane": "trees-lossguide",
+  "branch": "lane/trees-lossguide",
+  "head": "a4f3506a2",
+  "mode": "IDENTICAL",
+  "controls": {
+    "IDN_LG_FUSED_CHAIN": {
+      "define": "MOJOLEARN_IDN_LG_FUSED_CHAIN",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_IDN_LG_FUSED_CHAIN"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
+      ],
+      "binding": "_mojolearn_gbdt,_mojolearn_gbdt_host",
+      "bits_change": false,
+      "status": "pending",
+      "note": "F2: Lossguide on the fused 4-launch split chain; K2 stat propagation skipped (stat count 0) so DEVIATION 352 recomputes child stats; split-time right-child histogram copy kept (T19 dropped it). Gate on istella logloss (T19 trap)."
+    },
+    "hist_packed_gh": {
+      "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_TREES_HIST_PACKED_GH"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "gbdt/trees_hist_switches.mojo:31",
+        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:105",
+        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:146",
+        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:249"
+      ],
+      "binding": "_mojolearn_gbdt",
+      "bits_change": false,
+      "status": "new",
+      "reach": "every fused 8-bit two-stat histogram launch (>128 folds, stat_count 2): symmetric, depthwise, lossguide, rank; NVIDIA/AMD only",
+      "note": "F4 (ideas-all-gaps-20261011): zero code, existing opt-in; integer atomics are order-free, bits unchanged; raced here on the lossguide and categorical cells. Original entry: trees-hist-ideas.json."
+    },
+    "hist_warp_agg": {
+      "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_TREES_HIST_WARP_AGG"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "gbdt/trees_hist_switches.mojo:36",
+        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:193",
+        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:549",
+        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:815"
+      ],
+      "binding": "_mojolearn_gbdt",
+      "bits_change": false,
+      "status": "new",
+      "reach": "body loop of the fused 8-bit kernels (direct + gather); whole-wave same-bin aggregation only; NVIDIA/AMD only",
+      "note": "F4 (ideas-all-gaps-20261011): zero code, existing opt-in; integer atomics are order-free, bits unchanged; raced here on the lossguide and categorical cells. Original entry: trees-hist-ideas.json."
+    }
+  },
+  "algorithms": {
+    "trees:gbdt-lossguide": {
+      "binding": "_mojolearn_gbdt",
+      "route": "fit: doc_parallel_boosting -> fit_non_symmetric_tree (greedy_search_helper_depthwise, Lossguide, LG_EXACT_ID) -> split chain (8 launches; IDN_LG_FUSED_CHAIN: _launch_fused_split_chain + histogram copy)",
+      "controls": [
+        "IDN_LG_FUSED_CHAIN",
+        "hist_packed_gh",
+        "hist_warp_agg"
+      ],
+      "interaction_groups": [
+        [
+          "IDN_LG_FUSED_CHAIN"
+        ],
+        [
+          "hist_packed_gh",
+          "hist_warp_agg"
+        ]
+      ]
+    },
+    "trees:gbdt-categorical": {
+      "binding": "_mojolearn_gbdt",
+      "route": "fit: CatBoost CTR columns -> doc_parallel_boosting -> fit_non_symmetric_tree (Lossguide) per permutation",
+      "controls": [
+        "IDN_LG_FUSED_CHAIN",
+        "hist_packed_gh",
+        "hist_warp_agg"
+      ],
+      "interaction_groups": [
+        [
+          "IDN_LG_FUSED_CHAIN"
+        ],
+        [
+          "hist_packed_gh",
+          "hist_warp_agg"
+        ]
+      ]
+    }
+  }
+}
