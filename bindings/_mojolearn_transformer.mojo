@@ -173,6 +173,9 @@ from transformer.checks.transformer_fixture import RMS_EPS, ROPE_THETA
 # `_upload`/`_download` by their underscore names is DEVIATION 1112's
 # settled pattern (`transformer_check.mojo` imports the same pair).
 from transformer.impl.llama.fused_attention import (
+    attention_defer_begin,
+    attention_defer_enqueue_read,
+    attention_defer_flagged,
     fused_forward_supported_head_dim,
 )
 from transformer.impl.llama.modeling_llama import (
@@ -1010,6 +1013,15 @@ def _session_weights(
     session.weight_uploads += 1
 
 
+comptime IDN_TF_SESSION_LEAN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
+    "MOJOLEARN_IDN_TF_SESSION_LEAN"
+]()
+"""lane/lm-attn-nohost (2026-10-11, idea H9), default OFF: the stateless
+session prefill skips the cache zero-fill when the call writes every slot.
+The idea's weight version stamp needs a Python-side change (not this lane's
+file) and is left out."""
+
+
 def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = False](
     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
@@ -1060,8 +1072,19 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
         if s0 != 0:
             raise Error("transformer: a discarded cache starts at cached_tokens 0")
         # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
-        ws.kv.k.enqueue_fill(Float32(0.0))
-        ws.kv.v.enqueue_fill(Float32(0.0))
+        # IDN_TF_SESSION_LEAN (lane/lm-attn-nohost, idea H9, default off):
+        # when the prefill spans the whole capacity (l == smax, s0 == 0) the
+        # layer writes every cache slot before any read and this path never
+        # downloads the cache, so the fill writes bytes nothing reads. The
+        # condition is a coverage rule (every slot written), not a size
+        # threshold. Same words; expected ~0.1-0.3 ms of fills per call.
+        var fill_cache = True
+        comptime if IDN_TF_SESSION_LEAN:
+            if l == smax:
+                fill_cache = False
+        if fill_cache:
+            ws.kv.k.enqueue_fill(Float32(0.0))
+            ws.kv.v.enqueue_fill(Float32(0.0))
     else:
         # Host cache state is authoritative on EVERY call, including resets and
         # same-address edits. Copy into retained allocations, never trust a pointer.
@@ -1076,10 +1099,25 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
     ws.kv.s = s0
     _btick(ton, tk, "surface.cache_stages_x_up")
     var trace = IdentityTrace.disabled()
+    # IDN_ATTN_DEFER_REGIME (lane/lm-attn-nohost, idea H1): a forward-only
+    # call arms the deferred attention window, so the fused forward reads
+    # nothing on the host; its words come home with the downloads below,
+    # under their one wait. On a flag (a regime refusal or a corner, rare)
+    # the forward reruns disarmed (today's path, today's words) and the
+    # outputs download again. The rerun needs no cache re-upload: the layer
+    # writes cache slots [s0, s0 + l) before it reads them and never touches
+    # the others, so the device cache (and the host copy just downloaded)
+    # differ from the input only in slots the rerun rewrites; `x` is
+    # re-uploaded from the caller's unchanged input. A tape call never arms.
+    var armed = False
+    comptime if not retain_tape:
+        armed = attention_defer_begin(ctx)
     # forward_only: no backward reads this entry's stages.
     llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
                                 b, l, s0, trace, String("py"), forward_only=not retain_tape)
     _btick(ton, tk, "surface.forward")
+    if armed:
+        attention_defer_enqueue_read(ctx)
     # One wait for the downloads (the fresh entry's pattern): every owner
     # stays alive through it.
     _download_addr[False](ctx, ws.stages.residual2, b * l * dm, a[12])
@@ -1087,6 +1125,16 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
         _download_addr[False](ctx, ws.kv.k, len(ws.kv.k), a[10])
         _download_addr[False](ctx, ws.kv.v, len(ws.kv.v), a[11])
     ctx.synchronize()
+    if armed and attention_defer_flagged(ctx):
+        ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
+        ws.kv.s = s0
+        llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
+                                    b, l, s0, trace, String("py"), forward_only=not retain_tape)
+        _download_addr[False](ctx, ws.stages.residual2, b * l * dm, a[12])
+        comptime if not discard_cache:
+            _download_addr[False](ctx, ws.kv.k, len(ws.kv.k), a[10])
+            _download_addr[False](ctx, ws.kv.v, len(ws.kv.v), a[11])
+        ctx.synchronize()
     _btick(ton, tk, "surface.outputs_down")
     var result = ws.kv.s
     # Bound retained device-buffer storage per model. Large legal calls still

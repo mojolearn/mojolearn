@@ -8218,6 +8218,29 @@ def attention_defer_end(ctx: DeviceContext) raises -> Bool:
     return hp.unsafe_load(0) != Float32(0.0) or hp.unsafe_load(3) != Float32(0.0)
 
 
+def attention_defer_enqueue_read(ctx: DeviceContext) raises:
+    """Disarm the window and ENQUEUE the copy of its words home, no wait:
+    the caller's own output wait covers it; read the verdict after that wait
+    with `attention_defer_flagged`."""
+    comptime if IDN_ATTN_DEFER_REGIME:
+        var g = _ATTN_DEFER_STATE.get_or_create_ptr()
+        var si = _attn_defer_slot(ctx)
+        g[].armed[si] = False
+        step_count_d2h()
+        ctx.enqueue_copy(dst_ptr=g[].host[si].unsafe_ptr(), src_buf=g[].flag[si])
+
+
+def attention_defer_flagged(ctx: DeviceContext) raises -> Bool:
+    """The words `attention_defer_enqueue_read` brought home; call only
+    after a wait that follows it on `ctx`."""
+    comptime if not IDN_ATTN_DEFER_REGIME:
+        return False
+    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
+    var si = _attn_defer_slot(ctx)
+    var hp = g[].host[si].unsafe_ptr()
+    return hp.unsafe_load(0) != Float32(0.0) or hp.unsafe_load(3) != Float32(0.0)
+
+
 def attention_defer_disarm(ctx: DeviceContext) raises:
     """Disarm without reading (an error path)."""
     comptime if IDN_ATTN_DEFER_REGIME:
