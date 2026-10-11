@@ -2,7 +2,7 @@
  "schema": "mojolearn.grid-controls/1",
  "lane": "lars-grid-gram",
  "branch": "lane/lars-grid-gram",
- "head": "dd61cf895",
+ "head": "f6f16f128",
  "controls": {
   "lars_grid_gram": {
    "define": "MOJOLEARN_IDN_LARS_GRID_GRAM",
