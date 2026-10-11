@@ -1978,6 +1978,8 @@ def mamba3_s17_tail_shared_kernel(gid_: Int,
 
 comptime M3_S17_TAIL_PAGE_BYTES = 2 * M3_S17_TP * M3_D_STATE * 4
 comptime M3_S17_TAIL_ALT_FITS = False
+# MEASURE OWED (2026-10-11): the dbuf arm has no grid cell in g50ebe26a5 (samba-train-step); measure it once against the new
+# default (pipe) with -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF -D MOJOLEARN_IDN_M3_S17_TAIL_DBUF on NV + AMD.
 comptime M3_S17_TAIL_DBUF = (
     M3_S17_TAIL_SHARED
     and M3_S17_TAIL_ALT_FITS
@@ -1988,7 +1990,10 @@ comptime M3_S17_TAIL_PIPE = (
     M3_S17_TAIL_SHARED
     and M3_S17_TAIL_ALT_FITS
     and not M3_S17_TAIL_DBUF
-    and is_defined["MOJOLEARN_IDN_M3_S17_TAIL_PIPE"]()
+    # PROMOTED 2026-10-11 (grid g50ebe26a5, arm m3_s17_tail=pipe vs today's defaults, one run per arm): samba-train-step bytes
+    # NV L40S 40.105 -> 41.582 ms (v1372), AMD MI325X 117.272 -> 68.559 ms (a1540); avg ratio 0.779 (vendor split: NV 1.04x);
+    # hash 16f6e13b on both vendors. Default ON; -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF restores the shared tail.
+    and not is_defined["MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M3_S17_PIPE_GROUP = 16
