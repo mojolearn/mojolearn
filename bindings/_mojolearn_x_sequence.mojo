@@ -200,7 +200,7 @@ def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises 
     var ex = DeviceExec()
     comptime if ETS_TEAM or IDN_ETS_TEAM:
         # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF), and IDENTICAL behind
-        # -D MOJOLEARN_IDN_ETS_TEAM (default off; the host binding replays it in
+        # IDENTICAL by default (off: -D MOJOLEARN_IDN_ETS_TEAM_OFF; the host binding replays it in
         # sequence/exec.mojo): ETS(A, A|Ad, N) one series per block
         # (sequence/ets_team.mojo); every other model keeps ets_py
         if ets_team_applies(ip):

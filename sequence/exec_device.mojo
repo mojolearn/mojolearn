@@ -256,7 +256,7 @@ def team_kernel[OP: Int](
             garch_team(blk, team, a)
         elif (ETS_TEAM or IDN_ETS_TEAM) and OP == OP_ETS:
             # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo);
-            # IDENTICAL behind -D MOJOLEARN_IDN_ETS_TEAM (default off, the tree prefix)
+            # IDENTICAL default (off: -D MOJOLEARN_IDN_ETS_TEAM_OFF; the tree prefix)
             ets_team(blk, team, a)
         elif PROPHET_COOP:
             # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
@@ -887,7 +887,7 @@ struct DeviceExec(Exec):
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
-        # THETA_SPEC: FAST + Apple, and the IDENTICAL twin under -D MOJOLEARN_IDN_NM_SPEC
+        # THETA_SPEC: FAST + Apple, and the IDENTICAL twin by default (off: -D MOJOLEARN_IDN_NM_SPEC_OFF)
         # (sequence/theta_spec.mojo); ETS_SPEC: that define's no-season ETS (sequence/ets_spec.mojo).
         # Both admitted on NVIDIA/AMD by SEQ_COOP_NVAMD; same bits as op_theta / op_ets.
         comptime if (SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ

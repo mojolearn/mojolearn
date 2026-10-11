@@ -6,15 +6,24 @@
  "head_note": "head = last code commit before this file; the file is committed on top of it.",
  "controls": {
   "idn_nm_spec": {
-   "define": "MOJOLEARN_IDN_NM_SPEC",
+   "define": "MOJOLEARN_IDN_NM_SPEC,MOJOLEARN_IDN_NM_SPEC_OFF",
    "kind": "switch",
-   "arms": {"off": [], "on": ["MOJOLEARN_IDN_NM_SPEC"]},
-   "default": "off",
-   "source": ["sequence/theta_spec.mojo:61", "sequence/ets_spec.mojo:38", "sequence/exec_device.mojo:867"],
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_NM_SPEC_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "sequence/theta_spec.mojo:61",
+    "sequence/ets_spec.mojo:38",
+    "sequence/exec_device.mojo:867"
+   ],
    "binding": "_mojolearn_x_sequence",
    "bits_change": false,
-   "status": "new",
-   "note": "Theta (op_theta_spec) and no-season ETS (op_ets_spec) on one 32-lane cell per series on IDENTICAL: the four Nelder-Mead candidates (and the k+1 initial/shrunk vertices) evaluated at once, every lane replays nm_steps' decision; same objective words (theta: theta_run_reg's chain incl. seq_madd), so the same bits as op_theta/op_ets and the host column. Independent of MOJOLEARN_IDN_SEQ_REG (race both arms of it too). Seasonal ETS keeps op_ets. Race theta, optimized-theta, dynamic-optimized-theta, damped-ets taxi-hourly + synthetic, nv and amd; ID check expected MATCH with main."
+   "status": "promoted:w2-decide-neural-20261011",
+   "note": "PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-neural): A/B on main c8ef6c66d, one run per arm, same bits NV==AMD, all 8 cells 0.10-0.34 (theta 0.178/0.118, optimized-theta 0.152/0.100, dynamic-optimized-theta 0.251/0.339, damped-ets 0.141/0.126 NV/AMD); nv2 v0098 / A v0097, amd a1680 / A a1679. Arm off = MOJOLEARN_IDN_NM_SPEC_OFF. Theta (op_theta_spec) and no-season ETS (op_ets_spec) on one 32-lane cell per series on IDENTICAL: the four Nelder-Mead candidates (and the k+1 initial/shrunk vertices) evaluated at once, every lane replays nm_steps' decision; same objective words (theta: theta_run_reg's chain incl. seq_madd), so the same bits as op_theta/op_ets and the host column. Independent of MOJOLEARN_IDN_SEQ_REG (race both arms of it too). Seasonal ETS keeps op_ets. Race theta, optimized-theta, dynamic-optimized-theta, damped-ets taxi-hourly + synthetic, nv and amd; ID check expected MATCH with main."
   }
  }
 }
