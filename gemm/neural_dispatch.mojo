@@ -36,16 +36,16 @@ from gemm.experiments.neural_grouped import NN07,_neural_operand_pack_kernel
 from gemm.experiments.neural_switches import (
     ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD,ROLE_ALL,NEURAL_GEMM_ROLES,
 )
-from gemm.experiments.neural_ozaki import (
-    NEURAL_OZAKI,OZAKI_SLICES,neural_ozaki_into,ozaki_workspace_floats,
-)
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES (NN-OZ int8 Ozaki-split neural GEMM; DELETE-slower: grid g50ebe26a5, slices 4/5
+# on 10 neural workloads, e.g. lm-train-step NV L40S 35.3 -> 3172.6 / 3709.4 ms, AMD MI325X 42.7 -> 334.3 / 407.5 ms; cnn-clf avg
+# 25.9x / 30.1x; mlp-train-step 1.20x / 1.22x, the closest) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 7aa609453.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES.patch; record in docs/TOMBSTONES.md.
 
 # NN05 (the fused pair kernel arm) deleted 2026-10-08 (lane grid-act-4, grid
 # ge123e6f9, 2.2-3.9x slower); see the tombstone at _neural_pair_kernel's old site.
 comptime NEURAL_PAIR_ENABLED = NN07
 comptime NEURAL_GEMM_EXPERIMENT_ENABLED = (
     NEURAL_PROFILE_CHANGED or NN01 or NN02 or NN09 or NN10 or NN11 or NN12 or NN15 or NN16
-    or NEURAL_OZAKI
 )
 comptime _STREAM_GROUP = get_defined_int["MOJOLEARN_IDN_NEURAL_STREAM_GROUP",8]()
 comptime _DEPTH = get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]()
@@ -104,10 +104,6 @@ def _scheduled_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
         return max(1,m*n*leaves)
     comptime if NEURAL_PROFILE_CHANGED or _STAGING or NN11:
         return 1
-    comptime if NEURAL_OZAKI:
-        # The planes, row scales and Int32 diagonals; the incumbent's own
-        # workspace for the shapes outside the exactness bound.
-        return max(_incumbent_workspace(m,n,k),ozaki_workspace_floats[OZAKI_SLICES](m,n,k))
     return _incumbent_workspace(m,n,k)
 
 
@@ -169,18 +165,10 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     _admit_product(c,a,b,ws,m,n,k,op)
     if m==0 or n==0:
         return
-    comptime if NEURAL_OZAKI:
-        # NN-OZ replaces the whole product; it does not cross the other
-        # schedule routes (they would never be reached).
-        comptime assert _ROUTES == 0 and not NEURAL_PROFILE_CHANGED, (
-            "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES excludes the other neural GEMM routes"
-        )
-        comptime assert OZAKI_SLICES >= 4 and OZAKI_SLICES <= 6, (
-            "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES legal set is 4, 5, 6 (fp32-equivalent error)"
-        )
-        if not neural_ozaki_into[OZAKI_SLICES](ctx,c,a,b,ws,m,n,k,op):
-            _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
-        return
+    # TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES (NN-OZ int8 Ozaki-split neural GEMM; DELETE-slower: grid g50ebe26a5, slices 4/5
+    # on 10 neural workloads, e.g. lm-train-step NV L40S 35.3 -> 3172.6 / 3709.4 ms, AMD MI325X 42.7 -> 334.3 / 407.5 ms; cnn-clf avg
+    # 25.9x / 30.1x; mlp-train-step 1.20x / 1.22x, the closest) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 7aa609453.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES.patch; record in docs/TOMBSTONES.md.
     comptime if _SCHEDULED and not ((NEURAL_GEMM_ROLES & ROLE) != 0):
         comptime if NEURAL_PROFILE_CHANGED:
             neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
