@@ -97,7 +97,11 @@ comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and not is_defined["MOJOLEARN_IDN_JAC
 # host column (glm/host/gram_solve_host.mojo) runs the same cells.
 comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"]()
 
-# C1 (lane ridge-ff-tiled, 2026-10-11; DEFAULT OFF, -D MOJOLEARN_IDN_GFF_GRAM_TILED).
+# C1 (lane ridge-ff-tiled, 2026-10-11). PROMOTED to the IDENTICAL default 2026-10-11
+# (lane w2-decide-linalg; same box, main c8ef6c66d, one run per arm, NV==AMD digests):
+# ridge istella 0.917 (NV 0.857 / AMD 0.977; v0135/a1717 vs A v0134/a1716), ridge taxi
+# 0.973 (v0080/a1662 vs A v0079/a1661); ols / ard / bayesian-ridge / ridge-cv 1.00;
+# same bits. -D MOJOLEARN_IDN_GFF_GRAM_TILED_OFF restores the per-cell gff_leaf_kernel.
 # The float-float leaf Gram of IDN_GRAM_FF_FALLBACK (the route ridge istella
 # takes: the fp32 gate rejects it) as register tiles: a block owns one 64 x 64
 # tile of the extended (d + 1) x (d + 1) upper triangle ([X | y], the cross
@@ -114,7 +118,7 @@ comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_
 # each cell's sequence is unchanged (ff_centered of the same words, ff_mul
 # (c_i, c_j), ff_add into the cell, rows ascending within the leaf, the same
 # leaf cut), so the host column (glm/host/gram_solve_host.mojo) is untouched.
-comptime IDN_GFF_GRAM_TILED = IDN_GRAM_FF_FALLBACK and is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED"]()
+comptime IDN_GFF_GRAM_TILED = IDN_GRAM_FF_FALLBACK and not is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED_OFF"]()
 
 # C2 (lane ridge-ff-tiled, 2026-10-11; DEFAULT OFF, -D MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH).
 # The resident Gram solve's Cholesky, forward and backward solves (fp32 and
