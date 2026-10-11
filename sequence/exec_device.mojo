@@ -441,6 +441,8 @@ struct DeviceExec(Exec):
     #: lane gap-gemm-layers: the pair offsets of the MoE grouping, on the host
     #: (MOE_GROUPED_GEMM: the hidden op downloads them, the out op reuses them)
     var moe_poff: List[Int]
+    # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
 
     def __init__(out self) raises:
         self.ctx = sequence_ctx()

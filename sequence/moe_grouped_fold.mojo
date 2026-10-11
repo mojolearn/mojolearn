@@ -40,6 +40,8 @@ comptime MOE_GROUPED_GEMM = (
     and not is_defined["MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
 
 #: the fold stack's depth: 2^12 leaves cover the contract's CONTRACT_MAX_LEAVES = 1024
 comptime MOE_FOLD_LEVELS = 12

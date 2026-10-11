@@ -188,3 +188,7 @@ def moe_grouped_out(
         w, s, slot_of, y, Int32(D), Int32(k), Int32(n_tok * D),
         grid_dim=((n_tok * D + MG_TPB - 1) // MG_TPB, 1, 1), block_dim=(MG_TPB, 1, 1),
     )
+
+# TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
+
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch

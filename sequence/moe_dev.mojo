@@ -52,5 +52,7 @@ def moe_forward_dev_py(handles: PythonObject, ip: PythonObject) raises -> Python
     var W = seq_tensor_ptr(handles[4], T * k, "weights")
     var w = moe_weights_ptrs(wh)
     var ex = DeviceExec()
+    # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
     moe_forward_core(ex, X, Y, L, Sel, W, T, D, F, En, k, renorm, w[0], w[1], w[2])
     return PythonObject(T * D)
