@@ -57,6 +57,26 @@ comptime RBS = 64
 comptime RWS = 256
 #: below this many rows the bitonic sort runs (3 launches at one tile)
 comptime RADIX_MIN_ROWS = 8192
+# I3 (IDENTICAL experiment, lane xprep-one-copy 2026-10-11, default off):
+# `-D MOJOLEARN_IDN_DRADIX_RANGE_PASSES`. Structural reason: the LSD sort runs
+# every digit pass of all 32 key bits, though a column whose keys agree on a
+# digit gains nothing from that pass (a stable counting sort by a constant
+# digit is the identity permutation). One OR pass per (column, chunk) of
+# key ^ first key marks the digits that vary; every pass kernel skips the
+# columns whose digit is constant, and each column tracks which key block
+# holds its keys by the parity of its active passes (computed from the mask in
+# every kernel, no host read, no extra launch). A small-code column (e.g. 16
+# categories) sorts in 1 pass of 4. The sort chunk also shrinks to at most
+# 512 rows (grid control c07_radix_rows=1024 was 0.77-0.87x on onehot/kbins/
+# quantile), 4x the (column, chunk) threads at any n: a size rule from thread
+# occupancy, not a board shape. The sort has ONE answer (stable, total order),
+# so the words are identical to the default on every vendor and the host.
+# Expected: onehot/ordinal istella + taxi AMD 19-22 -> ~8-10 ms with I1.
+comptime IDN_DRADIX_RANGE_PASSES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
+    "MOJOLEARN_IDN_DRADIX_RANGE_PASSES"
+]()
+#: the sort chunk cap of IDN_DRADIX_RANGE_PASSES
+comptime RANGE_CHUNK_ROWS = 512
 
 
 @always_inline
@@ -210,11 +230,194 @@ def radix_chunks(n: Int, chunk_rows: Int) -> Int:
     return max(1, (n + cr - 1) // cr)
 
 
+def _sort_chunk_rows(chunk_rows: Int) -> Int:
+    """The chunk rows of `radix_sort_cols_device` (I3 caps them at 512)."""
+    comptime if IDN_DRADIX_RANGE_PASSES:
+        return min(max(chunk_rows, 1), RANGE_CHUNK_ROWS)
+    else:
+        return chunk_rows
+
+
 def radix_scratch_words(n: Int, cols: Int, chunk_rows: Int) -> Int:
     """The scratch words `radix_sort_cols_device` needs: two key blocks, the
-    chunk counts, the digit totals and the digit starts."""
+    chunk counts, the digit totals and the digit starts (I3: plus the
+    (column, chunk) digit masks and the column masks)."""
     var c = max(cols, 0)
-    return 2 * c * n + c * radix_chunks(n, chunk_rows) * RBINS + 2 * c * RBINS
+    var cr = _sort_chunk_rows(chunk_rows)
+    var words = 2 * c * n + c * radix_chunks(n, cr) * RBINS + 2 * c * RBINS
+    comptime if IDN_DRADIX_RANGE_PASSES:
+        words += c * radix_chunks(n, cr) + c
+    return words
+
+
+# ---- I3 MOJOLEARN_IDN_DRADIX_RANGE_PASSES kernels (see the define) ----
+
+
+@always_inline
+def _rp_digit(mask: UInt32, shift: Int) -> Bool:
+    """Whether the column's keys vary in the digit at `shift`."""
+    return ((mask >> UInt32(shift)) & UInt32(RBINS - 1)) != UInt32(0)
+
+
+@always_inline
+def _rp_parity(mask: UInt32, passes: Int) -> Int:
+    """Which key block (0 = first) holds the column's keys before pass
+    `passes`: the parity of its active passes below it."""
+    var p = 0
+    for q in range(passes):
+        if _rp_digit(mask, q * RBITS):
+            p = 1 - p
+    return p
+
+
+def radix_rmask_part_kernel(w: RUP, src: Int32, P: Int32, n: Int32, ch_n: Int32, total: Int32):
+    """t = c * CH + ch: w[P + t] = OR over chunk ch of key ^ the column's
+    first key (OR is order free: same word on every vendor)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var nn = Int(n)
+    var chn = Int(ch_n)
+    var c = t // chn
+    var ch = t - c * chn
+    var cs = (nn + chn - 1) // chn
+    var lo = min(ch * cs, nn)
+    var hi = min(lo + cs, nn)
+    var base = Int(src) + c * nn
+    var k0 = w[base]
+    var acc = UInt32(0)
+    for i in range(lo, hi):
+        acc |= w[base + i] ^ k0
+    w[Int(P) + t] = acc
+
+
+def radix_rmask_fold_kernel(w: RUP, P: Int32, M: Int32, ch_n: Int32, total: Int32):
+    """t = column c: w[M + c] = OR of its chunk masks."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var chn = Int(ch_n)
+    var acc = UInt32(0)
+    for ch in range(chn):
+        acc |= w[Int(P) + t * chn + ch]
+    w[Int(M) + t] = acc
+
+
+def radix_hist_rp_kernel(w: RUP, a_at: Int32, b_at: Int32, M: Int32, H: Int32, n: Int32, ch_n: Int32,
+                         ps: Int32, total: Int32):
+    """radix_hist_kernel for pass ps, skipping the columns whose digit is
+    constant and reading each column's current key block."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var nn = Int(n)
+    var chn = Int(ch_n)
+    var c = t // chn
+    var ch = t - c * chn
+    var mask = w[Int(M) + c]
+    var shift = Int(ps) * RBITS
+    if not _rp_digit(mask, shift):
+        return
+    var src = Int(a_at)
+    if _rp_parity(mask, Int(ps)) == 1:
+        src = Int(b_at)
+    var hb = Int(H) + t * RBINS
+    for b in range(RBINS):
+        w[hb + b] = UInt32(0)
+    var cs = (nn + chn - 1) // chn
+    var lo = min(ch * cs, nn)
+    var hi = min(lo + cs, nn)
+    var base = src + c * nn
+    var sh = UInt32(shift)
+    for i in range(lo, hi):
+        var dg = Int((w[base + i] >> sh) & UInt32(RBINS - 1))
+        w[hb + dg] = w[hb + dg] + UInt32(1)
+
+
+def radix_hsum_rp_kernel(w: RUP, M: Int32, H: Int32, TOT: Int32, ch_n: Int32, ps: Int32, total: Int32):
+    """radix_hsum_kernel skipping the columns whose digit is constant."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var chn = Int(ch_n)
+    var c = t // RBINS
+    var b = t - c * RBINS
+    if not _rp_digit(w[Int(M) + c], Int(ps) * RBITS):
+        return
+    var run = UInt32(0)
+    for ch in range(chn):
+        var at = Int(H) + (c * chn + ch) * RBINS + b
+        var v = w[at]
+        w[at] = run
+        run = run + v
+    w[Int(TOT) + t] = run
+
+
+def radix_hstart_rp_kernel(w: RUP, M: Int32, TOT: Int32, START: Int32, ps: Int32, total: Int32):
+    """radix_hstart_kernel skipping the columns whose digit is constant."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    if not _rp_digit(w[Int(M) + t], Int(ps) * RBITS):
+        return
+    var acc = UInt32(0)
+    for b in range(RBINS):
+        var v = w[Int(TOT) + t * RBINS + b]
+        w[Int(START) + t * RBINS + b] = acc
+        acc = acc + v
+
+
+def radix_scatter_rp_kernel(w: RUP, a_at: Int32, b_at: Int32, M: Int32, H: Int32, START: Int32, n: Int32,
+                            ch_n: Int32, ps: Int32, total: Int32):
+    """radix_scatter_kernel for pass ps from the column's current key block
+    into the other one, skipping the columns whose digit is constant."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var nn = Int(n)
+    var chn = Int(ch_n)
+    var c = t // chn
+    var ch = t - c * chn
+    var mask = w[Int(M) + c]
+    var shift = Int(ps) * RBITS
+    if not _rp_digit(mask, shift):
+        return
+    var src = Int(a_at)
+    var dst = Int(b_at)
+    if _rp_parity(mask, Int(ps)) == 1:
+        src = Int(b_at)
+        dst = Int(a_at)
+    var hb = Int(H) + t * RBINS
+    var sb = Int(START) + c * RBINS
+    for b in range(RBINS):
+        w[hb + b] = w[hb + b] + w[sb + b]
+    var cs = (nn + chn - 1) // chn
+    var lo = min(ch * cs, nn)
+    var hi = min(lo + cs, nn)
+    var base = src + c * nn
+    var out = dst + c * nn
+    var sh = UInt32(shift)
+    for i in range(lo, hi):
+        var v = w[base + i]
+        var dg = Int((v >> sh) & UInt32(RBINS - 1))
+        var k = w[hb + dg]
+        w[out + Int(k)] = v
+        w[hb + dg] = k + UInt32(1)
+
+
+def radix_store_rp_kernel(f: FP, w: RUP, a_at: Int32, b_at: Int32, M: Int32, S: Int32, n: Int32, total: Int32):
+    """radix_store_kernel reading each column's final key block."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var nn = Int(n)
+    var c = t // nn
+    var i = t - c * nn
+    var src = Int(a_at)
+    if _rp_parity(w[Int(M) + c], RPASSES) == 1:
+        src = Int(b_at)
+    var fu = f.bitcast[UInt32]()
+    fu[Int(S) + t] = radix_word(w[src + c * nn + i])
 
 
 def radix_sort_cols_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32],
@@ -230,7 +433,7 @@ def radix_sort_cols_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float3
     var f = df.unsafe_ptr()
     var w = dw.unsafe_ptr()
     var tot = cols * n
-    var chn = radix_chunks(n, chunk_rows)
+    var chn = radix_chunks(n, _sort_chunk_rows(chunk_rows))
     if radix_scratch_words(n, cols, chunk_rows) > 2 ** 31 - 1:
         raise Error("x_prep: sort_cols too large for the device sort")
     var a_at = 0
@@ -241,9 +444,40 @@ def radix_sort_cols_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float3
     ctx.enqueue_function[radix_load_kernel](
         f, w, Int32(X), Int32(n), Int32(d), Int32(cn), Int32(tot), grid_dim=_wblocks(tot), block_dim=RWS,
     )
+    var units = cols * chn
+    comptime if IDN_DRADIX_RANGE_PASSES:
+        var p_at = st_at + cols * RBINS
+        var m_at = p_at + units
+        ctx.enqueue_function[radix_rmask_part_kernel](
+            w, Int32(a_at), Int32(p_at), Int32(n), Int32(chn), Int32(units), grid_dim=_rblocks(units), block_dim=RBS,
+        )
+        ctx.enqueue_function[radix_rmask_fold_kernel](
+            w, Int32(p_at), Int32(m_at), Int32(chn), Int32(cols), grid_dim=_rblocks(cols), block_dim=RBS,
+        )
+        for ps in range(RPASSES):
+            ctx.enqueue_function[radix_hist_rp_kernel](
+                w, Int32(a_at), Int32(b_at), Int32(m_at), Int32(h_at), Int32(n), Int32(chn), Int32(ps),
+                Int32(units), grid_dim=_rblocks(units), block_dim=RBS,
+            )
+            ctx.enqueue_function[radix_hsum_rp_kernel](
+                w, Int32(m_at), Int32(h_at), Int32(tot_at), Int32(chn), Int32(ps), Int32(cols * RBINS),
+                grid_dim=_rblocks(cols * RBINS), block_dim=RBS,
+            )
+            ctx.enqueue_function[radix_hstart_rp_kernel](
+                w, Int32(m_at), Int32(tot_at), Int32(st_at), Int32(ps), Int32(cols),
+                grid_dim=_rblocks(cols), block_dim=RBS,
+            )
+            ctx.enqueue_function[radix_scatter_rp_kernel](
+                w, Int32(a_at), Int32(b_at), Int32(m_at), Int32(h_at), Int32(st_at), Int32(n), Int32(chn),
+                Int32(ps), Int32(units), grid_dim=_rblocks(units), block_dim=RBS,
+            )
+        ctx.enqueue_function[radix_store_rp_kernel](
+            f, w, Int32(a_at), Int32(b_at), Int32(m_at), Int32(S), Int32(n), Int32(tot),
+            grid_dim=_wblocks(tot), block_dim=RWS,
+        )
+        return
     var src = a_at
     var dst = b_at
-    var units = cols * chn
     for ps in range(RPASSES):
         var shift = ps * RBITS
         ctx.enqueue_function[radix_hist_kernel](
