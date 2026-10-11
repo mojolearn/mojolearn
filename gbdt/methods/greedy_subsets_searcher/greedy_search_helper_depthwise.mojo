@@ -320,31 +320,8 @@ comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not is_defined[
 comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not is_defined[
     "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
 ]()
-#: lane trees-lossguide (2026-10-11), F2 `-D MOJOLEARN_IDN_LG_FUSED_CHAIN`
-#: (IDENTICAL, NVIDIA + AMD + host twin, default OFF, A/B owed): a Lossguide
-#: round on the row-index-only schedule (`use_ridx`) runs the four-launch
-#: fused split chain (`kernel/split_chain_fused.mojo`) instead of the
-#: eight-launch one. Structural reason: the chain is a pure integer
-#: permutation (stable partition by the side flag, border = zero count), so
-#: the fused chain yields the same row order and the same {offset, size}
-#: words; launches drop 8 -> 5 per round (~5k rounds per lossguide cell).
-#: What T19 (deleted 2026-10-08, quality loss) got wrong is kept here:
-#:   1. K2's DEVIATION 1901 stat propagation is skipped by passing a stat
-#:      count of 0 (its stat loop runs zero times), so IDENTICAL's
-#:      DEVIATION 352 recomputation of the children's partition stats stays
-#:      the only writer of `part_stats`, byte for byte as the old chain;
-#:   2. the split-time parent -> right-child histogram copy (the IDENTICAL
-#:      arm when DEFER_HIST_COPY_1903 is off) is still enqueued after the
-#:      fused launches; T19's fused path dropped it, leaving the right
-#:      child's slot stale, which fits its istella logloss +20.7%;
-#:   3. `use_ridx` stays the byte rule (T19 forced it on).
-#: Bits: none expected (integer schedule change only). Expected: ~3
-#: launches x ~5k rounds, 0.2-0.4 s per lossguide cell (ideas F2).
-comptime LG_FUSED_CHAIN = (
-    SPLIT_COST_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_LG_FUSED_CHAIN"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_LG_FUSED_CHAIN (noise) deleted 2026-10-11 by SHA_LG; code recoverable at SHA_LG^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LG_FUSED_CHAIN.patch
 #: The histogram prefix scan over a shared-memory copy of 16 features'
 #: cells; the same serial fold, so the same bits. FAST on Apple, default
 #: on. Default since the M3 A/B (lane/apple-fast-dwgap2 049899d81, n=2,
@@ -3672,15 +3649,11 @@ def fit_non_symmetric_tree[
                 )
             stage_times.end(ctx, "split.host")
             var fused_chain = False
-            var lg_fused_chain = False
             comptime if DW_FUSED_CHAIN:
                 # Depthwise only: Lossguide keeps the eight-launch chain
+                # TOMBSTONE: MOJOLEARN_IDN_LG_FUSED_CHAIN (noise) deleted 2026-10-11 by SHA_LG; code recoverable at SHA_LG^.
+                # Restore: git apply experiments/removed/MOJOLEARN_IDN_LG_FUSED_CHAIN.patch
                 fused_chain = use_ridx and not lossguide
-            comptime if LG_FUSED_CHAIN:
-                # IDN_LG_FUSED_CHAIN: Lossguide on the fused chain, stats kept
-                if lossguide and use_ridx:
-                    fused_chain = True
-                    lg_fused_chain = True
             if level_synced:
                 # DW_NO_LEVEL_SYNC: the chain already ran behind the fold
                 pass
@@ -3688,13 +3661,8 @@ def fit_non_symmetric_tree[
                 # DW_FUSED_CHAIN: the eight-launch chain below in four, same
                 # permutation, partitions and stats (`kernel/split_chain_fused.mojo`)
                 stage_times.begin(ctx)
-                # IDN_LG_FUSED_CHAIN: a stat count of 0 skips K2's DEVIATION
-                # 1901 propagation; DEVIATION 352 recomputes the children
-                var chain_stat_count = stat_count
-                if lg_fused_chain:
-                    chain_stat_count = 0
                 _launch_fused_split_chain(
-                    ctx, n_split, n_rows, sm_count, chain_stat_count,
+                    ctx, n_split, n_rows, sm_count, stat_count,
                     hist_cells_per_leaf, cindex, row_index, new_index, p_off, p_sz,
                     d_left, d_right, d_win_cells, sp_feats, sp_bins, flags,
                     chunk_zeros, chunk_offsets, leaf_zeros, hp_off, hp_sz, hist,
@@ -3702,42 +3670,6 @@ def fit_non_symmetric_tree[
                 )
                 for _ in range(4):
                     mgr.stream_kernel()
-                comptime if LG_FUSED_CHAIN and not DEFER_HIST_COPY_1903:
-                    # IDN_LG_FUSED_CHAIN: the split-time parent -> right
-                    # child histogram copy of the eight-launch chain below
-                    # (same kernels, same grids); T19 dropped it.
-                    if lg_fused_chain:
-                        if (hist_cells_per_leaf * stat_count) % 4 == 0:
-                            ctx.enqueue_function[copy_histograms_vec4_kernel](
-                                d_left.unsafe_ptr(),
-                                d_right.unsafe_ptr(),
-                                Int32(stat_count),
-                                Int32(hist_cells_per_leaf),
-                                hist.unsafe_ptr(),
-                                grid_dim=(
-                                    (hist_cells_per_leaf * stat_count // 4 + 255)
-                                    // 256,
-                                    n_split,
-                                    1,
-                                ),
-                                block_dim=(256, 1, 1),
-                            )
-                        else:
-                            ctx.enqueue_function[copy_histograms_kernel](
-                                d_left.unsafe_ptr(),
-                                d_right.unsafe_ptr(),
-                                Int32(stat_count),
-                                Int32(hist_cells_per_leaf),
-                                hist.unsafe_ptr(),
-                                grid_dim=(
-                                    (hist_cells_per_leaf * stat_count + 255)
-                                    // 256,
-                                    n_split,
-                                    1,
-                                ),
-                                block_dim=(256, 1, 1),
-                            )
-                        mgr.stream_kernel()
                 stage_times.end(ctx, "split.chain.fused")
             else:
                 stage_times.begin(ctx)
