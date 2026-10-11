@@ -1,0 +1,51 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "cnn-resident-glue",
+ "branch": "lane/cnn-resident-glue",
+ "head": "618ea7b08",
+ "controls": {
+  "cnn_resident_grads": {
+   "define": "MOJOLEARN_IDN_CNN_RESIDENT_GRADS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_CNN_RESIDENT_GRADS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/device.mojo:IDN_CNN_RESIDENT_GRADS",
+    "x_cnn/device.mojo:idn_flags",
+    "python/mojolearn/_expansion_cnn.py:_resident",
+    "python/mojolearn/_expansion_cnn.py:Conv2d._backward_res",
+    "python/mojolearn/_expansion_cnn.py:BatchNorm2d._forward_res",
+    "python/mojolearn/_expansion_cnn.py:_AdaptivePool._device_io"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "new",
+   "notes": "G3 (ideas-all-gaps-20261011): x_cnn_idn_flags bit 7 turns on resident glue: conv weights auto-pinned, dW/db and BN running/aux resident (lazy host reads), adaptive pools take DeviceTensors with a cached pool layer, unfilled outputs. Same entries and operands. Workloads: neural resnet-block, conv2d, conv1d, global-maxpool, global-avgpool, maxpool1d, avgpool2d, batchnorm2d, batchnorm1d synthetic; nv+amd."
+  },
+  "gpool_warp": {
+   "define": "MOJOLEARN_IDN_GPOOL_WARP",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_GPOOL_WARP"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/ops.mojo:IDN_GPOOL_WARP",
+    "x_cnn/device.mojo:gpool_fwd_kernel",
+    "x_cnn/host/ops_host.mojo:_gpool_avg_host"
+   ],
+   "binding": "_mojolearn_x_cnn,_mojolearn_x_cnn host twin",
+   "bits_change": true,
+   "status": "new",
+   "notes": "G6: window = plane pools (global max/avg) run one 32-thread block per (n, c): strided lane folds then a fixed shared-memory pairwise tree (no shuffles, same on 32/64-wide). Max bits unchanged (associative pick reproduces the serial winner); avg bits change (tree sum), same on NV, AMD and host twin. Needs ID check nv+amd. Workloads: neural global-maxpool, global-avgpool synthetic."
+  }
+ }
+}
