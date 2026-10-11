@@ -1,0 +1,39 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "svgp-b-gated",
+ "branch": "lane/svgp-b-gated",
+ "head": "",
+ "controls": {
+  "svgp_b_fp32_gated": {
+   "define": "MOJOLEARN_IDN_SVGP_B_FP32_GATED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_SVGP_B_FP32_GATED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_neighbors/svgp_b32_gate.mojo:1",
+    "x_neighbors/iter_device.mojo:op_svgp_fit_ff",
+    "x_neighbors/iter_host.mojo:op_svgp_fit_ff"
+   ],
+   "binding": "_mojolearn_x_neighbors",
+   "bits_change": true,
+   "status": "new",
+   "notes": "B = Kuf Kfu by the identical GEMM (OP_TN, k = n, whole Kfu resident) in float32; float32 Cholesky of Kuu + jitter I + B32/noise with the gs_pivot_trusted gate decided on the device; trusted -> B = (B32, 0) into the unchanged float-float solve; rejected -> today's float-float B over the same row tiles (today's bits). Host column (_mojolearn_x_neighbors_host) runs gemm_oracle + the same gate cells. Expected: istella trusted, taxi rejected."
+  }
+ },
+ "algorithms": {
+  "algos:svgp": {
+   "binding": "_mojolearn_x_neighbors",
+   "route": "python/mojolearn/_expansion_neighbors.py SVGP.fit -> xn_svgp_fit_ff -> bindings/_mojolearn_x_neighbors.mojo svgp_fit_ff_binding -> x_neighbors/iter_device.mojo op_svgp_fit_ff",
+   "controls": [
+    "svgp_b_fp32_gated"
+   ],
+   "interaction_groups": []
+  }
+ },
+ "removed": []
+}
