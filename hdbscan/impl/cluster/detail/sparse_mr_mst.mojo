@@ -1285,7 +1285,7 @@ def _search(
     device, never read; `n_todo` is ignored and one launch covers all j."""
     comptime if IDN_HDB_ROUND_LEAN:
         if lean:
-            ctx.enqueue_function[smr_b_shape_kernel](
+            ctx.enqueue_function[smr_b_shape_kernel](  # small-launch(m: the column bound of the slice formula): one thread writes four scalar launch-shape words from st[COUNT], no per-row work
                 shape_d.unsafe_ptr(), st_d.unsafe_ptr(), Int32(m), Int32(sb.cap),
                 grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
             )
