@@ -151,7 +151,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_TRAIN_BACKWARD_SCRATCH"](), "retired define MOJOLEARN_IDN_TRAIN_BACKWARD_SCRATCH: use IDN_TRAIN_SCRATCH=1"
     comptime assert not is_defined["MOJOLEARN_NN62_LIFETIME_ARENA"](), "retired define MOJOLEARN_NN62_LIFETIME_ARENA: use IDN_TRAIN_SCRATCH=2"
     comptime assert get_defined_int["MOJOLEARN_IDN_M2_YOFF_EXP",0]() == 0 or get_defined_int["MOJOLEARN_IDN_M2_YOFF_EXP",0]() == 1 or get_defined_int["MOJOLEARN_IDN_M2_YOFF_EXP",0]() == 2, "invalid MOJOLEARN_IDN_M2_YOFF_EXP arm (legal: 0|1|2)"
-    comptime assert get_defined_int["MOJOLEARN_IDN_M2_YD_ROWS",4]() == 4 or get_defined_int["MOJOLEARN_IDN_M2_YD_ROWS",4]() == 8, "invalid MOJOLEARN_IDN_M2_YD_ROWS arm (legal: 4|8)"
+    comptime assert get_defined_int["MOJOLEARN_IDN_M2_YD_ROWS",8]() == 4 or get_defined_int["MOJOLEARN_IDN_M2_YD_ROWS",8]() == 8, "invalid MOJOLEARN_IDN_M2_YD_ROWS arm (legal: 4|8)"
     comptime assert get_defined_int["MOJOLEARN_IDN_M2_CS_PT",8]() == 8 or get_defined_int["MOJOLEARN_IDN_M2_CS_PT",8]() == 16, "invalid MOJOLEARN_IDN_M2_CS_PT arm (legal: 8|16)"
     comptime assert get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD",0]() == 1 or get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD",0]() == 2, "invalid MOJOLEARN_IDN_M2_GRAD_FOLD arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU",0]() == 1 or get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU",0]() == 2, "invalid MOJOLEARN_IDN_CNN_CONV_RELU arm (legal: 0|1|2)"

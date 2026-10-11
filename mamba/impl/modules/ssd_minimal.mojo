@@ -752,7 +752,10 @@ comptime M2_SSD_TILED = (
 # legal sets are asserted in core/six_lane_experiment_guards.mojo. Tiles
 # move no bit; they may be tuned per vendor.
 comptime _M2_TILE_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime NN33_YDIAG_ROWS8 = _M2_TILE_SWEEP and get_defined_int["MOJOLEARN_IDN_M2_YD_ROWS", 4]() == 8
+# PROMOTED 2026-10-11 (grid g50ebe26a5, single-switch arm m2_yd_rows=8 vs today's defaults, one run per arm): mamba2-forward
+# gaussian NV L40S 13.079 -> 5.688 ms (v1223), AMD MI325X 4.551 -> 4.388 ms (a1344); avg ratio 0.648; hash 0350b90b on both
+# vendors. Default is now 8; -D MOJOLEARN_IDN_M2_YD_ROWS=4 restores the old tile.
+comptime NN33_YDIAG_ROWS8 = _M2_TILE_SWEEP and get_defined_int["MOJOLEARN_IDN_M2_YD_ROWS", 8]() == 8
 comptime NN33_CSTATE_P16 = _M2_TILE_SWEEP and get_defined_int["MOJOLEARN_IDN_M2_CS_PT", 8]() == 16
 comptime M2_YD_ROWS = 8 if NN33_YDIAG_ROWS8 else 4
 comptime M2_YD_JC = 32 if NN33_YDIAG_ROWS8 else 64
@@ -773,8 +776,10 @@ comptime M2_CS_IC = 32
 # overnight-ab-20261006/amd/normalized-measurements.json, I08.
 comptime M2_RETAIN_GL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # Scoped near-neutral measurements retain the default OFF.
-    and is_defined["MOJOLEARN_IDN_M2_RETAIN_GL"]()
+    # PROMOTED 2026-10-11 (grid g50ebe26a5, arm m2_retain_gl=on vs today's defaults, one run per arm): mamba2-forward gaussian
+    # NV L40S 13.079 -> 5.690 ms (v1242), AMD MI325X 4.551 -> 4.554 ms (a1350); avg ratio 0.660; hash 0350b90b on both vendors.
+    # Default ON; -D MOJOLEARN_IDN_M2_RETAIN_GL_OFF restores the recompute path.
+    and not is_defined["MOJOLEARN_IDN_M2_RETAIN_GL_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not SSD_ANY_SABOTAGE
 )
