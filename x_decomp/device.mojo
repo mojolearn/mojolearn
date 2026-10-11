@@ -73,6 +73,7 @@ from x_decomp.cells import (
     absmax_part_cell,
     absmax_sign_cell,
     FOLD_BLOCK,
+    IDN_XD_KIT_GEMM,
     colsum_part_cell,
     rowsum_part_cell,
     fold_cell,
@@ -126,6 +127,8 @@ from x_decomp.cells import (
 from x_decomp.exec_trait import Exec
 # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
+from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.contract import OP_NN as KIT_OP_NN, OP_NT as KIT_OP_NT, OP_TN as KIT_OP_TN
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
@@ -163,7 +166,7 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 comptime U32Ptr = MutPointer[UInt32, MutAnyOrigin]
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import (
-    TS_SMEM_OK, ts_apply_device, ts_apply_device_buf, ts_factor_device, ts_free_device, ts_pack_center_device, ts_pack_device,
+    TS_SMEM_OK, ts_apply_device, ts_apply_device_buf, ts_factor_device, ts_free_device, TS_DEV_STATE, ts_pack_center_device, ts_pack_device,
 )
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
@@ -1854,7 +1857,17 @@ def _eigh_block_test(
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
-    return nb * m * n if nb > 1 else 0
+    var fold = nb * m * n if nb > 1 else 0
+    comptime if IDN_XD_KIT_GEMM:
+        # [identical GEMM workspace | op(A) transpose copy (TT only)]; the
+        # TT copy is sized unconditionally (ta/tb are not known here).
+        return max(fold, _kit_gemm_ws(m, k, n) + m * k)
+    return fold
+
+
+def _kit_gemm_ws(m: Int, k: Int, n: Int) -> Int:
+    """IDN_XD_KIT_GEMM: the identical GEMM's workspace for C (m x n) = op(A) op(B)."""
+    return identical_gemm_workspace_max_floats(m, n, k)
 
 
 #: lane/apple-fast-gap-linalg2-pca (2026-10-03): DECOMP_FAST_GEMM_MMA, the FAST +
@@ -1926,6 +1939,10 @@ def launch_gemm(
         if m > 0 and n > 0 and k > 0:
             _launch_gemm_mma(ctx, a, b, c, m, k, n, ta, tb)
             return
+    comptime if IDN_XD_KIT_GEMM:
+        if m > 0 and n > 0 and k > 0:
+            _launch_gemm_identical(ctx, a, b, c, p, m, k, n, ta, tb)
+            return
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
     if nb > 1:
         ctx.enqueue_function[gemm_part_kernel](
@@ -1938,6 +1955,53 @@ def launch_gemm(
             a, b, c, Int32(m), Int32(k), Int32(n),
             Int32(1 if ta else 0), Int32(1 if tb else 0), grid_dim=_blocks(m * n), block_dim=TPB,
         )
+
+
+def kit_transpose_kernel(src: F32Ptr, dst: F32Ptr, rows: Int32, cols: Int32):
+    """IDN_XD_KIT_GEMM: dst (cols x rows) = src (rows x cols)^T, a pure copy (no
+    arithmetic, so the words are unchanged)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var r = Int(rows)
+    var cc = Int(cols)
+    if t < r * cc:
+        var i = t // cc
+        var j = t - i * cc
+        dst.unsafe_store(j * r + i, src.unsafe_load(t))
+
+
+def _launch_gemm_identical(
+    ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, p: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
+) raises:
+    """IDN_XD_KIT_GEMM (x_decomp/cells.mojo): C = op(A) op(B) through
+    `identical_gemm_into`, enqueued (no sync; DEVIATION 2595's internal wait on
+    NVIDIA's long-k group path is stream-ordered). `p` holds
+    `gemm_scratch(m, k, n)` floats: [workspace | m*k transpose copy]. OP_NN /
+    OP_NT / OP_TN map directly; TT copies A^T (m x k) into the scratch tail and
+    runs OP_NT, the same words as the host twin (x_decomp/host.mojo
+    `_gemm_identical`). Every vendor and the host take this route together."""
+    var wsn = _kit_gemm_ws(m, k, n)
+    var dc = DeviceBuffer[DType.float32](ctx, c, m * n, owning=False)
+    var da = DeviceBuffer[DType.float32](ctx, a, m * k, owning=False)
+    var db = DeviceBuffer[DType.float32](ctx, b, k * n, owning=False)
+    var dw = DeviceBuffer[DType.float32](ctx, p, max(wsn, 1), owning=False)
+    if ta and tb:
+        var at = p + wsn
+        ctx.enqueue_function[kit_transpose_kernel](
+            a, at, Int32(k), Int32(m), grid_dim=_blocks(m * k), block_dim=TPB,
+        )
+        var dat = DeviceBuffer[DType.float32](ctx, at, m * k, owning=False)
+        identical_gemm_into(ctx, dc, dat, db, dw, m, n, k, KIT_OP_NT)
+        _ = dat^
+    elif ta:
+        identical_gemm_into(ctx, dc, da, db, dw, m, n, k, KIT_OP_TN)
+    elif tb:
+        identical_gemm_into(ctx, dc, da, db, dw, m, n, k, KIT_OP_NT)
+    else:
+        identical_gemm_into(ctx, dc, da, db, dw, m, n, k, KIT_OP_NN)
+    _ = dc^
+    _ = da^
+    _ = db^
+    _ = dw^
 
 
 def launch_gemm_ordered(
@@ -2334,11 +2398,89 @@ def orth_tsqr_select_kernel(r: F32Ptr, c: F32Ptr, l: Int32):
         c.unsafe_store(q, v)
 
 
+#: lane/xd-kit-gemm (2026-10-11, idea C7): -D MOJOLEARN_IDN_RSVD_ORTH_LEAN, default
+#: OFF. `_orth_tsqr_device` keeps its m x l work copy and l x l R / selection
+#: buffers in a module pool across the randomized-SVD's orths (one allocation set
+#: per shape instead of one per orth), takes the device R for the guard by a
+#: device-to-device copy from the kept TSQR state (no pageable host->device copy
+#: of the downloaded R), and drops its end `synchronize`: the copy back into `da`
+#: is stream-ordered on the one context stream, and the buffers it reads (the
+#: apply's Q) are parked in the pool until the next orth, whose factor pass
+#: synchronizes before anything there is replaced. Structural reason: 9 orths x
+#: (allocation set + H2D + end sync) on a ~0.1 ms orth. Expected: randomized-svd
+#: istella -20 to -30 ms, taxi 51 -> ~40 ms. Same words (no arithmetic moves).
+comptime IDN_RSVD_ORTH_LEAN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RSVD_ORTH_LEAN"]()
+
+
+struct _OrthLeanPool(Defaultable, Movable):
+    """IDN_RSVD_ORTH_LEAN: [work m*l, R l*l, selection l*l, last Q m*l]."""
+    var bufs: List[DeviceBuffer[DType.float32]]
+    var cells: Int
+    var ll: Int
+
+    def __init__(out self):
+        self.bufs = List[DeviceBuffer[DType.float32]]()
+        self.cells = 0
+        self.ll = 0
+
+
+comptime ORTH_LEAN_POOL = _Global[StorageType=_OrthLeanPool, name="MojoXDecompOrthLeanIdentical", init_fn=_OrthLeanPool.__init__]
+
+
+def _orth_tsqr_device_lean(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int) raises:
+    """IDN_RSVD_ORTH_LEAN's `_orth_tsqr_device`: the same launches and words,
+    pooled buffers, R by a device copy, no end wait (see the define above)."""
+    var cells = m * l
+    var pool = ORTH_LEAN_POOL.get_or_create_ptr()
+    if len(pool[].bufs) < 4 or pool[].cells != cells or pool[].ll != l * l:
+        # a new shape: the previous set's last reader (its copy back) was
+        # enqueued before this orth; wait for it, then replace the set
+        ctx.synchronize()
+        var fresh = List[DeviceBuffer[DType.float32]]()
+        fresh.append(ctx.enqueue_create_buffer[DType.float32](cells))
+        fresh.append(ctx.enqueue_create_buffer[DType.float32](l * l))
+        fresh.append(ctx.enqueue_create_buffer[DType.float32](l * l))
+        fresh.append(ctx.enqueue_create_buffer[DType.float32](1))
+        pool[].bufs = fresh^
+        pool[].cells = cells
+        pool[].ll = l * l
+    var dw = pool[].bufs[0]
+    var dr = pool[].bufs[1]
+    var dc = pool[].bufs[2]
+    ctx.enqueue_copy(dst_buf=dw, src_buf=da)
+    var r = List[Float32](length=l * l, fill=Float32(0))
+    var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
+    # the factor pass downloads R and synchronizes (the NaN refusal), so every
+    # earlier use of the pooled buffers has finished past this line
+    ts_factor_device(ctx, dw, m, l, pr, True)
+    # R from the kept state (bufs[2] = the stacked R, its first l*l floats),
+    # device to device, the same words the host copy carried
+    var st = TS_DEV_STATE.get_or_create_ptr()
+    ctx.enqueue_copy(dst_buf=dr, src_buf=st[].bufs[2].create_sub_buffer[DType.float32](0, l * l))
+    ctx.enqueue_function[orth_guard_kernel](dr.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
+    ctx.enqueue_function[orth_tsqr_select_kernel](
+        dr.unsafe_ptr(), dc.unsafe_ptr(), Int32(l), grid_dim=_blocks(l * l), block_dim=TPB
+    )
+    var dq = ts_apply_device_buf(ctx, dc, m, l, l)
+    var dd = da
+    ctx.enqueue_copy(dst_buf=dd, src_buf=dq)
+    # no wait: dq stays alive in the pool until the next orth's factor sync
+    pool[].bufs[3] = dq^
+    _ = r^
+    _ = dw^
+    _ = dr^
+    _ = dc^
+    _ = dd^
+
+
 def _orth_tsqr_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int) raises:
     """RSVD_IDN_TSQR_ORTHO (x_decomp/tsqr_core.mojo): `da` (m x l) replaced
     by Q of its blocked TSQR with the rank-guarded selection, Q = Q_full C.
     One factor pass (R comes home as the TSQR's contract, a NaN check), the
     guard and the selection on the device, one apply pass, one copy back."""
+    comptime if IDN_RSVD_ORTH_LEAN:
+        _orth_tsqr_device_lean(ctx, da, m, l)
+        return
     var cells = m * l
     var dw = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.enqueue_copy(dst_buf=dw, src_buf=da)
