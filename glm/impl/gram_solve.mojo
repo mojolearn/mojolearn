@@ -395,17 +395,17 @@ def gff_leaf_tiled_kernel(x: F32Ptr, y: F32Ptr, mh: F32Ptr, ml: F32Ptr, ph: F32P
                     wi = _gff_ext_word(x, y, mh, ml, rc + rr, ki, d)
                 if kj < de:
                     wj = _gff_ext_word(x, y, mh, ml, rc + rr, kj, d)
-            ih.store(e, wi.hi)
-            il.store(e, wi.lo)
-            jh.store(e, wj.hi)
-            jl.store(e, wj.lo)
+            ih.unsafe_store(e, wi.hi)
+            il.unsafe_store(e, wi.lo)
+            jh.unsafe_store(e, wj.hi)
+            jl.unsafe_store(e, wj.lo)
             e += GFF_TILE_TPB
         barrier()
         for rr in range(rows):
             comptime for a in range(GFF_TILE_CELLS):
-                var ci = FF(ih.load(rr * GFF_TILE + ty + GFF_TILE_SIDE * a), il.load(rr * GFF_TILE + ty + GFF_TILE_SIDE * a))
+                var ci = FF(ih.unsafe_load(rr * GFF_TILE + ty + GFF_TILE_SIDE * a), il.unsafe_load(rr * GFF_TILE + ty + GFF_TILE_SIDE * a))
                 comptime for b in range(GFF_TILE_CELLS):
-                    var cj = FF(jh.load(rr * GFF_TILE + tx + GFF_TILE_SIDE * b), jl.load(rr * GFF_TILE + tx + GFF_TILE_SIDE * b))
+                    var cj = FF(jh.unsafe_load(rr * GFF_TILE + tx + GFF_TILE_SIDE * b), jl.unsafe_load(rr * GFF_TILE + tx + GFF_TILE_SIDE * b))
                     var v = ff_add(FF(acc_h[a * GFF_TILE_CELLS + b], acc_l[a * GFF_TILE_CELLS + b]), ff_mul(ci, cj))
                     acc_h[a * GFF_TILE_CELLS + b] = v.hi
                     acc_l[a * GFF_TILE_CELLS + b] = v.lo
