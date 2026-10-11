@@ -1750,7 +1750,7 @@ class BatchNorm2d(_Layer):
     def eval(self):
         return self.train(False)
 
-    # lane cnn-resident-glue (G3, MOJOLEARN_IDN_CNN_RESIDENT_GRADS): on a
+    # lane cnn-resident-glue (G3, CNN resident grads, default on; _OFF clears it): on a
     # resident forward the running statistics stay in the resident array
     # "running" (uploaded when the host arrays were set since) and the aux
     # block (the statistics the backward reads, and its dgamma / dbeta) in
@@ -2208,7 +2208,7 @@ class _AdaptivePool(_Layer):
     def _divides(self, shape):
         return shape[2] % self.output_size[0] == 0 and shape[3] % self.output_size[1] == 0
 
-    # lane cnn-resident-glue (G3): with MOJOLEARN_IDN_CNN_RESIDENT_GRADS on,
+    # lane cnn-resident-glue (G3): with CNN resident grads on (the default),
     # callers (the board harness among them) hand x and dy over as
     # `DeviceTensor`s, as they do for the plain pools, and a dividing size
     # reuses one pool layer (and its resident winner array) per kernel.

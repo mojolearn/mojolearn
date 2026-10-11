@@ -377,6 +377,25 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_LAB_ONE_ENTRY"](), "removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, de9ce7b39): IDN_LAB_ONE_ENTRY (G3 one-entry LabelBinarizer.fit_transform) was SLOWER: label-binarizer istella 1.15-1.39x, taxi ~1.0 (v0041-v0044, a1624-a1627); code at de9ce7b39^, patch experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch"
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_NV_MICROTILE"](), "removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, c38d7bc89): IDN_GEMM_NV_MICROTILE (NVIDIA packed GEMM at K window 32) was SLOWER: neural:gemm gaussian NV 48.5 -> 55.9 ms (1.15x, v0050); code at c38d7bc89^, patch experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch"
     comptime assert not is_defined["MOJOLEARN_IDN_BM_GRAM_RB4"](), "removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, bde9c2243): IDN_BM_GRAM_RB4 (register-tiled 64x64 leaf Gram) was SLOWER net ~1.0-1.1x: pca taxi 1.24, pca istella 1.14, ols taxi NV 1.18, ridge taxi 1.08 (v0049, a1632); code at bde9c2243^, patch experiments/removed/MOJOLEARN_IDN_BM_GRAM_RB4.patch"
+    # wave-2 w2-decide-neural (2026-10-11): A/B on main c8ef6c66d, one run per arm, NV L40S nv2 / AMD MI325X, digests NV==AMD
+    # on every cell (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
+    # Promoted: the old positive define is refused; -D <NAME>_OFF restores the old path.
+    comptime assert not is_defined["MOJOLEARN_IDN_CNN_RESIDENT_GRADS"](), "promoted 2026-10-11 (lane/w2-decide-neural): CNN resident grads is the IDENTICAL default (avg 0.754 over 9 layer lanes, same bits, nv2 v0085 / amd a1667); drop -D MOJOLEARN_IDN_CNN_RESIDENT_GRADS, -D MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF restores the old glue"
+    comptime assert not is_defined["MOJOLEARN_IDN_BN_GRID_STATS"](), "promoted 2026-10-11 (lane/w2-decide-neural): BN grid statistics are the IDENTICAL default (batchnorm1d 0.471, batchnorm2d 0.486, bits change NV==AMD, nv2 v0087 / amd a1669; quality re-race v0137/v0138, a1719/a1720); drop -D MOJOLEARN_IDN_BN_GRID_STATS, -D MOJOLEARN_IDN_BN_GRID_STATS_OFF restores BN_FOLD_BLOCK"
+    comptime assert not is_defined["MOJOLEARN_IDN_NM_SPEC"](), "promoted 2026-10-11 (lane/w2-decide-neural): the speculative Nelder-Mead (theta + no-season ETS) is the IDENTICAL default (0.10-0.34x, same bits, nv2 v0098 / amd a1680); drop -D MOJOLEARN_IDN_NM_SPEC, -D MOJOLEARN_IDN_NM_SPEC_OFF restores op_theta / op_ets"
+    comptime assert not is_defined["MOJOLEARN_IDN_ETS_TEAM"](), "promoted 2026-10-11 (lane/w2-decide-neural): the ETS(A, A|Ad, N) team is the IDENTICAL default (damped-ets 0.014-0.017x, bits change NV==AMD, forecast_rmse equal, nv2 v0099 / amd a1681); drop -D MOJOLEARN_IDN_ETS_TEAM, -D MOJOLEARN_IDN_ETS_TEAM_OFF restores op_ets"
+    # TOMBSTONE: MOJOLEARN_IDN_CNN_DX_IMPLICIT (noise 0.980) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CNN_DX_IMPLICIT"](), "removed 2026-10-11 (lane/w2-decide-neural, 499997a56): IDN_CNN_DX_IMPLICIT (implicit transposed-conv dx) was NOISE: conv2d 0.931, resnet-block 0.955, conv1d 1.055, mean 0.980 (nv2 v0083, amd a1665)"
+    # TOMBSTONE: MOJOLEARN_IDN_CNN_WGRAD_LEAF1024 (noise 0.972) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CNN_WGRAD_LEAF1024"](), "removed 2026-10-11 (lane/w2-decide-neural, 499997a56): IDN_CNN_WGRAD_LEAF1024 (1024-row dW leaves) was NOISE: conv1d 0.954, conv2d 0.976, resnet-block 0.985, mean 0.972 (nv2 v0084, amd a1666)"
+    # TOMBSTONE: MOJOLEARN_IDN_GPOOL_WARP (noise/NV spike, bits changed on global-avgpool) deleted 2026-10-11 by f5aafae7f; code recoverable at f5aafae7f^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPOOL_WARP.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GPOOL_WARP"](), "removed 2026-10-11 (lane/w2-decide-neural, f5aafae7f): IDN_GPOOL_WARP (block-per-plane global pools) was NOISE/unusable: global-avgpool 0.868 with bits changed, global-maxpool AMD 1.065, NV 216 ms spike; CNN resident grads already takes both pools to ~0.1 ms (nv2 v0086, amd a1668)"
+    # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MOE_RESIDENT"](), "removed 2026-10-11 (lane/w2-decide-neural, 978e7f43b): IDN_MOE_RESIDENT (grouped device-offset MoE GEMM, no fills) was SLOWER: moe synthetic NV 5.94x / AMD 3.34x, avg 4.64x (nv2 v0101, amd a1683)"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
