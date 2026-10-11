@@ -2873,8 +2873,10 @@ struct DevExec(Exec):
         # vectors (x_decomp/eigh_tridiag.mojo) from n = TD_MIN_N; a refusal
         # (clustered spectrum, nonfinite T) falls through to the Jacobi on
         # the untouched `da`. lane gap-linalg (2026-10-08): also the
-        # IDENTICAL route on NVIDIA and AMD under -D MOJOLEARN_IDN_EIGH_TRIDIAG
-        # (`EIGH_TD_IDN`, pinned folds and the identical GEMM; CANDIDATE).
+        # IDENTICAL default on NVIDIA and AMD since 2026-10-11 (`EIGH_TD_IDN`,
+        # pinned folds and the identical GEMM; A/B eigh/synthetic AMD 8620.1 ->
+        # 353.7 ms a1600, NV 21119.9 -> 367.2 ms v0006, digests equal);
+        # -D MOJOLEARN_IDN_EIGH_TRIDIAG_OFF reverts to the Jacobi.
         comptime if EIGH_TRIDIAG_ROUTE:
             if n >= TD_MIN_N:
                 if DevExec._eigh_td_try(ctx, da, w, v, n):

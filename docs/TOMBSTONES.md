@@ -125,6 +125,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SGD_PERC_QOLD`](#mojolearn_sgd_perc_qold) | Linear | DROPPED-quality | 2026-10-04 | [MOJOLEARN_SGD_PERC_QOLD.patch](../experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch) |
 | [`MOJOLEARN_QN_FAST_COALESCED_OFF`](#mojolearn_qn_fast_coalesced_off) | Linear | DROPPED-slower | 2026-10-09 | [MOJOLEARN_QN_FAST_COALESCED_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_COALESCED_OFF.patch) |
 | [`MOJOLEARN_IDN_CD_GRAM_EPOCHS_64`](#mojolearn_idn_cd_gram_epochs_64) | Linear | DROPPED-slower | 2026-10-10 | [MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch](../experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch) |
+| [`MOJOLEARN_IDN_CHOL_NB128`](#mojolearn_idn_chol_nb128) | Linear | DROPPED-slower | 2026-10-11 | [MOJOLEARN_IDN_CHOL_NB128.patch](../experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch) |
 | [`MOJOLEARN_C29_STREAM_TOPK`](#mojolearn_c29_stream_topk) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_STREAM_TOPK.patch](../experiments/removed/MOJOLEARN_C29_STREAM_TOPK.patch) |
 | [`MOJOLEARN_C29_TILE`](#mojolearn_c29_tile) | Neighbors | serial shape | 2026-10-07 | [MOJOLEARN_C29_TILE.patch](../experiments/removed/MOJOLEARN_C29_TILE.patch) |
 | [`MOJOLEARN_CAGRA_FAST_DOT`](#mojolearn_cagra_fast_dot) | Neighbors | DROPPED-semantics | 2026-10-03 | [MOJOLEARN_CAGRA_FAST_DOT.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch) |
@@ -1049,6 +1050,16 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Files the patch restores: `experiments/classical_identical_ideas/fg_linear_controls.mojo`, `solver/impl/cd.mojo`
 - grid_controls: `fg-linear.json` `cd_gram_epochs_64` moved to `removed`.
 - Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-10 (lane/postmerge-act-6): IDN_CD_GRAM_EPOCHS_64 was SLOWER; code at main 9f83ea479.
+
+### MOJOLEARN_IDN_CHOL_NB128
+
+- Verdict: DROPPED-slower (loser, vendor split). Deleted 2026-10-11 by `dd9a3d31b` (lane/chol-nb128-delete).
+- Recoverable at `b2657cc89` (`dd9a3d31b^`, main the lane branched from). Patch: `experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch` (whole deletion reversed, code files only: `git diff 4c07d5195 b2657cc89 -- cholesky python/mojolearn/tests/test_cpu_training_gp.py`, taken after the tombstones were filled in so it applies to the tree as left).
+- What it tried: lane gap-linalg (2026-10-08): IDENTICAL Cholesky at panel width 128 (= CONTRACT_K_LEAF_MIN, one GEMM leaf) instead of 32, through a blocked driver `_potrf_lower_blocked`: guarded diagonal factor, guarded panel solve, trailing update `A22 -= L21 L21^T` through `gemm/block_update.mojo` `blk_gemm_sub` in 512-column blocks over lower cells only, no per-panel wait, one info read; the host column (`chol_oracle.CHOL_HOST_NB_PINNED`) pinned 128 with it; the estimator copied the factor straight to the caller. Bits changed (NV, AMD and host together).
+- Verdict numbers: A/B on main 5876e9205, one run per arm, cholesky synthetic (algos): NVIDIA L40S 296.2 -> 271.3 ms (0.92x, v0005); AMD MI325X 163.4 -> 374.8 ms (2.29x, a1614); average 1.6x, slower (vendor split: NV slightly faster, AMD much slower). Quality unchanged.
+- Files the patch restores: `cholesky/checks/potrf_blocked.mojo` (deleted), `cholesky/checks/potrf.mojo`, `cholesky/host/chol_oracle.mojo`, `cholesky/estimator.mojo`, `python/mojolearn/tests/test_cpu_training_gp.py`. `gemm/block_update.mojo` stays (shared with LU_DELAYED_UPDATE and eigh_tridiag).
+- grid_controls: `gap-linalg.json` `chol_nb128` moved to `removed`.
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-11 (lane/chol-nb128-delete, dd9a3d31b): IDN_CHOL_NB128 was SLOWER: NV 0.92x / AMD 2.29x (avg 1.6x).
 
 ## Neighbors
 
