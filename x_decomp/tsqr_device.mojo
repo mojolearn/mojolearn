@@ -61,7 +61,6 @@ from x_decomp.tsqr_core import (
     TS_NB,
     TS_P,
     TS_ROWS,
-    TS_RSTACK_TREE,
     TS_TPB,
     TS_W2,
     TS_WY_PAIR,
@@ -959,19 +958,11 @@ struct _TsDev(Defaultable, Movable):
     var bufs: List[DeviceBuffer[DType.float32]]
     var m: Int
     var n: Int
-    # TS_RSTACK_TREE: the stacked levels kept (bufs = [a, t, t2] per level,
-    # level 0 the leaves, then the final R tile); 0 for the binary tree's
-    # five buffers
-    var levels: Int
-    # the rows of each kept level (level 0: m)
-    var rows: List[Int]
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.m = 0
         self.n = 0
-        self.levels = 0
-        self.rows = List[Int]()
 
 
 comptime TS_DEV_STATE = _Global[StorageType=_TsDev, name="MojoXDecompTsqrDevice", init_fn=_TsDev.__init__]
@@ -982,18 +973,6 @@ def ts_free_device() raises:
     st[].bufs = List[DeviceBuffer[DType.float32]]()
     st[].m = 0
     st[].n = 0
-    st[].levels = 0
-    st[].rows = List[Int]()
-
-
-def _ts_state_ok(m: Int, n: Int) raises -> Bool:
-    """A kept factorization of this shape: the binary tree's five buffers,
-    or TS_RSTACK_TREE's 3 per level plus the R tile."""
-    var st = TS_DEV_STATE.get_or_create_ptr()
-    var want = 5
-    comptime if TS_RSTACK_TREE:
-        want = 3 * st[].levels + 1 if st[].levels > 0 else -1
-    return len(st[].bufs) == want and st[].m == m and st[].n == n
 
 
 @always_inline
@@ -1059,21 +1038,22 @@ def ts_pack_center_device(
     return out^
 
 
-def _ts_leaf_factor(
-    ctx: DeviceContext,
-    mut da: DeviceBuffer[DType.float32],
-    mut dt: DeviceBuffer[DType.float32],
-    mut dt2: DeviceBuffer[DType.float32],
-    m: Int,
-    n: Int,
-) raises:
-    """Every leaf block of the m x n row-major `da` factored in place (the
-    panels' T into dt, the pairs' T2 into dt2), enqueued: the leaf phase of
-    `ts_factor_device`, shared by the binary tree and TS_RSTACK_TREE's
-    stacked levels (the same launches, the same words)."""
+def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr, keep: Bool) raises:
+    """R (n x n) of the m x n row-major `da` (factored in place) into the host
+    r; with `keep` the factored state stays for `ts_apply_device`."""
+    comptime if not TS_SMEM_OK:
+        raise Error("x_decomp tsqr: the panel kernels' threadgroup memory does not fit this column")
+    comptime if (TS_WY_PAIR or TS_TREE_PAR) and not TS_SMEM2_OK:
+        raise Error("x_decomp tsqr: the pair and tree kernels' threadgroup memory does not fit this column")
+    ts_free_device()
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
     var npair = ts_pairs(n)
+    var dt = ctx.enqueue_create_buffer[DType.float32](nb * npan * _TT)
+    var dt2 = ctx.enqueue_create_buffer[DType.float32]((nb * npair * TS_T2) if TS_WY_PAIR else 1)
+    var dtl = ctx.enqueue_create_buffer[DType.float32](nb * n * n)
+    var dtau = ctx.enqueue_create_buffer[DType.float32](nb * n)
+    enqueue_fill(ctx, dtau, Float32(0.0))
     var mbmax = m - ts_block_lo(nb - 1)
     var bpl = _per_launch(3 * mbmax * n * TS_NB)
     comptime if TS_WY_PAIR:
@@ -1144,28 +1124,6 @@ def _ts_leaf_factor(
                             )
                         _wait_apple(ctx)
                 b0 += cnt
-
-
-def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr, keep: Bool) raises:
-    """R (n x n) of the m x n row-major `da` (factored in place) into the host
-    r; with `keep` the factored state stays for `ts_apply_device`."""
-    comptime if not TS_SMEM_OK:
-        raise Error("x_decomp tsqr: the panel kernels' threadgroup memory does not fit this column")
-    comptime if (TS_WY_PAIR or TS_TREE_PAR) and not TS_SMEM2_OK:
-        raise Error("x_decomp tsqr: the pair and tree kernels' threadgroup memory does not fit this column")
-    ts_free_device()
-    comptime if TS_RSTACK_TREE:
-        _ts_factor_rstack(ctx, da, m, n, r, keep)
-        return
-    var nb = ts_blocks(m)
-    var npan = ts_panels(n)
-    var npair = ts_pairs(n)
-    var dt = ctx.enqueue_create_buffer[DType.float32](nb * npan * _TT)
-    var dt2 = ctx.enqueue_create_buffer[DType.float32]((nb * npair * TS_T2) if TS_WY_PAIR else 1)
-    var dtl = ctx.enqueue_create_buffer[DType.float32](nb * n * n)
-    var dtau = ctx.enqueue_create_buffer[DType.float32](nb * n)
-    enqueue_fill(ctx, dtau, Float32(0.0))
-    _ts_leaf_factor(ctx, da, dt, dt2, m, n)
     ctx.enqueue_function[ts_rtile_kernel](
         da.unsafe_ptr(), dtl.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), grid_dim=_grid(nb * n * n), block_dim=TS_TPB
     )
@@ -1215,111 +1173,8 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
     _ = dtau^
 
 
-# lane tsqr-rstack (2026-10-11, idea C5 of ideas-all-gaps-20261011), IDENTICAL
-# only, -D MOJOLEARN_IDN_TSQR_RSTACK_TREE (default OFF; x_decomp/tsqr_core.mojo).
-# The binary combine tree is replaced by STACKED LEVELS: the nb leaf R tiles
-# (rtile's words, zero below the diagonal) are, row-major and contiguous, an
-# (nb n) x n tall matrix; it is factored by the SAME leaf phase
-# (`_ts_leaf_factor`: TS_ROWS-row blocks at full grid, the panel/pair WY
-# kernels), its block R's stack again, until one block remains (m < 2 TS_ROWS)
-# whose R is the result. Q C runs the levels top down through `_ts_leaf_apply`
-# (block b's [C_b; 0], C_b = rows b n .. b n + n - 1 of the level above's
-# output: exactly `ts_qinit_kernel`'s layout). Structural reason: a tree level
-# was one threadgroup per pair walking n columns with ~3 barriers each (the
-# serial depth of ~9 levels x n columns, the top level on 1-2 SMs); a stacked
-# level is ~5 launches per panel pair of independent blocks. Levels:
-# m -> ts_blocks(m) n -> ...; n < TS_ROWS shrinks every level by TS_ROWS / n
-# (220 columns: 1,000,000 -> 107,360 -> 11,440 -> 1,100 rows, 3 stacked levels
-# instead of 9 tree levels). Expected: qr istella NV 1177 -> ~500 ms, svd
-# istella -400 ms, ols istella -50 ms (the idea's estimate; unmeasured). Bits
-# CHANGE (different reflector set for the reduction), equal on NVIDIA, AMD and
-# the host replay (`ts_factor_host` takes the same levels). No shape rule: the
-# level rule is the leaf block rule.
-def _ts_factor_rstack(
-    ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr, keep: Bool
-) raises:
-    var npan = ts_panels(n)
-    var npair = ts_pairs(n)
-    var kept = List[DeviceBuffer[DType.float32]]()
-    var dtl = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var cur = da
-    var mc = m
-    var nlev = 0
-    var rows = List[Int]()
-    while True:
-        var nb = ts_blocks(mc)
-        var dt = ctx.enqueue_create_buffer[DType.float32](nb * npan * _TT)
-        var dt2 = ctx.enqueue_create_buffer[DType.float32]((nb * npair * TS_T2) if TS_WY_PAIR else 1)
-        _ts_leaf_factor(ctx, cur, dt, dt2, mc, n)
-        kept.append(cur)
-        kept.append(dt)
-        kept.append(dt2)
-        rows.append(mc)
-        nlev += 1
-        if nb == 1:
-            ctx.enqueue_function[ts_rtile_kernel](
-                cur.unsafe_ptr(), dtl.unsafe_ptr(), Int32(mc), Int32(n), Int32(1), grid_dim=_grid(n * n), block_dim=TS_TPB
-            )
-            break
-        # the level's block R's, stacked: the next level's (nb n) x n matrix
-        var nxt = ctx.enqueue_create_buffer[DType.float32](nb * n * n)
-        ctx.enqueue_function[ts_rtile_kernel](
-            cur.unsafe_ptr(), nxt.unsafe_ptr(), Int32(mc), Int32(n), Int32(nb), grid_dim=_grid(nb * n * n), block_dim=TS_TPB
-        )
-        _wait_apple(ctx)
-        cur = nxt
-        mc = nb * n
-    var dnan = ctx.enqueue_create_buffer[DType.int32](1)
-    enqueue_fill(ctx, dnan, TS_NO_NAN)
-    ctx.enqueue_function[ts_first_nan_kernel](
-        dtl.unsafe_ptr(), Int32(n * n), dnan.unsafe_ptr(), grid_dim=_grid(n * n), block_dim=TS_TPB
-    )
-    var hnan = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_buf=hnan, src_buf=dnan)
-    ctx.enqueue_copy(dst_ptr=r, src_buf=dtl.create_sub_buffer[DType.float32](0, n * n))
-    ctx.synchronize()
-    var first_nan = hnan.unsafe_ptr().unsafe_load(0)
-    _ = hnan^
-    _ = dnan^
-    if first_nan != TS_NO_NAN:
-        raise Error("x_decomp tsqr: R entry " + String(first_nan) + " is NaN (a NaN input, or a device launch cut short): refused")
-    if keep:
-        var st = TS_DEV_STATE.get_or_create_ptr()
-        kept.append(dtl)
-        st[].bufs = kept^
-        st[].rows = rows^
-        st[].levels = nlev
-        st[].m = m
-        st[].n = n
-    _ = dtl^
-    _ = cur^
-
-
-def _ts_apply_rstack(
-    ctx: DeviceContext, var dcb: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, keep: Bool
-) raises -> DeviceBuffer[DType.float32]:
-    """Q c under TS_RSTACK_TREE: the stacked levels top down (the top level
-    has one block, so only dcb's first n * k words are read), each level's
-    output the next level's C rows. The intermediates live until the sync."""
-    var st = TS_DEV_STATE.get_or_create_ptr()
-    var nlev = st[].levels
-    var hold = List[DeviceBuffer[DType.float32]]()
-    var cin = dcb^
-    for li in range(nlev):
-        var lv = nlev - 1 - li
-        var da = st[].bufs[3 * lv]
-        var dt = st[].bufs[3 * lv + 1]
-        var dt2 = st[].bufs[3 * lv + 2]
-        var q = _ts_leaf_apply(ctx, da, dt, dt2, cin, st[].rows[lv], n, k)
-        hold.append(cin)
-        cin = q
-    ctx.synchronize()
-    _ = hold^
-    if not keep:
-        ts_free_device()
-    return cin^
-
-
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by SHA_TS; code recoverable at SHA_TS^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
 def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep: Bool = False) raises -> DeviceBuffer[DType.float32]:
     """Q c (m x k) on the device for the kept factorization (c: host n x k);
     the state is released by default. Explicit guarded keep=True retains
@@ -1327,7 +1182,7 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
     state before replacing/closing the factor context. No content cache is
     inferred and no different factorization is reused."""
     var st = TS_DEV_STATE.get_or_create_ptr()
-    if not _ts_state_ok(m, n):
+    if len(st[].bufs) != 5 or st[].m != m or st[].n != n:
         ts_free_device()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
     if keep:
@@ -1350,8 +1205,6 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
         comptime if not (_TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_REUSE"]()):
             raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
         var retained_bytes = 0
-        comptime if TS_RSTACK_TREE:
-            raise Error("x_decomp tsqr: retained apply is not admitted with MOJOLEARN_IDN_TSQR_RSTACK_TREE")
         for i in range(5):  # admitted factor, panel, R tiles, tau and pair T2 buffers
             retained_bytes += len(st[].bufs[i])*4
         if retained_bytes>16*1024*1024:
@@ -1369,7 +1222,7 @@ def ts_apply_device_buf(
     first n * k words), so no host matrix crosses: RSVD_IDN_TSQR_ORTHO's
     selection matrix. The state is released."""
     var st = TS_DEV_STATE.get_or_create_ptr()
-    if not _ts_state_ok(m, n):
+    if len(st[].bufs) != 5 or st[].m != m or st[].n != n:
         ts_free_device()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
     var nb = ts_blocks(m)
@@ -1380,22 +1233,44 @@ def ts_apply_device_buf(
     return _ts_apply_dcb(ctx, dcb^, m, n, k, False)
 
 
-def _ts_leaf_apply(
-    ctx: DeviceContext,
-    mut da: DeviceBuffer[DType.float32],
-    mut dt: DeviceBuffer[DType.float32],
-    mut dt2: DeviceBuffer[DType.float32],
-    mut dcb: DeviceBuffer[DType.float32],
-    m: Int,
-    n: Int,
-    k: Int,
+def _ts_apply_dcb(
+    ctx: DeviceContext, var dcb: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, keep: Bool
 ) raises -> DeviceBuffer[DType.float32]:
-    """dq (m x k): block b's rows are Q_b [C_b; 0], C_b the n x k rows
-    b n .. b n + n - 1 of `dcb` (the leaf phase of `_ts_apply_dcb`, shared
-    by TS_RSTACK_TREE's stacked levels), enqueued."""
+    """The apply proper: `dcb` holds c in its first n * k words (the rest is
+    the tree's workspace)."""
+    var st = TS_DEV_STATE.get_or_create_ptr()
+    var da = st[].bufs[0]
+    var dt = st[].bufs[1]
+    var dtl = st[].bufs[2]
+    var dtau = st[].bufs[3]
+    var dt2 = st[].bufs[4]
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
     var npair = ts_pairs(n)
+    var strides = List[Int]()
+    var s = 1
+    while s < nb:
+        strides.append(s)
+        s *= TS_TREE_ARITY
+    var ppl = _per_launch(n * n * k)
+    # TS_TREE_PAR: C's columns tiled over threadgroups, TS_TPB a tile
+    var kt = 1
+    comptime if TS_TREE_PAR:
+        kt = (k + TS_TPB - 1) // TS_TPB
+    for li in range(len(strides)):
+        var sl = strides[len(strides) - 1 - li]
+        var pairs = (nb + TS_TREE_ARITY * sl - 1) // (TS_TREE_ARITY * sl)
+        for offset in range(1, TS_TREE_ARITY):
+            var child = TS_TREE_ARITY - offset
+            var p0 = 0
+            while p0 < pairs:
+                var cnt = min(ppl, pairs - p0)
+                ctx.enqueue_function[ts_capply_kernel](
+                    dcb.unsafe_ptr(), dtl.unsafe_ptr(), dtau.unsafe_ptr(), Int32(n), Int32(k), Int32(nb), Int32(sl), Int32(p0), Int32(child),
+                    Int32(kt), grid_dim=cnt * kt, block_dim=TS_TPB,
+                )
+                _wait_apple(ctx)
+                p0 += cnt
     var dq = ctx.enqueue_create_buffer[DType.float32](m * k)
     ctx.enqueue_function[ts_qinit_kernel](
         dcb.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(n), Int32(k), Int32(nb), grid_dim=_grid(m * k), block_dim=TS_TPB
@@ -1432,58 +1307,6 @@ def _ts_leaf_apply(
                 )
                 _wait_apple(ctx)
                 b0 += cnt
-    return dq^
-
-
-def _ts_apply_dcb(
-    ctx: DeviceContext, var dcb: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, keep: Bool
-) raises -> DeviceBuffer[DType.float32]:
-    """The apply proper: `dcb` holds c in its first n * k words (the rest is
-    the tree's workspace)."""
-    comptime if TS_RSTACK_TREE:
-        return _ts_apply_rstack(ctx, dcb^, m, n, k, keep)
-    else:
-        return _ts_apply_dcb_tree(ctx, dcb^, m, n, k, keep)
-
-
-def _ts_apply_dcb_tree(
-    ctx: DeviceContext, var dcb: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, keep: Bool
-) raises -> DeviceBuffer[DType.float32]:
-    """The binary tree's apply (top down), then the leaves."""
-    var st = TS_DEV_STATE.get_or_create_ptr()
-    var da = st[].bufs[0]
-    var dt = st[].bufs[1]
-    var dtl = st[].bufs[2]
-    var dtau = st[].bufs[3]
-    var dt2 = st[].bufs[4]
-    var nb = ts_blocks(m)
-    var npan = ts_panels(n)
-    var npair = ts_pairs(n)
-    var strides = List[Int]()
-    var s = 1
-    while s < nb:
-        strides.append(s)
-        s *= TS_TREE_ARITY
-    var ppl = _per_launch(n * n * k)
-    # TS_TREE_PAR: C's columns tiled over threadgroups, TS_TPB a tile
-    var kt = 1
-    comptime if TS_TREE_PAR:
-        kt = (k + TS_TPB - 1) // TS_TPB
-    for li in range(len(strides)):
-        var sl = strides[len(strides) - 1 - li]
-        var pairs = (nb + TS_TREE_ARITY * sl - 1) // (TS_TREE_ARITY * sl)
-        for offset in range(1, TS_TREE_ARITY):
-            var child = TS_TREE_ARITY - offset
-            var p0 = 0
-            while p0 < pairs:
-                var cnt = min(ppl, pairs - p0)
-                ctx.enqueue_function[ts_capply_kernel](
-                    dcb.unsafe_ptr(), dtl.unsafe_ptr(), dtau.unsafe_ptr(), Int32(n), Int32(k), Int32(nb), Int32(sl), Int32(p0), Int32(child),
-                    Int32(kt), grid_dim=cnt * kt, block_dim=TS_TPB,
-                )
-                _wait_apple(ctx)
-                p0 += cnt
-    var dq = _ts_leaf_apply(ctx, da, dt, dt2, dcb, m, n, k)
     ctx.synchronize()
     _ = dcb^
     _ = da^

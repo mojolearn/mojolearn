@@ -99,19 +99,8 @@ comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 comptime TS_TREE_PAR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-# lane tsqr-rstack (2026-10-11, idea C5), IDENTICAL only, DEFAULT OFF:
-# -D MOJOLEARN_IDN_TSQR_RSTACK_TREE replaces the fixed combine tree with
-# stacked levels: the nb leaf R tiles, stacked row-major, are an (nb n) x n
-# matrix factored by the same leaf blocks (TS_ROWS rows, panels/pairs), again
-# until one block remains, whose R is the result (x_decomp/tsqr_device.mojo
-# `_ts_factor_rstack`, host replay x_decomp/tsqr_host.mojo
-# `_ts_factor_rstack_host`). Bits change on every column together; the
-# reason and the expected speedup are at `_ts_factor_rstack`.
-comptime TS_RSTACK_TREE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_TSQR_RSTACK_TREE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by SHA_TS; code recoverable at SHA_TS^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
 #: reflectors of a panel pair (the pair's T2 is TS_W2 x TS_W2)
 comptime TS_W2 = 2 * TS_NB
 comptime TS_T2 = TS_W2 * TS_W2
