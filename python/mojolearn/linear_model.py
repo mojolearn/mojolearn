@@ -719,14 +719,10 @@ class LinearRegression(NumericModeMixin):
                 self._y_mean = 0.0
             self._set_intercept(cols)
             return self
-        if weights is None:
-            # MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE: the resident centered-Gram
-            # fit; None when the build lacks it or the Gram is not trusted
-            gram = _linear_gram_fit(b, x, target, rows, cols, 0.0, self.fit_intercept)
-            if gram is not None:
-                self.coef_, self._x_mean, self._y_mean = gram
-                self._set_intercept(cols)
-                return self
+        # SPLIT 2026-10-11 (grid g50ebe26a5, arm linear_gram_solve=off vs today's defaults, one run per arm): OLS leaves the
+        # resident centered-Gram route (MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE) for the centered TSQR below. OLS taxi NV L40S
+        # 13.567 -> 15.669 ms, AMD MI325X 31.501 -> 15.829 ms (avg 0.762); istella NV 657.0 -> 504.0 ms, AMD 775.0 -> 447.0 ms
+        # (avg 0.665); v1193 / b0048, hash c8495868 / cc3f6b24 on both vendors. Ridge keeps the Gram route (off: taxi 5.76x slower).
         if self.fit_intercept and weights is None and not normal_eq:
             # lane idn-dense-linalg: center + TSQR in one entry, X up once
             got = _ols_tsqr_centered(x, target, rows, cols, getattr(self, "numeric_mode", None))
