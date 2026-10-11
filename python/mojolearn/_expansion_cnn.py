@@ -1011,7 +1011,7 @@ class MaxPool2d(_Pool2d):
             if not _on_dev(b, x):
                 return DeviceTensor._wrap(b, MaxPool2d.forward(self, x.numpy()))
             shape = self._out_shape(x.shape)
-            out = DeviceTensor._new(b, shape)
+            out = _out_new(b, shape)   # the pool stores every word
             h = _dev_of(self, b).get("idx", _size(shape))
             b.x_cnn_maxpool2d_forward_m([x.h, out.h, h], 0b111, self._params(x.shape))
             self._xshape = x.shape
@@ -1045,7 +1045,7 @@ class MaxPool2d(_Pool2d):
                 return DeviceTensor._wrap(b, MaxPool2d.backward(self, grad_out.numpy()))
             if grad_out.shape != tuple(self._idx_shape):
                 raise ValueError(f"mojolearn: grad_out shape {grad_out.shape}, expected {tuple(self._idx_shape)}")
-            dxt = DeviceTensor._new(b, self._xshape)
+            dxt = _out_new(b, self._xshape)   # the gather stores every word
             b.x_cnn_maxpool2d_backward_m([grad_out.h, h, dxt.h], 0b111, self._params(self._xshape))
             return dxt
         g = _f32(grad_out, "grad_out")
@@ -1081,7 +1081,7 @@ class AvgPool2d(_Pool2d):
                 raise ValueError("mojolearn: AvgPool2d.forward takes (N, C, H, W)")
             if not _on_dev(b, x):
                 return DeviceTensor._wrap(b, AvgPool2d.forward(self, x.numpy()))
-            out = DeviceTensor._new(b, self._out_shape(x.shape))
+            out = _out_new(b, self._out_shape(x.shape))   # the pool stores every word
             b.x_cnn_avgpool2d_forward_m([x.h, out.h], 0b11, self._params(x.shape))
             self._xshape = x.shape
             return out
@@ -1102,7 +1102,7 @@ class AvgPool2d(_Pool2d):
             shape = self._out_shape(self._xshape)
             if grad_out.shape != shape:
                 raise ValueError(f"mojolearn: grad_out shape {grad_out.shape}, expected {shape}")
-            dxt = DeviceTensor._new(b, self._xshape)
+            dxt = _out_new(b, self._xshape)   # the gather stores every word
             b.x_cnn_avgpool2d_backward_m([grad_out.h, dxt.h], 0b11, self._params(self._xshape))
             return dxt
         g = _f32(grad_out, "grad_out")
@@ -2072,6 +2072,27 @@ class _AdaptivePool(_Layer):
     def _divides(self, shape):
         return shape[2] % self.output_size[0] == 0 and shape[3] % self.output_size[1] == 0
 
+    # lane cnn-resident-glue (G3): with MOJOLEARN_IDN_CNN_RESIDENT_GRADS on,
+    # callers (the board harness among them) hand x and dy over as
+    # `DeviceTensor`s, as they do for the plain pools, and a dividing size
+    # reuses one pool layer (and its resident winner array) per kernel.
+    @property
+    def _device_io(self):
+        try:
+            return _resident(self._binding())
+        except Exception:  # noqa: BLE001  (no binding: the host arrays)
+            return False
+
+    def _pool_for(self, b, k):
+        """The MaxPool2d / AvgPool2d of kernel = stride = `k` (cached under G3)."""
+        cls = MaxPool2d if self._max else AvgPool2d
+        hit = self.__dict__.get("_pool_cache")
+        if _resident(b) and hit is not None and hit[0] == k and type(hit[1]) is cls:
+            return hit[1]
+        lay = cls(k, stride=k, numeric_mode=self.numeric_mode)
+        self.__dict__["_pool_cache"] = (k, lay)
+        return lay
+
     # lane fam-neural (2026-10-04, IDN_ADAPT_M): on a binding with the switch
     # on, the adaptive kernel runs through `x_cnn_adaptive_pool_m`: host
     # arrays are copied once each way (the host entry staged every array
@@ -2118,7 +2139,7 @@ class _AdaptivePool(_Layer):
         d["_idx_host"] = d["_idx_dev"] = None
         if self._divides(x.shape):
             k = (x.shape[2] // self.output_size[0], x.shape[3] // self.output_size[1])
-            self._layer = (MaxPool2d if self._max else AvgPool2d)(k, stride=k, numeric_mode=self.numeric_mode)
+            self._layer = self._pool_for(b, k)
             out = self._layer.forward(x)
             if self._max and not m:
                 d["_idx_host"] = self._layer.indices_
@@ -2128,7 +2149,7 @@ class _AdaptivePool(_Layer):
         oshape = (n, c) + self.output_size
         prm = [*x.shape, *self.output_size, 2 if self._max else 0]
         if m:
-            out = DeviceTensor._new(b, oshape) if xt else np.empty(oshape, np.float32)
+            out = _out_new(b, oshape) if xt else np.empty(oshape, np.float32)
             h = _dev_of(self, b).get("idx", _size(oshape)) if self._max else 0
             b.x_cnn_adaptive_pool_m([x.h if xt else x.ctypes.data, out.h if xt else out.ctypes.data, h],
                                     (0b011 if xt else 0) | (0b100 if self._max else 0), prm)
@@ -2163,7 +2184,7 @@ class _AdaptivePool(_Layer):
                 if h is None or d.get("_dev") is None or self._dev.b is not b:
                     idx = np.ascontiguousarray(self.indices_, np.int32)
                     h, hbit = idx.ctypes.data, 0
-            dx = DeviceTensor._new(b, self._xshape) if gt else np.empty(self._xshape, np.float32)
+            dx = _out_new(b, self._xshape) if gt else np.empty(self._xshape, np.float32)
             b.x_cnn_adaptive_pool_m([g.h if gt else g.ctypes.data, dx.h if gt else dx.ctypes.data, h],
                                     (0b011 if gt else 0) | hbit, prm)
             return dx
@@ -2258,6 +2279,10 @@ class BasicBlock(_Layer):
     def _conv_dev(self, b, conv, xh, xshape, name, dev):
         oshape = conv._out_shape(xshape)
         yh = dev.get(name, int(_np().prod(oshape)))  # glue: product of the output shape entries
+        pw, pb = conv._res_w(b)   # G3: the auto-pinned weights (None with the switch off)
+        if pw is not None and pb is not None:
+            b.x_cnn_conv2d_forward_m([xh, pw, pb, yh], 0b1111, conv._params(xshape))
+            return yh, oshape
         w = _np().ascontiguousarray(conv.weight_)
         bias = _np().ascontiguousarray(conv.bias_)
         b.x_cnn_conv2d_forward_m([xh, w.ctypes.data, bias.ctypes.data, yh], 0b1001, conv._params(xshape))
@@ -2307,7 +2332,7 @@ class BasicBlock(_Layer):
         sh = dev.get("s", n2)
         b.x_cnn_map2_m([b2, idh, sh], 0b111, [2, n2])
         if xt:
-            y = DeviceTensor._new(b, s2)
+            y = _out_new(b, s2)   # the ReLU stores every word
             b.x_cnn_map2_m([sh, sh, y.h], 0b111, [0, n2])
         else:
             y = np.empty(s2, np.float32)
@@ -2322,6 +2347,8 @@ class BasicBlock(_Layer):
         weight gradients (the same words `Conv2d.backward` sets)."""
         np = _np()
         dxh = dev.get(name, int(np.prod(xshape)))  # glue: product of the input shape entries
+        if conv._backward_res(b, xh, gh, dxh, conv._params(xshape)):
+            return dxh   # G3: dW / db stay in the conv's resident arrays
         w = np.ascontiguousarray(conv.weight_)
         dw = np.empty(conv.weight_.shape, np.float32)
         db = np.empty(conv.out_channels, np.float32)
@@ -2359,7 +2386,7 @@ class BasicBlock(_Layer):
             self.downsample[1]._backward_dev(b, k["d1"], gs, gd)
             gi = self._conv_back_dev(b, self.downsample[0], k["xh"], k["x"], gd, k["sd"], "gdx", dev)
         if gt:
-            dxt = DeviceTensor._new(b, k["x"])
+            dxt = _out_new(b, k["x"])   # the add stores every word
             b.x_cnn_map2_m([gx1, gi, dxt.h], 0b111, [2, dxt.size])
             return dxt
         dx = np.empty(k["x"], np.float32)
