@@ -298,6 +298,8 @@ def identical_gemm_pair_into(ctx: DeviceContext,
     _ = scratch^
 
 
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_FILL_SPLITK (noise/loser: mamba2 NV 1.248, transformer NV 1.39) deleted 2026-10-11 by 026a811d5; code recoverable at 026a811d5^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch
 struct GemmWorkspace(Movable):
     """One in-order model context; no mutable global plan or operand cache."""
     var buffer: DeviceBuffer[DType.float32]

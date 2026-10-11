@@ -1,0 +1,162 @@
+diff --git a/gemm/neural_dispatch.mojo b/gemm/neural_dispatch.mojo
+index bb940d66a..af775e4ad 100644
+--- a/gemm/neural_dispatch.mojo
++++ b/gemm/neural_dispatch.mojo
+@@ -10,7 +10,9 @@ from gemm.experiments.neural_profile_device import neural_profile_device
+ from std.sys.compile import is_defined,get_defined_int
+ from std.gpu import block_idx,block_dim,thread_idx
+ from max.gpu.host import DeviceContext,DeviceBuffer
+-from checks.kernel_matrix import TARGET_COLUMN,COLUMN_NVIDIA
++from max.gpu.host.device_attribute import DeviceAttribute
++from checks.kernel_matrix import TARGET_COLUMN,COLUMN_NVIDIA,COLUMN_AMD
++from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
+ from checks.numerics import ftz
+ from checks.rtf_seam import rtf_mul_add
+ from core.step_phase import step_count_device_alloc,step_count_sync
+@@ -21,6 +23,11 @@ from gemm.checks.gemm_identical import (
+     identical_gemm_workspace_max_floats as _incumbent_workspace,
+     identical_gemm_with_plan,identical_gemm_workspace_floats,choose_gemm_plan,
+     GEMM_ARM_KPACK,PLAN_FLAT,ANY_SABOTAGE,
++    PLAN_TUNED_128_8X8,GEMM_IDENTICAL_MFMA,GEMM_REUSE_GROUP_WS,
++    GEMM_KPACK_RPT,GEMM_KPACK_CPT,GEMM_KPACK_KS,GEMM_KPACK_FS,GEMM_KPACK_PAD,GEMM_KPACK_ALIGN,TUNED_TC,
++    contract_partition,gemm_operand_strides,gemm_amd_short_k_tuned,gemm_default_ksplit_leaves,
++    gemm_step_ksplit_finest_leaves,_mfma_group_leaves,_mfma_run_ws,_kpack_launch,
++    _ksplit_resolve_leaves,_ksplit_fold_launch,
+ )
+ from gemm.experiments.neural_profile import (
+     NEURAL_EXPERIMENTS_ALLOWED,NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,
+@@ -298,6 +305,102 @@ def identical_gemm_pair_into(ctx: DeviceContext,
+     _ = scratch^
+ 
+ 
++# ---------------------------------------------------------------------------
++# H2 (2026-10-11 gap program, lane gemm-fill-splitk): MOJOLEARN_IDN_GEMM_FILL_SPLITK, default OFF.
++# STRUCTURAL REASON: a TUNED 128x128 call with few output tiles leaves most compute units idle
++# (e.g. 48-128 tiles on the L40S's 142 SMs / the MI325X's 304 CUs). The shipped rules split k only
++# below fixed rows (NVIDIA S=132 blocks; AMD the leaf split raised to 4-leaf groups, so k <= 512
++# never splits). This arm reads the compute-unit count from the device (a hardware count, never a
++# shape) and, when tiles < 2 x units, splits the contract's leaves over the grid's y axis: the
++# coarsest power-of-two group that still issues >= 2 x units blocks. Groups are powers of two
++# aligned at leaf 0 and the second launch is the existing contract fold (`_ksplit_fold_launch`),
++# so the leaves and the fold DAG are the contract's: NO BIT CHANGES on any column (the same
++# group/fold kernels the shipped grouped plan runs). Only block assignment changes, never the leaf
++# size (unlike the deleted GEMM_LEAF128). A call with one leaf, or one resulting group, or that the
++# shipped rule already splits at least as finely, keeps the shipped dispatch. The node partials go
++# in the model workspace (grown once by `run`), so no allocation and no wait.
++# EXPECTED: under-filled projections ~1/2-1/3 the time; lm-train-step NV 35 -> ~27 ms, AMD 43 -> ~30.
++# Revert: build without the define.
++comptime IDN_GEMM_FILL_SPLITK = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_GEMM_FILL_SPLITK"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    and not ANY_SABOTAGE
++    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
++)
++
++
++def _fill_splitk_leaves(m: Int,n: Int,k: Int,units: Int) -> Int:
++    """Leaves per group for the fill split, or 0 to keep the shipped dispatch.
++    Target: 2 blocks per compute unit (one to run, one to hide the tail)."""
++    if units<=0 or m<=0 or n<=0:
++        return 0
++    if choose_gemm_plan(m,n,k)!=PLAN_TUNED_128_8X8:
++        return 0
++    comptime if TARGET_COLUMN==COLUMN_AMD:
++        # The short-k band forces its own plan before the TUNED dispatch.
++        if gemm_amd_short_k_tuned(m,n,k):
++            return 0
++    var p_count = contract_partition(k)[1]
++    if p_count<2:
++        return 0
++    var target = 2*units
++    var tiles = ((m+127)//128)*((n+127)//128)
++    if tiles>=target:
++        return 0
++    var gl = gemm_step_ksplit_finest_leaves(m,n,k)
++    if gl<1 or (p_count+gl-1)//gl<2:
++        return 0
++    while (p_count+2*gl-1)//(2*gl)>=2 and tiles*((p_count+2*gl-1)//(2*gl))>=target:
++        gl = gl*2
++    var shipped: Int
++    comptime if GEMM_IDENTICAL_MFMA:
++        shipped = _mfma_group_leaves(m,n,k)
++    else:
++        shipped = gemm_default_ksplit_leaves(m,n,k)
++    if shipped>0 and shipped<=gl:
++        return 0
++    return gl
++
++
++def _fill_splitk_floats(m: Int,n: Int,k: Int,units: Int) -> Int:
++    """Node workspace the fill split needs at this call (0 when it declines)."""
++    var gl = _fill_splitk_leaves(m,n,k,units)
++    if gl<=0:
++        return 0
++    var p_count = contract_partition(k)[1]
++    return m*n*((p_count+gl-1)//gl)
++
++
++def _fill_splitk_into(ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
++    mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
++    mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,units: Int) raises -> Bool:
++    """Runs the fill split and answers True, or answers False (nothing launched)."""
++    var gl = _fill_splitk_leaves(m,n,k,units)
++    if gl<=0:
++        return False
++    var part = contract_partition(k)
++    var rg = _ksplit_resolve_leaves(gl,part[1])
++    if len(ws)<m*n*rg[1]:
++        return False
++    comptime if GEMM_IDENTICAL_MFMA:
++        # AMD matrix-core group launch + fold into the caller's workspace (asynchronous).
++        _mfma_run_ws(ctx,c,a,b,ws,m,n,k,op,gl)
++        return True
++    else:
++        comptime if not GEMM_REUSE_GROUP_WS:
++            return False
++        # The shipped packed (kpack-hg) group launch, as `_kpack_hg_run_with_ws` issues it,
++        # at the fill group size; FS is the profile-wide stack (local storage only, same DAG).
++        _kpack_launch[
++            GEMM_KPACK_RPT,GEMM_KPACK_CPT,TUNED_TC,
++            GEMM_KPACK_KS,GEMM_KPACK_FS,True,False,
++            GEMM_KPACK_PAD,GEMM_KPACK_ALIGN,0,True,True,
++        ](ctx,ws,a,b,m,n,k,part[0],part[1],gemm_operand_strides(op,m,n,k),rg[0],rg[1])
++        _ksplit_fold_launch(ctx,c,ws,m,n,rg[1])
++        return True
++
++
+ struct GemmWorkspace(Movable):
+     """One in-order model context; no mutable global plan or operand cache."""
+     var buffer: DeviceBuffer[DType.float32]
+@@ -305,6 +408,7 @@ struct GemmWorkspace(Movable):
+     var last_n: Int
+     var last_k: Int
+     var cached_plan: Int
++    var fill_units: Int
+ 
+     def __init__(out self,ctx: DeviceContext) raises:
+         step_count_device_alloc()
+@@ -313,6 +417,10 @@ struct GemmWorkspace(Movable):
+         self.last_n = -1
+         self.last_k = -1
+         self.cached_plan = PLAN_FLAT
++        self.fill_units = 0
++        comptime if IDN_GEMM_FILL_SPLITK:
++            # H2: compute units read once per model context (hardware count, not a shape).
++            self.fill_units = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+ 
+     def _ensure(mut self,ctx: DeviceContext,required: Int) raises:
+         if required>len(self.buffer):
+@@ -348,6 +456,12 @@ struct GemmWorkspace(Movable):
+                 self.last_k = k
+             _profile_or_cost_into(ctx,c,a,b,self.buffer,m,n,k,op,self.cached_plan)
+         else:
++            comptime if IDN_GEMM_FILL_SPLITK:
++                var fill = _fill_splitk_floats(m,n,k,self.fill_units)
++                if fill>0:
++                    self._ensure(ctx,fill)
++                    if _fill_splitk_into(ctx,c,a,b,self.buffer,m,n,k,op,self.fill_units):
++                        return
+             identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
+ 
+     def run_pair(mut self,ctx: DeviceContext,mut c1: DeviceBuffer[DType.float32],

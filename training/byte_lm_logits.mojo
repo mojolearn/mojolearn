@@ -53,6 +53,9 @@ from core.device_arena import arena_begin, arena_end, arena_release
 from core.device_scan import device_first_nonfinite, device_first_token_oob
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.experiments.neural_switches import ROLE_HEAD
+
+# TOMBSTONE: MOJOLEARN_IDN_LM_LOGITS_LEAN (noise: lm-forward 0.925) deleted 2026-10-11 by 066722146; code recoverable at 066722146^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch
 from gemm.experiments.neural_streaming import NN16
 from gemm.contract import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into

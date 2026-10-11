@@ -1010,6 +1010,10 @@ def _session_weights(
     session.weight_uploads += 1
 
 
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
+# TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
 def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = False](
     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
@@ -1060,6 +1064,8 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
         if s0 != 0:
             raise Error("transformer: a discarded cache starts at cached_tokens 0")
         # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
+        # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
         ws.kv.k.enqueue_fill(Float32(0.0))
         ws.kv.v.enqueue_fill(Float32(0.0))
     else:
@@ -1075,6 +1081,8 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
     # outlive the call (the download wait below drains everything).
     ws.kv.s = s0
     _btick(ton, tk, "surface.cache_stages_x_up")
+    # TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
     var trace = IdentityTrace.disabled()
     # forward_only: no backward reads this entry's stages.
     llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,

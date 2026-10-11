@@ -8115,6 +8115,8 @@ def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
     return f^
 
 
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
 def fused_forward_launch(
     ctx: DeviceContext,
     mut ctxv: DeviceBuffer[DType.float32],

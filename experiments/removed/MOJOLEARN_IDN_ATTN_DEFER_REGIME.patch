@@ -1,0 +1,471 @@
+diff --git a/bindings/_mojolearn_transformer.mojo b/bindings/_mojolearn_transformer.mojo
+index 5f847ea00..ee4182f58 100644
+--- a/bindings/_mojolearn_transformer.mojo
++++ b/bindings/_mojolearn_transformer.mojo
+@@ -173,6 +173,9 @@ from transformer.checks.transformer_fixture import RMS_EPS, ROPE_THETA
+ # `_upload`/`_download` by their underscore names is DEVIATION 1112's
+ # settled pattern (`transformer_check.mojo` imports the same pair).
+ from transformer.impl.llama.fused_attention import (
++    attention_defer_begin,
++    attention_defer_enqueue_read,
++    attention_defer_flagged,
+     fused_forward_supported_head_dim,
+ )
+ from transformer.impl.llama.modeling_llama import (
+@@ -1010,6 +1013,15 @@ def _session_weights(
+     session.weight_uploads += 1
+ 
+ 
++comptime IDN_TF_SESSION_LEAN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
++    "MOJOLEARN_IDN_TF_SESSION_LEAN"
++]()
++"""lane/lm-attn-nohost (2026-10-11, idea H9), default OFF: the stateless
++session prefill skips the cache zero-fill when the call writes every slot.
++The idea's weight version stamp needs a Python-side change (not this lane's
++file) and is left out."""
++
++
+ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = False](
+     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
+     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
+@@ -1060,8 +1072,19 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
+         if s0 != 0:
+             raise Error("transformer: a discarded cache starts at cached_tokens 0")
+         # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
+-        ws.kv.k.enqueue_fill(Float32(0.0))
+-        ws.kv.v.enqueue_fill(Float32(0.0))
++        # IDN_TF_SESSION_LEAN (lane/lm-attn-nohost, idea H9, default off):
++        # when the prefill spans the whole capacity (l == smax, s0 == 0) the
++        # layer writes every cache slot before any read and this path never
++        # downloads the cache, so the fill writes bytes nothing reads. The
++        # condition is a coverage rule (every slot written), not a size
++        # threshold. Same words; expected ~0.1-0.3 ms of fills per call.
++        var fill_cache = True
++        comptime if IDN_TF_SESSION_LEAN:
++            if l == smax:
++                fill_cache = False
++        if fill_cache:
++            ws.kv.k.enqueue_fill(Float32(0.0))
++            ws.kv.v.enqueue_fill(Float32(0.0))
+     else:
+         # Host cache state is authoritative on EVERY call, including resets and
+         # same-address edits. Copy into retained allocations, never trust a pointer.
+@@ -1076,10 +1099,25 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
+     ws.kv.s = s0
+     _btick(ton, tk, "surface.cache_stages_x_up")
+     var trace = IdentityTrace.disabled()
++    # IDN_ATTN_DEFER_REGIME (lane/lm-attn-nohost, idea H1): a forward-only
++    # call arms the deferred attention window, so the fused forward reads
++    # nothing on the host; its words come home with the downloads below,
++    # under their one wait. On a flag (a regime refusal or a corner, rare)
++    # the forward reruns disarmed (today's path, today's words) and the
++    # outputs download again. The rerun needs no cache re-upload: the layer
++    # writes cache slots [s0, s0 + l) before it reads them and never touches
++    # the others, so the device cache (and the host copy just downloaded)
++    # differ from the input only in slots the rerun rewrites; `x` is
++    # re-uploaded from the caller's unchanged input. A tape call never arms.
++    var armed = False
++    comptime if not retain_tape:
++        armed = attention_defer_begin(ctx)
+     # forward_only: no backward reads this entry's stages.
+     llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
+                                 b, l, s0, trace, String("py"), forward_only=not retain_tape)
+     _btick(ton, tk, "surface.forward")
++    if armed:
++        attention_defer_enqueue_read(ctx)
+     # One wait for the downloads (the fresh entry's pattern): every owner
+     # stays alive through it.
+     _download_addr[False](ctx, ws.stages.residual2, b * l * dm, a[12])
+@@ -1087,6 +1125,16 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
+         _download_addr[False](ctx, ws.kv.k, len(ws.kv.k), a[10])
+         _download_addr[False](ctx, ws.kv.v, len(ws.kv.v), a[11])
+     ctx.synchronize()
++    if armed and attention_defer_flagged(ctx):
++        ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
++        ws.kv.s = s0
++        llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
++                                    b, l, s0, trace, String("py"), forward_only=not retain_tape)
++        _download_addr[False](ctx, ws.stages.residual2, b * l * dm, a[12])
++        comptime if not discard_cache:
++            _download_addr[False](ctx, ws.kv.k, len(ws.kv.k), a[10])
++            _download_addr[False](ctx, ws.kv.v, len(ws.kv.v), a[11])
++        ctx.synchronize()
+     _btick(ton, tk, "surface.outputs_down")
+     var result = ws.kv.s
+     # Bound retained device-buffer storage per model. Large legal calls still
+diff --git a/transformer/impl/llama/fused_attention.mojo b/transformer/impl/llama/fused_attention.mojo
+index b2840bc0b..c61fd0b6e 100644
+--- a/transformer/impl/llama/fused_attention.mojo
++++ b/transformer/impl/llama/fused_attention.mojo
+@@ -8115,6 +8115,263 @@ def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
+     return f^
+ 
+ 
++# ===========================================================================
++# IDN_ATTN_DEFER_REGIME (lane/lm-attn-nohost, 2026-10-11, idea H1)
++# ===========================================================================
++
++comptime IDN_ATTN_DEFER_REGIME = (
++    is_defined["MOJOLEARN_IDN_ATTN_DEFER_REGIME"]()
++    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and TARGET_COLUMN != COLUMN_APPLE
++)
++"""Default OFF experiment, `-D MOJOLEARN_IDN_ATTN_DEFER_REGIME`.
++
++Structural reason: every fused forward reads the regime scan and the corner
++flag on the host (one or two waits per layer: 16 round trips per LM forward,
++2 of transformer-forward's ~3.2 ms on AMD). Under this switch a DRIVER that
++promises to check arms a deferred window (`attention_defer_begin`); inside
++it the fused forward evaluates the regime bound ON THE DEVICE
++(`attn_regime_flag_kernel`, the same partials and the same max fold as the
++host, the same Float64 bound) and ORs the refusal and the kernels' corner
++flag into one per-context word buffer, then returns `FUSED_RAN` with no
++wait. The driver reads that buffer ONCE (`attention_defer_end`) behind the
++output readback it already does; when any word is set it reruns the whole
++forward with the window disarmed, which is today's path and today's words.
++A refusal never lets a wrong output escape: the rerun overwrites it.
++Bits: none (the regime only chooses between paths; the speculative fused
++words are kept only when no flag is set, and then they are the words today's
++path keeps). Drivers that never arm (byte-LM training today) are unchanged.
++Expected: transformer-forward AMD 3.2 -> ~2.6 ms, NV 4.0 -> ~3.6 ms; the
++LM forward/train inherits once training/byte_lm.mojo arms the window.
++Not on the Apple column (Float64 in a kernel; Apple keeps `_attn_speculative`)."""
++
++comptime _DEFER_WORDS = 4
++"""Deferred words: 0 the corner flag (any layer), 1-2 the masked-tail
++repair counters the kernels may write (never read here), 3 the regime
++refusal (any layer)."""
++
++
++struct _AttnDeferState(Defaultable, Movable):
++    # One entry per device context (core/ctx_key.mojo), as the scan cache.
++    var ids: List[Int]
++    var armed: List[Bool]
++    var flag: List[DeviceBuffer[DType.float32]]  # each [_DEFER_WORDS]
++    var part: List[DeviceBuffer[DType.float32]]  # each [3 * ABSMAX_BLOCKS]
++    var host: List[HostBuffer[DType.float32]]  # each [_DEFER_WORDS]
++
++    def __init__(out self):
++        self.ids = List[Int]()
++        self.armed = List[Bool]()
++        self.flag = List[DeviceBuffer[DType.float32]]()
++        self.part = List[DeviceBuffer[DType.float32]]()
++        self.host = List[HostBuffer[DType.float32]]()
++
++
++comptime _ATTN_DEFER_STATE = _Global[StorageType=_AttnDeferState,
++    name="MojolearnAttnDeferStateV1", init_fn=_AttnDeferState.__init__]
++
++
++def _attn_defer_slot(ctx: DeviceContext) raises -> Int:
++    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
++    var si = ctx_cache_slot(g[].ids, ctx)
++    if si >= 0:
++        return si
++    step_count_device_alloc()
++    g[].flag.append(ctx.enqueue_create_buffer[DType.float32](_DEFER_WORDS))
++    step_count_device_alloc()
++    g[].part.append(ctx.enqueue_create_buffer[DType.float32](3 * ABSMAX_BLOCKS))
++    step_count_host_alloc()
++    g[].host.append(ctx.enqueue_create_host_buffer[DType.float32](_DEFER_WORDS))
++    g[].armed.append(False)
++    g[].ids.append(ctx_cache_key(ctx))
++    return len(g[].ids) - 1
++
++
++def attention_defer_begin(ctx: DeviceContext) raises -> Bool:
++    """Arm the deferred window for one forward on `ctx`: zero the words
++    (an enqueued fill, no wait). Returns False, arming nothing, on a build
++    without the switch; the caller then runs exactly as before."""
++    comptime if not IDN_ATTN_DEFER_REGIME:
++        return False
++    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
++    var si = _attn_defer_slot(ctx)
++    step_count_launch()
++    g[].flag[si].enqueue_fill(Float32(0.0))
++    g[].armed[si] = True
++    return True
++
++
++def attention_defer_end(ctx: DeviceContext) raises -> Bool:
++    """Disarm the window and read its words with ONE wait (put it where the
++    caller already waits for its output). True when any layer refused the
++    regime or hit a corner: the caller must rerun the forward disarmed."""
++    comptime if not IDN_ATTN_DEFER_REGIME:
++        return False
++    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
++    var si = _attn_defer_slot(ctx)
++    g[].armed[si] = False
++    var hp = g[].host[si].unsafe_ptr()
++    step_count_d2h()
++    ctx.enqueue_copy(dst_ptr=hp, src_buf=g[].flag[si])
++    step_count_sync()
++    ctx.synchronize()
++    return hp.unsafe_load(0) != Float32(0.0) or hp.unsafe_load(3) != Float32(0.0)
++
++
++def attention_defer_enqueue_read(ctx: DeviceContext) raises:
++    """Disarm the window and ENQUEUE the copy of its words home, no wait:
++    the caller's own output wait covers it; read the verdict after that wait
++    with `attention_defer_flagged`."""
++    comptime if IDN_ATTN_DEFER_REGIME:
++        var g = _ATTN_DEFER_STATE.get_or_create_ptr()
++        var si = _attn_defer_slot(ctx)
++        g[].armed[si] = False
++        step_count_d2h()
++        ctx.enqueue_copy(dst_ptr=g[].host[si].unsafe_ptr(), src_buf=g[].flag[si])
++
++
++def attention_defer_flagged(ctx: DeviceContext) raises -> Bool:
++    """The words `attention_defer_enqueue_read` brought home; call only
++    after a wait that follows it on `ctx`."""
++    comptime if not IDN_ATTN_DEFER_REGIME:
++        return False
++    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
++    var si = _attn_defer_slot(ctx)
++    var hp = g[].host[si].unsafe_ptr()
++    return hp.unsafe_load(0) != Float32(0.0) or hp.unsafe_load(3) != Float32(0.0)
++
++
++def attention_defer_disarm(ctx: DeviceContext) raises:
++    """Disarm without reading (an error path)."""
++    comptime if IDN_ATTN_DEFER_REGIME:
++        var g = _ATTN_DEFER_STATE.get_or_create_ptr()
++        var si = ctx_cache_slot(g[].ids, ctx)
++        if si >= 0:
++            g[].armed[si] = False
++
++
++def _attn_defer_armed(ctx: DeviceContext) raises -> Bool:
++    comptime if not IDN_ATTN_DEFER_REGIME:
++        return False
++    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
++    var si = ctx_cache_slot(g[].ids, ctx)
++    if si < 0:
++        return False
++    return g[].armed[si]
++
++
++def _attn_defer_corner(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
++    """The deferred words as the kernels' corner buffer: NOT zeroed (the
++    window's fill did that once), so every layer's corner ORs into word 0."""
++    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
++    var si = _attn_defer_slot(ctx)
++    return g[].flag[si].create_sub_buffer[DType.float32](0, _DEFER_WORDS)
++
++
++def attn_regime_flag_kernel(
++    flag: MutPointer[Float32, MutAnyOrigin],
++    part: MutPointer[Float32, MutAnyOrigin],
++    k0_in: Int32,
++    k1_in: Int32,
++    k2_in: Int32,
++    hd_in: Int32,
++):
++    """One block of ABSMAX_TPB threads: fold the three operands' absmax
++    partials (q, k, v) with the host fold's rule (`v > m` from 0.0; `max`
++    of non-NaN words is exact in any order, and the partials already read
++    NaN as +inf), then apply `regime_product_ok(hd, qmax, kmax)` and
++    `regime_finite(vmax)` in Float64 exactly as the host does (two products
++    and a compare: nothing to contract). A refusal sets word 3; nothing
++    clears it, so the window ORs every layer."""
++    var red = stack_allocation[
++        3 * ABSMAX_TPB,
++        Scalar[DType.float32],
++        address_space = AddressSpace.SHARED,
++    ]()
++    var tid = Int(thread_idx.x)
++    var k0 = Int(k0_in)
++    var k1 = Int(k1_in)
++    var k2 = Int(k2_in)
++    var lo = 0
++    for which in range(3):
++        var kb = k0
++        if which == 1:
++            kb = k1
++        elif which == 2:
++            kb = k2
++        var m = Float32(0.0)
++        var i = tid
++        while i < kb:
++            var v = part.unsafe_load(lo + i)
++            if v > m:
++                m = v
++            i += ABSMAX_TPB
++        red.unsafe_store(which * ABSMAX_TPB + tid, m)
++        lo += kb
++    barrier()
++    var active = ABSMAX_TPB // 2
++    while active > 0:
++        if tid < active:
++            for which in range(3):
++                var base = which * ABSMAX_TPB
++                var o = red.unsafe_load(base + tid + active)
++                if o > red.unsafe_load(base + tid):
++                    red.unsafe_store(base + tid, o)
++        barrier()
++        active = active // 2
++    if tid == 0:
++        var qmax = Float64(red.unsafe_load(0))
++        var kmax = Float64(red.unsafe_load(ABSMAX_TPB))
++        var vmax = Float64(red.unsafe_load(2 * ABSMAX_TPB))
++        var inf = Float64(bitcast[DType.float32](UInt32(0x7F800000)))
++        var ok = qmax < inf and kmax < inf and vmax < inf
++        if ok:
++            ok = Float64(Int(hd_in)) * qmax * kmax < REGIME_BOUND
++        if not ok:
++            flag.unsafe_store(3, Float32(1.0))
++
++
++def _attn_defer_regime(
++    ctx: DeviceContext,
++    q_p: MutPointer[Float32, MutAnyOrigin], nq: Int,
++    k_p: MutPointer[Float32, MutAnyOrigin],
++    v_p: MutPointer[Float32, MutAnyOrigin], nkv: Int,
++    hd: Int,
++) raises:
++    """Enqueue the regime scan and its device-side verdict into the
++    window's word 3: the partials are `device_absmax4`'s launches at its
++    grids; no copy, no wait."""
++    var g = _ATTN_DEFER_STATE.get_or_create_ptr()
++    var si = _attn_defer_slot(ctx)
++    var k0 = _absmax_blocks(nq)
++    var k1 = _absmax_blocks(nkv)
++    var k2 = _absmax_blocks(nkv)
++    var pp = g[].part[si].unsafe_ptr()
++    if k0 > 0:
++        step_count_launch()
++        ctx.enqueue_function[absmax_partial_kernel](
++            pp, q_p, Int32(nq),
++            grid_dim=(k0, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
++        )
++    if k1 > 0:
++        step_count_launch()
++        ctx.enqueue_function[absmax_partial_kernel](
++            pp + k0, k_p, Int32(nkv),
++            grid_dim=(k1, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
++        )
++    if k2 > 0:
++        step_count_launch()
++        ctx.enqueue_function[absmax_partial_kernel](
++            pp + k0 + k1, v_p, Int32(nkv),
++            grid_dim=(k2, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
++        )
++    step_count_launch()
++    ctx.enqueue_function[attn_regime_flag_kernel](
++        g[].flag[si].unsafe_ptr(), pp, Int32(k0), Int32(k1), Int32(k2), Int32(hd),
++        grid_dim=(1, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
++    )
++
++
+ def fused_forward_launch(
+     ctx: DeviceContext,
+     mut ctxv: DeviceBuffer[DType.float32],
+@@ -8214,7 +8471,18 @@ def fused_forward_launch_ran(
+     var ton = _attn_timer_on()
+     var tk = Int(perf_counter_ns())
+     var speculative = _attn_speculative()
+-    if not speculative:
++    # IDN_ATTN_DEFER_REGIME: inside an armed window the regime verdict is
++    # enqueued on the device and the corner ORs into the window's words; no
++    # wait here (the driver reads the words once and reruns on a flag).
++    var deferred = _attn_defer_armed(ctx)
++    if deferred:
++        speculative = False
++        _attn_defer_regime(
++            ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
++            k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd, hd,
++        )
++    if not speculative and not deferred:
+         var amx = device_absmax4(
+             ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+             b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+@@ -8230,7 +8498,11 @@ def fused_forward_launch_ran(
+         if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
+             return FUSED_REFUSED_REGIME
+         _attn_tick(ctx, ton, tk, "fwd_regime_scan")
+-    var corner = _zero_flag(ctx)
++    var corner: DeviceBuffer[DType.float32]
++    if deferred:
++        corner = _attn_defer_corner(ctx)
++    else:
++        corner = _zero_flag(ctx)
+     var tq = fused_rows_per_block(hd)
+     var blocks = b * nh * ((l + tq - 1) // tq)
+     var nt = hd * tq
+@@ -8432,6 +8704,11 @@ def fused_forward_launch_ran(
+                 grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
+             )
+         _attn_tick(ctx, ton, tk, "fwd_kernel")
++    if deferred:
++        # IDN_ATTN_DEFER_REGIME: speculative FUSED_RAN; the window's words
++        # carry this call's regime refusal and corner to the driver.
++        _ = corner^
++        return FUSED_RAN
+     if speculative:
+         # The scan behind the kernels: its one wait covers them, and the
+         # flag read after it finds nothing pending.
+diff --git a/transformer/impl/llama/modeling_llama.mojo b/transformer/impl/llama/modeling_llama.mojo
+index 80f946255..933f786cd 100644
+--- a/transformer/impl/llama/modeling_llama.mojo
++++ b/transformer/impl/llama/modeling_llama.mojo
+@@ -356,6 +356,7 @@ from mamba.impl.modeling.modeling_mamba import (
+ )
+ 
+ from transformer.impl.llama.fused_attention import (
++    IDN_ATTN_DEFER_REGIME,
+     ATTN_ARM_TRIAL,
+     ATTN_STICKY,
+     ATTN_SHIPPED_BWD_ESTASH,
+@@ -1710,6 +1711,12 @@ struct LlamaDeviceStages(Movable):
+     carry planes). Set by `llama_decoder_layer_forward_planted` on every
+     call; read by S11 and by the attention path choice."""
+     var attn_prefer_eager: Bool  # byte-LM auto policy; explicit fused overrides
++    var attn_forward_only: Bool
++    """IDN_ATTN_DEFER_REGIME (lane/lm-attn-nohost, idea H1): THIS call is
++    forward-only (`forward_only` of `llama_decoder_layer_forward_planted`,
++    set on every call), so no backward reads an exp stash: under the switch
++    the fused forward takes the plain launcher instead of the `_estash` one
++    (fewer bytes written, no stash kept). Off-switch builds never read it."""
+     var attn_recompute_backward: Bool
+     """Model-kind attention stash policy (lane grid-act-4, 2026-10-08): the
+     caller's training step wants the backward to recompute the attention
+@@ -1841,6 +1848,7 @@ struct LlamaDeviceStages(Movable):
+         self.qk_sumsq = _zeros[False](ctx, m * nh)
+         self.attn_prefer_eager = False
+         self.attn_recompute_backward = False
++        self.attn_forward_only = False
+         self.attn_forward_status = -1
+         self.attn_fused_off = False
+         self.attn_materialized = False
+@@ -1922,6 +1930,7 @@ struct LlamaDeviceStages(Movable):
+         self.qk_sumsq.enqueue_fill(Float32(0))
+         self.attn_prefer_eager = False
+         self.attn_recompute_backward = False
++        self.attn_forward_only = False
+         self.attn_forward_status = -1
+         self.attn_fused_off = False
+         self.attn_materialized = False
+@@ -4227,7 +4236,12 @@ def eager_attention_forward(
+             # A caller that asked for the recompute policy
+             # (`attn_recompute_backward`, the Samba train step) keeps no
+             # stash: the plain launcher below runs, as under ATTN_STASH=1.
+-            if (not need_eager) and fused_attention_arm_estash_runs(arm) and not stages.attn_recompute_backward:
++            # IDN_ATTN_DEFER_REGIME: a forward-only call keeps no stash.
++            var stash_wanted = not stages.attn_recompute_backward
++            comptime if IDN_ATTN_DEFER_REGIME:
++                if stages.attn_forward_only:
++                    stash_wanted = False
++            if (not need_eager) and fused_attention_arm_estash_runs(arm) and stash_wanted:
+                 var ran = 0
+                 status = fused_forward_launch_estash_ran(
+                     ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
+@@ -6028,6 +6042,7 @@ def llama_decoder_layer_forward_planted(
+     # lane/lowbit-blocks: this call runs under `fixed15_v1` exactly when its
+     # weights carry planes.
+     stages.int15_on = Bool(w.int15)
++    stages.attn_forward_only = forward_only
+ 
+     trace.record_device[DType.float32](ctx, prefix + ".input.x", x, m * dm)
+ 

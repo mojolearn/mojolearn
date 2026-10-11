@@ -872,6 +872,8 @@ comptime BYTE_LM_EMB_HEAD_VIEWS = (
     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
 )
 
+# TOMBSTONE: MOJOLEARN_IDN_LM_LEAN_STEP (noise: lm-train-step 0.982) deleted 2026-10-11 by 8cc78c8ae; code recoverable at 8cc78c8ae^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch
 # NI27 source candidate, not a promotion of the Apple FAST experiment.
 # Only aliases change; every gradient writer keeps the same arithmetic.
 # Both parameter and gradient views are rebound before each use, including

@@ -4227,6 +4227,8 @@ def eager_attention_forward(
             # A caller that asked for the recompute policy
             # (`attn_recompute_backward`, the Samba train step) keeps no
             # stash: the plain launcher below runs, as under ATTN_STASH=1.
+            # TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+            # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
             if (not need_eager) and fused_attention_arm_estash_runs(arm) and not stages.attn_recompute_backward:
                 var ran = 0
                 status = fused_forward_launch_estash_ran(
