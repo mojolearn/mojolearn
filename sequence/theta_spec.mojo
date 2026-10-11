@@ -30,18 +30,84 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from sequence.coop_lane import coop_src
-from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
+from sequence.ops import FP, Args, add, fma3, ld, mul, seq_madd, st, sub
 from sequence.theta import (
     DOTM, DSTM, OTM, STM, THETA_REG, THETA_REG_FAST, THETA_SNAP, _acf_decide, _decompose, div, theta_forecast_reg,
     theta_invariants, theta_run_reg, theta_sse_hoisted,
 )
-from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 
 #: the switch (FAST + Apple with THETA_REG). Default since the M3 A/B (n=1,
 #: quality identical; theta taxi-hourly 218 -> 20.3 ms);
 #: -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF turns it off; the old
 #: -D MOJOLEARN_SEQ_FAST_THETA_SPEC is harmless.
-comptime THETA_SPEC = THETA_REG_FAST and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"]()
+comptime THETA_SPEC_FAST = THETA_REG_FAST and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"]()
+#: IDENTICAL twin, -D MOJOLEARN_IDN_NM_SPEC (lane seq-nm-spec 2026-10-11,
+#: default off; idea E1). Structural reason: op_theta runs one thread per
+#: series and its Nelder-Mead evaluates the reflection, then the expansion
+#: or a contraction, back to back (2 + k whole-series passes on a shrink),
+#: a latency-bound serial chain with 64 threads on the taxi-hourly cell.
+#: Here the series' 32-lane cell evaluates the four candidates (and the
+#: k + 1 initial / shrunk vertices) at once and every lane replays
+#: nelder_mead's decision on the broadcast values. Each accepted value is
+#: the serial objective on the same words (`_theta_sse_idn` below is
+#: `theta_run_reg`'s error chain, seq_madd included), the decision is
+#: nm_steps' (no stall rule, no snapshot on IDENTICAL), so NO bit moves on
+#: NVIDIA, AMD or the host column (the host keeps the serial op_theta).
+#: Admitted on NVIDIA/AMD through the cooperative dispatch
+#: (sequence/exec_device.mojo, SEQ_COOP_NVAMD). Expected: theta taxi-hourly
+#: AMD 596 -> ~130 ms, optimized-theta 626 -> ~150 ms (critical path from
+#: ~1.5-2 evaluations per iteration to 1, shrinks from 2 + k to 1).
+comptime THETA_SPEC_IDN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_NM_SPEC"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime THETA_SPEC = THETA_SPEC_FAST or THETA_SPEC_IDN
+
+
+@always_inline
+def _theta_sse_idn[DYN: Bool](
+    y: FP, n: Int, level0: Float32, alpha: Float32, theta: Float32, A0: Float32, B0: Float32, mean_y: Float32,
+) -> Float32:
+    """`theta_run_reg`'s return value (MOJOLEARN_IDN_NM_SPEC): its error
+    chain op for op (the two `seq_madd` spellings included, which
+    `theta_sse_hoisted` writes as mul + add), nothing stored; A0, B0 and
+    mean_y are `theta_invariants`' words, the same chains theta_run_reg
+    runs."""
+    var y0 = ld(y, 0)
+    var k = sub(Float32(1.0), div(Float32(1.0), theta))
+    var An: Float32
+    var Bn: Float32
+    comptime if DYN:
+        An = y0
+        Bn = Float32(0.0)
+    else:
+        An = A0
+        Bn = B0
+    var oma = sub(Float32(1.0), alpha)
+    var lev = fma3(alpha, y0, mul(oma, level0))
+    var my = y0
+    var sse = Float32(0.0)
+    var pw = oma
+    for i in range(1, n):
+        var pw1 = mul(pw, oma)
+        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var yi = ld(y, i)
+        var ei = sub(yi, m)
+        if i >= 3:
+            sse = fma3(ei, ei, sse)
+        var lev2 = fma3(alpha, yi, mul(oma, lev))
+        comptime if DYN:
+            var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
+            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+                         Float32(i + 2))
+            Bn = b2
+            An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
+            my = my2
+        lev = lev2
+        pw = pw1
+    return div(sse, mean_y)
 
 
 @fieldwise_init
@@ -80,6 +146,12 @@ struct ThetaEv(ImplicitlyCopyable, Movable):
     def ev(self, x0: Float32, x1: Float32, x2: Float32) -> Float32:
         var p = self.params(x0, x1, x2)
         var mse: Float32
+        comptime if THETA_SPEC_IDN:
+            if self.dyn:
+                mse = _theta_sse_idn[True](self.y, self.n, p[0], p[1], p[2], self.hA, self.hB, self.hmean)
+            else:
+                mse = _theta_sse_idn[False](self.y, self.n, p[0], p[1], p[2], self.hA, self.hB, self.hmean)
+            return mse if mse > Float32(-1e10) else Float32(-1e10)
         if self.dyn:
             mse = theta_sse_hoisted[True](self.y, self.n, p[0], p[1], p[2], self.hA, self.hB, self.hmean)
         else:
