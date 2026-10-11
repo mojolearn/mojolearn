@@ -3110,6 +3110,13 @@ class TreeExplainer(_TreesEnsembleBase):
 
 #: xtrees/agnostic.mojo AGN_BUDGET: synthetic words per explainer chunk
 _AGN_BUDGET = 1 << 25
+#: MOJOLEARN_IDN_PSHAP_RESIDENT (lane/neighbors-small-ports, default off;
+#: `x_trees_pshap_linear_ok`): PermutationExplainer over this library's
+#: linear regressors keeps a chunk's synthetic rows on the device
+#: (xtrees/agnostic_device.mojo `pshap_values_linear`), so a chunk is bounded
+#: by device memory, not by a host matrix: 2^28 float32 words (1 GiB of
+#: synthetic rows), a memory bound that fits every supported GPU, no shape rule.
+_AGN_BUDGET_RESIDENT = 1 << 28
 #: MOJOLEARN_IDN_SHAP_DEVICE_MODEL (lane fam2-forests; an IDENTICAL GPU
 #: build's switch, `x_trees_fast_switches` bit 64, -D
 #: MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF clears it): Kernel/Permutation SHAP
@@ -3399,6 +3406,32 @@ class PermutationExplainer(_AgnosticExplainer):
     def __init__(self, model, data, *, random_state=None):
         super().__init__(model, data, random_state)
 
+    def _linear_wb(self, b):
+        """MOJOLEARN_IDN_PSHAP_RESIDENT: ([w | b] float32 block, link) when
+        the binding carries the switch and the explained model's predict is
+        this library's linear `link(X W^T + b)` (x_linear `decision_kernel`);
+        else None (the model callback). Routing and byte copies only."""
+        try:
+            ok = int(b.x_trees_pshap_linear_ok()) == 1
+        except (AttributeError, ImportError):
+            return None
+        if not ok:
+            return None
+        m = self.model
+        pred = getattr(type(m), "predict", None)
+        if getattr(pred, "__qualname__", "") != "_LinearRegressorMixin.predict":
+            return None
+        if int(getattr(m, "n_features_in_", -1)) != self._bg.shape[1]:
+            return None
+        from ._expansion_linear import _coef_block   # glue: the model's own [w | b] byte copies
+        intercept = m.intercept_
+        if not hasattr(intercept, "shape"):
+            intercept = full((1,), float(intercept), "<f4")
+        wb = _coef_block(m.coef_, intercept)
+        if wb.size != self.n_outputs_ * (self._bg.shape[1] + 1):
+            return None
+        return wb, int(m._link)
+
     def shap_values(self, X, npermutations=10):
         Xa = self._check(X)
         n, d = Xa.shape
@@ -3424,6 +3457,18 @@ class PermutationExplainer(_AgnosticExplainer):
                     b.x_trees_pshap_values_model(x0 + 4 * r0 * d, p0 + 8 * r0 * d * k, [rows, nb, d, npm, r0, seed, k])
             finally:
                 b.x_trees_agn_model_release()
+            return self._shape(phi, n, d)
+        lin = self._linear_wb(b)
+        if lin is not None:
+            # IDN_PSHAP_RESIDENT: synthetic rows, the linear predict, means
+            # and marginals on the device per chunk; only x rows and phi cross
+            wb, link = lin
+            bg0, wb0 = addr_ro(self._bg, name="data"), addr_ro(wb, name="coef")
+            Rl = max(1, min(n, _AGN_BUDGET_RESIDENT // max(1, mm * nb * d)))
+            for r0 in range(0, n, Rl):  # glue: chunk loop (one binding call per chunk)
+                rows = min(Rl, n - r0)
+                b.x_trees_pshap_values_linear(x0 + 4 * r0 * d, bg0, wb0, p0 + 8 * r0 * d * k,
+                                              [rows, nb, d, npm, r0, seed, k, link])
             return self._shape(phi, n, d)
         # one synthetic buffer for every chunk
         idn_pool = _trees_build_switch(self, _AGN_IDN_SYN_POOL)
