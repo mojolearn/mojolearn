@@ -32,7 +32,7 @@ from std.sys.compile import is_defined
 
 from sequence.coop_lane import coop_src
 from sequence.ets import SEAS_N, ets_init_state, ets_lik
-from sequence.ops import FP, Args, add, fma3, ld, mul, seq_madd, st, sub
+from sequence.ops import FP, Args, add, fma3, ld, mul st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_pow, identical_sqrt
 
 comptime ETS_SPEC = (
@@ -351,7 +351,7 @@ def op_ets_spec(t: Int, lane: Int, a: Args):
     var b = r[2]
     var phistar = u[2]
     for i in range(h):
-        var f = seq_madd(phistar, b, l) if trend else l
+        var f = add(mul(phistar, b), l) if trend else l
         st(a.p1, t * h + i, f)
         if i < h - 1:
             phistar = add(phistar, ftz(identical_pow(u[2], Float32(i + 1))))

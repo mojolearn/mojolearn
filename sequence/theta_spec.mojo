@@ -30,7 +30,7 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from sequence.coop_lane import coop_src
-from sequence.ops import FP, Args, add, fma3, ld, mul, seq_madd, st, sub
+from sequence.ops import FP, Args, add, fma3, ld, mul st, sub
 from sequence.theta import (
     DOTM, DSTM, OTM, STM, THETA_REG, THETA_REG_FAST, THETA_SNAP, _acf_decide, _decompose, div, theta_forecast_reg,
     theta_invariants, theta_run_reg, theta_sse_hoisted,
@@ -51,7 +51,7 @@ comptime THETA_SPEC_FAST = THETA_REG_FAST and not is_defined["MOJOLEARN_SEQ_FAST
 #: k + 1 initial / shrunk vertices) at once and every lane replays
 #: nelder_mead's decision on the broadcast values. Each accepted value is
 #: the serial objective on the same words (`_theta_sse_idn` below is
-#: `theta_run_reg`'s error chain, seq_madd included), the decision is
+#: `theta_run_reg`'s error chain, add(mul) form), the decision is
 #: nm_steps' (no stall rule, no snapshot on IDENTICAL), so NO bit moves on
 #: NVIDIA, AMD or the host column (the host keeps the serial op_theta).
 #: Admitted on NVIDIA/AMD through the cooperative dispatch
@@ -71,7 +71,7 @@ def _theta_sse_idn[DYN: Bool](
     y: FP, n: Int, level0: Float32, alpha: Float32, theta: Float32, A0: Float32, B0: Float32, mean_y: Float32,
 ) -> Float32:
     """`theta_run_reg`'s return value (MOJOLEARN_IDN_NM_SPEC): its error
-    chain op for op (the two `seq_madd` spellings included, which
+    chain op for op (the add(mul) spellings, since SEQ_FMA was deleted 2026-10-11; which
     `theta_sse_hoisted` writes as mul + add), nothing stored; A0, B0 and
     mean_y are `theta_invariants`' words, the same chains theta_run_reg
     runs."""
@@ -92,7 +92,7 @@ def _theta_sse_idn[DYN: Bool](
     var pw = oma
     for i in range(1, n):
         var pw1 = mul(pw, oma)
-        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
         var yi = ld(y, i)
         var ei = sub(yi, m)
         if i >= 3:
@@ -100,7 +100,7 @@ def _theta_sse_idn[DYN: Bool](
         var lev2 = fma3(alpha, yi, mul(oma, lev))
         comptime if DYN:
             var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
-            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
                          Float32(i + 2))
             Bn = b2
             An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
