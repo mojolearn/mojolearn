@@ -434,7 +434,7 @@ def ridge_fit_host(
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var w = ctx.enqueue_create_buffer[DType.float32](n_features)
-    # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by SHA_DEL; code recoverable at SHA_DEL^.
+    # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
@@ -681,7 +681,7 @@ def qn_fit_host(
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-    # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by SHA_DEL; code recoverable at SHA_DEL^.
+    # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)

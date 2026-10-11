@@ -97,7 +97,7 @@ comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and not is_defined["MOJOLEARN_IDN_JAC
 # host column (glm/host/gram_solve_host.mojo) runs the same cells.
 comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"]()
 
-# TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
 # Tried: L4 (lane fg-linear), the linear fits' X/y uploads through a process-lifetime pinned stage
 # of two 32 MB halves; grid ge123e6f9 (one run per arm) found the OFF arm FASTER: ols istella
