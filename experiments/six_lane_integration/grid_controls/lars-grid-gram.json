@@ -19,12 +19,12 @@
     "x_linear/lars.mojo:_lars_host_blocked_moments",
     "x_linear/device.mojo:XL_IDN_LARS_GRID_GRAM",
     "x_linear/device.mojo:fit_device",
-    "core/blocked_moments_host.mojo:host_bm_column_mean_ptr"
+    "core/classical_centered.mojo:bm_column_mean_cell"
    ],
    "binding": "_mojolearn_x_linear",
    "bits_change": true,
    "status": "new",
-   "notes": "Ideas F5. LARS / LassoLars means, centered Gram and X'y from core/blocked_moments.mojo (bm_column_mean, bm_centered_gram_panels, bm_centered_cross_panels at contract_leaf_size(n) leaves, binary-counter fold) instead of x_linear/moments_grid.mojo (one block per 16-column tile pair, one serial all-rows chain per cell: 3 blocks at taxi's 16 features). Host column (_mojolearn_x_linear_host) uses the same fold via centered_gram_v1_cell / centered_cross_v1_cell / host_bm_column_mean_ptr under the same define. Apple keeps the moments grid. Races: lars and lasso-lars taxi (+ istella), quality r2 equal; ID on nv+amd."
+   "notes": "Ideas F5. LARS / LassoLars means, centered Gram and X'y from core/blocked_moments.mojo (bm_column_mean, bm_centered_gram_panels, bm_centered_cross_panels at contract_leaf_size(n) leaves, binary-counter fold) instead of x_linear/moments_grid.mojo (one block per 16-column tile pair, one serial all-rows chain per cell: 3 blocks at taxi's 16 features). Host column (_mojolearn_x_linear_host) uses the same fold via centered_gram_v1_cell / centered_cross_v1_cell / bm_column_mean_cell under the same define. Apple keeps the moments grid. Races: lars and lasso-lars taxi (+ istella), quality r2 equal; ID on nv+amd."
   }
  }
 }

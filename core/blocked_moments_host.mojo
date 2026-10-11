@@ -138,12 +138,6 @@ def host_bm_chan_fold(
 
 def host_bm_column_mean(x: List[Float32], n: Int, d: Int) -> List[Float32]:
     """`bm_column_mean`."""
-    return host_bm_column_mean_ptr(MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr())), n, d)
-
-
-def host_bm_column_mean_ptr(x: MutPointer[Float32, MutAnyOrigin], n: Int, d: Int) -> List[Float32]:
-    """`bm_column_mean` over a row-major n x d pointer (the List form's
-    statements; lane lars-grid-gram reads a fit's input in place)."""
     var leaf = bm_mean_leaf_rows(n)
     var leaves = bm_leaf_count(n, leaf)
     var part = List[Float32](length=max(1, leaves * d), fill=Float32(0.0))
@@ -158,7 +152,7 @@ def host_bm_column_mean_ptr(x: MutPointer[Float32, MutAnyOrigin], n: Int, d: Int
                     var acc = Float32(0.0)
                     var r = r0 + s
                     while r < r1:
-                        acc = bm_add(acc, x.unsafe_load(r * d + j))
+                        acc = bm_add(acc, x[r * d + j])
                         r += chains
                     tot = acc if s == 0 else bm_add(tot, acc)
                 part[k * d + j] = tot
@@ -166,7 +160,7 @@ def host_bm_column_mean_ptr(x: MutPointer[Float32, MutAnyOrigin], n: Int, d: Int
             for j in range(d):
                 var acc = Float32(0.0)
                 for r in range(r0, r1):
-                    acc = bm_add(acc, x.unsafe_load(r * d + j))
+                    acc = bm_add(acc, x[r * d + j])
                 part[k * d + j] = acc
     return host_bm_sum_fold(part^, leaves, d, n)
 

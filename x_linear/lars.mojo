@@ -29,8 +29,7 @@ from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty, t_cholesky
 from std.sys.compile import is_defined
-from core.blocked_moments_host import host_bm_column_mean_ptr
-from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cell
+from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cell, bm_column_mean_cell
 
 # lane/lars-grid-gram (2026-10-11), IDENTICAL experiment, default OFF:
 # `-D MOJOLEARN_IDN_LARS_GRID_GRAM` takes LARS / LassoLars' moments from the
@@ -45,7 +44,7 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
 # lars taxi 60.8 -> ~10 ms NV (ideas-dense-linalg-20261011 F5). Bits change
 # (the fold order), on NVIDIA, AMD and this host column together: the host
 # below runs the device's reference cells (`centered_gram_v1_cell`,
-# `centered_cross_v1_cell`, `host_bm_column_mean_ptr`). Apple keeps main's
+# `centered_cross_v1_cell`, `bm_column_mean_cell`). Apple keeps main's
 # grid (x_linear/device.mojo `XL_IDN_LARS_GRID_GRAM`).
 comptime LARS_GRID_GRAM = is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM"]()
 
@@ -58,11 +57,9 @@ def _lars_host_blocked_moments(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, x
     var ym = Float32(0)
     fill(fw, xm, d, Float32(0))
     if fi and n > 0:
-        var mu = host_bm_column_mean_ptr(x, n, d)
         for j in range(d):
-            st(fw, xm + j, mu[j])
-        var my = host_bm_column_mean_ptr(y, n, 1)
-        ym = my[0]
+            st(fw, xm + j, bm_column_mean_cell(x, n, d, j))
+        ym = bm_column_mean_cell(y, n, 1, 0)
     var mp = fw + xm
     for i in range(d):
         for j in range(i, d):
