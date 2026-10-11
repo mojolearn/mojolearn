@@ -31,7 +31,7 @@ from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _down_i
 from core.device_fold import device_sum_i32
 from core.device_pool import pool_give, pool_take
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 
@@ -224,7 +224,18 @@ comptime NC_COLMISS_ONLY = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gp
 # wide all-missing/all-present and pool reuse). Measured sourcef9c5887a8.
 # Both column counts and total use parallel GPU integer atomics; host does
 # no count reduction. Synchronize before return/pool reuse. See EXPERIMENTS.
-comptime NC_FIT_LEAN = NC_COLMISS_ONLY and not is_defined["MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF"]()
+comptime _NC_FIT_LEAN_FAST = NC_COLMISS_ONLY and not is_defined["MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF"]()
+
+# lane/neighbors-small-ports (2026-10-11, idea D3): -D MOJOLEARN_IDN_NC_FIT_LEAN admits
+# the same lean fit on IDENTICAL (default off, OPEN). Structural reason: KNNImputer.fit
+# needs only the per-column NaN counts and their total; today's IDENTICAL fit runs the
+# full n x d cell compaction (five kernels, a host sync and the cell list's D2H). The
+# lean op's outputs are integer counts summed by atomics (order-free), so the words
+# equal the full pass on NVIDIA, AMD and the host binding alike. Not keyed on any
+# shape. Expected knn-imputer istella NV 83 -> ~15 ms, AMD 25 -> ~6 ms.
+comptime _NC_FIT_LEAN_IDN = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+                             and is_defined["MOJOLEARN_IDN_NC_FIT_LEAN"]())
+comptime NC_FIT_LEAN = _NC_FIT_LEAN_FAST or _NC_FIT_LEAN_IDN
 
 
 def nan_fit_counts_kernel(x: FP, colmiss: IP, n_: Int64, d_: Int64):

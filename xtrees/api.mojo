@@ -1632,6 +1632,33 @@ def kshap_solve_model_binding(x: PythonObject, fx: PythonObject, fnull: PythonOb
     return PythonObject(p[0])
 
 
+def pshap_linear_ok_binding() raises -> PythonObject:
+    """1 when this build carries MOJOLEARN_IDN_PSHAP_RESIDENT on a device
+    binding (xtrees/agnostic_device.mojo), else 0 (the host column and every
+    other build keep the model callback)."""
+    comptime if XTREES_DEVICE_OPS and agn_dev.PSHAP_IDN_RESIDENT:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def pshap_values_linear_binding(x: PythonObject, bg: PythonObject, wb: PythonObject, phi: PythonObject,
+                                params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_IDN_PSHAP_RESIDENT (lane/neighbors-small-ports): a chunk of
+    PermutationExplainer values over one of this library's linear
+    regressors, the synthetic rows and the model on the device: x Float32
+    R x d, bg Float32 nb x d, wb Float32 k x (d + 1), phi float64 R x d x k;
+    params = [R, nb, d, np, row0, seed, k, link]."""
+    var p = _agn_ints(params, 8, "x_trees_pshap_values_linear")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1 or p[7] < 0 or p[7] > 2:
+        raise Error("x_trees_pshap_values_linear: bad counts")
+    comptime if XTREES_DEVICE_OPS and agn_dev.PSHAP_IDN_RESIDENT:
+        agn_dev.pshap_values_linear(Int(py=x), Int(py=bg), Int(py=wb), Int(py=phi), p[0], p[1], p[2], p[6], p[3],
+                                    p[5], p[4], p[7])
+    else:
+        raise Error("x_trees_pshap_values_linear: built without MOJOLEARN_IDN_PSHAP_RESIDENT")
+    return PythonObject(p[0])
+
+
 def pshap_values_model_binding(x: PythonObject, phi: PythonObject, params: PythonObject) raises -> PythonObject:
     """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: PermutationExplainer's values of a
     chunk over the loaded forest, `x_trees_pshap_synth` + the model +
@@ -1916,5 +1943,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[agn_model_release_binding]("x_trees_agn_model_release")
     m.def_function[kshap_solve_model_binding]("x_trees_kshap_solve_model")
     m.def_function[pshap_values_model_binding]("x_trees_pshap_values_model")
+    m.def_function[pshap_linear_ok_binding]("x_trees_pshap_linear_ok")
+    m.def_function[pshap_values_linear_binding]("x_trees_pshap_values_linear")
     m.def_function[pshap_dsynth_binding]("x_trees_pshap_dsynth")
     m.def_function[pshap_dvalues_binding]("x_trees_pshap_dvalues")

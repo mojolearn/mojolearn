@@ -1,0 +1,105 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "neighbors-small-ports",
+ "branch": "lane/neighbors-small-ports",
+ "head": "5445778af",
+ "controls": {
+  "IDN_NC_FIT_LEAN": {
+   "define": "MOJOLEARN_IDN_NC_FIT_LEAN",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_NC_FIT_LEAN"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_neighbors/nan_cells_device.mojo:236"
+   ],
+   "binding": "_mojolearn_x_neighbors",
+   "bits_change": false,
+   "status": "new",
+   "note": "IDENTICAL KNNImputer.fit runs only the per-column NaN count kernel (integer atomics, order-free) instead of the full cell compaction + D2H; same words. A/B knn-imputer istella nv+amd."
+  },
+  "IDN_MBK_RESIDENT": {
+   "define": "MOJOLEARN_IDN_MBK_RESIDENT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_MBK_RESIDENT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cluster/minibatch_ptr.mojo:83",
+    "x_cluster/minibatch.mojo:210",
+    "bindings/_mojolearn_x_cluster.mojo:71"
+   ],
+   "binding": "_mojolearn_x_cluster",
+   "bits_change": false,
+   "status": "new",
+   "note": "IDENTICAL MiniBatchKMeans uploads X from the caller's pointer (no read_f32 host list), scans it on the device (Python skips all_finite), minibatch_fit runs on the resident slot with device gathers of the same rows; step loop unchanged; same words. A/B minibatch-kmeans istella + taxi nv+amd."
+  },
+  "IDN_PSHAP_RESIDENT": {
+   "define": "MOJOLEARN_IDN_PSHAP_RESIDENT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_PSHAP_RESIDENT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "xtrees/agnostic_device.mojo:120",
+    "xtrees/api.mojo:pshap_values_linear_binding",
+    "python/mojolearn/_expansion_trees.py:PermutationExplainer._linear_wb"
+   ],
+   "binding": "_mojolearn_x_trees",
+   "bits_change": false,
+   "status": "new",
+   "note": "IDENTICAL PermutationExplainer over this library's linear regressors: synthetic rows + x_linear decision statements + means + marginals on the device per chunk, chunk budget 2^28 words; same words as the callback path. A/B permutation-shap istella + taxi nv+amd."
+  }
+ },
+ "algorithms": {
+  "algos:knn-imputer": {
+   "binding": "_mojolearn_x_neighbors",
+   "route": "KNNImputer.fit -> _nan_cells(colmiss_only=1) -> nan_cells_device (NC_FIT_LEAN)",
+   "controls": [
+    "IDN_NC_FIT_LEAN"
+   ],
+   "interaction_groups": [
+    [
+     "IDN_NC_FIT_LEAN"
+    ]
+   ]
+  },
+  "algos:minibatch-kmeans": {
+   "binding": "_mojolearn_x_cluster",
+   "route": "MiniBatchKMeans.fit -> x_cluster_call ENTRY_MINIBATCH -> minibatch_entry_ptr_idn -> minibatch_fit(xs_res)",
+   "controls": [
+    "IDN_MBK_RESIDENT"
+   ],
+   "interaction_groups": [
+    [
+     "IDN_MBK_RESIDENT"
+    ]
+   ]
+  },
+  "algos:permutation-shap": {
+   "binding": "_mojolearn_x_trees",
+   "route": "PermutationExplainer.shap_values -> _linear_wb -> x_trees_pshap_values_linear -> pshap_values_linear",
+   "controls": [
+    "IDN_PSHAP_RESIDENT"
+   ],
+   "interaction_groups": [
+    [
+     "IDN_PSHAP_RESIDENT"
+    ]
+   ]
+  }
+ },
+ "removed": []
+}
