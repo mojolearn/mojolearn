@@ -3611,6 +3611,213 @@ def kde_chunk_lse_kernel(
         part_sum.unsafe_store(q * n_chunks + chunk, s)
 
 
+# ===========================================================================
+# IDN_KDE_QTILE (lane/kde-qtile, 2026-10-11; ideas-all-gaps D1, default OFF,
+# `-D MOJOLEARN_IDN_KDE_QTILE`). Structural reason: `kde_chunk_lse_kernel`
+# gives each thread ONE query and stages a 64-feature x 64-train tile with
+# lanes along the train axis (every staging load strides by d words), so each
+# shared train word serves one query and the global loads are uncoalesced.
+# This body gives each thread KDE_QT_Q = 4 queries (one staged train word
+# serves 4 queries), stages KDE_QT_CELL = 16 train rows x up to KDE_QT_FEAT =
+# 256 features with consecutive lanes along the feature axis (a row of d
+# contiguous words: coalesced), and stages only the `cells x feats` words the
+# call needs (no zero padding above d; a cost rule over every d, not a board
+# shape). Expected (ideas file D1): kde istella NV 28 -> ~9 ms, taxi 21 -> ~6.
+# BITS: UNCHANGED. Each (query, train) pair folds its features in ascending
+# order with the same per-feature step as the default body, and each query
+# folds its chunk's cells in ascending j into the same (m, s) pair, so the
+# partial planes are word-for-word the default's on every vendor and the host
+# column needs no change. (The idea's part (c), log K straight from d^2, moves
+# bits on the four device distance sites and the host oracle's three; it is
+# left for a separate define, not folded into this one.)
+# ===========================================================================
+comptime KDE_IDN_QTILE = KDE_IDN_CHUNK_LSE and is_defined["MOJOLEARN_IDN_KDE_QTILE"]()
+comptime KDE_QT_Q = 4
+comptime KDE_QT_CELL = 16
+comptime KDE_QT_FEAT = 256
+comptime KDE_QT_TILE_FLOATS = KDE_QT_CELL * KDE_QT_FEAT
+
+
+@always_inline
+def _kde_qt_step(
+    acc: SIMD[DType.float32, KDE_QT_CELL],
+    qs: Float32,
+    row: SIMD[DType.float32, KDE_QT_CELL],
+    metric: Int,
+) -> SIMD[DType.float32, KDE_QT_CELL]:
+    """One feature step of one (query, 16 cells) accumulator: the default
+    body's step for each metric, spelled once."""
+    var qv = SIMD[DType.float32, KDE_QT_CELL](ftz(qs))
+    if metric == DIST_L2_SQRT_UNEXPANDED:
+        var diff = ftz_simd[KDE_QT_CELL](qv - row)
+        comptime if KDE_DIRECT_DISTANCE:
+            return direct_distance_step[KDE_QT_CELL](acc, diff, SIMD[DType.float32, KDE_QT_CELL](0))
+        else:
+            return ftz_simd[KDE_QT_CELL](identical_mul_add_simd[KDE_QT_CELL](diff, diff, acc))
+    elif metric == DIST_L1:
+        return ftz_simd[KDE_QT_CELL](acc + abs(ftz_simd[KDE_QT_CELL](qv - row)))
+    var diff = abs(ftz_simd[KDE_QT_CELL](qv - row))
+    return diff.gt(acc).select(diff, acc)
+
+
+@always_inline
+def _kde_qt_fold(
+    acc: SIMD[DType.float32, KDE_QT_CELL],
+    cells: Int,
+    j_base: Int,
+    has_weights: Bool,
+    logw: MutPointer[Float32, MutAnyOrigin],
+    bandwidth: Float32,
+    kernel: Int,
+    metric: Int,
+    mut m: Float32,
+    mut s: Float32,
+):
+    """The default body's per-cell epilogue and (m, s) update, ascending c."""
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    for c in range(cells):
+        var dist = acc[c]
+        if metric == DIST_L2_SQRT_UNEXPANDED:
+            dist = ftz(identical_sqrt(dist))
+        var v = compute_log_kernel(ftz(dist), bandwidth, kernel)
+        if has_weights:
+            v = ftz(v + logw.unsafe_load(j_base + c))
+        if v > m:
+            if m == neg_inf:
+                s = Float32(1.0)
+            else:
+                s = ftz(identical_mul_add(s, ftz(identical_exp(ftz(m - v))), Float32(1.0)))
+            m = v
+        elif v != neg_inf:
+            s = ftz(s + ftz(identical_exp(ftz(v - m))))
+
+
+def kde_chunk_lse_qtile_kernel(
+    part_max: MutPointer[Float32, MutAnyOrigin],
+    part_sum: MutPointer[Float32, MutAnyOrigin],
+    query: MutPointer[Float32, MutAnyOrigin],
+    train: MutPointer[Float32, MutAnyOrigin],
+    logw: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+    d_in: Int32,
+    n_chunks_in: Int32,
+    chunk_rows_in: Int32,
+    has_weights_in: Int32,
+    bandwidth: Float32,
+    kernel_in: Int32,
+    metric_in: Int32,
+):
+    """`kde_chunk_lse_kernel` with 4 queries per thread (block x covers
+    `block_dim.x * KDE_QT_Q` queries: thread t owns q0 + t + k * tpb) and a
+    coalesced 16-row train tile. Same partial planes, same bits."""
+    var n_query = Int(n_query_in)
+    var n_train = Int(n_train_in)
+    var d = Int(d_in)
+    var n_chunks = Int(n_chunks_in)
+    var chunk_rows = Int(chunk_rows_in)
+    var has_weights = Int(has_weights_in) != 0
+    var kernel = Int(kernel_in)
+    var metric = Int(metric_in)
+    var tpb = Int(block_dim.x)
+    var tid = Int(thread_idx.x)
+    var qblock = Int(block_idx.x) * tpb * KDE_QT_Q + tid
+    var q0 = qblock
+    var q1 = qblock + tpb
+    var q2 = qblock + 2 * tpb
+    var q3 = qblock + 3 * tpb
+    var chunk = Int(block_idx.y)
+    var in_chunk = chunk < n_chunks
+    var v0 = in_chunk and q0 < n_query
+    var v1 = in_chunk and q1 < n_query
+    var v2 = in_chunk and q2 < n_query
+    var v3 = in_chunk and q3 < n_query
+    # Invalid slots read query row 0 (always present) and never store.
+    var b0 = q0 * d if v0 else 0
+    var b1 = q1 * d if v1 else 0
+    var b2 = q2 * d if v2 else 0
+    var b3 = q3 * d if v3 else 0
+    var any_valid = v0 or v1 or v2 or v3
+    var j_begin = chunk * chunk_rows
+    var j_end = j_begin + chunk_rows
+    if j_end > n_train:
+        j_end = n_train
+
+    var tile = stack_allocation[
+        KDE_QT_TILE_FLOATS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var m0 = neg_inf
+    var m1 = neg_inf
+    var m2 = neg_inf
+    var m3 = neg_inf
+    var s0 = Float32(0.0)
+    var s1 = Float32(0.0)
+    var s2 = Float32(0.0)
+    var s3 = Float32(0.0)
+
+    var j_base = j_begin
+    while j_base < j_end:
+        var cells = j_end - j_base
+        if cells > KDE_QT_CELL:
+            cells = KDE_QT_CELL
+        var a0 = SIMD[DType.float32, KDE_QT_CELL](0.0)
+        var a1 = SIMD[DType.float32, KDE_QT_CELL](0.0)
+        var a2 = SIMD[DType.float32, KDE_QT_CELL](0.0)
+        var a3 = SIMD[DType.float32, KDE_QT_CELL](0.0)
+        var f0 = 0
+        while f0 < d:
+            var feats = d - f0
+            if feats > KDE_QT_FEAT:
+                feats = KDE_QT_FEAT
+            barrier()
+            # Coalesced staging: consecutive lanes walk one row's features.
+            var words = cells * feats
+            var idx = tid
+            while idx < words:
+                var cell = idx // feats
+                var feat = idx - cell * feats
+                tile.unsafe_store(
+                    feat * KDE_QT_CELL + cell,
+                    ftz(train.unsafe_load((j_base + cell) * d + f0 + feat)),
+                )
+                idx += tpb
+            barrier()
+            if any_valid:
+                for feat in range(feats):
+                    var row = tile.unsafe_load[width=KDE_QT_CELL](feat * KDE_QT_CELL)
+                    var fo = f0 + feat
+                    a0 = _kde_qt_step(a0, query.unsafe_load(b0 + fo), row, metric)
+                    a1 = _kde_qt_step(a1, query.unsafe_load(b1 + fo), row, metric)
+                    a2 = _kde_qt_step(a2, query.unsafe_load(b2 + fo), row, metric)
+                    a3 = _kde_qt_step(a3, query.unsafe_load(b3 + fo), row, metric)
+            f0 += KDE_QT_FEAT
+        if v0:
+            _kde_qt_fold(a0, cells, j_base, has_weights, logw, bandwidth, kernel, metric, m0, s0)
+        if v1:
+            _kde_qt_fold(a1, cells, j_base, has_weights, logw, bandwidth, kernel, metric, m1, s1)
+        if v2:
+            _kde_qt_fold(a2, cells, j_base, has_weights, logw, bandwidth, kernel, metric, m2, s2)
+        if v3:
+            _kde_qt_fold(a3, cells, j_base, has_weights, logw, bandwidth, kernel, metric, m3, s3)
+        j_base += KDE_QT_CELL
+    if v0:
+        part_max.unsafe_store(q0 * n_chunks + chunk, m0)
+        part_sum.unsafe_store(q0 * n_chunks + chunk, s0)
+    if v1:
+        part_max.unsafe_store(q1 * n_chunks + chunk, m1)
+        part_sum.unsafe_store(q1 * n_chunks + chunk, s1)
+    if v2:
+        part_max.unsafe_store(q2 * n_chunks + chunk, m2)
+        part_sum.unsafe_store(q2 * n_chunks + chunk, s2)
+    if v3:
+        part_max.unsafe_store(q3 * n_chunks + chunk, m3)
+        part_sum.unsafe_store(q3 * n_chunks + chunk, s3)
+
+
 def kde_chunk_lse_reduce_kernel(
     lse: MutPointer[Float32, MutAnyOrigin],
     part_max: MutPointer[Float32, MutAnyOrigin],
@@ -3788,10 +3995,18 @@ def _kde_score_samples_chunk_lse_reused_locked(
     if has_weights:
         ctx.enqueue_function[log_weights_kernel](sc.logw.unsafe_ptr(),weights.unsafe_ptr(),Int32(n_train),
             grid_dim=((n_train+elem_tpb-1)//elem_tpb,1,1),block_dim=(elem_tpb,1,1))
-    ctx.enqueue_function[kde_chunk_lse_kernel](sc.part.unsafe_ptr(),sc.psum.unsafe_ptr(),query.unsafe_ptr(),train.unsafe_ptr(),
-        sc.logw.unsafe_ptr(),Int32(n_query),Int32(n_train),Int32(n_features),Int32(n_chunks),Int32(chunk_rows),
-        Int32(1 if has_weights else 0),bandwidth,Int32(kernel),Int32(metric),
-        grid_dim=((n_query+q_tpb-1)//q_tpb,n_chunks,1),block_dim=(q_tpb,1,1))
+    comptime if KDE_IDN_QTILE:
+        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel).
+        var qt_span=q_tpb*KDE_QT_Q
+        ctx.enqueue_function[kde_chunk_lse_qtile_kernel](sc.part.unsafe_ptr(),sc.psum.unsafe_ptr(),query.unsafe_ptr(),train.unsafe_ptr(),
+            sc.logw.unsafe_ptr(),Int32(n_query),Int32(n_train),Int32(n_features),Int32(n_chunks),Int32(chunk_rows),
+            Int32(1 if has_weights else 0),bandwidth,Int32(kernel),Int32(metric),
+            grid_dim=((n_query+qt_span-1)//qt_span,n_chunks,1),block_dim=(q_tpb,1,1))
+    else:
+        ctx.enqueue_function[kde_chunk_lse_kernel](sc.part.unsafe_ptr(),sc.psum.unsafe_ptr(),query.unsafe_ptr(),train.unsafe_ptr(),
+            sc.logw.unsafe_ptr(),Int32(n_query),Int32(n_train),Int32(n_features),Int32(n_chunks),Int32(chunk_rows),
+            Int32(1 if has_weights else 0),bandwidth,Int32(kernel),Int32(metric),
+            grid_dim=((n_query+q_tpb-1)//q_tpb,n_chunks,1),block_dim=(q_tpb,1,1))
     ctx.enqueue_function[kde_chunk_lse_reduce_kernel](sc.lse.unsafe_ptr(),sc.part.unsafe_ptr(),sc.psum.unsafe_ptr(),Int32(n_query),Int32(n_chunks),
         grid_dim=((n_query+lse_tpb-1)//lse_tpb,1,1),block_dim=(lse_tpb,1,1))
     var log_sw=ftz(identical_log(sum_weights));var norm=log_kernel_norm(kernel,bandwidth,n_features)
@@ -3858,24 +4073,45 @@ def kde_score_samples_chunk_lse_identical(
     var part = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
     var psum = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
     var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
-    ctx.enqueue_function[kde_chunk_lse_kernel](
-        part.unsafe_ptr(),
-        psum.unsafe_ptr(),
-        query.unsafe_ptr(),
-        train.unsafe_ptr(),
-        logw.unsafe_ptr(),
-        Int32(n_query),
-        Int32(n_train),
-        Int32(n_features),
-        Int32(n_chunks),
-        Int32(chunk_rows),
-        Int32(1 if has_weights else 0),
-        bandwidth,
-        Int32(kernel),
-        Int32(metric),
-        grid_dim=((n_query + q_tpb - 1) // q_tpb, n_chunks, 1),
-        block_dim=(q_tpb, 1, 1),
-    )
+    comptime if KDE_IDN_QTILE:
+        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel).
+        ctx.enqueue_function[kde_chunk_lse_qtile_kernel](
+            part.unsafe_ptr(),
+            psum.unsafe_ptr(),
+            query.unsafe_ptr(),
+            train.unsafe_ptr(),
+            logw.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            Int32(n_features),
+            Int32(n_chunks),
+            Int32(chunk_rows),
+            Int32(1 if has_weights else 0),
+            bandwidth,
+            Int32(kernel),
+            Int32(metric),
+            grid_dim=((n_query + q_tpb * KDE_QT_Q - 1) // (q_tpb * KDE_QT_Q), n_chunks, 1),
+            block_dim=(q_tpb, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[kde_chunk_lse_kernel](
+            part.unsafe_ptr(),
+            psum.unsafe_ptr(),
+            query.unsafe_ptr(),
+            train.unsafe_ptr(),
+            logw.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            Int32(n_features),
+            Int32(n_chunks),
+            Int32(chunk_rows),
+            Int32(1 if has_weights else 0),
+            bandwidth,
+            Int32(kernel),
+            Int32(metric),
+            grid_dim=((n_query + q_tpb - 1) // q_tpb, n_chunks, 1),
+            block_dim=(q_tpb, 1, 1),
+        )
     ctx.enqueue_function[kde_chunk_lse_reduce_kernel](
         lse.unsafe_ptr(),
         part.unsafe_ptr(),
