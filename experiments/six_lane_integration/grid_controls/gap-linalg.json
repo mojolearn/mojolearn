@@ -23,29 +23,6 @@
    "bits_change": true,
    "status": "promoted:lane/eigh-promote",
    "notes": "PROMOTED 2026-10-11 (A/B main@5876e9205 eigh/synthetic: AMD 8620.1 -> 353.7 ms a1600, NV 21119.9 -> 367.2 ms v0006, digest dbbb891997... NV == AMD). The Apple FAST tridiagonal eigh (Householder panels, df64 bisection, twisted vectors, compact-WY back-transform) on IDENTICAL NVIDIA/AMD: every product-meets-add / division / sqrt through checks/numerics seams, fixed 256-slot block folds, rank-2k update as ONE OP_NT identical GEMM at k = 64, back-transform as three identical GEMMs; clustered-spectrum refusal falls back to the identical Jacobi (decided by T's bits). Host column keeps the Jacobi (digest recorded, not required). Also linked by _mojolearn_linalg (its eigh_binding calls DevExec.eigh)."
-  },
-  "ols_r_trisolve": {
-   "define": "MOJOLEARN_IDN_OLS_R_TRISOLVE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_OLS_R_TRISOLVE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_decomp/ols_trisolve.mojo:1",
-    "x_decomp/api.mojo:IDN_OLS_R_TRISOLVE",
-    "x_decomp/api.mojo:ols_r_trisolve_py",
-    "x_decomp/device.mojo:DevExec.ols_r_trisolve",
-    "x_decomp/host.mojo:HostExec.ols_r_trisolve",
-    "python/mojolearn/linear_model.py:_ols_tsqr_centered"
-   ],
-   "binding": "_mojolearn_x_decomp",
-   "bits_change": true,
-   "status": "new",
-   "notes": "lane ols-r-trisolve (ideas-dense-linalg F1): LinearRegression solves R x = c from the TSQR's R_aug in one one-block launch behind a rank gate on R's p2-equilibrated diagonal (min > eps32*d*max), computed and returned by Mojo; gate 0 keeps the Jacobi-SVD route. Bits: coefficients from the back-substitution (fixed 256-lane fold + halving tree, same on NV/AMD/host) instead of V diag(1/s) U^T c; r2 expected equal. Host column _mojolearn_x_decomp_host takes the same define."
   }
  },
  "algorithms": {
@@ -80,14 +57,6 @@
     "eigh_tridiag_idn"
    ],
    "interaction_groups": []
-  },
-  "classical:ols": {
-   "binding": "_mojolearn_x_decomp (host column _mojolearn_x_decomp_host)",
-   "route": "fit: LinearRegression.fit -> _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> [x_decomp_ols_r_trisolve: gate 1 ends (on)] -> _tsqr_lstsq_core(Ra=...) small-R SVD (off, and gate 0)",
-   "controls": [
-    "ols_r_trisolve"
-   ],
-   "interaction_groups": []
   }
  },
  "removed": [
@@ -100,6 +69,11 @@
    "define": "MOJOLEARN_IDN_CHOL_NB128",
    "control": "chol_nb128",
    "reason": "DELETED 2026-10-11 (lane/chol-nb128-delete, deletion dd9a3d31b): SLOWER, cholesky synthetic NV 296.2 -> 271.3 ms (0.92x, v0005) / AMD 163.4 -> 374.8 ms (2.29x, a1614), avg 1.6x (vendor split), main 5876e9205, one run per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch."
+  },
+  {
+   "define": "MOJOLEARN_IDN_OLS_R_TRISOLVE",
+   "control": "ols_r_trisolve",
+   "reason": "DELETED 2026-10-11 (lane/i17-decide-linalg-seq, deletion c14beeda5): NOISE with bits changed (r2 differs at 1e-8): classical:ols taxi NV 15.8 -> 16.9 ms (1.07x) / AMD 14.2 -> 12.6 ms (0.89x), istella NV 505.5 -> 502.9 (0.99x) / AMD 444.7 -> 445.6 (1.00x), avg ~0.98x; arm nv2 v0047 / amd a1630 (r1011.olstri.ab), A nv2 r1011.ols + v0052 / amd a1634 (r1011.ols2, main 2afa942e3), one run per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch."
   }
  ]
 }
