@@ -1616,11 +1616,30 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      in the merged host modules (core/
                                      host_parallel, forest_host_groves,
                                      gbdt_host_ctr, the ExtraTrees host fit);
-                                     no lane dropped"""
+                                     no lane dropped
+
+    REMEASURED 2026-10-10 (lane/lane-select-tests, main 4e9a39e94; each move
+    attributed by recomputing the map on the trees either side):
+      gbdt_host_predict    51 -> 53  new lanes only: gbdt-class-weights
+                                     (f8761cfce) and gbdt-multiclass-offgrid
+                                     (51f6c2b01), 2026-09-29
+      forest_host_predict  88 -> 91  the same two new lanes, plus
+                                     lowbit-conversions from 5d1a8c120
+                                     (2026-10-03: its pure-Python oracle moved
+                                     into the harness lane body, which now
+                                     names more of the package); 5d1a8c120^
+                                     answers 90, 5d1a8c120 answers 91
+      kmeans_oracle        83 (held) fe5587bb0 (2026-10-04) made
+                                     _hierarchy_impl.py name a fourth binding
+                                     and the registry cap read it as a sink
+                                     (80: agglomerative and its two x-cluster
+                                     lanes dropped). A SELECTOR BUG, fixed in
+                                     `enumerator_files` (a host twin counts
+                                     once), not re-pinned"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 83),
-                      ("core/gbdt_host_predict.mojo", 51),
-                      ("core/forest_host_predict.mojo", 88),
+                      ("core/gbdt_host_predict.mojo", 53),
+                      ("core/forest_host_predict.mojo", 91),
                       ("core/forest_inference.mojo", 50),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
