@@ -320,6 +320,111 @@ def gff_leaf_kernel(x: F32Ptr, y: F32Ptr, mh: F32Ptr, ml: F32Ptr, ph: F32Ptr, pl
     pl.unsafe_store(leaf * t + q, v.lo)
 
 
+# IDN_GFF_GRAM_TILED (lane ridge-ff-tiled C1, default off; module controls).
+#: Tile side over the extended (d + 1) columns [X | y].
+comptime GFF_TILE = 64
+#: Rows of centered words staged per chunk (4 panels x 16 x 64 floats = 16 KB shared).
+comptime GFF_TILE_ROWS = 16
+#: 16 x 16 threads, 4 x 4 cells each.
+comptime GFF_TILE_TPB = 256
+comptime GFF_TILE_SIDE = 16
+comptime GFF_TILE_CELLS = 4
+
+
+@always_inline
+def _gff_ext_word(x: F32Ptr, y: F32Ptr, mh: F32Ptr, ml: F32Ptr, r: Int, k: Int, d: Int) -> FF:
+    """Column k of the extended design at row r, centered: `gff_leaf_cell`'s
+    `ff_centered(ld(x, r * d + k), m_k)` for k < d and `ff_centered(ld(y, r),
+    m_d)` for k == d (the same words, the same operation)."""
+    if k < d:
+        return ff_centered(x.unsafe_load(r * d + k), ff_ld(mh, ml, k))
+    return ff_centered(y.unsafe_load(r), ff_ld(mh, ml, d))
+
+
+def gff_leaf_tiled_kernel(x: F32Ptr, y: F32Ptr, mh: F32Ptr, ml: F32Ptr, ph: F32Ptr, pl: F32Ptr, n_in: Int64, d_in: Int32):
+    """grid (tile pairs ti <= tj of the extended upper triangle, GFF_LEAVES),
+    block GFF_TILE_TPB. Each thread owns cells (ti*64 + ty + 16a, tj*64 + tx
+    + 16b), a, b < 4, and runs `gff_leaf_cell`'s chain for each: acc =
+    ff_add(acc, ff_mul(c_i, c_j)), rows of the leaf ascending. Extended cell
+    (i, j) with j < d is Gram cell q = i d + j (stored when i <= j); (i, d)
+    with i < d is cross cell q = d^2 + i (ff_mul(c_i, c_y), the cross cell's
+    operand order). Cells gff_fold_cell never reads are not stored."""
+    var d = Int(d_in)
+    var n = Int(n_in)
+    var t = gff_cells(d)
+    var de = d + 1
+    var nt = (de + GFF_TILE - 1) // GFF_TILE
+    var rem = Int(block_idx.x)
+    var ti = 0
+    while ti < nt and rem >= nt - ti:
+        rem -= nt - ti
+        ti += 1
+    var tj = ti + rem
+    if ti >= nt or tj >= nt:
+        return
+    var leaf = Int(block_idx.y)
+    var lr = gff_leaf_rows(n)
+    var r0 = leaf * lr
+    var r1 = r0 + lr
+    if r1 > n:
+        r1 = n
+    var tid = Int(thread_idx.x)
+    var tx = tid % GFF_TILE_SIDE
+    var ty = tid // GFF_TILE_SIDE
+    var ih = stack_allocation[GFF_TILE_ROWS * GFF_TILE, Float32, address_space=AddressSpace.SHARED]()
+    var il = stack_allocation[GFF_TILE_ROWS * GFF_TILE, Float32, address_space=AddressSpace.SHARED]()
+    var jh = stack_allocation[GFF_TILE_ROWS * GFF_TILE, Float32, address_space=AddressSpace.SHARED]()
+    var jl = stack_allocation[GFF_TILE_ROWS * GFF_TILE, Float32, address_space=AddressSpace.SHARED]()
+    var acc_h = InlineArray[Float32, GFF_TILE_CELLS * GFF_TILE_CELLS](fill=Float32(0))
+    var acc_l = InlineArray[Float32, GFF_TILE_CELLS * GFF_TILE_CELLS](fill=Float32(0))
+    var rc = r0
+    while rc < r1:
+        var rows = r1 - rc
+        if rows > GFF_TILE_ROWS:
+            rows = GFF_TILE_ROWS
+        var e = tid
+        while e < GFF_TILE_ROWS * GFF_TILE:
+            var rr = e // GFF_TILE
+            var cc = e - rr * GFF_TILE
+            var ki = ti * GFF_TILE + cc
+            var kj = tj * GFF_TILE + cc
+            var wi = FF(Float32(0), Float32(0))
+            var wj = FF(Float32(0), Float32(0))
+            if rr < rows:
+                if ki < de:
+                    wi = _gff_ext_word(x, y, mh, ml, rc + rr, ki, d)
+                if kj < de:
+                    wj = _gff_ext_word(x, y, mh, ml, rc + rr, kj, d)
+            ih.store(e, wi.hi)
+            il.store(e, wi.lo)
+            jh.store(e, wj.hi)
+            jl.store(e, wj.lo)
+            e += GFF_TILE_TPB
+        barrier()
+        for rr in range(rows):
+            comptime for a in range(GFF_TILE_CELLS):
+                var ci = FF(ih.load(rr * GFF_TILE + ty + GFF_TILE_SIDE * a), il.load(rr * GFF_TILE + ty + GFF_TILE_SIDE * a))
+                comptime for b in range(GFF_TILE_CELLS):
+                    var cj = FF(jh.load(rr * GFF_TILE + tx + GFF_TILE_SIDE * b), jl.load(rr * GFF_TILE + tx + GFF_TILE_SIDE * b))
+                    var v = ff_add(FF(acc_h[a * GFF_TILE_CELLS + b], acc_l[a * GFF_TILE_CELLS + b]), ff_mul(ci, cj))
+                    acc_h[a * GFF_TILE_CELLS + b] = v.hi
+                    acc_l[a * GFF_TILE_CELLS + b] = v.lo
+        barrier()
+        rc += GFF_TILE_ROWS
+    comptime for a in range(GFF_TILE_CELLS):
+        var i = ti * GFF_TILE + ty + GFF_TILE_SIDE * a
+        comptime for b in range(GFF_TILE_CELLS):
+            var j = tj * GFF_TILE + tx + GFF_TILE_SIDE * b
+            var q = -1
+            if j < d and i <= j:
+                q = i * d + j
+            elif j == d and i < d:
+                q = d * d + i
+            if q >= 0:
+                ph.unsafe_store(leaf * t + q, acc_h[a * GFF_TILE_CELLS + b])
+                pl.unsafe_store(leaf * t + q, acc_l[a * GFF_TILE_CELLS + b])
+
+
 def gff_fold_kernel(ph: F32Ptr, pl: F32Ptr, gh: F32Ptr, gl: F32Ptr, ch: F32Ptr, cl: F32Ptr, d_in: Int32):
     var d = Int(d_in)
     var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -383,6 +488,41 @@ def gff_backward_step_kernel(lh: F32Ptr, ll: F32Ptr, zh: F32Ptr, zl: F32Ptr, wh:
         gff_backward_cell(lh, ll, zh, zl, wh, wl, i, jj, Int(n))
 
 
+# IDN_GS_SOLVE_ONE_LAUNCH, float-float: the step kernels' cells in one block.
+def gff_chol_one_kernel(ah: F32Ptr, al: F32Ptr, adh: F32Ptr, adl: F32Ptr, info: F32Ptr, n: Int32):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    for jj in range(nn):
+        var i = jj + tid
+        while i < nn:
+            gff_chol_cell(ah, al, adh, adl, info, i, jj, nn)
+            i += GS_ONE_TPB
+        barrier()
+
+
+def gff_forward_one_kernel(lh: F32Ptr, ll: F32Ptr, bh: F32Ptr, bl: F32Ptr, zh: F32Ptr, zl: F32Ptr, n: Int32):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    for jj in range(nn):
+        var i = jj + tid
+        while i < nn:
+            gff_forward_cell(lh, ll, bh, bl, zh, zl, i, jj, nn)
+            i += GS_ONE_TPB
+        barrier()
+
+
+def gff_backward_one_kernel(lh: F32Ptr, ll: F32Ptr, zh: F32Ptr, zl: F32Ptr, wh: F32Ptr, wl: F32Ptr, n: Int32):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    for k in range(nn):
+        var jj = nn - 1 - k
+        var i = tid
+        while i <= jj:
+            gff_backward_cell(lh, ll, zh, zl, wh, wl, i, jj, nn)
+            i += GS_ONE_TPB
+        barrier()
+
+
 def gff_coef_kernel(wh: F32Ptr, wl: F32Ptr, sv: F32Ptr, dst: F32Ptr, d_in: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(d_in):
@@ -412,10 +552,18 @@ def _gs_ff_fit(
     )
     var d_ph = ctx.enqueue_create_buffer[DType.float32](GFF_LEAVES * t)
     var d_pl = ctx.enqueue_create_buffer[DType.float32](GFF_LEAVES * t)
-    ctx.enqueue_function[gff_leaf_kernel](
-        _p(d_x), _p(d_y), _p(d_mh), _p(d_ml), _p(d_ph), _p(d_pl), Int64(n_rows), Int32(d),
-        grid_dim=(_gs_blocks(t), GFF_LEAVES, 1), block_dim=(GS_TPB, 1, 1),
-    )
+    comptime if IDN_GFF_GRAM_TILED:
+        # lane ridge-ff-tiled C1 (default off): register-tiled leaf Gram, same words
+        var gt = (d + 1 + GFF_TILE - 1) // GFF_TILE
+        ctx.enqueue_function[gff_leaf_tiled_kernel](
+            _p(d_x), _p(d_y), _p(d_mh), _p(d_ml), _p(d_ph), _p(d_pl), Int64(n_rows), Int32(d),
+            grid_dim=(gt * (gt + 1) // 2, GFF_LEAVES, 1), block_dim=(GFF_TILE_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[gff_leaf_kernel](
+            _p(d_x), _p(d_y), _p(d_mh), _p(d_ml), _p(d_ph), _p(d_pl), Int64(n_rows), Int32(d),
+            grid_dim=(_gs_blocks(t), GFF_LEAVES, 1), block_dim=(GS_TPB, 1, 1),
+        )
     var d_gh = ctx.enqueue_create_buffer[DType.float32](d * d)
     var d_gl = ctx.enqueue_create_buffer[DType.float32](d * d)
     var d_ch = ctx.enqueue_create_buffer[DType.float32](d)
@@ -438,11 +586,19 @@ def _gs_ff_fit(
     var d_info = ctx.enqueue_create_buffer[DType.float32](1)
     var d_flag = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.enqueue_function[gs_info_init_kernel](_p(d_info), grid_dim=1, block_dim=1)
-    for j in range(d):
-        ctx.enqueue_function[gff_chol_step_kernel](
-            _p(d_ah), _p(d_al), _p(d_adh), _p(d_adl), _p(d_info), Int32(j), Int32(d),
-            grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
+    var ff_one = False
+    comptime if GS_ONE_ON:
+        ff_one = d <= GFF_ONE_MAX_D
+    if ff_one:
+        ctx.enqueue_function[gff_chol_one_kernel](  # small-launch(d: feature count): one block walks the d column steps of the d x d float-float factor, never rows
+            _p(d_ah), _p(d_al), _p(d_adh), _p(d_adl), _p(d_info), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB,
         )
+    else:
+        for j in range(d):
+            ctx.enqueue_function[gff_chol_step_kernel](
+                _p(d_ah), _p(d_al), _p(d_adh), _p(d_adl), _p(d_info), Int32(j), Int32(d),
+                grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
+            )
     ctx.enqueue_function[gff_trust_kernel](
         _p(d_ah), _p(d_adh), _p(d_info), _p(d_flag), Int32(d), grid_dim=1, block_dim=1
     )
@@ -456,17 +612,25 @@ def _gs_ff_fit(
         var d_wh = ctx.enqueue_create_buffer[DType.float32](d)
         var d_wl = ctx.enqueue_create_buffer[DType.float32](d)
         var d_w = ctx.enqueue_create_buffer[DType.float32](d)
-        for j in range(d):
-            ctx.enqueue_function[gff_forward_step_kernel](
-                _p(d_ah), _p(d_al), _p(d_bh), _p(d_bl), _p(d_zh), _p(d_zl), Int32(j), Int32(d),
-                grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
+        if ff_one:
+            ctx.enqueue_function[gff_forward_one_kernel](  # small-launch(d: feature count): one block walks the d forward steps over d-vectors, never rows
+                _p(d_ah), _p(d_al), _p(d_bh), _p(d_bl), _p(d_zh), _p(d_zl), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB,
             )
-        for jj in range(d):
-            var j = d - 1 - jj
-            ctx.enqueue_function[gff_backward_step_kernel](
-                _p(d_ah), _p(d_al), _p(d_zh), _p(d_zl), _p(d_wh), _p(d_wl), Int32(j), Int32(d),
-                grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB,
+            ctx.enqueue_function[gff_backward_one_kernel](  # small-launch(d: feature count): one block walks the d backward steps over d-vectors, never rows
+                _p(d_ah), _p(d_al), _p(d_zh), _p(d_zl), _p(d_wh), _p(d_wl), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB,
             )
+        else:
+            for j in range(d):
+                ctx.enqueue_function[gff_forward_step_kernel](
+                    _p(d_ah), _p(d_al), _p(d_bh), _p(d_bl), _p(d_zh), _p(d_zl), Int32(j), Int32(d),
+                    grid_dim=_gs_blocks(d - j), block_dim=GS_TPB,
+                )
+            for jj in range(d):
+                var j = d - 1 - jj
+                ctx.enqueue_function[gff_backward_step_kernel](
+                    _p(d_ah), _p(d_al), _p(d_zh), _p(d_zl), _p(d_wh), _p(d_wl), Int32(j), Int32(d),
+                    grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB,
+                )
         ctx.enqueue_function[gff_coef_kernel](
             _p(d_wh), _p(d_wl), _p(d_s), _p(d_w), Int32(d), grid_dim=_gs_blocks(d), block_dim=GS_TPB
         )
@@ -621,10 +785,19 @@ def linear_gram_fit_host(
         grid_dim=_gs_blocks(d * d), block_dim=GS_TPB,
     )
     ctx.enqueue_function[gs_info_init_kernel](_p(d_info), grid_dim=1, block_dim=1)
-    for j in range(d):
-        ctx.enqueue_function[gs_chol_step_kernel](
-            _p(d_a), _p(d_adiag), _p(d_info), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
+    var one = False
+    comptime if GS_ONE_ON:
+        # lane ridge-ff-tiled C2 (default off): one launch per chain, same statements
+        one = d <= GS_ONE_MAX_D
+    if one:
+        ctx.enqueue_function[gs_chol_one_kernel](  # small-launch(d: feature count): one block walks the d column steps of the d x d factor, never rows
+            _p(d_a), _p(d_adiag), _p(d_info), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB
         )
+    else:
+        for j in range(d):
+            ctx.enqueue_function[gs_chol_step_kernel](
+                _p(d_a), _p(d_adiag), _p(d_info), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
+            )
     ctx.enqueue_function[gs_trust_kernel](
         _p(d_a), _p(d_adiag), _p(d_info), _p(d_flag), Int32(d), grid_dim=1, block_dim=1
     )
@@ -634,15 +807,23 @@ def linear_gram_fit_host(
     var trusted = h_flag.unsafe_ptr().unsafe_load(0) != Float32(0)
     var status = 1
     if trusted:
-        for j in range(d):
-            ctx.enqueue_function[gs_forward_step_kernel](
-                _p(d_a), _p(d_b), _p(d_z), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
+        if one:
+            ctx.enqueue_function[gs_forward_one_kernel](  # small-launch(d: feature count): one block walks the d forward steps over d-vectors, never rows
+                _p(d_a), _p(d_b), _p(d_z), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB
             )
-        for jj in range(d):
-            var j = d - 1 - jj
-            ctx.enqueue_function[gs_backward_step_kernel](
-                _p(d_a), _p(d_z), _p(d_w), Int32(j), Int32(d), grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB
+            ctx.enqueue_function[gs_backward_one_kernel](  # small-launch(d: feature count): one block walks the d backward steps over d-vectors, never rows
+                _p(d_a), _p(d_z), _p(d_w), Int32(d), grid_dim=1, block_dim=GS_ONE_TPB
             )
+        else:
+            for j in range(d):
+                ctx.enqueue_function[gs_forward_step_kernel](
+                    _p(d_a), _p(d_b), _p(d_z), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
+                )
+            for jj in range(d):
+                var j = d - 1 - jj
+                ctx.enqueue_function[gs_backward_step_kernel](
+                    _p(d_a), _p(d_z), _p(d_w), Int32(j), Int32(d), grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB
+                )
         ctx.enqueue_function[gs_unscale_kernel](_p(d_w), _p(d_s), Int32(d), grid_dim=_gs_blocks(d), block_dim=GS_TPB)
         ctx.enqueue_copy(dst_ptr=coef_ptr, src_buf=d_w)
         ctx.synchronize()
