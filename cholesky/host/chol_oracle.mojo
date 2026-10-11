@@ -92,7 +92,7 @@ from core.host_simd_identical import ftz_v
 comptime CHOL_HOST_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
 
 #: `potrf.mojo::CHOL_NB_PINNED`. NUMERIC (DEVIATION 1630).
-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 comptime CHOL_HOST_NB_PINNED = 32
 

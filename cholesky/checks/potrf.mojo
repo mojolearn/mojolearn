@@ -325,7 +325,7 @@ from cholesky.checks.chol_sabotage import (
     sabotage_trsm_panel_kernel,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel, trsm_panel_guarded_kernel
-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 from cholesky.checks.potrf_strip import (
     CHOL_STRIP_ROUTE,
@@ -393,7 +393,7 @@ comptime CHOL_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
 #: replay of it a serial loop. A wider panel would put a fold tree inside the
 #: update, which is legal under the gemm profile and correct, and is a v2
 #: decision rather than a free one.
-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 comptime CHOL_NB_PINNED = 32
 
@@ -1642,7 +1642,7 @@ def chol_workspace_floats(n: Int, nb: Int) -> Int:
                 gws = c
         j0 += nb
     var need = nt * nb + nt * nt + gws
-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
     if need < 1:
         return 1
@@ -1886,7 +1886,7 @@ def _potrf_lower_strips(
     return CholRun(info, CS_NB, n_panels)
 
 
-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 
 
@@ -1974,7 +1974,7 @@ def potrf_lower(
             " that a small matrix will not show you"
         )
 
-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
     # The strip schedule (cholesky/checks/potrf_strip.mojo): the same cells,
     # the same steps, the same order. Only without a trace, a sabotage or a

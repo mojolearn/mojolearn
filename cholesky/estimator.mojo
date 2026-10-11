@@ -80,7 +80,7 @@ from cholesky.checks.potrf import (
     potrf_lower,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
-# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
 from cholesky.impl.linalg.cholesky_r1_update import (
     chol_rank1_update,
@@ -354,7 +354,7 @@ def cholesky_factor_poolio(
     var logdet = Float32(0.0)
     if run.info == 0:
         logdet = chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by SHA_TBD; code recoverable at SHA_TBD^.
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
     var stage = _chol_stage_ptr(ctx, cells)
     ctx.enqueue_copy(dst_ptr=stage, src_buf=da)
