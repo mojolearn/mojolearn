@@ -39,7 +39,8 @@ from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 # 331.3 -> 697.0 ms, avg 1.80x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 885c23dc7.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_NB128.patch; record in docs/TOMBSTONES.md.
 from x_decomp.lu_fast_mma import LU_FAST_MMA, lu_fast_mma_factor
-from x_decomp.lu_delayed import IDN_LU_DELAYED_UPDATE, lu_delayed_factor
+# TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
 # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: blocked right-looking Cholesky (x_decomp/fast_chol.mojo, 3 n / 32 launches); cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6.
@@ -121,7 +122,8 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
-from x_decomp.ols_trisolve import OTS_TPB, ols_r_trisolve_kernel
+# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
@@ -2478,16 +2480,8 @@ def launch_lu(
                     ctx, a, piv, info, act, _p(lfs_p0), _p(lfs_p1), _p(lfs_pa), _p(lfs_pb), n, lfs_mb
                 )
                 k0 = n
-        # lane/lu-delayed-update: MOJOLEARN_IDN_LU_DELAYED_UPDATE (IDENTICAL,
-        # default off; x_decomp/lu_delayed.mojo): main's 32-column panel, the
-        # trailing square updated once per 256 columns through the identical
-        # GEMM instead of once per panel. Bits change (host twin: HostExec.lu).
-        comptime if IDN_LU_DELAYED_UPDATE:
-            if not precise and nb == LU_PANEL_NB:
-                lu_delayed_factor(
-                    ctx, a, piv, info, act, _p(lfs_p0), _p(lfs_p1), _p(lfs_pa), _p(lfs_pb), n, lfs_mb
-                )
-                k0 = n
+        # TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
         while k0 < n:
             var k1 = min(k0 + nb, n)
             if step1:
@@ -4046,29 +4040,8 @@ struct DevExec(Exec):
         _ = da^
         _ = ctx^
 
-    @staticmethod
-    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
-        """MOJOLEARN_IDN_OLS_R_TRISOLVE: R_aug up (n x n words, n <= TS_MAX_N),
-        ONE launch (gate + back-substitution, x_decomp/ols_trisolve.mojo),
-        d + 1 words down (x, then the gate word)."""
-        var n = d + 1
-        var ctx = xd_ctx()
-        var dr = _up(ctx, r, n * n)
-        var dout = ctx.enqueue_create_buffer[DType.float32](n)
-        ctx.enqueue_function[ols_r_trisolve_kernel](  # small-launch(d: R_aug columns): one block over the d x d factor, never data rows
-            _p(dr), _p(dout), Int32(d), grid_dim=1, block_dim=OTS_TPB,
-        )
-        var host = List[Float32](length=n, fill=Float32(0))
-        _down(ctx, dout, F32Ptr(unsafe_from_address=Int(host.unsafe_ptr())), n)
-        ctx.synchronize()
-        for j in range(d):  # small-loop(d: coefficients): copy-res of d words
-            res.unsafe_store(j, host[j])
-        var ok = 1 if host[d] != Float32(0) else 0
-        _ = host^
-        _ = dr^
-        _ = dout^
-        _ = ctx^
-        return ok
+    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 
     @staticmethod
     def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:

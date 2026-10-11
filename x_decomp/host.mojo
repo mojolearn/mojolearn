@@ -35,15 +35,13 @@ from x_decomp.lle_local import (
 from std.sys.compile import is_defined
 
 from decomposition.host.linalg_public import host_eigh, host_qr_r
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import ftz
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
     lu_perm_src,
     lu_result_word,
     lu_finish_host,
-    div0,
-    lu_swap_elem,
     lu_aux_clamp,
     lu_aux_join,
     lu_aux_val,
@@ -78,9 +76,10 @@ from x_decomp.cells import (
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
-from x_decomp.lu_delayed_ctl import IDN_LU_DELAYED_UPDATE, LDP, LDU_MAX_LEAVES, LDU_NB
-from gemm.contract import CONTRACT_K_LEAF_MIN, contract_leaf_size, leaf_begin, leaf_count, leaf_end
-from x_decomp.ols_trisolve import ols_r_trisolve_host
+# TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
+# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.host.center_host import center_on_cpu, col_sums_on_cpu
@@ -192,129 +191,8 @@ def xd_parallel[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
     host_parallelize(group, groups)
 
 
-# ---- lane/lu-delayed-update (2026-10-11): MOJOLEARN_IDN_LU_DELAYED_UPDATE's
-# host column. THE ORDER is stated once, in x_decomp/lu_delayed.mojo.
-
-
-def _ldu_bu_host(a: F32Ptr, act: F32Ptr, n: Int, r0: Int, c0: Int, p0: Int, m: Int, nc: Int, k: Int):
-    """BU(p0, k) on the host: the contract's cell (gemm/host/gemm_oracle.mojo
-    `gemm_oracle_cell` at contract_leaf_size(k)), then one subtraction.
-    Rows are tasks; each row reads only L columns [p0, p0 + k) and U rows
-    [p0, p0 + k), which no task writes."""
-    if m <= 0 or nc <= 0 or k <= 0:
-        return
-    var leaf = contract_leaf_size(k)
-    var pc = leaf_count(k, leaf)
-    comptime assert LDU_NB <= LDU_MAX_LEAVES * CONTRACT_K_LEAF_MIN, "lu_delayed: a BU call (k <= LDU_NB) has at most this many leaves"
-
-    def row(t: Int) {imm a, imm act, imm n, imm r0, imm c0, imm p0, imm nc, imm k, imm leaf, imm pc}:
-        var i = r0 + t
-        var buf = InlineArray[Float32, LDU_MAX_LEAVES](fill=Float32(0))
-        for jj in range(nc):
-            var j = c0 + jj
-            for q in range(pc):
-                var g = Float32(0)
-                for p in range(leaf_begin(q, leaf), leaf_end(q, leaf, k)):
-                    var lv = Float32(0)
-                    if act.unsafe_load(p0 + p) != Float32(0):
-                        lv = ftz(a.unsafe_load(i * n + p0 + p))
-                    g = ftz(identical_mul_add(lv, ftz(a.unsafe_load((p0 + p) * n + j)), g))
-                buf[q] = ftz(g)
-            # the contract's balanced tree: pairs (2q, 2q + 1), an odd last
-            # node carried unchanged, then the output seam
-            var w = pc
-            while w > 1:
-                var pairs = w // 2
-                for q in range(pairs):
-                    buf[q] = ftz(ftz(buf[2 * q]) + ftz(buf[2 * q + 1]))
-                if w % 2 != 0:
-                    buf[pairs] = buf[w - 1]
-                w = pairs + w % 2
-            var gg = ftz(buf[0])
-            a.unsafe_store(i * n + j, ftz(ftz(a.unsafe_load(i * n + j)) - ftz(gg)))
-
-    xd_parallel(row, m)
-
-
-def _ldu_cols_host(a: F32Ptr, piv: I32Ptr, act: F32Ptr, k0: Int, k1: Int, jlo: Int, jtri: Int, n: Int, swaps: Bool):
-    """`lfm_swaps_trsm_kernel`'s statements, columns [jlo, n) as tasks."""
-    if n <= jlo:
-        return
-
-    def col(t: Int) {imm a, imm piv, imm act, imm k0, imm k1, imm jlo, imm jtri, imm n, imm swaps}:
-        var j = jlo + t
-        if swaps:
-            for k in range(k0, k1):
-                lu_swap_elem(a, piv, k, j, n)
-        if j < jtri:
-            for k in range(k0 + 1, k1):
-                var acc = ftz(a.unsafe_load(k * n + j))
-                for kp in range(k0, k):
-                    if act.unsafe_load(kp) != Float32(0):
-                        var l = a.unsafe_load(k * n + kp)
-                        acc = ftz(identical_mul_add(-l, ftz(a.unsafe_load(kp * n + j)), ftz(acc)))
-                a.unsafe_store(k * n + j, acc)
-
-    xd_parallel(col, n - jlo)
-
-
-def lu_delayed_host(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
-    """THE ORDER above on the host (IDN_LU_DELAYED_UPDATE's host column)."""
-    info.unsafe_store(0, Float32(0))
-    var actl = List[Float32](length=max(n, 1), fill=Float32(0))
-    var act = F32Ptr(unsafe_from_address=Int(actl.unsafe_ptr()))
-    var K0 = 0
-    while K0 < n:
-        var K1 = min(K0 + LDU_NB, n)
-        var k0 = K0
-        while k0 < K1:
-            var k1 = min(k0 + LDP, K1)
-            # 1. the panel (`lu_fast_panel`'s statements; NB128's host panel at 32)
-            for k in range(k0, k1):
-                var p = k
-                var best = abs(ftz(a.unsafe_load(k * n + k)))
-                for i in range(k + 1, n):
-                    var v = abs(ftz(a.unsafe_load(i * n + k)))
-                    if v > best:
-                        best = v
-                        p = i
-                piv.unsafe_store(k, Int32(p))
-                if p != k:
-                    for j in range(k1):
-                        var t = a.unsafe_load(k * n + j)
-                        a.unsafe_store(k * n + j, a.unsafe_load(p * n + j))
-                        a.unsafe_store(p * n + j, t)
-                var d = ftz(a.unsafe_load(k * n + k))
-                if d == Float32(0):
-                    if info.unsafe_load(0) == Float32(0):
-                        info.unsafe_store(0, Float32(k + 1))
-                    act.unsafe_store(k, Float32(0))
-                    continue
-                act.unsafe_store(k, Float32(1))
-                for i in range(k + 1, n):
-                    var l = div0(a.unsafe_load(i * n + k), d)
-                    a.unsafe_store(i * n + k, l)
-                    for j in range(k + 1, k1):
-                        a.unsafe_store(
-                            i * n + j,
-                            ftz(identical_mul_add(-l, ftz(a.unsafe_load(k * n + j)), ftz(a.unsafe_load(i * n + j)))),
-                        )
-            # 2. every later column's swaps; the block's U rows
-            _ldu_cols_host(a, piv, act, k0, k1, k1, K1, n, True)
-            # 3. the block's remaining columns
-            _ldu_bu_host(a, act, n, k1, k1, k0, n - k1, K1 - k1, k1 - k0)
-            k0 = k1
-        if K1 < n:
-            var c = K0
-            while c < K1:
-                var ce = min(c + LDP, K1)
-                _ldu_cols_host(a, piv, act, c, ce, K1, n, n, False)
-                _ldu_bu_host(a, act, n, ce, K1, c, K1 - ce, n - K1, ce - c)
-                c = ce
-            _ldu_bu_host(a, act, n, K1, K1, K0, n - K1, n - K1, K1 - K0)
-        K0 = K1
-    lu_finish_host(a, n * n)
-    _ = actl^
+# TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch (lu_delayed_host, the host column).
 
 
 @fieldwise_init
@@ -492,11 +370,8 @@ struct HostExec(Exec):
         # TOMBSTONE: MOJOLEARN_IDN_LU_NB128 (DELETE-slower: grid g50ebe26a5 lu-solve synthetic NV L40S 352.1 -> 541.4 ms, AMD MI325X
         # 331.3 -> 697.0 ms, avg 1.80x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 885c23dc7.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_NB128.patch; record in docs/TOMBSTONES.md.
-        # lane/lu-delayed-update: MOJOLEARN_IDN_LU_DELAYED_UPDATE's host
-        # column (`lu_delayed_host` below; THE ORDER in x_decomp/lu_delayed.mojo), the device's launch_lu twin
-        comptime if IDN_LU_DELAYED_UPDATE:
-            lu_delayed_host(a, piv, n, info)
-            return
+        # TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
         # lu_serial's statements; each step's row eliminations are tasks of
         # LU_ROWS rows, SIMD across the row (x_decomp/host_simd.mojo lu_rows)
         info.unsafe_store(0, Float32(0))
@@ -956,16 +831,8 @@ struct HostExec(Exec):
         _ = ca^
         _ = cb^
 
-    @staticmethod
-    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
-        """The host column of DevExec.ols_r_trisolve: the same fold."""
-        var tmp = List[Float32](length=d + 1, fill=Float32(0))
-        ols_r_trisolve_host(r, F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr())), d)
-        for j in range(d):  # small-loop(d: coefficients): copy-res of d words
-            res.unsafe_store(j, tmp[j])
-        var ok = 1 if tmp[d] != Float32(0) else 0
-        _ = tmp^
-        return ok
+    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 
     @staticmethod
     def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:

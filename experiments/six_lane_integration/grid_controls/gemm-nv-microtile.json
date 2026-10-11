@@ -3,33 +3,12 @@
  "lane": "gemm-nv-microtile",
  "branch": "lane/gemm-nv-microtile",
  "head": "0a2e921d8",
- "controls": {
-  "gemm_nv_microtile": {
+ "controls": {},
+ "removed": [
+  {
    "define": "MOJOLEARN_IDN_GEMM_NV_MICROTILE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GEMM_NV_MICROTILE=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gemm/checks/gemm_identical.mojo:7971",
-    "gemm/checks/gemm_identical.mojo:8347"
-   ],
-   "binding": [
-    "_mojolearn_byte_lm",
-    "_mojolearn_transformer",
-    "_mojolearn_training",
-    "_mojolearn_mamba",
-    "_mojolearn_linalg"
-   ],
-   "vendors": ["nvidia"],
-   "bits_change": false,
-   "status": "open",
-   "board": "neural:gemm (4096^3), every NV identical-GEMM consumer (lm, cholesky/lu delayed update)",
-   "note": "Idea A1 (ideas-dense-linalg-20261011). NVIDIA IDENTICAL packed GEMM body (identical_gemm_kpack_kernel, GATHER): K window 16 -> 32 steps, two gather pairs a thread, A page pad 0 so two 128x64 blocks still fit a 100 KB SM. Halves per-FMA window overhead (barrier, window bounds, admission minima, staging). Execution plan only: same cells, same ascending p chain, same leaves and fold; no bit can move (NV digest must equal the off arm's and AMD's). AMD/Apple/host compile unchanged."
+   "control": "gemm_nv_microtile",
+   "reason": "DELETED 2026-10-11 (lane/i17-decide-nbr-lin-prep, deletion c38d7bc89): SLOWER, neural:gemm gaussian NV 48.5 -> 55.9 ms (1.15x, v0050 vs r1011.nfwd); NVIDIA-only switch, AMD not applicable; main b2657cc89. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch."
   }
- }
+ ]
 }

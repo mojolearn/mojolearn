@@ -1,0 +1,427 @@
+diff --git a/bindings/_mojolearn_x_decomp.mojo b/bindings/_mojolearn_x_decomp.mojo
+index 1148b09ab..4444882f3 100644
+--- a/bindings/_mojolearn_x_decomp.mojo
++++ b/bindings/_mojolearn_x_decomp.mojo
+@@ -13,7 +13,7 @@ from x_decomp.api import (
+     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, als_cg_rows_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
+     py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py,
+     rowsum_py, sqdist_py, vendor_py, fast_defines_py,
+-    idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
++    idn_flags_py, lu_gesv_py, ols_tsqr_r_py, ols_r_trisolve_py,
+ )
+ from x_decomp.device import DevExec
+ from x_decomp.fa_fast import FA_FAST_APPLE, fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
+@@ -146,8 +146,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
+         # lane idn-dense-linalg: the one-entry OLS and solve routes
+         m.def_function[idn_flags_py]("x_decomp_idn_flags")
+         m.def_function[ols_tsqr_r_py[DevExec]]("x_decomp_ols_tsqr_r")
+-        # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++        m.def_function[ols_r_trisolve_py[DevExec]]("x_decomp_ols_r_trisolve")
+         m.def_function[lu_gesv_py[DevExec]]("x_decomp_lu_gesv")
+         m.def_function[als_cg_rows_py[DevExec]]("x_decomp_als_cg_rows")
+         # MinCovDet's fast_mcd and online LDA on the resident kit
+diff --git a/bindings/_mojolearn_x_decomp_host.mojo b/bindings/_mojolearn_x_decomp_host.mojo
+index 9c2bdaf3e..772556c0c 100644
+--- a/bindings/_mojolearn_x_decomp_host.mojo
++++ b/bindings/_mojolearn_x_decomp_host.mojo
+@@ -15,7 +15,7 @@ from x_decomp.api import (
+     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
+     py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py,
+     rowsum_py, sqdist_py, vendor_py,
+-    idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
++    idn_flags_py, lu_gesv_py, ols_tsqr_r_py, ols_r_trisolve_py,
+ )
+ from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
+ from x_decomp.select_ops import order_small_py, reduce_py
+@@ -102,8 +102,7 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
+         # lane idn-dense-linalg: the one-entry OLS and solve routes
+         m.def_function[idn_flags_py]("x_decomp_idn_flags")
+         m.def_function[ols_tsqr_r_py[HostExec]]("x_decomp_ols_tsqr_r")
+-        # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++        m.def_function[ols_r_trisolve_py[HostExec]]("x_decomp_ols_r_trisolve")
+         m.def_function[lu_gesv_py[HostExec]]("x_decomp_lu_gesv")
+         m.def_function[als_cg_rows_py[HostExec]]("x_decomp_als_cg_rows")
+         m.def_function[mcd_py[HostExec]]("x_decomp_mcd")
+diff --git a/python/mojolearn/_surface_decomp.py b/python/mojolearn/_surface_decomp.py
+index fa99dc32d..164008b22 100644
+--- a/python/mojolearn/_surface_decomp.py
++++ b/python/mojolearn/_surface_decomp.py
+@@ -26,11 +26,11 @@ FAMILIES = (
+         forest_kinds=(),
+         classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor", "lstsq", "PLSRegression", "PLSCanonical", "CCA", "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding", "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares", "SparseCoder"),
+         display="the decomposition and linear algebra expansion",
+-        host_modules=("x_decomp/host.mojo", "x_decomp/select_ops.mojo", "x_decomp/nmf.mojo", "x_decomp/ica.mojo", "x_decomp/fa_em.mojo", "x_decomp/rotation.mojo", "x_decomp/chi2.mojo", "x_decomp/als.mojo", "x_decomp/mds.mojo", "x_decomp/lle_iter.mojo", "x_decomp/pls.mojo", "x_decomp/lda_fit.mojo", "x_decomp/dictl.mojo", "x_decomp/lanczos_host.mojo", "x_decomp/mds_iso.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/tsqr_host.mojo", "x_decomp/tsqr_core.mojo", "x_decomp/qr_sliced.mojo", "x_decomp/qr_sliced_host.mojo", "x_decomp/host_jacobi.mojo", "x_decomp/host_lda.mojo", "x_decomp/host_ew.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo", "x_decomp/kit.mojo", "x_decomp/mcd.mojo", "x_decomp/lda_online.mojo", "x_decomp/moves.mojo", "x_decomp/graph_cells.mojo", "x_decomp/graph_host.mojo"),
++        host_modules=("x_decomp/host.mojo", "x_decomp/select_ops.mojo", "x_decomp/nmf.mojo", "x_decomp/ica.mojo", "x_decomp/fa_em.mojo", "x_decomp/rotation.mojo", "x_decomp/chi2.mojo", "x_decomp/als.mojo", "x_decomp/mds.mojo", "x_decomp/lle_iter.mojo", "x_decomp/pls.mojo", "x_decomp/lda_fit.mojo", "x_decomp/dictl.mojo", "x_decomp/lanczos_host.mojo", "x_decomp/mds_iso.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/tsqr_host.mojo", "x_decomp/ols_trisolve.mojo", "x_decomp/tsqr_core.mojo", "x_decomp/qr_sliced.mojo", "x_decomp/qr_sliced_host.mojo", "x_decomp/host_jacobi.mojo", "x_decomp/host_lda.mojo", "x_decomp/host_ew.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo", "x_decomp/kit.mojo", "x_decomp/mcd.mojo", "x_decomp/lda_online.mojo", "x_decomp/moves.mojo", "x_decomp/graph_cells.mojo", "x_decomp/graph_host.mojo"),
+         exports=(
+             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
+             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
+-            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_lu_gesv", "x_decomp_ols_tsqr_r", "x_decomp_idn_flags", "x_decomp_chol", "x_decomp_eigh", "x_decomp_eigh_batch", "x_decomp_lle_local", "x_decomp_lle_apply", "x_decomp_cd_rows", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_rand_gamma", "x_decomp_lda_rows", "x_decomp_dijkstra_rows", "x_decomp_barycenter_rows", "x_decomp_als_rows", "x_decomp_absmax_sign", "x_decomp_qr_r", "x_decomp_geqrf", "x_decomp_orgqr", "x_decomp_tsqr_r", "x_decomp_tsqr_q", "x_decomp_als_cg_rows",
++            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_lu_gesv", "x_decomp_ols_tsqr_r", "x_decomp_ols_r_trisolve", "x_decomp_idn_flags", "x_decomp_chol", "x_decomp_eigh", "x_decomp_eigh_batch", "x_decomp_lle_local", "x_decomp_lle_apply", "x_decomp_cd_rows", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_rand_gamma", "x_decomp_lda_rows", "x_decomp_dijkstra_rows", "x_decomp_barycenter_rows", "x_decomp_als_rows", "x_decomp_absmax_sign", "x_decomp_qr_r", "x_decomp_geqrf", "x_decomp_orgqr", "x_decomp_tsqr_r", "x_decomp_tsqr_q", "x_decomp_als_cg_rows",
+             # lane py-decomp-nbrs (2026-09-28): fast_mcd, LDA online and the MDS / Isomap moves
+             "x_decomp_mcd", "x_decomp_lda_online", "x_decomp_gather", "x_decomp_scatter", "x_decomp_triu_nonzero",
+             "x_decomp_argsort_f32", "x_decomp_iso_order",
+diff --git a/python/mojolearn/linear_model.py b/python/mojolearn/linear_model.py
+index 89bf345dd..4fb1abe4e 100644
+--- a/python/mojolearn/linear_model.py
++++ b/python/mojolearn/linear_model.py
+@@ -574,8 +574,14 @@ def _ols_tsqr_centered(x, y, rows, cols, mode):
+     k.b.x_decomp_ols_tsqr_r(addr_ro(x, name="X"), addr_ro(y, name="y"), Ra.addr,
+                             addr(mu, name="column means"), addr(ymean, name="y mean"),
+                             [int(rows), int(cols)])
+-    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++    if int(flags()) & 512:
++        # MOJOLEARN_IDN_OLS_R_TRISOLVE (bit 9, default off): R x = c in one
++        # launch behind the rank gate Mojo computes on R's equilibrated
++        # diagonal (x_decomp/ols_trisolve.mojo); gate 0 keeps the SVD route.
++        coef = empty((cols,), "<f4")
++        # ORDER MATCHES x_decomp/api.mojo ols_r_trisolve_py: (r, out), (d)
++        if int(k.b.x_decomp_ols_r_trisolve(Ra.addr, addr(coef, name="coefficients"), [int(cols)])):
++            return coef, mu, float(ymean.tolist()[0])
+     X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True, Ra=Ra)
+     return X.out((cols,)), mu, float(ymean.tolist()[0])
+ 
+diff --git a/x_decomp/api.mojo b/x_decomp/api.mojo
+index 75539dc0f..666cc4ccf 100644
+--- a/x_decomp/api.mojo
++++ b/x_decomp/api.mojo
+@@ -587,8 +587,11 @@ def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises
+ # refused. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+ comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ comptime IDN_OLS_ONE_ENTRY = _API_IDN
+-# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++# MOJOLEARN_IDN_OLS_R_TRISOLVE (bit 9, lane ols-r-trisolve 2026-10-11, DEFAULT OFF, verdict OPEN):
++# LinearRegression solves R x = c from the TSQR's R in one launch behind a rank gate on R's equilibrated
++# diagonal (x_decomp/ols_trisolve.mojo), keeping the SVD route only when the gate fails. Removes the
++# ~2.5k-launch Jacobi SVD of the (d+1) x (d+1) R and ~10 kit crossings; expected ~100-200 ms on NV istella.
++comptime IDN_OLS_R_TRISOLVE = _API_IDN and is_defined["MOJOLEARN_IDN_OLS_R_TRISOLVE"]()
+ comptime IDN_LU_GESV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ # lane fam-decomp (2026-10-04): LLE builds F0 = [F^ | u] in three cells and
+ # takes F^ X as F0 [X; 0] on every column of an IDENTICAL build (device and
+@@ -647,8 +650,11 @@ def idn_flags_py() raises -> PythonObject:
+     (IDN_NMF_L2_CELL); bit 6: FastICA's limit on the device
+     (IDN_ICA_LIM_DEV); bit 7: `_polar`'s max on the device
+     (IDN_POLAR_MAX_DEV); bit 8: LLE's zero-row pad on the device
+-    (IDN_LLE_PAD_DEV); bit 9 was IDN_OLS_R_TRISOLVE (deleted 2026-10-11)."""
++    (IDN_LLE_PAD_DEV); bit 9: LinearRegression solves from R behind a
++    rank gate (`ols_r_trisolve_py`, IDN_OLS_R_TRISOLVE)."""
+     var bits = 0
++    comptime if IDN_OLS_R_TRISOLVE:
++        bits |= 512
+     comptime if IDN_NMF_L2_CELL:
+         bits |= 32
+     comptime if IDN_ICA_LIM_DEV:
+@@ -696,8 +702,20 @@ def ols_tsqr_r_py[E: Exec](
+     return PythonObject(n)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++def ols_r_trisolve_py[E: Exec](r: PythonObject, res: PythonObject, p: PythonObject) raises -> PythonObject:
++    """res (float32 [d]) = R's back-substitution R x = c of R_aug (r,
++    (d + 1) x (d + 1), as `ols_tsqr_r_py` wrote it) when the rank gate on
++    R's equilibrated diagonal passes; returns the gate (1 pass, 0 fail:
++    the caller keeps the SVD route). p = [d]."""
++    var d = _n(p, 0)
++    if d < 1 or d + 1 > TS_MAX_N:
++        raise Error("x_decomp: ols_r_trisolve needs 1 <= d, d + 1 <= " + String(TS_MAX_N))
++    var pr = _f(r)
++    var po = _f(res)
++    var ok = 0
++    with GILReleased(Python()):
++        ok = E.ols_r_trisolve(pr, po, d)
++    return PythonObject(ok)
+ 
+ 
+ def lu_gesv_py[E: Exec](a: PythonObject, b: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 94b51825e..07a86a23a 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -122,8 +122,7 @@ from x_decomp.cells import (
+     sqdist_cell,
+ )
+ from x_decomp.exec_trait import Exec
+-# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++from x_decomp.ols_trisolve import OTS_TPB, ols_r_trisolve_kernel
+ from x_decomp.jacobi2 import dev_barrier
+ from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
+ from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
+@@ -4040,8 +4039,29 @@ struct DevExec(Exec):
+         _ = da^
+         _ = ctx^
+ 
+-    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++    @staticmethod
++    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
++        """MOJOLEARN_IDN_OLS_R_TRISOLVE: R_aug up (n x n words, n <= TS_MAX_N),
++        ONE launch (gate + back-substitution, x_decomp/ols_trisolve.mojo),
++        d + 1 words down (x, then the gate word)."""
++        var n = d + 1
++        var ctx = xd_ctx()
++        var dr = _up(ctx, r, n * n)
++        var dout = ctx.enqueue_create_buffer[DType.float32](n)
++        ctx.enqueue_function[ols_r_trisolve_kernel](  # small-launch(d: R_aug columns): one block over the d x d factor, never data rows
++            _p(dr), _p(dout), Int32(d), grid_dim=1, block_dim=OTS_TPB,
++        )
++        var host = List[Float32](length=n, fill=Float32(0))
++        _down(ctx, dout, F32Ptr(unsafe_from_address=Int(host.unsafe_ptr())), n)
++        ctx.synchronize()
++        for j in range(d):  # small-loop(d: coefficients): copy-res of d words
++            res.unsafe_store(j, host[j])
++        var ok = 1 if host[d] != Float32(0) else 0
++        _ = host^
++        _ = dr^
++        _ = dout^
++        _ = ctx^
++        return ok
+ 
+     @staticmethod
+     def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:
+diff --git a/x_decomp/exec_trait.mojo b/x_decomp/exec_trait.mojo
+index d7723455d..2be763b61 100644
+--- a/x_decomp/exec_trait.mojo
++++ b/x_decomp/exec_trait.mojo
+@@ -186,8 +186,13 @@ trait Exec:
+         every difference `center_cell` (glm/impl/center_items.mojo)."""
+         ...
+ 
+-    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++    @staticmethod
++    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
++        """MOJOLEARN_IDN_OLS_R_TRISOLVE (x_decomp/ols_trisolve.mojo): res
++        (d) = the back-substitution of R_aug's ((d + 1) x (d + 1)) R x = c
++        when the equilibrated diagonal rank gate passes; returns the gate
++        (1 pass, 0 fail: res is then not meaningful)."""
++        ...
+ 
+     @staticmethod
+     def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:
+diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
+index 685fb0b39..f837cac32 100644
+--- a/x_decomp/host.mojo
++++ b/x_decomp/host.mojo
+@@ -78,8 +78,7 @@ from core.host_parallel import host_parallelize
+ from x_decomp.exec_trait import Exec
+ # TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
+-# TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++from x_decomp.ols_trisolve import ols_r_trisolve_host
+ from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
+ from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
+ from glm.host.center_host import center_on_cpu, col_sums_on_cpu
+@@ -831,8 +830,16 @@ struct HostExec(Exec):
+         _ = ca^
+         _ = cb^
+ 
+-    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
++    @staticmethod
++    def ols_r_trisolve(r: F32Ptr, res: F32Ptr, d: Int) raises -> Int:
++        """The host column of DevExec.ols_r_trisolve: the same fold."""
++        var tmp = List[Float32](length=d + 1, fill=Float32(0))
++        ols_r_trisolve_host(r, F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr())), d)
++        for j in range(d):  # small-loop(d: coefficients): copy-res of d words
++            res.unsafe_store(j, tmp[j])
++        var ok = 1 if tmp[d] != Float32(0) else 0
++        _ = tmp^
++        return ok
+ 
+     @staticmethod
+     def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:
+diff --git a/x_decomp/ols_trisolve.mojo b/x_decomp/ols_trisolve.mojo
+new file mode 100644
+index 000000000..3f725cd13
+--- /dev/null
++++ b/x_decomp/ols_trisolve.mojo
+@@ -0,0 +1,183 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""MOJOLEARN_IDN_OLS_R_TRISOLVE (lane ols-r-trisolve, 2026-10-11; DEFAULT OFF,
++verdict OPEN): LinearRegression's solve straight from the TSQR's R.
++
++Structural reason: the centered TSQR of [X - mu | y - ybar] already gives
++R_aug = [[R, c], [0, r22]] ((d + 1) x (d + 1), row-major); the least-squares
++coefficients are the back-substitution R x = c. Today's route takes the
++one-sided Jacobi SVD of R (~2.5k launches at d = 220, a host readback per
++sweep group) plus ~12 kit binding calls, all of it only for rank deficiency.
++This file runs ONE launch (one block over the d x d factor, never over rows):
++  1. the DEVIATION 2620 power-of-two column scales s_j of ||R e_j||^2 (the
++     `p2scale` that `_tsqr_lstsq_core(equilibrate=True)` applies);
++  2. the rank gate on the equilibrated diagonal: every |R_jj s_j| above
++     rcond * max_j |R_jj s_j| with rcond = eps32 * d (the cutoff the SVD route
++     applies to singular values, applied to R's diagonal instead);
++  3. if the gate passes, x by back-substitution on the UNSCALED R (a power of
++     two scale commutes exactly with every rounding, so solving R S and
++     multiplying by S gives the same words).
++The gate word goes back to Python, which keeps the SVD route when it is 0
++(rank deficient, ill-conditioned or non-finite R). Expected speedup: removes
++~2.5k launches and ~10 binding crossings, ~100-200 ms of OLS istella on NV
++(ideas-dense-linalg-20261011 F1). Bits change versus the SVD route (same
++model up to rounding, r2 unchanged), the same on NVIDIA, AMD and the host
++column: every dot product is the fixed fold below on every column.
++
++Fold (identical on device and host): row i's sum over j > i of R_ij x_j is
++split over OTS_TPB lanes, lane t taking j = i + 1 + t, i + 1 + t + OTS_TPB,
++... ascending with the IDENTICAL fma cell, then the lanes fold by the halving
++tree p[t] += p[t + s], s = OTS_TPB / 2 .. 1; x_i = (c_i - sum) / R_ii."""
++from std.gpu import thread_idx
++from std.memory import stack_allocation
++from max.gpu.memory import AddressSpace
++from max.gpu.sync import barrier
++from checks.numerics import ftz, identical_mul_add
++from x_decomp.cells import F32Ptr, add, div0, mul, p2_equilibration_scale, sub
++from x_decomp.tsqr_core import TS_MAX_N
++
++comptime OTS_TPB = 256
++comptime OTS_EPS = Float32(1.1920928955078125e-07)
++
++
++@always_inline
++def ots_fma(a: Float32, b: Float32, acc: Float32) -> Float32:
++    """The IDENTICAL cell chain ftz(fma(ftz(a), ftz(b), acc))."""
++    return ftz(identical_mul_add(ftz(a), ftz(b), acc))
++
++
++@always_inline
++def ots_col_diag(r: F32Ptr, j: Int, n: Int) -> Float32:
++    """|R_jj s_j| with s_j the power-of-two scale of ||R e_j||^2, summed
++    i = 0 .. j ascending (rows below the diagonal are zero)."""
++    var acc = Float32(0)
++    for i in range(j + 1):  # small-loop(j: rows of one R column): R is the d x d factor, never data rows
++        var v = r.unsafe_load(i * n + j)
++        acc = add(acc, mul(v, v))
++    var dj = mul(r.unsafe_load(j * n + j), p2_equilibration_scale(ftz(acc)))
++    return dj if dj >= Float32(0) else -dj
++
++
++@always_inline
++def ots_gate(dg: F32Ptr, d: Int) -> Bool:
++    """Every equilibrated |diagonal| strictly above eps32 * d * max (max and
++    min are exact, so the order is free); a NaN or inf fails it."""
++    var dmax = Float32(0)
++    for j in range(d):  # small-loop(d: R diagonal entries): one word per feature, never rows
++        var v = dg.unsafe_load(j)
++        if not (v == v):
++            return False
++        if v > dmax:
++            dmax = v
++    var cut = mul(dmax, mul(OTS_EPS, Float32(d)))
++    if not (cut < Float32(3.4028234663852886e38)):
++        return False
++    for j in range(d):  # small-loop(d: R diagonal entries): one word per feature, never rows
++        if not (dg.unsafe_load(j) > cut):
++            return False
++    return True
++
++
++@always_inline
++def ots_lane_partial(r: F32Ptr, x: F32Ptr, i: Int, t: Int, n: Int, d: Int) -> Float32:
++    """Lane t's ascending partial of row i's sum over j > i of R_ij x_j."""
++    var acc = Float32(0)
++    var j = i + 1 + t
++    while j < d:  # small-loop(d: R columns of one row): the d x d factor, never data rows
++        acc = ots_fma(r.unsafe_load(i * n + j), x.unsafe_load(j), acc)
++        j += OTS_TPB
++    return acc
++
++
++def ols_r_trisolve_kernel(r: F32Ptr, res: F32Ptr, d_in: Int32):
++    """One block of OTS_TPB threads over R_aug (n = d + 1, row-major, device):
++    res[0, d) = x when the gate passes, res[d] = 1 (pass) or 0 (fail)."""
++    var d = Int(d_in)
++    var n = d + 1
++    var tid = Int(thread_idx.x)
++    var sx = stack_allocation[TS_MAX_N, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var sdg = stack_allocation[TS_MAX_N, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var sp = stack_allocation[OTS_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var sok = stack_allocation[1, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var j = tid
++    while j < d:
++        sdg[j] = ots_col_diag(r, j, n)
++        sx[j] = Float32(0)
++        j += OTS_TPB
++    barrier()
++    if tid == 0:  # small-launch(d: R diagonal entries): the gate reads d words of the d x d factor
++        # the same steps as `ots_gate` on the shared words
++        var dmax = Float32(0)
++        var good = True
++        for q in range(d):  # small-loop(d: R diagonal entries): one word per feature, never rows
++            var v = sdg[q]
++            if not (v == v):
++                good = False
++            elif v > dmax:
++                dmax = v
++        var cut = mul(dmax, mul(OTS_EPS, Float32(d)))
++        if not (cut < Float32(3.4028234663852886e38)):
++            good = False
++        for q in range(d):  # small-loop(d: R diagonal entries): one word per feature, never rows
++            if not (sdg[q] > cut):
++                good = False
++        sok[0] = Float32(1) if good else Float32(0)
++    barrier()
++    if sok[0] != Float32(0):
++        var i = d - 1
++        while i >= 0:
++            # `ots_lane_partial` on the shared x
++            var acc = Float32(0)
++            var q = i + 1 + tid
++            while q < d:
++                acc = ots_fma(r.unsafe_load(i * n + q), sx[q], acc)
++                q += OTS_TPB
++            sp[tid] = acc
++            barrier()
++            var s = OTS_TPB // 2
++            while s > 0:
++                if tid < s:
++                    sp[tid] = add(sp[tid], sp[tid + s])
++                barrier()
++                s //= 2
++            if tid == 0:  # small-launch(d: R row i): one division per row of the d x d factor
++                sx[i] = div0(sub(r.unsafe_load(i * n + d), sp[0]), r.unsafe_load(i * n + i))
++            barrier()
++            i -= 1
++    j = tid
++    while j < d:
++        res.unsafe_store(j, sx[j])
++        j += OTS_TPB
++    if tid == 0:  # small-launch(d: the gate word): one word written after the d x d solve
++        res.unsafe_store(d, sok[0])
++
++
++def ols_r_trisolve_host(r: F32Ptr, res: F32Ptr, d: Int):
++    """The host column of `ols_r_trisolve_kernel`: the same cells in the
++    same fold (lane partials then the halving tree)."""
++    var n = d + 1
++    var dg = List[Float32](length=d if d > 0 else 1, fill=Float32(0))
++    var x = List[Float32](length=d if d > 0 else 1, fill=Float32(0))
++    var p = List[Float32](length=OTS_TPB, fill=Float32(0))
++    for j in range(d):  # small-loop(d: R columns): the d x d factor, never data rows
++        dg[j] = ots_col_diag(r, j, n)
++    var ok = ots_gate(F32Ptr(unsafe_from_address=Int(dg.unsafe_ptr())), d)
++    if ok:
++        var xp = F32Ptr(unsafe_from_address=Int(x.unsafe_ptr()))
++        var i = d - 1
++        while i >= 0:  # small-loop(d: R rows): back-substitution over the d x d factor
++            for t in range(OTS_TPB):
++                p[t] = ots_lane_partial(r, xp, i, t, n, d)
++            var s = OTS_TPB // 2
++            while s > 0:
++                for t in range(s):
++                    p[t] = add(p[t], p[t + s])
++                s //= 2
++            x[i] = div0(sub(r.unsafe_load(i * n + d), p[0]), r.unsafe_load(i * n + i))
++            i -= 1
++    for j in range(d):  # small-loop(d: coefficients): one word per feature
++        res.unsafe_store(j, x[j])
++    res.unsafe_store(d, Float32(1) if ok else Float32(0))
++    _ = dg^
++    _ = x^
++    _ = p^

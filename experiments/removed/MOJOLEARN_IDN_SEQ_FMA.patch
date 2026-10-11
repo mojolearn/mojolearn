@@ -1,0 +1,156 @@
+diff --git a/sequence/ets.mojo b/sequence/ets.mojo
+index 22e467ec8..8638e6bfd 100644
+--- a/sequence/ets.mojo
++++ b/sequence/ets.mojo
+@@ -38,7 +38,7 @@ errors, prediction intervals."""
+ from std.memory import bitcast
+ 
+ from sequence.nm import Objective, nelder_mead
+-from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
++from sequence.ops import FP, Args, add, fma3, ld, mul, seq_madd, st, sub
+ from checks.numerics import ftz, identical_cos, identical_div, identical_log, identical_pow, identical_sin, identical_sqrt
+ 
+ comptime ERR_A = 0
+@@ -97,9 +97,9 @@ def ets_lik(y: FP, n: Int, err: Int, trend: Bool, season: Int, m: Int, ring: FP,
+         var ol = l
+         var ob = b
+         var phib = mul(phi, ob) if trend else Float32(0.0)
+-        # TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by 0c8ea9eeb; code recoverable at 0c8ea9eeb^.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch
+-        var q = add(ol, phib)
++        # MOJOLEARN_IDN_SEQ_FMA (sequence/ops.mojo SEQ_IDN_FMA): q = phi b + l
++        # in one pinned fma; phib stays the rounded product the trend update reads.
++        var q = seq_madd(phi, ob, ol) if trend else add(ol, phib)
+         var f0 = q
+         var sl = Float32(0.0)
+         var last = 0
+@@ -519,7 +519,7 @@ def op_ets(t: Int, a: Args):
+     var head = r[3]
+     var phistar = u[3]
+     for i in range(h):
+-        var f = add(l, mul(phistar, b)) if trend else l
++        var f = seq_madd(phistar, b, l) if trend else l
+         if season != SEAS_N:
+             var j = m - 1 - (i % m)
+             var ix = head + j
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 7aab6b6d9..a418121f3 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -349,8 +349,33 @@ def fma3(a: Float32, b: Float32, c: Float32) -> Float32:
+     return ftz(identical_mul_add(a, b, c))
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by 0c8ea9eeb; code recoverable at 0c8ea9eeb^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch
++#: lane/seq-reg (2026-10-11), experiment MOJOLEARN_IDN_SEQ_FMA, default off.
++#: The theta and ETS recurrences spell several multiply-adds as
++#: `add(mul(a, b), c)` (two roundings, two dependent instructions on a
++#: one-thread-per-series chain that is latency bound: 64 threads on the whole
++#: GPU, 1,392 serial steps inside up to 1,000 Nelder-Mead evaluations).
++#: `seq_madd` contracts those into ONE pinned fused multiply-add
++#: (`identical_mul_add`: a single fma on NVIDIA, AMD and the host binding,
++#: the same instruction semantics everywhere), so bits change on every vendor
++#: and in the host column together. Structural reason: one rounding and one
++#: instruction off each step's dependent chain. Expected: the Apple FAST twin
++#: (SEQ_FAST_FMA with THETA_REG) went 1,769 -> 220 ms on the M3; on NVIDIA/AMD
++#: a 1.2-2x on theta/damped-ets on top of MOJOLEARN_IDN_SEQ_REG (latency bound).
++#: Off, `seq_madd` is exactly the old `add(mul(a, b), c)`.
++comptime SEQ_IDN_FMA = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_SEQ_FMA"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++
++
++@always_inline
++def seq_madd(a: Float32, b: Float32, c: Float32) -> Float32:
++    """a * b + c: one pinned fma under MOJOLEARN_IDN_SEQ_FMA, else the
++    rounded product then the rounded sum (the pre-experiment form)."""
++    comptime if SEQ_IDN_FMA:
++        return ftz(identical_mul_add(a, b, c))
++    return add(mul(a, b), c)
+ 
+ 
+ @always_inline
+diff --git a/sequence/theta.mojo b/sequence/theta.mojo
+index 2eab421b4..a4938f52c 100644
+--- a/sequence/theta.mojo
++++ b/sequence/theta.mojo
+@@ -16,9 +16,7 @@ std::pow; the objective's 1-step forecast is the state update's mu (the
+ reference computes nmse-step forecasts and uses only the first for the
+ objective); the ACF, the decomposition and the objective are float32."""
+ from sequence.nm import Objective, nelder_mead
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by 0c8ea9eeb; code recoverable at 0c8ea9eeb^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch (the theta level/trend updates go back to seq_madd).
+-from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
++from sequence.ops import FP, Args, add, fma3, ld, mul, seq_madd, st, sub
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
+ from std.sys.compile import is_defined
+ from std.sys.info import has_apple_gpu_accelerator
+@@ -152,7 +150,7 @@ def theta_run(
+         var An = ld(states, r0 + 2)
+         var Bn = ld(states, r0 + 3)
+         var pw1 = mul(pw, oma)
+-        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
++        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+         var yi = ld(y, i)
+         st(e, i, sub(yi, m))
+         st(states, r + 4, m)
+@@ -160,7 +158,7 @@ def theta_run(
+         var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
+         st(states, r + 1, my2)
+         if dyn:
+-            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
++            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+                          Float32(i + 2))
+             st(states, r + 3, b2)
+             st(states, r + 2, sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0))))
+@@ -222,7 +220,7 @@ def theta_run_reg(
+     var pw = oma          # (1 - alpha)^i at i = 1
+     for i in range(1, n):
+         var pw1 = mul(pw, oma)
+-        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
++        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+         var yi = ld(y, i)
+         var ei = sub(yi, m)
+         if i >= 3:
+@@ -230,7 +228,7 @@ def theta_run_reg(
+         var lev2 = fma3(alpha, yi, mul(oma, lev))
+         var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
+         if dyn:
+-            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
++            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+                          Float32(i + 2))
+             Bn = b2
+             An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
+@@ -332,11 +330,11 @@ def theta_forecast_reg(n: Int, h: Int, model: Int, alpha: Float32, theta: Float3
+     for j in range(h):
+         var i = n + j
+         var pw1 = mul(pw, oma)
+-        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
++        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+         var lev2 = fma3(alpha, m, mul(oma, lev))
+         var my2 = div(fma3(Float32(i), my, m), Float32(i + 1))
+         if dyn:
+-            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
++            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
+                          Float32(i + 2))
+             Bn = b2
+             An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
+@@ -364,13 +362,13 @@ def theta_forecast(n: Int, h: Int, model: Int, alpha: Float32, theta: Float32, s
+         var An = ld(states, r0 + 2)
+         var Bn = ld(states, r0 + 3)
+         var pw1 = mul(pw, oma)
+-        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
++        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+         st(states, r + 4, m)
+         st(states, r, fma3(alpha, m, mul(oma, lev)))
+         var my2 = div(fma3(Float32(i), my, m), Float32(i + 1))
+         st(states, r + 1, my2)
+         if dyn:
+-            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
++            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
+                          Float32(i + 2))
+             st(states, r + 3, b2)
+             st(states, r + 2, sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0))))

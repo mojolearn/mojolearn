@@ -652,9 +652,9 @@ comptime XL_LARS_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_
                               and not is_defined["MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF"]())
 
 
-#: lane/lars-grid-gram (2026-10-11), IDENTICAL experiment, default OFF
-#: (`-D MOJOLEARN_IDN_LARS_GRID_GRAM`; the reason and the expected speedup at
-#: x_linear/lars.mojo `LARS_GRID_GRAM`): LARS / LassoLars' means, centered
+#: lane/lars-grid-gram (2026-10-11), PROMOTED to the default 2026-10-11
+#: (revert `-D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF`; the A/B numbers, the open
+#: lars istella regression and the reason at x_linear/lars.mojo `LARS_GRID_GRAM`): LARS / LassoLars' means, centered
 #: Gram and X'y from core/blocked_moments.mojo (one block per leaf of rows,
 #: binary-counter fold) instead of main's moments grid. NVIDIA and AMD (and
 #: the host column) change bits together; Apple keeps main's grid (its

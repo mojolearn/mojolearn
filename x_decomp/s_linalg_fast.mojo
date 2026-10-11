@@ -8,9 +8,9 @@ verdicts batch 6 (2026-10-05), each with an _OFF rollback:
   bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`)
   bit 2  DECOMP_FAST_ORTH_WS (`-D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`)
   bit 4  LU_FAST_RESIDENT    (`-D MOJOLEARN_LU_FAST_RESIDENT_OFF`)
-  bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL experiment, `-D MOJOLEARN_IDN_LU_RESIDENT_PAIR`, default off)
+  bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL default since 2026-10-11, `-D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF`)
 
-IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries, and only with its define.
+IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries (unless its _OFF define).
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.python import Python, PythonObject
@@ -104,10 +104,18 @@ comptime LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX and not is_defined["MOJOLE
 #: `launch_lu_solve`. Same launches on the same words: no bit moves, host
 #: column untouched. Expect lu-factor 1180 -> ~470 ms NV (the one-entry
 #: `solve` measures the same kernels at 462 ms), AMD by the same ratio.
-#: Default OFF; -D MOJOLEARN_IDN_LU_RESIDENT_PAIR turns it on (A/B: grid).
-comptime IDN_LU_RESIDENT_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
-    "MOJOLEARN_IDN_LU_RESIDENT_PAIR"
-]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+#: PROMOTED 2026-10-11 (lane/i17-decide-linalg-seq): the IDENTICAL default on
+#: every vendor. A/B on main b2657cc89, one run per arm (NV L40S v0032/v0033,
+#: AMD MI325X a1615/a1616), digests equal NV == AMD on both arms, quality
+#: equal: lu-factor synthetic NV 822.7 -> 369.0 ms (0.45x), AMD 568.0 ->
+#: 315.4 ms (0.56x), avg 0.50x; lu-solve NV 353.0 -> 378.7 (1.07x), AMD
+#: 317.0 -> 317.3 (1.00x), avg 1.04x (noise). Rollback:
+#: -D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF (or MOJOLEARN_IDN_ALL_OFF).
+comptime IDN_LU_RESIDENT_PAIR = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 #: Whether the binding registers `x_decomp_dev_lu_factor` / `_dev_lu_solve`.
 comptime LU_RESIDENT_ENTRIES = LU_FAST_RESIDENT or IDN_LU_RESIDENT_PAIR
 

@@ -6,26 +6,29 @@
  "head_note": "head = last code commit before this file; the file is committed on top of it.",
  "controls": {
   "idn_seq_reg": {
-   "define": "MOJOLEARN_IDN_SEQ_REG",
+   "define": "MOJOLEARN_IDN_SEQ_REG_OFF",
    "kind": "switch",
-   "arms": {"off": [], "on": ["MOJOLEARN_IDN_SEQ_REG"]},
-   "default": "off",
-   "source": ["sequence/theta.mojo:52"],
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_SEQ_REG_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "sequence/theta.mojo:52"
+   ],
    "binding": "_mojolearn_x_sequence",
    "bits_change": false,
-   "status": "new",
-   "note": "Theta (op_theta) on IDENTICAL runs theta_run_reg: state in registers, row n-1 written, same operations in the same order (bit-identical, host column unchanged). ETS needs no port: ets_lik already keeps l/b in registers (only the seasonal ring is stored; damped-ets AAN has none). A/B owed: theta + dynamic-optimized-theta taxi-hourly and synthetic, nv and amd; ID check expected MATCH with main."
-  },
-  "idn_seq_fma": {
-   "define": "MOJOLEARN_IDN_SEQ_FMA",
-   "kind": "switch",
-   "arms": {"off": [], "on": ["MOJOLEARN_IDN_SEQ_FMA"]},
-   "default": "off",
-   "source": ["sequence/ops.mojo:373", "sequence/theta.mojo:146", "sequence/ets.mojo:102"],
-   "binding": "_mojolearn_x_sequence",
-   "bits_change": true,
-   "status": "new",
-   "note": "theta mu/B updates and ETS q = phi*b + l (and the ETS forecast) contracted from add(mul) into one pinned identical_mul_add on NV, AMD and host (same binding source). Bits change on all columns together. Race with and without MOJOLEARN_IDN_SEQ_REG; damped-ets, theta, dynamic-optimized-theta taxi-hourly + synthetic, nv and amd; forecast_rmse must not drop; ID check owed (nv == amd)."
+   "status": "promoted:lane/i17-decide-linalg-seq",
+   "note": "PROMOTED 2026-10-11 (A/B main@b2657cc89, one run per arm, NV v0037/v0038, AMD a1620/a1621, digests NV == AMD, quality equal): theta synthetic avg 0.62x, theta taxi-hourly 0.63x, dynamic-optimized-theta synthetic 0.71x / taxi-hourly 0.78x, damped-ets 1.00x. Rollback -D MOJOLEARN_IDN_SEQ_REG_OFF. Theta (op_theta) on IDENTICAL runs theta_run_reg: state in registers, row n-1 written, same operations in the same order (bit-identical, host column unchanged). ETS needs no port: ets_lik already keeps l/b in registers (only the seasonal ring is stored; damped-ets AAN has none). A/B owed: theta + dynamic-optimized-theta taxi-hourly and synthetic, nv and amd; ID check expected MATCH with main."
   }
- }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_SEQ_FMA",
+   "control": "idn_seq_fma",
+   "reason": "DELETED 2026-10-11 (lane/i17-decide-linalg-seq, deletion 0c8ea9eeb): NOISE with bits changed (forecast_rmse differs): theta NV 1.00x / AMD 1.00x, dynamic-optimized-theta 0.99x / 0.98-1.00x, damped-ets 1.00x / 1.08x and 0.97x (v0039/v0040, a1622/a1623), main b2657cc89, one run per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch."
+  }
+ ]
 }

@@ -16,7 +16,9 @@ std::pow; the objective's 1-step forecast is the state update's mu (the
 reference computes nmse-step forecasts and uses only the first for the
 objective); the ACF, the decomposition and the objective are float32."""
 from sequence.nm import Objective, nelder_mead
-from sequence.ops import FP, Args, add, fma3, ld, mul, seq_madd, st, sub
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_FMA (loser: noise, theta 1.00x, damped-ets ~1.0x, bits changed) deleted 2026-10-11 by 0c8ea9eeb; code recoverable at 0c8ea9eeb^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch (the theta level/trend updates go back to seq_madd).
+from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -34,8 +36,15 @@ from std.sys.info import has_apple_gpu_accelerator
 #: alone 1,770 -> 1,326 ms; with MOJOLEARN_SEQ_FAST_FMA 1,769 -> 220 ms,
 #: forecast_rmse 49.28 -> 49.02. -D MOJOLEARN_SEQ_THETA_REG_OFF restores the
 #: stored-row code; the old -D MOJOLEARN_SEQ_THETA_REG=1 is harmless.
-#: IDENTICAL compiles the stored-row code unless -D MOJOLEARN_IDN_SEQ_REG
-#: (lane/seq-reg 2026-10-11, default off): the same register form on
+#: IDENTICAL compiles the register form by default (MOJOLEARN_IDN_SEQ_REG,
+#: lane/seq-reg 2026-10-11, PROMOTED 2026-10-11 by lane/i17-decide-linalg-seq;
+#: A/B main b2657cc89, one run per arm, NV v0037/v0038, AMD a1620/a1621,
+#: digests equal NV == AMD, quality equal: theta synthetic NV 93.4 -> 56.2 ms
+#: / AMD 189.2 -> 122.4 (avg 0.62x); theta taxi-hourly 294.6 -> 173.5 /
+#: 596.8 -> 397.6 (0.63x); dynamic-optimized-theta synthetic 476.5 -> 340.4
+#: / 1117.1 -> 792.2 (0.71x), taxi-hourly 2161.6 -> 1807.9 / 6295.8 ->
+#: 4603.4 (0.78x); damped-ets 1.00x). -D MOJOLEARN_IDN_SEQ_REG_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores the stored-row code. The same register form on
 #: NVIDIA/AMD and the host binding. Structural reason: the stored-row run
 #: makes ~1.4M dependent device-memory round trips per thread (five state
 #: words and one error per step, the previous row read back) on a kernel of
@@ -51,7 +60,7 @@ comptime THETA_REG_FAST = (
 )
 comptime THETA_REG = THETA_REG_FAST or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_SEQ_REG"]()
+    and not is_defined["MOJOLEARN_IDN_SEQ_REG_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
@@ -143,7 +152,7 @@ def theta_run(
         var An = ld(states, r0 + 2)
         var Bn = ld(states, r0 + 3)
         var pw1 = mul(pw, oma)
-        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
         var yi = ld(y, i)
         st(e, i, sub(yi, m))
         st(states, r + 4, m)
@@ -151,7 +160,7 @@ def theta_run(
         var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
         st(states, r + 1, my2)
         if dyn:
-            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
                          Float32(i + 2))
             st(states, r + 3, b2)
             st(states, r + 2, sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0))))
@@ -213,7 +222,7 @@ def theta_run_reg(
     var pw = oma          # (1 - alpha)^i at i = 1
     for i in range(1, n):
         var pw1 = mul(pw, oma)
-        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
         var yi = ld(y, i)
         var ei = sub(yi, m)
         if i >= 3:
@@ -221,7 +230,7 @@ def theta_run_reg(
         var lev2 = fma3(alpha, yi, mul(oma, lev))
         var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
         if dyn:
-            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
                          Float32(i + 2))
             Bn = b2
             An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
@@ -323,11 +332,11 @@ def theta_forecast_reg(n: Int, h: Int, model: Int, alpha: Float32, theta: Float3
     for j in range(h):
         var i = n + j
         var pw1 = mul(pw, oma)
-        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
         var lev2 = fma3(alpha, m, mul(oma, lev))
         var my2 = div(fma3(Float32(i), my, m), Float32(i + 1))
         if dyn:
-            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
                          Float32(i + 2))
             Bn = b2
             An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
@@ -355,13 +364,13 @@ def theta_forecast(n: Int, h: Int, model: Int, alpha: Float32, theta: Float32, s
         var An = ld(states, r0 + 2)
         var Bn = ld(states, r0 + 3)
         var pw1 = mul(pw, oma)
-        var m = fma3(k, seq_madd(An, pw, div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
         st(states, r + 4, m)
         st(states, r, fma3(alpha, m, mul(oma, lev)))
         var my2 = div(fma3(Float32(i), my, m), Float32(i + 1))
         st(states, r + 1, my2)
         if dyn:
-            var b2 = div(seq_madd(Float32(i - 1), Bn, div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
                          Float32(i + 2))
             st(states, r + 3, b2)
             st(states, r + 2, sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0))))

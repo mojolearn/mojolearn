@@ -1,103 +1,38 @@
 {
-  "schema": "mojolearn.grid-controls/1",
-  "lane": "lab-binarizer",
-  "branch": "lane/lab-binarizer",
-  "head": "3fef1d762",
-  "controls": {
-    "idn_lab_unique_hist": {
-      "define": "MOJOLEARN_IDN_LAB_UNIQUE_HIST",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_IDN_LAB_UNIQUE_HIST"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_prep/labels.mojo",
-        "x_prep/fam2.mojo",
-        "python/mojolearn/_expansion_prep.py"
-      ],
-      "binding": "_mojolearn_x_prep",
-      "bits_change": false,
-      "status": "new",
-      "note": "G1: integral labels within R of their device minimum (R from the row count, cap 2^24) take min + presence flags + flag scan for classes_, no radix sort; same class words. A/B owed: label-binarizer, label-encoder taxi + istella on nv and amd; ID check owed (expected MATCH)."
-    },
-    "idn_lab_codes_direct": {
-      "define": "MOJOLEARN_IDN_LAB_CODES_DIRECT",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_IDN_LAB_UNIQUE_HIST",
-          "MOJOLEARN_IDN_LAB_CODES_DIRECT"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_prep/labels.mojo",
-        "x_prep/fam2.mojo",
-        "python/mojolearn/_expansion_prep.py"
-      ],
-      "binding": "_mojolearn_x_prep",
-      "bits_change": false,
-      "status": "new",
-      "note": "G2 (needs G1): codes = flag rank RK[v - min] instead of the binary-search lookup; same codes."
-    },
-    "idn_lab_one_entry": {
-      "define": "MOJOLEARN_IDN_LAB_ONE_ENTRY",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_IDN_LAB_UNIQUE_HIST",
-          "MOJOLEARN_IDN_LAB_CODES_DIRECT",
-          "MOJOLEARN_IDN_LAB_ONE_ENTRY"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_prep/labels.mojo",
-        "x_prep/fam2.mojo",
-        "python/mojolearn/_expansion_prep.py"
-      ],
-      "binding": "_mojolearn_x_prep",
-      "bits_change": false,
-      "status": "new",
-      "note": "G3 (needs G1+G2): LabelBinarizer.fit_transform feeds the fit program's codes to the dense int32 output; no second raw-label upload, lab_load or lookup. Output dtype unchanged."
-    }
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "lab-binarizer",
+ "branch": "lane/lab-binarizer",
+ "head": "3fef1d762",
+ "controls": {},
+ "algorithms": {
+  "expanded:label-binarizer": {
+   "binding": "_mojolearn_x_prep",
+   "route": "LabelBinarizer.fit_transform -> _label_fit_hist (lab_min_part/fold, lab_present, lab_flag_count, uniq_scan, lab_hist_write, lab_code_direct) -> label_binarize",
+   "controls": [],
+   "interaction_groups": []
   },
-  "algorithms": {
-    "expanded:label-binarizer": {
-      "binding": "_mojolearn_x_prep",
-      "route": "LabelBinarizer.fit_transform -> _label_fit_hist (lab_min_part/fold, lab_present, lab_flag_count, uniq_scan, lab_hist_write, lab_code_direct) -> label_binarize",
-      "controls": [
-        "idn_lab_unique_hist",
-        "idn_lab_codes_direct",
-        "idn_lab_one_entry"
-      ],
-      "interaction_groups": [
-        [
-          "idn_lab_unique_hist",
-          "idn_lab_codes_direct",
-          "idn_lab_one_entry"
-        ]
-      ]
-    },
-    "expanded:label-encoder": {
-      "binding": "_mojolearn_x_prep",
-      "route": "LabelEncoder.fit_transform -> _label_fit_hist",
-      "controls": [
-        "idn_lab_unique_hist",
-        "idn_lab_codes_direct"
-      ],
-      "interaction_groups": [
-        [
-          "idn_lab_unique_hist",
-          "idn_lab_codes_direct"
-        ]
-      ]
-    }
+  "expanded:label-encoder": {
+   "binding": "_mojolearn_x_prep",
+   "route": "LabelEncoder.fit_transform -> _label_fit_hist",
+   "controls": [],
+   "interaction_groups": []
   }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_LAB_UNIQUE_HIST",
+   "control": "idn_lab_unique_hist",
+   "reason": "DELETED 2026-10-11 (lane/i17-decide-nbr-lin-prep, deletion de9ce7b39): SLOWER, label-encoder 2.1-2.6x on NV and AMD (istella 5.7 -> 12.8 / 2.9 -> 6.1 ms), label-binarizer istella 1.15-1.39x, taxi ~1.0; runs v0041-v0044, a1624-a1627, main b2657cc89, one run per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch."
+  },
+  {
+   "define": "MOJOLEARN_IDN_LAB_CODES_DIRECT",
+   "control": "idn_lab_codes_direct",
+   "reason": "DELETED 2026-10-11 (lane/i17-decide-nbr-lin-prep, deletion de9ce7b39): SLOWER, label-encoder 2.1-2.6x on NV and AMD (istella 5.7 -> 12.8 / 2.9 -> 6.1 ms), label-binarizer istella 1.15-1.39x, taxi ~1.0; runs v0041-v0044, a1624-a1627, main b2657cc89, one run per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch."
+  },
+  {
+   "define": "MOJOLEARN_IDN_LAB_ONE_ENTRY",
+   "control": "idn_lab_one_entry",
+   "reason": "DELETED 2026-10-11 (lane/i17-decide-nbr-lin-prep, deletion de9ce7b39): SLOWER, label-encoder 2.1-2.6x on NV and AMD (istella 5.7 -> 12.8 / 2.9 -> 6.1 ms), label-binarizer istella 1.15-1.39x, taxi ~1.0; runs v0041-v0044, a1624-a1627, main b2657cc89, one run per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch."
+  }
+ ]
 }

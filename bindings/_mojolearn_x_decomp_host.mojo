@@ -15,7 +15,7 @@ from x_decomp.api import (
     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py,
     rowsum_py, sqdist_py, vendor_py,
-    idn_flags_py, lu_gesv_py, ols_tsqr_r_py, ols_r_trisolve_py,
+    idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.select_ops import order_small_py, reduce_py
@@ -102,7 +102,8 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         # lane idn-dense-linalg: the one-entry OLS and solve routes
         m.def_function[idn_flags_py]("x_decomp_idn_flags")
         m.def_function[ols_tsqr_r_py[HostExec]]("x_decomp_ols_tsqr_r")
-        m.def_function[ols_r_trisolve_py[HostExec]]("x_decomp_ols_r_trisolve")
+        # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
         m.def_function[lu_gesv_py[HostExec]]("x_decomp_lu_gesv")
         m.def_function[als_cg_rows_py[HostExec]]("x_decomp_als_cg_rows")
         m.def_function[mcd_py[HostExec]]("x_decomp_mcd")
