@@ -2348,9 +2348,16 @@ def test_the_ann_b_gate_edit_selects_ivf_filter_alone():
 
 
 def test_a_gate_entry_for_no_registered_lane_is_refused_by_name():
-    """The same edit where `ivf-filter` is NOT registered (this tree): refused,
-    naming the entry, never read as selecting nothing."""
-    lanes, why = _gate_answer(_gate_edit(*ANN_B_GATE_EDIT))
+    """The same edit where `ivf-filter` is NOT registered: refused, naming the
+    entry, never read as selecting nothing.
+
+    STALE PREMISE FIXED 2026-10-10: this tree no longer stands in for an
+    unregistered `ivf-filter`; 2d23b2f07 registered it
+    (tools/identity_lanes/ann.py `@lane("ivf-filter")`, merged 2026-09-28), so
+    the tree's registry selected it. The registry is now handed in without it,
+    the mirror of the test above, which adds it."""
+    every = set(lane_select.lane_sources()[0]) - {"ivf-filter"}
+    lanes, why = _gate_answer(_gate_edit(*ANN_B_GATE_EDIT), every)
     assert lanes is None and "ivf-filter" in why, (lanes, why)
 
 
