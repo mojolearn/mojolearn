@@ -198,13 +198,16 @@ commits=$(sed -n 's/.* commit=\([0-9a-f]*\) .*/\1/p' "$EVID/check.txt" | sort -u
 # (2026-10-12: the AMD column was recorded at a5c56140e and the NVIDIA column at 5b0dfc1ef, the board-ingest
 # and CHANGELOG commits between them; re-recording a vendor for a docs commit is exactly the double work
 # Andrew forbade on 2026-10-10). The admitted commit is the newest of them.
+TMP_CODEDIFF=$(mktemp)
 ncommits=$(wc -l <<< "$commits" | tr -d ' ')
 if [ "$ncommits" != 1 ]; then
     for c in $commits; do git cat-file -e "$c^{commit}" 2>/dev/null || die "commit $c is not in this repository (git fetch origin first)"; done
     first=$(echo $commits | cut -d' ' -f1)
     for c in $commits; do
-        git diff --quiet "$first" "$c" -- . ':!bench/results' ':!docs' ':!CHANGELOG.md' ':!*.md' \
-            || die "records name more than one commit and the code differs between $first and $c: $(echo $commits)"
+        # tools/identity_code_equal.py: docs, boards, tools, the docs site, package metadata and docstring-only
+        # Python changes cannot move a record's bits (2026-10-12: 80 docstring rewrites between the two columns).
+        python3 tools/identity_code_equal.py "$first" "$c" > "$TMP_CODEDIFF" \
+            || die "records name more than one commit and the code differs between $first and $c ($(head -n 3 "$TMP_CODEDIFF" | tr '\n' ' ')...): $(echo $commits)"
     done
     echo "records name $ncommits commits with identical code ($(echo $commits)); admitting under the newest"
 fi
