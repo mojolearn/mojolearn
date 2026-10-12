@@ -169,213 +169,164 @@ def _dense_square(X, who):
 _DENSE_EMPTY, _DENSE_NONFINITE, _DENSE_NEGATIVE = -1, -2, -3
 
 
+# Maintainer notes (moved from the docstring). Reference: cuML 26.08's
+# SpectralClustering; pipeline as in cuVS. The identity profile is
+# `spectral/IDENTICAL_SPECTRAL_CONTRACT.md` (mojolearn.identical.spectral.fp32.v1).
+#
+# Sign rule (DEVIATION 770): after the projected eigenproblem is solved and its
+# eigenvalues sorted, every column of the ncv x ncv PROJECTED eigenvector matrix
+# is negated iff its first nonzero component (x != 0.0, so a leading +-0.0 is
+# skipped) in ascending row index is negative; an all-zero column is left
+# alone. Applied there and nowhere else: there is no sign pin on the returned
+# embedding. Its signs follow from the pinned start vector (DEVIATION 772, a
+# splitmix64 hashed uniform that is an exact function of (seed, n)). Adding a
+# second rule would be a different profile. RAFT pins neither convention.
+#
+# Ordering and ties (DEVIATION 778): the projected solver returns eigenvalues
+# ascending (cuSOLVER syevd's convention, which RAFT's slicing assumes). This
+# path uses which=LA on the NEGATED Laplacian and takes the LAST k, so index
+# k-1 is the Laplacian's smallest eigenvalue; the reversed gather puts the
+# second-smallest in embedding column 0. Ties break by original index: the
+# ascending sort is an insertion sort with the strict comparison
+# d[order[j]] > d[key], so equal eigenvalues keep their Jacobi-diagonal order,
+# a pure function of the input bits and the pinned sweep schedule. +0.0 and
+# -0.0 compare equal, deliberately. LM and SM are refused rather than
+# implemented: theirs sorts by magnitude with thrust::sort, which is not
+# stable, so implementing it would mean inventing a tie-break.
+#
+# Degeneracy: same input bits and profile give the same eigenvector bits,
+# including inside a degenerate subspace (the Jacobi sweep is a fixed
+# sequence). The basis inside a degenerate subspace is NOT stable under
+# perturbation: a one-ulp change can rotate it arbitrarily.
+#
+# Open coverage gaps: the device SIGN_FLIP sabotage bites only on the `hashed`
+# fixture (inert on path, ring, hashed_unnorm, blobs; archive/plans/CARD_GAPS.md:78,
+# contract section 9); two host instruments also cover the rule.
+# spectral.ritz.vectors is recorded AFTER the sign pin, so a whole-column sign
+# disagreement between vendors would be re-canonicalized before hashing
+# (CARD_GAPS.md, "Three more cards that hash on the far side of a washer").
+# Seam J4: the fused ROTATE (DEVIATION 781) lives in a solver shared by the
+# device arm and the oracle; the hash-against-a-literal check is owed
+# (spectral/NOT_IMPLEMENTED.tsv, "this lane's own gaps").
+#
+# DEVIATION 780, so nobody re-inflates it: of the five constants once claimed
+# as ours (ncv = min(n - k, max(2k+1, 20)), max_iterations = 10 * n_samples,
+# the plumbed tolerance, the Jacobi sweep cap, the ncv admissibility bound),
+# three were struck on 2026-08-23: they are identical to cuVS 26.08, down to
+# the RAFT_EXPECTS message (cuVS 25.08 spells them as literals). Ours: the host
+# Jacobi's 60-sweep cap and the ncv admissibility guard.
+#
+# eigen_tol='auto' refused (DEVIATION 890): cuML 26.08's Python maps 'auto' to
+# 0.0 (spectral_clustering.pyx:346-347), passed through as the tolerance; that
+# disables the convergence test (res > tol), runs to 10 * n_samples iterations
+# and drives an exactly converged problem into DEVIATION 774's
+# restart-breakdown refusal. Default 1e-5 is cuVS's struct default
+# (spectral_embedding.hpp:59).
+# random_state=None means seed 0 (DEVIATION 891): cuVS's struct default is
+# rng_state{0}, and the no-seed Lanczos start vector is refused (DEVIATION 772;
+# std::random_device is not reproducible).
+# n_init=10 is what cluster/detail/spectral.cuh passes (KMeans defaults to 1).
+# Normalization: cluster/detail/spectral.cuh:35-36 hard-codes
+# norm_laplacian = true and drop_first = false on the clustering path.
+# assign_labels 'discretize'/'cluster_qr': x_cluster/spectral_assign.mojo, host
+# float64, a Jacobi SVD for LAPACK's (DEVIATION 5119); discretize draws its
+# start row from the splitmix64 stream seeded by random_state.
+# predict: DEVIATION 2860 (see the notes above `predict`).
 class SpectralClustering:
-    """Spectral clustering. Reference: cuML 26.08's `SpectralClustering`.
+    """Spectral clustering on a nearest-neighbor or precomputed affinity graph.
 
-    The pipeline (as in cuVS): build a kNN connectivity graph (or take a
-    precomputed affinity matrix), form the NORMALIZED graph Laplacian,
-    negate it, take the `n_components` largest algebraic eigenpairs of the
-    negation with a thick-restart Lanczos, and run k-means on the resulting
-    embedding.
+    Builds an affinity graph, forms the normalized graph Laplacian, takes its
+    ``n_components`` smallest eigenvectors with a thick-restart Lanczos solver
+    and clusters the resulting embedding. Defaults follow cuML's
+    ``SpectralClustering``, which differ from scikit-learn's: the default
+    affinity is ``"nearest_neighbors"`` with ``n_neighbors=10``, and
+    ``n_components`` defaults to ``n_clusters``. The Laplacian is always
+    normalized and the first (nearly constant) eigenvector is kept, so the
+    clustering runs on all ``n_components`` columns; ``embedding_`` is
+    therefore not what :class:`SpectralEmbedding` returns.
 
-    WHAT IS PINNED, AND WHAT IS ONLY MEASURED ON ONE MACHINE
-    --------------------------------------------------------
-    An eigenproblem has no unique answer. If `v` is a unit eigenvector then
-    so is `-v`; if two eigenvalues are equal then every orthonormal basis of
-    their shared subspace is equally correct. RAFT pins neither convention,
-    because RAFT ships one backend and has never had to. This implementation pins
-    both, and `spectral/IDENTICAL_SPECTRAL_CONTRACT.md` (profile
-    `mojolearn.identical.spectral.fp32.v1`) is where they live.
+    Eigenvectors are only defined up to sign, and a basis inside a repeated
+    eigenvalue is arbitrary. Results are reproducible for the same input and
+    seed, but a graph with ``c`` connected components has eigenvalue 0 with
+    multiplicity ``c``, and an embedding with ``n_components <= c`` can change
+    a lot under tiny input changes.
 
-    **THE SIGN RULE (DEVIATION 770).** After the projected eigenproblem is
-    solved and its eigenvalues sorted, every column of the `ncv x ncv`
-    PROJECTED eigenvector matrix is negated if and only if its first
-    nonzero component in ascending row index is negative. "Nonzero" is
-    `x != 0.0`, which is false for both `+0.0` and `-0.0`, so a leading
-    signed zero is SKIPPED rather than consulted for its sign bit; an
-    all-zero column is left alone. **The rule is applied there and nowhere
-    else. THERE IS NO SIGN PIN ON THE EMBEDDING THIS CLASS RETURNS.** The
-    embedding's signs follow from the pinned start vector (DEVIATION 772, a
-    splitmix64 hashed uniform that is an exact function of `(seed, n)`), not
-    from a second rule. Adding one would be a different profile.
-
-    **THE ORDERING AND TIE RULES (DEVIATION 778).** The projected solver
-    returns its eigenvalues ASCENDING, eigenvector `c` in column `c`, which
-    is cuSOLVER `syevd`'s convention and what RAFT's slicing assumes. This
-    path uses `which = LA` on the NEGATED Laplacian and takes the LAST `k`,
-    so index `k-1` is the Laplacian's smallest eigenvalue; the reversed
-    gather then puts the Laplacian's second-smallest in embedding column 0.
-    Ties are broken by ORIGINAL INDEX: the ascending sort is an insertion
-    sort with the strict comparison `d[order[j]] > d[key]`, so equal
-    eigenvalues keep the order they had on the Jacobi's diagonal, which is
-    itself a pure function of the input bits and the pinned sweep schedule.
-    `+0.0` and `-0.0` compare EQUAL, so two zero eigenvalues of opposite
-    sign are ordered by index and not by sign bit, deliberately. The `LM`
-    and `SM` solver modes are REFUSED by name rather than implemented, because
-    theirs sorts by magnitude with `thrust::sort`, which is not stable, and
-    implementing it would mean inventing a tie-break.
-
-    **WHAT THE PROFILE CLAIMS ABOUT DEGENERACY, exactly.** Given the same
-    input bits and the same profile, the same eigenvector bits come out,
-    INCLUDING inside a degenerate subspace, because the Jacobi sweep that
-    produced them is the same deterministic sequence of rotations. It does
-    NOT claim that the basis inside a degenerate subspace is STABLE under
-    perturbation, and it is not: a one-ulp change in one Laplacian entry can
-    rotate a degenerate pair's basis arbitrarily. A graph with `c` connected
-    components has eigenvalue zero with multiplicity `c`, so a
-    `n_components <= c` embedding of such a graph lies entirely inside a
-    degenerate subspace. That is a property of spectral embedding, not of
-    this implementation, and it is the shape most likely to surprise you.
-
-    **WHAT COVERAGE THAT SITS ON, stated as narrowly as the evidence.**
-
-      * NO CROSS-VENDOR RESULT OF ANY KIND. Every gate in this lane ran on
-        one Apple M4 on 2026-08-23. `spectral` is not in
-        `tools/e1_bootstrap.sh` phase 8, has no card in either leg-11
-        vendor lane directory, and is not judged by
-        `tools/e3_round_judge.sh` section 7. The metrics functions in
-        `mojolearn`'s sibling module ARE certified on three vendors; this
-        class is not, and the two must not be read together.
-      * THE DEVICE-SIDE INSTRUMENT FOR THE SIGN RULE RESTS ON ONE FIXTURE.
-        The `SIGN_FLIP` sabotage bites on the `hashed` fixture and is inert
-        on `path`, `ring`, `hashed_unnorm` and `blobs`, because after a
-        restart the re-canonicalization absorbs the flip on those four
-        (`archive/plans/CARD_GAPS.md:78`; the contract's section 9 table). The rule has
-        two host instruments the sabotage does not target, so the clause is
-        not undefended, but the DEVICE path's coverage is one fixture wide.
-      * A WHOLE-COLUMN SIGN DISAGREEMENT BETWEEN TWO VENDORS WOULD BE
-        INVISIBLE TO THE CARD. `spectral.ritz.vectors` is recorded AFTER
-        the sign pin is applied, so the pin re-canonicalizes such a
-        divergence away before it is hashed (`archive/plans/CARD_GAPS.md`, "Three more
-        cards that hash on the far side of a washer"). That is an open gap,
-        not a solved problem.
-      * SEAM J4's CERTIFICATE GATE IS OWED. The fused `ROTATE` (DEVIATION
-        781) lives in a solver SHARED by the device arm and the oracle, so
-        a device-equals-oracle compare cannot see a change to it. Its
-        sabotage does bite, on the ring fixture's degenerate pair, but the
-        hash-against-a-literal check the lane wants is written down and not
-        done (`spectral/NOT_IMPLEMENTED.tsv`, "this lane's own gaps").
-
-    **ON DEVIATION 780, so nobody re-inflates it.** That deviation once
-    claimed five constants as this implementation's own: `ncv = min(n - k, max(2k+1,
-    20))`, `max_iterations = 10 * n_samples`, the plumbed `tolerance`, the
-    Jacobi sweep cap, and the `ncv` admissibility bound. THREE OF THE FIVE
-    WERE STRUCK on 2026-08-23. They are IDENTICAL to cuVS 26.08, down to the
-    message string of the `RAFT_EXPECTS`; the claim was made while only a
-    cuVS 25.08 checkout existed on the machine, and 25.08 spells them as
-    literals. What remains ours is the host Jacobi's 60-sweep cap and this
-    lane's own `ncv` admissibility guard, both in code that stands where a
-    CLOSED vendor library does. Reading the wrong tree invents ORIGINALITY
-    an implementation does not have, which is exactly as bad as missing a real
-    deviation.
-
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY
-    -----------------------------------------
-        n_clusters     honored   cuML's default 8. Must be in
-                                 [1, n_samples].
-        n_components   honored   None (the default) means `n_clusters`,
-                                 which is cuML's rule. The Lanczos requires
-                                 `1 <= n_components < n_samples` and
-                                 `n_samples - n_components > 0`, and
-                                 refuses otherwise by name.
-        n_neighbors    honored   cuML's default 10. Ignored with
-                                 affinity='precomputed', as theirs is.
-        n_init         honored   cuML's default 10 (k-means restarts). NOTE
-                                 that `mojolearn.KMeans` defaults to cuVS's
-                                 1; this path takes cuVS's clustering
-                                 default of 10, which is what
-                                 `cluster/detail/spectral.cuh` passes.
-        eigen_tol      honored   a positive float; the default 1e-5 is
-                                 cuVS's own struct default
-                                 (`spectral_embedding.hpp:59`).
-                                 **'auto' IS REFUSED BY NAME (DEVIATION
-                                 890).** cuML 26.08's Python maps 'auto' to
-                                 0.0 (`spectral_clustering.pyx:346-347`),
-                                 and 0.0 does not select a default anywhere
-                                 downstream -- it is passed through as the
-                                 tolerance, which disables the convergence
-                                 test entirely (the loop condition is
-                                 `res > tol`), runs to `max_iterations =
-                                 10 * n_samples`, and drives an exactly
-                                 converged problem into DEVIATION 774's
-                                 restart-breakdown refusal. Substituting
-                                 1e-5 silently would be a value cuML does
-                                 not use; refusing names the choice.
-        random_state   honored   an int in [0, 2**32) as cuML requires.
-                                 **None means SEED 0 (DEVIATION 891)**, not
-                                 a fresh entropy draw: cuVS's struct
-                                 default is `rng_state{0}` and the no-seed
-                                 arm of the Lanczos start vector is refused
-                                 outright (DEVIATION 772, because
-                                 `std::random_device` is not reproducible).
-                                 So `random_state=None` here is
-                                 DETERMINISTIC, which is neither
-                                 scikit-learn's meaning nor cuML's Python
-                                 one, and this line is why.
-        affinity       honored   'nearest_neighbors' (default, cuML's),
-                                 'precomputed', and scikit-learn's 'rbf'
-                                 (its default; exp(-gamma |x_i - x_j|^2)
-                                 by the decomp lane's identical cells, then
-                                 the precomputed route) and
-                                 'precomputed_nearest_neighbors' (the
-                                 kNN connectivity of a distance matrix,
-                                 0.5 (C + C^T)). A callable and every other
-                                 kernel name are REFUSED by name.
-        assign_labels  honored   'kmeans' (default, cuVS's k-means on the
-                                 embedding), and scikit-learn's
-                                 'discretize' and 'cluster_qr' on the same
-                                 embedding (x_cluster/spectral_assign.mojo,
-                                 host float64, a Jacobi SVD for LAPACK's,
-                                 DEVIATION 5119); discretize draws its
-                                 start row from the lane's splitmix64
-                                 stream seeded by random_state. predict
-                                 (prediction_data=True) carries 'kmeans'
-                                 only.
-        eigen_solver   refused   scikit-learn's choice of arpack / lobpcg /
-                                 amg. There is one solver here, RAFT's
-                                 thick-restart Lanczos, and it is the only
-                                 thing the profile pins.
-        gamma          honored   with 'rbf' only; None means 1.0,
-                                 scikit-learn's SpectralClustering default
-        degree, coef0, refused   parameters of kernels not carried
-        kernel_params
-        n_jobs, verbose refused  no host thread pool and nothing prints.
-        affinity_matrix_ set     for 'rbf' and 'precomputed_nearest_neighbors'
-                                 (the dense matrix the fit used) and
-                                 'precomputed' (X, as scikit-learn); absent
-                                 for 'nearest_neighbors', whose graph cuVS
-                                 builds inside the fit
-        prediction_data honored  False (the default) fits exactly as before.
-                                 True also copies out of the fit the Ritz
-                                 values, the Ritz vectors before the degree
-                                 division, the degree scaling and the final
-                                 k-means centroids (and, for
-                                 'nearest_neighbors', keeps the training
-                                 rows), which `predict` and `save` need. The
-                                 copies add no arithmetic; the fit's labels
-                                 and embedding are the same bytes
-        predict()      NEW       DEVIATION 2860, the Nystrom out-of-sample
-                                 extension (Bengio et al., NIPS 2003) and the
-                                 fit's own k-means assignment. Neither cuML
-                                 nor scikit-learn has one. See `predict`
-
-    NORMALIZATION IS NOT A PARAMETER HERE, and that is theirs.
-    `cluster/detail/spectral.cuh:35-36` hard-codes `norm_laplacian = true`
-    and `drop_first = false` on the clustering path. So the trivial
-    (roughly constant) eigenvector is KEPT and k-means runs on all
-    `n_components` columns. `embedding_` is therefore not the same object a
-    spectral EMBEDDING transform returns, which drops it.
+    Parameters
+    ----------
+    n_clusters : int, default 8
+        Number of clusters, in ``[1, n_samples]``.
+    n_components : int or None, default None
+        Number of eigenvectors; None uses ``n_clusters``. Must satisfy
+        ``1 <= n_components < n_samples``.
+    random_state : int or None, default None
+        Seed in ``[0, 2**32)``. None means seed 0, so results are
+        deterministic (unlike scikit-learn and cuML, where None draws a fresh
+        seed).
+    n_neighbors : int, default 10
+        Neighbors per row in the nearest-neighbor graph; ignored with
+        ``affinity="precomputed"``.
+    n_init : int, default 10
+        Number of k-means restarts on the embedding (cuVS's spectral default;
+        :class:`KMeans` itself defaults to 1).
+    eigen_tol : float, default 1e-5
+        Convergence tolerance of the eigensolver; must be a positive float.
+        The string ``"auto"`` raises ``NotImplementedError``: cuML maps it to
+        0.0, which disables the convergence test.
+    affinity : str, default "nearest_neighbors"
+        ``"nearest_neighbors"`` (symmetrized k-NN connectivity of ``X``),
+        ``"precomputed"`` (``X`` is a square affinity matrix, dense or sparse),
+        ``"rbf"`` (``exp(-gamma * ||x_i - x_j||**2)``, scikit-learn's kernel)
+        or ``"precomputed_nearest_neighbors"`` (k-NN connectivity of a
+        precomputed distance matrix, symmetrized as ``0.5 * (C + C.T)``). A
+        callable or any other name raises ``ValueError``.
+    assign_labels : {"kmeans", "discretize", "cluster_qr"}, default "kmeans"
+        How labels are assigned from the embedding: k-means, or
+        scikit-learn's ``"discretize"`` and ``"cluster_qr"``.
+    eigen_solver : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+    gamma : float or None, default None
+        RBF kernel coefficient, used only with ``affinity="rbf"``; None means
+        1.0 (scikit-learn's default). Setting it with another affinity raises
+        ``NotImplementedError``.
+    degree, coef0, kernel_params : None
+        Not supported; any value raises ``NotImplementedError``.
+    n_jobs : None
+        Not supported; any value raises ``NotImplementedError``.
+    verbose : bool, default False
+        Not supported; True raises ``NotImplementedError``.
+    prediction_data : bool, default False
+        Keep the eigenpairs, degree scaling and k-means centroids (and, for
+        ``"nearest_neighbors"``, the training rows) so that ``predict`` and
+        ``save`` work. It does not change the fitted labels or embedding.
+        Supported with ``assign_labels="kmeans"`` and the
+        ``"nearest_neighbors"`` or ``"precomputed"`` affinities only;
+        otherwise ``NotImplementedError``.
 
     Attributes
     ----------
-    labels_ : Array (n_samples,) int32
-        Cluster ids in `[0, n_clusters)`, k-means's numbering.
-    embedding_ : Array (n_samples, n_components) float32
-        The row-major spectral embedding k-means was run on. Exposed
-        because the lane's gates read it and because it is the thing every
-        clause above is about.
+    labels_ : Array of shape (n_samples,), int32
+        Cluster label of each training row, in ``[0, n_clusters)``.
+    embedding_ : Array of shape (n_samples, n_components), float32
+        The spectral embedding that was clustered.
+    n_components_ : int
+        Number of eigenvectors used.
+    affinity_matrix_ : array
+        The affinity matrix used by the fit: ``X`` itself for
+        ``"precomputed"``, the dense matrix for ``"rbf"`` and
+        ``"precomputed_nearest_neighbors"``. Not set for
+        ``"nearest_neighbors"``.
     n_features_in_ : int
-        Only set for affinity='nearest_neighbors'.
+        Number of features of ``X``; set for ``"nearest_neighbors"`` and
+        ``"rbf"``.
+    n_iter_assign_ : int
+        Iterations of the ``"discretize"`` label assignment; set only for it.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.SpectralClustering(n_clusters=4, random_state=0).fit(X)
+    >>> labels = model.labels_
     """
 
     def __init__(
@@ -531,6 +482,31 @@ class SpectralClustering:
         )
 
     def fit(self, X, y=None):
+        """Cluster ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+            Training data, or with ``affinity="precomputed"`` a square
+            nonnegative affinity matrix (dense or sparse); with
+            ``"precomputed_nearest_neighbors"`` a square distance matrix.
+            Values must be finite.
+        y : ignored
+
+        Returns
+        -------
+        self : SpectralClustering
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``X`` holds NaN or infinity, a precomputed affinity has no
+            nonzero entries, ``n_clusters`` exceeds ``n_samples`` or
+            ``n_components`` is not below ``n_samples``.
+        TypeError
+            If ``prediction_data`` is not a bool.
+        """
         if not isinstance(self.prediction_data, bool):
             raise TypeError(
                 "mojolearn SpectralClustering: prediction_data must be a bool, "
@@ -774,63 +750,83 @@ class SpectralClustering:
             )
 
     def fit_predict(self, X, y=None):
+        """Fit to ``X`` and return the training labels.
+
+        Parameters
+        ----------
+        X : array-like
+            As in ``fit``.
+        y : ignored
+
+        Returns
+        -------
+        labels : Array of shape (n_samples,), int32
+            Same as ``labels_``.
+        """
         return self.fit(X, y=y).labels_
 
+    # predict, maintainer notes (DEVIATION 2860). Nystrom extension of Bengio,
+    # Paiement, Vincent, Delalleau, Le Roux and Ouimet (NIPS 2003), as Fowlkes
+    # et al. (TPAMI 2004) use it, then the fit's own k-means assignment. For a
+    # new row x and column c:
+    #     e_c(x) = (1 / mu_c) * sum_i Ktilde(x, x_i) u_c[i] / sqrt(d(x))
+    #     Ktilde(x, x_i) = K(x, x_i) / (sqrt(d(x)) * sqrt(d_i))
+    # u_c is the fit's unit eigenvector before its degree division,
+    # mu_c = 1 + theta_c the normalized affinity's eigenvalue (theta_c the Ritz
+    # value of the negated normalized Laplacian), d_i the fit's degree and
+    # d(x) = sum_i K(x, x_i); the last division by sqrt(d(x)) is the fit's own
+    # row scaling. A 'nearest_neighbors' query edge weighs 0.5: the fit's
+    # symmetrization 0.5 * (a + b) of an edge with no reverse edge. Every fold
+    # (degree, each projection) runs over training rows in ascending index,
+    # seeded +0.0, one query at a time, so labels do not depend on the batch
+    # and the GPU binding and the CPU host binding compute the same bytes.
+    # Nothing is dropped (the clustering fit keeps the trivial column); a
+    # column with |mu_c| < 1e-3 is refused by name. How often
+    # predict(X_train) == labels_ holds is measured in
+    # bench/results/identity_break/2026-09-15_spectral-predict/.
     def predict(self, X):
-        """Label NEW rows under the fitted clustering. NEW CAPABILITY
-        (DEVIATION 2860): neither scikit-learn's nor cuML's
-        SpectralClustering has a `predict`, and this is not either library's
-        behavior.
+        r"""Assign new rows to the fitted clusters.
 
-        THE METHOD is the Nystrom out-of-sample extension of Bengio,
-        Paiement, Vincent, Delalleau, Le Roux and Ouimet, "Out-of-Sample
-        Extensions for LLE, Isomap, MDS, Eigenmaps, and Spectral Clustering"
-        (NIPS 2003), as Fowlkes et al. (TPAMI 2004) use it for spectral
-        grouping, followed by the fit's own k-means assignment. For a new row
-        `x` and each embedding column `c`,
+        Neither scikit-learn nor cuML provides ``predict`` for spectral
+        clustering. This one uses the Nystrom out-of-sample extension (Bengio
+        et al., NIPS 2003): each new row is projected onto the fitted
+        eigenvectors through its affinity to the training rows, then assigned
+        to the nearest fitted k-means centroid (ties go to the lowest
+        centroid index). A row's label does not depend on the other rows in
+        the call.
 
-            e_c(x) = (1 / mu_c) * sum_i Ktilde(x, x_i) u_c[i] / sqrt(d(x))
-            Ktilde(x, x_i) = K(x, x_i) / (sqrt(d(x)) * sqrt(d_i))
+        Requires a fit with ``prediction_data=True``.
 
-        where `u_c` is the fit's unit eigenvector before its degree division,
-        `mu_c = 1 + theta_c` the normalized affinity's eigenvalue (`theta_c`
-        the Ritz value of the negated normalized Laplacian), `d_i` the fit's
-        degree and `d(x) = sum_i K(x, x_i)`. The last division by
-        `sqrt(d(x))` is the fit's own row scaling. The row is then assigned
-        to the nearest fitted k-means centroid, ties to the lowest centroid
-        index.
+        The affinity of a new row:
 
-        THE AFFINITY OF A NEW ROW.
-          'nearest_neighbors'  its `n_neighbors` nearest training rows under
-                               the fit's own k-NN (L2, ties by the search's
-                               own order), each with weight 0.5: the fit's
-                               symmetrization `0.5 * (a + b)` of an edge with
-                               no reverse edge, since a new row has none. The
-                               training degrees are not changed.
-          'precomputed'        X is the affinity between the new rows and
-                               the training rows, shape (n_new, n_train),
-                               finite and non-negative (a sparse matrix is
-                               densified with `toarray()`).
-        Every fold (the degree, each projection) runs over the training rows
-        in ascending index, seeded +0.0, one query at a time, so a row's
-        label does not depend on the batch, and the GPU binding and the CPU
-        host binding compute the same bytes.
+        - ``"nearest_neighbors"``: its ``n_neighbors`` nearest training rows
+          (Euclidean), each with weight 0.5. Training degrees are unchanged.
+        - ``"precomputed"``: ``X`` is the affinity between the new rows and
+          the training rows, shape ``(n_new, n_train)``, finite and
+          nonnegative. A sparse matrix is densified.
 
-        THE THRESHOLD. Nothing is dropped (the clustering fit keeps every
-        column, the trivial one included). A column whose `|mu_c|` is below
-        1e-3 would be amplified by more than 1000x, so predict REFUSES BY
-        NAME, naming the column.
+        Training rows passed to ``predict`` are not guaranteed to get their
+        ``labels_``: as a query, a row sees itself with weight 0.5 rather
+        than 1.0 and has no reverse edges.
 
-        ON THE TRAINING ROWS the extension reproduces `embedding_` only in
-        exact arithmetic and only for the fit's own affinity: asked as a
-        query, a training row sees itself at 0.5 where the fit's graph had
-        1.0, has no reverse edges, and the eigenpairs hold to `eigen_tol`.
-        `predict(X_train) == labels_` is therefore not promised; how often it
-        holds is measured in
-        bench/results/identity_break/2026-09-15_spectral-predict/.
+        Parameters
+        ----------
+        X : array-like of shape (n_new, n_features) or (n_new, n_train)
+            New rows, or their affinity to the training rows.
 
-        Requires `prediction_data=True` at fit; refused by name otherwise.
-        Returns int32 labels, the dtype and numbering of `labels_`.
+        Returns
+        -------
+        labels : Array of shape (n_new,), int32
+            Cluster labels, numbered as in ``labels_``.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, was fitted without
+            ``prediction_data=True``, ``X`` has the wrong shape, or an
+            eigenvalue of the normalized affinity has magnitude below 1e-3
+            (the projection would amplify it more than 1000x; the error names
+            the column).
         """
         return self._predict_embedding(X)[0]
 
@@ -902,17 +898,30 @@ class SpectralClustering:
         )
         return labels, emb
 
+    # Saved layout: eigenvalues <f4 (k), eigenvectors <f4 (n_train, k), diag <f4
+    # (n_train), centroids <f4 (n_clusters, k), labels <i4, x <f4 (training rows,
+    # 'nearest_neighbors' only), affinity, numeric_mode, eigen_tol <f8, meta <i8
+    # [n_clusters, n_components_, n_neighbors, n_init, seed,
+    # random_state_is_none, n_train, n_features_in_ (0 for precomputed)]. On a
+    # CPU-only install predict runs through _mojolearn_metrics_host.spectral_predict.
     def save(self, path):
-        """Write the prediction data of a `prediction_data=True` fit to
-        `path` as an npz: `eigenvalues` `<f4` (k), `eigenvectors` `<f4`
-        (n_train, k), `diag` `<f4` (n_train), `centroids` `<f4`
-        (n_clusters, k), `labels` `<i4`, `x` `<f4` (the training rows,
-        'nearest_neighbors' only), `affinity`, `numeric_mode`, `eigen_tol`
-        `<f8` and `meta` `<i8` [n_clusters, n_components_, n_neighbors,
-        n_init, seed, random_state_is_none, n_train, n_features_in_ (0 for
-        precomputed)]. A loaded model predicts; it does not refit. On a
-        CPU-only install `SpectralClustering.load(path).predict(X)` runs
-        through `_mojolearn_metrics_host.spectral_predict`."""
+        """Save a model fitted with ``prediction_data=True`` to ``path`` (npz).
+
+        A model restored with ``SpectralClustering.load`` can ``predict``
+        new rows, including on a CPU-only install, but cannot refit.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            If it was fitted without ``prediction_data=True``.
+        """
         if not hasattr(self, "labels_"):
             raise RuntimeError("this estimator is not fitted yet")
         if getattr(self, "_pd_eigenvalues", None) is None:
@@ -947,8 +956,27 @@ class SpectralClustering:
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; every array is
-        read at its saved dtype and never cast."""
+        """Load a model written by ``save``.
+
+        The loaded model can ``predict``; it does not refit. Arrays are read
+        at their saved dtype and never cast.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by ``SpectralClustering.save``.
+
+        Returns
+        -------
+        model : SpectralClustering
+            The restored model, with ``labels_`` and ``n_components_`` set.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a SpectralClustering model or its arrays have
+            inconsistent shapes.
+        """
         arrays = _serialize.read_npz(path, _SPECTRAL_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
