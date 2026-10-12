@@ -19,6 +19,21 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   exact reference folds the background mean in one fixed order. The opponents keep the NumPy ridge they were scored with
   (no re-score); `tools/shap_xvendor_probe.py` prints both models' digests per box.
 
+## 0.8.42 (published 2026-10-12)
+
+- LARS and LassoLars on Apple use the same blocked Gram fold as NVIDIA and AMD: every LARS cell now matches the
+  NVIDIA, AMD and host digests bit for bit (the Apple exclusion in `x_linear/device.mojo` is gone).
+- KernelPCA: the device eigensolver (tridiagonal from n = 64) is the same on every vendor; NVIDIA, AMD and Apple agree
+  bit for bit, and the host column keeps its Jacobi solver. Notes at the dispatch sites in `_expansion_neighbors.py`.
+- resnet-block and conv2d board cells are scored against a rebuilt host reference (0.0 relative error on AMD).
+- Docstrings of the public API rewritten for users (docs.mojolearn.org): what each estimator does, parameters, returns,
+  examples. Project URLs in the package metadata point at mojolearn.org and docs.mojolearn.org.
+- Identity reference table regenerated from an NVIDIA RTX 4090 (sm_89) column and an AMD MI325X (gfx942) column at the
+  same code; the admit accepts vendor columns recorded at commits that differ only in docs or docstrings.
+- Release tooling: the changed-lane selector no longer re-records every lane for A/B records or packed runtime
+  libraries; the release tool finds the system CA bundle when the interpreter has none. The NVIDIA wheel stays sm_89
+  only (PTX slot registered, unshipped).
+
 ## 0.8.41 (published 2026-10-12)
 
 - Linux core, mojolearn-nvidia and mojolearn-amd (0.8.39 and 0.8.40 published macOS only: the packer still demanded the

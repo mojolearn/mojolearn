@@ -62,6 +62,8 @@ html_theme = "pydata_sphinx_theme"
 html_title = f"mojolearn {release} documentation"
 html_static_path = ["_static"]
 html_css_files = ["mojolearn.css"]
+# Light/dark choice shared with mojolearn.org through a cookie on the parent domain.
+html_js_files = ["theme-cookie.js"]
 html_favicon = "_static/mojolearn-mark-full.svg"
 html_theme_options = {
     "logo": {
