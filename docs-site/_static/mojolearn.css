@@ -5,6 +5,8 @@ html[data-theme="light"] {
   --pst-color-link: #30215A;
   --pst-color-link-hover: #5A4890;
   --pst-color-accent: #30215A;
+  --pst-color-inline-code: #30215A;
+  --pst-color-inline-code-links: #30215A;
 }
 html[data-theme="dark"] {
   --pst-color-primary: #A99BE0;
@@ -12,6 +14,8 @@ html[data-theme="dark"] {
   --pst-color-link: #A99BE0;
   --pst-color-link-hover: #C9BFEF;
   --pst-color-accent: #A99BE0;
+  --pst-color-inline-code: #C9BFEF;
+  --pst-color-inline-code-links: #A99BE0;
 }
 .navbar-brand img { height: 1.6rem; }
 .sd-card-title { font-weight: 650; }

@@ -26,6 +26,13 @@ myst_heading_anchors = 3
 
 autosummary_generate = True
 autosummary_imported_members = True
+# Names that differ only in case (the hdbscan module and the HDBSCAN class) would share one file on a
+# case-insensitive disk; give the lower-case ones a distinct page name.
+_lower = {}
+for _n in mojolearn.__all__:
+    _lower.setdefault(_n.lower(), []).append(_n)
+autosummary_filename_map = {f"mojolearn.{n}": f"mojolearn.{n}-module"
+                            for group in _lower.values() if len(group) > 1 for n in group if n == n.lower()}
 autodoc_default_options = {"members": True, "inherited-members": False, "show-inheritance": False,
                            "exclude-members": "__init__"}
 # Docstrings write names in single backticks; render them as code, not as italic title references.
