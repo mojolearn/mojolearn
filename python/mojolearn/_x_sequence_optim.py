@@ -360,9 +360,60 @@ class _SeqOptimizer(_ResidentState):
 
 
 class RMSprop(_SeqOptimizer):
-    """`torch.optim.RMSprop`: v = alpha v + (1 - alpha) g^2; centered
-    subtracts the squared running mean of g; momentum keeps a buffer of
-    g / (sqrt(v) + eps). Defaults are torch's."""
+    """RMSprop optimizer, as `torch.optim.RMSprop`.
+
+    Keeps a running average of squared gradients, ``v = alpha * v + (1 - alpha) * g**2``,
+    and divides the gradient by ``sqrt(v) + eps``. With ``centered=True`` the squared
+    running mean of the gradient is subtracted from `v`; with ``momentum > 0`` a
+    momentum buffer accumulates the scaled gradient. Defaults are torch's.
+
+    Parameters
+    ----------
+    params : ndarray or list of ndarray
+        Parameters to update in place.
+    lr : float, default 1e-2
+        Learning rate.
+    alpha : float, default 0.99
+        Smoothing constant of the squared-gradient average.
+    eps : float, default 1e-8
+        Term added to the denominator.
+    weight_decay : float, default 0.0
+        L2 penalty added to the gradient.
+    momentum : float, default 0.0
+        Momentum factor.
+    centered : bool, default False
+        Normalize by the estimated gradient variance.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode of the update. None uses the library default.
+
+    Attributes
+    ----------
+    t : int
+        Number of steps taken.
+    square_avg : ndarray
+        Running average of squared gradients, flat over all parameters.
+
+    Notes
+    -----
+    `params` must be C-contiguous float32 NumPy arrays, updated in place; anything
+    else raises `TypeError`. `step(grads)`
+    takes one gradient per parameter, in the same order and shapes; float64 gradients
+    raise `TypeError`. `lr` is read at every step, so you can change ``opt.lr`` between
+    steps, or set ``opt.lr_schedule`` to a schedule (`StepLR`, `ExponentialLR`,
+    `OneCycleLR`, or any object with a one-based `lr_at(t)`), which sets `lr` before
+    each step. `state_dict()` and `load_state_dict()` save and restore the step count,
+    learning rate and state buffers.
+
+    Not supported: parameter groups, `maximize`, `foreach`/`fused`/`capturable`/
+    `differentiable`, sparse gradients and float64 parameters.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> w = np.zeros((64, 8), dtype=np.float32)
+    >>> opt = mojolearn.RMSprop([w], lr=1e-2)
+    >>> opt = opt.step([np.ones_like(w)])
+    """
     _NAME = "rmsprop"
 
     def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-8, weight_decay=0.0, momentum=0.0,
@@ -372,12 +423,61 @@ class RMSprop(_SeqOptimizer):
 
     @property
     def square_avg(self):
+        """Running average of squared gradients, flat over all parameters."""
         return self.state[1]
 
 
 class Adagrad(_SeqOptimizer):
-    """`torch.optim.Adagrad`: sum += g^2; p -= clr g / (sqrt(sum) + eps),
-    clr = lr / (1 + (t - 1) lr_decay). Defaults are torch's."""
+    """Adagrad optimizer, as `torch.optim.Adagrad`.
+
+    Accumulates squared gradients, ``sum += g**2``, and updates
+    ``p -= clr * g / (sqrt(sum) + eps)`` with ``clr = lr / (1 + (t - 1) * lr_decay)``.
+    Defaults are torch's.
+
+    Parameters
+    ----------
+    params : ndarray or list of ndarray
+        Parameters to update in place.
+    lr : float, default 1e-2
+        Learning rate.
+    lr_decay : float, default 0.0
+        Learning-rate decay per step.
+    weight_decay : float, default 0.0
+        L2 penalty added to the gradient.
+    initial_accumulator_value : float, default 0.0
+        Starting value of the squared-gradient sum.
+    eps : float, default 1e-10
+        Term added to the denominator.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode of the update. None uses the library default.
+
+    Attributes
+    ----------
+    t : int
+        Number of steps taken.
+    sum : ndarray
+        Accumulated squared gradients, flat over all parameters.
+
+    Notes
+    -----
+    `params` must be C-contiguous float32 NumPy arrays, updated in place; anything
+    else raises `TypeError`. `step(grads)`
+    takes one gradient per parameter, in the same order and shapes; float64 gradients
+    raise `TypeError`. `lr` is read at every step, so you can change ``opt.lr`` between
+    steps, or set ``opt.lr_schedule`` to a schedule (`StepLR`, `ExponentialLR`,
+    `OneCycleLR`, or any object with a one-based `lr_at(t)`), which sets `lr` before
+    each step. `state_dict()` and `load_state_dict()` save and restore the step count,
+    learning rate and state buffers.
+
+    Not supported: parameter groups, `maximize`, `foreach`/`fused`/`capturable`/
+    `differentiable`, sparse gradients and float64 parameters.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> w = np.zeros(128, dtype=np.float32)
+    >>> opt = mojolearn.Adagrad(w, lr=0.1).step(np.ones_like(w))
+    """
     _NAME = "adagrad"
 
     def __init__(self, params, lr=1e-2, lr_decay=0.0, weight_decay=0.0, initial_accumulator_value=0.0,
@@ -388,13 +488,57 @@ class Adagrad(_SeqOptimizer):
 
     @property
     def sum(self):
+        """Accumulated squared gradients, flat over all parameters."""
         return self.state[1]
 
 
 class Lion(_SeqOptimizer):
-    """Lion (Chen et al. 2023, "Symbolic Discovery of Optimization
-    Algorithms"; lion-pytorch's statement): p *= 1 - lr wd; p -= lr
-    sign(b1 m + (1 - b1) g); m = b2 m + (1 - b2) g. Defaults are the paper's."""
+    """Lion optimizer (Chen et al., 2023, "Symbolic Discovery of Optimization Algorithms").
+
+    Follows the lion-pytorch statement of the update: ``p *= 1 - lr * weight_decay``;
+    ``p -= lr * sign(beta1 * m + (1 - beta1) * g)``; ``m = beta2 * m + (1 - beta2) * g``.
+    Defaults are the paper's.
+
+    Parameters
+    ----------
+    params : ndarray or list of ndarray
+        Parameters to update in place.
+    lr : float, default 1e-4
+        Learning rate.
+    betas : tuple of float, default (0.9, 0.99)
+        Interpolation factor of the update direction and decay of the momentum.
+    weight_decay : float, default 0.0
+        Decoupled weight decay.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode of the update. None uses the library default.
+
+    Attributes
+    ----------
+    t : int
+        Number of steps taken.
+    exp_avg : ndarray
+        Momentum buffer, flat over all parameters.
+
+    Notes
+    -----
+    `params` must be C-contiguous float32 NumPy arrays, updated in place; anything
+    else raises `TypeError`. `step(grads)`
+    takes one gradient per parameter, in the same order and shapes; float64 gradients
+    raise `TypeError`. `lr` is read at every step, so you can change ``opt.lr`` between
+    steps, or set ``opt.lr_schedule`` to a schedule (`StepLR`, `ExponentialLR`,
+    `OneCycleLR`, or any object with a one-based `lr_at(t)`), which sets `lr` before
+    each step. `state_dict()` and `load_state_dict()` save and restore the step count,
+    learning rate and state buffers.
+
+    Not supported: parameter groups, `maximize`, `foreach`/`fused`/`capturable`/
+    `differentiable`, sparse gradients and float64 parameters.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> w = np.zeros(128, dtype=np.float32)
+    >>> opt = mojolearn.Lion([w], lr=1e-4).step([np.ones_like(w)])
+    """
     _NAME = "lion"
 
     def __init__(self, params, lr=1e-4, betas=(0.9, 0.99), weight_decay=0.0, numeric_mode=None):
@@ -402,12 +546,57 @@ class Lion(_SeqOptimizer):
 
     @property
     def exp_avg(self):
+        """Momentum buffer, flat over all parameters."""
         return self.state[0]
 
 
 class Adamax(_SeqOptimizer):
-    """`torch.optim.Adamax`: m.lerp_(g, 1 - b1); u = max(b2 u, |g| + eps);
-    p -= lr / (1 - b1^t) m / u; coupled weight decay. Defaults are torch's."""
+    """Adamax optimizer, as `torch.optim.Adamax`.
+
+    The infinity-norm variant of Adam: ``m = lerp(m, g, 1 - beta1)``,
+    ``u = max(beta2 * u, |g| + eps)``, ``p -= lr / (1 - beta1**t) * m / u``. Weight
+    decay is coupled (added to the gradient). Defaults are torch's.
+
+    Parameters
+    ----------
+    params : ndarray or list of ndarray
+        Parameters to update in place.
+    lr : float, default 2e-3
+        Learning rate.
+    betas : tuple of float, default (0.9, 0.999)
+        Decay rates of the first moment and the infinity norm, each in [0, 1).
+    eps : float, default 1e-8
+        Term added to the norm.
+    weight_decay : float, default 0.0
+        L2 penalty added to the gradient.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode of the update. None uses the library default.
+
+    Attributes
+    ----------
+    t : int
+        Number of steps taken.
+
+    Notes
+    -----
+    `params` must be C-contiguous float32 NumPy arrays, updated in place; anything
+    else raises `TypeError`. `step(grads)`
+    takes one gradient per parameter, in the same order and shapes; float64 gradients
+    raise `TypeError`. `lr` is read at every step, so you can change ``opt.lr`` between
+    steps, or set ``opt.lr_schedule`` to a schedule (`StepLR`, `ExponentialLR`,
+    `OneCycleLR`, or any object with a one-based `lr_at(t)`), which sets `lr` before
+    each step. `state_dict()` and `load_state_dict()` save and restore the step count,
+    learning rate and state buffers.
+
+    Not supported: parameter groups, `maximize`, `foreach`/`fused`/`capturable`/
+    `differentiable`, sparse gradients and float64 parameters.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> w = np.zeros(128, dtype=np.float32)
+    >>> opt = mojolearn.Adamax([w]).step([np.ones_like(w)])
+    """
     _NAME = "adamax"
 
     def __init__(self, params, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, numeric_mode=None):
@@ -415,10 +604,57 @@ class Adamax(_SeqOptimizer):
 
 
 class NAdam(_SeqOptimizer):
-    """`torch.optim.NAdam`: Nesterov-accelerated Adam with torch's momentum
-    schedule mu_t = b1 (1 - 0.5 0.96^(t momentum_decay)), denominator
-    sqrt(v / (1 - b2^t)) + eps, coupled or decoupled weight decay. Defaults
-    are torch's."""
+    """NAdam optimizer, as `torch.optim.NAdam`.
+
+    Adam with Nesterov momentum and torch's momentum schedule
+    ``mu_t = beta1 * (1 - 0.5 * 0.96**(t * momentum_decay))``; the denominator is
+    ``sqrt(v / (1 - beta2**t)) + eps``. Weight decay is coupled by default, decoupled
+    (AdamW style) with ``decoupled_weight_decay=True``. Defaults are torch's.
+
+    Parameters
+    ----------
+    params : ndarray or list of ndarray
+        Parameters to update in place.
+    lr : float, default 2e-3
+        Learning rate.
+    betas : tuple of float, default (0.9, 0.999)
+        Decay rates of the first and second moments.
+    eps : float, default 1e-8
+        Term added to the denominator.
+    weight_decay : float, default 0.0
+        Weight decay.
+    momentum_decay : float, default 4e-3
+        Momentum schedule decay. Must be >= 0, otherwise `ValueError`.
+    decoupled_weight_decay : bool, default False
+        Apply weight decay to the parameters directly instead of the gradient.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode of the update. None uses the library default.
+
+    Attributes
+    ----------
+    t : int
+        Number of steps taken.
+
+    Notes
+    -----
+    `params` must be C-contiguous float32 NumPy arrays, updated in place; anything
+    else raises `TypeError`. `step(grads)`
+    takes one gradient per parameter, in the same order and shapes; float64 gradients
+    raise `TypeError`. `lr` is read at every step, so you can change ``opt.lr`` between
+    steps, or set ``opt.lr_schedule`` to a schedule (`StepLR`, `ExponentialLR`,
+    `OneCycleLR`, or any object with a one-based `lr_at(t)`), which sets `lr` before
+    each step. `state_dict()` and `load_state_dict()` save and restore the step count,
+    learning rate and state buffers.
+
+    Not supported: parameter groups, `maximize`, `foreach`/`fused`/`capturable`/
+    `differentiable`, sparse gradients and float64 parameters.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> w = np.zeros(128, dtype=np.float32)
+    >>> opt = mojolearn.NAdam([w], lr=2e-3).step([np.ones_like(w)])
+    """
     _NAME = "nadam"
 
     def __init__(self, params, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, momentum_decay=4e-3,
