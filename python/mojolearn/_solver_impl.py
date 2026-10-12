@@ -55,161 +55,156 @@ _CD_FORMAT = "mojolearn-cd-1"
 
 
 
+# Maintainer notes (moved from the docstring, 2026-10-12):
+# Reference: cuml.linear_model.ElasticNet(solver='cd') and
+# cuml/cpp/src/solver/cd.cuh::cdFit; the Mojo implementation is
+# solver/impl/cd.mojo and the host surface solver/estimator.mojo.
+# THE OBJECTIVE: cd.cuh:84-86 documents an unscaled objective, and the code
+# (cd.cuh:201-202, v26.08.00 checkout) scales both penalties by the row count:
+#     l2_alpha = (1 - l1_ratio) * alpha * n_rows
+#     l1_alpha =      l1_ratio  * alpha * n_rows
+# so what is minimized is n_rows times scikit-learn's documented objective
+# (sklearn/linear_model/_coordinate_descent.py:499-501; scikit-learn's solver
+# applies the same n_samples factor, :781-782). A positive scale does not move
+# the minimizer, so alpha and l1_ratio mean the same in sklearn, cuML and here;
+# cuML's docstring is off by the factor n.
+# Differences from scikit-learn, all matching cuML on purpose:
+#   stopping rule  after each epoch, coefMax < tol OR diffMax / coefMax < tol
+#                  (cd.cuh:271), a coefficient-change test only; no duality gap,
+#                  so dual_gap_ is absent, not zero
+#   tol default    1e-3 (cuML's); cuML's CPU-to-GPU converter multiplies a
+#                  scikit-learn tol by 10 (elastic_net.py:154)
+#   zero-column    `squared > 1e-5 ? r / squared : 0` (cd.cuh:68), an absolute
+#   guard          threshold on a sum of squares; on the identity card as
+#                  `cd.squared`. scikit-learn skips only an exactly-zero column
+# Refusals and their sources:
+#   alpha / l1_ratio  non-finite refused by name (DEVIATION 613, cd.mojo): cuML's
+#                  guard `alpha < 0` is false for NaN, and a NaN alpha zeroes
+#                  every coefficient silently
+#   fit_intercept  centers on the device through the implemented preProcessData /
+#                  postProcessData (cuML's kernels; on the identity card as
+#                  `cd.mu_input`, `cd.mu_labels`), unlike LinearRegression/Ridge
+#   selection      'random' refused (cd.mojo): cuML seeds std::mt19937(0) and calls
+#                  std::shuffle, whose algorithm the C++ standard does not
+#                  specify, so it cannot be gated bitwise; an exact
+#                  implementation is DEVIATION 611, reserved and not spent
+#   solver 'qn'    refused: cuML's 'auto' picks 'qn' for sparse input
+#                  (elastic_net.py:243-244); 'qn' under l1 is OWL-QN on that
+#                  surface (glm/NOT_IMPLEMENTED.tsv)
+#   sample_weight  the weighted preProcessData and sqrt-weight scaling are not
+#                  implemented (cd.mojo raises)
+#   positive / warm_start / precompute  cuML raises UnsupportedOnGPU too
+#                  (elastic_net.py:143, :146, :149); cdFit reads coef as its
+#                  starting point and solver/estimator.mojo zeroes it every fit
+#   copy_X=False   refused: the design is copied to the device and the caller's
+#                  array is never written (DEVIATION 880; cuML's cdFit centers
+#                  and un-centers input in place and does not restore the bits)
+#   random_state   accepted and inert (only 'random' reads it); refusing it broke
+#                  nested Lasso(random_state=...) in voting/stacking members
+#   n_rows <= 1 / n_cols <= 0  refused by cdFit itself (cd.cuh:145, :144), in fit
+#                  and in predict
+#   sparse X       cdFit is dense only (elastic_net.py:265-269)
+# THE DESIGN MATRIX IS COPIED AT MOST ONCE (DEVIATION 2367): cdFit wants cuML's F
+# order and `_buffer.as_f32_colmajor` converts dtype and layout in one pass; a
+# float32 C-order design crosses as is and the device transposes it
+# (lane/gap-nv-classical2). `input_copied_` and `fortran_copied_` report the same
+# flag.
+# n_iter_: the stopping test branches on reduction bits; under identical it is a
+# function of the inputs alone and is the card's `cd.n_iter` stage (bit-identical
+# on Apple M4, NVIDIA H100 and AMD MI325X at leg 11).
+# IDENTITY TRACE: with MOJOLEARN_IDENTITY_TRACE=<path> set, a fit writes the same
+# `cd.*` identity card solver/cd_main.mojo writes (solver/estimator.mojo hands the
+# implemented entry a live trace).
 class ElasticNet(ParamsMixin):
-    """Elastic-net regression by coordinate descent on the GPU.
+    """Linear regression with a combined l1 and l2 penalty, fitted by
+    coordinate descent.
 
-    Reference: `cuml.linear_model.ElasticNet(solver='cd')` and
-    `cuml/cpp/src/solver/cd.cuh::cdFit`; the Mojo implementation is
-    `solver/impl/cd.mojo` and the host surface is
-    `solver/estimator.mojo`.
+    Minimizes scikit-learn's elastic-net objective::
 
-    THE OBJECTIVE, AND WHOSE `alpha` THIS IS
-    ----------------------------------------
-    `cd.cuh:84-86` DOCUMENTS an unscaled objective, and the CODE
-    (`cd.cuh:201-202`, read in the `v26.08.00` checkout) scales both
-    penalties by the row count::
-
-        l2_alpha = (1 - l1_ratio) * alpha * n_rows
-        l1_alpha =      l1_ratio  * alpha * n_rows
-
-    so what is minimized is `n_rows` times ::
-
-        (1 / (2 n)) ||y - X w||^2
+        (1 / (2 * n_samples)) * ||y - X w||^2
         + alpha * l1_ratio * ||w||_1
         + 0.5 * alpha * (1 - l1_ratio) * ||w||^2
 
-    which is exactly scikit-learn's documented ElasticNet objective
-    (`sklearn/linear_model/_coordinate_descent.py:499-501`), and
-    scikit-learn's own solver applies the same `n_samples` factor to both
-    penalties before its coordinate loop (`:781-782`). Scaling an objective
-    by a positive constant does not move its minimizer, so **`alpha` and
-    `l1_ratio` mean the same thing in `sklearn.linear_model.ElasticNet`, in
-    `cuml.linear_model.ElasticNet` and here.** Their docstring is off by the
-    factor `n`; the code is what was implemented.
+    so ``alpha`` and ``l1_ratio`` mean the same as in scikit-learn's and
+    cuML's ``ElasticNet``. The solver is cuML's coordinate descent
+    (``solver='cd'``), and it differs from scikit-learn in ways that can
+    change results:
 
-    WHERE THE THREE STILL DIFFER, all of it matching cuML on purpose:
+    - It stops when the largest coefficient, or the largest coefficient
+      change relative to it, falls below ``tol`` after an epoch. There is
+      no duality-gap check, so there is no ``dual_gap_`` attribute.
+    - ``tol`` defaults to 1e-3 (cuML's); scikit-learn's is 1e-4. Set it
+      explicitly for a like-for-like comparison.
+    - A column whose sum of squares is at most 1e-5 gets a zero
+      coefficient. This threshold is absolute, so very small-valued
+      features can be zeroed where the same data in larger units would
+      not be. scikit-learn zeroes only an all-zero column.
 
-        stopping rule   after each epoch, `coefMax < tol` OR
-                        `diffMax / coefMax < tol` (`cd.cuh:271`) -- a
-                        coefficient-CHANGE test only. scikit-learn runs the
-                        same change test and THEN requires a duality gap
-                        below `tol * ||y||^2`; the gap is what it certifies
-                        and there is none here. `dual_gap_` is therefore
-                        ABSENT, not zero.
-        tol default     1e-3 (cuML's). scikit-learn's is 1e-4, and cuML's
-                        own CPU-to-GPU converter multiplies a scikit-learn
-                        `tol` by 10 (`elastic_net.py:154`) to line the two
-                        up. A like-for-like comparison must set them.
-        zero-column     `squared > 1e-5 ? r / squared : 0` (`cd.cuh:68`), an
-        guard           ABSOLUTE threshold on a sum of squares that scales
-                        with `n` and with the square of the data, so a
-                        column of tiny-unit data can be zeroed where the
-                        same design in larger units is not. Carried as
-                        theirs, and recorded on the
-                        identity card as `cd.squared`. scikit-learn instead
-                        skips only a column whose norm is exactly 0.
+    ``X`` must be dense and is read as float32; the caller's array is
+    never modified. ``y`` must be one-dimensional. At least two rows are
+    required, in ``fit`` and in ``predict``. With ``fit_intercept=True``
+    the data are centered on the GPU. ``ElasticNet`` has no
+    ``numeric_mode`` parameter.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
-    because a parameter accepted and ignored is a wrong answer waiting for a
-    caller. Every "refused by name" below names the file that raises it:
-
-        alpha           honored   >= 0. Non-finite is REFUSED BY NAME
-                                  (DEVIATION 613, cd.mojo): cuML's guard is
-                                  `alpha < 0`, which is false for a NaN, and
-                                  a NaN alpha makes every coefficient 0
-                                  silently.
-        l1_ratio        honored   0 <= l1_ratio <= 1; NaN refused by name
-                                  (DEVIATION 613)
-        fit_intercept   honored   True centers X and y ON THE DEVICE through
-                                  the implemented `preProcessData` /
-                                  `postProcessData`. NOTE this is unlike
-                                  `mojolearn.LinearRegression` and
-                                  `mojolearn.Ridge`, whose centering is a
-                                  host reimplementation; here the
-                                  centering is cuML's own kernels and is on
-                                  the identity card (`cd.mu_input`,
-                                  `cd.mu_labels`).
-        max_iter        honored   `cdFit`'s `epochs`; default 1000, theirs
-        tol             honored   default 1e-3, theirs (see above)
-        selection       honored   'cyclic' only. 'random' is REFUSED BY NAME
-                                  (cd.mojo): cuML seeds `std::mt19937(0)`
-                                  and calls `std::shuffle`, whose algorithm
-                                  the C++ standard does not specify, so
-                                  their permutation is a function of the
-                                  toolchain and not of the seed and cannot
-                                  be gated bitwise. An exact implementation is
-                                  DEVIATION 611, reserved and NOT spent.
-        solver          honored   'auto' and 'cd'. 'qn' is REFUSED BY NAME:
-                                  cuML's 'auto' picks 'qn' for SPARSE input
-                                  (`elastic_net.py:243-244`), and 'qn' under
-                                  an l1 penalty is OWL-QN, which is not
-                                  implemented (`glm/NOT_IMPLEMENTED.tsv`). Sparse input
-                                  is refused with it.
-        sample_weight   refused   the weighted `preProcessData`, the
-                                  sqrt-weight scaling of X and y and its
-                                  undo are not implemented (cd.mojo raises)
-        positive        refused   cuML raises `UnsupportedOnGPU` too
-                                  (`elastic_net.py:143`)
-        warm_start      refused   cuML raises `UnsupportedOnGPU` too
-                                  (`elastic_net.py:146`). `cdFit` READS
-                                  `coef` as its starting point, and
-                                  `solver/estimator.mojo` zeroes it on every
-                                  fit precisely so that a fit is a function
-                                  of its inputs.
-        precompute      refused   cuML raises `UnsupportedOnGPU` too
-                                  (`elastic_net.py:149`)
-        copy_X          honored   True only, and it is what happens: the
-                                  design is copied to the device and the
-                                  caller's array is never written
-                                  (DEVIATION 880 -- cuML's `cdFit` centers
-                                  and un-centers `input` IN PLACE and does
-                                  not restore the bits). False is refused
-                                  because this surface cannot offer it.
-        random_state    accepted  stored for get_params/clone; scikit-learn
-                                  reads it only under selection='random',
-                                  which is refused, so it is inert (as it
-                                  is in scikit-learn under 'cyclic')
-        y 2-D           refused   one target only, at this boundary
-        n_rows <= 1     refused by name by `cdFit` itself (`cd.cuh:145`),
-                        in `fit` AND in `predict` -- so `predict(X[:1])`
-                        raises rather than returning one number
-        n_cols <= 0     refused by name (`cd.cuh:144`)
-        sparse X        refused   `cdFit` is dense only; cuML routes sparse
-                                  to 'qn' and raises for `solver='cd'`
-                                  (`elastic_net.py:265-269`)
-
-    THE DESIGN MATRIX IS COPIED AT MOST ONCE (DEVIATION 2367). `cdFit`
-    wants cuML's `F` (column-major) order, and `_buffer.as_f32_colmajor`
-    converts dtype and layout in ONE pass straight from the caller's buffer
-    (the DEVIATION 1887 argument: a C-order or float64 input costs one
-    copy, a float32 Fortran-ordered input is a zero-copy borrow). It used
-    to be two copies -- `as_f32_c` to C order, then `np.asfortranarray`
-    back -- and `input_copied_` / `fortran_copied_` named them separately.
-    Both attributes are kept and now report the SAME flag, the one copy
-    that can happen; pass a float32 array that is already Fortran-ordered
-    and both are False. Element values and flat order are unchanged, so
-    no output bit moves.
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Overall penalty strength, >= 0. A negative value raises
+        ``ValueError``; a non-finite value is refused by ``fit``.
+    l1_ratio : float, default 0.5
+        The l1 share of the penalty, in [0, 1] (``ValueError``
+        otherwise); 1.0 is the lasso.
+    fit_intercept : bool, default True
+        Whether to fit an (unpenalized) intercept.
+    max_iter : int, default 1000
+        Maximum number of coordinate-descent epochs.
+    tol : float, default 1e-3
+        Stopping tolerance (see above).
+    solver : {'auto', 'cd'}, default 'auto'
+        Both mean coordinate descent. ``'qn'`` raises
+        ``NotImplementedError``; any other value raises ``ValueError``.
+    selection : {'cyclic'}, default 'cyclic'
+        Coordinates are updated in order. ``'random'`` raises
+        ``NotImplementedError``; any other value raises ``ValueError``.
+    precompute : False
+        Only False is supported; anything else raises
+        ``NotImplementedError``.
+    copy_X : True
+        Only True is supported; False raises ``NotImplementedError``.
+    warm_start : False
+        Only False is supported (every fit starts from zero); True raises
+        ``NotImplementedError``.
+    positive : False
+        Only False is supported; True raises ``NotImplementedError``.
+    random_state : None, int or NumPy random state, default None
+        Accepted for compatibility and unused, as in scikit-learn with
+        ``selection='cyclic'``.
 
     Attributes
     ----------
-    coef_ : ndarray (n_features,) float32
+    coef_ : array of shape (n_features,), float32
+        The fitted coefficients.
     intercept_ : float
-        `mean(y) - mu_X . coef` from the implemented `postProcessData`, computed
-        on the DEVICE; 0.0 exactly when `fit_intercept` is False.
+        The fitted intercept; exactly 0.0 when ``fit_intercept`` is False.
     n_iter_ : int
-        Epochs actually run. **This number is a property of the arithmetic,
-        not only of the data**: the stopping test branches on reduction
-        bits, so under the default FAST mode it can differ between GPUs.
-        Under `MOJOLEARN_NUMERIC_MODE=identical` it is a function of the
-        inputs alone and is the card's `cd.n_iter` stage, which was
-        bit-identical on Apple M4, NVIDIA H100 and AMD MI325X at leg 11.
+        The number of epochs run. In ``identical`` mode it is the same on
+        NVIDIA and AMD GPUs; in other modes it can differ between GPUs.
     n_features_in_ : int
+        The number of features seen in ``fit``.
+    input_copied_ : bool
+        Whether ``fit`` had to copy ``X``. A float32 array in C or Fortran
+        order is used without a copy.
+    fortran_copied_ : bool
+        The same flag as ``input_copied_``, kept for compatibility.
 
-    IDENTITY: with `MOJOLEARN_IDENTITY_TRACE=<path>` set, a `fit` through
-    this class writes the same `cd.*` identity card
-    `solver/cd_main.mojo` writes (`solver/estimator.mojo` hands the implemented
-    entry a live trace). Under FAST the reductions are the vendor's and no
-    cross-vendor claim is made.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32) + 1.0
+    >>> model = mojolearn.ElasticNet(alpha=0.01, l1_ratio=0.7).fit(X, y)
+    >>> pred = model.predict(X)
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -336,6 +331,24 @@ class ElasticNet(ParamsMixin):
         return _mojolearn_solver
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model by coordinate descent.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dense training data, read as float32. Sparse input raises
+            ``NotImplementedError``.
+        y : array-like of shape (n_samples,)
+            Target values. A 2-D ``y`` or a length mismatch raises
+            ``ValueError``.
+        sample_weight : None
+            Must be None; weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self : ElasticNet
+            The fitted estimator.
+        """
         # The CPU inference boundary: ElasticNet does not inherit
         # NumericModeMixin's guard, so on a CPU-only install the fit refuses
         # outside mojolearn._cpu_reference.reference_training().
@@ -401,6 +414,24 @@ class ElasticNet(ParamsMixin):
         return self
 
     def predict(self, X):
+        """Predict with the fitted model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32; at least two rows.
+
+        Returns
+        -------
+        y_pred : array of shape (n_samples,), float32
+            ``X @ coef_ + intercept_``.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, or ``X`` has a different number of
+            features than the training data.
+        """
         if not hasattr(self, "coef_"):
             raise ValueError("mojolearn ElasticNet: call fit before predict")
         work_x, _ = self._as_fortran(X, "X")
@@ -417,12 +448,27 @@ class ElasticNet(ParamsMixin):
         )
         return out
 
+    # The file: `coef_` as fitted, the intercept <f8, `hyper` <f8 [alpha,
+    # l1_ratio, tol], `meta` <i8 [n_features_in_, fit_intercept, max_iter,
+    # n_iter_] and the numeric mode (lane/inference-linear-svm, 2026-09-15).
     def save(self, path):
-        """Write the fitted model to `path` as an npz: `coef_` as fitted,
-        the intercept as float64, `hyper` `<f8` [alpha, l1_ratio, tol],
-        `meta` `<i8` [n_features_in_, fit_intercept, max_iter, n_iter_] and
-        the numeric mode (lane/inference-linear-svm, 2026-09-15).
-        `mojolearn.host_model(path)` predicts from it on a CPU with no GPU."""
+        """Save the fitted model to ``path`` as an ``.npz`` file.
+
+        The file stores ``coef_``, the intercept, ``alpha``, ``l1_ratio``,
+        ``tol``, ``max_iter``, ``fit_intercept``, ``n_iter_`` and the
+        numeric mode. ``mojolearn.host_model(path)`` can predict from the
+        file on a machine without a GPU.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         if not hasattr(self, "coef_"):
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {
@@ -441,8 +487,26 @@ class ElasticNet(ParamsMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; it does not
-        refit."""
+        """Load a model written by ``save``.
+
+        The loaded model predicts with the saved coefficients and
+        intercept and carries the saved hyperparameters and ``n_iter_``.
+
+        Parameters
+        ----------
+        path : str or path-like
+            A file written by ``save`` of the same class.
+
+        Returns
+        -------
+        model : ElasticNet or Lasso
+
+        Raises
+        ------
+        ValueError
+            If the file was saved by a different estimator or its fields do
+            not match.
+        """
         arrays = _serialize.read_npz(path, _CD_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
@@ -470,24 +534,74 @@ class ElasticNet(ParamsMixin):
         obj.n_iter_ = int(meta[3])
         return obj
 
+    # `linear_model._r2_host` (formerly a sequential float64 host reduction,
+    # DEVIATION 2365).
     def score(self, X, y):
-        """R^2, a sequential float64 host reduction outside the identity
-        claim (`linear_model._r2_host`, DEVIATION 2365)."""
+        """Return the coefficient of determination R^2 of the prediction.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True target values.
+
+        Returns
+        -------
+        score : float
+            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
+            scores 0.0.
+        """
         return _r2_host(self.predict(X), y)
 
 
+# Maintainer note: cuML spells Lasso as ElasticNet(l1_ratio=1.0)
+# (cuml/linear_model/lasso.py:129-140, "Lasso is just a special case of
+# ElasticNet"), and so does scikit-learn; the l2 term is absent and
+# l1_alpha = alpha * n_rows. See ElasticNet's notes.
 class Lasso(ElasticNet):
-    """l1-regularized least squares by coordinate descent on the GPU.
+    """Linear regression with an l1 penalty, fitted by coordinate descent.
 
-    `Lasso` is `ElasticNet(l1_ratio=1.0)` and nothing else -- that is how
-    cuML spells it (`cuml/linear_model/lasso.py:129-140`, "Lasso is just a
-    special case of ElasticNet") and how scikit-learn does. Read
-    `ElasticNet`'s docstring for the objective, the honored/refused table
-    and the identity note; every line of it applies here with
-    `l1_ratio` pinned at 1.0, so the l2 term is absent and `l1_alpha =
-    alpha * n_rows`.
+    ``Lasso(alpha)`` is ``ElasticNet(alpha, l1_ratio=1.0)``: it minimizes
+    ``(1 / (2 * n_samples)) * ||y - X w||^2 + alpha * ||w||_1``, the same
+    objective as scikit-learn's ``Lasso``. Everything in ``ElasticNet``'s
+    description applies, including the stopping rule, the absolute
+    zero-column threshold and the refused options.
 
-    `tol` defaults to 1e-3, which is cuML's and NOT scikit-learn's 1e-4.
+    ``tol`` defaults to 1e-3 (cuML's); scikit-learn's is 1e-4.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Penalty strength, finite and >= 0.
+    fit_intercept : bool, default True
+        Whether to fit an (unpenalized) intercept.
+    max_iter : int, default 1000
+        Maximum number of coordinate-descent epochs.
+    tol : float, default 1e-3
+        Stopping tolerance.
+    solver, selection, precompute, copy_X, warm_start, positive, random_state
+        As on ``ElasticNet``.
+
+    Attributes
+    ----------
+    coef_ : array of shape (n_features,), float32
+        The fitted coefficients; the l1 penalty sets some exactly to zero.
+    intercept_ : float
+        The fitted intercept; exactly 0.0 when ``fit_intercept`` is False.
+    n_iter_ : int
+        The number of epochs run.
+    n_features_in_ : int
+        The number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32) + 1.0
+    >>> model = mojolearn.Lasso(alpha=0.01).fit(X, y)
+    >>> pred = model.predict(X)
     """
 
     def __init__(self, alpha=1.0, *, fit_intercept=True, max_iter=1000,
