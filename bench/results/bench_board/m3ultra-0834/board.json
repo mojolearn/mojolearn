@@ -174283,7 +174283,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 64.8,
-     "quality": {},
+     "quality": {
+      "max_rel_diff_vs_ours": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -174341,7 +174343,8 @@
       "baseline_ms": 224.26991697284393,
       "baseline_quality_text": "max_rel_diff_vs_ours=0",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in raw/algos/rows-full/lr-exponential-synthetic.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-cpu",
@@ -174716,7 +174719,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 65.4,
-     "quality": {},
+     "quality": {
+      "max_rel_diff_vs_ours": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -174779,7 +174784,8 @@
       "baseline_ms": 1358.7926250183955,
       "baseline_quality_text": "max_rel_diff_vs_ours=0",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in raw/algos/rows-full/lr-onecycle-synthetic.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-cpu",
@@ -175151,7 +175157,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 62.2,
-     "quality": {},
+     "quality": {
+      "max_rel_diff_vs_ours": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -175210,7 +175218,8 @@
       "baseline_ms": 11.72024998231791,
       "baseline_quality_text": "max_rel_diff_vs_ours=0",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in raw/algos/rows-full/lr-step-synthetic.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-cpu",
@@ -349096,7 +349105,10 @@
      },
      "peak_gpu_mb": 1232.5,
      "peak_host_mb": 1742.2,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 2.384185791015625e-07,
+      "max_rel_diff_vs_ours": 1.188965496577979e-07
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 0.22685079913172781,
      "rounds": 1,
@@ -349155,7 +349167,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-eager-fp32 in raw/neural/shape-full/mamba1-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-eager-bf16",
@@ -349200,7 +349213,10 @@
      },
      "peak_gpu_mb": 1200.7,
      "peak_host_mb": 1712.8,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 5.14984130859375e-05,
+      "max_rel_diff_vs_ours": 2.5681654726084346e-05
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 0.21566013925528402,
      "rounds": 1,
@@ -349259,7 +349275,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-eager-bf16 in raw/neural/shape-full/mamba1-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     }
    ],
    "command": [
@@ -350327,7 +350344,10 @@
      },
      "peak_gpu_mb": 7248.8,
      "peak_host_mb": 7748.3,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 2.0265579223632812e-06,
+      "max_rel_diff_vs_ours": 6.889823455163785e-07
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 0.13894408364920977,
      "rounds": 1,
@@ -350386,7 +350406,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-eager-fp32 in raw/neural/shape-full/mamba2-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-compile-fp32",
@@ -350431,7 +350452,10 @@
      },
      "peak_gpu_mb": 7248.8,
      "peak_host_mb": 7851.3,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 2.0265579223632812e-06,
+      "max_rel_diff_vs_ours": 6.889823455163785e-07
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 0.14265917779488443,
      "rounds": 1,
@@ -350490,7 +350514,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-compile-fp32 in raw/neural/shape-full/mamba2-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-eager-bf16",
@@ -350535,7 +350560,10 @@
      },
      "peak_gpu_mb": 5744.8,
      "peak_host_mb": 6247.2,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 0.007543683052062988,
+      "max_rel_diff_vs_ours": 0.0025646759886248202
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 0.17120953094822142,
      "rounds": 1,
@@ -350594,7 +350622,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-eager-bf16 in raw/neural/shape-full/mamba2-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-compile-bf16",
@@ -350639,7 +350668,10 @@
      },
      "peak_gpu_mb": 5744.8,
      "peak_host_mb": 6345.2,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 0.007543683052062988,
+      "max_rel_diff_vs_ours": 0.0025646759886248202
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 0.21976316561643788,
      "rounds": 1,
@@ -350698,7 +350730,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-compile-bf16 in raw/neural/shape-full/mamba2-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     }
    ],
    "command": [
@@ -352278,7 +352311,10 @@
      },
      "peak_gpu_mb": 1096.8,
      "peak_host_mb": 1631.6,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 8.344650268554688e-07,
+      "max_rel_diff_vs_ours": 3.650589366792758e-07
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 0.3592103629432585,
      "rounds": 1,
@@ -352337,7 +352373,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-eager-fp32 in raw/neural/shape-full/mamba3-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-compile-fp32",
@@ -352478,7 +352515,10 @@
      },
      "peak_gpu_mb": 1096.8,
      "peak_host_mb": 1642.3,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 0.0020946860313415527,
+      "max_rel_diff_vs_ours": 0.000916376157979985
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 0.35819237164029405,
      "rounds": 1,
@@ -352537,7 +352577,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-eager-bf16 in raw/neural/shape-full/mamba3-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-compile-bf16",
@@ -360284,7 +360325,10 @@
      },
      "peak_gpu_mb": 112.7,
      "peak_host_mb": 625.1,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 4.76837158203125e-07,
+      "max_rel_diff_vs_ours": 1.0202790667303321e-07
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 2.20600989355415,
      "rounds": 1,
@@ -360346,7 +360390,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-eager-fp32 in raw/neural/shape-full/transformer-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-compile-fp32",
@@ -360392,7 +360437,10 @@
      },
      "peak_gpu_mb": 1064.5,
      "peak_host_mb": 1663.2,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 4.76837158203125e-07,
+      "max_rel_diff_vs_ours": 1.0202790667303321e-07
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 2.8205632878755673,
      "rounds": 1,
@@ -360454,7 +360502,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-compile-fp32 in raw/neural/shape-full/transformer-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-eager-bf16",
@@ -360500,7 +360549,10 @@
      },
      "peak_gpu_mb": 112.7,
      "peak_host_mb": 616.8,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 0.0018194019794464111,
+      "max_rel_diff_vs_ours": 0.0003892938546551253
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 2.132993486853492,
      "rounds": 1,
@@ -360562,7 +360614,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-eager-bf16 in raw/neural/shape-full/transformer-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     },
     {
      "arm": "torch-compile-bf16",
@@ -360608,7 +360661,10 @@
      },
      "peak_gpu_mb": 40.7,
      "peak_host_mb": 634.7,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_ours": 0.0018194019794464111,
+      "max_rel_diff_vs_ours": 0.0003892938546551253
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": 2.6665907727500118,
      "rounds": 1,
@@ -360670,7 +360726,8 @@
       },
       "effective_utilization": "Library dependent; not a claim that all cores were busy",
       "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
-     }
+     },
+     "quality_source": "fit quality of arm torch-compile-bf16 in raw/neural/shape-full/transformer-forward-gaussian.json (R2 measurements/2026-10-02/board-0834-m3ultra.tar.gz): the run that built this cell"
     }
    ],
    "command": [
