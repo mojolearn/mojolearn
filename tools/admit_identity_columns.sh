@@ -193,8 +193,22 @@ crc=$?
 cut -c1-300 "$EVID/check.txt"
 [ $crc = 0 ] || die "a record is not admissible (see above); nothing changed"
 commits=$(sed -n 's/.* commit=\([0-9a-f]*\) .*/\1/p' "$EVID/check.txt" | sort -u)
-[ "$(wc -l <<< "$commits" | tr -d ' ')" = 1 ] || die "records name more than one commit: $(echo $commits)"
-C=$("${PY[@]}" -c "import json,sys; print(json.load(open(sys.argv[1]))['commit'])" "${files[0]}")
+# One commit, or several commits whose trees differ only outside the code (bench/results, docs, CHANGELOG):
+# then the kernels the records exercised are the same bits and the columns are one witness pair
+# (2026-10-12: the AMD column was recorded at a5c56140e and the NVIDIA column at 5b0dfc1ef, the board-ingest
+# and CHANGELOG commits between them; re-recording a vendor for a docs commit is exactly the double work
+# Andrew forbade on 2026-10-10). The admitted commit is the newest of them.
+ncommits=$(wc -l <<< "$commits" | tr -d ' ')
+if [ "$ncommits" != 1 ]; then
+    for c in $commits; do git cat-file -e "$c^{commit}" 2>/dev/null || die "commit $c is not in this repository (git fetch origin first)"; done
+    first=$(echo $commits | cut -d' ' -f1)
+    for c in $commits; do
+        git diff --quiet "$first" "$c" -- . ':!bench/results' ':!docs' ':!CHANGELOG.md' ':!*.md' \
+            || die "records name more than one commit and the code differs between $first and $c: $(echo $commits)"
+    done
+    echo "records name $ncommits commits with identical code ($(echo $commits)); admitting under the newest"
+fi
+C=$(for c in $commits; do echo "$(git log -1 --format=%ct $c) $c"; done | sort -n | tail -n 1 | cut -d' ' -f2)
 git cat-file -e "$C^{commit}" 2>/dev/null || die "commit $C is not in this repository (git fetch origin first)"
 
 if [ $CHECK_ONLY = 1 ]; then
