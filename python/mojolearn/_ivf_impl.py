@@ -88,23 +88,95 @@ def _int_param(name, v):
     return int(v)
 
 
+# n_probes has no default (policy 1); n_probes > n_lists raises on the Mojo
+# host rather than clamping (policy 2); a build under each metric trains the
+# k-means quantizer on a different reduction (policy 4). The euclidean root is
+# taken over the k selected squared distances
+# (ivf/impl/neighbors/ivf_common.mojo::postprocess_distances), where cuVS
+# takes it; ivf/checks/ivf_check.mojo::check_l2_sqrt_is_the_root_of_l2.
 class IVFIndex(NumericModeMixin):
-    """IVF-Flat build, then search (reference: cuVS `ivf_flat`).
+    """Approximate nearest-neighbor index with inverted lists (IVF-Flat).
+
+    Follows cuVS's ``ivf_flat``. `fit` trains a k-means coarse quantizer that
+    splits the rows into `n_lists` lists and stores the rows uncompressed,
+    grouped by list. `search` scans the `n_probes` lists nearest each query
+    and returns exact distances to the rows in those lists, so recall depends
+    only on `n_probes`. Results are reproducible. On a GPU the fitted index
+    stays on the device between searches; each search uploads only its
+    queries. `IVFFlat` is another name for this class.
 
     Parameters
     ----------
     n_lists : int
+        Number of inverted lists (k-means clusters). Must be at least 1.
     n_probes : int
-        Required; no default at this boundary (policy 1).
+        Number of lists scanned per query. Required, with no default; a value
+        greater than `n_lists` raises an error rather than being clamped.
     n_neighbors : int, default 8
+        Number of neighbors `search` returns per query.
     kmeans_n_iters : int, default 20
+        k-means iterations for the coarse quantizer.
     metric : {'sqeuclidean', 'euclidean'}, default 'sqeuclidean'
+        'sqeuclidean' (cuVS ``L2Expanded``) returns squared Euclidean
+        distances; 'euclidean' (cuVS ``L2SqrtExpanded``) returns their square
+        roots. 'l2_expanded' is accepted for 'sqeuclidean', and
+        'l2_sqrt_expanded' and 'l2' for 'euclidean'. The metric is fixed when
+        the index is built: on one index the ids are the same under both, but
+        the k-means quantizer trains differently under each, so two indexes
+        built with different metrics can return different neighbors when
+        ``n_probes < n_lists``.
     random_state : int, default 0
+        Seed for the k-means initialization.
+    numeric_mode : str or None, default None
+        Numeric mode for this estimator; None uses the package default set
+        with `mojolearn.set_numeric_mode`.
 
-    `fit(X)` builds the index; `search(queries)` returns `(distances,
-    indices)` as float32 `(m, k)` and int32 `(m, k)`, with `n_candidates_`
-    `(m,)` int32 set on the instance (how much of the index each query
-    looked at).
+    Attributes
+    ----------
+    centers_ : ndarray of shape (n_lists, n_features), float32
+        Coarse quantizer centers.
+    center_norms_ : ndarray of shape (n_lists,), float32
+        Squared norm of each center.
+    list_offsets_ : ndarray of shape (n_lists + 1,), int32
+        Start of each list in `list_indices_` and `list_data_`.
+    list_indices_ : ndarray of shape (n_rows_,), int32
+        Original row ids, grouped by list and ascending within each list.
+    list_data_ : ndarray of shape (n_rows_, n_features), float32
+        The indexed rows, in the order of `list_indices_`.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+    n_rows_ : int
+        Number of indexed rows, including rows added by `extend`.
+    n_lists_ : int
+        The fitted value of `n_lists`.
+    metric_code_ : int
+        The metric the index was built under: 0 for 'sqeuclidean', 1 for
+        'euclidean'.
+    n_candidates_ : ndarray of shape (n_queries,), int32
+        Set by `search`: how many indexed rows each query scanned.
+    extend_labels_ : ndarray of shape (n_new,), int32
+        Set by `extend`: the list each new row joined.
+
+    Raises
+    ------
+    TypeError
+        If an integer parameter is not an int.
+    ValueError
+        If `n_lists` is less than 1 or `metric` is unknown.
+
+    See Also
+    --------
+    IVFPQIndex, IVFSQIndex, IVFRaBitQIndex : Compressed IVF indexes.
+    CagraIndex : Graph-based index.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> index = mojolearn.IVFIndex(n_lists=16, n_probes=4, n_neighbors=5).fit(X)
+    >>> distances, indices = index.search(X[:10])
+    >>> indices.shape
+    (10, 5)
     """
 
     _BINDING = "_mojolearn_ivf"
@@ -181,13 +253,29 @@ class IVFIndex(NumericModeMixin):
         del d["_device_list_data"]
         d["_resident"] = (self._resident_key(False) + (id(cached[2]),), cached[1], cached[2])
 
+    # On a GPU binding with `ivf_flat_build_resident` the index stays on the
+    # device: the four small arrays are written here, the list vectors stay in
+    # the binding's resident handle that `search` names, and `list_data_` is
+    # made on first read. On a CPU-only install fit refuses outside the
+    # internal reference context.
     def fit(self, X, y=None):
-        """Build the index. Returns `self`.
+        """Build the index from `X`.
 
-        On a GPU binding with `ivf_flat_build_resident` (lane gap-ivf,
-        2026-10-08) the index STAYS ON THE DEVICE: the four small arrays are
-        written here, the list vectors stay in the binding's resident handle
-        that `search` names, and `list_data_` is made on first read."""
+        Building needs a GPU install; on a CPU-only install, load a saved
+        index instead.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to index, converted to float32.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : IVFIndex
+            The fitted index.
+        """
         self.__dict__.pop("_device_list_data", None)
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
@@ -331,13 +419,41 @@ class IVFIndex(NumericModeMixin):
                              "one flag per indexed row")
         return np.ascontiguousarray(f.astype(np.int32))
 
+    # filter: cuVS's sample filter, applied to the merged candidates of the
+    # probed lists before any distance (DEVIATION 5863); a short query raises
+    # (DEVIATION 1794).
     def search(self, queries, filter=None):
-        """`filter`: optional boolean array of shape (n_rows_,) over the
-        indexed rows' ORIGINAL ids; a False row is never scored, returned or
-        counted in `n_candidates_` (cuVS's sample filter, DEVIATION 5863:
-        applied to the merged candidates of the probed lists, before any
-        distance). A query whose probed lists keep fewer than `n_neighbors`
-        rows raises, as an unfiltered short query does (DEVIATION 1794)."""
+        """Find the nearest indexed rows of each query within the probed lists.
+
+        Parameters
+        ----------
+        queries : array-like of shape (n_queries, n_features)
+            Query rows, converted to float32.
+        filter : array-like of bool, shape (n_rows_,), optional
+            One flag per indexed row, by original row id; a row flagged False
+            is never scored, returned or counted in `n_candidates_` (cuVS's
+            sample filter, applied before any distance is computed).
+
+        Returns
+        -------
+        distances : ndarray of shape (n_queries, n_neighbors), float32
+            Distances under `metric`, ascending.
+        indices : ndarray of shape (n_queries, n_neighbors), int32
+            Original row ids of the neighbors.
+
+        Raises
+        ------
+        ValueError
+            If the index is not fitted or loaded, the queries have a different
+            number of features, `metric` no longer names the metric the index
+            was built under, or `filter` has the wrong shape or dtype.
+
+        Notes
+        -----
+        Unlike the compressed IVF indexes, a query whose probed lists hold
+        (after filtering) fewer than `n_neighbors` rows raises an error rather
+        than being padded. Raise `n_probes` if this happens.
+        """
         if not self._is_built():
             raise ValueError("mojolearn IVFIndex: call fit (or load) before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
@@ -392,24 +508,40 @@ class IVFIndex(NumericModeMixin):
 
     # -- extend (lane/inference-embedding-ivf-cholesky stage 2, 2026-09-15) --
 
+    # Reference: cuVS `ivf_flat::extend` with `adaptive_centers = false`
+    # (`ivf_flat_build.cuh:180-345`). Caller-supplied ids are not a parameter
+    # because an arbitrary id would need a merge to keep every list ascending
+    # in its carried ids (DEVIATION 1783). On a CPU-only install
+    # `_mojolearn_ivf_search_host` carries it.
     def extend(self, X):
-        """Add the rows of `X` to the built index. Returns `self`.
+        """Add the rows of `X` to the built index.
 
-        Reference: cuVS `ivf_flat::extend` with `adaptive_centers = false`
-        (`ivf_flat_build.cuh:180-345`). Each new row is assigned to the FIXED
-        centres by the build's own assignment, with the build's tie rule (the
-        lower list id wins an exact tie), and appended to its list. The new rows
-        take the ids `n_rows_, n_rows_ + 1, ...` in the order given; cuVS takes
-        caller-supplied ids, which are not a parameter here, because an arbitrary
-        id would need a merge to keep every list ascending in its carried ids
-        (DEVIATION 1783). So extending by a set of rows in one call, or in
-        several calls over the same rows in the same order, gives the same index
-        bytes, and a search afterwards is the same on every column. The centres
-        and their norms do not move. `extend_labels_` (int32, one per new row)
-        holds the list each new row went to.
+        Follows cuVS's ``ivf_flat::extend`` with ``adaptive_centers=False``:
+        each new row joins the list of its nearest center (an exact tie goes
+        to the lower list id), and the centers do not move. The new rows take
+        the ids ``n_rows_, n_rows_ + 1, ...`` in the order given; unlike cuVS,
+        custom ids are not accepted. Extending by a set of rows in one call
+        or in several calls, in the same order, gives the same index. Works
+        on a CPU-only install, since it trains nothing.
 
-        Public on a CPU-only install: assignment against saved centres trains
-        nothing, and `_mojolearn_ivf_search_host` carries it."""
+        Parameters
+        ----------
+        X : array-like of shape (n_new, n_features)
+            Rows to add, converted to float32.
+
+        Returns
+        -------
+        self : IVFIndex
+            The extended index. `extend_labels_` holds the list each new row
+            joined.
+
+        Raises
+        ------
+        ValueError
+            If the index is not fitted or loaded, `X` has a different number
+            of features, or `metric` no longer names the metric the index was
+            built under.
+        """
         if not self._is_built():
             raise ValueError("mojolearn IVFIndex: call fit (or load) before extend")
         x, _ = as_f32_c(X, ndim=2, name="X")
@@ -467,11 +599,31 @@ class IVFIndex(NumericModeMixin):
 
     # -- saved indexes (lane/inference-embedding-ivf-cholesky, 2026-09-15) --
 
+    # npz layout: the five index arrays as `fit` left them, `meta` `<i8`
+    # [n_rows, dim, n_lists, metric, n_probes, n_neighbors, kmeans_n_iters,
+    # random_state] and the tier; format tag `mojolearn-ivf-flat-1`.
     def save(self, path):
-        """Write the built index to `path` as an npz: the five index arrays
-        as `fit` left them, `meta` `<i8` [n_rows, dim, n_lists, metric,
-        n_probes, n_neighbors, kmeans_n_iters, random_state] and the tier.
-        A loaded index searches; it does not rebuild."""
+        """Write the built index to `path` as an ``.npz`` file.
+
+        The file holds the index arrays, the parameters and the numeric mode.
+        Reload it with `load`; a loaded index searches without rebuilding,
+        including on a CPU-only install.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Returns
+        -------
+        path : str or path-like
+            The path written.
+
+        Raises
+        ------
+        RuntimeError
+            If the index has not been fitted.
+        """
         if not self._is_built():
             raise RuntimeError("mojolearn IVFIndex: call fit before save")
         from .decomposition import _saved_mode
@@ -491,11 +643,31 @@ class IVFIndex(NumericModeMixin):
             arrays[name.rstrip("_")] = getattr(self, name)
         return _serialize.write_npz(path, arrays)
 
+    # The layout itself is admitted by the binding
+    # (`ivf_validate_index_arrays`) at the first search.
     @classmethod
     def load(cls, path):
-        """Load an index written by `save`. Every array's dtype and shape is
-        checked here; the layout itself is admitted by the binding at the
-        first search."""
+        """Load an index written by `save`.
+
+        Every array's dtype and shape is checked on load; the list layout is
+        checked at the first search.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+
+        Returns
+        -------
+        index : IVFIndex
+            A fitted index, ready to `search` or `extend`.
+
+        Raises
+        ------
+        ValueError
+            If the file was saved by another class or its contents do not
+            match the IVF-Flat layout.
+        """
         from .decomposition import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _IVF_FORMAT)
         _check_saved_by(arrays, path, cls)
