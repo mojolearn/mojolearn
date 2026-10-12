@@ -127,3 +127,15 @@ and no change may add one.
 - Identity records and checks run ONCE (`REPEATS=1`); a mismatch is a bug to fix, never a reason to rerun.
 - Re-record only the lanes whose bits can have changed (`ONLY_CHANGED=table tools/record_identity_column.sh`); every other table row is kept.
 - One identity check per release: the table admit. No release step re-fits or re-diffs identity after it.
+
+## Public docs and docstrings (Andrew, 2026-10-12)
+
+- Docstrings of public names are user documentation: they render on docs.mojolearn.org. Write them for users:
+  what it does, parameters, returns, a short example. No status notes, no internal file paths, no dates, no
+  lane or run names, no all-caps asides, no "NO NVIDIA LEG HAS RUN", "NOT CERTIFIED YET", "NO REAL CHECKPOINT
+  HAS BEEN LOADED" or anything like them. Engineering notes belong in `#` comments next to the code.
+- If something is broken, unverified or unfinished, it is NOT documented: leave it out of docs-site and list it in
+  `docs-site/api_exclude.txt` (name and reason) so the API reference skips it. Never document a caveat in its place.
+- `fast` is Apple only. Docs never offer `fast` on NVIDIA, AMD or the CPU.
+- The 162M two-route model is research and marketing material (mlsys paper, mojolearn.org), not library
+  documentation: it never appears in docs-site or the library docs.
