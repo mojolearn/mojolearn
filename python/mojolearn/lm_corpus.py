@@ -1,66 +1,66 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Tokenize a training corpus ONCE, and train the language model on the ids.
+"""Tokenize a training corpus once and train a language model on the ids.
 
-    from mojolearn import lm_corpus, LanguageModelTrainer, LanguageModelConfig
+The tokenizer is part of the model: it is chosen before the first training
+step, and the model's ids mean something only through it. This module
+prepares a corpus with a BPE vocabulary, caches the token ids, serves
+training batches, and checks that a tokenizer is the one a model was trained
+on.
 
-    corpus = lm_corpus.prepare("corpus/input.txt")                   # trains OUR vocabulary
-    corpus = lm_corpus.prepare("corpus/input.txt", vocab="ranks.tsv")  # YOUR token map
-    corpus = lm_corpus.prepare("corpus/input.txt",
-                               vocab=("encoder.json", "vocab.bpe"))    # YOUR token map
-    batches = corpus.batches(batch=1, length=2048)
-    shape = LanguageModelConfig(..., vocab_size=corpus.n_vocab)
-    trainer = LanguageModelTrainer(weights, shape=shape, data_schedule=batches.data_schedule())
-    trainer.train_step(batches.ids(0))
-    tok = lm_corpus.tokenizer_for(trainer, corpus.vocabulary_path)     # refuses any other table
+- With no ``vocab``, :func:`prepare` trains a byte-level BPE vocabulary on
+  the corpus's training range (never validation or test data), tokenizes the
+  whole corpus once and caches the ids.
+- With ``vocab=``, your own token map is used and nothing is trained: a
+  rank file, an ``(encoder.json, vocab.bpe)`` pair, a
+  :class:`~mojolearn.tokenizer.BpeTokenizer` or a ``TrainedBpeVocabulary``.
 
-THE TOKENIZER IS PART OF THE MODEL. It is chosen once, before the first step,
-and every id the model ever sees or emits means something only through it. So
-tokenization is the DEFAULT here, not an add-on:
-
-  * with no `vocab`, `prepare` trains a byte-level BPE vocabulary with OUR OWN
-    `BpeVocabularyTrainer` on the corpus's TRAIN range (never validation or
-    test), tokenizes the whole corpus once, and caches the pinned id array;
-  * `vocab=` uses the caller's token map instead and trains nothing: a rank
-    file, `(encoder.json, vocab.bpe)`, a `BpeTokenizer` or a
-    `TrainedBpeVocabulary`;
-  * byte training (ids = raw bytes, vocabulary 256) is still there by explicit
-    choice: `tools/lm_train.py --bytes`, whose batches are
-    `tools/lm_step_memory_probe.py::CorpusBatches`, unchanged.
-
-THE CACHE. Under `cache_dir` (default `$MOJOLEARN_LM_CACHE`, else
-`~/.cache/mojolearn/lm`):
+Cache
+-----
+Files are written under ``cache_dir`` (default ``$MOJOLEARN_LM_CACHE``, else
+``~/.cache/mojolearn/lm``)::
 
     vocab/<corpus sha16>-v<vocab_size>-f<min_frequency>-s<sample bytes>/
         ranks.tsv, vocabulary.json            (a trained vocabulary)
-    vocab/user-<vocabulary sha16>/ranks.tsv, vocabulary.json   (yours, canonical)
+    vocab/user-<vocabulary sha16>/ranks.tsv, vocabulary.json   (yours)
     tokens/<corpus sha16>-<vocabulary sha16>-d<document bytes>/
-        tokens.i32, manifest.json             (schema TOKENS_SCHEMA)
+        tokens.i32, manifest.json
 
-A rerun with the same corpus and vocabulary reads the cache: the corpus and
-the id array are re-hashed against the manifest, and a mismatch is refused by
-name rather than silently rebuilt. Nothing here is ever written into the
-package or the repository: a vocabulary trained on someone's text is derived
-from that text, and mojolearn ships no vocabulary and no corpus.
+A rerun with the same corpus and vocabulary reuses the cache after
+re-hashing it against its manifest; a mismatch raises ValueError rather than
+silently rebuilding. Nothing is written into the package.
 
-THE VOCABULARY TRAVELS WITH THE MODEL. `TokenBatches.data_schedule()` carries
-the vocabulary's identity (`BpeTokenizer.identity`: the sha256 of its
-canonical rank file and its `n_vocab`). `LanguageModelTrainer` refuses a
-schedule whose `n_vocab` is not its `vocab_size`, and keeps the schedule in
-every checkpoint under the envelope's payload sha256. `tokenizer_for(model,
-vocabulary)` loads a tokenizer only if it IS that vocabulary, by sha256, and
-refuses by name otherwise, so ids are not decoded with the wrong table.
+Vocabulary identity
+-------------------
+:meth:`TokenBatches.data_schedule` records the vocabulary's identity (the
+SHA-256 of its canonical rank file and its ``n_vocab``). The trainer refuses
+a schedule whose ``n_vocab`` differs from its ``vocab_size`` and keeps the
+schedule in every checkpoint, and :func:`tokenizer_for` only returns a
+tokenizer that matches it, so ids are never decoded with the wrong table.
 
-DOCUMENTS ARE PART OF THE ARTIFACT. BPE never merges across a pre-token
-boundary, and where a long file is cut into pieces changes the ids at every
-cut. So the cut is declared and recorded: a document never spans the source
-manifest's train / validation / test boundaries (so each split's token range
-is exact), is at most `document_bytes`, and ends at the last 0x0A at or before
-that limit (or at the limit exactly when the window holds none). Each
-document is encoded ALONE and the ids are concatenated in order.
-`<|endoftext|>` is not inserted and not recognized in the text: the byte path
-inserts no separator either.
+Documents
+---------
+BPE never merges across a pre-token boundary, and where a long file is cut
+changes the ids at every cut, so the cut is fixed and recorded: a document
+never spans the corpus manifest's train / validation / test boundaries, is
+at most ``document_bytes`` long, and ends at the last newline at or before
+that limit (or exactly at the limit when there is none). Each document is
+encoded alone and the ids are concatenated. ``<|endoftext|>`` is neither
+inserted nor recognized in the text.
+
+Examples
+--------
+>>> from mojolearn import lm_corpus, LanguageModelConfig, LanguageModelTrainer
+>>> corpus = lm_corpus.prepare("corpus/input.txt")               # train a vocabulary
+>>> corpus = lm_corpus.prepare("corpus/input.txt", vocab="ranks.tsv")  # use yours
+>>> batches = corpus.batches(batch=1, length=2048)
+>>> schedule = batches.data_schedule()
+>>> ids = batches.ids(0)
+>>> tok = lm_corpus.tokenizer_for(schedule, corpus.vocabulary_path)
 """
+# Byte training (ids = raw bytes, vocabulary 256) stays available by explicit
+# choice: `tools/lm_train.py --bytes`, whose batches are
+# `tools/lm_step_memory_probe.py::CorpusBatches`, unchanged.
 import hashlib
 import json
 import os
@@ -105,6 +105,7 @@ def _sha_file(path, chunk=1 << 22):
 
 
 def default_cache_dir():
+    """The default cache directory: ``$MOJOLEARN_LM_CACHE``, else ``~/.cache/mojolearn/lm``."""
     return Path(os.environ.get("MOJOLEARN_LM_CACHE") or Path.home() / ".cache" / "mojolearn" / "lm")
 
 
@@ -288,8 +289,19 @@ def _tokenize(data, src, ranges, tok, identity, out, document_bytes, batch_docum
 
 
 class TokenizedCorpus:
-    """A prepared corpus: `tokens_dir` (the pinned id array and its
-    manifest) and `vocabulary_path` (its canonical rank file)."""
+    """A prepared corpus: cached token ids and the vocabulary they use.
+
+    Returned by :func:`prepare`.
+
+    Attributes
+    ----------
+    tokens_dir : pathlib.Path
+        Directory holding ``tokens.i32`` (the int32 ids) and ``manifest.json``.
+    vocabulary_path : pathlib.Path
+        The vocabulary's canonical rank file.
+    manifest : dict
+        The parsed token manifest.
+    """
 
     def __init__(self, tokens_dir, vocabulary_path):
         self.tokens_dir = Path(tokens_dir)
@@ -300,16 +312,20 @@ class TokenizedCorpus:
 
     @property
     def vocabulary(self):
+        """The vocabulary identity record (schema, ``sha256``, ``n_vocab``)."""
         return dict(self.manifest["vocabulary"])
 
     @property
     def n_vocab(self):
+        """Number of token ids in the vocabulary, ``<|endoftext|>`` included."""
         return int(self.manifest["vocabulary"]["n_vocab"])
 
     def tokenizer(self):
+        """A :class:`~mojolearn.tokenizer.BpeTokenizer` for this corpus's vocabulary."""
         return tokenizer_for(self.manifest, self.vocabulary_path)
 
     def batches(self, batch, length):
+        """Training batches over this corpus; see :class:`TokenBatches`."""
         return TokenBatches(self.tokens_dir, batch, length)
 
     def __repr__(self):
@@ -318,17 +334,61 @@ class TokenizedCorpus:
                 f"sha256={m['sha256'][:16]}, dir={str(self.tokens_dir)!r})")
 
 
+# Tokenize `corpus` (a file path) once and return a `TokenizedCorpus`.
+#
+# `vocab=None` trains a `vocab_size`-rank vocabulary (n_vocab = vocab_size
+# + 1 with `<|endoftext|>`) with `BpeVocabularyTrainer` on the first
+# `vocab_sample_bytes` of the corpus's TRAIN range. Anything else is the
+# caller's own token map (see the module docstring) and nothing is
+# trained. Both are cached; a rerun with the same corpus and vocabulary
+# reuses the id array after re-hashing it.
 def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=DEFAULT_VOCAB_SIZE,
             min_frequency=DEFAULT_MIN_FREQUENCY, vocab_sample_bytes=DEFAULT_VOCAB_SAMPLE_BYTES,
             document_bytes=DEFAULT_DOCUMENT_BYTES, batch_documents=DEFAULT_BATCH_DOCUMENTS, progress=None):
-    """Tokenize `corpus` (a file path) once and return a `TokenizedCorpus`.
+    """Tokenize a corpus file once and return a :class:`TokenizedCorpus`.
 
-    `vocab=None` trains a `vocab_size`-rank vocabulary (n_vocab = vocab_size
-    + 1 with `<|endoftext|>`) with `BpeVocabularyTrainer` on the first
-    `vocab_sample_bytes` of the corpus's TRAIN range. Anything else is the
-    caller's own token map (see the module docstring) and nothing is
-    trained. Both are cached; a rerun with the same corpus and vocabulary
-    reuses the id array after re-hashing it."""
+    If a ``manifest.json`` with schema ``mojolearn.byte-lm.corpus.v1`` sits
+    beside the corpus, the file is checked against its SHA-256 and length and
+    its train / validation / test ranges are used; otherwise the whole file is
+    the training range. Results are cached (see the module documentation).
+
+    Parameters
+    ----------
+    corpus : str or path-like
+        Path to the corpus text file.
+    vocab : str, path-like, tuple, BpeTokenizer, TrainedBpeVocabulary or None, default None
+        None trains a vocabulary of ``vocab_size`` ranks (``n_vocab =
+        vocab_size + 1`` with ``<|endoftext|>``) on the first
+        ``vocab_sample_bytes`` of the training range. Otherwise your token
+        map: a rank file, an ``(encoder.json, vocab.bpe)`` pair, a
+        ``BpeTokenizer`` or a ``TrainedBpeVocabulary``; nothing is trained.
+        ``"bytes"`` raises ValueError (byte-level training needs no
+        vocabulary).
+    cache_dir : str, path-like or None, default None
+        Cache location; None uses :func:`default_cache_dir`.
+    vocab_size : int, default 50256
+        Ranks to train (GPT-2's vocabulary size, without ``<|endoftext|>``).
+    min_frequency : int, default 2
+        Minimum pair frequency for a merge.
+    vocab_sample_bytes : int, default 10_000_000
+        Bytes of the training range used to train the vocabulary.
+    document_bytes : int, default 1048576
+        Maximum document length; see the module documentation.
+    batch_documents : int, default 16
+        Documents tokenized per batch.
+    progress : callable or None, default None
+        Optional progress callback.
+
+    Returns
+    -------
+    TokenizedCorpus
+
+    Raises
+    ------
+    ValueError
+        For a non-positive size argument, a corpus that does not match its
+        manifest, or a cache that does not match its manifest.
+    """
     for name, value in (("vocab_size", vocab_size), ("min_frequency", min_frequency),  # glue: validates three trainer arguments
                         ("vocab_sample_bytes", vocab_sample_bytes), ("document_bytes", document_bytes),
                         ("batch_documents", batch_documents)):
@@ -369,17 +429,40 @@ def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=DEFAULT_VOCAB_SIZE
 
 # ---------------------------------------------------------------- batches
 
+# Token batches from a pinned id array, with `CorpusBatches`' interface
+# (`ids(step_index)`, `describe()`), plus `data_schedule()` for the
+# trainer.
+#
+# Step `k` (zero-based), row `b` reads ids
+# `[lo + (k*batch*length + b*length) % (hi - lo - length - 1) : + length + 1]`
+# where `[lo, hi)` is the TRAIN range in tokens, so a run of any length
+# reads no validation or test id. (`CorpusBatches` takes the same form over
+# the WHOLE byte file, test range included; it is kept that way so byte
+# runs hash as they always have.)
 class TokenBatches:
-    """Token batches from a pinned id array, with `CorpusBatches`' interface
-    (`ids(step_index)`, `describe()`), plus `data_schedule()` for the
-    trainer.
+    """Training batches from a tokenized corpus.
 
-    Step `k` (zero-based), row `b` reads ids
-    `[lo + (k*batch*length + b*length) % (hi - lo - length - 1) : + length + 1]`
-    where `[lo, hi)` is the TRAIN range in tokens, so a run of any length
-    reads no validation or test id. (`CorpusBatches` takes the same form over
-    the WHOLE byte file, test range included; it is kept that way so byte
-    runs hash as they always have.)"""
+    Step ``k`` (zero-based), row ``b`` reads the ``length + 1`` ids starting
+    at ``lo + (k * batch * length + b * length) % (hi - lo - length - 1)``,
+    where ``[lo, hi)`` is the training range in tokens, so a run of any
+    length reads no validation or test id. Targets are the inputs shifted by
+    one id. The token file is verified against its manifest when opened.
+
+    Parameters
+    ----------
+    tokens_dir : str or path-like
+        A :class:`TokenizedCorpus` ``tokens_dir``.
+    batch : int
+        Rows per batch.
+    length : int
+        Tokens per row (each row holds ``length + 1`` ids).
+
+    Raises
+    ------
+    ValueError
+        If the token file does not match its manifest or the training range
+        is shorter than one row.
+    """
 
     def __init__(self, tokens_dir, batch, length):
         import mmap
@@ -412,9 +495,16 @@ class TokenBatches:
 
     @property
     def vocabulary(self):
+        """The vocabulary identity record (schema, ``sha256``, ``n_vocab``)."""
         return dict(self.manifest["vocabulary"])
 
     def ids(self, step_index):
+        """The batch for training step ``step_index``.
+
+        Returns
+        -------
+        Array of shape (batch, length + 1), int32
+        """
         from ._array import Array
         width = self.length + 1
         out = Array((self.batch, width), "<i4")
@@ -424,15 +514,32 @@ class TokenBatches:
                                 step_index * self.batch * self.length)
         return out
 
+    # Yield ``(step, ids)`` in order.
+    #
+    # Each batch is one `tokens_gather_rows` copy out of the already
+    # verified mmap, made when the consumer asks for it; there is no host
+    # thread (lane/pyglue-text-io, 2026-10-03), so ``depth`` only bounds
+    # how many batches may be live and is validated for the old callers.
+    # A failure is raised at its exact logical step, before any later
+    # batch is made.
     def prefetch(self, start_step, steps, *, depth=2):
-        """Yield ``(step, ids)`` in order.
+        """Iterate over ``(step, ids)`` for ``steps`` steps from ``start_step``.
 
-        Each batch is one `tokens_gather_rows` copy out of the already
-        verified mmap, made when the consumer asks for it; there is no host
-        thread (lane/pyglue-text-io, 2026-10-03), so ``depth`` only bounds
-        how many batches may be live and is validated for the old callers.
-        A failure is raised at its exact logical step, before any later
-        batch is made.
+        Each batch is made when the consumer asks for it, and an error is raised
+        at its own step, before any later batch is made.
+
+        Parameters
+        ----------
+        start_step : int
+            First step, at least 0.
+        steps : int
+            Number of steps, at least 0.
+        depth : int, default 2
+            Maximum number of batches alive at once; at least 1.
+
+        Returns
+        -------
+        iterator of (int, Array)
         """
         if type(start_step) is not int or start_step < 0:
             raise ValueError(f"mojolearn: start_step must be a nonnegative int, got {start_step!r}")
@@ -447,6 +554,7 @@ class TokenBatches:
             yield step, self.ids(step)
 
     def describe(self):
+        """A dict describing the token file, its hashes, the training range and the schedule."""
         v = self.manifest["vocabulary"]
         return dict(path=str(self.dir / "tokens.i32"), sha256=self.sha256, manifest_sha256=self.manifest_sha256,
                     tokens=int(self.ids_all.size), train_range=[self.lo, self.hi],
@@ -456,8 +564,15 @@ class TokenBatches:
                              ': +length+1] over the TRAIN range [lo, hi) in tokens; targets shifted one id')
 
     def data_schedule(self, **extra):
-        """The trainer's `data_schedule`: which ids, in which order, from
-        which vocabulary. Kept in every checkpoint."""
+        """The trainer's ``data_schedule``: which ids, in which order, from which vocabulary.
+
+        Pass it to the language model trainer, which keeps it in every
+        checkpoint. Keyword arguments are added to the record.
+
+        Returns
+        -------
+        dict
+        """
         v = self.manifest["vocabulary"]
         out = dict(schema=TOKENS_SCHEMA, schedule=_SCHEDULE, tokens_sha256=self.sha256,
                    corpus_sha256=self.manifest["source"]["sha256"], batch=self.batch, length=self.length,
@@ -484,9 +599,26 @@ def _expected_vocabulary(model):
 
 
 def require_vocabulary(model, tokenizer):
-    """Refuse by name unless `tokenizer` is the vocabulary `model` was
-    trained on. `model` is a trainer, a checkpoint state, a data schedule or
-    a tokens manifest; `tokenizer` is a `BpeTokenizer`."""
+    """Check that ``tokenizer`` is the vocabulary ``model`` was trained on.
+
+    Parameters
+    ----------
+    model : trainer, dict
+        A trainer, a checkpoint state, a data schedule or a tokens manifest.
+    tokenizer : BpeTokenizer
+        The tokenizer to check.
+
+    Returns
+    -------
+    BpeTokenizer
+        ``tokenizer``, unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``model`` carries no vocabulary identity, or the tokenizer's SHA-256
+        or ``n_vocab`` differs from it.
+    """
     expected = _expected_vocabulary(model)
     if expected is None:
         raise ValueError("mojolearn: this model carries no vocabulary identity (a byte model, or trained "
@@ -501,8 +633,25 @@ def require_vocabulary(model, tokenizer):
 
 
 def tokenizer_for(model, vocabulary):
-    """A `BpeTokenizer` over `vocabulary` (any form `prepare(vocab=...)`
-    takes), refused by name unless it is the one `model` was trained on."""
+    """A tokenizer for ``vocabulary``, checked against the vocabulary ``model`` was trained on.
+
+    Parameters
+    ----------
+    model : trainer, dict
+        A trainer, a checkpoint state, a data schedule or a tokens manifest.
+    vocabulary : str, path-like, tuple, BpeTokenizer or TrainedBpeVocabulary
+        Any form :func:`prepare` accepts as ``vocab``.
+
+    Returns
+    -------
+    BpeTokenizer
+
+    Raises
+    ------
+    ValueError
+        If the vocabulary does not match the model's (see
+        :func:`require_vocabulary`).
+    """
     if isinstance(vocabulary, _tokenizer.BpeTokenizer):
         tok = vocabulary
     elif isinstance(vocabulary, _tokenizer.TrainedBpeVocabulary):

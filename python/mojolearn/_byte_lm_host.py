@@ -170,18 +170,56 @@ def _flatten_parameters(params, shape):
     return flat, fmt
 
 
+# Forward-only byte LM on the CPU. The parameters are copied at
+# construction and never change afterward.
+#
+# By default (`threaded=True`) calls run the threaded path (DEVIATIONS
+# 2616, 2640): host kernels that spend the oracles' arithmetic in the
+# oracles' order without their per-cell allocation, advanced as SIMD lanes
+# and split across at most `threads` threads (None: one per physical core)
+# along axes the contracts make independent. `threaded=False` runs the
+# reference path, the oracles as written on one thread. Both give the same
+# bits, which the gate and tools/byte_lm_host_path_sweep.py check on every
+# certified CPU. Each call may override both instance defaults.
 class LanguageModelInference:
-    """Forward-only byte LM on the CPU. The parameters are copied at
-    construction and never change afterward.
+    """Run a trained decoder language model on the CPU, with no GPU.
 
-    By default (`threaded=True`) calls run the threaded path (DEVIATIONS
-    2616, 2640): host kernels that spend the oracles' arithmetic in the
-    oracles' order without their per-cell allocation, advanced as SIMD lanes
-    and split across at most `threads` threads (None: one per physical core)
-    along axes the contracts make independent. `threaded=False` runs the
-    reference path, the oracles as written on one thread. Both give the same
-    bits, which the gate and tools/byte_lm_host_path_sweep.py check on every
-    certified CPU. Each call may override both instance defaults."""
+    Forward pass only: logits, loss and greedy next-token prediction for a
+    model trained with :class:`~mojolearn.LanguageModelTrainer`, giving the
+    same bits as the GPU forward pass. The parameters are copied at
+    construction and never change.
+
+    By default (``threaded=True``) calls use SIMD and up to ``threads`` threads
+    (None: one per physical core); ``threaded=False`` runs single-threaded
+    reference code. Both give the same bits. Each call can override both
+    settings.
+
+    Parameters
+    ----------
+    parameters : array-like or dict
+        Flat float32 parameters of ``shape.n_total`` values (finite), or a dict
+        of named tensors as listed by
+        :meth:`LanguageModelTrainer.parameter_registry`; packed low-bit tensors
+        from ``mojolearn.lowbit`` are expanded exactly.
+    shape : LanguageModelConfig or None, default None
+        Model dimensions; None uses the defaults.
+    threaded : bool, default True
+        Use the multithreaded path.
+    threads : int or None, default None
+        Thread count; None means one per physical core.
+
+    Attributes
+    ----------
+    weight_format : str
+        ``"float32"``, or the packed format of the parameters given.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> lm = mojolearn.LanguageModelInference.from_checkpoint("model.json")
+    >>> ids = np.frombuffer(b"Hello, wor", dtype=np.uint8).astype(np.int32).reshape(1, -1)
+    >>> next_ids = lm.next_bytes(ids)
+    """
 
     def __init__(self, parameters, *, shape=None, threaded=True, threads=None):
         shape = ByteLanguageModelConfig() if shape is None else shape
@@ -215,8 +253,24 @@ class LanguageModelInference:
 
     @classmethod
     def from_checkpoint(cls, path, *, threaded=True, threads=None):
-        """Parameters from a `mojolearn.small-byte-lm-json-checkpoint.v1`
-        file, through the trainer's own decoder and integrity checks."""
+        """Load the parameters of a JSON checkpoint written by the trainer.
+
+        Reads a file written by :meth:`LanguageModelTrainer.export_checkpoint`,
+        with the trainer's own integrity checks.
+
+        Parameters
+        ----------
+        path : str or path-like
+            The checkpoint file.
+        threaded : bool, default True
+            As for the constructor.
+        threads : int or None, default None
+            As for the constructor.
+
+        Returns
+        -------
+        LanguageModelInference
+        """
         from ._byte_lm_impl import _CHECKPOINT_LIMIT, _decode_checkpoint
         with Path(path).open('rb') as stream:
             encoded = stream.read(_CHECKPOINT_LIMIT + 1)
@@ -234,24 +288,40 @@ class LanguageModelInference:
 
     @property
     def shape(self):
+        """The model dimensions, a :class:`~mojolearn.LanguageModelConfig`."""
         return self._shape
 
     @property
     def profile(self):
+        """The name of the arithmetic profile the CPU binding computes."""
         return str(self._binding.byte_lm_host_profile(self._native))
 
     def parameters_sha256(self):
+        """SHA-256 of the parameters' little-endian float32 bytes."""
         return hashlib.sha256(le_bytes(self._parameters, 'f')).hexdigest()
 
     def logits(self, ids, *, lengths=None, threaded=None, threads=None):
-        """Float32 logits `[batch, length, vocab]` for int32 ids
-        `[batch, length]`, positions from 0, length at most `shape.length`.
+        """Float32 logits for every position.
 
-        `lengths` (2026-09-15) makes the batch RAGGED: `batch` integers in
-        `[1, length]`, row `i` real at positions `[0, lengths[i])` and
-        padding after, whatever int32 values the padding holds. Real
-        positions' logits are byte for byte the row alone at its own length
-        and padding positions' logits are exactly `+0.0` (`_ragged.py`)."""
+        Parameters
+        ----------
+        ids : array-like of shape (batch, length), int32
+            Token ids, starting at position 0; ``length`` at most
+            ``shape.length``.
+        lengths : sequence of int or None, default None
+            Makes the batch ragged: row ``i`` is real at positions
+            ``[0, lengths[i])`` and padding after, whatever the padding ids are.
+            Real positions get exactly the logits of the row alone at its own
+            length; padding positions are ``+0.0``.
+        threaded : bool or None, default None
+            Override the instance setting.
+        threads : int or None, default None
+            Override the instance setting.
+
+        Returns
+        -------
+        Array of shape (batch, length, vocab_size), float32
+        """
         if lengths is not None:
             raw, _ = as_i32_c(ids, ndim=2, name='ids')
             return _ragged.ragged_forward(
@@ -271,10 +341,23 @@ class LanguageModelInference:
         return out
 
     def loss_bits(self, ids, *, threaded=None, threads=None):
-        """IEEE-754 bits of the mean next-byte loss of int32 ids
-        `[shape.batch, shape.length + 1]`, the training batch layout. The last
-        column is only ever a target, and -100 there is ignored as the loss
-        oracle ignores it."""
+        """IEEE-754 bit pattern of the mean next-token loss.
+
+        Parameters
+        ----------
+        ids : array-like of shape (shape.batch, shape.length + 1), int32
+            The training batch layout. The last column is only a target; -100 there
+            is ignored.
+        threaded : bool or None, default None
+            Override the instance setting.
+        threads : int or None, default None
+            Override the instance setting.
+
+        Returns
+        -------
+        int
+            The float32 loss's bits, for exact comparison.
+        """
         flag = self._threads_flag(threaded)
         count = self._threads_arg(threads)
         tokens, _ = as_i32_c(ids, ndim=2, name='ids')
@@ -287,13 +370,32 @@ class LanguageModelInference:
             self._native, flag, count))
 
     def loss(self, ids, *, threaded=None, threads=None):
+        """Mean next-token loss as a float; see :meth:`loss_bits`."""
         bits = self.loss_bits(ids, threaded=threaded, threads=threads)
         return struct.unpack('<f', struct.pack('<I', bits))[0]
 
     def next_bytes(self, ids, *, lengths=None, threaded=None, threads=None):
-        """Greedy next byte after each row of ids `[batch, length]`; ties go
-        to the lowest byte value. With `lengths` (a ragged batch, see
-        `logits`) the byte after each row's LAST REAL position."""
+        """Greedy next token after each row.
+
+        Picks the highest logit at each row's last position (with ``lengths``, its
+        last real position), ties going to the lowest id.
+
+        Parameters
+        ----------
+        ids : array-like of shape (batch, length), int32
+            Token ids.
+        lengths : sequence of int or None, default None
+            Ragged row lengths, as for :meth:`logits`.
+        threaded : bool or None, default None
+            Override the instance setting.
+        threads : int or None, default None
+            Override the instance setting.
+
+        Returns
+        -------
+        list of int
+            One token id per row.
+        """
         if lengths is not None:
             raw, _ = as_i32_c(ids, ndim=2, name='ids')
             logits, lens = _ragged.ragged_forward(

@@ -1,20 +1,69 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Host-only runtime shape for the configured decoder language model."""
+"""Shape configuration for the decoder language model trainer."""
 from dataclasses import dataclass, fields
 import operator
 
 _DEFAULT_PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 
 
+# Runtime dimensions, layer count and token vocabulary.
+#
+# The defaults preserve the published small model's registry and profile.
+# Shape admission is not a performance or cross-vendor qualification.
+# ``chunked_lm_head_v2=True`` selects the explicit IDENTICAL loss/gradient
+# profile with bounded vocabulary panels. Logits prediction still returns
+# the full vocabulary; its per-cell GEMM contraction is unchanged.
 @dataclass(frozen=True)
 class ByteLanguageModelConfig:
-    """Runtime dimensions, layer count and token vocabulary.
+    """Dimensions of the decoder language model: batch, sequence, layers, vocabulary.
 
-    The defaults preserve the published small model's registry and profile.
-    Shape admission is not a performance or cross-vendor qualification.
-    ``chunked_lm_head_v2=True`` selects the explicit IDENTICAL loss/gradient
-    profile with bounded vocabulary panels. Logits prediction still returns
-    the full vocabulary; its per-cell GEMM contraction is unchanged.
+    An immutable description of the model and training-batch shape passed to
+    :class:`~mojolearn.LanguageModelTrainer` as ``shape=``. Each layer has an
+    attention block with grouped key/value heads and a gated MLP, each with
+    its own norm weight; the model has a token embedding and a separate output
+    head. The defaults describe the small published byte-level model
+    (vocabulary 256). ``LanguageModelConfig`` is the same class.
+
+    Parameters
+    ----------
+    batch : int, default 2
+        Sequences per training step.
+    length : int, default 32
+        Tokens per sequence, at most 8192.
+    d_model : int, default 32
+        Model width; must equal ``n_heads * head_dim``.
+    n_heads : int, default 4
+        Attention heads; must be divisible by ``n_kv``.
+    n_kv : int, default 2
+        Key/value heads.
+    head_dim : int, default 8
+        Width of each head; must be even.
+    intermediate : int, default 64
+        MLP hidden width.
+    n_layers : int, default 2
+        Number of decoder layers.
+    vocab_size : int, default 256
+        Token vocabulary size (256 for bytes; ``corpus.n_vocab`` for a BPE
+        corpus from :mod:`mojolearn.lm_corpus`).
+    chunked_lm_head_v2 : bool, default False
+        Compute the loss and its gradient over bounded vocabulary panels, which
+        bounds memory for large vocabularies. Logits from prediction still
+        cover the full vocabulary.
+
+    Raises
+    ------
+    ValueError
+        If a dimension is not an integer in [1, 2**20], the head constraints
+        above are not met, or the shape exceeds signed 32-bit indexing.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> shape = mojolearn.LanguageModelConfig(batch=1, length=128, d_model=64, n_heads=4,
+    ...                                       n_kv=2, head_dim=16, intermediate=128,
+    ...                                       n_layers=2, vocab_size=256)
+    >>> shape.n_total > 0
+    True
     """
     batch: int = 2
     length: int = 32
@@ -56,6 +105,7 @@ class ByteLanguageModelConfig:
 
     @property
     def native_shape(self):
+        """The dimensions as a tuple of ints, in field order."""
         dimensions = tuple(getattr(self, field.name) for field in fields(self)  # glue: dataclass shape fields only
                            if field.name != 'chunked_lm_head_v2')  # glue: dataclass shape fields only
         # Preserve the existing nine-integer ABI when the opt-in is absent.
@@ -63,6 +113,7 @@ class ByteLanguageModelConfig:
 
     @property
     def profile(self):
+        """The name of the training profile this shape selects."""
         if self.native_shape == (2, 32, 32, 4, 2, 8, 64, 2, 256):
             return _DEFAULT_PROFILE
         b, l, dm, h, kv, hd, ff, layers, vocab = self.native_shape[:9]
@@ -73,6 +124,7 @@ class ByteLanguageModelConfig:
 
     @property
     def parameter_shapes(self):
+        """The shape of every parameter tensor, in packing order."""
         dm, kd, ff = self.d_model, self.n_kv * self.head_dim, self.intermediate
         block = ((dm,), (dm, dm), (kd, dm), (kd, dm), (dm, dm),
                  (dm,), (ff, dm), (ff, dm), (dm, ff))
@@ -80,15 +132,18 @@ class ByteLanguageModelConfig:
 
     @property
     def n_tensors(self):
+        """Number of parameter tensors: ``2 + 9 * n_layers``."""
         return 2 + 9 * self.n_layers
 
     @property
     def parameter_names(self):
+        """The name of every parameter tensor, in packing order."""
         names = ('norm1_w', 'w_q', 'w_k', 'w_v', 'w_o', 'norm2_w', 'w_gate', 'w_up', 'w_down')
         return ('embed', *(f'block{layer}.{name}' for layer in range(self.n_layers) for name in names), 'lm_head')  # glue: parameter names per layer
 
     @property
     def offsets(self):
+        """Start offset of every parameter tensor in the flat parameter vector, plus the total."""
         from ._portable_math import prod
         offsets = [0]
         for shape in self.parameter_shapes:  # glue: offsets over parameter shapes
@@ -97,9 +152,11 @@ class ByteLanguageModelConfig:
 
     @property
     def n_total(self):
+        """Total number of parameters."""
         return self.offsets[-1]
 
     def to_dict(self):
+        """The fields as a dict, suitable for ``ByteLanguageModelConfig(**d)``."""
         return {field.name: getattr(self, field.name) for field in fields(self)}  # glue: config dataclass field values
 
 

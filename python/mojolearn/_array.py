@@ -293,11 +293,57 @@ class _ArrayInterface:
         self.__array_interface__ = owner.__array_interface__
 
 
+# A typed, shaped, contiguous block of memory. See the module docstring.
+#
+# `Array(shape, dtype)` allocates zeros; `empty`, `zeros`, `full`,
+# `frombytes`, `from_list` and `from_buffer` are the usual constructors.
 class Array:
-    """A typed, shaped, contiguous block of memory. See the module docstring.
+    """The array type mojolearn returns: typed, shaped, contiguous memory.
 
-    `Array(shape, dtype)` allocates zeros; `empty`, `zeros`, `full`,
-    `frombytes`, `from_list` and `from_buffer` are the usual constructors.
+    mojolearn does not require NumPy, so estimators return ``Array`` objects.
+    An ``Array`` is a C- or F-contiguous block that either owns its memory or,
+    through :meth:`from_buffer`, borrows it from another buffer it keeps alive.
+    Its memory address never changes during its lifetime.
+
+    With NumPy installed, ``numpy.asarray(a)`` is a zero-copy view (through
+    ``__array_interface__``). On Python 3.12 and later ``memoryview(a)`` is
+    zero-copy too.
+
+    ``Array`` is a container, not a NumPy replacement: there are no arithmetic
+    operators, no broadcasting and no fancy indexing. Indexing with ints and
+    slices is supported (a full integer index returns a Python scalar, anything
+    else a C-order copy), as are :meth:`tolist`, :meth:`reshape`,
+    :meth:`astype`, ``==`` and the reductions :meth:`min`, :meth:`max`,
+    :meth:`sum` and :meth:`argmax`, so you can inspect results without NumPy.
+    ``'<f2'`` (float16) values are stored, not computed with.
+
+    Parameters
+    ----------
+    shape : int or tuple of int
+        Shape of the new, zero-filled array.
+    dtype : str, default "<f4"
+        One of ``"<f4"``, ``"<f8"``, ``"<f2"``, ``"<i4"``, ``"<i8"``, ``"<i1"``,
+        ``"<u4"``, ``"<u2"``, ``"<u1"``.
+
+    Attributes
+    ----------
+    shape : tuple of int
+    dtype : str
+    ndim, size, nbytes, itemsize : int
+    strides : tuple of int
+    order : {"C", "F"}
+    flags : dict
+        ``C_CONTIGUOUS``, ``F_CONTIGUOUS`` and ``WRITEABLE``.
+
+    Examples
+    --------
+    >>> from mojolearn import Array
+    >>> a = Array.from_list([[1.0, 2.0], [3.0, 4.0]], "<f4")
+    >>> a.shape, a.sum()
+    ((2, 2), 10.0)
+    >>> import numpy as np
+    >>> np.asarray(a).dtype
+    dtype('float32')
     """
 
     __slots__ = (
@@ -364,12 +410,25 @@ class Array:
 
     @classmethod
     def from_buffer(cls, obj):
-        """A zero-copy view over any contiguous buffer-protocol object.
+        """A zero-copy view of any contiguous buffer-protocol object.
 
-        `obj` is kept alive by the result and NOT owned; writes through the
-        result reach `obj`. A non-contiguous or unsupported-format buffer
-        is refused (ValueError / TypeError) rather than copied: copying is
-        `_buffer.as_*_c`'s job and it reports the copy.
+        The result keeps ``obj`` alive but does not own it; writes through the
+        result reach ``obj``.
+
+        Parameters
+        ----------
+        obj : buffer-protocol object
+            For example a NumPy array, ``array.array``, ``bytearray`` or
+            ``memoryview``.
+
+        Returns
+        -------
+        Array
+
+        Raises
+        ------
+        ValueError, TypeError
+            For a non-contiguous buffer or an unsupported format (no copy is made).
         """
         from . import _buffer  # lazy: _buffer imports this module
 
@@ -406,12 +465,23 @@ class Array:
 
     @classmethod
     def from_list(cls, nested, dtype="<f8"):
-        """An owned C-order Array from a (nested) list of Python scalars.
+        """A new C-order Array from a (nested) list of Python numbers.
 
-        Shape is inferred and must be rectangular. Float -> `'<f4'` is
-        round-to-nearest-even (the `array.array('f')` item setter is a C
-        `(float)` cast); float -> int dtypes are refused rather than
-        truncated, ints wider than the dtype overflow rather than wrap.
+        The shape is inferred and must be rectangular. Floats converted to
+        ``"<f4"`` round to nearest even. Floats are not converted to integer dtypes
+        (an error is raised instead of truncating), and integers too large for
+        the dtype raise an error rather than wrap.
+
+        Parameters
+        ----------
+        nested : list
+            Nested lists of numbers.
+        dtype : str, default "<f8"
+            Element type.
+
+        Returns
+        -------
+        Array
         """
         dtype = normalize_dtype(dtype)
         shape, flat = _flatten(nested)
@@ -445,6 +515,7 @@ class Array:
 
     @property
     def flags(self):
+        """``{"C_CONTIGUOUS", "F_CONTIGUOUS", "WRITEABLE"}`` as booleans."""
         both = self._both_orders()
         return {
             "C_CONTIGUOUS": self.order == "C" or both,
@@ -541,8 +612,7 @@ class Array:
                                  self.order, self._readonly))
 
     def tobytes(self):
-        """The bytes of the storage, in storage order (C for a C-order
-        Array, column-major for an F-order one)."""
+        """The raw bytes, in storage order (row-major for a C-order Array, column-major for an F-order one)."""
         return self._mv.tobytes()
 
     def _values(self):
@@ -572,14 +642,14 @@ class Array:
         return Array._owned(out, self.shape, self.dtype, "F")
 
     def tolist(self):
-        """Nested Python lists by shape (a scalar for a 0-d Array)."""
+        """The values as nested Python lists (a scalar for a 0-d Array)."""
         a = self._as_c()
         if self.ndim == 0:
             return a._values()[0]
         return _nest(a)
 
     def copy(self):
-        """An owned copy, same dtype, shape and order."""
+        """A new Array with the same dtype, shape, order and values."""
         store = array.array(_CODE[self.dtype])
         store.frombytes(self._mv.cast("B"))  # one memcpy
         return Array._owned(store, self.shape, self.dtype, self.order)
@@ -587,11 +657,18 @@ class Array:
     def astype(self, dtype):
         """A converted copy (always a copy, even for the same dtype).
 
-        Float -> `'<f4'` is one round-to-nearest-even per element (the C
-        cast); float -> `'<f8'` and every int -> float within 2**53 is
-        exact. Float -> int truncates toward zero like NumPy and is a
-        per-element Python loop: it is for labels, not for matrices. Order
-        is preserved.
+        Float to ``"<f4"`` rounds to nearest even; float to ``"<f8"`` and integers
+        up to 2**53 to float are exact. Float to integer truncates toward zero, like
+        NumPy. The memory order is kept.
+
+        Parameters
+        ----------
+        dtype : str
+            Target element type.
+
+        Returns
+        -------
+        Array
         """
         dtype = normalize_dtype(dtype)
         if dtype == self.dtype:
@@ -665,8 +742,18 @@ class Array:
         return Array._owned(store, self.shape, dtype, self.order)
 
     def reshape(self, shape):
-        """A C-order view over the same buffer (one `-1` allowed). An
-        F-order Array is copied to C order first, as NumPy would."""
+        """A C-order view with a new shape (one dimension may be ``-1``).
+
+        An F-order Array is copied to C order first, as NumPy does.
+
+        Parameters
+        ----------
+        shape : int or tuple of int
+
+        Returns
+        -------
+        Array
+        """
         if isinstance(shape, int):
             shape = (shape,)
         shape = [int(s) for s in shape]  # glue: validates the shape argument
@@ -687,6 +774,7 @@ class Array:
         return Array._view_of(self._as_c(), shape, "C")
 
     def ravel(self):
+        """A 1-D view, same as ``reshape(-1)``."""
         return self.reshape((-1,))
 
     def __len__(self):
@@ -928,6 +1016,7 @@ class Array:
             raise _rebuild("reduce_stat")
 
     def min(self):
+        """Smallest element, in storage order; ValueError for an empty Array."""
         fast = self._native_reduce(_REDUCE_MIN)
         if fast is not None:
             return fast
@@ -935,6 +1024,7 @@ class Array:
         return min(self._reduce_values("min"))  # cpu-route: the differential test's reference arm only
 
     def max(self):
+        """Largest element, in storage order; ValueError for an empty Array."""
         fast = self._native_reduce(_REDUCE_MAX)
         if fast is not None:
             return fast
@@ -942,8 +1032,7 @@ class Array:
         return max(self._reduce_values("max"))  # cpu-route: the differential test's reference arm only
 
     def sum(self):
-        """Sequential accumulation: exact `int` for int dtypes, a Python
-        float summed left to right in storage order for float dtypes."""
+        """Sum of all elements: an exact ``int`` for integer dtypes, a float summed in storage order for float dtypes."""
         if self.size == 0:
             return 0 if self.dtype in _INT else 0.0
         if self.dtype in ("<f4", "<f8", "<f2"):
@@ -968,8 +1057,7 @@ class Array:
         return acc
 
     def argmax(self):
-        """Flat index of the first maximum (first-max-wins), in storage
-        order, over the C-order view."""
+        """Flat (C-order) index of the first maximum."""
         fast = self._as_c()._native_reduce(_REDUCE_ARGMAX)
         if fast is not None:
             return fast

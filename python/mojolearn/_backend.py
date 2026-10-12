@@ -1065,9 +1065,20 @@ def _ptx_fallback(pkg, native_refusal):
 
 
 def gpu_arch():
-    """The architecture directory this process loads from ('sm_80',
-    'gfx942', ...), or None on the flat and arch-less layouts (where no
-    choice was made)."""
+    """The GPU architecture whose binaries this process loaded.
+
+    Returns
+    -------
+    str or None
+        The architecture name, such as ``'sm_80'`` or ``'gfx942'``; None when
+        no architecture choice was made (macOS, a source checkout, or a
+        CPU-only install).
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> arch = mojolearn.gpu_arch()
+    """
     if _CPU_ONLY is not None:
         return None
     _layout()
@@ -1075,9 +1086,16 @@ def gpu_arch():
 
 
 def gpu_arch_how():
-    """How the architecture was decided, for `mojolearn doctor` and the
-    smoke: 'exact match for the device (...)', 'MOJOLEARN_GPU_ARCH in the
-    environment', 'same-family lower architecture (...)', ..."""
+    """How the GPU architecture was chosen, as a sentence.
+
+    For example an exact match for the device, the ``MOJOLEARN_GPU_ARCH``
+    environment variable, or a compatible lower architecture of the same
+    family. Useful when diagnosing an install (``mojolearn doctor`` prints it).
+
+    Returns
+    -------
+    str
+    """
     if _CPU_ONLY is not None:
         return "no GPU binary set loaded (CPU-only install, DEVIATION 2615)"
     _layout()
@@ -2212,12 +2230,42 @@ def default_mode():
     return _DEFAULT_MODE
 
 
+# Choose the tier IN CODE, at runtime. Returns the previous value.
+#
+# Loading is eager and deliberate: a name that cannot be honoured must fail
+# HERE, at the line that asked for it, not at some later fit that would
+# otherwise silently run on the tier it was already holding.
 def set_default_mode(mode):
-    """Choose the tier IN CODE, at runtime. Returns the previous value.
+    """Set the process-wide default numeric mode.
 
-    Loading is eager and deliberate: a name that cannot be honoured must fail
-    HERE, at the line that asked for it, not at some later fit that would
-    otherwise silently run on the tier it was already holding.
+    Estimators created without an explicit ``numeric_mode=`` use this mode.
+    The starting default is the ``MOJOLEARN_NUMERIC_MODE`` environment
+    variable, or ``"identical"`` when it is unset. The mode's binaries are
+    loaded immediately, so a mode that cannot be used fails here rather than at
+    a later fit.
+
+    - ``"identical"`` (default): the same bits on NVIDIA and AMD GPUs.
+    - ``"deterministic"``: reproducible results run to run.
+    - ``"fast"``: the fastest arithmetic, for Apple GPUs; no bitwise promise.
+
+    Not every family offers every mode: ``"deterministic"`` is offered by the
+    tree ensembles (gradient boosting, random forest, extra trees) only.
+    Using a family under a mode it does not ship raises ImportError.
+
+    Parameters
+    ----------
+    mode : {"identical", "deterministic", "fast"} or None
+        The new default; None keeps the current one.
+
+    Returns
+    -------
+    str
+        The previous default.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> previous = mojolearn.set_numeric_mode("identical")
     """
     global _DEFAULT_MODE
     mode = (default_mode() if mode is None else mode).strip().lower()
@@ -2347,27 +2395,48 @@ def _build_script(name):
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 
+# 'fast', 'deterministic' or 'identical' -- what this process LOADED,
+# cross-checked against the gbdt binary's own compile-time answer when it
+# exposes one.
+#
+# The cross-check read `== 1 else "fast"` until 2026-08-29. A deterministic
+# binary reports 2, so that spelling called it "fast" and AGREED with a
+# selector that had loaded fast, reporting no conflict while the caller
+# held the wrong arm.
+#
+# IT REPORTS THE CURRENT DEFAULT, NOT THE IMPORT-TIME ONE. It returned
+# `_SELECTED` -- what `select()` loaded before the first estimator existed
+# -- until 2026-08-29, which meant that after
+#
+#     mojolearn.set_numeric_mode("deterministic")
+#
+# this function still answered "fast" while every estimator built after
+# that line ran deterministic. A function whose whole purpose is that "a
+# run cannot be mislabeled by accident" was the one thing mislabeling it.
+# `numeric_mode_used()` on an estimator instance was already right, so the
+# two disagreed. Found by running the pair, not by reading them.
 def numeric_mode():
-    """'fast', 'deterministic' or 'identical' -- what this process LOADED,
-    cross-checked against the gbdt binary's own compile-time answer when it
-    exposes one.
+    """The current default numeric mode of this process.
 
-    The cross-check read `== 1 else "fast"` until 2026-08-29. A deterministic
-    binary reports 2, so that spelling called it "fast" and AGREED with a
-    selector that had loaded fast, reporting no conflict while the caller
-    held the wrong arm.
+    Returns
+    -------
+    {"identical", "deterministic", "fast"}
+        The mode estimators use when they are not given ``numeric_mode=``
+        (see :func:`mojolearn.set_numeric_mode`). Where the loaded binaries
+        report their compiled mode, it is checked against this answer.
 
-    IT REPORTS THE CURRENT DEFAULT, NOT THE IMPORT-TIME ONE. It returned
-    `_SELECTED` -- what `select()` loaded before the first estimator existed
-    -- until 2026-08-29, which meant that after
+    Raises
+    ------
+    RuntimeError
+        If a loaded binary was compiled for a different mode than the one
+        selected (a broken install).
 
-        mojolearn.set_numeric_mode("deterministic")
-
-    this function still answered "fast" while every estimator built after
-    that line ran deterministic. A function whose whole purpose is that "a
-    run cannot be mislabeled by accident" was the one thing mislabeling it.
-    `numeric_mode_used()` on an estimator instance was already right, so the
-    two disagreed. Found by running the pair, not by reading them."""
+    Examples
+    --------
+    >>> import mojolearn
+    >>> mojolearn.numeric_mode()
+    'identical'
+    """
     loaded = default_mode()
     pkg = sys.modules[__name__.rsplit(".", 1)[0]]
     # The cross-check has to read the binary of the tier being REPORTED. The
@@ -2410,21 +2479,44 @@ def numeric_mode():
     return loaded
 
 
+# 'metal', 'cuda' or 'hip': the accelerator API of the binaries this
+# process runs, READ BACK FROM THE BINARIES of the current default tier.
+#
+# Same shape as `numeric_mode()`: the selector's choice is only reported
+# after the loaded set has been asked and agrees. On the flat layout
+# (macOS, or a Linux source checkout) the selector made no choice and the
+# binaries are the only source; on the Linux wheel layout the directory
+# was chosen by `_layout()` and every binary in it was checked against
+# that directory when it loaded, so this cannot disagree with the
+# directory without having already raised.
+#
+# Returns None only for binaries built before the read-back existed
+# (before 2026-08-29), and says so in `vendor_how()` rather than
+# inventing a name from the platform.
 def vendor():
-    """'metal', 'cuda' or 'hip': the accelerator API of the binaries this
-    process runs, READ BACK FROM THE BINARIES of the current default tier.
+    """The GPU programming interface of the binaries this process runs.
 
-    Same shape as `numeric_mode()`: the selector's choice is only reported
-    after the loaded set has been asked and agrees. On the flat layout
-    (macOS, or a Linux source checkout) the selector made no choice and the
-    binaries are the only source; on the Linux wheel layout the directory
-    was chosen by `_layout()` and every binary in it was checked against
-    that directory when it loaded, so this cannot disagree with the
-    directory without having already raised.
+    The answer is read back from the loaded binaries.
 
-    Returns None only for binaries built before the read-back existed
-    (before 2026-08-29), and says so in `vendor_how()` rather than
-    inventing a name from the platform."""
+    Returns
+    -------
+    {"metal", "cuda", "hip", "cpu"} or None
+        ``"metal"`` for Apple GPUs, ``"cuda"`` for NVIDIA, ``"hip"`` for AMD,
+        ``"cpu"`` on a CPU-only install. None only for binaries too old to
+        report it.
+
+    Raises
+    ------
+    RuntimeError
+        If the loaded binaries disagree with the vendor directory they were
+        loaded from (a broken install).
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> mojolearn.vendor() in ("metal", "cuda", "hip", "cpu")
+    True
+    """
     global _VENDOR_SELECTED
     if _CPU_ONLY is not None:
         return "cpu"

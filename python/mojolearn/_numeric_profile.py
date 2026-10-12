@@ -237,8 +237,34 @@ def canonical(name, what="numeric_profile"):
 
 
 def measured(profile, vendor=None):
-    """The measured rows of `profile`: every vendor's, or one vendor's row
-    (None when that vendor was not measured)."""
+    """Measured speed of a numeric profile relative to ``fp32_v1``.
+
+    Parameters
+    ----------
+    profile : str
+        A registered profile name (see :func:`mojolearn.numeric_profiles`).
+    vendor : {"metal", "cuda", "hip"} or None, default None
+        One vendor, as :func:`mojolearn.vendor` names it; None returns every
+        measured vendor.
+
+    Returns
+    -------
+    dict or None
+        With ``vendor=None``, a dict from vendor to its row. With a vendor, that
+        vendor's row, or None when it was not measured. A row's ``over`` is the
+        range of the profile's time divided by ``fp32_v1``'s on the same shapes
+        (above 1 means slower); ``what`` says which operation was timed.
+
+    Raises
+    ------
+    ValueError
+        If ``profile`` is not a registered profile.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> rows = mojolearn.numeric_profile_measured("fixed15_v1")
+    """
     rows = MEASURED.get(canonical(profile), {})
     return dict(rows) if vendor is None else rows.get(vendor)
 
@@ -308,11 +334,33 @@ _defaults = {}
 
 
 def default_profile(use="inference"):
-    """The profile a call that names none runs under, for `use`. The
-    inference default starts at `MOJOLEARN_NUMERIC_PROFILE` when that is
-    set, else `DEFAULT`; the training default is `TRAINING_DEFAULT`. A
-    family the inference default does not reach gets `BASELINE`
-    (`resolve`)."""
+    """The numeric profile used when a call names none.
+
+    A numeric profile is the number format the matrix products of the neural
+    models compute in. It is independent of the numeric mode: under
+    ``numeric_mode="identical"`` every profile gives the same bits across
+    vendors. The default is ``"fp32_v1"`` for inference and training unless the
+    ``MOJOLEARN_NUMERIC_PROFILE`` environment variable or
+    :func:`mojolearn.set_numeric_profile` sets another inference default. The
+    inference default applies only to the families it covers (the transformer
+    models of ``mojolearn.models``); other families use ``"fp32_v1"``.
+
+    Parameters
+    ----------
+    use : {"inference", "training"}, default "inference"
+        Which default to return.
+
+    Returns
+    -------
+    str
+        The profile name.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> mojolearn.numeric_profile()
+    'fp32_v1'
+    """
     if use not in USES:
         raise ValueError(f"mojolearn: use must be one of {USES}, got {use!r}")
     if use not in _defaults:
@@ -325,10 +373,35 @@ def default_profile(use="inference"):
 
 
 def set_default_profile(name, use="inference"):
-    """Choose the process default for `use` IN CODE. Returns the previous
-    value. A name that cannot be honored for `use` fails HERE, not at a
-    later forward. `set_default_profile("fp32_v1")` is the arithmetic every
-    call made before 2026-09-29."""
+    """Set the process-wide default numeric profile.
+
+    The name is checked immediately: a profile that is not registered, or not
+    available for ``use``, raises here rather than at a later call. Only
+    ``"fp32_v1"`` is available for training.
+
+    Parameters
+    ----------
+    name : str
+        A registered profile name, such as ``"fp32_v1"`` or ``"fixed15_v1"``
+        (see :func:`mojolearn.numeric_profiles`).
+    use : {"inference", "training"}, default "inference"
+        Which default to set.
+
+    Returns
+    -------
+    str
+        The previous default.
+
+    Raises
+    ------
+    ValueError
+        If the name is not a registered profile.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> previous = mojolearn.set_numeric_profile("fp32_v1")
+    """
     prev = default_profile(use)
     _defaults[use] = _refuse_unavailable(canonical(name, "set_numeric_profile"),
                                          "set_numeric_profile", use)
@@ -369,9 +442,25 @@ def require_training(what, name=None):
 
 
 def profiles():
-    """Every registered row, the baseline first, as plain dicts, each with
-    its measured times per vendor (`measured`, empty when none). `default`
-    marks the inference default, `training_default` the training one."""
+    """Every registered numeric profile, the baseline first.
+
+    Returns
+    -------
+    tuple of dict
+        One record per profile with its ``name``; ``default`` and
+        ``training_default`` flags; ``inference`` and ``training``
+        availability; ``products`` (the arithmetic of each product family);
+        ``computes`` (the model families it applies to, None for all);
+        ``default_for``; ``quality`` (measured relative change in held-out
+        perplexity against ``fp32_v1``); a ``note``; and ``measured`` speed
+        rows per vendor (see :func:`mojolearn.numeric_profile_measured`).
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> [p["name"] for p in mojolearn.numeric_profiles()]
+    ['fp32_v1', 'fixed15_v1']
+    """
     return tuple({"name": k, "default": k == DEFAULT, "training_default": k == TRAINING_DEFAULT,
                   **v, "products": dict(v["products"]),
                   "computes": None if v["computes"] is None else tuple(v["computes"]),
