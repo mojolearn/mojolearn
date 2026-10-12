@@ -62,12 +62,12 @@ html_theme = "pydata_sphinx_theme"
 html_title = f"mojolearn {release} documentation"
 html_static_path = ["_static"]
 html_css_files = ["mojolearn.css"]
-html_favicon = "_static/mojolearn-mark-on-white.svg"
+html_favicon = "_static/mojolearn-mark-full.svg"
 html_theme_options = {
     "logo": {
         "text": "mojolearn",
         "image_light": "_static/mojolearn-mark.svg",
-        "image_dark": "_static/mojolearn-mark-on-white.svg",
+        "image_dark": "_static/mojolearn-mark-full.svg",
         "link": "https://mojolearn.org",
     },
     "external_links": [
