@@ -5346,6 +5346,9 @@ def _label_codes_device(pr, lb, cats):
     return c
 
 
+# Numeric labels run on the device (sort + run scan for classes_, a binary
+# search for transform); a numeric label buffer crosses as its raw words
+# (`_label_buffer`), so fit_transform is one program. str labels take Python.
 class LabelEncoder(_PrepBase):
     """Encode target labels as integers ``0`` to ``n_classes - 1``.
 
@@ -5487,6 +5490,7 @@ def _class_words(pr, out, n, ints):
     return Array._owned(store, (n,), "<i8" if ints else "<f8", "C")
 
 
+# Numeric labels take the device route, str labels Python's.
 class LabelBinarizer(_PrepBase):
     """Binarize labels in a one-vs-all fashion.
 
@@ -5702,6 +5706,8 @@ def _mlb_flat(y):
     return _MLBFlat(len(rows), lb, offs)
 
 
+# Numeric labels take the device route (a sort, a binary search, a scatter
+# of ones), str labels Python's.
 class MultiLabelBinarizer(_PrepBase):
     """Convert sets of labels to a binary indicator matrix.
 
@@ -5850,23 +5856,91 @@ class _NeighbourDraws:
         return out
 
 
+# With the default estimator (BayesianRidge, default priors, max_iter 300, tol
+# 1e-3) the whole fit is one device program; another estimator runs the same
+# rounds in Python over its fit / predict (predict(return_std=True) for
+# sample_posterior). The stop test is the matrix inf-norm of the round's change
+# < tol * max|X_observed|. Every draw (random order, neighbours, posterior
+# samples) comes from random_state by splitmix64 (sklearn draws numpy's; None
+# is seed 0).
 class IterativeImputer(_PrepBase):
-    """sklearn.impute.IterativeImputer. With its default estimator
-    (BayesianRidge, default priors, max_iter 300, tol 1e-3) the whole fit is
-    one device program: initial fill by SimpleImputer(initial_strategy), then
-    rounds over the features in imputation_order ('ascending' default,
-    'descending', 'roman', 'arabic', or 'random': a fresh permutation each
-    round), each feature regressed on the others (or on n_nearest_features of
-    them, drawn without replacement with probability proportional to their
-    absolute correlation with it) over its observed rows, its missing
-    entries predicted and clipped to [min_value, max_value], or with
-    sample_posterior drawn from the predictive normal truncated to them;
-    stop when the matrix inf-norm of the change < tol * max|X_observed|.
-    Another estimator runs the same rounds in Python over that estimator's
-    fit / predict (predict(return_std=True) for sample_posterior).
-    add_indicator appends MissingIndicator's columns. Every draw (the random
-    order, the neighbours, the posterior samples) comes from random_state by
-    splitmix64 (the reference draws numpy's; None is seed 0)."""
+    """Impute missing values by modeling each feature from the others, round by round.
+
+    Follows scikit-learn's ``IterativeImputer``. Missing entries are first filled by a
+    :class:`SimpleImputer` with ``initial_strategy``. Then, for up to ``max_iter`` rounds, each feature
+    with missing values is regressed on the other features over its observed rows, and its missing
+    entries are replaced by the predictions, clipped to ``[min_value, max_value]``. Fit stops early when
+    the largest change in a round falls below ``tol`` times the largest absolute observed value. Input
+    and output are float32.
+
+    The default estimator is a Bayesian ridge regression (default priors, at most 300 iterations, tol
+    1e-3), as in scikit-learn.
+
+    Parameters
+    ----------
+    estimator : object, default None
+        Regressor with ``fit`` and ``predict``, cloned for each step and run on the host. None uses the
+        built-in Bayesian ridge regression.
+    missing_values : float, default NaN
+        Value that marks a missing entry.
+    sample_posterior : bool, default False
+        Draw each imputed value from the predictive normal distribution, truncated to
+        ``[min_value, max_value]``, instead of using its mean. A custom ``estimator`` must then support
+        ``predict(X, return_std=True)`` (``ValueError`` otherwise).
+    max_iter : int, default 10
+        Maximum number of imputation rounds.
+    tol : float, default 1e-3
+        Stopping tolerance, relative to the largest absolute observed value.
+    n_nearest_features : int, default None
+        Number of other features used to predict each feature, drawn without replacement with
+        probability proportional to their absolute correlation with it. None uses all of them. Must be an
+        int ``>= 1``.
+    initial_strategy : {'mean', 'median', 'most_frequent', 'constant'}, default 'mean'
+        Strategy of the initial :class:`SimpleImputer`.
+    fill_value : float, default None
+        Constant for ``initial_strategy='constant'``.
+    imputation_order : {'ascending', 'descending', 'roman', 'arabic', 'random'}, default 'ascending'
+        Order in which features are imputed in each round: by increasing or decreasing count of missing
+        values, left to right, right to left, or a new random permutation each round.
+    skip_complete : bool, default False
+        Skip features with no missing values in fit.
+    min_value : float or array-like of shape (n_features,), default -inf
+        Lower bound for imputed values.
+    max_value : float or array-like of shape (n_features,), default inf
+        Upper bound for imputed values.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility.
+    random_state : int or None, default None
+        Seed for the random order, the feature draws and the posterior samples. None uses seed 0. Draws
+        use mojolearn's own generator, so they differ from scikit-learn's for the same seed.
+    add_indicator : bool, default False
+        Append missing-indicator columns (1.0 where missing), as scikit-learn's ``MissingIndicator``.
+    keep_empty_features : bool, default False
+        Keep columns that had no observed values in fit (passed to the initial imputer).
+
+    Attributes
+    ----------
+    initial_imputer_ : SimpleImputer
+        Imputer used for the initial fill.
+    imputation_sequence_ : list of tuples
+        The fitted steps in the order they are applied.
+    n_iter_ : int
+        Number of rounds run.
+    n_features_with_missing_ : int
+        Number of features with missing values in fit.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 5), dtype=np.float32)
+    >>> X[rng.random(X.shape) < 0.1] = np.nan
+    >>> Xt = mojolearn.IterativeImputer(max_iter=5).fit_transform(X)
+    """
     _parameters = ("estimator", "missing_values", "sample_posterior", "max_iter", "tol", "n_nearest_features",
                    "initial_strategy", "fill_value", "imputation_order", "skip_complete", "min_value",
                    "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features")
