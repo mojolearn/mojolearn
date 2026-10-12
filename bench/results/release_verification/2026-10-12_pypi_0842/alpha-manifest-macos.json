@@ -1,0 +1,14 @@
+{
+  "files": {
+    "mojolearn-0.8.42-py3-none-macosx_11_0_arm64.whl": "e92c04494e679f51020108d24b6f431224ac23ea94bdec353a8f092c81f3ef7a"
+  },
+  "light_smoke": {
+    "receipts": {
+      "light-smoke-macos.json": "76063cc787d252fed3d10a19530809a3b507c764a7ae9f61581055b9e25da9e6"
+    },
+    "source_commit": "0db362a62516faef0a52b112e93f7cba5e212a2b"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.42"
+}
