@@ -240,231 +240,330 @@ def _no_exog():
     return empty((1,), "<f4")
 
 
+# Batched ARIMA, backed by a batched Kalman filter and a
+# batched L-BFGS (`arima/`, DEVIATIONS 670 to 687 and 990 to
+# 993; `arima/README.md`), in statsmodels' constructor shape.
+#
+# `y` IS 2-D, `(batch_size, n_obs)`, AND THAT DIFFERS FROM statsmodels.
+# Every series in the batch gets its own parameters and they are fitted
+# together, in one set of launches. A 1-D `y` is taken as one series; the
+# outputs are 2-D either way. The module docstring says what else follows
+# from the batch being the point.
+#
+# WHAT IS HONORED, WHAT IS REFUSED, AND WHY, one line per parameter,
+# because a parameter that is accepted and ignored is a wrong answer
+# waiting for a caller (the house rule). The file named on a refusal is
+# THE FILE THAT RAISES IT, and where that file is a `.mojo` one the
+# exception arrives as a bare `Exception`, because a Mojo `Error` crossing
+# `def_function` is not a named Python type.
+#
+#     order (p, d, q)   honored   `p > 8` and `q > 8` are refused by
+#                                 `arima/impl/tsa/arima_common.mojo::
+#                                 validate_order`, with the reference's message, as
+#                                 is `d + D > 2` and an order with no
+#                                 parameters at all
+#     seasonal_order    honored   `(P, D, Q, s)`. A seasonal term with
+#       (P, D, Q, s)              `s < 2`, and `s <= p` or `s <= q`, are
+#                                 refused by `validate_order`, again with
+#                                 the reference's message
+#     rd > 8            refused   `validate_order`. `rd = d + s*D +
+#                                 max(p + s*P, q + s*Q + 1)` selects
+#                                 cuML's BLOCK-PER-SERIES Kalman kernel
+#                                 (`batched_kalman.cu:335-745`), a
+#                                 different fold shape and an unimplemented
+#                                 one. This is a bound on the ORDER, so it
+#                                 fires at fit, before any device work
+#     r > 5             refused   `validate_order`. `r = max(p + s*P,
+#                                 q + s*Q + 1)` selects their Schur /
+#                                 Francis-QR Lyapunov solver
+#                                 (`matrix.cuh:1899-1948`); the direct
+#                                 Kronecker solve is the `r <= 5` arm and
+#                                 is what this lane carries
+#     trend             honored   for None, 'n' and 'c' ONLY, and it is
+#                                 this class's spelling of cuML's
+#                                 `fit_intercept` (DEVIATION 993 below).
+#                                 't', 'ct' and a polynomial trend
+#                                 specification are REFUSED BY NAME by
+#                                 `_arima_impl.py`: cuML has no time trend
+#                                 to hold one to; pass the time index as an
+#                                 `exog` column instead
+#     method            honored   for 'ml' ONLY. 'css' and 'css-ml' are
+#                                 REFUSED BY NAME by
+#                                 `arima/estimator.mojo::_refuse_method`,
+#                                 not here: the conditional sum of squares
+#                                 likelihood and its `truncate` parameter
+#                                 (`batched_arima.cu:271-391`) have no
+#                                 implementation. The string is turned into a code
+#                                 and passed through UNCLAMPED so that
+#                                 refusal stays reachable (DEVIATION 992)
+#     maxiter           honored   the L-BFGS iteration cap, cuML's
+#                                 `maxiter`, default 1000 as theirs.
+#                                 Refused below 1 by `arima/estimator.mojo`
+#     exog              honored   on `fit(y, exog)`, `predict(start, end,
+#                                 exog)` and `forecast(steps, exog)`
+#                                 (lane/arima-exog, 2026-09-15): regression
+#                                 with ARIMA errors as cuML's (`beta` packed
+#                                 after `mu`, the regressors differenced like
+#                                 `y`, `beta` started by least squares before
+#                                 the ARMA fit, `x_t beta` added to every
+#                                 prediction). `(batch_size, n_obs, n_exog)`
+#                                 (DEVIATION 996); at most 17 regressors
+#                                 (DEVIATION 994, validate_order); a
+#                                 non-finite one refused by name (DEVIATION
+#                                 997). cuML's `exog` is a CONSTRUCTOR
+#                                 argument; here it goes to `fit` with `y`
+#     verbose           refused   `_arima_impl.py`, for anything truthy.
+#                                 In the reference it selects LOG LINES; this implementation
+#                                 prints none, so accepting it would be
+#                                 accepting-and-ignoring
+#     output_type       refused   `_arima_impl.py`. A cuML-internal
+#                                 array-type selector; this package
+#                                 returns `mojolearn.Array` (zero-copy
+#                                 under `numpy.asarray`)
+#     float64 y         CONVERTED to float32, and the conversion COPIES.
+#                                 Named rather than hidden. cuML's ARIMA
+#                                 is instantiated on `double` ONLY and
+#                                 `arima.pyx:326` checks its input to
+#                                 float64; Metal exposes no float64 on the
+#                                 device, so there is no double arm here
+#                                 to pick (DEVIATION 670). These are
+#                                 float32 answers to a float32 problem
+#     non-finite y      refused   `arima/impl/batched_arima.mojo::
+#                                 _refuse_non_finite`, which names the
+#                                 flat index. cuML instead has a MISSING
+#                                 OBSERVATION path (`missing = isnan(yt)`
+#                                 and the four branches it guards,
+#                                 `batched_kalman.cu:191-246`) and that
+#                                 path is NOT IMPLEMENTED, so a NaN here is
+#                                 refused rather than treated as missing
+#     level             absent    NOT A PARAMETER OF THIS CLASS, so
+#                                 passing it is a TypeError naming it.
+#                                 cuML's confidence intervals (the
+#                                 `confidence_intervals` kernel at
+#                                 `batched_kalman.cu:824-838` and the
+#                                 `P = T P T' + RR'` propagation beside
+#                                 it) are NOT IMPLEMENTED
+#     simple_           absent    cuML's switch. This lane implements the
+#       differencing              `True` arm only and does not carry the
+#                                 other as a switch, so there is no value
+#                                 to accept
+#     start_params      absent    cuML's `set_fit_params` has no door
+#                                 here. Every fit starts from
+#                                 `estimate_x0`
+#     truncate          absent    read only by the CSS likelihood, which
+#                                 is refused
+#     h                 absent    the finite-difference step, pinned at
+#                                 2^-10 by DEVIATION 687. cuML's 1e-8 is
+#                                 BELOW float32 epsilon and collapses the
+#                                 gradient to zero, so this is not a knob
+#                                 a caller may turn
+#
+# THE DEFAULT ORDER IS (1, 0, 0) AND IT IS NEITHER REFERENCE'S. cuML's is
+# (1, 1, 1) and statsmodels' is (0, 0, 0), and the two cannot both be
+# honored. (0, 0, 0) is not even reachable here: with `trend=None` it
+# resolves to `k = 1` and fits a mean, and with `trend='n'` it is an order
+# with no parameters at all, which `validate_order` refuses with the
+# reference's message. (1, 1, 1) is a differencing model, and a default that silently
+# differences a caller's data is a default that changes what the numbers
+# mean. (1, 0, 0) is the smallest model that fits something, and the right
+# thing to do with it is to pass your own order.
+#
+# DEVIATION 993: `trend` IS THIS CLASS'S SPELLING OF cuML's
+# `fit_intercept`, AND THE DEFAULT IS statsmodels' RULE, NOT cuML's.
+# cuML has a boolean `fit_intercept` defaulting to True, whatever `d`
+# is. statsmodels has `trend`, and `trend=None` there resolves to 'c' when
+# the series is not differenced and to 'n' when it is. This class takes
+# statsmodels' spelling and statsmodels' default rule, so
+#
+#     trend=None  ->  k = 1 if d + D == 0 else 0
+#     trend='n'   ->  k = 0
+#     trend='c'   ->  k = 1
+#
+# and a caller who wants cuML's default on a differenced series writes
+# `trend='c'` explicitly. `k` is what reaches the kernels; it is
+# `ARIMAOrder::k` and it adds one `mu` per series to the parameter vector.
+#
+# DEVIATION 990: THE FITTED MODEL CROSSES BACK TO THE HOST AND IS UPLOADED
+# AGAIN AT EVERY `predict`. The binding retains no device pointer (the
+# rule `bindings/_mojolearn_estimators.mojo` states and every binding in
+# this package inherits), so `params_` is a host array and `predict` and
+# `forecast` hand it back down with the training series. The consequences,
+# both real: the training series is RETAINED by this object, because
+# `predict` needs it and there is nowhere else for it to live; and every
+# prediction re-runs the Kalman filter over the whole series rather than
+# resuming a stored state, which is what cuML does too.
+#
+# DEVIATION 991: `aic_` AND `bic_` ARE COMPUTED ON THE HOST IN FLOAT64 AND
+# ARE NOT A DEVICE ANSWER. cuML's `information_criterion`
+# (`batched_arima.cu:592-618`) is NOT IMPLEMENTED, and what it does beyond the
+# log-likelihood is one `raft::stats::information_criterion_batched` unary
+# op. This computes the same formula,
+#
+#     aic = 2 * N - 2 * llf
+#     bic = log(T) * N - 2 * llf
+#
+# with `N` the parameter count `ARIMAOrder::complexity()` and `T` the
+# number of observations AFTER differencing, `n_obs - (d + s * D)`, which
+# is the `n_samples` their caller passes. `llf_` is the device's float32
+# log-likelihood widened to float64; the two lines above are a summary of
+# the answer, not the answer, and they are no part of any identity claim.
+# AICc is not offered, because nothing in this lane needs it and an
+# untested third arm is a liability.
+#
+# THE LOG-LIKELIHOOD IS EVALUATED AGAIN AT THE FITTED POINT, once, rather
+# than recovered from the optimizer's objective. The optimizer minimizes
+# `-loglike / (n_obs - 1)`, so inverting it would cost a float32 negate
+# and a float32 divide whose rounding nobody has measured. That is
+# `arima/estimator.mojo::_loglike_at`, and it is what cuML's own
+# `information_criterion` does.
+#
+# Attributes (every array below is a `mojolearn.Array`; `numpy.asarray`
+# on it is zero-copy -- DEVIATION 2416)
+# ----------
+# params_ : Array (batch_size, N) float32
+#     The fitted model, forward transformed, packed per series in
+#     `ARIMAParams::pack`'s order: `mu` (only when `k == 1`), `beta`
+#     (n_exog), then `ar` (p), `ma` (q), `sar` (P), `sma` (Q), then
+#     `sigma2`. `N = p + q + P + Q + k + n_exog + 1`. This is exactly the
+#     array `predict` and `forecast` send back down.
+# beta_ : Array (batch_size, n_exog) float32
+#     The regression coefficients, one per regressor per series. Raises
+#     AttributeError when the fit had no `exog`, as `mu_` does without an
+#     intercept.
+# n_exog_ : int
+#     The regressor count the fit was handed, 0 without `exog`.
+# mu_, ar_, ma_, sar_, sma_, sigma2_ : ndarray float32
+#     Named blocks of `params_`. `mu_` and `sigma2_` are `(batch_size,)`;
+#     `ar_`, `ma_`, `sar_` and `sma_` are `(batch_size, p)`,
+#     `(batch_size, q)`, `(batch_size, P)` and `(batch_size, Q)`, and come
+#     back `(batch_size, 0)` where the order has no such block, which is
+#     an empty answer to a well-posed question. `mu_` is the exception and
+#     raises AttributeError when `k == 0`, because a zero-width mean is
+#     not an empty answer, it is a model that has no mean at all.
+# llf_ : ndarray (batch_size,) float64
+#     Log-likelihood at the fitted parameters, one per series.
+# aic_, bic_ : ndarray (batch_size,) float64
+#     DEVIATION 991 above.
+# n_iter_ : ndarray (batch_size,) int32
+#     L-BFGS iterations per series.
+# retcode_ : ndarray (batch_size,) int32
+#     0 is OPT_SUCCESS. A non-zero entry means that series ran to
+#     `maxiter` without meeting the convergence bound, and it is NOT
+#     raised on: a batch is fitted together and one bad series must not
+#     deny the caller the other fifty. Read it.
+# x_, x0_ : ndarray (batch_size, N) float32
+#     The unconstrained optimum, and the starting point `estimate_x0`
+#     produced, in the same packing. Neither is on cuML's Python surface.
+#     They are here because a fit that goes wrong is nearly always a fit
+#     that started wrong and `estimate_x0` is the half of this lane with
+#     no reference oracle.
+# n_obs_, batch_size_ : int
+# k_ : int
+#     0 or 1, what `trend` resolved to.
+# complexity_ : int
+#     `N`, the per-series parameter count.
+# input_copied_ : bool
+#     Whether `fit` had to copy `y` to reach float32 C order.
 class ARIMA(NumericModeMixin):
-    """Batched ARIMA, backed by a batched Kalman filter and a
-    batched L-BFGS (`arima/`, DEVIATIONS 670 to 687 and 990 to
-    993; `arima/README.md`), in statsmodels' constructor shape.
+    """Batched ARIMA and seasonal ARIMA fitted by maximum likelihood.
 
-    `y` IS 2-D, `(batch_size, n_obs)`, AND THAT DIFFERS FROM statsmodels.
-    Every series in the batch gets its own parameters and they are fitted
-    together, in one set of launches. A 1-D `y` is taken as one series; the
-    outputs are 2-D either way. The module docstring says what else follows
-    from the batch being the point.
+    Fits a separate (S)ARIMA model to every series in a batch at once, with a
+    batched Kalman filter and a batched L-BFGS optimizer. The batch is not a
+    multivariate model: each series gets its own parameters.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY, one line per parameter,
-    because a parameter that is accepted and ignored is a wrong answer
-    waiting for a caller (the house rule). The file named on a refusal is
-    THE FILE THAT RAISES IT, and where that file is a `.mojo` one the
-    exception arrives as a bare `Exception`, because a Mojo `Error` crossing
-    `def_function` is not a named Python type.
+    Differences from statsmodels and cuML that change how you call it:
 
-        order (p, d, q)   honored   `p > 8` and `q > 8` are refused by
-                                    `arima/impl/tsa/arima_common.mojo::
-                                    validate_order`, with the reference's message, as
-                                    is `d + D > 2` and an order with no
-                                    parameters at all
-        seasonal_order    honored   `(P, D, Q, s)`. A seasonal term with
-          (P, D, Q, s)              `s < 2`, and `s <= p` or `s <= q`, are
-                                    refused by `validate_order`, again with
-                                    the reference's message
-        rd > 8            refused   `validate_order`. `rd = d + s*D +
-                                    max(p + s*P, q + s*Q + 1)` selects
-                                    cuML's BLOCK-PER-SERIES Kalman kernel
-                                    (`batched_kalman.cu:335-745`), a
-                                    different fold shape and an unimplemented
-                                    one. This is a bound on the ORDER, so it
-                                    fires at fit, before any device work
-        r > 5             refused   `validate_order`. `r = max(p + s*P,
-                                    q + s*Q + 1)` selects their Schur /
-                                    Francis-QR Lyapunov solver
-                                    (`matrix.cuh:1899-1948`); the direct
-                                    Kronecker solve is the `r <= 5` arm and
-                                    is what this lane carries
-        trend             honored   for None, 'n' and 'c' ONLY, and it is
-                                    this class's spelling of cuML's
-                                    `fit_intercept` (DEVIATION 993 below).
-                                    't', 'ct' and a polynomial trend
-                                    specification are REFUSED BY NAME by
-                                    `_arima_impl.py`: cuML has no time trend
-                                    to hold one to; pass the time index as an
-                                    `exog` column instead
-        method            honored   for 'ml' ONLY. 'css' and 'css-ml' are
-                                    REFUSED BY NAME by
-                                    `arima/estimator.mojo::_refuse_method`,
-                                    not here: the conditional sum of squares
-                                    likelihood and its `truncate` parameter
-                                    (`batched_arima.cu:271-391`) have no
-                                    implementation. The string is turned into a code
-                                    and passed through UNCLAMPED so that
-                                    refusal stays reachable (DEVIATION 992)
-        maxiter           honored   the L-BFGS iteration cap, cuML's
-                                    `maxiter`, default 1000 as theirs.
-                                    Refused below 1 by `arima/estimator.mojo`
-        exog              honored   on `fit(y, exog)`, `predict(start, end,
-                                    exog)` and `forecast(steps, exog)`
-                                    (lane/arima-exog, 2026-09-15): regression
-                                    with ARIMA errors as cuML's (`beta` packed
-                                    after `mu`, the regressors differenced like
-                                    `y`, `beta` started by least squares before
-                                    the ARMA fit, `x_t beta` added to every
-                                    prediction). `(batch_size, n_obs, n_exog)`
-                                    (DEVIATION 996); at most 17 regressors
-                                    (DEVIATION 994, validate_order); a
-                                    non-finite one refused by name (DEVIATION
-                                    997). cuML's `exog` is a CONSTRUCTOR
-                                    argument; here it goes to `fit` with `y`
-        verbose           refused   `_arima_impl.py`, for anything truthy.
-                                    In the reference it selects LOG LINES; this implementation
-                                    prints none, so accepting it would be
-                                    accepting-and-ignoring
-        output_type       refused   `_arima_impl.py`. A cuML-internal
-                                    array-type selector; this package
-                                    returns `mojolearn.Array` (zero-copy
-                                    under `numpy.asarray`)
-        float64 y         CONVERTED to float32, and the conversion COPIES.
-                                    Named rather than hidden. cuML's ARIMA
-                                    is instantiated on `double` ONLY and
-                                    `arima.pyx:326` checks its input to
-                                    float64; Metal exposes no float64 on the
-                                    device, so there is no double arm here
-                                    to pick (DEVIATION 670). These are
-                                    float32 answers to a float32 problem
-        non-finite y      refused   `arima/impl/batched_arima.mojo::
-                                    _refuse_non_finite`, which names the
-                                    flat index. cuML instead has a MISSING
-                                    OBSERVATION path (`missing = isnan(yt)`
-                                    and the four branches it guards,
-                                    `batched_kalman.cu:191-246`) and that
-                                    path is NOT IMPLEMENTED, so a NaN here is
-                                    refused rather than treated as missing
-        level             absent    NOT A PARAMETER OF THIS CLASS, so
-                                    passing it is a TypeError naming it.
-                                    cuML's confidence intervals (the
-                                    `confidence_intervals` kernel at
-                                    `batched_kalman.cu:824-838` and the
-                                    `P = T P T' + RR'` propagation beside
-                                    it) are NOT IMPLEMENTED
-        simple_           absent    cuML's switch. This lane implements the
-          differencing              `True` arm only and does not carry the
-                                    other as a switch, so there is no value
-                                    to accept
-        start_params      absent    cuML's `set_fit_params` has no door
-                                    here. Every fit starts from
-                                    `estimate_x0`
-        truncate          absent    read only by the CSS likelihood, which
-                                    is refused
-        h                 absent    the finite-difference step, pinned at
-                                    2^-10 by DEVIATION 687. cuML's 1e-8 is
-                                    BELOW float32 epsilon and collapses the
-                                    gradient to zero, so this is not a knob
-                                    a caller may turn
+    - The data goes to ``fit``, not to the constructor: ``ARIMA(order=(1, 0,
+      0)).fit(y)``. ``y`` is ``(batch_size, n_obs)``, one series per row; a
+      1-D ``y`` is one series, and outputs are 2-D either way.
+    - The default order is ``(1, 0, 0)`` (cuML uses ``(1, 1, 1)``, statsmodels
+      ``(0, 0, 0)``).
+    - ``trend`` follows statsmodels: None means an intercept (``'c'``) when the
+      model is not differenced (``d + D == 0``) and none (``'n'``) otherwise.
+      ``trend='c'`` is cuML's ``fit_intercept=True``.
+    - In :meth:`predict`, ``end`` is excluded, as in cuML (statsmodels returns
+      ``end`` itself).
+    - Computation is float32; a float64 ``y`` is converted (and copied).
+    - Only maximum likelihood (``method='ml'``) is available. Missing values
+      (NaN) are not supported and are refused; prediction intervals are not
+      available.
 
-    THE DEFAULT ORDER IS (1, 0, 0) AND IT IS NEITHER REFERENCE'S. cuML's is
-    (1, 1, 1) and statsmodels' is (0, 0, 0), and the two cannot both be
-    honored. (0, 0, 0) is not even reachable here: with `trend=None` it
-    resolves to `k = 1` and fits a mean, and with `trend='n'` it is an order
-    with no parameters at all, which `validate_order` refuses with the
-    reference's message. (1, 1, 1) is a differencing model, and a default that silently
-    differences a caller's data is a default that changes what the numbers
-    mean. (1, 0, 0) is the smallest model that fits something, and the right
-    thing to do with it is to pass your own order.
-
-    DEVIATION 993: `trend` IS THIS CLASS'S SPELLING OF cuML's
-    `fit_intercept`, AND THE DEFAULT IS statsmodels' RULE, NOT cuML's.
-    cuML has a boolean `fit_intercept` defaulting to True, whatever `d`
-    is. statsmodels has `trend`, and `trend=None` there resolves to 'c' when
-    the series is not differenced and to 'n' when it is. This class takes
-    statsmodels' spelling and statsmodels' default rule, so
-
-        trend=None  ->  k = 1 if d + D == 0 else 0
-        trend='n'   ->  k = 0
-        trend='c'   ->  k = 1
-
-    and a caller who wants cuML's default on a differenced series writes
-    `trend='c'` explicitly. `k` is what reaches the kernels; it is
-    `ARIMAOrder::k` and it adds one `mu` per series to the parameter vector.
-
-    DEVIATION 990: THE FITTED MODEL CROSSES BACK TO THE HOST AND IS UPLOADED
-    AGAIN AT EVERY `predict`. The binding retains no device pointer (the
-    rule `bindings/_mojolearn_estimators.mojo` states and every binding in
-    this package inherits), so `params_` is a host array and `predict` and
-    `forecast` hand it back down with the training series. The consequences,
-    both real: the training series is RETAINED by this object, because
-    `predict` needs it and there is nowhere else for it to live; and every
-    prediction re-runs the Kalman filter over the whole series rather than
-    resuming a stored state, which is what cuML does too.
-
-    DEVIATION 991: `aic_` AND `bic_` ARE COMPUTED ON THE HOST IN FLOAT64 AND
-    ARE NOT A DEVICE ANSWER. cuML's `information_criterion`
-    (`batched_arima.cu:592-618`) is NOT IMPLEMENTED, and what it does beyond the
-    log-likelihood is one `raft::stats::information_criterion_batched` unary
-    op. This computes the same formula,
-
-        aic = 2 * N - 2 * llf
-        bic = log(T) * N - 2 * llf
-
-    with `N` the parameter count `ARIMAOrder::complexity()` and `T` the
-    number of observations AFTER differencing, `n_obs - (d + s * D)`, which
-    is the `n_samples` their caller passes. `llf_` is the device's float32
-    log-likelihood widened to float64; the two lines above are a summary of
-    the answer, not the answer, and they are no part of any identity claim.
-    AICc is not offered, because nothing in this lane needs it and an
-    untested third arm is a liability.
-
-    THE LOG-LIKELIHOOD IS EVALUATED AGAIN AT THE FITTED POINT, once, rather
-    than recovered from the optimizer's objective. The optimizer minimizes
-    `-loglike / (n_obs - 1)`, so inverting it would cost a float32 negate
-    and a float32 divide whose rounding nobody has measured. That is
-    `arima/estimator.mojo::_loglike_at`, and it is what cuML's own
-    `information_criterion` does.
-
-    Attributes (every array below is a `mojolearn.Array`; `numpy.asarray`
-    on it is zero-copy -- DEVIATION 2416)
+    Parameters
     ----------
-    params_ : Array (batch_size, N) float32
-        The fitted model, forward transformed, packed per series in
-        `ARIMAParams::pack`'s order: `mu` (only when `k == 1`), `beta`
-        (n_exog), then `ar` (p), `ma` (q), `sar` (P), `sma` (Q), then
-        `sigma2`. `N = p + q + P + Q + k + n_exog + 1`. This is exactly the
-        array `predict` and `forecast` send back down.
-    beta_ : Array (batch_size, n_exog) float32
-        The regression coefficients, one per regressor per series. Raises
-        AttributeError when the fit had no `exog`, as `mu_` does without an
-        intercept.
-    n_exog_ : int
-        The regressor count the fit was handed, 0 without `exog`.
-    mu_, ar_, ma_, sar_, sma_, sigma2_ : ndarray float32
-        Named blocks of `params_`. `mu_` and `sigma2_` are `(batch_size,)`;
-        `ar_`, `ma_`, `sar_` and `sma_` are `(batch_size, p)`,
-        `(batch_size, q)`, `(batch_size, P)` and `(batch_size, Q)`, and come
-        back `(batch_size, 0)` where the order has no such block, which is
-        an empty answer to a well-posed question. `mu_` is the exception and
-        raises AttributeError when `k == 0`, because a zero-width mean is
-        not an empty answer, it is a model that has no mean at all.
-    llf_ : ndarray (batch_size,) float64
-        Log-likelihood at the fitted parameters, one per series.
-    aic_, bic_ : ndarray (batch_size,) float64
-        DEVIATION 991 above.
-    n_iter_ : ndarray (batch_size,) int32
+    order : tuple of int (p, d, q), default (1, 0, 0)
+        Non-seasonal AR order, differencing and MA order. ``p`` and ``q`` are at
+        most 8 and ``d + D`` at most 2.
+    seasonal_order : tuple of int (P, D, Q, s), default (0, 0, 0, 0)
+        Seasonal AR order, differencing, MA order and period. A seasonal term
+        needs ``s >= 2`` with ``s > p`` and ``s > q``. The state size is
+        bounded: ``r = max(p + s P, q + s Q + 1)`` at most 5 and ``d + s D +
+        r`` at most 8; larger orders, and an order with no parameters at all,
+        are refused at fit.
+    trend : {None, "n", "c"}, default None
+        ``'c'`` fits an intercept, ``'n'`` none, None applies statsmodels' rule
+        above. ``'t'``, ``'ct'`` and polynomial trends raise
+        NotImplementedError; pass the time index as an ``exog`` column instead.
+    method : {"ml"}, default "ml"
+        Likelihood. ``'css'`` and ``'css-ml'`` are recognized but not
+        implemented and raise an error at fit; other names raise ValueError.
+    maxiter : int, default 1000
+        L-BFGS iteration cap, at least 1.
+    verbose : bool, default False
+        Must be False; True raises NotImplementedError.
+    output_type : None, default None
+        Must be None (cuML's array-type selector is not supported).
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'`` or
+        ``'fast'``); None uses the process default (see
+        :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    params_ : Array of shape (batch_size, N), float32
+        Fitted parameters per series, packed as ``mu`` (when there is an
+        intercept), ``beta`` (one per regressor), ``ar`` (p), ``ma`` (q),
+        ``sar`` (P), ``sma`` (Q), then ``sigma2``; ``N = p + q + P + Q + k +
+        n_exog + 1``. ``numpy.asarray`` on a ``mojolearn.Array`` is zero-copy.
+    mu_ : ndarray of shape (batch_size,), float32
+        Intercepts. Raises AttributeError when the model has no intercept.
+    beta_ : Array of shape (batch_size, n_exog), float32
+        Regression coefficients. Raises AttributeError when the fit had no
+        ``exog``.
+    ar_, ma_, sar_, sma_ : ndarray of shape (batch_size, p), (batch_size, q), (batch_size, P), (batch_size, Q), float32
+        Named blocks of ``params_``; zero-width when the order has no such
+        block.
+    sigma2_ : ndarray of shape (batch_size,), float32
+        Innovation variance.
+    llf_ : ndarray of shape (batch_size,), float64
+        Log-likelihood at the fitted parameters.
+    aic_, bic_ : ndarray of shape (batch_size,), float64
+        ``2 N - 2 llf`` and ``log(T) N - 2 llf``, with ``T = n_obs - (d + s D)``.
+    n_iter_ : ndarray of shape (batch_size,), int32
         L-BFGS iterations per series.
-    retcode_ : ndarray (batch_size,) int32
-        0 is OPT_SUCCESS. A non-zero entry means that series ran to
-        `maxiter` without meeting the convergence bound, and it is NOT
-        raised on: a batch is fitted together and one bad series must not
-        deny the caller the other fifty. Read it.
-    x_, x0_ : ndarray (batch_size, N) float32
-        The unconstrained optimum, and the starting point `estimate_x0`
-        produced, in the same packing. Neither is on cuML's Python surface.
-        They are here because a fit that goes wrong is nearly always a fit
-        that started wrong and `estimate_x0` is the half of this lane with
-        no reference oracle.
+    retcode_ : ndarray of shape (batch_size,), int32
+        0 when the series converged. A non-zero entry means that series reached
+        ``maxiter`` without converging; this is reported, not raised, so check
+        it.
+    x_, x0_ : ndarray of shape (batch_size, N), float32
+        The unconstrained optimum and the starting point, in the same packing.
+    n_exog_ : int
+        Number of exogenous regressors (0 without ``exog``).
     n_obs_, batch_size_ : int
+        Shape of the fitted ``y``.
     k_ : int
-        0 or 1, what `trend` resolved to.
+        1 with an intercept, 0 without.
     complexity_ : int
-        `N`, the per-series parameter count.
+        ``N``, the parameter count per series.
     input_copied_ : bool
-        Whether `fit` had to copy `y` to reach float32 C order.
+        Whether ``fit`` had to copy ``y`` to reach float32 C order.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> y = np.random.default_rng(0).standard_normal((16, 200)).cumsum(axis=1).astype(np.float32)
+    >>> model = mojolearn.ARIMA(order=(1, 1, 1)).fit(y)
+    >>> model.forecast(10).shape
+    (16, 10)
     """
 
     _BINDING = "_mojolearn_arima"
@@ -580,18 +679,36 @@ class ARIMA(NumericModeMixin):
 
     # -- fit ----------------------------------------------------------------
 
+    # `ARIMA.fit` with `method='ml'` and `start_params=None`, which is
+    # every arm this lane can reach.
+    #
+    # `y` is `(batch_size, n_obs)` float32, one series per ROW; a 1-D `y`
+    # is one series. `exog` is `(batch_size, n_obs, n_exog)`, the
+    # regressors beside every observation (see `_exog_array` for the
+    # shorter spellings); without it the model has no regression.
+    #
+    # Returns `self`. Read `retcode_` before you believe a series: a batch
+    # is fitted together and a series that ran to `maxiter` is reported,
+    # not raised on.
     def fit(self, y, exog=None):
-        """`ARIMA.fit` with `method='ml'` and `start_params=None`, which is
-        every arm this lane can reach.
+        """Fit one model per series.
 
-        `y` is `(batch_size, n_obs)` float32, one series per ROW; a 1-D `y`
-        is one series. `exog` is `(batch_size, n_obs, n_exog)`, the
-        regressors beside every observation (see `_exog_array` for the
-        shorter spellings); without it the model has no regression.
+        Parameters
+        ----------
+        y : array-like of shape (batch_size, n_obs) or (n_obs,)
+            The series, one per row; a 1-D ``y`` is one series. Must be finite
+            (NaN is refused, not treated as missing).
+        exog : array-like of shape (batch_size, n_obs, n_exog) or None, default None
+            Exogenous regressors beside every observation (regression with ARIMA
+            errors, as in cuML; at most 17 regressors, finite). Shorter forms are
+            accepted: ``(n_obs,)`` or ``(n_obs, n_exog)`` for a 1-D ``y``, and
+            ``(batch_size, n_obs)`` for one regressor.
 
-        Returns `self`. Read `retcode_` before you believe a series: a batch
-        is fitted together and a series that ran to `maxiter` is reported,
-        not raised on.
+        Returns
+        -------
+        self
+            Check ``retcode_``: a series that ran to ``maxiter`` is reported there,
+            not raised on.
         """
         y_ndim = _input_ndim(y)
         arr, batch_size, n_obs, copied = _series_major(y, "y")
@@ -796,28 +913,55 @@ class ARIMA(NumericModeMixin):
             )
         return self._exog, fut
 
+    # In-sample and out-of-sample prediction, `(batch_size, end - start)`.
+    #
+    # `exog` is the regressors' FUTURE values, `(batch_size, end - n_obs,
+    # n_exog)`, required exactly when the model has a regression and `end >
+    # n_obs`, and refused otherwise (cuML's rule and words).
+    #
+    # `end` IS EXCLUDED. That is cuML's convention, stated in the cuML
+    # docstring ("Index where to end the predictions, excluded"), and it
+    # is NOT statsmodels', where `end` is the last index RETURNED. This
+    # sentence is on the class, on this method and in the two Mojo files
+    # under it, because it is the one thing on this surface a caller can
+    # get silently wrong by one. `predict(0, n_obs)` gives every in-sample
+    # prediction; statsmodels' equivalent is `predict(0, n_obs - 1)`.
+    #
+    # `end=None` means `n_obs`, as in the reference. `end > n_obs` extends into a
+    # forecast, which is what `forecast` is a name for.
+    #
+    # PREDICTIONS BEFORE `d + s * D` ARE NaN, and that is a value rather
+    # than an omission (DEVIATION 676, the canonical quiet NaN
+    # `0x7fc00000` on every vendor). Differencing consumes those
+    # observations; cuML logs a warning and writes the same NaN.
     def predict(self, start=0, end=None, exog=None):
-        """In-sample and out-of-sample prediction, `(batch_size, end - start)`.
+        """In-sample and out-of-sample predictions.
 
-        `exog` is the regressors' FUTURE values, `(batch_size, end - n_obs,
-        n_exog)`, required exactly when the model has a regression and `end >
-        n_obs`, and refused otherwise (cuML's rule and words).
+        ``end`` is excluded, as in cuML: ``predict(0, n_obs)`` returns every
+        in-sample prediction (statsmodels' equivalent is ``predict(0, n_obs -
+        1)``). ``end > n_obs`` continues into a forecast. Predictions before index
+        ``d + s * D`` are NaN, because differencing consumes those observations.
 
-        `end` IS EXCLUDED. That is cuML's convention, stated in the cuML
-        docstring ("Index where to end the predictions, excluded"), and it
-        is NOT statsmodels', where `end` is the last index RETURNED. This
-        sentence is on the class, on this method and in the two Mojo files
-        under it, because it is the one thing on this surface a caller can
-        get silently wrong by one. `predict(0, n_obs)` gives every in-sample
-        prediction; statsmodels' equivalent is `predict(0, n_obs - 1)`.
+        Parameters
+        ----------
+        start : int, default 0
+            First index to predict.
+        end : int or None, default None
+            Index to stop before; None means ``n_obs``. Must be greater than
+            ``start``.
+        exog : array-like of shape (batch_size, end - n_obs, n_exog) or None, default None
+            Future regressor values. Required when the model has regressors and
+            ``end > n_obs``; refused otherwise.
 
-        `end=None` means `n_obs`, as in the reference. `end > n_obs` extends into a
-        forecast, which is what `forecast` is a name for.
+        Returns
+        -------
+        Array of shape (batch_size, end - start), float32
 
-        PREDICTIONS BEFORE `d + s * D` ARE NaN, and that is a value rather
-        than an omission (DEVIATION 676, the canonical quiet NaN
-        `0x7fc00000` on every vendor). Differencing consumes those
-        observations; cuML logs a warning and writes the same NaN.
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, ``start >= end``, or ``exog`` is missing,
+            unexpected or of the wrong width.
         """
         self._check_fitted("predict")
         if end is None:
@@ -855,15 +999,29 @@ class ARIMA(NumericModeMixin):
         )
         return out.reshape((self.batch_size_, width))
 
+    # `(batch_size, steps)` out-of-sample forecasts, continuing each
+    # series from its own last observation.
+    #
+    # In the reference this is literally `predict(n_obs, n_obs + steps)` and it is
+    # that here too, so nothing in the answer depends on which of the two
+    # you call. `exog` is the regressors' future values, `(batch_size,
+    # steps, n_exog)`, required when the model has a regression. There is no NaN prefix in it: the in-sample kernel does
+    # not launch at all when `start == n_obs`.
     def forecast(self, steps, exog=None):
-        """`(batch_size, steps)` out-of-sample forecasts, continuing each
-        series from its own last observation.
+        """Forecast ``steps`` past the end of every series.
 
-        In the reference this is literally `predict(n_obs, n_obs + steps)` and it is
-        that here too, so nothing in the answer depends on which of the two
-        you call. `exog` is the regressors' future values, `(batch_size,
-        steps, n_exog)`, required when the model has a regression. There is no NaN prefix in it: the in-sample kernel does
-        not launch at all when `start == n_obs`.
+        Identical to ``predict(n_obs, n_obs + steps)``.
+
+        Parameters
+        ----------
+        steps : int
+            Forecast horizon, at least 1.
+        exog : array-like of shape (batch_size, steps, n_exog) or None, default None
+            Future regressor values; required when the model has regressors.
+
+        Returns
+        -------
+        Array of shape (batch_size, steps), float32
         """
         self._check_fitted("forecast")
         steps = int(steps)
@@ -895,23 +1053,36 @@ class ARIMA(NumericModeMixin):
 
     # -- saved models (lane/inference-forecast-umap-pca, 2026-09-15) --------
 
+    # Write the fitted model to `path` as an npz: the series `y` the
+    # filter runs over (`(batch_size, n_obs)` float32), `params` in the
+    # packed fitted order, `x`, `x0`, `fx` (float32), `n_iter`, `retcode`
+    # (int32), `llf`, `aic`, `bic` (float64), `meta` `<i8` [p, d, q, P, D,
+    # Q, s, k, batch_size, n_obs, maxiter, input_copied], `trend`, `method`
+    # and `numeric_mode`, under format `mojolearn-arima-1`. A model fit with
+    # `exog` (DEVIATION 998) is `mojolearn-arima-2`: the same members, the
+    # fit's regressors as `exog` `(batch_size, n_obs, n_exog)` float32, and
+    # `n_exog` appended to `meta`.
+    #
+    # A loaded model predicts and forecasts and answers every fitted
+    # attribute (`params_`, `ar_`, `ma_`, `sar_`, `sma_`, `mu_`,
+    # `sigma2_`, `llf_`, `aic_`, `bic_`, `n_iter_`, `retcode_`); it does
+    # not refit. On a CPU-only install that is public inference through the
+    # host binding (`mojolearn.host_model(path)`, or `ARIMA.load(path)`),
+    # with no GPU and no CPU training.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: the series `y` the
-        filter runs over (`(batch_size, n_obs)` float32), `params` in the
-        packed fitted order, `x`, `x0`, `fx` (float32), `n_iter`, `retcode`
-        (int32), `llf`, `aic`, `bic` (float64), `meta` `<i8` [p, d, q, P, D,
-        Q, s, k, batch_size, n_obs, maxiter, input_copied], `trend`, `method`
-        and `numeric_mode`, under format `mojolearn-arima-1`. A model fit with
-        `exog` (DEVIATION 998) is `mojolearn-arima-2`: the same members, the
-        fit's regressors as `exog` `(batch_size, n_obs, n_exog)` float32, and
-        `n_exog` appended to `meta`.
+        """Save the fitted model to an ``.npz`` file.
 
-        A loaded model predicts and forecasts and answers every fitted
-        attribute (`params_`, `ar_`, `ma_`, `sar_`, `sma_`, `mu_`,
-        `sigma2_`, `llf_`, `aic_`, `bic_`, `n_iter_`, `retcode_`); it does
-        not refit. On a CPU-only install that is public inference through the
-        host binding (`mojolearn.host_model(path)`, or `ARIMA.load(path)`),
-        with no GPU and no CPU training."""
+        The file holds the training series (needed for prediction), the fitted
+        parameters and diagnostics, and the settings. A loaded model predicts,
+        forecasts and exposes every fitted attribute; it does not refit. On a
+        CPU-only install a saved model can be used for inference with
+        ``ARIMA.load(path)`` or ``mojolearn.host_model(path)``.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+        """
         self._check_fitted("save")
         from . import _serialize
         from .decomposition import _saved_mode
@@ -947,8 +1118,23 @@ class ARIMA(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts, forecasts and
-        answers the fitted attributes; it does not refit."""
+        """Load a model written by :meth:`save`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by :meth:`save`.
+
+        Returns
+        -------
+        ARIMA
+            A fitted model that predicts and forecasts; it does not refit.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a valid saved ARIMA model.
+        """
         from . import _serialize
         from .decomposition import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, (_ARIMA_FORMAT, _ARIMA_FORMAT_EXOG))
