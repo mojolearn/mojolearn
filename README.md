@@ -237,6 +237,9 @@ These are the canonical pages. Update them in place; don't start new ones.
 
 ## Documentation
 
+- **[docs.mojolearn.org](https://docs.mojolearn.org)**: install, user guide and API reference
+  (source in [docs-site/](docs-site/))
+- [Install picker](https://mojolearn.org/get-started) and project site: [mojolearn.org](https://mojolearn.org)
 - [Support matrix](SUPPORT_MATRIX.md)
 - [Verification](docs/VERIFY.md)
 - [Changelog](CHANGELOG.md)

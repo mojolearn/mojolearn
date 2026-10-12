@@ -137,7 +137,8 @@ verify = ["numpy>=1.26.4"]
 
 [project.urls]
 Paper = "https://github.com/mojolearn/mojolearn/blob/main/python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf"
-Homepage = "https://github.com/mojolearn/mojolearn"
+Homepage = "https://mojolearn.org"
+Documentation = "https://docs.mojolearn.org"
 Repository = "https://github.com/mojolearn/mojolearn"
 Issues = "https://github.com/mojolearn/mojolearn/issues"
 # THE CITATION, ON THE PYPI PAGE. Until 2026-08-31 a reader who arrived from
