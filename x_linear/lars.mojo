@@ -56,8 +56,9 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
 # lars taxi 60.8 -> ~10 ms NV (ideas-dense-linalg-20261011 F5). Bits change
 # (the fold order), on NVIDIA, AMD and this host column together: the host
 # below runs the device's reference cells (`centered_gram_v1_cell`,
-# `centered_cross_v1_cell`, `bm_column_mean_cell`). Apple keeps main's
-# grid (x_linear/device.mojo `XL_IDN_LARS_GRID_GRAM`).
+# `centered_cross_v1_cell`, `bm_column_mean_cell`). Apple runs the same
+# blocked fold (lane/apple-lars, 2026-10-12; x_linear/device.mojo
+# `XL_IDN_LARS_GRID_GRAM`), so its column matches NVIDIA == AMD == host.
 comptime LARS_GRID_GRAM = not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"]() and not is_defined[
     "MOJOLEARN_IDN_ALL_OFF"
 ]()
