@@ -1,50 +1,28 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`mojolearn.transformer`: the Llama-shaped decoder block, for
-cross-checking.
+"""Llama-style transformer decoder block.
 
-The public face of `_transformer_impl.py`, which carries every contract
-detail on its classes; this module exists because the block is not an
-estimator -- it has no `fit`, so it lives beside the sklearn-shaped
-names rather than among them (it IS also re-exported from `mojolearn`
-itself), exactly as `mojolearn.mamba` does for the Mamba blocks.
+`TransformerBlock` is one Llama-shaped decoder layer (input RMSNorm, causal
+self-attention with RoPE, grouped-query attention and a KV cache, residual,
+post-attention RMSNorm, SiLU-gated MLP, residual), float32 in and out. It is a
+building block, not an estimator: it has no `fit`. You pass in the weights, and
+the KV cache is an explicit, caller-owned `TransformerState`. Prefill,
+continuation from a carried cache and single-token decode all run through the
+same computation. `TransformerDecodeSession` keeps the weights and cache on the
+device across decode steps.
 
-What is here, in one paragraph. `TransformerBlock` is ONE
-reference-pinned Llama-shaped decoder layer -- input RMSNorm, eager
-self-attention with RoPE, GQA and a KV cache, residual, post-attention
-RMSNorm, SiLU-gated MLP, residual -- float32 in and out, weights handed
-in as given bits, with the recurrent state EXPLICIT and caller-owned
-(`TransformerState`: the KV cache as plain float32 buffers --
-`mojolearn.Array` as allocated, or any writable buffer-protocol object
-such as a NumPy array -- that round-trip byte for byte, plus
-`cached_tokens`). NumPy is NOT required (numpy-free-0.7, DEVIATION
-2436): every input is read through the buffer protocol and every
-output is a `mojolearn.Array`, zero-copy under `numpy.asarray`; the
-example below uses NumPy only because it is the array library a
-reader is likeliest to hold weights in. Prefill, continuation
-from a carried cache and single-token decode all run through the
-certified Mojo entry point the lane gates run (`transformer/checks/`);
-`numeric_mode=` selects the fast / deterministic / identical tier at
-call time, per instance. The identity claims are the LANE's: the
-forward card is recorded byte-identical on Apple, NVIDIA and AMD
-(clauses (a) and (d), 2026-08-28; the rest of the clause set is OWED
-cross-vendor and `transformer/README.md` says exactly what). This
-Python path itself printed green on 2026-09-02 in all three tiers,
-44 checks 0 failed each (`tests/test_transformer_surface.py`), on ONE
-APPLE M4 and no other vendor -- its NVIDIA and AMD columns are OWED.
+NumPy is not required: inputs are read through the buffer protocol and outputs
+are `mojolearn.Array` objects, which `numpy.asarray` wraps without a copy. All
+three names are also exported from `mojolearn`.
 
-    from mojolearn.transformer import TransformerBlock
-
-    blk = TransformerBlock(weights, n_heads=2)  # dict of float32 buffers
-                                                # (any buffer-protocol
-                                                # object: array.array,
-                                                # memoryview, an ndarray),
-                                                # reference parameter names
-    y = blk.forward(x)                          # (B, L, d_model) -> same
-    st = blk.allocate_state(batch_size=1, max_tokens=64)
-    y = blk.forward(x, st)                      # prefill, cache carried
-    for t in range(steps):                      # decode == prefill/token
-        y_t = blk.step(x_t, st)                 # st updated in place
+Examples
+--------
+>>> from mojolearn.transformer import TransformerBlock
+>>> blk = TransformerBlock(weights, n_heads=2)      # dict of float32 buffers
+>>> y = blk.forward(x)                              # (B, L, d_model) -> same
+>>> st = blk.allocate_state(batch_size=1, max_tokens=64)
+>>> y = blk.forward(x, st)                          # prefill, cache carried
+>>> y_t = blk.step(x_t, st)                         # one decode token
 """
 
 from ._transformer_impl import (TransformerBlock, TransformerDecodeSession,
