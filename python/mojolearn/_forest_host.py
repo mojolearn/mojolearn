@@ -91,9 +91,39 @@ _MODEL_ARRAYS = (('offsets', '<i4'), ('colid', '<i4'), ('quesval', '<f4'),
 
 
 class HostForest:
-    """A saved forest that predicts on the CPU. The model arrays are the
-    file's bytes, exact dtypes, never cast; the binding refuses a file whose
-    tree spans, child indices or column ids do not fit its own arrays."""
+    """A saved random forest or extra-trees model that predicts on the CPU.
+
+    Build one with `HostForest.from_file(path)` from a file written by
+    `RandomForestClassifier.save`, `RandomForestRegressor.save`,
+    `ExtraTreesClassifier.save` or `ExtraTreesRegressor.save`. Prediction
+    runs the inference engine the file names ('sequential' or
+    'parallel_groves') and returns what the GPU estimator returns for the
+    same file: random forest probabilities and regression values as float32,
+    extra-trees probabilities and regression values as float64. The model
+    arrays are used exactly as saved, never cast; a file whose tree arrays
+    are inconsistent raises `ValueError`.
+
+    Attributes
+    ----------
+    estimator : str
+        Name of the estimator class that saved the model.
+    classes_ : list
+        Class labels (classifiers only).
+    n_classes_ : int
+        Number of classes (classifiers only).
+    n_features_in_ : int
+        Number of features the model expects.
+    device : str or None
+        The device recorded in the file.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> y = X[:, 0] * 2.0
+    >>> mojolearn.RandomForestRegressor(n_estimators=20).fit(X, y).save("rf.npz")
+    >>> pred = mojolearn.HostForest.from_file("rf.npz").predict(X)
+    """
 
     def __init__(self, *, estimator, offsets, colid, quesval, left_child, leaves,
                  n_features, n_trees, num_outputs, classes=None, device=None,
@@ -145,11 +175,24 @@ class HostForest:
 
     @classmethod
     def from_file(cls, path):
-        """A forest from a file written by `RandomForest*.save` or
-        `ExtraTrees*.save`, predicting through the engine the archive names.
-        A `-parallel-groves-1` archive whose `numeric_mode` is not
-        `identical` is refused by name: its saved-beside predictions are
-        another arithmetic's bits and this binding computes IDENTICAL only."""
+        """Load a forest from a file written by a random forest or
+        extra-trees `save`.
+
+        The model predicts through the inference engine the file names. A
+        model saved with `inference_engine='parallel_groves'` must have been
+        saved under `numeric_mode='identical'`; otherwise this raises
+        `ValueError`, because the CPU engine computes `identical` results
+        only.
+
+        Parameters
+        ----------
+        path : str or path-like
+            The saved model file.
+
+        Returns
+        -------
+        HostForest
+        """
         accepted = tuple(_FORMATS) + tuple(f + _GROVES_SUFFIX for f in _FORMATS)
         arrays = _serialize.read_npz(path, accepted)
         fmt = _serialize.scalar_str(arrays, 'format')
@@ -178,12 +221,13 @@ class HostForest:
 
     @property
     def n_trees(self):
+        """Number of trees in the model."""
         return self._n_trees
 
     @property
     def inference_engine(self):
-        """The engine the archive named: `sequential` or `parallel_groves`.
-        Read-only: the engine is the model's, recorded in its format tag."""
+        """The inference engine the file named: 'sequential' or
+        'parallel_groves'. Read-only."""
         return self._inference_engine
 
     def _groves_handle(self):
@@ -213,8 +257,10 @@ class HostForest:
         self._binding = _load()
 
     def model_sha256(self):
-        """SHA-256 over the five model arrays' bytes in save order, for a
-        report to name the model it predicted with."""
+        """SHA-256 hex digest of the model arrays' bytes, in save order.
+
+        Identifies the exact model used for a prediction.
+        """
         h = hashlib.sha256()
         for a in (self._offsets, self._colid, self._quesval, self._left_child, self._leaves):
             h.update(a.tobytes())
@@ -251,9 +297,12 @@ class HostForest:
         return out.reshape((n_rows, self._num_outputs))
 
     def predict_proba(self, X):
-        """Classifiers only. RF gives the float32 vote fractions
-        (`RandomForestClassifier.predict_proba`), ET the same vote widened
-        exactly to float64 (`ExtraTreesClassifier.predict_proba`)."""
+        """Class probabilities, for classifier models only.
+
+        Returns the same values as the estimator's own `predict_proba`:
+        float32 for a random forest, float64 for extra trees, shape
+        (n_samples, n_classes). A regressor model raises `AttributeError`.
+        """
         if not self.is_classifier:
             raise AttributeError(f"{self.estimator} has no predict_proba")
         vote = self._vote(X)
@@ -272,9 +321,13 @@ class HostForest:
         return decode_labels(self.classes_, argmax_rows(vote)), proba
 
     def predict(self, X):
-        """Classifiers, the argmax of the vote (first max wins) mapped
-        through `classes_`. Regressors, the forest mean per row, float32 for
-        RF and float64 for ET, as the GPU classes return it."""
+        """Predict with the saved model.
+
+        For a classifier, the class with the highest probability (first
+        maximum winning) mapped through `classes_`. For a regressor, the mean
+        of the trees' predictions: float32 for a random forest, float64 for
+        extra trees.
+        """
         vote = self._vote(X)
         if self.is_classifier:
             return decode_labels(self.classes_, argmax_rows(vote))
@@ -282,17 +335,36 @@ class HostForest:
         return flat if self.family == 'rf' else flat.astype('<f8')
 
 
+# Maintainer note (moved from the docstring): HostGBDT lives in
+# `_gbdt_host.py`; the classical and knn host models in `_classical_host.py`.
 def host_model(path):
-    """The host model for a saved file, by its `format` member: a
-    `HostForest` for a forest archive, a `HostGBDT` (`_gbdt_host.py`) for a
-    `GradientBoosting.save` archive, a host subclass of LinearRegression,
-    Ridge, TruncatedSVD, LogisticRegression or PCA (`_classical_host.py`,
-    the classical host inference lane, 2026-09-13), of NearestNeighbors,
-    KNeighborsClassifier or KNeighborsRegressor (the knn host inference
-    lane, 2026-09-14), or of StandardScaler, MinMaxScaler, ElasticNet,
-    Lasso, KernelRidge, Nystroem or RBFSampler (lane/inference-linear-svm,
-    2026-09-15) for one of their archives. Any other format is refused with
-    the tag it carries."""
+    """Load a saved model for prediction on the CPU.
+
+    Chooses the CPU model from the file's format: a `HostForest` for a random
+    forest or extra-trees file, a `HostGBDT` for a `GradientBoosting.save`
+    file, or the CPU model for a saved LinearRegression, Ridge, TruncatedSVD,
+    LogisticRegression, PCA, NearestNeighbors, KNeighborsClassifier,
+    KNeighborsRegressor, StandardScaler, MinMaxScaler, ElasticNet, Lasso,
+    KernelRidge, Nystroem or RBFSampler. Any other format raises an error
+    naming the format.
+
+    Parameters
+    ----------
+    path : str or path-like
+        The saved model file.
+
+    Returns
+    -------
+    model
+        An object with `predict` (and `predict_proba` for classifiers).
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> mojolearn.RandomForestRegressor(n_estimators=20).fit(X, X[:, 0]).save("rf.npz")
+    >>> pred = mojolearn.host_model("rf.npz").predict(X)
+    """
     from ._classical_host import CLASSICAL_FORMATS
     from ._classical_host import host_model as classical_host_model
     from ._gbdt_host import GBDT_FORMAT, HostGBDT
@@ -315,10 +387,37 @@ def host_model(path):
 
 
 def host_predict(path, X):
-    """`host_model(path).predict(X)`."""
+    """Predict on the CPU with a saved model: `host_model(path).predict(X)`.
+
+    Parameters
+    ----------
+    path : str or path-like
+        The saved model file.
+    X : array-like of shape (n_samples, n_features)
+        Input data.
+
+    Returns
+    -------
+    Array or list of shape (n_samples,)
+        Predictions, as the saved model's `predict` returns them.
+    """
     return host_model(path).predict(X)
 
 
 def host_predict_proba(path, X):
-    """`host_model(path).predict_proba(X)`."""
+    """Class probabilities on the CPU from a saved classifier:
+    `host_model(path).predict_proba(X)`.
+
+    Parameters
+    ----------
+    path : str or path-like
+        The saved model file.
+    X : array-like of shape (n_samples, n_features)
+        Input data.
+
+    Returns
+    -------
+    Array of shape (n_samples, n_classes)
+        Class probabilities.
+    """
     return host_model(path).predict_proba(X)
