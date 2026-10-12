@@ -1,9 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Bounded serial cross-validation for GPU estimators and pipelines.
+"""Cross-validation, splitters and hyperparameter search for mojolearn estimators.
 
-Default folds and estimator cloning use the standard library. External
-scikit-learn pipelines and splitters remain optional interoperability surfaces.
-Fold indices are host metadata; all learning stays with the GPU estimator.
+This module follows scikit-learn's ``sklearn.model_selection``: the splitters
+(``KFold``, ``StratifiedKFold``, ``GroupKFold``, ``ShuffleSplit``, ...),
+``train_test_split``, ``cross_val_score``, ``cross_validate``,
+``cross_val_predict``, ``GridSearchCV``, ``RandomizedSearchCV``,
+``validation_curve``, ``learning_curve``, ``permutation_test_score`` and the
+scorer helpers. scikit-learn is not required; scikit-learn pipelines,
+splitters and estimators that follow its protocol also work.
+
+Behavior to know:
+
+* Fits run serially, one fold at a time. ``n_jobs`` must be ``1`` (or
+  ``None`` where scikit-learn accepts it).
+* Splitters yield ``(train, test)`` pairs of int64 row-index arrays.
+* Shuffled splits draw from mojolearn's own counter-based random generator,
+  so a given ``random_state`` gives a reproducible split, but not the same
+  rows scikit-learn would pick for that seed.
+* Fold rows are gathered on the device, and X and y stay resident there
+  across folds and candidates. All learning happens in the estimator.
 """
 import array
 import collections
@@ -363,38 +378,84 @@ def _order_digest(value, name):
                    _canonical(list(array.shape)), array.tobytes())
 
 
+# Maintainer notes (moved from the docstring):
+# LINK 3 OF THE REPRODUCIBLE PIPELINE. Everything else mojolearn promises is
+# pinned by something mojolearn holds: the kernels by the numeric mode, the
+# artifact by its file hash, the byte-LM corpus by the caller's
+# `data_schedule`. The order the rows arrive in is not, and cannot be:
+# mojolearn does not fetch, sort or reorder a caller's data. What is inside
+# the boundary is recording it; before this function a cross-validation run
+# recorded nothing, so the same code, config and rows in a different order
+# produced different scores with no artifact that showed why.
+# The trap: hashing the FOLD ASSIGNMENT looks like it pins the split and does
+# not. `_default_folds` never reads X, so a permutation that keeps the label
+# sequence keeps every fold index byte identical (measured: 2048 rows rotated
+# within their class, zero of four fold-index hashes moved, four of four
+# fold-content hashes moved), and the KFold branch keeps its indices under ANY
+# permutation because its folds are blocks of positions.
+# `fold_assignment_sha256` is a readable summary; `X_sha256` and `y_sha256`
+# carry the claim.
+# `estimator` is required (not defaulted) when cv is None or an integer:
+# `_classifier(None)` is False, which would silently describe a classifier's
+# stratified folds as plain KFold ones.
 def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
-    """What a reproduction of a `cross_val_score` run has to be handed.
+    """Describe a cross-validation split so a run can be reproduced.
 
-    LINK 3 OF THE REPRODUCIBLE PIPELINE. Everything else mojolearn promises
-    is pinned by something mojolearn holds: the kernels by the numeric mode,
-    the artifact by its file hash, the byte-LM corpus by the caller's
-    `data_schedule`. The ORDER THE ROWS ARRIVE IN is not, and it cannot be:
-    mojolearn does not fetch, sort or reorder a caller's data. It is outside
-    the boundary. What is inside the boundary is RECORDING it, and until this
-    function a cross-validation run recorded nothing at all, so two runs of
-    the same code, the same config and the same rows in a different order
-    produced different scores with no artifact that showed why.
+    The scores from ``cross_val_score`` depend on the order of the rows in
+    ``X`` and ``y``: the default folds are unshuffled, so the fold a row lands
+    in is decided by its position. mojolearn never reorders your data, so it
+    cannot tell two orderings of the same rows apart. Record this descriptor
+    beside the scores; it hashes the data in arrival order and the fold
+    assignment, so a reader can check that a rerun used the same split.
 
-    The trap this is aimed at is not the obvious one. Hashing the FOLD
-    ASSIGNMENT looks like it pins the split and does not:
-    `_default_folds` never reads X, so a permutation that keeps the label
-    sequence keeps every fold index byte identical (measured: 2048 rows
-    rotated within their class, zero of four fold-index hashes moved, four of
-    four fold-content hashes moved), and the KFold branch keeps its indices
-    under ANY permutation because its folds are blocks of positions.
-    `fold_assignment_sha256` is in the descriptor as a readable summary;
-    `X_sha256` and `y_sha256` are what carry the claim.
+    The descriptor covers the split only. It does not hash the scores, the
+    estimator or the numeric mode.
 
-    `estimator` is required whenever `cv` is None or an integer, and refused
-    by name rather than defaulted: `_classifier` of nothing is False, which
-    would silently describe a classifier's stratified folds as plain KFold
-    ones and hand the caller a descriptor of a split that never ran.
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Dense, nonempty 2-D training data, in the order passed to
+        ``cross_val_score``.
+    y : array-like of shape (n_samples,)
+        Targets, in the same order. A buffer array or a list of labels.
+    estimator : estimator, default None
+        The estimator given to ``cross_val_score``. Required when ``cv`` is
+        None or an integer, because the default folds are stratified for a
+        classifier and plain ``KFold`` otherwise; omitting it then raises
+        ``ValueError``.
+    cv : int, splitter or iterable of (train, test), default None
+        The ``cv`` given to ``cross_val_score`` (None means five folds).
+    groups : array-like of shape (n_samples,), default None
+        Group labels, when the splitter reads them.
 
-    Returns a JSON-serializable dict whose `sha256` is over the canonical
-    encoding of every other field. It describes the split only. It is not a
-    hash of the scores, the estimator, the numeric mode or the binding; those
-    are `run_metadata()`'s job on the estimators that have one.
+    Returns
+    -------
+    descriptor : dict
+        A JSON-serializable dict with keys ``schema``, ``n_rows``,
+        ``n_features``, ``X_sha256``, ``y_sha256``, ``groups_sha256``,
+        ``fold_assignment_sha256``, ``n_folds``, ``fold_sizes`` (one
+        ``[n_train, n_test]`` pair per fold) and ``sha256``, a hash over the
+        canonical encoding of every other field. ``X_sha256`` and
+        ``y_sha256`` change when the rows are reordered, even when the fold
+        indices do not.
+
+    Raises
+    ------
+    ValueError
+        If ``estimator`` is missing for an integer or default ``cv``, if X is
+        not a nonempty 2-D array, if y does not match X's rows, or if ``cv``
+        produces no folds.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.model_selection import cross_val_score, split_descriptor
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> model = mojolearn.Ridge(alpha=1.0)
+    >>> scores = cross_val_score(model, X, y)
+    >>> record = split_descriptor(X, y, estimator=model)
     """
     if (cv is None or (not is_bool(cv) and isinstance(cv, numbers.Integral))) and estimator is None:
         raise ValueError(
@@ -439,35 +500,70 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
 
 def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
                     n_jobs=1, error_score='raise'):
-    """Return one score per fold, fitting a fresh clone serially.
+    """Evaluate an estimator by cross-validation and return one score per fold.
 
-    X must be a dense 2-D buffer array and y a 1-D buffer array. Dtypes are
-    preserved; each estimator validates its own supported dtype. ``cv`` uses
-    sklearn's check_cv convention (default five unshuffled folds, stratified
-    for classification), or accepts a splitter/iterable of integer index pairs.
-    Every fold must be nonempty, unique within each side and train/test disjoint.
-    Repeated heldout rows across different folds are allowed.
+    For each fold, a fresh clone of ``estimator`` is fit on the training rows
+    and scored on the held-out rows. Folds run one after another. Every fold
+    is checked before the first fit: each side must be nonempty, have no
+    repeated rows, and not overlap the other side. A row may be held out in
+    more than one fold.
 
-    ``scoring=None`` calls the fitted estimator's score (GPU accuracy/R² for
-    MojoLearn tree adapters). A callable takes (estimator, X_test, y_test) and
-    must return a real scalar; a string is one of `get_scorer_names()`
-    (scikit-learn's scorer names over mojolearn.metrics, lane/metrics).
-    Negate a loss explicitly when higher-is-better scores are wanted. Scores
-    are packed into a Float64 host array without aggregation.
+    The default folds are unshuffled, so the scores depend on the order of
+    the rows in X and y. Record ``split_descriptor(X, y, estimator=estimator,
+    cv=cv)`` beside the scores if the run must be reproducible.
 
-    Only serial execution and propagated errors are supported. No fit metadata,
-    weights, eval_set, precomputed kernels, sparse data or automatic refit.
-    Put unfitted transforms inside the pipeline to fit them on training folds.
-    Set numeric_mode explicitly on every pipeline step and custom GPU metric.
-    This function does not certify arbitrary pipelines as IDENTICAL.
+    Parameters
+    ----------
+    estimator : estimator
+        An unfitted estimator with ``get_params``, ``fit`` and (when
+        ``scoring`` is None) ``score``. A scikit-learn pipeline works too; put
+        unfitted transforms inside it so they are fit on each training fold.
+    X : array-like of shape (n_samples, n_features)
+        Dense 2-D training data. Its dtype is kept; the estimator checks the
+        dtypes it supports. Sparse input is not supported.
+    y : array-like of shape (n_samples,)
+        1-D targets matching X's rows.
+    cv : int, splitter or iterable of (train, test), default None
+        None means five folds. An integer gives that many unshuffled folds,
+        stratified by class for a classifier with discrete labels, plain
+        contiguous folds otherwise. A splitter (any object with
+        ``split(X, y, groups)``) or an iterable of integer index pairs is
+        used as given.
+    scoring : str, callable or None, default None
+        None calls the fitted estimator's ``score``. A string is one of
+        ``get_scorer_names()``. A callable is called as
+        ``scoring(estimator, X_test, y_test)`` and must return a real
+        scalar. Loss scorers are negated (``'neg_mean_squared_error'``), so
+        higher is always better.
+    groups : array-like of shape (n_samples,), default None
+        Group labels for a splitter that reads them. Passing ``groups`` with
+        an integer or default ``cv`` raises ``ValueError``, because the
+        default folds would ignore them.
+    n_jobs : int, default 1
+        Only ``1`` is supported; other values raise ``NotImplementedError``.
+    error_score : 'raise', default 'raise'
+        Only ``'raise'`` is supported: an error in a fit or score propagates.
 
-    THE SCORES ARE A FUNCTION OF THE ROW ORDER, and the default folds carry no
-    seed that would absorb it: they are unshuffled, so the fold a row lands in
-    is decided by WHERE IT SITS in X and y. Rerunning this on the same rows in
-    a different order is a different experiment and mojolearn cannot tell the
-    two apart, because it never fetches or reorders a caller's data. Record
-    `split_descriptor(X, y, estimator=estimator, cv=cv)` beside the scores; a
-    reader with the scores alone cannot reproduce them.
+    Returns
+    -------
+    scores : Array of shape (n_splits,), float64
+        The score of each fold, in fold order, with no aggregation.
+
+    Notes
+    -----
+    Fit parameters, sample weights, ``eval_set``, precomputed kernels and
+    refitting are not supported. Set ``numeric_mode`` explicitly on every
+    pipeline step and custom metric when the results must be reproducible
+    across devices.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.model_selection import cross_val_score
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> scores = cross_val_score(mojolearn.Ridge(alpha=1.0), X, y, cv=5)
     """
     # Behavioral reference: sklearn 1.8.0 model_selection/_validation.py,
     # cross_validate (clone per fold), cross_val_score and _fit_and_score
@@ -932,9 +1028,11 @@ class _Splitter:
         return f'{type(self).__name__}({params})'
 
     def get_params(self, deep=True):
+        """Return the splitter's constructor parameters as a dict."""
         return {k: v for k, v in vars(self).items() if not k.startswith('_')}  # glue: repr and params over the splitter attributes
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays, one pair per split."""
         # every splitter builds its rows natively in its own `split` (lane
         # py-runtime-b deleted the Python `_test_folds` definitions)
         raise NotImplementedError
@@ -961,14 +1059,43 @@ class _KFoldBase(_Splitter):
         self.random_state = random_state
 
     def get_n_splits(self, X=None, y=None, groups=None):
+        """Return the number of splits, ``n_splits``."""
         return self.n_splits
 
 
 class KFold(_KFoldBase):
-    """scikit-learn 1.9 `KFold`: contiguous folds of the (optionally shuffled)
-    row order; the first n % k folds are one larger."""
+    """K-fold cross-validator.
+
+    Splits the rows into ``n_splits`` contiguous folds of the (optionally
+    shuffled) row order; each fold is the test set once. The first
+    ``n_samples % n_splits`` folds are one row larger. Follows scikit-learn's
+    ``KFold``; shuffling uses mojolearn's counter-based random generator, so
+    the shuffled folds differ from scikit-learn's for the same seed.
+
+    Parameters
+    ----------
+    n_splits : int, default 5
+        Number of folds, at least 2.
+    shuffle : bool, default False
+        Shuffle the rows before splitting into folds.
+    random_state : int or None, default None
+        Seed for the shuffle. Setting it with ``shuffle=False`` raises
+        ``ValueError``, as in scikit-learn.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import KFold
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> for train, test in KFold(n_splits=5, shuffle=True, random_state=0).split(X):
+    ...     pass
+    """
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each fold.
+
+        Raises ``ValueError`` when ``n_splits`` exceeds the number of rows.
+        """
         n = self._check_n(X)
         if self.shuffle:
             # the permutation and every fold's (train, test) rows in one
@@ -1001,11 +1128,42 @@ class KFold(_KFoldBase):
 
 
 class StratifiedKFold(_KFoldBase):
-    """scikit-learn 1.9 `StratifiedKFold`: classes encoded in order of first
-    appearance, allocated round-robin over the class-sorted labels; with
-    shuffle each class's fold assignment is permuted by the counter RNG."""
+    """Stratified k-fold cross-validator.
+
+    Each fold keeps roughly the class proportions of ``y``. Follows
+    scikit-learn's ``StratifiedKFold``: classes are taken in order of first
+    appearance and allocated round-robin over the class-sorted labels. With
+    ``shuffle=True`` each class's fold assignment is permuted by mojolearn's
+    counter-based random generator, so shuffled folds differ from
+    scikit-learn's for the same seed.
+
+    Parameters
+    ----------
+    n_splits : int, default 5
+        Number of folds, at least 2.
+    shuffle : bool, default False
+        Shuffle each class's rows before assigning folds.
+    random_state : int or None, default None
+        Seed for the shuffle. Setting it with ``shuffle=False`` raises
+        ``ValueError``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import StratifiedKFold
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.integers(0, 3, 1000).astype(np.int32)
+    >>> folds = list(StratifiedKFold(n_splits=5).split(X, y))
+    """
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each fold.
+
+        ``y`` holds the class labels. Raises ``ValueError`` when every class
+        has fewer than ``n_splits`` members, and warns when the smallest
+        class does.
+        """
         enc, k, counts, alloc = self._fold_plan(y)
         rng = _rng(self.random_state) if self.shuffle else None
         if self.n_splits <= 256:
@@ -1082,11 +1240,39 @@ class StratifiedKFold(_KFoldBase):
 
 
 class GroupKFold(_KFoldBase):
-    """scikit-learn 1.9 `GroupKFold`: unshuffled, the largest groups first,
-    each to the lightest fold (lowest fold index on a tie); shuffled, the
-    permuted groups split into n_splits nearly equal runs."""
+    """K-fold cross-validator that keeps each group in a single fold.
+
+    Follows scikit-learn's ``GroupKFold``. Unshuffled, groups are assigned
+    largest first, each to the fold with the fewest rows so far (the lowest
+    fold index on a tie). Shuffled, the groups are permuted and split into
+    ``n_splits`` runs of nearly equal group count.
+
+    Parameters
+    ----------
+    n_splits : int, default 5
+        Number of folds, at least 2 and at most the number of groups.
+    shuffle : bool, default False
+        Shuffle the groups before splitting.
+    random_state : int or None, default None
+        Seed for the shuffle (mojolearn's counter-based generator). Setting
+        it with ``shuffle=False`` raises ``ValueError``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import GroupKFold
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> groups = rng.integers(0, 20, 1000)
+    >>> folds = list(GroupKFold(n_splits=5).split(X, groups=groups))
+    """
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each fold.
+
+        ``groups`` is required. Raises ``ValueError`` when ``n_splits``
+        exceeds the number of distinct groups.
+        """
         n = _n_samples(X)
         gc = _GroupCodes.get(groups, n, 'groups')
         m = gc.m
@@ -1115,12 +1301,40 @@ class GroupKFold(_KFoldBase):
 
 
 class StratifiedGroupKFold(_KFoldBase):
-    """scikit-learn 1.9 `StratifiedGroupKFold`: groups (sorted by the standard
-    deviation of their class distribution, descending, unless shuffled by the
-    counter RNG) each go to the fold whose class distribution they perturb
-    least."""
+    """Stratified k-fold cross-validator that keeps each group in a single fold.
+
+    Follows scikit-learn's ``StratifiedGroupKFold``: groups are taken in
+    descending order of the standard deviation of their class distribution
+    (or in a shuffled order), and each goes to the fold whose class
+    distribution it changes least.
+
+    Parameters
+    ----------
+    n_splits : int, default 5
+        Number of folds, at least 2.
+    shuffle : bool, default False
+        Shuffle the group order instead of sorting it.
+    random_state : int or None, default None
+        Seed for the shuffle (mojolearn's counter-based generator). Setting
+        it with ``shuffle=False`` raises ``ValueError``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import StratifiedGroupKFold
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> groups = rng.integers(0, 50, 1000)
+    >>> folds = list(StratifiedGroupKFold(n_splits=5).split(X, y, groups))
+    """
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each fold.
+
+        ``y`` and ``groups`` are required. Raises ``ValueError`` when
+        ``n_splits`` is greater than the number of members of a class.
+        """
         n = _n_samples(X)
         gc = _GroupCodes.get(groups, n, 'groups')
         # the class codes in first-seen order (natively; the dict encoder for
@@ -1156,7 +1370,31 @@ class StratifiedGroupKFold(_KFoldBase):
 
 
 class TimeSeriesSplit(_Splitter):
-    """scikit-learn 1.9 `TimeSeriesSplit` (no randomness)."""
+    """Time-series cross-validator with expanding training windows.
+
+    Follows scikit-learn's ``TimeSeriesSplit``. Split ``i`` tests on a block
+    of consecutive rows and trains on the rows before it, so a model never
+    trains on rows that come after its test block. There is no randomness.
+
+    Parameters
+    ----------
+    n_splits : int, default 5
+        Number of splits, at least 2.
+    max_train_size : int or None, default None
+        Largest training window; older rows are dropped beyond it.
+    test_size : int or None, default None
+        Rows per test block. None means ``n_samples // (n_splits + 1)``.
+    gap : int, default 0
+        Rows left out between the end of each training window and its test
+        block.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import TimeSeriesSplit
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> folds = list(TimeSeriesSplit(n_splits=5, gap=10).split(X))
+    """
 
     def __init__(self, n_splits=5, *, max_train_size=None, test_size=None, gap=0):
         self.n_splits = _check_splits(n_splits)
@@ -1165,9 +1403,15 @@ class TimeSeriesSplit(_Splitter):
         self.gap = gap
 
     def get_n_splits(self, X=None, y=None, groups=None):
+        """Return the number of splits, ``n_splits``."""
         return self.n_splits
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each split.
+
+        Raises ``ValueError`` when there are too few rows for ``n_splits``,
+        ``test_size`` and ``gap``.
+        """
         n = _n_samples(X)
         folds = self.n_splits + 1
         test_size = self.test_size if self.test_size is not None else n // folds
@@ -1183,14 +1427,30 @@ class TimeSeriesSplit(_Splitter):
 
 
 class LeaveOneOut(_Splitter):
-    """scikit-learn 1.9 `LeaveOneOut`."""
+    """Leave-one-out cross-validator.
+
+    Each row is the test set once, with every other row as the training set.
+    Follows scikit-learn's ``LeaveOneOut``. It takes no parameters.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import LeaveOneOut
+    >>> X = np.random.default_rng(0).random((20, 4), dtype=np.float32)
+    >>> folds = list(LeaveOneOut().split(X))
+    """
 
     def get_n_splits(self, X=None, y=None, groups=None):
+        """Return the number of rows of ``X`` (``X`` is required)."""
         if X is None:
             raise ValueError("The 'X' parameter should not be None.")
         return _n_samples(X)
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays, one per row.
+
+        Raises ``ValueError`` when ``X`` has fewer than two rows.
+        """
         n_splits = _n_samples(X)
         if n_splits <= 1:
             raise ValueError(f'Cannot perform LeaveOneOut with n_samples={n_splits}.')
@@ -1203,15 +1463,38 @@ class LeaveOneOut(_Splitter):
 
 
 class LeavePOut(_Splitter):
-    """scikit-learn 1.9 `LeavePOut` (combinations in lexicographic order)."""
+    """Leave-P-out cross-validator.
+
+    Every combination of ``p`` rows is the test set once, in lexicographic
+    order, with the remaining rows as the training set. Follows
+    scikit-learn's ``LeavePOut``. The number of splits grows as
+    ``n_samples choose p``.
+
+    Parameters
+    ----------
+    p : int
+        Size of each test set; must be less than the number of rows.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import LeavePOut
+    >>> X = np.random.default_rng(0).random((10, 4), dtype=np.float32)
+    >>> folds = list(LeavePOut(2).split(X))
+    """
 
     def __init__(self, p):
         self.p = p
 
     def get_n_splits(self, X=None, y=None, groups=None):
+        """Return ``n_samples choose p``."""
         return _comb(_n_samples(X), self.p)
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each combination.
+
+        Raises ``ValueError`` when ``p`` is not less than the number of rows.
+        """
         n = _n_samples(X)
         if n <= self.p:
             raise ValueError(f'p={self.p} must be strictly less than the number of samples={n}')
@@ -1232,12 +1515,32 @@ class LeavePOut(_Splitter):
 
 
 class LeaveOneGroupOut(_Splitter):
-    """scikit-learn 1.9 `LeaveOneGroupOut` (groups in sorted order)."""
+    """Leave-one-group-out cross-validator.
+
+    Each distinct group is the test set once, in sorted group order, with
+    the rows of every other group as the training set. Follows
+    scikit-learn's ``LeaveOneGroupOut``. It takes no parameters.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import LeaveOneGroupOut
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> groups = rng.integers(0, 5, 1000)
+    >>> folds = list(LeaveOneGroupOut().split(X, groups=groups))
+    """
 
     def get_n_splits(self, X=None, y=None, groups=None):
+        """Return the number of distinct values in ``groups``."""
         return len(set(_labels_list(groups, 'groups')))
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays, one per group.
+
+        Raises ``ValueError`` when ``groups`` has fewer than two distinct
+        values.
+        """
         n = _n_samples(X)
         gc = _GroupCodes.get(groups, n, 'groups')
         if gc.m <= 1:
@@ -1249,15 +1552,41 @@ class LeaveOneGroupOut(_Splitter):
 
 
 class LeavePGroupsOut(_Splitter):
-    """scikit-learn 1.9 `LeavePGroupsOut`."""
+    """Leave-P-groups-out cross-validator.
+
+    Every combination of ``n_groups`` distinct groups is the test set once,
+    with the rows of the other groups as the training set. Follows
+    scikit-learn's ``LeavePGroupsOut``.
+
+    Parameters
+    ----------
+    n_groups : int
+        Number of groups in each test set; must be less than the number of
+        distinct groups.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import LeavePGroupsOut
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> groups = rng.integers(0, 5, 1000)
+    >>> folds = list(LeavePGroupsOut(n_groups=2).split(X, groups=groups))
+    """
 
     def __init__(self, n_groups):
         self.n_groups = n_groups
 
     def get_n_splits(self, X=None, y=None, groups=None):
+        """Return ``n_distinct_groups choose n_groups``."""
         return _comb(len(set(_labels_list(groups, 'groups'))), self.n_groups)
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each combination.
+
+        Raises ``ValueError`` when ``n_groups`` is not less than the number
+        of distinct groups.
+        """
         n = _n_samples(X)
         gc = _GroupCodes.get(groups, n, 'groups')
         if self.n_groups >= gc.m:
@@ -1281,12 +1610,20 @@ class _Repeated:
         self.cvargs = params
 
     def get_params(self, deep=True):
+        """Return ``n_repeats``, ``random_state`` and ``n_splits`` as a dict."""
         return dict(n_repeats=self.n_repeats, random_state=self.random_state, **self.cvargs)
 
     def get_n_splits(self, X=None, y=None, groups=None):
+        """Return ``n_splits * n_repeats``."""
         return self.cv(**self.cvargs).get_n_splits(X, y, groups) * self.n_repeats
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays, repeat by repeat.
+
+        Each repeat is a shuffled run of the underlying splitter with its own
+        seed derived from ``random_state``, so the whole sequence is fixed by
+        ``random_state``.
+        """
         # Repeat r draws its own seed from the base seed, so every repeat is
         # a different shuffle and the whole sequence is fixed by random_state.
         base = _rng(self.random_state)
@@ -1300,14 +1637,59 @@ def _mix_seed(seed, r):
 
 
 class RepeatedKFold(_Repeated):
-    """scikit-learn 1.9 `RepeatedKFold`: n_repeats shuffled KFolds."""
+    """Repeated k-fold cross-validator.
+
+    Runs a shuffled ``KFold`` ``n_repeats`` times, each repeat with a
+    different shuffle. Follows scikit-learn's ``RepeatedKFold``; the
+    shuffles come from mojolearn's counter-based random generator.
+
+    Parameters
+    ----------
+    n_splits : int, default 5
+        Number of folds per repeat, at least 2.
+    n_repeats : int, default 10
+        Number of repeats, at least 1.
+    random_state : int or None, default None
+        Seed that fixes every repeat's shuffle.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import RepeatedKFold
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> folds = list(RepeatedKFold(n_splits=5, n_repeats=3, random_state=0).split(X))
+    """
 
     def __init__(self, *, n_splits=5, n_repeats=10, random_state=None):
         super().__init__(KFold, n_repeats=n_repeats, random_state=random_state, n_splits=n_splits)
 
 
 class RepeatedStratifiedKFold(_Repeated):
-    """scikit-learn 1.9 `RepeatedStratifiedKFold`."""
+    """Repeated stratified k-fold cross-validator.
+
+    Runs a shuffled ``StratifiedKFold`` ``n_repeats`` times, each repeat with
+    a different shuffle. Follows scikit-learn's ``RepeatedStratifiedKFold``;
+    the shuffles come from mojolearn's counter-based random generator.
+
+    Parameters
+    ----------
+    n_splits : int, default 5
+        Number of folds per repeat, at least 2.
+    n_repeats : int, default 10
+        Number of repeats, at least 1.
+    random_state : int or None, default None
+        Seed that fixes every repeat's shuffle.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import RepeatedStratifiedKFold
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=0)
+    >>> folds = list(cv.split(X, y))
+    """
 
     def __init__(self, *, n_splits=5, n_repeats=10, random_state=None):
         super().__init__(StratifiedKFold, n_repeats=n_repeats, random_state=random_state, n_splits=n_splits)
@@ -1358,8 +1740,36 @@ def _validate_shuffle_split(n, test_size, train_size, default_test_size=None):
 
 
 class ShuffleSplit(_Splitter):
-    """scikit-learn 1.9 `ShuffleSplit`: each split a fresh counter-RNG
-    permutation; the first n_test rows test, the next n_train train."""
+    """Random permutation cross-validator.
+
+    Each split draws a fresh random permutation of the rows; its first
+    ``n_test`` rows are the test set and the next ``n_train`` rows the
+    training set. Splits may overlap. Follows scikit-learn's
+    ``ShuffleSplit``; the permutations come from mojolearn's counter-based
+    random generator, so the rows differ from scikit-learn's for the same
+    seed.
+
+    Parameters
+    ----------
+    n_splits : int, default 10
+        Number of splits.
+    test_size : float, int or None, default None
+        A float in (0, 1) is a fraction of the rows (rounded up), an int an
+        absolute count. None means the complement of ``train_size``, or 0.1
+        when both are None.
+    train_size : float, int or None, default None
+        A float in (0, 1) is a fraction of the rows (rounded down), an int an
+        absolute count. None means the complement of ``test_size``.
+    random_state : int or None, default None
+        Seed for the permutations.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import ShuffleSplit
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> folds = list(ShuffleSplit(n_splits=5, test_size=0.2, random_state=0).split(X))
+    """
     _default_test_size = 0.1
 
     def __init__(self, n_splits=10, *, test_size=None, train_size=None, random_state=None):
@@ -1369,12 +1779,18 @@ class ShuffleSplit(_Splitter):
         self.random_state = random_state
 
     def get_n_splits(self, X=None, y=None, groups=None):
+        """Return the number of splits, ``n_splits``."""
         return self.n_splits
 
     def _sizes(self, n):
         return _validate_shuffle_split(n, self.test_size, self.train_size, self._default_test_size)
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each split.
+
+        Raises ``ValueError`` for sizes out of range or summing to more than
+        the number of rows.
+        """
         n = _n_samples(X)
         n_train, n_test = self._sizes(n)
         rng = _rng(self.random_state)
@@ -1385,11 +1801,43 @@ class ShuffleSplit(_Splitter):
 
 
 class GroupShuffleSplit(ShuffleSplit):
-    """scikit-learn 1.9 `GroupShuffleSplit`: ShuffleSplit over the sorted
-    unique groups, rows following their group."""
+    """Shuffle-split cross-validator over groups.
+
+    Works like ``ShuffleSplit`` on the sorted distinct groups, and every row
+    follows its group, so a group is never split between train and test.
+    ``test_size`` and ``train_size`` count groups, not rows. Follows
+    scikit-learn's ``GroupShuffleSplit``.
+
+    Parameters
+    ----------
+    n_splits : int, default 10
+        Number of splits.
+    test_size : float, int or None, default None
+        Fraction or number of groups in the test set. None means the
+        complement of ``train_size``, or 0.2 when both are None.
+    train_size : float, int or None, default None
+        Fraction or number of groups in the training set. None means the
+        complement of ``test_size``.
+    random_state : int or None, default None
+        Seed for the permutations (mojolearn's counter-based generator).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import GroupShuffleSplit
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> groups = rng.integers(0, 50, 1000)
+    >>> cv = GroupShuffleSplit(n_splits=5, test_size=0.2, random_state=0)
+    >>> folds = list(cv.split(X, groups=groups))
+    """
     _default_test_size = 0.2
 
     def split(self, X, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each split.
+
+        ``groups`` is required.
+        """
         gc = _GroupCodes.get(groups, _n_samples(X), 'groups')
         # each group's side (0 train, 1 test, 2 neither) as a table
         # gathered per row, the same draws (lane/py-misc-msel)
@@ -1411,13 +1859,49 @@ class GroupShuffleSplit(ShuffleSplit):
 
 
 class StratifiedShuffleSplit(ShuffleSplit):
-    """scikit-learn 1.9 `StratifiedShuffleSplit`: per class, a counter-RNG
-    permutation of its rows (in row order) gives n_i train and t_i test
-    rows, n_i and t_i from the exact-integer approximate mode
-    (`CounterRng.approximate_modes`, x_metrics/split.mojo); train and
-    test are then permuted."""
+    """Stratified random-permutation cross-validator.
 
+    Each split keeps roughly the class proportions of ``y`` in both the
+    training and the test set. Follows scikit-learn's
+    ``StratifiedShuffleSplit``: each class's rows are permuted and the
+    per-class train and test counts are scikit-learn's approximate mode of
+    the class proportions; the training and test rows are then shuffled. The
+    permutations come from mojolearn's counter-based random generator.
+
+    Parameters
+    ----------
+    n_splits : int, default 10
+        Number of splits.
+    test_size : float, int or None, default None
+        Fraction or number of rows in the test set. None means the
+        complement of ``train_size``, or 0.1 when both are None.
+    train_size : float, int or None, default None
+        Fraction or number of rows in the training set. None means the
+        complement of ``test_size``.
+    random_state : int or None, default None
+        Seed for the permutations.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import StratifiedShuffleSplit
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.integers(0, 3, 1000)
+    >>> cv = StratifiedShuffleSplit(n_splits=5, test_size=0.2, random_state=0)
+    >>> folds = list(cv.split(X, y))
+    """
+
+    # Maintainer note (moved from the class docstring): n_i and t_i come
+    # from the exact-integer approximate mode (`CounterRng.approximate_modes`,
+    # x_metrics/split.mojo).
     def split(self, X, y, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each split.
+
+        ``y`` is required. Raises ``ValueError`` when a class has a single
+        member, or when the training or test set is smaller than the number
+        of classes.
+        """
         # lane py-runtime-b: the core-helper route is the only one (the
         # Python row route is deleted)
         yield from self._native_split(y)
@@ -1471,8 +1955,25 @@ class StratifiedShuffleSplit(ShuffleSplit):
 
 
 class PredefinedSplit(_Splitter):
-    """scikit-learn 1.9 `PredefinedSplit`: test_fold[i] is row i's fold, -1
-    never tested; folds in sorted order."""
+    """Cross-validator with user-defined folds.
+
+    ``test_fold[i]`` is the fold in which row ``i`` is tested; a value of -1
+    keeps that row in every training set and never tests it. Folds are
+    yielded in sorted order of their values. Follows scikit-learn's
+    ``PredefinedSplit``.
+
+    Parameters
+    ----------
+    test_fold : array-like of int, shape (n_samples,)
+        The fold of each row, or -1.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import PredefinedSplit
+    >>> cv = PredefinedSplit(np.array([0, 1, -1, 1, 0]))
+    >>> folds = list(cv.split())
+    """
 
     def __init__(self, test_fold):
         # lane py-runtime-b: the fold labels widened once to int64 (a C
@@ -1486,11 +1987,13 @@ class PredefinedSplit(_Splitter):
         return _GroupCodes.get(self._folds, self._folds.size, 'test_fold')
 
     def get_n_splits(self, X=None, y=None, groups=None):
+        """Return the number of distinct fold values other than -1."""
         from ._labels import encode_labels
         classes = encode_labels(self._folds)[0]
         return len(classes) - (1 if -1 in classes else 0)  # glue: membership test over the fold values
 
     def split(self, X=None, y=None, groups=None):
+        """Yield ``(train, test)`` int64 row-index arrays for each fold."""
         gc = self._codes()
         # the sorted fold values natively, each fold's rows by its code
         # (lane/py-misc-msel)
@@ -1564,8 +2067,46 @@ def _native_discrete(y):
 
 
 def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None):
-    """scikit-learn 1.9 `check_cv`: an int becomes StratifiedKFold for a
-    classifier with binary / multiclass y, KFold otherwise."""
+    """Turn a ``cv`` argument into a splitter.
+
+    Follows scikit-learn's ``check_cv``. An integer (or None, meaning 5)
+    becomes ``StratifiedKFold`` when ``classifier`` is true and ``y`` holds
+    discrete labels (strings, or integer-valued finite numbers), and
+    ``KFold`` otherwise. An object with a ``split`` method is returned as is,
+    and an iterable of ``(train, test)`` index pairs is wrapped in a
+    splitter that yields those pairs.
+
+    Parameters
+    ----------
+    cv : int, splitter, iterable or None, default 5
+        The cross-validation strategy.
+    y : array-like of shape (n_samples,), default None
+        Targets, read only to decide whether to stratify.
+    classifier : bool, default False
+        Whether the estimator is a classifier.
+    shuffle : bool, default False
+        Passed to the ``KFold`` or ``StratifiedKFold`` built from an integer.
+    random_state : int or None, default None
+        Seed for that splitter, used only when ``shuffle`` is true.
+
+    Returns
+    -------
+    splitter
+        An object with ``split(X, y, groups)`` and ``get_n_splits``.
+
+    Raises
+    ------
+    ValueError
+        If ``cv`` is a string or another value that is not an integer,
+        splitter or iterable.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import check_cv
+    >>> y = np.random.default_rng(0).integers(0, 2, 1000)
+    >>> cv = check_cv(5, y, classifier=True)
+    """
     cv = 5 if cv is None else cv
     if isinstance(cv, numbers.Integral) and not is_bool(cv):
         stratify = False
@@ -1590,10 +2131,56 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
 
 def train_test_split(*arrays, test_size=None, train_size=None, random_state=None, shuffle=True,
                      stratify=None):
-    """scikit-learn 1.9 `train_test_split`: ShuffleSplit (or
-    StratifiedShuffleSplit when `stratify` is given) with the counter RNG,
-    or the leading/trailing rows when shuffle=False. Returns the pieces in
-    scikit-learn's order: X_train, X_test, y_train, y_test, ..."""
+    """Split arrays into random train and test subsets.
+
+    Follows scikit-learn's ``train_test_split``. With ``shuffle=True`` the
+    rows are chosen by one ``ShuffleSplit`` draw (or ``StratifiedShuffleSplit``
+    when ``stratify`` is given) from mojolearn's counter-based random
+    generator, so the rows differ from scikit-learn's for the same seed.
+    With ``shuffle=False`` the leading rows are the training set and the
+    rows after them the test set.
+
+    Parameters
+    ----------
+    *arrays : sequence of array-likes
+        Arrays or lists with the same number of rows. Buffer arrays are
+        returned as mojolearn ``Array`` objects, lists as lists.
+    test_size : float, int or None, default None
+        Fraction (rounded up) or number of rows in the test set. None means
+        the complement of ``train_size``, or 0.25 when both are None.
+    train_size : float, int or None, default None
+        Fraction (rounded down) or number of rows in the training set. None
+        means the complement of ``test_size``.
+    random_state : int or None, default None
+        Seed for the shuffle.
+    shuffle : bool, default True
+        Whether to shuffle before splitting.
+    stratify : array-like or None, default None
+        Class labels to stratify by. Requires ``shuffle=True``; with
+        ``shuffle=False`` it raises ``ValueError``.
+
+    Returns
+    -------
+    splitting : list
+        Two pieces per input, in scikit-learn's order:
+        ``X_train, X_test, y_train, y_test, ...``.
+
+    Raises
+    ------
+    ValueError
+        If no array is given, the arrays have different numbers of rows, or
+        the sizes are out of range.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import train_test_split
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> X_train, X_test, y_train, y_test = train_test_split(
+    ...     X, y, test_size=0.2, random_state=0)
+    """
     if not arrays:
         raise ValueError('At least one array required as input')
     n = _n_samples(arrays[0])
@@ -1798,8 +2385,35 @@ def _proba_column1(pred):
 
 
 def make_scorer(score_func, *, response_method='predict', greater_is_better=True, **kwargs):
-    """scikit-learn 1.9 `make_scorer` (response_method a name or a tuple of
-    names tried in order; the sign flips when greater_is_better=False)."""
+    """Make a scorer from a metric function.
+
+    Follows scikit-learn's ``make_scorer``. The scorer is called as
+    ``scorer(estimator, X, y)``: it gets predictions from the estimator's
+    response method and returns ``score_func(y, predictions, **kwargs)`` as a
+    float, negated when ``greater_is_better=False``.
+
+    Parameters
+    ----------
+    score_func : callable
+        Metric with signature ``score_func(y_true, y_pred, **kwargs)``.
+    response_method : str or tuple of str, default 'predict'
+        Estimator method that produces the predictions. A tuple is tried in
+        order and the first method the estimator has is used.
+    greater_is_better : bool, default True
+        False for a loss; the scorer then returns the negated value.
+    **kwargs
+        Extra keyword arguments passed to ``score_func``.
+
+    Returns
+    -------
+    scorer : callable
+
+    Examples
+    --------
+    >>> from mojolearn import metrics
+    >>> from mojolearn.model_selection import make_scorer
+    >>> scorer = make_scorer(metrics.mean_absolute_error, greater_is_better=False)
+    """
     return _Scorer(score_func, 1 if greater_is_better else -1, kwargs, response_method, None)
 
 
@@ -1849,13 +2463,46 @@ def _scorer_table():
 
 
 def get_scorer_names():
-    """The scorer names `get_scorer` accepts (scikit-learn's, less the
-    multilabel 'samples' averages, which are NOT IMPLEMENTED)."""
+    """Return the sorted list of scorer names that ``get_scorer`` accepts.
+
+    The names are scikit-learn's, computed with ``mojolearn.metrics``. The
+    multilabel ``'samples'`` averages (for example ``'f1_samples'``) are not
+    available.
+
+    Examples
+    --------
+    >>> from mojolearn.model_selection import get_scorer_names
+    >>> 'neg_mean_squared_error' in get_scorer_names()
+    True
+    """
     return sorted(_scorer_table())  # glue: scorer table over the scorer names
 
 
 def get_scorer(scoring):
-    """scikit-learn 1.9 `get_scorer`: a name, a callable, or None."""
+    """Return the scorer for a scoring argument.
+
+    Follows scikit-learn's ``get_scorer``.
+
+    Parameters
+    ----------
+    scoring : str, callable or None
+        A name from ``get_scorer_names()``, a callable (returned as is), or
+        None (returned as is, meaning the estimator's own ``score``).
+
+    Returns
+    -------
+    scorer : callable or None
+
+    Raises
+    ------
+    ValueError
+        If ``scoring`` is an unknown name or not a str, callable or None.
+
+    Examples
+    --------
+    >>> from mojolearn.model_selection import get_scorer
+    >>> scorer = get_scorer('r2')
+    """
     if scoring is None or callable(scoring):
         return scoring
     if isinstance(scoring, str):
@@ -1920,10 +2567,60 @@ def _require_serial(n_jobs, error_score, caller):
 def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, n_jobs=None,
                    return_train_score=False, return_estimator=False, return_indices=False,
                    error_score=float('nan')):
-    """scikit-learn 1.9 `cross_validate`, serial: a fresh clone per fold,
-    fit on the training rows, scored on the held-out rows. `scoring` is
-    None (the estimator's score), a scorer name, a callable, or a list /
-    dict of them (keys `test_<name>`). Times are recorded as wall seconds."""
+    """Evaluate one or more scores by cross-validation, with fit and score times.
+
+    Follows scikit-learn's ``cross_validate``. For each fold, a fresh clone
+    of ``estimator`` is fit on the training rows and scored on the held-out
+    rows. Folds run one after another.
+
+    Parameters
+    ----------
+    estimator : estimator
+        An unfitted estimator with ``get_params`` and ``fit``.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,), default None
+        Targets; None for unsupervised estimators.
+    groups : array-like of shape (n_samples,), default None
+        Group labels for a splitter that reads them.
+    scoring : str, callable, list, tuple, set, dict or None, default None
+        None uses the estimator's ``score``. A name or callable gives one
+        score, stored as ``test_score``. A list, tuple or set of names, or a
+        dict of name to scorer, gives several, stored as ``test_<name>``.
+    cv : int, splitter, iterable or None, default None
+        As in ``check_cv``: None means five folds, stratified for a
+        classifier.
+    n_jobs : int or None, default None
+        Only None or 1 is supported; other values raise
+        ``NotImplementedError``.
+    return_train_score : bool, default False
+        Also score each fold's training rows (``train_<name>``).
+    return_estimator : bool, default False
+        Also return the fitted estimator of each fold.
+    return_indices : bool, default False
+        Also return each fold's train and test indices.
+    error_score : 'raise' or float, default nan
+        ``'raise'`` propagates a fit error; a number is recorded as the
+        fold's score instead.
+
+    Returns
+    -------
+    results : dict
+        ``fit_time``, ``score_time`` (wall-clock seconds) and the score
+        arrays, each a float64 ``Array`` of shape (n_splits,); plus
+        ``estimator`` (a list) and ``indices`` (``{'train': [...], 'test':
+        [...]}``) when requested.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.model_selection import cross_validate
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> res = cross_validate(mojolearn.Ridge(alpha=1.0), X, y, cv=5,
+    ...                      scoring=['r2', 'neg_mean_squared_error'])
+    """
     _require_serial(n_jobs, error_score, 'cross_validate')
     X, y, folds = _cv_folds(estimator, X, y, cv, groups)
     return _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score, return_estimator,
@@ -1993,8 +2690,49 @@ def _cross_validate_loop(estimator, y, folds, rows, names, multi, single, out, e
 
 
 def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None, method='predict'):
-    """scikit-learn 1.9 `cross_val_predict`: each row's prediction from the
-    fold that held it out. Every row must be held out exactly once."""
+    """Return each row's prediction from the fold that held it out.
+
+    Follows scikit-learn's ``cross_val_predict``. For each fold, a fresh
+    clone of ``estimator`` is fit on the training rows and its ``method`` is
+    called on the held-out rows; the predictions are put back in row order.
+    The folds must hold out every row exactly once, otherwise ``ValueError``
+    is raised.
+
+    Parameters
+    ----------
+    estimator : estimator
+        An unfitted estimator with ``get_params``, ``fit`` and ``method``.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,), default None
+        Targets.
+    groups : array-like of shape (n_samples,), default None
+        Group labels for a splitter that reads them.
+    cv : int, splitter, iterable or None, default None
+        As in ``check_cv``: None means five folds, stratified for a
+        classifier.
+    n_jobs : int or None, default None
+        Only None or 1 is supported.
+    method : str, default 'predict'
+        Estimator method to call, for example ``'predict_proba'``.
+
+    Returns
+    -------
+    predictions : Array or list
+        Shape (n_samples,) or (n_samples, ...) for numeric predictions:
+        int64 when every fold returns 1-D integer predictions, float64
+        otherwise. Predictions that are not numbers (string labels) come
+        back as a list.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.model_selection import cross_val_predict
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> pred = cross_val_predict(mojolearn.Ridge(alpha=1.0), X, y, cv=5)
+    """
     _require_serial(n_jobs, 'raise', 'cross_val_predict')
     X, y, folds = _cv_folds(estimator, X, y, cv, groups)
     n = len(X)
@@ -2101,8 +2839,25 @@ def _expansion_metrics_binding():
 
 
 class ParameterGrid:
-    """scikit-learn 1.9 `ParameterGrid`: the product of each dict's values,
-    keys in sorted order, dicts in list order."""
+    """Grid of parameter combinations, iterated as dicts.
+
+    Follows scikit-learn's ``ParameterGrid``: every combination of each
+    dict's values, with keys in sorted order, and the dicts in list order.
+    Supports ``len()`` and indexing.
+
+    Parameters
+    ----------
+    param_grid : dict or list of dicts
+        Maps each parameter name to a nonempty list of values. Raises
+        ``TypeError`` for a value that is not a list-like, and
+        ``ValueError`` for an empty one.
+
+    Examples
+    --------
+    >>> from mojolearn.model_selection import ParameterGrid
+    >>> list(ParameterGrid({'alpha': [0.1, 1.0], 'fit_intercept': [True, False]}))[0]
+    {'alpha': 0.1, 'fit_intercept': True}
+    """
 
     def __init__(self, param_grid):
         if isinstance(param_grid, dict):
@@ -2143,10 +2898,33 @@ class ParameterGrid:
 
 
 class ParameterSampler:
-    """scikit-learn 1.9 `ParameterSampler` over LISTS (each value drawn
-    uniformly by the counter RNG: a permutation of the grid when every
-    distribution is a list, as scikit-learn samples without replacement).
-    scipy.stats distributions are NOT IMPLEMENTED (their draws are numpy's)."""
+    """Random sample of parameter combinations, iterated as dicts.
+
+    Follows scikit-learn's ``ParameterSampler`` for lists of values: the
+    combinations are sampled without replacement, as a random permutation of
+    the full grid drawn by mojolearn's counter-based random generator. When
+    the grid has fewer than ``n_iter`` combinations, a warning is issued and
+    every combination is returned.
+
+    Parameters
+    ----------
+    param_distributions : dict or list of dicts
+        Maps each parameter name to a list of values. scipy.stats
+        distributions are not supported and raise ``NotImplementedError``.
+    n_iter : int
+        Number of combinations to sample.
+    random_state : int or None, default None
+        Seed for the sampling.
+
+    Examples
+    --------
+    >>> from mojolearn.model_selection import ParameterSampler
+    >>> params = list(ParameterSampler({'alpha': [0.01, 0.1, 1.0, 10.0]},
+    ...                                n_iter=2, random_state=0))
+    """
+
+    # Maintainer note: scipy.stats distributions are refused because their
+    # draws are numpy's (x_metrics/split.mojo DEVIATION 6108).
 
     def __init__(self, param_distributions, n_iter, *, random_state=None):
         if isinstance(param_distributions, dict):
@@ -2210,16 +2988,43 @@ class _BaseSearch:
         return getattr(self.estimator, '_estimator_type', None)
 
     def get_params(self, deep=False):
+        """Return the search's constructor parameters as a dict."""
         import inspect
         names = [p for p in inspect.signature(type(self).__init__).parameters if p != 'self']  # glue: estimator parameters over the init names
         return {k: getattr(self, k) for k in names}  # glue: estimator parameters over the init names
 
     def set_params(self, **params):
+        """Set constructor parameters by name and return ``self``."""
         for k, v in params.items():  # glue: estimator parameters over the init names
             setattr(self, k, v)
         return self
 
     def fit(self, X, y=None, *, groups=None):
+        """Cross-validate every candidate and, with ``refit``, fit the best one.
+
+        The folds are drawn once and every candidate is scored on the same
+        folds. Fits run serially.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : array-like of shape (n_samples,), default None
+            Targets.
+        groups : array-like of shape (n_samples,), default None
+            Group labels for a splitter that reads them.
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If there are no candidates, or if ``scoring`` names several
+            metrics and ``refit`` is neither False, one of their names, nor a
+            callable.
+        """
         _require_serial(self.n_jobs, self.error_score, type(self).__name__)
         candidates = list(self._candidates())
         if not candidates:
@@ -2303,23 +3108,32 @@ class _BaseSearch:
         return self.best_estimator_
 
     def predict(self, X):
+        """Call ``predict`` on ``best_estimator_``."""
         return self._best().predict(X)
 
     def predict_proba(self, X):
+        """Call ``predict_proba`` on ``best_estimator_``."""
         return self._best().predict_proba(X)
 
     def decision_function(self, X):
+        """Call ``decision_function`` on ``best_estimator_``."""
         return self._best().decision_function(X)
 
     def transform(self, X):
+        """Call ``transform`` on ``best_estimator_``."""
         return self._best().transform(X)
 
     def score(self, X, y=None):
+        """Score ``best_estimator_`` on X and y with the search's scorer.
+
+        With several metrics, the metric named by ``refit`` is used.
+        """
         sc = get_scorer(self.scoring) if not self.multimetric_ else self.scorer_[self.refit]
         return _score(self._best(), X, y, sc)
 
     @property
     def classes_(self):
+        """The class labels of ``best_estimator_``."""
         return self._best().classes_
 
 
@@ -2339,9 +3153,75 @@ class _Pinned:
 
 
 class GridSearchCV(_BaseSearch):
-    """scikit-learn 1.9 `GridSearchCV`, serial, over `ParameterGrid(param_grid)`:
-    cv_results_ (params, param_*, split*_test_score, mean/std/rank_test_score),
-    best_index_ / best_score_ / best_params_ / best_estimator_ with refit."""
+    """Exhaustive search over a parameter grid by cross-validation.
+
+    Follows scikit-learn's ``GridSearchCV``. Every combination in
+    ``ParameterGrid(param_grid)`` is cross-validated on the same folds, one
+    fit at a time. With ``refit``, the best combination is then fit on all
+    of X and y, and ``predict``, ``predict_proba``, ``decision_function``,
+    ``transform`` and ``score`` call that fitted estimator.
+
+    Parameters
+    ----------
+    estimator : estimator
+        An unfitted estimator with ``get_params`` and ``fit``.
+    param_grid : dict or list of dicts
+        Parameter names mapped to lists of values.
+    scoring : str, callable, list, tuple, set, dict or None, default None
+        As in ``cross_validate``. None uses the estimator's ``score``.
+    n_jobs : int or None, default None
+        Only None or 1 is supported; other values raise
+        ``NotImplementedError``.
+    refit : bool, str or callable, default True
+        Refit the best candidate on the whole data. With several metrics,
+        the name of the metric that picks the best candidate, or a callable
+        that takes ``cv_results_`` and returns the best index.
+    cv : int, splitter, iterable or None, default None
+        As in ``check_cv``: None means five folds, stratified for a
+        classifier.
+    verbose : int, default 0
+        Accepted for compatibility; nothing is printed.
+    pre_dispatch : str, default '2*n_jobs'
+        Accepted for compatibility; not used.
+    error_score : 'raise' or float, default nan
+        ``'raise'`` propagates a fit error; a number is recorded as the
+        fold's score instead.
+    return_train_score : bool, default False
+        Also record training scores (``mean_train_score``).
+
+    Attributes
+    ----------
+    cv_results_ : dict
+        ``params``, ``param_<name>``, ``split<i>_test_score``,
+        ``mean_test_score``, ``std_test_score`` and ``rank_test_score`` (1 is
+        best); with several metrics each score key ends in ``_<metric>``.
+    best_index_ : int
+        Index of the best candidate in ``cv_results_``.
+    best_score_ : float
+        Mean cross-validated score of the best candidate (not set when
+        ``refit`` is a callable).
+    best_params_ : dict
+        Parameters of the best candidate.
+    best_estimator_ : estimator
+        The best candidate refit on the whole data (only with ``refit``).
+    scorer_ : callable or dict
+        The scorer(s) used (only with ``refit``).
+    n_splits_ : int
+        Number of cross-validation splits.
+    multimetric_ : bool
+        Whether several metrics were scored.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.model_selection import GridSearchCV
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> search = GridSearchCV(mojolearn.Ridge(), {'alpha': [0.1, 1.0, 10.0]}, cv=5)
+    >>> search = search.fit(X, y)
+    >>> best = search.best_params_
+    """
 
     def __init__(self, estimator, param_grid, *, scoring=None, n_jobs=None, refit=True, cv=None, verbose=0,
                  pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False):
@@ -2355,7 +3235,57 @@ class GridSearchCV(_BaseSearch):
 
 
 class RandomizedSearchCV(_BaseSearch):
-    """scikit-learn 1.9 `RandomizedSearchCV` over lists (ParameterSampler)."""
+    """Randomized search over parameter lists by cross-validation.
+
+    Follows scikit-learn's ``RandomizedSearchCV`` for lists of values:
+    ``n_iter`` combinations are sampled without replacement by
+    ``ParameterSampler`` and each is cross-validated on the same folds, one
+    fit at a time. scipy.stats distributions are not supported. Fitting,
+    refitting, the result attributes and the prediction methods are as in
+    ``GridSearchCV``.
+
+    Parameters
+    ----------
+    estimator : estimator
+        An unfitted estimator with ``get_params`` and ``fit``.
+    param_distributions : dict or list of dicts
+        Parameter names mapped to lists of values.
+    n_iter : int, default 10
+        Number of combinations to try.
+    scoring : str, callable, list, tuple, set, dict or None, default None
+        As in ``cross_validate``.
+    n_jobs : int or None, default None
+        Only None or 1 is supported.
+    refit : bool, str or callable, default True
+        As in ``GridSearchCV``.
+    cv : int, splitter, iterable or None, default None
+        As in ``check_cv``.
+    verbose : int, default 0
+        Accepted for compatibility; nothing is printed.
+    pre_dispatch : str, default '2*n_jobs'
+        Accepted for compatibility; not used.
+    random_state : int or None, default None
+        Seed for the sampling (mojolearn's counter-based generator).
+    error_score : 'raise' or float, default nan
+        As in ``GridSearchCV``.
+    return_train_score : bool, default False
+        Also record training scores.
+
+    Attributes
+    ----------
+    cv_results_, best_index_, best_score_, best_params_, best_estimator_, scorer_, n_splits_, multimetric_
+        As in ``GridSearchCV``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.model_selection import RandomizedSearchCV
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> search = RandomizedSearchCV(mojolearn.Ridge(), {'alpha': [0.01, 0.1, 1.0, 10.0]},
+    ...                             n_iter=2, random_state=0).fit(X, y)
+    """
 
     def __init__(self, estimator, param_distributions, *, n_iter=10, scoring=None, n_jobs=None, refit=True,
                  cv=None, verbose=0, pre_dispatch='2*n_jobs', random_state=None, error_score=float('nan'),
@@ -2373,8 +3303,51 @@ class RandomizedSearchCV(_BaseSearch):
 
 def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, cv=None, scoring=None,
                      n_jobs=None, error_score=float('nan')):
-    """scikit-learn 1.9 `validation_curve`: (train_scores, test_scores), each
-    (len(param_range), n_splits)."""
+    """Training and test scores for each value of one parameter.
+
+    Follows scikit-learn's ``validation_curve``. For each value in
+    ``param_range``, the estimator with that parameter set is
+    cross-validated on the same folds, one fit at a time.
+
+    Parameters
+    ----------
+    estimator : estimator
+        An unfitted estimator with ``get_params``, ``set_params`` and
+        ``fit``.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,)
+        Targets.
+    param_name : str
+        Name of the parameter to vary.
+    param_range : sequence
+        Values of the parameter.
+    groups : array-like of shape (n_samples,), default None
+        Group labels for a splitter that reads them.
+    cv : int, splitter, iterable or None, default None
+        As in ``check_cv``.
+    scoring : str, callable or None, default None
+        As in ``cross_val_score``.
+    n_jobs : int or None, default None
+        Only None or 1 is supported.
+    error_score : 'raise' or float, default nan
+        ``'raise'`` propagates a fit error; a number is recorded instead.
+
+    Returns
+    -------
+    train_scores : Array of shape (len(param_range), n_splits), float64
+    test_scores : Array of shape (len(param_range), n_splits), float64
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.model_selection import validation_curve
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> train, test = validation_curve(mojolearn.Ridge(), X, y, param_name='alpha',
+    ...                                param_range=[0.1, 1.0, 10.0], cv=5)
+    """
     _require_serial(n_jobs, error_score, 'validation_curve')
     # the folds are drawn ONCE for every parameter value, as scikit-learn does
     Xf, yf, folds = _cv_folds(_Pinned(estimator), X, y, cv, groups)
@@ -2395,8 +3368,63 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
 def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.55, 0.775, 1.0), cv=None,
                    scoring=None, n_jobs=None, shuffle=False, random_state=None, error_score=float('nan'),
                    return_times=False):
-    """scikit-learn 1.9 `learning_curve` (serial, no exploit_incremental_learning):
-    (train_sizes_abs, train_scores, test_scores[, fit_times, score_times])."""
+    """Training and test scores for growing training-set sizes.
+
+    Follows scikit-learn's ``learning_curve``, without
+    ``exploit_incremental_learning``. For each size and fold, a fresh clone
+    is fit on the first ``size`` training rows of that fold and scored on
+    those rows and on the fold's test rows. Fits run one at a time.
+
+    Parameters
+    ----------
+    estimator : estimator
+        An unfitted estimator with ``get_params`` and ``fit``.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,)
+        Targets.
+    groups : array-like of shape (n_samples,), default None
+        Group labels for a splitter that reads them.
+    train_sizes : sequence of float or int, default (0.1, 0.325, 0.55, 0.775, 1.0)
+        Floats are fractions of the smallest training fold (rounded down),
+        ints are row counts. Each must resolve to between 1 and the smallest
+        training fold's size, or ``ValueError`` is raised. Duplicates are
+        dropped and the sizes sorted.
+    cv : int, splitter, iterable or None, default None
+        As in ``check_cv``.
+    scoring : str, callable or None, default None
+        As in ``cross_val_score``.
+    n_jobs : int or None, default None
+        Accepted for compatibility; fits always run serially.
+    shuffle : bool, default False
+        Shuffle each fold's training rows once before taking the prefixes.
+    random_state : int or None, default None
+        Seed for the shuffle (mojolearn's counter-based generator).
+    error_score : 'raise' or float, default nan
+        Accepted for compatibility; a fit error always propagates.
+    return_times : bool, default False
+        Also return fit and score times.
+
+    Returns
+    -------
+    train_sizes_abs : Array of shape (n_sizes,), int64
+        The training-set sizes used.
+    train_scores : Array of shape (n_sizes, n_splits), float64
+    test_scores : Array of shape (n_sizes, n_splits), float64
+    fit_times : Array of shape (n_sizes, n_splits), float64
+        Wall-clock seconds; only with ``return_times=True``.
+    score_times : Array of shape (n_sizes, n_splits), float64
+        Wall-clock seconds; only with ``return_times=True``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.model_selection import learning_curve
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> sizes, train, test = learning_curve(mojolearn.Ridge(), X, y, cv=5)
+    """
     import time
     X, y, folds = _cv_folds(estimator, X, y, cv, groups)
     n_max = min(len(tr) for tr, _ in folds)  # glue: smallest training fold size over the folds
@@ -2463,9 +3491,59 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
 
 def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutations=100, n_jobs=None,
                            random_state=0, verbose=0, scoring=None, fit_params=None, params=None):
-    """scikit-learn 1.9 `permutation_test_score`: the mean CV score, the
-    scores with y permuted (counter-RNG permutations; within groups when
-    groups is given) and the p-value (C + 1) / (n_permutations + 1)."""
+    """Test the significance of a cross-validated score by permuting y.
+
+    Follows scikit-learn's ``permutation_test_score``. The mean
+    cross-validated score on the real targets is compared with the mean
+    scores after ``n_permutations`` random permutations of ``y`` (within
+    each group when ``groups`` is given). The permutations come from
+    mojolearn's counter-based random generator.
+
+    Parameters
+    ----------
+    estimator : estimator
+        An unfitted estimator with ``get_params`` and ``fit``.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,)
+        Targets.
+    groups : array-like of shape (n_samples,), default None
+        Permute ``y`` only within each group; also passed to the splitter.
+    cv : int, splitter, iterable or None, default None
+        As in ``check_cv``.
+    n_permutations : int, default 100
+        Number of permutations.
+    n_jobs : int or None, default None
+        Accepted for compatibility; fits run serially.
+    random_state : int or None, default 0
+        Seed for the permutations.
+    verbose : int, default 0
+        Accepted for compatibility; nothing is printed.
+    scoring : str, callable or None, default None
+        As in ``cross_val_score``.
+    fit_params, params : dict or None, default None
+        Accepted for compatibility; not passed to ``fit``.
+
+    Returns
+    -------
+    score : float
+        Mean cross-validated score on the real targets.
+    permutation_scores : Array of shape (n_permutations,), float64
+        Mean score for each permutation.
+    pvalue : float
+        ``(C + 1) / (n_permutations + 1)``, where ``C`` is the number of
+        permutation scores greater than or equal to ``score``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.model_selection import permutation_test_score
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> score, perm_scores, pvalue = permutation_test_score(
+    ...     mojolearn.Ridge(), X, y, cv=5, n_permutations=20)
+    """
     fast = _NativePermutation.get(estimator, X, y, groups, cv)
     if fast is not None:
         return fast.run(estimator, groups, cv, n_permutations, random_state, get_scorer(scoring))
