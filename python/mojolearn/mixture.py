@@ -1,28 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`GaussianMixture` on the GPU (workstream D, 2026-09-14).
+# Maintainer notes (moved from the module docstring; workstream D, 2026-09-14):
+# The Python door of `mixture/estimator.mojo` through
+# `bindings/_mojolearn_mixture.mojo`. There is no GPU reference: cuML, cuVS and
+# RAFT ship no Gaussian mixture at the pinned commits, so scikit-learn's
+# `_gaussian_mixture.py` and `_base.py` are the semantics and the oracle, never
+# the design source. `mixture/README.md` carries the parameter mapping.
+# The default binding implements covariance_type='full', init_params 'kmeans'
+# (through the identity-certified k-means) and 'random' (position-mapped Philox
+# draws, DEVIATION 1733), n_init=1, warm_start=False; every other option is
+# routed to the cluster lane's mixture driver (`_expansion_cluster._gmm_ext_fit`).
+# A collapsed component raises (DEVIATION 1723). No speed claim.
+"""Gaussian mixture models.
 
-The Python door of `mixture/estimator.mojo` through
-`bindings/_mojolearn_mixture.mojo`. THERE IS NO GPU REFERENCE: cuML, cuVS and
-RAFT ship no Gaussian mixture at the pinned commits, so scikit-learn's
-`_gaussian_mixture.py` and `_base.py` are the SEMANTICS and the oracle,
-never the design source (the estimator's header). Every parameter here
-means exactly what scikit-learn's parameter of that name means, or is
-named differently; `mixture/README.md` carries the mapping.
-
-WHAT IS IMPLEMENTED: `covariance_type='full'`, `init_params='kmeans'`
-(through the identity-certified k-means) and `'random'` (position-mapped
-Philox draws, DEVIATION 1733), `n_init=1`, `warm_start=False`. The other
-covariance types and init methods are REFUSED BY NAME on the Mojo host
-with the reason each costs; `n_init > 1`, `warm_start`, `means_init`,
-`weights_init` and `precisions_init` are refused by name here, because
-`GmmParams` has no field for them (DEVIATION 1734).
-
-A COLLAPSED COMPONENT RAISES (DEVIATION 1723); the fit never returns a
-model with a reset component. `n_iter_`, `converged_` and `lower_bound_`
-are part of the model and of the identity card.
-
-NO SPEED CLAIM. The lane has no published number and this door adds none.
+`GaussianMixture` fits a mixture of Gaussians by expectation-maximization,
+with scikit-learn's parameter names and meanings.
 """
 from . import _backend, _serialize
 from ._array import Array
@@ -63,40 +55,84 @@ def _real(v, name):
     return float(v)
 
 
+# log_det_chol_ is `_compute_log_det_cholesky`'s answer from the device fold
+# (DEVIATION 1726), never re-derived from the diagonal in Python.
+# converged_=False: scikit-learn warns, this reports (DEVIATION 1746).
 class GaussianMixture(NumericModeMixin):
-    """`sklearn.mixture.GaussianMixture` semantics on the GPU.
+    """Gaussian mixture model fitted by expectation-maximization.
 
-    Parameters (scikit-learn's defaults, stated rather than matched)
+    Follows scikit-learn's `GaussianMixture`: every parameter has the same
+    name, meaning and default. Iterates until the change in the lower bound
+    is below `tol` or `max_iter` is reached. `X` is read as float32 and the
+    fitted arrays are float32.
+
+    The default configuration (`covariance_type='full'`,
+    `init_params='kmeans'` or `'random'`, `n_init=1`, no warm start and no
+    initial arrays) runs on mojolearn's main mixture solver. Any other
+    option runs on a second solver; a model fitted that way can score and
+    predict, but `save` and `sample` raise `NotImplementedError`.
+
+    Parameters
     ----------
     n_components : int, default 1
-    covariance_type : str, default 'full'
-        Only 'full' is implemented; 'tied', 'diag' and 'spherical' are
-        refused by name on the Mojo host with what each would cost.
+        Number of mixture components.
+    covariance_type : {'full', 'tied', 'diag', 'spherical'}, default 'full'
+        Form of each component's covariance, as in scikit-learn.
     tol : float, default 1e-3
+        Convergence threshold on the change in the lower bound.
     reg_covar : float, default 1e-6
+        Added to the diagonal of each covariance.
     max_iter : int, default 100
-    init_params : {'kmeans', 'random'}, default 'kmeans'
-        'k-means++' and 'random_from_data' are refused by name on the
-        Mojo host.
+        Maximum number of EM iterations.
+    init_params : {'kmeans', 'random', 'k-means++', 'random_from_data'}, default 'kmeans'
+        How the responsibilities are initialized.
     random_state : int, default 0
-    n_init, warm_start, means_init, weights_init, precisions_init
-        Refused by name when passed anything but scikit-learn's default.
+        Seed for initialization and for `sample`.
+    n_init : int, default 1
+        Number of initializations; the best one is kept.
+    warm_start : bool, default False
+        Start from the previous fit's solution when the shape and covariance
+        type match.
+    means_init : array-like of shape (n_components, n_features), default None
+        Initial means.
+    weights_init : array-like of shape (n_components,), default None
+        Initial weights.
+    precisions_init : array-like, default None
+        Initial precisions, shaped by `covariance_type` as in scikit-learn.
 
     Attributes
     ----------
-    weights_ : Array (n_components,) float32
-    means_ : Array (n_components, n_features) float32
-    covariances_ : Array (n_components, n_features, n_features) float32
-        Includes `reg_covar` on the diagonal, as scikit-learn's does.
-    precisions_cholesky_ : Array (n_components, n_features, n_features) float32
-    log_det_chol_ : Array (n_components,) float32
-        `_compute_log_det_cholesky`'s answer, from the device fold
-        (DEVIATION 1726); never re-derived from the diagonal here.
+    weights_ : Array of shape (n_components,), float32
+        Weight of each component.
+    means_ : Array of shape (n_components, n_features), float32
+        Mean of each component.
+    covariances_ : Array, float32
+        Covariance of each component, shaped by `covariance_type`; for 'full',
+        `(n_components, n_features, n_features)`. Includes `reg_covar` on
+        the diagonal, as scikit-learn's does.
+    precisions_cholesky_ : Array, float32
+        Cholesky factors of the precision matrices, shaped like
+        `covariances_`.
+    log_det_chol_ : Array of shape (n_components,), float32
+        Log-determinant of each precision Cholesky factor.
     n_iter_ : int
+        Number of EM iterations run.
     converged_ : bool
-        False means the loop ran out of iterations; scikit-learn warns,
-        this reports (DEVIATION 1746).
+        False when the fit stopped at `max_iter` before reaching `tol`.
+        scikit-learn also warns in that case; mojolearn only sets this flag.
     lower_bound_ : float
+        Lower bound on the log likelihood at the end of the fit.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> gmm = mojolearn.GaussianMixture(n_components=3).fit(X)
+    >>> labels = gmm.predict(X)
+    >>> proba = gmm.predict_proba(X)
+    >>> X_new, y_new = gmm.sample(100)
     """
 
     _BINDING = "_mojolearn_mixture"
@@ -152,17 +188,42 @@ class GaussianMixture(NumericModeMixin):
             if getattr(self, name) is not None:
                 raise ValueError("mojolearn GaussianMixture: " + _REFUSED_KNOBS[name])
 
+    # EM runs one shot on the device (`gaussian_mixture_fit`). Option parity
+    # (2026-09-27, lane/algos-cluster): any option this binding does not carry
+    # runs the same EM on the cluster lane's mixture driver
+    # (`x_cluster/bgmm.mojo`, plain mode; `_expansion_cluster._gmm_ext_fit`).
+    # The default fit is untouched and keeps its recorded bits.
     def fit(self, X, y=None):
-        """EM until `abs(lower_bound - prev) < tol` or `max_iter`, one shot
-        on the device (`gaussian_mixture_fit`). Returns `self`.
+        """Fit the mixture to `X` by expectation-maximization.
 
-        OPTION PARITY (2026-09-27, lane/algos-cluster): a fit with any option
-        this binding does not carry -- covariance_type 'tied'/'diag'/
-        'spherical', init_params 'k-means++'/'random_from_data', n_init > 1,
-        warm_start, weights_init, means_init, precisions_init -- runs the same
-        EM on the cluster lane's mixture driver (`x_cluster/bgmm.mojo`, plain
-        mode; `_expansion_cluster._gmm_ext_fit`). The default fit is untouched
-        and keeps its recorded bits."""
+        Runs until `abs(lower_bound - previous) < tol` or `max_iter`
+        iterations.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : ignored
+            Present for scikit-learn API compatibility.
+
+        Returns
+        -------
+        self : GaussianMixture
+            The fitted estimator.
+
+        An unknown `covariance_type` or `init_params`, or a component that
+        collapses during the fit, raises an error naming the problem; the fit
+        never returns a model with a reset component.
+
+        Raises
+        ------
+        ValueError
+            For a non-positive `n_components` or initial arrays of the wrong
+            shape.
+        TypeError
+            If `n_components` is not an int or `tol`/`reg_covar` is not a
+            number.
+        """
         from ._expansion_cluster import _gmm_needs_ext, _gmm_ext_fit
         if _gmm_needs_ext(self):
             return _gmm_ext_fit(self, X)
@@ -234,7 +295,16 @@ class GaussianMixture(NumericModeMixin):
         return (x, flat_m, flat_c, flat_p), addrs, params, n, k
 
     def score_samples(self, X):
-        """One log likelihood per row, float32 `(n,)`."""
+        """Return the log likelihood of each row of `X` under the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        log_likelihood : Array of shape (n_samples,), float32
+        """
         if getattr(self, "_ext", None) is not None:
             from ._expansion_cluster import _gmm_ext_score
             return _gmm_ext_score(self, X)[1]
@@ -245,7 +315,16 @@ class GaussianMixture(NumericModeMixin):
         return out
 
     def predict_proba(self, X):
-        """`exp(log_resp)`, float32 `(n, n_components)`."""
+        """Return the posterior probability of each component for each row.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        proba : Array of shape (n_samples, n_components), float32
+        """
         if getattr(self, "_ext", None) is not None:
             from ._expansion_cluster import _gmm_ext_score
             return _gmm_ext_score(self, X)[2]
@@ -257,8 +336,18 @@ class GaussianMixture(NumericModeMixin):
         return out.reshape((n, k))
 
     def predict(self, X):
-        """Argmax of the weighted log probabilities, int32 `(n,)`; ties to
-        the lowest component index."""
+        """Return the most likely component for each row of `X`.
+
+        A tie goes to the lowest component index.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        labels : Array of shape (n_samples,), int32
+        """
         if getattr(self, "_ext", None) is not None:
             from ._expansion_cluster import _gmm_ext_score
             return _gmm_ext_score(self, X)[3]
@@ -269,14 +358,34 @@ class GaussianMixture(NumericModeMixin):
         return out
 
     def fit_predict(self, X, y=None):
+        """Fit the model, then return `predict(X)`.
+
+        Returns
+        -------
+        labels : Array of shape (n_samples,), int32
+        """
         return self.fit(X).predict(X)
 
     def save(self, path):
-        """Write the fitted model to `path` as an npz (`_GMM_FORMAT`, the
-        neighbors and density inference lane, 2026-09-15): every array the
-        scoring entries read, as fitted, plus `n_iter_`, `converged_` and
-        `lower_bound_`, which the binding's model rebuild takes too.
-        `mojolearn.host_model(path)` scores it on a CPU with no GPU."""
+        """Save the fitted model to `path` as an `.npz` file.
+
+        The file holds every fitted array plus `n_iter_`, `converged_` and
+        `lower_bound_`. Load it with `load`, or with
+        `mojolearn.host_model(path)` to score on a machine with no GPU.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        NotImplementedError
+            If the model was fitted with options outside the default
+            configuration (see the class description).
+        """
         if not hasattr(self, "weights_"):
             raise RuntimeError("this estimator is not fitted yet")
         if getattr(self, "_ext", None) is not None:
@@ -303,9 +412,26 @@ class GaussianMixture(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`; every array at its saved dtype,
-        never cast. The result answers score_samples, predict_proba,
-        predict, score, bic and aic."""
+        """Load a model written by `save`.
+
+        Arrays keep their saved dtypes. The result supports `score_samples`,
+        `predict_proba`, `predict`, `score`, `bic` and `aic`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `GaussianMixture.save`.
+
+        Returns
+        -------
+        model : GaussianMixture
+
+        Raises
+        ------
+        ValueError
+            If the file is of another format or estimator, or is truncated or
+            inconsistent.
+        """
         from .linear_model import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _GMM_FORMAT)
         _check_saved_by(arrays, path, cls)
@@ -349,29 +475,85 @@ class GaussianMixture(NumericModeMixin):
         return float(out[0]), float(out[1]), float(out[2])
 
     def score(self, X, y=None):
-        """The mean of `score_samples`, the host ascending fold."""
+        """Return the mean log likelihood of the rows of `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+            Present for scikit-learn API compatibility.
+
+        Returns
+        -------
+        score : float
+        """
         return self._score_bic_aic(X)[0]
 
     def bic(self, X):
+        """Return the Bayesian information criterion of the model on `X`.
+
+        Lower is better.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        bic : float
+        """
         return self._score_bic_aic(X)[1]
 
     def aic(self, X):
+        """Return the Akaike information criterion of the model on `X`.
+
+        Lower is better.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        aic : float
+        """
         return self._score_bic_aic(X)[2]
 
+    # Reference: scikit-learn `BaseMixture.sample`. Draws are position-mapped
+    # Philox keyed by `random_state` (DEVIATION 2791, `mixture/checks/sample.mojo`);
+    # the normals go through the fitted `precisions_cholesky_` (DEVIATION 2792).
     def sample(self, n_samples=1):
-        """`n_samples` random rows from the fitted mixture: `(X, y)`, `X`
-        float32 `(n_samples, n_features)`, `y` int32 `(n_samples,)`.
+        """Draw random rows from the fitted mixture.
 
-        scikit-learn's `BaseMixture.sample` is the reference: the component
-        counts are a multinomial draw over `weights_`, and the rows come out
-        GROUPED BY COMPONENT ascending, `y` naming each row's component. The
-        draws are position-mapped Philox keyed by `random_state` (DEVIATION
-        2791, `mixture/checks/sample.mojo`) and the normals go through the
-        fitted `precisions_cholesky_` (DEVIATION 2792), so the same model
-        and `random_state` give the same bits on every vendor and on every
-        call; they are not scikit-learn's bits. `X` is the model's float32
-        and `y` is `predict`'s int32, where scikit-learn returns float64
-        and int64. `n_samples < 1` is refused by name in Mojo.
+        As in scikit-learn, the number of rows per component is a multinomial
+        draw over `weights_`, and the rows come out grouped by component in
+        ascending order. The draws are keyed by `random_state`, so the same
+        model and `random_state` give the same rows on every call and every
+        GPU vendor; they differ from scikit-learn's draws. `X` is float32 and
+        `y` int32, where scikit-learn returns float64 and int64.
+
+        Parameters
+        ----------
+        n_samples : int, default 1
+            Number of rows to draw. Must be at least 1.
+
+        Returns
+        -------
+        X : Array of shape (n_samples, n_features), float32
+            The drawn rows.
+        y : Array of shape (n_samples,), int32
+            The component each row was drawn from.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted or `random_state` is not an int in
+            `[0, 2**64)`.
+        TypeError
+            If `n_samples` is not an int.
+        NotImplementedError
+            If the model was fitted with options outside the default
+            configuration.
         """
         if getattr(self, "_ext", None) is not None:
             raise NotImplementedError("mojolearn GaussianMixture: sample() is the default fit's; a fit with "
