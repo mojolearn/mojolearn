@@ -728,9 +728,29 @@ class _PrepBase:
     _parameters = ()
 
     def get_params(self, deep=True):
+        """Return the constructor parameters as a dict.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for scikit-learn compatibility.
+
+        Returns
+        -------
+        dict
+            Parameter names mapped to their values.
+        """
         return {name: getattr(self, name) for name in self._parameters}  # glue: copies estimator keyword arguments
 
     def set_params(self, **params):
+        """Set constructor parameters.
+
+        An unknown parameter name raises ``ValueError``.
+
+        Returns
+        -------
+        self
+        """
         for k, v in params.items():  # glue: copies estimator keyword arguments
             if k not in self._parameters:
                 raise ValueError(f"mojolearn: invalid parameter {k!r} for {type(self).__name__}")
@@ -738,6 +758,13 @@ class _PrepBase:
         return self
 
     def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
         return self.fit(X, y, **fit_params).transform(X)
 
     def _check_fitted(self):
@@ -2666,24 +2693,89 @@ class _Classifier(_PrepBase):
         """Raises on what `_score_checks` found, after the run."""
 
     def predict(self, X):
+        """Predict the class of each row.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to classify.
+
+        Returns
+        -------
+        array of shape (n_samples,)
+            Predicted class labels.
+        """
         pr, n, K, o = self._scores(X, ("predict",))
         return decode_labels(self.classes_, pr.get_i32(o["predict"], n))
 
     def predict_proba(self, X):
+        """Return class probabilities for each row.
+
+        Probabilities are float32 in ``identical`` mode. In ``fast`` mode (Apple), they are float64, so that
+        a very confident prediction does not round to exactly 1.0.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to score.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes)
+            Probability of each class, in the order of ``classes_``.
+        """
         pr, n, K, o = self._scores(X, ("proba",))
         if o.get("proba64"):
             return pr.get_f64(o["proba"], (n, K))
         return pr.get(o["proba"], (n, K))
 
     def predict_log_proba(self, X):
+        """Return the log of the class probabilities for each row.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to score.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes)
+            Log probability of each class, in the order of ``classes_``.
+        """
         pr, n, K, o = self._scores(X, ("log",))
         return pr.get(o["log"], (n, K))
 
     def predict_joint_log_proba(self, X):
+        """Return the unnormalized joint log likelihood of each row and class.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to score.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes)
+            Joint log likelihood ``log P(x, c)`` of each class, in the order of ``classes_``.
+        """
         pr, n, K, o = self._scores(X, ())
         return pr.get(o["jll"], (n, K))
 
     def score(self, X, y):
+        """Return the mean accuracy on the given rows and labels.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to classify.
+        y : array-like of shape (n_samples,)
+            True labels.
+
+        Returns
+        -------
+        float
+            Fraction of rows classified correctly.
+        """
         from ._expansion_metrics import accuracy_fraction
         return accuracy_fraction(y, self.predict(X))
 
@@ -6405,11 +6497,37 @@ def _mask_list(pr, off, d):
 # ---------------------------------------------------------------- feature selection
 class _SelectorMixin(_PrepBase):
     def get_support(self, indices=False):
+        """Return the selected features.
+
+        Parameters
+        ----------
+        indices : bool, default False
+            Return the indices of the selected columns instead of a boolean mask.
+
+        Returns
+        -------
+        list
+            Boolean mask over the input columns, or the selected column indices.
+        """
         self._check_fitted()
         mask = list(self._mask)
         return [j for j, m in enumerate(mask) if m] if indices else mask  # glue: support index list (mask-sized: feature support mask)
 
     def transform(self, X):
+        """Keep only the selected columns of ``X``.
+
+        Raises ``ValueError`` when no column is selected.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Data with the columns seen in fit.
+
+        Returns
+        -------
+        array of shape (n_samples, n_selected_features)
+            The selected columns, float32.
+        """
         self._check_fitted()
         arr = _x2d(X)
         self._check_width(arr)
