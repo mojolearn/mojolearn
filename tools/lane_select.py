@@ -107,6 +107,11 @@ MANIFEST = os.path.join(PKG, "host_surface.py")
 INERT_SUFFIXES = (".md", ".txt", ".tsv", ".cff", ".log", ".patch")
 INERT_PREFIXES = (
     "docs/", "archive/", "parked/", "bench/results/", "catboost_info/",
+    # A/B records and build outputs (2026-10-12: five such paths made ONLY_CHANGED re-record all 439 lanes
+    # for 0.8.39 and 0.8.42): the grid_controls JSON is read by the A/B planners (tools/six_lane_ab.py,
+    # six_lane_grid.py), never by a build; .libs/ and .dylibs/ hold the packed runtime libraries whose SOURCE
+    # (packaging/portable_math) stays attributed on its own.
+    "experiments/six_lane_integration/grid_controls/", "python/mojolearn/.libs/", "python/mojolearn/.dylibs/",
     "run/", "build/", ".github/", "AUTHORS", "CHANGELOG", "CITATION",
     "CONTRIBUTING", "GOVERNANCE", "LICENSE", "NOTICE", "README", "ROADMAP",
     "SECURITY", "SUPPORT",
@@ -119,7 +124,11 @@ INERT_PREFIXES = (
 #: registry sink, imports it, and it decides which vendor set every lane
 #: loads on a Linux install, so no one lane owns a change to it.
 GPU_PLUGINS = os.path.join(PKG, "gpu_plugins.py")
-GLOBAL_PATHS = (HARNESS, MANIFEST, GPU_PLUGINS)
+#: THE LOADER (2026-10-12): `_backend.py` selects and loads the binary every lane runs (vendor, tier, host
+#: twin), so a change to it reaches every lane by the same reasoning as the plugin table; until 2026-10-12
+#: it was UNATTRIBUTED, which the identity re-record widened to all 439 lanes without saying why.
+BACKEND = os.path.join(PKG, "_backend.py")
+GLOBAL_PATHS = (HARNESS, MANIFEST, GPU_PLUGINS, BACKEND)
 
 #: THE SELECTION MACHINERY ITSELF. These files decide WHICH lanes run; they
 #: cannot change what any lane computes, because nothing the harness or the
