@@ -54,47 +54,117 @@ def _scalar(value, name):
     return _round_f32(result)
 
 
+# Maintainer notes (moved from the docstring):
+# - Option parity (lane/algos-decomp, 2026-09-27): n_components 2 and 3 keep
+#   their bits; the others run the run-time-dimension optimizer (DEVIATION
+#   5322); local_connectivity uses umap-learn's rho interpolation (DEVIATION
+#   5323); supervised fit (DEVIATION 5324).
+# - Spectral initialization uses at most 20 Lanczos basis vectors for 2D/3D.
+# - transform has its own qualification requirements; fit certificates do not
+#   certify transform or reference RNG bits.
+# - Batch independence of transform: lane/umap-batch-fix (2026-09-16), see
+#   umap/transform.mojo and the note above `save`.
+# - embedding_ and returned embeddings are `_array.Array`s (DEVIATION 2370;
+#   they were ndarrays). The private training copies are plain copies rather
+#   than read-only views: an Array has no `setflags`, and nothing outside this
+#   instance holds them.
 class UMAP(NumericModeMixin):
-    """UMAP embedding with exact Euclidean neighbors and spectral init.
+    """Uniform Manifold Approximation and Projection (UMAP) embedding.
 
-    Supports fit/fit_transform/transform. OPTION PARITY (lane/algos-decomp,
-    2026-09-27): n_components 1 to 32 (2 and 3 keep their bits; the others
-    run the run-time-dimension optimizer, DEVIATION 5322); any
-    local_connectivity >= 0 (umap-learn's rho interpolation, DEVIATION 5323);
-    metric euclidean / l2, sqeuclidean, cosine, manhattan (l1, cityblock,
-    taxicab), chebyshev (linf, infinity), minkowski (metric_kwds={'p': p});
-    init 'spectral', 'random' (uniform(-10, 10)), 'pca' (umap-learn's scaled
-    PCA plus N(0, 1e-4) noise, through the decomp cells) or an
-    (n_samples, n_components) array; a and b given directly; fit(X, y)
-    supervised with target_metric 'categorical' (-1 unknown) or 'l2' /
-    'euclidean', target_weight and target_n_neighbors (DEVIATION 5324).
-    REFUSED BY NAME: densmap=True, output_metric other than euclidean, a
-    callable metric and every other metric name, other target metrics.
-    The source fit path stores a CSR graph in O(n_samples*n_neighbors)
-    space, linear in samples when n_neighbors is bounded; exact neighbor
-    search still performs quadratic pair comparisons. Spectral initialization
-    uses at most 20 Lanczos basis vectors for 2D/3D output. At least
-    2*n_components+4 samples are required. n_epochs=None uses 200 epochs;
-    random_state defaults to 0. Input is converted to C-order float32;
-    input_copied_ records whether a copy was needed.
+    Builds a fuzzy nearest-neighbor graph of the training rows with exact
+    neighbor search, then optimizes a low-dimensional layout. Input is a dense
+    array converted to C-order float32. The neighbor graph is stored in CSR
+    form, so memory grows linearly with ``n_samples`` for a bounded
+    ``n_neighbors``; the exact neighbor search still compares every pair of
+    rows. Parameters follow umap-learn; defaults that differ are
+    ``n_epochs=None`` (200 epochs) and ``random_state=0``.
 
-    transform retains private copies of training data and embedding, adding
-    O(n_samples*n_features + n_samples*n_components) storage, plus parameters
-    and mode from the last successful fit. It computes query-to-training
-    neighbors, memberships, weighted initialization and seeded refinement
-    against the frozen training embedding. Default refinement is 100 epochs
-    at every request size, or max(1, n_epochs//3) when explicitly set;
-    learning rate is learning_rate/4; repulsion_strength and
-    negative_sample_rate apply to both fit and transform. Query batching
-    does NOT change results: a batch of N returns the same bytes as N calls
-    of one row (lane/umap-batch-fix, 2026-09-16). This path has its own
-    qualification requirements; existing fit certificates do not certify
-    transform or reference RNG bits.
+    At least ``2 * n_components + 4`` samples are needed for the spectral
+    initialization.
 
-    `embedding_` and every returned embedding are `_array.Array`s of float32
-    (DEVIATION 2370; they were ndarrays). The private training copies are
-    plain copies rather than read-only views: an Array has no
-    `setflags`, and nothing outside this instance holds them.
+    Parameters
+    ----------
+    n_neighbors : int, default 15
+        Size of the local neighborhood; at least 2 and at most ``n_samples``.
+    n_components : int, default 2
+        Dimension of the embedding, 1 to 32.
+    min_dist : float, default 0.1
+        Minimum distance between embedded points; ``0 <= min_dist <= spread``.
+    spread : float, default 1.0
+        Scale of the embedded points; must be positive.
+    n_epochs : int or None, default None
+        Number of optimization epochs; None uses 200.
+    random_state : int, default 0
+        Seed for the optimizer and random initialization; a nonnegative
+        integer.
+    set_op_mix_ratio : float, default 1.0
+        Mix between fuzzy union (1.0) and fuzzy intersection (0.0), in [0, 1].
+    local_connectivity : float, default 1.0
+        Number of nearest neighbors assumed locally connected; any value
+        ``>= 0`` (umap-learn's interpolation for fractional values).
+    metric : str, default "euclidean"
+        Input distance: ``"euclidean"`` (``"l2"``), ``"sqeuclidean"``,
+        ``"cosine"``, ``"manhattan"`` (``"l1"``, ``"cityblock"``,
+        ``"taxicab"``), ``"chebyshev"`` (``"linf"``, ``"linfinity"``,
+        ``"infinity"``) or ``"minkowski"``. A callable or any other name
+        raises ``ValueError``.
+    init : {"spectral", "random", "pca"} or array, default "spectral"
+        Initial layout. ``"random"`` draws uniform(-10, 10); ``"pca"`` is
+        umap-learn's scaled PCA plus N(0, 1e-4) noise; an array must have
+        shape ``(n_samples, n_components)`` and be finite.
+    learning_rate : float, default 1.0
+        Initial learning rate; must be positive.
+    repulsion_strength : float, default 1.0
+        Weight of negative samples; must be nonnegative.
+    negative_sample_rate : int, default 5
+        Negative samples per positive sample.
+    a, b : float or None, default None
+        Curve parameters of the low-dimensional similarity. Give both or
+        neither; when None they are derived from ``min_dist`` and ``spread``.
+    metric_kwds : dict or None, default None
+        Extra metric arguments. Only ``{"p": p}`` for ``"minkowski"`` (``p > 0``,
+        default 2.0); any other key raises ``ValueError``.
+    target_n_neighbors : int, default -1
+        Neighbors used for the target graph in supervised fits; -1 uses
+        ``n_neighbors``, otherwise at least 2.
+    target_metric : {"categorical", "l2", "euclidean"}, default "categorical"
+        Distance on ``y`` for supervised fits. With ``"categorical"``, the
+        label -1 means unknown. Other values raise ``NotImplementedError``.
+    target_weight : float, default 0.5
+        Weight of the target in [0, 1]; 0 ignores the data, 1 ignores ``y``.
+    densmap : bool, default False
+        densMAP is not supported; True raises ``NotImplementedError``.
+    output_metric : str, default "euclidean"
+        Only ``"euclidean"`` (or ``"l2"``) is supported; any other value raises
+        ``NotImplementedError``.
+
+    Attributes
+    ----------
+    embedding_ : Array of shape (n_samples, n_components)
+        The float32 embedding of the training data.
+    n_features_in_ : int
+        Number of features seen during ``fit``.
+    input_copied_ : bool
+        Whether ``X`` had to be copied to C-order float32.
+
+    Notes
+    -----
+    ``transform`` keeps private copies of the training data and embedding,
+    adding ``O(n_samples * (n_features + n_components))`` memory. It finds
+    each new row's neighbors among the training rows, initializes it from
+    their weighted embedding and refines it against the frozen training
+    embedding for 100 epochs (``max(1, n_epochs // 3)`` when ``n_epochs`` is
+    set) at ``learning_rate / 4``. The result for a row does not depend on
+    the other rows in the call.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.UMAP(n_neighbors=15, n_components=2).fit(X)
+    >>> model.embedding_.shape
+    (1000, 2)
+    >>> Y = model.transform(X[:10])
     """
 
     _BINDING = "_mojolearn_metrics"
@@ -276,6 +346,32 @@ class UMAP(NumericModeMixin):
             f"UMAP target_metric={tm!r} is not implemented; 'categorical' and 'l2' / 'euclidean' are")
 
     def fit(self, X, y=None):
+        """Fit the embedding to ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data; converted to C-order float32 and must be finite.
+        y : array-like of shape (n_samples,) or (n_samples, n_targets), optional
+            Target for supervised UMAP. Categorical labels (one per row, -1
+            for unknown) or, with ``target_metric="l2"``, finite continuous
+            values.
+
+        Returns
+        -------
+        self : UMAP
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``X`` is not finite, ``n_neighbors`` exceeds ``n_samples``,
+            there are too few samples for spectral initialization, or a
+            parameter is out of range.
+        NotImplementedError
+            For ``densmap=True``, a non-euclidean ``output_metric`` or an
+            unsupported ``target_metric``.
+        """
         config = self._parameters()
         extras = self._extras()
         x, copied = as_f32_c(X, ndim=2, name="X")
@@ -328,23 +424,46 @@ class UMAP(NumericModeMixin):
         return self
 
     def fit_transform(self, X, y=None):
+        """Fit to ``X`` and return the training embedding.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : array-like, optional
+            Target for supervised UMAP (see ``fit``).
+
+        Returns
+        -------
+        embedding : Array of shape (n_samples, n_components)
+            The float32 embedding, the same object as ``embedding_``.
+        """
         return self.fit(X, y).embedding_
 
     def transform(self, X):
-        """Embed new rows in the last fitted coordinate system without refitting.
+        """Embed new rows in the fitted coordinate system without refitting.
 
-        Identical training-input bytes return a copy of the saved embedding.
-        Parameter or mode changes require a successful refit. Later edits of
-        public embedding_ or the original X do not alter the retained model.
+        Each row is embedded independently: a batch of rows returns the same
+        values as embedding the rows one at a time. Passing the exact training
+        data returns a copy of the training embedding. Later edits of
+        ``embedding_`` or of the original ``X`` do not change the model.
 
-        The answer for a row does NOT depend on the other rows in the same
-        call. The sigma floor's mean, the edge-weight scale and the
-        negative-sample counter are all per row, and the refinement epoch
-        count does not read the request size, so a batch of N returns the
-        same bytes as N calls of one row, on every device alike
-        (umap/transform.mojo, and lane/umap-batch-fix, 2026-09-16, which
-        measured all four couplings closed on the CPU host route and on
-        Metal).
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            New rows; must be finite and have the training feature count.
+
+        Returns
+        -------
+        embedding : Array of shape (n_queries, n_components)
+            The float32 embedding of the new rows.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, the parameters or numeric mode changed
+            since ``fit`` (refit first), the feature count differs, or ``X``
+            is not finite.
         """
         if not hasattr(self, "_transform_training"):
             raise ValueError("UMAP transform requires a successful fit")
@@ -381,28 +500,39 @@ class UMAP(NumericModeMixin):
             raise RuntimeError("UMAP transform returned an invalid embedding")
         return output
 
+    # Saved layout (lane/inference-forecast-umap-pca, 2026-09-15): training and
+    # embedding (float32), `meta` <i8 [n_neighbors, n_components, n_epochs,
+    # random_state, negative_sample_rate, n_epochs_is_none, input_copied],
+    # `controls` <f4 [min_dist, spread, set_op_mix_ratio, local_connectivity,
+    # learning_rate, repulsion_strength], `extras`, `metric`, `init`,
+    # `numeric_mode`. On a CPU-only install a loaded model runs through the
+    # metrics host binding.
+    # Transform does not depend on the query batch. Until lane/umap-batch-fix
+    # (2026-09-16) it did, four ways: the sigma floor was a mean over every
+    # query's neighbor distances, each edge weight was scaled by the maximum
+    # over the batch, the negative-sample draws were keyed by a row's position
+    # in the batch, and with n_epochs unset the epoch count fell from 100 to 30
+    # above ten thousand queries. All four read one row now (umap/transform.mojo;
+    # measured closed on the CPU host route and on Metal), so a loaded model on
+    # a CPU answers the GPU's bytes for a row whatever else is asked with it.
     def save(self, path):
-        """Write the fitted embedding to `path` as an npz: the retained
-        training rows and embedding (float32), `meta` `<i8` [n_neighbors,
-        n_components, n_epochs, random_state, negative_sample_rate,
-        n_epochs_is_none, input_copied], `controls` `<f4` [min_dist, spread,
-        set_op_mix_ratio, local_connectivity, learning_rate,
-        repulsion_strength], `metric`, `init` and `numeric_mode`
-        (lane/inference-forecast-umap-pca, 2026-09-15).
+        """Save the fitted model to ``path`` as an ``.npz`` file.
 
-        A loaded model transforms; it does not refit. On a CPU-only install
-        that is public inference through the metrics host binding
-        (`mojolearn.host_model(path)` or `UMAP.load(path)`).
+        The file holds the training rows, the embedding, the parameters and
+        the numeric mode. A model loaded with ``UMAP.load`` (or
+        ``mojolearn.host_model``) can ``transform`` new rows, including on a
+        CPU-only install, but cannot refit.
 
-        THE RESULT DOES NOT DEPEND ON THE QUERY BATCH. Until
-        lane/umap-batch-fix (2026-09-16) it did, four ways: the sigma floor
-        was a mean over every query's neighbor distances, each edge weight
-        was scaled by the maximum over the batch, the negative-sample draws
-        were keyed by a row's position in the batch, and with n_epochs unset
-        the epoch count fell from 100 to 30 above ten thousand queries. All
-        four read one row now, so a loaded model on a CPU answers the GPU's
-        bytes for a row whatever else is asked with it, and a row asked
-        alone embeds exactly as it does in a batch."""
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted.
+        """
         if not hasattr(self, "_transform_training"):
             raise ValueError("UMAP save requires a successful fit")
         from . import _serialize
@@ -429,10 +559,27 @@ class UMAP(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load an embedding saved by `save`. The result transforms new
-        rows against the saved training rows and embedding; it does not
-        refit. Transform results do not depend on the query batch (see
-        `save`)."""
+        """Load a model written by ``save``.
+
+        The loaded model transforms new rows against the saved training rows
+        and embedding; it does not refit.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by ``UMAP.save``.
+
+        Returns
+        -------
+        model : UMAP
+            The restored model, with ``embedding_``, ``n_features_in_`` and
+            ``input_copied_`` set.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a UMAP model or its contents are inconsistent.
+        """
         from . import _serialize
         from .decomposition import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _UMAP_FORMAT)
