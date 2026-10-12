@@ -2445,8 +2445,21 @@ def race_builds(lane, arms=("ours",), repo=REPO):
     base = lane_binding(lane)[len("_mojolearn_"):]
     want = ["build_" + base]
     if needs_host_reference(lane, arms):
-        want.append("build_%s_host" % base)
+        want += ["build_%s" % b[len("_mojolearn_"):] for b in host_reference_bindings(lane)]
     return [b for b in want if os.path.exists(os.path.join(repo, "bindings", b + ".sh"))]
+
+
+# The base binding's host twin. A layer or optimizer constructor draws its seeded init through `_buffer.InitStream`
+# (`_mojolearn.uniform_init_f32` / `normal_init_f32`), and the CPU vendor serves `_mojolearn` from this twin
+# (host_surface family "core"). Without it the host reference of every lane whose class draws an init refused
+# "no CPU implementation of _mojolearn.uniform_init_f32 ... no GPU set is loaded, on request" (resnet-block, nv2 v0140 /
+# amd a1721, 2026-10-12); batchnorm draws nothing, so its cells passed in the same jobs.
+CORE_HOST_BINDING = "_mojolearn_core_host"
+
+
+def host_reference_bindings(lane):
+    """Host binding basenames the own-host reference of `lane` loads: the lane's twin, then the core twin."""
+    return [lane_binding(lane) + "_host", CORE_HOST_BINDING]
 
 
 def _host_binding_path(basename):
@@ -2473,20 +2486,22 @@ def host_reference_preflight(lane, ds, arms, work):
         return None
     if not needs_host_reference(lane, arms):
         return None
-    basename = lane_binding(lane) + "_host"
-    if not os.path.exists(os.path.join(REPO, "bindings", "build_%s.sh" % basename[len("_mojolearn_"):])):
-        return None
-    if os.path.exists(_host_binding_path(basename)):
-        return None
-    marker = os.path.join(work, "host-preflight-%s.asked" % basename)
-    if os.path.exists(marker):
-        print("ALGOS-HOST-REFERENCE lane=%s dataset=%s %s still missing after one ask; racing without it"
-              % (lane, ds, basename), flush=True)
-        return None
-    with open(marker, "w") as fh:
-        fh.write(now_utc() + "\n")
-    _say_needs_host(lane, ds, basename, "preflight")
-    return 4
+    # one twin per ask (the box loop builds the last `needs` line it reads), in host_reference_bindings order
+    for basename in host_reference_bindings(lane):
+        if not os.path.exists(os.path.join(REPO, "bindings", "build_%s.sh" % basename[len("_mojolearn_"):])):
+            continue
+        if os.path.exists(_host_binding_path(basename)):
+            continue
+        marker = os.path.join(work, "host-preflight-%s.asked" % basename)
+        if os.path.exists(marker):
+            print("ALGOS-HOST-REFERENCE lane=%s dataset=%s %s still missing after one ask; racing without it"
+                  % (lane, ds, basename), flush=True)
+            continue
+        with open(marker, "w") as fh:
+            fh.write(now_utc() + "\n")
+        _say_needs_host(lane, ds, basename, "preflight")
+        return 4
+    return None
 
 
 def _ours_info(lane, est=None):

@@ -851,7 +851,7 @@ class KernelPCA(_XNeighbors):
     Reference: scikit-learn `decomposition/_kernel_pca.py` (1.9.0) with
     `preprocessing.KernelCenterer`: the kernel matrix, centered in their
     order, the dense eigendecomposition (eigen_solver 'dense'; here
-    x_decomp's eigh, the round-robin Jacobi on the device, ascending, then
+    x_decomp's eigh, ascending, then
     sklearn's `svd_flip(u, None)` sign rule), eigenvalues
     below zero set to zero, components sorted by decreasing eigenvalue (equal
     eigenvalues: the higher solver index first, as their reversed argsort),
@@ -967,9 +967,14 @@ class KernelPCA(_XNeighbors):
             self.n_features_in_ = d
             return self
         # lane hr2-kpca-seq: the dense eigendecomposition is x_decomp's
-        # eigh (the pinned round-robin Jacobi, x_decomp/rr.mojo, on the
-        # device; the host binding runs the same rounds), never the host
-        # Jacobi of x_neighbors/eigh.mojo inside the GPU binding.
+        # eigh, never the host Jacobi of x_neighbors/eigh.mojo inside the
+        # GPU binding. On every IDENTICAL device column (NVIDIA, AMD and
+        # Apple alike, no vendor gate) eigh from n = 2 TD_NB (64) is the
+        # tridiagonal route (x_decomp/eigh_tridiag.mojo EIGH_TD_IDN, default
+        # since 2026-10-11), below that and on a clustered-spectrum refusal
+        # the round-robin Jacobi (x_decomp/rr.mojo); the host binding keeps
+        # the Jacobi at every n, so its digest here is recorded, not
+        # required, from n = 64 (lane apple-kpca, 2026-10-12).
         c = n if self.n_components is None else min(n, int(self.n_components))
         import array
         from ._expansion_decomp import _Kit, _M

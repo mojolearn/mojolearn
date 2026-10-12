@@ -108,10 +108,21 @@ def test_missing_host_bindings_reads_both_refusals(tmp_path):
     assert hq.missing_host_bindings(tmp_path / "absent.log") == []
 
 
+def test_missing_host_bindings_names_the_core_twin_for_the_base_binding(tmp_path):
+    # resnet-block's init draw (InitStream -> _mojolearn.uniform_init_f32), nv2 v0140 / amd a1721
+    log = tmp_path / "host.log"
+    log.write_text("ImportError: mojolearn: no CPU implementation of _mojolearn.uniform_init_f32 yet; see "
+                   "SUPPORT_MATRIX.md (no host binding covers _mojolearn; host bindings built here: x_cnn). "
+                   "Why no GPU set loaded:\nmojolearn: MOJOLEARN_VENDOR=cpu; no GPU set is loaded, on request "
+                   "(flat layout)\n")
+    assert hq.missing_host_bindings(log) == ["_mojolearn_core_host"]
+
+
 def test_race_builds_add_the_host_twin_only_for_host_reference_lanes():
     algos = bb.ALGOS
-    assert algos.race_builds("nadam") == ["build_x_sequence", "build_x_sequence_host"]
-    assert algos.race_builds("conv2d") == ["build_x_cnn", "build_x_cnn_host"]
-    assert algos.race_builds("embedding") == ["build_embedding", "build_embedding_host"]
+    assert algos.race_builds("nadam") == ["build_x_sequence", "build_x_sequence_host", "build_core_host"]
+    assert algos.race_builds("conv2d") == ["build_x_cnn", "build_x_cnn_host", "build_core_host"]
+    assert algos.race_builds("resnet-block") == ["build_x_cnn", "build_x_cnn_host", "build_core_host"]
+    assert algos.race_builds("embedding") == ["build_embedding", "build_embedding_host", "build_core_host"]
     # torch-eager-fp32 in the race: quality compares against it, no host twin
     assert algos.race_builds("conv2d", ("ours", "torch-eager-fp32")) == ["build_x_cnn"]
