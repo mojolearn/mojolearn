@@ -1,12 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Brute-force exact k-nearest-neighbours on the GPU, and the classifier and
-regressor built on it.
+# References: `NearestNeighbors` follows cuVS's brute force;
+# `KNeighborsClassifier` and `KNeighborsRegressor` follow cuML's
+# `kneighbors_classifier.pyx` / `kneighbors_regressor.pyx` over
+# `ML::knn_classify` / `ML::knn_regress` (`neighbors/impl/knn/knn.mojo`,
+# `neighbors/impl/selection/knn.mojo`).
+"""Exact nearest-neighbor search on the GPU, and the k-NN classifier,
+k-NN regressor and radius search built on it.
 
-`NearestNeighbors` references cuVS's brute force; `KNeighborsClassifier` and
-`KNeighborsRegressor` reference cuML's `kneighbors_classifier.pyx` /
-`kneighbors_regressor.pyx` over `ML::knn_classify` / `ML::knn_regress`
-(`neighbors/impl/knn/knn.mojo`, `neighbors/impl/selection/knn.mojo`).
+`NearestNeighbors` follows cuVS's brute force; `KNeighborsClassifier` and
+`KNeighborsRegressor` follow cuML's estimators of the same names;
+`RadiusNeighbors` returns every neighbor within a radius over a random ball
+cover. Every search is exact, never approximate.
 """
 
 from . import _portable_math as math
@@ -464,83 +469,103 @@ def _resolve_rbc_metric(cls_name, metric, p):
     return value, arg
 
 
+# Maintainer notes (moved from the docstring):
+# - Reference: cuVS's fused L2 kernel. Exact by deliberate scope: an
+#   approximate index is a different algorithm with a different contract.
+# - Honored/refused rows were measured row by row by `tools/e2u_matrix_fit.py`.
+# - n_neighbors above n_samples_fit is refused: the reference's short-index
+#   fill is not implemented (knn_brute_force.mojo). Under
+#   IDENTICAL/DETERMINISTIC a k above 1024 selects in rounds of 1024 and
+#   merges index tiles by binary search (DEVIATION 6300,
+#   neighbors/checks/select_radix_identical.mojo); the answer is the same
+#   ascending (distance, index) list. FAST runs k > 256 through the radix
+#   select (reference: RAFT).
+# - query_tile is a memory number only (`check_knn_tiled_is_query_tile_
+#   invariant`). The planner: NVIDIA IDENTICAL starts at 512, other modes and
+#   columns at 256.
+# - metric: the rows of cuML's `_build_metric_type`
+#   (nearest_neighbors.pyx:520-553) this tree computes, plus the extra
+#   metrics (distance_ops.mojo::extra_metric_cell); haversine is refused by
+#   name (no pinned arcsin).
+# - p: refused at p <= 0, inf, NaN and subnormal (DEVIATION 552 -- 1/p and
+#   the vendor flush policy). cuML passes self.p for every metric
+#   (nearest_neighbors.pyx:852-854) and every non-Lp op discards it; here a
+#   non-default p under another metric is refused rather than ignored.
+# - algorithm 'rbc': exact k-NN over a random ball cover (DEVIATIONS 558 to
+#   567). 'kd_tree' / 'ball_tree' are an engineering refusal (see the
+#   message in `_check_refusals`).
+# - The arm (fused vs tiled, `KNN_METHOD_AUTO`) is not a parameter by design
+#   (POLICY CHOICE 4); under NUMERIC_IDENTICAL AUTO is pinned to the tiled
+#   arm on every column (DEVIATION 509).
 class NearestNeighbors(NumericModeMixin):
-    """Exact k-NN by brute force. Reference: cuVS's fused L2 kernel.
+    """Exact k-nearest-neighbor search.
 
-    EXACT, not approximate. There is no index to build and no recall to trade
-    away: every query is compared against every index point. That is a
-    deliberate scope choice rather than a missing feature -- an approximate
-    index is a different algorithm with a different contract, and this library
-    does not ship one.
-
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
-    `tools/e2u_matrix_fit.py`):
-
-        n_neighbors   honored   k. Refused above n_samples_fit (the
-                                reference's short-index fill is not implemented:
-                                knn_brute_force.mojo). UNDER
-                                IDENTICAL/DETERMINISTIC a k above 1024
-                                selects in rounds of 1024 and merges index
-                                tiles by binary search (DEVIATION 6300,
-                                neighbors/checks/select_radix_identical
-                                .mojo); the answer is the same ascending
-                                (distance, index) list. FAST runs k > 256
-                                through the radix select (reference: RAFT).
-        query_tile    honored   a MEMORY number; the answer does not depend
-                                on it (`check_knn_tiled_is_query_tile_
-                                invariant`), only the workspace does
-        metric        honored   every row of cuML's `_build_metric_type`
-                                (nearest_neighbors.pyx:520-553) this tree
-                                computes: 'euclidean'/'l2', 'sqeuclidean',
-                                'l1'/'cityblock'/'manhattan'/'taxicab',
-                                'chebyshev'/'linf', 'cosine',
-                                'minkowski'/'lp'. THE REST of their
-                                VALID_METRICS['brute'] set (canberra,
-                                jensenshannon, correlation, inner_product,
-                                haversine, braycurtis) is refused BY NAME.
-                                UNTIL 2026-09-01 THIS ROW READ "refused,
-                                anything but Euclidean"; cosine and
-                                Minkowski are implemented and the sentence is
-                                deleted rather than annotated.
-        p             honored   Minkowski's exponent, at any finite
-                                positive normal value. Refused at p <= 0,
-                                p = inf, NaN and subnormal p (DEVIATION
-                                552 -- 1/p and the vendor flush policy).
-                                Read ONLY by metric='minkowski'/'lp'
-                                (nearest_neighbors.pyx:852-854 passes
-                                self.p for every metric and every non-Lp
-                                op discards it). Under any other metric a
-                                p other than the default 2 is REFUSED by
-                                name rather than accepted and ignored.
-        algorithm     honored   'brute' / 'auto' (exact brute force, the
-                                default) and 'rbc' (exact k-NN over a
-                                random ball cover, an INDEX -- added
-                                2026-09-01, DEVIATIONS 558 to 567).
-                                'kd_tree' and 'ball_tree' stay refused and
-                                it is an ENGINEERING refusal, not an
-                                attribution one; see the note under
-                                `algorithm` below.
-
-    The ARM (fused vs tiled, `KNN_METHOD_AUTO`) is NOT a parameter of this
-    class by design (POLICY CHOICE 4 above); under NUMERIC_IDENTICAL AUTO is
-    pinned to the tiled arm on every column (DEVIATION 509).
+    Every query is compared against every fitted point (``algorithm='brute'``,
+    the default), or searched over an exact random ball cover index
+    (``algorithm='rbc'``). Both return the exact neighbors; there is no
+    approximate index and no recall to trade away. Input is converted to
+    float32. Neighbors come back nearest first, with ties in distance broken
+    by the lower index.
 
     Parameters
     ----------
     n_neighbors : int, default 5
-        scikit-learn's default.
-    query_tile : int, default 0 (automatic)
-        Queries processed per pass. Zero uses the compiled planner: NVIDIA
-        IDENTICAL starts at 512, while other modes and columns start at 256.
-        The planner applies its workspace limit and clamps to the query count.
-        Set an explicit positive tile to request a fixed starting size.
-        ``used_query_tile_`` reports the batch size that actually ran.
+        Number of neighbors returned by `kneighbors`, scikit-learn's default.
+        Must be between 1 and the number of fitted samples; a larger value
+        raises ``ValueError``.
+    query_tile : int, default 0
+        Queries processed per pass. It changes memory use only, never the
+        answer. ``0`` lets the library choose, within its workspace limit and
+        clamped to the query count; a positive value requests a fixed
+        starting size. ``used_query_tile_`` reports the size that ran.
+    metric : str, default 'euclidean'
+        Distance, by name. With ``algorithm='brute'`` or ``'auto'``:
+        'euclidean'/'l2', 'sqeuclidean', 'manhattan'/'l1'/'cityblock'/
+        'taxicab', 'chebyshev'/'linf', 'cosine', 'minkowski'/'lp',
+        'canberra', 'braycurtis', 'correlation', 'jensenshannon' (needs
+        ``X >= 0``) and 'inner_product' (a similarity: larger is nearer, and
+        `kneighbors` returns the products themselves). With
+        ``algorithm='rbc'``, only true metrics: 'euclidean'/'l2',
+        'manhattan'/'l1'/'cityblock'/'taxicab', 'chebyshev'/'linf' and
+        'minkowski'/'lp' with ``p >= 1``. 'haversine', a callable and
+        unknown names raise ``ValueError``.
+    algorithm : {'brute', 'auto', 'rbc'}, default 'brute'
+        'brute' and 'auto' (which means 'brute') compare every pair. 'rbc'
+        searches an exact random ball cover, whose pruning rests on the
+        triangle inequality, so it accepts only true metrics. 'kd_tree' and
+        'ball_tree' raise ``ValueError``.
+    p : float, default 2
+        Minkowski exponent, read only by ``metric='minkowski'`` (or 'lp').
+        It must be finite and positive (and at least 1 with
+        ``algorithm='rbc'``). Under any other metric, a value other than 2
+        raises ``ValueError`` instead of being ignored. Unlike scikit-learn,
+        ``metric='minkowski', p=2`` runs the Minkowski computation rather
+        than switching to Euclidean; the two agree to a few units in the last
+        place.
+    numeric_mode : {'identical', 'deterministic', 'fast'}, optional
+        Numeric mode for this estimator; ``None`` uses the process default
+        (`mojolearn.set_numeric_mode`). 'fast' is available on Apple GPUs
+        only.
 
     Attributes
     ----------
-    used_query_tile_ : int
-        Set by `kneighbors` after automatic planning, the workspace cap and
-        the query-count clamp.
+    n_samples_fit_ : int
+        Number of fitted samples.
+    n_features_in_ : int
+        Number of features seen at `fit`.
+    used_query_tile_ : int or None
+        Query batch size the last `kneighbors` call ran with; ``None`` after
+        an ``algorithm='rbc'`` search.
+    n_candidate_distances_ : int
+        Set by an ``algorithm='rbc'`` search: the number of distances the
+        ball cover computed.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> nn = mojolearn.NearestNeighbors(n_neighbors=5).fit(X)
+    >>> distances, indices = nn.kneighbors(X[:10])
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -565,17 +590,47 @@ class NearestNeighbors(NumericModeMixin):
         self._index = None
         self.used_query_tile_ = None
 
+    # The knn host inference lane, 2026-09-14: the file holds what
+    # `kneighbors` reads and nothing else.
     def save(self, path):
-        """Write the fitted index to `path` as an npz: the `<f4` index as
-        fitted, `n_neighbors`, `query_tile`, `metric`, `p` and `algorithm`
-        (the knn host inference lane, 2026-09-14). What `kneighbors` reads
-        and nothing else; `mojolearn.host_model(path)` searches it on a CPU
-        with no GPU (brute arm, euclidean and sqeuclidean)."""
+        """Save the fitted model to an ``.npz`` file.
+
+        The file holds the float32 index as fitted and the parameters
+        (`n_neighbors`, `query_tile`, `metric`, `p`, `algorithm`, numeric
+        mode). Equal models write identical files.
+        `mojolearn.host_model(path)` can search the saved model on a CPU with
+        no GPU (brute force, 'euclidean' and 'sqeuclidean').
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         return _serialize.write_npz(path, _knn_arrays(self))
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result answers `kneighbors`."""
+        """Load a model written by `save`.
+
+        Arrays are read at their saved dtypes and never cast. A file naming
+        a metric or algorithm this class refuses raises ``ValueError``, as
+        `fit` would.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+
+        Returns
+        -------
+        NearestNeighbors
+            A fitted model, ready for `kneighbors`.
+        """
         obj, _, _ = _load_knn(cls, path)
         return obj
 
@@ -719,10 +774,21 @@ class NearestNeighbors(NumericModeMixin):
         return state
 
     def fit(self, X, y=None):
-        """Store the index. There is no index structure to build.
+        """Store the points to search.
 
-        `y` is accepted and ignored, for scikit-learn call-shape
-        compatibility.
+        Parameter checks run here, so an unsupported metric, algorithm or
+        `p` raises ``ValueError`` before any search.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Points to search; converted to float32.
+        y : ignored
+            Accepted for scikit-learn compatibility.
+
+        Returns
+        -------
+        self
         """
         self._check_refusals()
         # A refit drops the device copy of the previous index HERE, not at
@@ -740,30 +806,48 @@ class NearestNeighbors(NumericModeMixin):
         self.n_features_in_ = idx.shape[1]
         return self
 
+    # Maintainer notes (moved from the docstring): the kernel computes squared
+    # Euclidean distances and the square root is taken on the way out, over
+    # n_queries * k values. The index stays on the device (DEVIATION 2921,
+    # `neighbors/resident_index.mojo`): the resident search is
+    # `knn_search`'s body after its upload, so the bits are `knn_search`'s.
+    # The copy is keyed on the index array's address and shape, released at
+    # refit and when the instance is collected. The CPU host binding has no
+    # resident entry and reads the caller's memory on every call.
     def kneighbors(self, X, n_neighbors=None, return_distance=True):
-        """Distances and indices of the nearest neighbours, nearest first.
+        """Find the nearest fitted points to each query, nearest first.
 
-        Returns `(distances, indices)` when `return_distance`, else
-        `indices`, matching scikit-learn's layout and its ordering.
+        Distances are the chosen metric's ('euclidean' returns true, not
+        squared, distances). Ties in distance are broken by the lower index,
+        matching scikit-learn's layout and ordering.
 
-        Distances are Euclidean, not squared. The kernel computes squared
-        distances and the square root is taken on the way out, over
-        `n_queries * k` values rather than `n_queries * n_index`, so it is not
-        on the hot path.
+        On a GPU the fitted points are copied to the device at the first call
+        after `fit` and reused by later calls. Changing the array passed to
+        `fit` in place after that is not seen; call `fit` again instead (as
+        with cuML, whose `fit` copies the data to the device).
 
-        THE INDEX STAYS ON THE DEVICE (DEVIATION 2921, lane/infer-speed-
-        classical, 2026-09-17). On a GPU binding the brute-force arm uploads
-        the fitted index ONCE, at the first call after `fit`, and every
-        later call searches the device copy (`neighbors/resident_index.
-        mojo`); the search itself is `knn_search`'s body after its upload,
-        so the bits are `knn_search`'s. The copy is keyed on the index
-        array's address and shape: a refit replaces the array and the next
-        call uploads again, and the old copy is released then and when the
-        instance is collected. An in-place write into the array `fit` was
-        given, after the first call, is NOT seen by later calls, as it is
-        not by cuML, whose `fit` copies the index to the device. The CPU
-        host binding has no such entry and reads the caller's memory on
-        every call.
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Query points; converted to float32.
+        n_neighbors : int, optional
+            Neighbors per query; defaults to the constructor's
+            `n_neighbors`. Must be between 1 and `n_samples_fit_`.
+        return_distance : bool, default True
+            Return the distances as well as the indices.
+
+        Returns
+        -------
+        distances : Array of shape (n_queries, n_neighbors), float32
+            Returned only when `return_distance` is True.
+        indices : Array of shape (n_queries, n_neighbors), int64
+            Row indices into the fitted data.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, `X` has the wrong number of features,
+            or `n_neighbors` is out of range.
         """
         if self._index is None:
             raise ValueError("mojolearn: call fit before kneighbors")
@@ -863,71 +947,80 @@ class NearestNeighbors(NumericModeMixin):
         return ind.astype("<i8")
 
 
+# Maintainer notes (moved from the docstring):
+# - Reference: cuML's `KNeighborsClassifier`; `predict` is `knn_classify`,
+#   the tie rule cuML's `class_vote_kernel`
+#   (`src_prims/selection/knn.cuh:74-109`), scikit-learn's `mode`. The vote
+#   is a serial fold per query in neighbor order, so it is bit-identical in
+#   both numeric modes by construction (`neighbors/impl/selection/knn.mojo`,
+#   DEVIATION 542). Rows measured by `tools/e2u_matrix_fit.py`.
+# - weights='distance' is DEVIATION 556 (scikit-learn `_base.py:108-113`).
+#   The weighted arm asks the search for the rooted distance where the
+#   uniform arm asks for the squared one, because a weight reads the value
+#   and a vote only the order (estimator.mojo policy 8).
+# - algorithm='rbc' is refused: knn_classify searches inside its own entry
+#   point, so 'rbc' would be accepted and inert.
+# - y: any int values, multi-output as cuML's `vector<int*> y`.
+# - classes_: the pyx's `cp.unique`; `_labels.sorted_classes`, DEVIATION
+#   2340 (a list rather than an ndarray). The Mojo side recomputes the set
+#   with `getUniquelabels` and `predict` asserts the two agree.
 class KNeighborsClassifier(NearestNeighbors):
-    """k-NN classification by UNWEIGHTED majority vote over the `n_neighbors`
-    nearest index points. Reference: cuML's `KNeighborsClassifier`.
+    """Classifier that votes among the k nearest training points.
 
-    `predict` is cuML's `knn_classify`: for each query, count the classes of
-    its `k` neighbours (each worth `1/k`), take the argmax, and on a tie
-    return the LOWEST class in sorted order -- cuML's `class_vote_kernel`
-    (`src_prims/selection/knn.cuh:74-109`), scikit-learn's `mode`. The vote
-    is a serial fold per query in neighbour order (nearest first, ties in
-    distance by lowest index), so it is bit-identical in both numeric modes
-    by construction (`neighbors/impl/selection/knn.mojo`, DEVIATION 542).
-
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
-    `tools/e2u_matrix_fit.py`; the `NearestNeighbors` rows apply as well):
-
-        n_neighbors   honored   k, as NearestNeighbors (refused above
-                                n_samples_fit; under NUMERIC_IDENTICAL above
-                                256)
-        weights       honored   'uniform' (cuML's only arm, the implemented
-                                `class_probs_kernel`) and 'distance'
-                                (DEVIATION 556, scikit-learn's semantics:
-                                `w = 1/d`, and a row containing an exact
-                                zero is REPLACED WHOLESALE by its
-                                zero-mask so the exact matches get 1.0 and
-                                every other neighbour in that row gets
-                                0.0 -- _base.py:108-113). A CALLABLE is
-                                refused: it would have to run inside a GPU
-                                kernel. UNTIL 2026-09-01 THIS ROW READ
-                                "refused, anything but 'uniform', cuML
-                                refuses it too"; cuML not having a thing
-                                stopped being a reason to refuse it.
-                                NOTE: the weighted arm asks the search for
-                                the ROOTED distance where the uniform arm
-                                asks for the squared one, because a weight
-                                reads the VALUE and a vote reads only the
-                                ORDER (estimator.mojo policy 8).
-        metric, p     honored   as NearestNeighbors
-        algorithm     refused   anything but 'brute' / 'auto'. 'rbc' is
-                                refused HERE though NearestNeighbors takes
-                                it: this class calls knn_classify (as cuML does),
-                                which searches inside its own entry point,
-                                so 'rbc' would be accepted and inert
-        y             honored   int labels, ANY values (negative, gaps);
-                                1-D or 2-D (multi-output, one vote per
-                                column, as cuML's `vector<int*> y`)
-
-    `predict_proba` returns each query's vote fractions over `classes_`
-    (cuML's `knn_class_proba`), one array, or a list of arrays for a 2-D
-    `y`, exactly as cuML and scikit-learn shape it.
+    For each query, the classes of its `n_neighbors` nearest training points
+    are counted and the most frequent wins; a tie goes to the lowest class in
+    sorted order, as in cuML and scikit-learn. With ``weights='distance'``
+    each neighbor's vote is weighted by ``1 / distance``. Neighbor search is
+    exact brute force, as in `NearestNeighbors`.
 
     Parameters
     ----------
     n_neighbors : int, default 5
-    weights : {'uniform', 'distance'}, default 'uniform'
-    query_tile, metric, algorithm, p : as NearestNeighbors
+        Number of neighbors that vote. Must be between 1 and the number of
+        training samples.
+    query_tile : int, default 0
+        As in `NearestNeighbors`: memory use only, never the answer.
+    weights : {'uniform', 'distance'} or None, default 'uniform'
+        'uniform' (or ``None``) gives every neighbor one vote. 'distance'
+        follows scikit-learn: weight ``1 / d``, and when a query has
+        neighbors at distance exactly zero, those neighbors get weight 1 and
+        the others in that row get 0. A callable raises ``ValueError``.
+        'distance' with ``metric='inner_product'`` raises ``ValueError``
+        (an inner product is a similarity, not a distance).
+    metric : str, default 'euclidean'
+        As in `NearestNeighbors` with ``algorithm='brute'``.
+    algorithm : {'brute', 'auto'}, default 'brute'
+        Exact brute force. 'rbc' raises ``ValueError`` here; use
+        ``NearestNeighbors(algorithm='rbc').kneighbors`` and vote on the
+        result instead.
+    p : float, default 2
+        As in `NearestNeighbors`.
+    numeric_mode : {'identical', 'deterministic', 'fast'}, optional
+        As in `NearestNeighbors`. 'fast' is available on Apple GPUs only.
 
     Attributes
     ----------
-    classes_ : list, or list of lists for a 2-D `y`
-        The sorted unique labels per output, as Python ints (the pyx's
-        `cp.unique`; `_labels.sorted_classes`, DEVIATION 2340, a list
-        rather than an ndarray). The
-        Mojo side recomputes the same set with the implemented `getUniquelabels`
-        and `predict` asserts the two agree.
+    classes_ : list of int, or list of lists for a 2-D `y`
+        Sorted unique labels per output, as Python ints (a list, not an
+        ndarray).
     outputs_2d_ : bool
+        Whether `y` had more than one output column.
+    n_samples_fit_ : int
+        Number of training samples.
+    n_features_in_ : int
+        Number of features seen at `fit`.
+    used_query_tile_ : int
+        Query batch size the last prediction ran with.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int32)
+    >>> clf = mojolearn.KNeighborsClassifier(n_neighbors=5).fit(X, y)
+    >>> labels = clf.predict(X[:10])
+    >>> proba = clf.predict_proba(X[:10])
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -963,14 +1056,28 @@ class KNeighborsClassifier(NearestNeighbors):
         super()._check_refusals()
         _resolve_weights(type(self).__name__, self.weights)
 
+    # File members: the index and parameters `NearestNeighbors.save` writes,
+    # `weights`, the `<i4` label columns the binding takes (`_y_cols`,
+    # policy 6), `classes` (`<i8`, every output's sorted classes
+    # concatenated) and `class_counts` (`<i8`, one per output). The knn host
+    # inference lane, 2026-09-14.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: the index and
-        parameters `NearestNeighbors.save` writes, `weights`, the `<i4`
-        label columns the binding takes (`_y_cols`, policy 6), `classes`
-        (`<i8`, every output's sorted classes concatenated) and
-        `class_counts` (`<i8`, one per output) (the knn host inference lane,
-        2026-09-14). `mojolearn.host_model(path)` predicts from it on a CPU
-        with no GPU."""
+        """Save the fitted model to an ``.npz`` file.
+
+        The file holds the training points, labels, classes and parameters.
+        `mojolearn.host_model(path)` can predict from it on a CPU with no
+        GPU.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         if self._y_cols is None:
             raise RuntimeError("this estimator is not fitted yet")
         arrays = _knn_arrays(self)
@@ -985,9 +1092,22 @@ class KNeighborsClassifier(NearestNeighbors):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts. `classes_` is
-        rebuilt from the label columns exactly as `fit` builds it and must
-        equal the file's `classes` member, or the file is refused."""
+        """Load a model written by `save`.
+
+        `classes_` is rebuilt from the saved labels as `fit` builds it; a
+        file whose stored classes disagree with its labels raises
+        ``ValueError``.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+
+        Returns
+        -------
+        KNeighborsClassifier
+            A fitted model, ready for `predict`.
+        """
         obj, arrays, (o2d, n_out) = _load_knn(cls, path)
         y_cols = _load_y_cols(arrays, path, "<i4", obj.n_samples_fit_, n_out)
         classes = _serialize.exact(arrays, "classes", "<i8").tolist()
@@ -1010,7 +1130,22 @@ class KNeighborsClassifier(NearestNeighbors):
         return obj
 
     def fit(self, X, y):
-        """Store the index and the labels. `y` is int, 1-D or 2-D."""
+        """Store the training points and their labels.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training points; converted to float32.
+        y : array-like of int, shape (n_samples,) or (n_samples, n_outputs)
+            Integer class labels of any values (negative values and gaps are
+            fine) within the int32 range. A 2-D `y` votes each column
+            separately. Float labels raise ``ValueError``; cast them to int
+            first (cuML requires int32 labels too).
+
+        Returns
+        -------
+        self
+        """
         super().fit(X)
         shape = _shape_of(y)
         if len(shape) not in (1, 2):
@@ -1067,6 +1202,8 @@ class KNeighborsClassifier(NearestNeighbors):
 
     @property
     def classes_(self):
+        """Sorted unique labels seen at `fit`, as a list of ints; a list of
+        such lists for a 2-D `y`."""
         if self._y_cols is None:
             raise AttributeError("classes_ is set by fit")
         if self.outputs_2d_:
@@ -1162,8 +1299,25 @@ class KNeighborsClassifier(NearestNeighbors):
         return labels, proba, n_classes
 
     def predict(self, X):
-        """The voted class per query: shape `(n_queries,)`, or
-        `(n_queries, n_outputs)` for a 2-D `y`. Original label values."""
+        """Predict the class of each query by neighbor vote.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Query points; converted to float32.
+
+        Returns
+        -------
+        Array of int64, shape (n_queries,) or (n_queries, n_outputs)
+            The voted labels, in the original label values; 2-D when `y`
+            was 2-D.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, `X` has the wrong number of features,
+            or `n_neighbors` exceeds the number of training samples.
+        """
         labels, _, _ = self._predict(X, want_proba=False)
         if self.outputs_2d_:
             return labels.astype("<i8")
@@ -1171,8 +1325,19 @@ class KNeighborsClassifier(NearestNeighbors):
         return labels.reshape((labels.shape[0],)).astype("<i8")
 
     def predict_proba(self, X):
-        """Vote fractions per class, columns in `classes_` order; a list of
-        arrays for a 2-D `y`."""
+        """Return each query's vote fractions per class.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Query points; converted to float32.
+
+        Returns
+        -------
+        Array of float32, shape (n_queries, n_classes), or a list of them
+            Columns follow `classes_` order. For a 2-D `y`, one array per
+            output, as cuML and scikit-learn return it.
+        """
         labels, proba, n_classes = self._predict(X, want_proba=True)
         # `labels` is the one-element sentinel in this arm.  The selected
         # flat probability buffer records the query count without retaining
@@ -1189,30 +1354,62 @@ class KNeighborsClassifier(NearestNeighbors):
         return out[0]
 
 
+# Maintainer notes (moved from the docstring): reference cuML's
+# `KNeighborsRegressor` (`ML::knn_regress`, `regress_avg_kernel`,
+# `src_prims/selection/knn.cuh:112-131`). The mean is a serial float32 fold
+# per query in neighbor order, then one division by k; the same arithmetic
+# in both numeric modes, with the seams flushed under NUMERIC_IDENTICAL
+# (DEVIATION 542). weights='distance' is DEVIATION 556. float64 targets are
+# cast to float32 as cuML does (convert_to_dtype=np.float32).
 class KNeighborsRegressor(NearestNeighbors):
-    """k-NN regression by the UNWEIGHTED mean of the `n_neighbors` nearest
-    targets. Reference: cuML's `KNeighborsRegressor` (`ML::knn_regress`,
-    `regress_avg_kernel`, `src_prims/selection/knn.cuh:112-131`).
+    """Regressor that averages the targets of the k nearest training points.
 
-    The mean is a serial float32 fold per query in neighbour order, then one
-    division by `k`; the same arithmetic in both numeric modes, with the
-    seams flushed under NUMERIC_IDENTICAL (DEVIATION 542).
+    Each prediction is the mean of the `n_neighbors` nearest targets, or with
+    ``weights='distance'`` the weighted mean ``sum(w * y) / sum(w)`` with
+    ``w = 1 / d``. Neighbor search is exact brute force, as in
+    `NearestNeighbors`. Targets are converted to float32.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (the `NearestNeighbors` rows
-    apply as well):
+    Parameters
+    ----------
+    n_neighbors : int, default 5
+        Number of neighbors averaged. Must be between 1 and the number of
+        training samples.
+    query_tile : int, default 0
+        As in `NearestNeighbors`: memory use only, never the answer.
+    weights : {'uniform', 'distance'} or None, default 'uniform'
+        'uniform' (or ``None``) averages equally. 'distance' follows
+        scikit-learn, including its rule for neighbors at distance exactly
+        zero (they get weight 1, the rest of that row 0). A callable raises
+        ``ValueError``, as does 'distance' with ``metric='inner_product'``.
+    metric : str, default 'euclidean'
+        As in `NearestNeighbors` with ``algorithm='brute'``.
+    algorithm : {'brute', 'auto'}, default 'brute'
+        Exact brute force. 'rbc' raises ``ValueError`` here; use
+        ``NearestNeighbors(algorithm='rbc').kneighbors`` instead.
+    p : float, default 2
+        As in `NearestNeighbors`.
+    numeric_mode : {'identical', 'deterministic', 'fast'}, optional
+        As in `NearestNeighbors`. 'fast' is available on Apple GPUs only.
 
-        n_neighbors   honored   as NearestNeighbors
-        weights       honored   'uniform' (cuML's `regress_avg_kernel`) and
-                                'distance' (DEVIATION 556: scikit-learn's
-                                `sum(y w) / sum(w)` with `w = 1/d` and the
-                                same row-level zero rule as the
-                                classifier). A callable is refused.
-        metric, algorithm, p    as NearestNeighbors
-        y             honored   float targets, 1-D or 2-D (multi-output);
-                                float64 is cast to float32 (cuML:
-                                convert_to_dtype=np.float32)
+    Attributes
+    ----------
+    outputs_2d_ : bool
+        Whether `y` had more than one output column.
+    n_samples_fit_ : int
+        Number of training samples.
+    n_features_in_ : int
+        Number of features seen at `fit`.
+    used_query_tile_ : int
+        Query batch size the last prediction ran with.
 
-    Parameters / Attributes: as KNeighborsClassifier, without `classes_`.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X.sum(axis=1)
+    >>> reg = mojolearn.KNeighborsRegressor(n_neighbors=5).fit(X, y)
+    >>> pred = reg.predict(X[:10])
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -1248,12 +1445,26 @@ class KNeighborsRegressor(NearestNeighbors):
         super()._check_refusals()
         _resolve_weights(type(self).__name__, self.weights)
 
+    # File members: the index and parameters `NearestNeighbors.save` writes,
+    # `weights` and the `<f4` target columns the binding takes (`_y_cols`,
+    # policy 6). The knn host inference lane, 2026-09-14.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: the index and
-        parameters `NearestNeighbors.save` writes, `weights` and the `<f4`
-        target columns the binding takes (`_y_cols`, policy 6) (the knn host
-        inference lane, 2026-09-14). `mojolearn.host_model(path)` predicts
-        from it on a CPU with no GPU."""
+        """Save the fitted model to an ``.npz`` file.
+
+        The file holds the training points, targets and parameters.
+        `mojolearn.host_model(path)` can predict from it on a CPU with no
+        GPU.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         if self._y_cols is None:
             raise RuntimeError("this estimator is not fitted yet")
         arrays = _knn_arrays(self)
@@ -1262,14 +1473,38 @@ class KNeighborsRegressor(NearestNeighbors):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts."""
+        """Load a model written by `save`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+
+        Returns
+        -------
+        KNeighborsRegressor
+            A fitted model, ready for `predict`.
+        """
         obj, arrays, (o2d, n_out) = _load_knn(cls, path)
         obj._y_cols = _load_y_cols(arrays, path, "<f4", obj.n_samples_fit_, n_out)
         obj.outputs_2d_ = o2d
         return obj
 
     def fit(self, X, y):
-        """Store the index and the targets. `y` is float, 1-D or 2-D."""
+        """Store the training points and their targets.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training points; converted to float32.
+        y : array-like, shape (n_samples,) or (n_samples, n_outputs)
+            Numeric targets; converted to float32. A 2-D `y` is averaged
+            column by column.
+
+        Returns
+        -------
+        self
+        """
         super().fit(X)
         shape = _shape_of(y)
         if len(shape) not in (1, 2):
@@ -1300,8 +1535,24 @@ class KNeighborsRegressor(NearestNeighbors):
         return self
 
     def predict(self, X):
-        """The mean target per query: `(n_queries,)`, or
-        `(n_queries, n_outputs)` for a 2-D `y`. float32."""
+        """Predict each query's target from its neighbors.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Query points; converted to float32.
+
+        Returns
+        -------
+        Array of float32, shape (n_queries,) or (n_queries, n_outputs)
+            The (weighted) mean target; 2-D when `y` was 2-D.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, `X` has the wrong number of features,
+            or `n_neighbors` exceeds the number of training samples.
+        """
         if self._index is None or self._y_cols is None:
             raise ValueError("mojolearn: call fit before predict")
         q, _ = as_f32_dense_c(X, ndim=2, name="X")
@@ -1355,48 +1606,73 @@ class KNeighborsRegressor(NearestNeighbors):
         return out.reshape((nq,))
 
 
+# Maintainer notes (moved from the docstring):
+# - The index is cuVS's random ball cover (`neighbors/impl/ball_cover/`),
+#   which DBSCAN uses for its eps neighborhood. Exactness is asserted by
+#   `neighbors/checks/radius_check.mojo` against a host brute-force oracle
+#   per cell; the per-metric gate is `pixi run
+#   check-ball-cover-knn-identical`. Metric refusals and their reasons live
+#   in `_resolve_rbc_metric`.
+# - The distances are recomputed, not stored by the search: a separate pass
+#   walks the finished neighbor list (`neighbors/checks/
+#   radius_distances.mojo` carries the argument that the value is the same;
+#   under `identical` the check asserts it bit for bit).
+# - sort_results: the device returns each row in ascending index order under
+#   `identical` (DEVIATION 551), so a stable sort by distance gives
+#   (distance, index) order with the tie-break free. The sort is the
+#   segmented device sort `xn_p2m_row_sort`.
+# - Two calls cross the boundary per query (count, then fill), because the
+#   output size is not a function of the inputs; the ball cover is built in
+#   each (`neighbors/estimator.mojo`).
 class RadiusNeighbors(NumericModeMixin):
-    """Every neighbour inside a radius, over the random ball cover.
+    """Find every fitted point within a radius of each query.
 
-    scikit-learn's `RadiusNeighborsMixin.radius_neighbors` shape: a ragged
-    `(distances, indices)` pair, one variable-length array per query row.
+    Returns scikit-learn's `radius_neighbors` shape: a ragged
+    ``(distances, indices)`` pair with one variable-length array per query.
+    The search runs over a random ball cover index (neither brute force nor
+    one of scikit-learn's trees) and returns the exact set: its pruning is a
+    triangle-inequality bound, not an approximation. Input is converted to
+    float32.
 
-    **This is not brute force and it is not one of scikit-learn's trees.**
-    The index is cuVS's random ball cover
-    (`neighbors/impl/ball_cover/`), which DBSCAN has used for its
-    eps neighbourhood since this library's first release. It returns the
-    EXACT set -- its pruning is a triangle-inequality bound, not an
-    approximation -- and `neighbors/checks/radius_check.mojo` asserts that
-    against a host brute-force oracle per cell, not per total.
+    Parameters
+    ----------
+    radius : float, default 1.0
+        Default search radius; must be positive and finite.
+    metric : str, default 'euclidean'
+        Any distance that satisfies the triangle inequality:
+        'euclidean'/'l2', 'manhattan'/'l1'/'cityblock'/'taxicab',
+        'chebyshev'/'linf' and 'minkowski'/'lp' with ``p >= 1``. 'cosine',
+        'sqeuclidean', Minkowski with ``p < 1`` and other names raise
+        ``ValueError``, because the index would silently miss neighbors
+        under them. For squared Euclidean, use 'euclidean' and square the
+        distances.
+    algorithm : {'auto', 'rbc'}, default 'auto'
+        Both mean the random ball cover. 'brute', 'kd_tree' and 'ball_tree'
+        raise ``ValueError``, since they would name a different algorithm.
+    p : float, default 2
+        Minkowski exponent, read only by ``metric='minkowski'`` (or 'lp');
+        must be finite and at least 1. Under any other metric, a value other
+        than 2 raises ``ValueError``.
+    numeric_mode : {'identical', 'deterministic', 'fast'}, optional
+        Numeric mode for this estimator; ``None`` uses the process default
+        (`mojolearn.set_numeric_mode`). 'fast' is available on Apple GPUs
+        only.
 
-    **Metrics: every one that satisfies the triangle inequality, which is
-    what the pruning rests on.** 'euclidean'/'l2', 'manhattan'/'l1'/
-    'cityblock'/'taxicab', 'chebyshev'/'linf' and 'minkowski'/'lp' at
-    p >= 1. Until 2026-09-01 this was Euclidean only; the reason given was
-    correct and is kept, and it turned out to be narrower than its own
-    argument, because Minkowski at p >= 1 IS a metric. 'cosine',
-    'sqeuclidean' and Lp at p < 1 stay refused BY NAME with the inequality
-    as the stated reason (`_resolve_rbc_metric`). The per-metric gate is
-    `pixi run check-ball-cover-knn-identical`.
+    Attributes
+    ----------
+    n_samples_fit_ : int
+        Number of fitted samples.
+    n_features_in_ : int
+        Number of features seen at `fit`.
 
-    **The distances are recomputed, not stored by the search.** The search
-    kernel knows every distance at the moment it decides membership and
-    throws them away; a separate pass walks the finished neighbour list and
-    recomputes them. `neighbors/checks/radius_distances.mojo` carries the
-    reasoning and the argument for why the recomputed value is the same
-    value. Under `identical` the check asserts that bit for bit.
-
-    **`sort_results=True` is done here, on the host, and that is deliberate.**
-    The device returns each row in ascending INDEX order under `identical`
-    (DEVIATION 551), so a STABLE sort by distance yields exactly
-    `(distance, index)` lexicographic order, with the index tie-break coming
-    free from the order the device already committed to. Doing it host-side
-    means the tie-break cannot depend on a lane width.
-
-    Two calls cross the boundary per query, not one, because a radius query's
-    output size is not a function of its inputs: the first counts, the caller
-    allocates, the second fills. The cost is the ball-cover index built
-    twice; `neighbors/estimator.mojo` says so where it is paid.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> rn = mojolearn.RadiusNeighbors(radius=0.5).fit(X)
+    >>> distances, indices = rn.radius_neighbors(X[:10], sort_results=True)
+    >>> len(indices)
+    10
     """
 
     _BINDING = "_mojolearn"
@@ -1455,15 +1731,26 @@ class RadiusNeighbors(NumericModeMixin):
                 "refused; it must be positive and finite"
             )
 
+    # The ball cover is not built at fit, a known cost rather than an
+    # oversight: `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner
+    # records it.
     def fit(self, X, y=None):
-        """Store the index. The ball cover is built per query, not here.
+        """Store the points to search.
 
-        `y` is accepted and ignored, for scikit-learn call-shape
-        compatibility. THE BALL COVER IS NOT BUILT HERE and that is a known
-        cost rather than an oversight: nothing in this library holds a fitted
-        device handle yet, and introducing the first one to save a build on
-        the first radius surface is the wrong order to do those two things
-        in. `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner records it.
+        Parameter checks run here, so an unsupported metric, algorithm, `p`
+        or radius raises ``ValueError`` before any search. The ball cover
+        index is built at each `radius_neighbors` call, not here.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Points to search; converted to float32.
+        y : ignored
+            Accepted for scikit-learn compatibility.
+
+        Returns
+        -------
+        self
         """
         self._check_refusals()
         idx, _ = as_f32_dense_c(X, ndim=2, name="X")
@@ -1473,10 +1760,23 @@ class RadiusNeighbors(NumericModeMixin):
         return self
 
     def save(self, path):
-        """Write the fitted index to `path` as an npz (`_RADIUS_FORMAT`): the
-        `<f4` index as fitted, `radius`, `metric`, `p` and `algorithm`.
-        `mojolearn.host_model(path)` answers `radius_neighbors` from it on a
-        CPU with no GPU."""
+        """Save the fitted model to an ``.npz`` file.
+
+        The file holds the float32 points as fitted and the parameters
+        (`radius`, `metric`, `p`, `algorithm`, numeric mode).
+        `mojolearn.host_model(path)` can answer `radius_neighbors` from it on
+        a CPU with no GPU.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         if self._index is None:
             raise RuntimeError("this estimator is not fitted yet")
         return _serialize.write_npz(path, {
@@ -1493,8 +1793,21 @@ class RadiusNeighbors(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The refusals `fit` raises are raised
-        here too; every array is read at its saved dtype and never cast."""
+        """Load a model written by `save`.
+
+        Arrays are read at their saved dtypes and never cast. Parameters
+        `fit` would refuse raise ``ValueError`` here too.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+
+        Returns
+        -------
+        RadiusNeighbors
+            A fitted model, ready for `radius_neighbors`.
+        """
         arrays = _serialize.read_npz(path, _RADIUS_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
@@ -1523,28 +1836,53 @@ class RadiusNeighbors(NumericModeMixin):
         obj.n_features_in_ = nf
         return obj
 
+    # DEVIATION 2375: the containers are Python lists of Arrays, where they
+    # were object-dtype ndarrays of ndarrays. The self-edge under X=None is
+    # kept because the ball cover returns it, DBSCAN counts on it, and
+    # dropping it would make this surface disagree with the CSR every other
+    # consumer sees.
     def radius_neighbors(
         self, X=None, radius=None, return_distance=True, sort_results=False
     ):
-        """Neighbours within `radius`, as ragged arrays, one row per query.
+        """Find the fitted points within `radius` of each query.
 
-        Returns `(distances, indices)` when `return_distance` is True and
-        `indices` alone otherwise, matching scikit-learn. Each element is a
-        1-D Array; the rows have different lengths, so the containers are
-        Python lists rather than a rectangular block (DEVIATION 2375).
+        `X=None` queries the fitted points against themselves, as in
+        scikit-learn. Unlike scikit-learn, each point is then included in
+        its own neighbor list.
 
-        `X=None` queries the fitted data against itself, as scikit-learn
-        does. Note that scikit-learn EXCLUDES each point from its own
-        neighbour list in that case and this does NOT: the ball cover returns
-        the self-edge, DBSCAN counts on it, and dropping it here would make
-        the Python surface disagree with the CSR every other consumer sees.
-        That difference is named rather than papered over.
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features), optional
+            Query points; converted to float32. ``None`` uses the fitted
+            points.
+        radius : float, optional
+            Search radius for this call; defaults to the constructor's
+            `radius`. Must be positive and finite.
+        return_distance : bool, default True
+            Return the distances as well as the indices.
+        sort_results : bool, default False
+            Sort each row by increasing distance. Requires
+            ``return_distance=True``. Under the 'identical' mode, rows come
+            in ascending index order, so sorted rows break distance ties by
+            the lower index.
 
-        DEVIATION 2375: the two containers are Python LISTS of `Array`s
-        (int64 indices, float32 distances), one per query row, where they
-        were object-dtype ndarrays of ndarrays. Indexing with `[i]` and
-        `len()` read the same; `np.asarray(container)` does not (it was
-        never a rectangular block either).
+        Returns
+        -------
+        distances : list of Array, float32
+            One 1-D array per query. Returned only when `return_distance` is
+            True.
+        indices : list of Array, int64
+            One 1-D array per query of row indices into the fitted data.
+            Rows have different lengths, so these are Python lists rather
+            than a rectangular array: indexing with ``[i]`` and ``len()``
+            work, ``np.asarray`` on the list does not give a 2-D block.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, the radius is invalid, `X` has the
+            wrong number of features, or ``sort_results=True`` with
+            ``return_distance=False``.
         """
         if self._index is None:
             raise ValueError(
