@@ -72,7 +72,11 @@ def fake_host(monkeypatch, tmp_path):
     # resolver these tests fake. Swapping the dict for the test and letting
     # monkeypatch restore it makes the result independent of test order.
     monkeypatch.setattr(_buffer, '_NATIVE', {'all_finite_f32': m.all_finite_f32})
-    return m
+    yield m
+    # The test's own load_door_host() call planted THIS fake under the extension key; delitem above only
+    # undoes a key that existed before the test, so without this the fake survived into every later test
+    # of the process (test_ragged_lengths saw its 2.0 at vocab index 3; release rehearsal 0.8.39, 2026-10-12).
+    _backend._DOOR_HOST_MODULES.pop(host_mod._EXTENSION, None)
 
 
 def test_loss_bits_round_trip(fake_host):
