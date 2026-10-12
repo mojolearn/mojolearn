@@ -1,0 +1,33 @@
+{
+ "columns": {
+  "amd": null,
+  "nvidia": null,
+  "nvidia-hopper": null
+ },
+ "earlier_commits": [
+  "3f86fd03a11451b21ce3179f3b06c65fc7d7a93f"
+ ],
+ "legs": {
+  "cuda-sm_89": {
+   "admitted_for": "db9dc78a72ace5261b4ea826aab3b4288c97475f",
+   "because": "the set identity (every binding identity of the set, the host bindings and the runtime closure) and the build tooling digest equal this freeze's",
+   "built_from": "72f74b8d43ceb1283b62c3f92bf020145a6adb03",
+   "origin": "taken",
+   "set_identity_digest": "0e179794885d8d9d80033822b056c5f1a53784f0f43c7d9c58a2f929449881cc"
+  },
+  "hip-gfx942": {
+   "admitted_for": "db9dc78a72ace5261b4ea826aab3b4288c97475f",
+   "because": "the set identity (every binding identity of the set, the host bindings and the runtime closure) and the build tooling digest equal this freeze's",
+   "built_from": "72f74b8d43ceb1283b62c3f92bf020145a6adb03",
+   "origin": "taken",
+   "set_identity_digest": "c85c35748be1a1953c79368449cc99b17b52f030cf4f6a1a093e47c534304dfd"
+  }
+ },
+ "published": [
+  "macos"
+ ],
+ "schema": "mojolearn.release-provenance.v1",
+ "source_commit": "db9dc78a72ace5261b4ea826aab3b4288c97475f",
+ "tooling_commit": "db9dc78a72ace5261b4ea826aab3b4288c97475f",
+ "version": "0.8.40"
+}
